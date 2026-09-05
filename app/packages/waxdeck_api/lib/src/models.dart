@@ -525,6 +525,8 @@ class ItemDetail extends ItemSummary {
     this.sampleRate,
     this.bitrate,
     this.addedAt,
+    this.mbid,
+    this.isrc,
     this.artSource,
   });
 
@@ -540,6 +542,11 @@ class ItemDetail extends ItemSummary {
   final int? sampleRate;
   final int? bitrate;
   final DateTime? addedAt;
+
+  /// The recording's own identifiers, as tagged or matched. Null for
+  /// the items carrying neither, which is most of an untagged library.
+  final String? mbid;
+  final String? isrc;
 
   /// Where the cover this item resolves came from, so a surface drawing
   /// it large can say so. Null when nothing is attributed.
@@ -863,6 +870,7 @@ class PlayState {
     required this.playCount,
     required this.starred,
     this.rating,
+    this.lastPlayedAt,
     this.updatedAt,
   });
 
@@ -875,6 +883,11 @@ class PlayState {
 
   /// The caller's rating, 0 to 100; null when unrated.
   final int? rating;
+
+  /// When a play was last counted; null until one has been. A manual
+  /// played mark does not set it, so this reads as the listening record
+  /// rather than as the flag's age.
+  final DateTime? lastPlayedAt;
 
   final DateTime? updatedAt;
 }

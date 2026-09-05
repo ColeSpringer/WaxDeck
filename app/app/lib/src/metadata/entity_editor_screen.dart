@@ -6,7 +6,6 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/art_source_label.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
-import '../music/album_detail.dart' show retryUnlessRefused;
 import '../music/music_controllers.dart';
 import '../providers.dart';
 import '../settings/settings_registry.dart';

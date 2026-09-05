@@ -952,6 +952,13 @@ components:
           minimum: 0
           maximum: 100
           description: The caller's rating (0 to 100); absent or null when unrated.
+        lastPlayedAt:
+          type: string
+          format: date-time
+          description: >
+            When a play was last counted for the caller. Absent until
+            one has been; a manual played mark sets the flags without
+            standing in for a listen, so it does not set this.
         updatedAt:
           type: string
           format: date-time

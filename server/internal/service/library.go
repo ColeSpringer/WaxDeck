@@ -696,6 +696,13 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		return nil
 	})
 
+	// The starter playlists every account should hold. A boot pass
+	// rather than a read: it is what covers accounts made before the
+	// starters existed, and a catalog reset or rebuild, which drops the
+	// playlist while the row naming it survives. Both only ever take
+	// effect at a start.
+	group.GoOnce(ctx, "starter-playlists", l.reconcileStarterPlaylists)
+
 	if cfg.ScanOnStart {
 		group.GoOnce(ctx, "startup-scan", func(ctx context.Context) error {
 			pid, err := l.lib.StartScan(ctx, waxbin.ScanRequest{})

@@ -37,7 +37,6 @@
   "healthIssuesEmptyMessage": "Todo lo que ha visto el barrido la cumple.",
   "healthIssuesEmptyTitle": "Nada incumple esta regla",
   "healthIssuesError": "No se han podido cargar los incumplimientos",
-  "healthKbps": "{kbps} kbps",
   "healthKeepBest": "Quedarse con la mejor versión",
   "healthLegacyTags": "Solo etiquetas heredadas",
   "healthLoadError": "No se ha podido cargar la salud de la biblioteca",

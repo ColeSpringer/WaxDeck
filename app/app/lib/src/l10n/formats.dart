@@ -142,7 +142,23 @@ extension WaxFormats on AppLocalizations {
   /// hand-trimmed `toStringAsFixed` drew, in every language rather than
   /// in English alone.
   String formatSpeed(double speed) =>
-      speedMultiplier(_speedFormat(localeName).format(speed));
+      speedMultiplier(_decimalFormat(localeName).format(speed));
+
+  /// A sample rate as the reader knows it: "44.1 kHz", "48 kHz",
+  /// "22.05 kHz".
+  ///
+  /// The decimals are whatever the number needs and no more, which is
+  /// the only rule that gets every rate in use right: a fixed one drops
+  /// the second digit of 22.05 and puts a pointless zero on 48. The
+  /// separator is the locale's, for the reason [formatSpeed] gives.
+  String formatSampleRate(int hz) =>
+      unitKilohertz(_decimalFormat(localeName).format(hz / 1000));
+
+  /// An audio bitrate: "320 kbps".
+  String formatBitrate(int kbps) => unitKbps(kbps);
+
+  /// A tempo: "128 BPM".
+  String formatTempo(int bpm) => unitBpm(bpm);
 
   /// A size in the largest unit that leaves a number worth reading:
   /// "512 B", "640 KB", "12.4 MB", "1.5 GB".
@@ -193,11 +209,14 @@ Map<int, String> _monthInitialsFor(String locale) =>
 
 /// The one number pattern, held for the same reason and keyed the same
 /// way. Trailing zeros are dropped by the pattern itself, so 1.0 reads
-/// "1" and 1.5 reads "1,5" where that is how a decimal is written.
-final Map<String, NumberFormat> _speedCache = <String, NumberFormat>{};
+/// "1" and 1.5 reads "1,5" where that is how a decimal is written -
+/// which is what a playback rate and a sample rate both want.
+final Map<String, NumberFormat> _decimalCache = <String, NumberFormat>{};
 
-NumberFormat _speedFormat(String locale) =>
-    _speedCache.putIfAbsent(locale, () => NumberFormat.decimalPattern(locale));
+NumberFormat _decimalFormat(String locale) => _decimalCache.putIfAbsent(
+  locale,
+  () => NumberFormat.decimalPattern(locale),
+);
 
 DateFormat _dateFormat(String locale) =>
     _dateCache.putIfAbsent(locale, () => DateFormat.yMMMd(locale));

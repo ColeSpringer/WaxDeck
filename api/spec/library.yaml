@@ -1218,6 +1218,20 @@ components:
               type: string
               format: date-time
               description: When the item entered the library.
+            mbid:
+              type: string
+              description: >
+                MusicBrainz identifier for what this item is - a
+                recording for a track, a release for a book. Absent
+                unless the file was tagged with one or matching found
+                one.
+              example: b9b3d3f9-1e2b-4a1e-9a4a-1a2b3c4d5e6f
+            isrc:
+              type: string
+              description: >
+                The recording's ISRC, as tagged or matched. Absent for
+                anything carrying none, which is most of a library.
+              example: USRC17607839
             artSource:
               $ref: "#/components/schemas/ArtSource"
       description: Full detail for a single library item.

@@ -34,6 +34,8 @@ part 'item.g.dart';
 /// * [sampleRate] - Source sample rate in Hz.
 /// * [bitrate] - Source bitrate in kilobits per second, when known.
 /// * [addedAt] - When the item entered the library.
+/// * [mbid] - MusicBrainz identifier for what this item is - a recording for a track, a release for a book. Absent unless the file was tagged with one or matching found one. 
+/// * [isrc] - The recording's ISRC, as tagged or matched. Absent for anything carrying none, which is most of a library. 
 /// * [artSource] 
 @BuiltValue()
 abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
@@ -52,6 +54,10 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   @BuiltValueField(wireName: r'artSource')
   ArtSource? get artSource;
 
+  /// MusicBrainz identifier for what this item is - a recording for a track, a release for a book. Absent unless the file was tagged with one or matching found one. 
+  @BuiltValueField(wireName: r'mbid')
+  String? get mbid;
+
   /// Release / publication year.
   @BuiltValueField(wireName: r'year')
   int? get year;
@@ -63,6 +69,10 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   /// Source bitrate in kilobits per second, when known.
   @BuiltValueField(wireName: r'bitrate')
   int? get bitrate;
+
+  /// The recording's ISRC, as tagged or matched. Absent for anything carrying none, which is most of a library. 
+  @BuiltValueField(wireName: r'isrc')
+  String? get isrc;
 
   /// Source sample rate in Hz.
   @BuiltValueField(wireName: r'sampleRate')
@@ -116,6 +126,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
         specifiedType: const FullType(ArtSource),
       );
     }
+    if (object.mbid != null) {
+      yield r'mbid';
+      yield serializers.serialize(
+        object.mbid,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.trackNumber != null) {
       yield r'trackNumber';
       yield serializers.serialize(
@@ -149,6 +166,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
       yield serializers.serialize(
         object.bitrate,
         specifiedType: const FullType(int),
+      );
+    }
+    if (object.isrc != null) {
+      yield r'isrc';
+      yield serializers.serialize(
+        object.isrc,
+        specifiedType: const FullType(String),
       );
     }
     yield r'pid';
@@ -271,6 +295,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           ) as ArtSource;
           result.artSource.replace(valueDes);
           break;
+        case r'mbid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.mbid = valueDes;
+          break;
         case r'trackNumber':
           final valueDes = serializers.deserialize(
             value,
@@ -305,6 +336,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
             specifiedType: const FullType(int),
           ) as int;
           result.bitrate = valueDes;
+          break;
+        case r'isrc':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.isrc = valueDes;
           break;
         case r'pid':
           final valueDes = serializers.deserialize(

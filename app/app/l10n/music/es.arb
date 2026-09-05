@@ -120,6 +120,7 @@
   "musicShuffleNothingPlayable": "Aquí no hay nada que se reproduzca en secuencia.",
   "musicTitle": "Música",
   "musicTrackCount": "{count, plural, =1{1 pista} other{{count} pistas}}",
+  "musicTrackPlaysSpoken": "{count, plural, =1{reproducida una vez} other{reproducida {count} veces}}",
   "musicTracksTitle": "Pistas",
   "musicVariousArtists": "Varios artistas"
 }

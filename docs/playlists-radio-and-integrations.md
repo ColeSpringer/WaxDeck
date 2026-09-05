@@ -21,6 +21,21 @@ every user on the server; only its owner can edit it. A shared smart
 playlist always shows the owner's evaluation: "my top rated" means the
 owner's ratings, and viewers see the owner's list.
 
+### The starter
+
+Every account is created holding one smart playlist, **Most played**:
+music you have played at least once, most played first, capped at 50.
+It exists so a first sign-in lands on something rather than an empty
+grid, and it is an ordinary playlist in every other way - yours to
+rename, re-rule, share, or delete, and it is not special-cased
+anywhere else in the server.
+
+Deleting it sticks, permanently: the server remembers that the account
+was offered the starter, so it does not come back on the next restart,
+and it does not come back if the catalog is later rebuilt either. What
+a rebuild does bring back is a starter nobody deleted, since that drops
+the playlist while the record of the offer survives.
+
 ### The rule editor
 
 Rules are groups of conditions. A group matches ALL of its children or
@@ -69,7 +84,7 @@ That is the rule for both directions by default: **anything that cannot
 be said exactly refuses the whole document, naming every part that
 stopped it.** Half a rule is a different playlist, so nothing is
 quietly dropped. On import that covers fields the catalog has no answer
-for (`bitrate`, `size`, `bpm`, the `mbz_*` identifiers, and the rest),
+for (`bitrate`, `size`, the `mbz_*` identifiers, and the rest),
 `limitPercent` and any other unrecognised top-level key - including a
 typo for `all`, which would otherwise import as a rule over your whole
 library - `inPlaylist`, and the absolute date operators, whose naive

@@ -4941,12 +4941,6 @@ abstract class AppLocalizations {
   /// **'Could not load issues'**
   String get healthIssuesError;
 
-  /// One copy's bitrate, in a comma-separated run of its properties. kbps is the unit.
-  ///
-  /// In en, this message translates to:
-  /// **'{kbps} kbps'**
-  String healthKbps(int kbps);
-
   /// Accessible name of the button that resolves one quality finding.
   ///
   /// In en, this message translates to:
@@ -5529,6 +5523,102 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{Moved 1 file to the trash} other{Moved {count} files to the trash}}'**
   String libraryDeleteTrashDone(int count);
 
+  /// Facts sheet row label: when the item entered the library.
+  ///
+  /// In en, this message translates to:
+  /// **'Added'**
+  String get libraryFactsAdded;
+
+  /// Facts sheet row label: the source file's bitrate.
+  ///
+  /// In en, this message translates to:
+  /// **'Bitrate'**
+  String get libraryFactsBitrate;
+
+  /// Facts sheet row label: the track's stated tempo, shown in beats per minute.
+  ///
+  /// In en, this message translates to:
+  /// **'Tempo'**
+  String get libraryFactsBpm;
+
+  /// Facts sheet row label: the audio codec the file is encoded with.
+  ///
+  /// In en, this message translates to:
+  /// **'Codec'**
+  String get libraryFactsCodec;
+
+  /// Facts sheet row label: the file format holding the audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Container'**
+  String get libraryFactsContainer;
+
+  /// Facts sheet row label: how long the item runs.
+  ///
+  /// In en, this message translates to:
+  /// **'Length'**
+  String get libraryFactsDuration;
+
+  /// Facts sheet row label: the item's genres, comma separated.
+  ///
+  /// In en, this message translates to:
+  /// **'Genres'**
+  String get libraryFactsGenres;
+
+  /// Facts sheet row label: the recording's ISRC. An international standard code, so the acronym stands untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'ISRC'**
+  String get libraryFactsIsrc;
+
+  /// Facts sheet row label: when a play was last counted for the reader.
+  ///
+  /// In en, this message translates to:
+  /// **'Last played'**
+  String get libraryFactsLastPlayed;
+
+  /// Value of the last-played row for an item that has a play count but no time attached, which is what a played mark made by hand leaves behind.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get libraryFactsLastPlayedUnknown;
+
+  /// Facts sheet row label: the MusicBrainz identifier. A product name, so it stands untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'MusicBrainz ID'**
+  String get libraryFactsMbid;
+
+  /// Value of the last-played row for an item the reader has never finished.
+  ///
+  /// In en, this message translates to:
+  /// **'Never'**
+  String get libraryFactsNeverPlayed;
+
+  /// Facts sheet row label: how many times the reader has played the item.
+  ///
+  /// In en, this message translates to:
+  /// **'Plays'**
+  String get libraryFactsPlayCount;
+
+  /// Facts sheet row label: the source sample rate, shown in kilohertz.
+  ///
+  /// In en, this message translates to:
+  /// **'Sample rate'**
+  String get libraryFactsSampleRate;
+
+  /// Heading of the sheet listing one item's facts.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get libraryFactsTitle;
+
+  /// Facts sheet row label: the release or publication year.
+  ///
+  /// In en, this message translates to:
+  /// **'Year'**
+  String get libraryFactsYear;
+
   /// The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case.
   ///
   /// In en, this message translates to:
@@ -5570,6 +5660,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Detached from the release.'**
   String get libraryMenuDetached;
+
+  /// Row in an item's overflow menu that opens the facts sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get libraryMenuDetails;
 
   /// Item-menu row opening the album the item belongs to.
   ///
@@ -7358,6 +7454,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 track} other{{count} tracks}}'**
   String musicTrackCount(int count);
+
+  /// What a screen reader hears in place of the bare play count beside an album track's duration.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{played once} other{played {count} times}}'**
+  String musicTrackPlaysSpoken(int count);
 
   /// The listing of every track in the library, named on the hub tile that opens it and as its own title.
   ///
@@ -15415,6 +15517,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tool tasks'**
   String get toolsTitle;
+
+  /// A track's tempo. BPM is beats per minute, which is written the same way in most languages.
+  ///
+  /// In en, this message translates to:
+  /// **'{bpm} BPM'**
+  String unitBpm(int bpm);
+
+  /// An audio bitrate. kbps is kilobits per second.
+  ///
+  /// In en, this message translates to:
+  /// **'{kbps} kbps'**
+  String unitKbps(int kbps);
+
+  /// A sample rate. {khz} arrives already written for this language, so a locale that separates decimals differently is already handled.
+  ///
+  /// In en, this message translates to:
+  /// **'{khz} kHz'**
+  String unitKilohertz(String khz);
 
   /// Snackbar after asking the server to download from a URL.
   ///

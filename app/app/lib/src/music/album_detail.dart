@@ -4,23 +4,6 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 
-/// Whether a failed read is worth trying again.
-///
-/// Riverpod retries a failed provider with backoff, which is right for a
-/// dropped connection and wrong for a refusal: an album the server does
-/// not have will not appear on the fourth ask, and a header that quietly
-/// re-asks every few seconds for a pid that will never resolve is a
-/// background loop nobody can see. Anything that is not the server saying
-/// no keeps the default.
-Duration? retryUnlessRefused(int attempt, Object error) {
-  if (error case WaxDeckApiException(
-    statusCode: final int status,
-  ) when status >= 400 && status < 500) {
-    return null;
-  }
-  return Duration(milliseconds: 200 * (1 << attempt.clamp(0, 6)));
-}
-
 /// One album entity's identity, for the album header and the editor.
 ///
 /// Auto-disposed and per-pid, like [itemDetailProvider] beside it: the

@@ -332,13 +332,8 @@ class _DownloadedShelf extends ConsumerWidget {
 }
 
 /// A download row's saved position, as the shelves draw one.
-PlayProgress _resume(PlayState? state) => state == null
-    ? PlayProgress.none
-    : PlayProgress(
-        positionMs: state.positionMs,
-        played: state.played,
-        finished: state.finished,
-      );
+PlayProgress _resume(PlayState? state) =>
+    state == null ? PlayProgress.none : PlayProgress.of(state);
 
 /// The newest episodes across the shows the caller follows.
 ///

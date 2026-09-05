@@ -435,7 +435,7 @@ class _UpgradesSection extends ConsumerWidget {
   static String _memberLine(AppLocalizations l10n, UpgradeMember member) {
     final parts = <String>[
       member.codec,
-      if (member.bitrate != null) l10n.healthKbps(member.bitrate! ~/ 1000),
+      if (member.bitrate != null) l10n.unitKbps(member.bitrate! ~/ 1000),
       if (member.lossless) l10n.healthLossless,
     ];
     return parts.join(', ');

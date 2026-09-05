@@ -1,6 +1,9 @@
 package service
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestCrossedPlayedThreshold(t *testing.T) {
 	t.Parallel()
@@ -57,5 +60,98 @@ func TestInvalidSession(t *testing.T) {
 		if got := reason != ""; got != c.reject {
 			t.Errorf("%s: reject = %v (%q), want %v", c.name, got, reason, c.reject)
 		}
+	}
+}
+
+// TestLastPlayedAtFollowsCountedPlays pins what the play state's
+// last-played stamp means: the listening record, not the flag's age. A
+// counted listen sets it; a manual played mark, which exists so a
+// listener can clear a backlog they heard elsewhere, deliberately does
+// not - stamping it would put a play in the record that never happened.
+func TestLastPlayedAtFollowsCountedPlays(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	played, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
+	marked, _ := fixtureTrackPID(t, ctx, svc, uc, "Basalt Steps")
+
+	for _, pid := range []string{played, marked} {
+		st, err := svc.PlayState(ctx, uc, pid)
+		if err != nil {
+			t.Fatalf("play state for %s: %v", pid, err)
+		}
+		if !st.LastPlayedAt.IsZero() {
+			t.Fatalf("a fresh state carries lastPlayedAt %v, want zero", st.LastPlayedAt)
+		}
+	}
+
+	before := time.Now().UTC().Add(-time.Second)
+	res, err := svc.IngestListens(ctx, uc, []ListenSession{{
+		SessionID: "s-1",
+		PID:       played,
+		StartedAt: time.Now().UTC(),
+		MsPlayed:  2000,
+		Finished:  true,
+	}})
+	if err != nil || res.Accepted != 1 {
+		t.Fatalf("ingest = %+v (%v), want one accepted", res, err)
+	}
+	st, err := svc.PlayState(ctx, uc, played)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.PlayCount != 1 {
+		t.Fatalf("play count = %d, want 1", st.PlayCount)
+	}
+	if st.LastPlayedAt.Before(before) {
+		t.Fatalf("lastPlayedAt = %v, want at or after %v", st.LastPlayedAt, before)
+	}
+
+	if _, err := svc.SetPlayed(ctx, uc, marked, true, true, nil, nil, nil); err != nil {
+		t.Fatalf("manual played mark: %v", err)
+	}
+	st, err = svc.PlayState(ctx, uc, marked)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.Played || !st.Finished {
+		t.Fatalf("manual mark left %+v, want played and finished", st)
+	}
+	if !st.LastPlayedAt.IsZero() {
+		t.Fatalf("a manual mark stamped lastPlayedAt %v, want zero", st.LastPlayedAt)
+	}
+	// And the pair a reader has to be told about: the catalog raises the
+	// count to the smallest number consistent with the flag, so a hand
+	// mark answers one play with no time attached. "Never played" is the
+	// wrong reading of that, and so is a blank.
+	if st.PlayCount != 1 {
+		t.Fatalf("manual mark left play count %d, want 1 beside a zero stamp", st.PlayCount)
+	}
+}
+
+// TestItemDetailCarriesRecordingIdentifiers pins the two identifier
+// fields the detail read grew for the facts sheet: present on the
+// tagged track, absent on the rest, which is what most of a scanned
+// library looks like.
+func TestItemDetailCarriesRecordingIdentifiers(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	tagged, _ := fixtureTrackPID(t, ctx, svc, uc, "Delta Groove")
+	bare, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
+
+	d, err := svc.Item(ctx, uc, tagged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.MBID != catalogFixtureMBID || d.ISRC != catalogFixtureISRC {
+		t.Fatalf("identifiers = %q/%q, want %q/%q",
+			d.MBID, d.ISRC, catalogFixtureMBID, catalogFixtureISRC)
+	}
+
+	d, err = svc.Item(ctx, uc, bare)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.MBID != "" || d.ISRC != "" {
+		t.Fatalf("an untagged track carries %q/%q, want neither", d.MBID, d.ISRC)
 	}
 }

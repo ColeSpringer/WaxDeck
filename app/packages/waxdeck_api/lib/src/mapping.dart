@@ -272,6 +272,8 @@ ItemDetail itemDetailFromGen(gen.Item item, {String baseUrl = ''}) {
     sampleRate: item.sampleRate,
     bitrate: item.bitrate,
     addedAt: item.addedAt,
+    mbid: item.mbid,
+    isrc: item.isrc,
     artSource: artSourceFromGen(item.artSource),
   );
 }
@@ -373,6 +375,7 @@ PlayState playStateFromGen(gen.PlayState state) {
     playCount: state.playCount,
     starred: state.starred,
     rating: state.rating,
+    lastPlayedAt: state.lastPlayedAt,
     updatedAt: state.updatedAt,
   );
 }

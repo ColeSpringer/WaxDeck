@@ -56,12 +56,7 @@ Future<List<ShelfEpisode>> _shelf(
     for (final episode in page.items) episode.pid,
   ]);
   final byPid = <String, PlayProgress>{
-    for (final state in states)
-      state.pid: PlayProgress(
-        positionMs: state.positionMs,
-        played: state.played,
-        finished: state.finished,
-      ),
+    for (final state in states) state.pid: PlayProgress.of(state),
   };
   return <ShelfEpisode>[
     for (final episode in page.items)

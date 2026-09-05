@@ -58,6 +58,20 @@ func samePids(a, b []string) bool {
 	return true
 }
 
+// playlistNamed picks one playlist out of a listing by name, so a test
+// about its own playlist is not written against the seeded starter's
+// position beside it.
+func playlistNamed(t *testing.T, playlists []Playlist, name string) Playlist {
+	t.Helper()
+	for _, pl := range playlists {
+		if pl.Name == name {
+			return pl
+		}
+	}
+	t.Fatalf("no playlist named %q in %+v", name, playlists)
+	return Playlist{}
+}
+
 func TestPlaylistStaticLifecycle(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -81,13 +95,21 @@ func TestPlaylistStaticLifecycle(t *testing.T) {
 		t.Fatalf("created itemCount = %v, want 3", pl.ItemCount)
 	}
 
-	// The listing carries the stored count for static playlists.
+	// The listing carries the stored count for static playlists. Exactly
+	// two rows, not one: every account is seeded with the Most played
+	// starter, which is an ordinary playlist and lists as one. Counted
+	// rather than searched, so a second starter would red this.
 	page := decode[PlaylistPage](t, get(t, h.ts, "/api/v1/playlists", h.token))
-	if len(page.Playlists) != 1 || page.Playlists[0].Pid != pl.Pid {
+	if len(page.Playlists) != 2 {
+		t.Fatalf("listing = %+v, want the starter and Road Trip", page.Playlists)
+	}
+	playlistNamed(t, page.Playlists, "Most played")
+	listed := playlistNamed(t, page.Playlists, "Road Trip")
+	if listed.Pid != pl.Pid {
 		t.Fatalf("listing = %+v", page.Playlists)
 	}
-	if page.Playlists[0].ItemCount == nil || *page.Playlists[0].ItemCount != 3 {
-		t.Fatalf("listing itemCount = %v, want 3", page.Playlists[0].ItemCount)
+	if listed.ItemCount == nil || *listed.ItemCount != 3 {
+		t.Fatalf("listing itemCount = %v, want 3", listed.ItemCount)
 	}
 
 	det := decode[Playlist](t, get(t, h.ts, "/api/v1/playlists/"+pl.Pid, h.token))

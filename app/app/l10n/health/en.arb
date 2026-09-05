@@ -173,16 +173,6 @@
   "@healthIssuesError": {
     "description": "Title of the error state when a rule's failing items could not be read."
   },
-  "healthKbps": "{kbps} kbps",
-  "@healthKbps": {
-    "description": "One copy's bitrate, in a comma-separated run of its properties. kbps is the unit.",
-    "placeholders": {
-      "kbps": {
-        "type": "int",
-        "example": "320"
-      }
-    }
-  },
   "healthKeepBest": "Keep the best version",
   "@healthKeepBest": {
     "description": "Accessible name of the button that resolves one quality finding."

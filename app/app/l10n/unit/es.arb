@@ -1,0 +1,8 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "unitBpm": "{bpm} BPM",
+  "unitKbps": "{kbps} kbps",
+  "unitKilohertz": "{khz} kHz"
+}

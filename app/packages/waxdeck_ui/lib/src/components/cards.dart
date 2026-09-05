@@ -816,6 +816,25 @@ class MediaListRow extends StatelessWidget {
             ),
           ),
         Expanded(child: content),
+        // Outside the content, not inside it beside the duration: the
+        // content's label is built with `excludeSemantics`, so a node
+        // drawn in there would be invisible to a screen reader and to
+        // the suite alike. Its own node is also the better reading -
+        // "played 5 times" after the row rather than buried in its
+        // name.
+        if (data.trailingDetail != null)
+          Padding(
+            padding: const EdgeInsetsDirectional.only(start: WaxSpace.s8),
+            child: Semantics(
+              identifier: data.trailingDetailSemanticsId,
+              label: data.trailingDetailSpoken ?? data.trailingDetail,
+              excludeSemantics: true,
+              child: Text(
+                data.trailingDetail!,
+                style: WaxType.monoTime.copyWith(color: colors.textTertiary),
+              ),
+            ),
+          ),
         ...actions,
         if (onMore != null)
           WaxIconButton(

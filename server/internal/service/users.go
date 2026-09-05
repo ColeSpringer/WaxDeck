@@ -177,6 +177,12 @@ func (l *Library) createAccount(ctx context.Context, in AccountCreate, onlyIfNoA
 			return nil, &Error{Kind: KindInternal, Err: err}
 		}
 	}
+	// The starter playlists, so a first sign-in lands on something
+	// rather than an empty grid. Every way an account is made comes
+	// through here - an admin create, a signup, an OIDC provision, and
+	// the bootstrap - except approval, which turns a pending row into an
+	// account of its own and seeds there.
+	l.seedStartersFor(ctx, u)
 	return l.accountFor(ctx, u)
 }
 

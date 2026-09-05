@@ -224,6 +224,12 @@ reports per-file detail and surfaces as an out-of-sync diagnostic
 rather than failing the edit. Lyrics write-back writes the `.lrc`
 sidecar so corrections stay portable to every other player.
 
+What the editor writes, listeners read. A track's tempo, its ISRC and
+its MusicBrainz recording id come back on the item read, and the app's
+Details sheet (any item's overflow menu) shows them beside the file's
+technical facts, so a curated tempo or identifier is visible to
+everyone rather than only to whoever opens the editor.
+
 ### Where a cover came from
 
 Covers and lyrics carry the same attribution the scalar fields do:

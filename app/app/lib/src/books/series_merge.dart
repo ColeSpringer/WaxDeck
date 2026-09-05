@@ -5,7 +5,6 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
-import '../music/album_detail.dart' show retryUnlessRefused;
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import 'books_controller.dart';

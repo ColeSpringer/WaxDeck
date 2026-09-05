@@ -54,6 +54,7 @@ class PlayStateController extends OptimisticStateController<PlayState> {
       playCount: s.playCount,
       starred: starred ?? s.starred,
       rating: setRating ? rating : s.rating,
+      lastPlayedAt: s.lastPlayedAt,
       updatedAt: s.updatedAt,
     );
   }

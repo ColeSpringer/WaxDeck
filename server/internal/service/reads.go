@@ -604,6 +604,8 @@ func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (Ite
 		Codec:       it.Codec,
 		Container:   it.Container,
 		SampleRate:  it.SampleRate,
+		MBID:        it.MBID,
+		ISRC:        it.ISRC,
 	}
 	if it.Genre != "" {
 		d.Genres = []string{it.Genre}

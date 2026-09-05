@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/entity_facts.dart';
@@ -323,6 +324,47 @@ void main() {
       await tester.tap(_byId(SemanticsIds.editMetadata('tr-One')));
       await tester.pumpAndSettle();
       expect(find.byType(MetadataScreen), findsOneWidget);
+    });
+
+    testWidgets('a row wears its play count beside its running time', (
+      tester,
+    ) async {
+      // The count is the caller's own, read in one batch for the whole
+      // release; a track nobody has finished shows nothing rather than
+      // a zero, which would put a column of noughts down a fresh
+      // library.
+      final repository = FakeRepository()
+        ..facetItems['album 1'] = <ItemSummary>[
+          _track('One', track: 1),
+          _track('Two', track: 2),
+        ]
+        ..finishedPids.add('tr-One');
+
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      final rows = tester
+          .widgetList<MediaListRow>(find.byType(MediaListRow))
+          .toList();
+      expect(rows[0].data.trailingDetail, '1');
+      expect(rows[1].data.trailingDetail, isNull);
+    });
+
+    testWidgets('a track row menu opens the facts sheet', (tester) async {
+      // Also in the library list, which is where the fake's item detail
+      // reads from: the sheet's rows are that read, not the listing's.
+      final repository = FakeRepository(items: [_track('One', track: 1)])
+        ..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)]
+        ..itemDetailBpm['tr-One'] = 128;
+
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.albumTrackMore(0)));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuDetails));
+      await tester.pumpAndSettle();
+
+      expect(_byId(SemanticsIds.itemFactsSheet('tr-One')), findsOneWidget);
+      expect(_byId(SemanticsIds.itemFactsRow('bpm')), findsOneWidget);
     });
 
     testWidgets('a track row detaches from the release it sits on', (
@@ -745,17 +787,28 @@ void main() {
         sampleRate: rate,
       );
 
+      final l10n = AppLocalizationsEn();
       expect(
-        codecChipLabel(detail(codec: 'flac', rate: 44100)),
+        codecChipLabel(l10n, detail(codec: 'flac', rate: 44100)),
         'FLAC 44.1 kHz',
       );
-      expect(codecChipLabel(detail(codec: 'flac', rate: 48000)), 'FLAC 48 kHz');
-      expect(codecChipLabel(detail(codec: 'flac')), 'FLAC');
+      expect(
+        codecChipLabel(l10n, detail(codec: 'flac', rate: 48000)),
+        'FLAC 48 kHz',
+      );
+      expect(codecChipLabel(l10n, detail(codec: 'flac')), 'FLAC');
+      // The rates that are not whole thousands keep every digit they
+      // need: half of 44.1 is 22.05, not 22.1, and spoken-word files
+      // are full of it.
+      expect(
+        codecChipLabel(l10n, detail(codec: 'mp3', rate: 22050)),
+        'MP3 22.05 kHz',
+      );
       // A rate with no codec is still worth saying, and saying it must
       // not leave the space the codec would have filled.
-      expect(codecChipLabel(detail(rate: 44100)), '44.1 kHz');
-      expect(codecChipLabel(detail(codec: '', rate: 44100)), '44.1 kHz');
-      expect(codecChipLabel(detail()), isEmpty);
+      expect(codecChipLabel(l10n, detail(rate: 44100)), '44.1 kHz');
+      expect(codecChipLabel(l10n, detail(codec: '', rate: 44100)), '44.1 kHz');
+      expect(codecChipLabel(l10n, detail()), isEmpty);
     });
 
     test('a running time reads the way an album sleeve does', () async {

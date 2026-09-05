@@ -15,6 +15,7 @@ import '../library/item_menu.dart';
 import '../sharing/share_dialog.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
+import '../player/play_progress.dart';
 import '../providers.dart';
 import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
@@ -404,11 +405,19 @@ class _TrackList extends ConsumerWidget {
     // number that appears nowhere on the record.
     int discOf(ItemSummary track) => track.discNumber ?? 1;
     final multiDisc = tracks.any((t) => discOf(t) > 1);
+    // One batch read for the whole release rather than one per row: a
+    // release is a page's worth of tracks, which is what the batch
+    // endpoint is sized for. A pid the server holds no state for reads
+    // as the zero state, so an unplayed release simply shows nothing.
+    final plays =
+        ref.watch(playProgressProvider(playProgressKey(tracks))).value ??
+        const <String, PlayProgress>{};
     return SliverList.builder(
       itemCount: tracks.length,
       itemBuilder: (context, index) {
         final track = tracks[index];
         final disc = discOf(track);
+        final playCount = plays[track.pid]?.playCount ?? 0;
         final startsDisc =
             multiDisc && (index == 0 || discOf(tracks[index - 1]) != disc);
         final row = Padding(
@@ -427,6 +436,18 @@ class _TrackList extends ConsumerWidget {
                 trailingText: formatTimecode(
                   Duration(milliseconds: track.durationMs),
                 ),
+                // Nothing at all on a track nobody has finished, so an
+                // unplayed release is a clean column rather than a
+                // stripe of zeroes - which is also why the spoken form
+                // and the handle are conditional: there is no node to
+                // carry them.
+                trailingDetail: playCount > 0 ? '$playCount' : null,
+                trailingDetailSpoken: playCount > 0
+                    ? context.l10n.musicTrackPlaysSpoken(playCount)
+                    : null,
+                trailingDetailSemanticsId: playCount > 0
+                    ? SemanticsIds.albumTrackPlays(index)
+                    : null,
                 semanticsId: SemanticsIds.indexItem(index),
               ),
               leadingIndex: track.trackNumber ?? index + 1,
@@ -512,7 +533,7 @@ class _ReleaseDetail extends ConsumerWidget {
     // format is what the file is, which is the distinction the switch
     // draws.
     final codec = ref.watch(technicalDetailsProvider)
-        ? codecChipLabel(detail)
+        ? codecChipLabel(context.l10n, detail)
         : '';
     final chips = <String>[
       if (codec.isNotEmpty) codec,

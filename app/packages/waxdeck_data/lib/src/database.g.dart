@@ -626,6 +626,17 @@ class $MirrorPlayStatesTable extends MirrorPlayStates
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _lastPlayedAtMeta = const VerificationMeta(
+    'lastPlayedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> lastPlayedAt = GeneratedColumn<DateTime>(
+    'last_played_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     pid,
@@ -636,6 +647,7 @@ class $MirrorPlayStatesTable extends MirrorPlayStates
     starred,
     rating,
     updatedAt,
+    lastPlayedAt,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -699,6 +711,15 @@ class $MirrorPlayStatesTable extends MirrorPlayStates
         updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
       );
     }
+    if (data.containsKey('last_played_at')) {
+      context.handle(
+        _lastPlayedAtMeta,
+        lastPlayedAt.isAcceptableOrUnknown(
+          data['last_played_at']!,
+          _lastPlayedAtMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -740,6 +761,10 @@ class $MirrorPlayStatesTable extends MirrorPlayStates
         DriftSqlType.dateTime,
         data['${effectivePrefix}updated_at'],
       ),
+      lastPlayedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_played_at'],
+      ),
     );
   }
 
@@ -758,6 +783,13 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
   final bool starred;
   final int? rating;
   final DateTime? updatedAt;
+
+  /// When the last counted play was, for the facts sheet read offline.
+  /// Null on a state nobody has finished, and on one marked played by
+  /// hand, which raises the count and stamps no time.
+  ///
+  /// Last on purpose, for the reason [DownloadRecords.durationMs] gives.
+  final DateTime? lastPlayedAt;
   const MirrorPlayState({
     required this.pid,
     required this.positionMs,
@@ -767,6 +799,7 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
     required this.starred,
     this.rating,
     this.updatedAt,
+    this.lastPlayedAt,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -782,6 +815,9 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
     }
     if (!nullToAbsent || updatedAt != null) {
       map['updated_at'] = Variable<DateTime>(updatedAt);
+    }
+    if (!nullToAbsent || lastPlayedAt != null) {
+      map['last_played_at'] = Variable<DateTime>(lastPlayedAt);
     }
     return map;
   }
@@ -800,6 +836,9 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
       updatedAt: updatedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(updatedAt),
+      lastPlayedAt: lastPlayedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(lastPlayedAt),
     );
   }
 
@@ -817,6 +856,7 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
       starred: serializer.fromJson<bool>(json['starred']),
       rating: serializer.fromJson<int?>(json['rating']),
       updatedAt: serializer.fromJson<DateTime?>(json['updatedAt']),
+      lastPlayedAt: serializer.fromJson<DateTime?>(json['lastPlayedAt']),
     );
   }
   @override
@@ -831,6 +871,7 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
       'starred': serializer.toJson<bool>(starred),
       'rating': serializer.toJson<int?>(rating),
       'updatedAt': serializer.toJson<DateTime?>(updatedAt),
+      'lastPlayedAt': serializer.toJson<DateTime?>(lastPlayedAt),
     };
   }
 
@@ -843,6 +884,7 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
     bool? starred,
     Value<int?> rating = const Value.absent(),
     Value<DateTime?> updatedAt = const Value.absent(),
+    Value<DateTime?> lastPlayedAt = const Value.absent(),
   }) => MirrorPlayState(
     pid: pid ?? this.pid,
     positionMs: positionMs ?? this.positionMs,
@@ -852,6 +894,7 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
     starred: starred ?? this.starred,
     rating: rating.present ? rating.value : this.rating,
     updatedAt: updatedAt.present ? updatedAt.value : this.updatedAt,
+    lastPlayedAt: lastPlayedAt.present ? lastPlayedAt.value : this.lastPlayedAt,
   );
   MirrorPlayState copyWithCompanion(MirrorPlayStatesCompanion data) {
     return MirrorPlayState(
@@ -865,6 +908,9 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
       starred: data.starred.present ? data.starred.value : this.starred,
       rating: data.rating.present ? data.rating.value : this.rating,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      lastPlayedAt: data.lastPlayedAt.present
+          ? data.lastPlayedAt.value
+          : this.lastPlayedAt,
     );
   }
 
@@ -878,7 +924,8 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
           ..write('playCount: $playCount, ')
           ..write('starred: $starred, ')
           ..write('rating: $rating, ')
-          ..write('updatedAt: $updatedAt')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('lastPlayedAt: $lastPlayedAt')
           ..write(')'))
         .toString();
   }
@@ -893,6 +940,7 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
     starred,
     rating,
     updatedAt,
+    lastPlayedAt,
   );
   @override
   bool operator ==(Object other) =>
@@ -905,7 +953,8 @@ class MirrorPlayState extends DataClass implements Insertable<MirrorPlayState> {
           other.playCount == this.playCount &&
           other.starred == this.starred &&
           other.rating == this.rating &&
-          other.updatedAt == this.updatedAt);
+          other.updatedAt == this.updatedAt &&
+          other.lastPlayedAt == this.lastPlayedAt);
 }
 
 class MirrorPlayStatesCompanion extends UpdateCompanion<MirrorPlayState> {
@@ -917,6 +966,7 @@ class MirrorPlayStatesCompanion extends UpdateCompanion<MirrorPlayState> {
   final Value<bool> starred;
   final Value<int?> rating;
   final Value<DateTime?> updatedAt;
+  final Value<DateTime?> lastPlayedAt;
   final Value<int> rowid;
   const MirrorPlayStatesCompanion({
     this.pid = const Value.absent(),
@@ -927,6 +977,7 @@ class MirrorPlayStatesCompanion extends UpdateCompanion<MirrorPlayState> {
     this.starred = const Value.absent(),
     this.rating = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.lastPlayedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   MirrorPlayStatesCompanion.insert({
@@ -938,6 +989,7 @@ class MirrorPlayStatesCompanion extends UpdateCompanion<MirrorPlayState> {
     this.starred = const Value.absent(),
     this.rating = const Value.absent(),
     this.updatedAt = const Value.absent(),
+    this.lastPlayedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : pid = Value(pid);
   static Insertable<MirrorPlayState> custom({
@@ -949,6 +1001,7 @@ class MirrorPlayStatesCompanion extends UpdateCompanion<MirrorPlayState> {
     Expression<bool>? starred,
     Expression<int>? rating,
     Expression<DateTime>? updatedAt,
+    Expression<DateTime>? lastPlayedAt,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -960,6 +1013,7 @@ class MirrorPlayStatesCompanion extends UpdateCompanion<MirrorPlayState> {
       if (starred != null) 'starred': starred,
       if (rating != null) 'rating': rating,
       if (updatedAt != null) 'updated_at': updatedAt,
+      if (lastPlayedAt != null) 'last_played_at': lastPlayedAt,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -973,6 +1027,7 @@ class MirrorPlayStatesCompanion extends UpdateCompanion<MirrorPlayState> {
     Value<bool>? starred,
     Value<int?>? rating,
     Value<DateTime?>? updatedAt,
+    Value<DateTime?>? lastPlayedAt,
     Value<int>? rowid,
   }) {
     return MirrorPlayStatesCompanion(
@@ -984,6 +1039,7 @@ class MirrorPlayStatesCompanion extends UpdateCompanion<MirrorPlayState> {
       starred: starred ?? this.starred,
       rating: rating ?? this.rating,
       updatedAt: updatedAt ?? this.updatedAt,
+      lastPlayedAt: lastPlayedAt ?? this.lastPlayedAt,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1015,6 +1071,9 @@ class MirrorPlayStatesCompanion extends UpdateCompanion<MirrorPlayState> {
     if (updatedAt.present) {
       map['updated_at'] = Variable<DateTime>(updatedAt.value);
     }
+    if (lastPlayedAt.present) {
+      map['last_played_at'] = Variable<DateTime>(lastPlayedAt.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1032,6 +1091,7 @@ class MirrorPlayStatesCompanion extends UpdateCompanion<MirrorPlayState> {
           ..write('starred: $starred, ')
           ..write('rating: $rating, ')
           ..write('updatedAt: $updatedAt, ')
+          ..write('lastPlayedAt: $lastPlayedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4879,6 +4939,7 @@ typedef $$MirrorPlayStatesTableCreateCompanionBuilder =
       Value<bool> starred,
       Value<int?> rating,
       Value<DateTime?> updatedAt,
+      Value<DateTime?> lastPlayedAt,
       Value<int> rowid,
     });
 typedef $$MirrorPlayStatesTableUpdateCompanionBuilder =
@@ -4891,6 +4952,7 @@ typedef $$MirrorPlayStatesTableUpdateCompanionBuilder =
       Value<bool> starred,
       Value<int?> rating,
       Value<DateTime?> updatedAt,
+      Value<DateTime?> lastPlayedAt,
       Value<int> rowid,
     });
 
@@ -4940,6 +5002,11 @@ class $$MirrorPlayStatesTableFilterComposer
 
   ColumnFilters<DateTime> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastPlayedAt => $composableBuilder(
+    column: $table.lastPlayedAt,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4992,6 +5059,11 @@ class $$MirrorPlayStatesTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<DateTime> get lastPlayedAt => $composableBuilder(
+    column: $table.lastPlayedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$MirrorPlayStatesTableAnnotationComposer
@@ -5028,6 +5100,11 @@ class $$MirrorPlayStatesTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastPlayedAt => $composableBuilder(
+    column: $table.lastPlayedAt,
+    builder: (column) => column,
+  );
 }
 
 class $$MirrorPlayStatesTableTableManager
@@ -5075,6 +5152,7 @@ class $$MirrorPlayStatesTableTableManager
                 Value<bool> starred = const Value.absent(),
                 Value<int?> rating = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
+                Value<DateTime?> lastPlayedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MirrorPlayStatesCompanion(
                 pid: pid,
@@ -5085,6 +5163,7 @@ class $$MirrorPlayStatesTableTableManager
                 starred: starred,
                 rating: rating,
                 updatedAt: updatedAt,
+                lastPlayedAt: lastPlayedAt,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -5097,6 +5176,7 @@ class $$MirrorPlayStatesTableTableManager
                 Value<bool> starred = const Value.absent(),
                 Value<int?> rating = const Value.absent(),
                 Value<DateTime?> updatedAt = const Value.absent(),
+                Value<DateTime?> lastPlayedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MirrorPlayStatesCompanion.insert(
                 pid: pid,
@@ -5107,6 +5187,7 @@ class $$MirrorPlayStatesTableTableManager
                 starred: starred,
                 rating: rating,
                 updatedAt: updatedAt,
+                lastPlayedAt: lastPlayedAt,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

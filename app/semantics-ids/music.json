@@ -2,6 +2,7 @@
   "doc": "The music hub, its indexes, and the buckets they drill.",
   "ids": {
     "albumTrackMore": "album-track-more-{index}",
+    "albumTrackPlays": "album-track-plays-{index}",
     "entityAlbum": "entity-album-{pid}",
     "entityAllTracks": "entity-all-tracks",
     "entityEditMetadata": "entity-edit-metadata",

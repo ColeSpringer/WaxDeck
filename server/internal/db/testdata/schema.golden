@@ -514,6 +514,14 @@ table similarity_queue
   column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
   autoindex pk|unique=1|(essence)
   index similarity_queue_ready|unique=0|partial=0|(lease_until_ns,enqueued_at_ns)
+table starter_playlists
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column dismissed|INTEGER|notnull=1|default=0|pk=0
+  column kind|TEXT|notnull=1|default=<none>|pk=2
+  column playlist_pid|TEXT|notnull=1|default=''|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,kind)
 table sync_state
   column key|TEXT|notnull=0|default=<none>|pk=1
   column value|TEXT|notnull=1|default=<none>|pk=0

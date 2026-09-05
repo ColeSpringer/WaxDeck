@@ -22,6 +22,8 @@ class _$PlayState extends PlayState {
   @override
   final int? rating;
   @override
+  final DateTime? lastPlayedAt;
+  @override
   final DateTime? updatedAt;
 
   factory _$PlayState([void Function(PlayStateBuilder)? updates]) =>
@@ -35,6 +37,7 @@ class _$PlayState extends PlayState {
     required this.playCount,
     required this.starred,
     this.rating,
+    this.lastPlayedAt,
     this.updatedAt,
   }) : super._();
   @override
@@ -55,6 +58,7 @@ class _$PlayState extends PlayState {
         playCount == other.playCount &&
         starred == other.starred &&
         rating == other.rating &&
+        lastPlayedAt == other.lastPlayedAt &&
         updatedAt == other.updatedAt;
   }
 
@@ -68,6 +72,7 @@ class _$PlayState extends PlayState {
     _$hash = $jc(_$hash, playCount.hashCode);
     _$hash = $jc(_$hash, starred.hashCode);
     _$hash = $jc(_$hash, rating.hashCode);
+    _$hash = $jc(_$hash, lastPlayedAt.hashCode);
     _$hash = $jc(_$hash, updatedAt.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -83,6 +88,7 @@ class _$PlayState extends PlayState {
           ..add('playCount', playCount)
           ..add('starred', starred)
           ..add('rating', rating)
+          ..add('lastPlayedAt', lastPlayedAt)
           ..add('updatedAt', updatedAt))
         .toString();
   }
@@ -119,6 +125,11 @@ class PlayStateBuilder implements Builder<PlayState, PlayStateBuilder> {
   int? get rating => _$this._rating;
   set rating(int? rating) => _$this._rating = rating;
 
+  DateTime? _lastPlayedAt;
+  DateTime? get lastPlayedAt => _$this._lastPlayedAt;
+  set lastPlayedAt(DateTime? lastPlayedAt) =>
+      _$this._lastPlayedAt = lastPlayedAt;
+
   DateTime? _updatedAt;
   DateTime? get updatedAt => _$this._updatedAt;
   set updatedAt(DateTime? updatedAt) => _$this._updatedAt = updatedAt;
@@ -137,6 +148,7 @@ class PlayStateBuilder implements Builder<PlayState, PlayStateBuilder> {
       _playCount = $v.playCount;
       _starred = $v.starred;
       _rating = $v.rating;
+      _lastPlayedAt = $v.lastPlayedAt;
       _updatedAt = $v.updatedAt;
       _$v = null;
     }
@@ -187,6 +199,7 @@ class PlayStateBuilder implements Builder<PlayState, PlayStateBuilder> {
             'starred',
           ),
           rating: rating,
+          lastPlayedAt: lastPlayedAt,
           updatedAt: updatedAt,
         );
     replace(_$result);

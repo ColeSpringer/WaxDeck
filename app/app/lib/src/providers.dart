@@ -13,6 +13,24 @@ import 'auth/oidc_flow.dart';
 import 'auth/oidc_ports.dart';
 import 'uploads/share_intake.dart';
 
+/// Whether a failed read is worth trying again.
+///
+/// Riverpod retries a failed provider with backoff, which is right for a
+/// dropped connection and wrong for a refusal: an item the server does
+/// not have will not appear on the fourth ask, and a surface that
+/// quietly re-asks every few seconds for a pid that will never resolve
+/// is a background loop nobody can see - and, for the ten seconds it
+/// runs, an error state the reader never gets shown. Anything that is
+/// not the server saying no keeps the default.
+Duration? retryUnlessRefused(int attempt, Object error) {
+  if (error case WaxDeckApiException(
+    statusCode: final int status,
+  ) when status >= 400 && status < 500) {
+    return null;
+  }
+  return Duration(milliseconds: 200 * (1 << attempt.clamp(0, 6)));
+}
+
 /// The compile-time server base, for native builds only: the
 /// `--dart-define=WAXDECK_BASE_URL=<url>` override when set, else the
 /// dev default. What every install used before addresses became a

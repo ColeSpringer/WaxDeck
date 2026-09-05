@@ -11,6 +11,13 @@ paths:
         entries omit it (evaluating every rule to draw a page of tiles
         is work a listing does not do); fetch the playlist detail for
         a computed count.
+
+
+        Every account is seeded with one smart playlist, "Most played"
+        (music, play count above zero, most played first, capped at
+        50). It is ordinary in every other way: the account owns it and
+        may rename it, re-rule it, share it, or delete it, and a
+        deletion sticks.
       tags: [playlists]
       parameters:
         - name: cursor
@@ -215,7 +222,7 @@ paths:
         importing a rule that means something else - a document that
         imported as a quietly different playlist is worse than one that
         did not import. That covers fields the catalog has no answer
-        for (`bitrate`, `size`, `bpm`, the `mbz_*` identifiers, and the
+        for (`bitrate`, `size`, the `mbz_*` identifiers, and the
         rest), `limitPercent` and any other unrecognised top-level key,
         `inPlaylist`/`notInPlaylist`, and the absolute date operators
         (`before`, `after`, `is`) on `dateAdded` and `lastPlayed`,

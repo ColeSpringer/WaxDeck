@@ -16,11 +16,15 @@ class _$Item extends Item {
   @override
   final ArtSource? artSource;
   @override
+  final String? mbid;
+  @override
   final int? year;
   @override
   final BuiltList<String>? genres;
   @override
   final int? bitrate;
+  @override
+  final String? isrc;
   @override
   final int? sampleRate;
   @override
@@ -56,9 +60,11 @@ class _$Item extends Item {
     this.codec,
     this.addedAt,
     this.artSource,
+    this.mbid,
     this.year,
     this.genres,
     this.bitrate,
+    this.isrc,
     this.sampleRate,
     this.bpm,
     required this.pid,
@@ -88,9 +94,11 @@ class _$Item extends Item {
         codec == other.codec &&
         addedAt == other.addedAt &&
         artSource == other.artSource &&
+        mbid == other.mbid &&
         year == other.year &&
         genres == other.genres &&
         bitrate == other.bitrate &&
+        isrc == other.isrc &&
         sampleRate == other.sampleRate &&
         bpm == other.bpm &&
         pid == other.pid &&
@@ -113,9 +121,11 @@ class _$Item extends Item {
     _$hash = $jc(_$hash, codec.hashCode);
     _$hash = $jc(_$hash, addedAt.hashCode);
     _$hash = $jc(_$hash, artSource.hashCode);
+    _$hash = $jc(_$hash, mbid.hashCode);
     _$hash = $jc(_$hash, year.hashCode);
     _$hash = $jc(_$hash, genres.hashCode);
     _$hash = $jc(_$hash, bitrate.hashCode);
+    _$hash = $jc(_$hash, isrc.hashCode);
     _$hash = $jc(_$hash, sampleRate.hashCode);
     _$hash = $jc(_$hash, bpm.hashCode);
     _$hash = $jc(_$hash, pid.hashCode);
@@ -140,9 +150,11 @@ class _$Item extends Item {
           ..add('codec', codec)
           ..add('addedAt', addedAt)
           ..add('artSource', artSource)
+          ..add('mbid', mbid)
           ..add('year', year)
           ..add('genres', genres)
           ..add('bitrate', bitrate)
+          ..add('isrc', isrc)
           ..add('sampleRate', sampleRate)
           ..add('bpm', bpm)
           ..add('pid', pid)
@@ -180,6 +192,10 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
   set artSource(covariant ArtSourceBuilder? artSource) =>
       _$this._artSource = artSource;
 
+  String? _mbid;
+  String? get mbid => _$this._mbid;
+  set mbid(covariant String? mbid) => _$this._mbid = mbid;
+
   int? _year;
   int? get year => _$this._year;
   set year(covariant int? year) => _$this._year = year;
@@ -191,6 +207,10 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
   int? _bitrate;
   int? get bitrate => _$this._bitrate;
   set bitrate(covariant int? bitrate) => _$this._bitrate = bitrate;
+
+  String? _isrc;
+  String? get isrc => _$this._isrc;
+  set isrc(covariant String? isrc) => _$this._isrc = isrc;
 
   int? _sampleRate;
   int? get sampleRate => _$this._sampleRate;
@@ -257,9 +277,11 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
       _codec = $v.codec;
       _addedAt = $v.addedAt;
       _artSource = $v.artSource?.toBuilder();
+      _mbid = $v.mbid;
       _year = $v.year;
       _genres = $v.genres?.toBuilder();
       _bitrate = $v.bitrate;
+      _isrc = $v.isrc;
       _sampleRate = $v.sampleRate;
       _bpm = $v.bpm;
       _pid = $v.pid;
@@ -301,9 +323,11 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
             codec: codec,
             addedAt: addedAt,
             artSource: _artSource?.build(),
+            mbid: mbid,
             year: year,
             genres: _genres?.build(),
             bitrate: bitrate,
+            isrc: isrc,
             sampleRate: sampleRate,
             bpm: bpm,
             pid: BuiltValueNullFieldError.checkNotNull(pid, r'Item', 'pid'),

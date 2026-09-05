@@ -345,9 +345,13 @@ abstract final class SemanticsIds {
   static const String itemDelete = 'item-delete';
   static const String itemDeleteConfirm = 'item-delete-confirm';
   static String itemDeleteMode(Object mode) => 'item-delete-mode-$mode';
+  static const String itemFactsError = 'item-facts-error';
+  static String itemFactsRow(Object key) => 'item-facts-$key';
+  static String itemFactsSheet(Object pid) => 'item-facts-sheet-$pid';
   static const String itemMenuDetach = 'item-menu-detach';
   static const String itemMenuDetachConfirm = 'item-menu-detach-confirm';
   static const String itemMenuDetachWriteBack = 'item-menu-detach-writeback';
+  static const String itemMenuDetails = 'item-menu-details';
   static const String itemMenuGoAlbum = 'item-menu-go-album';
   static const String itemMenuGoArtist = 'item-menu-go-artist';
   static const String itemMenuMix = 'item-menu-mix';
@@ -453,6 +457,7 @@ abstract final class SemanticsIds {
 
   // music: The music hub, its indexes, and the buckets they drill.
   static String albumTrackMore(Object index) => 'album-track-more-$index';
+  static String albumTrackPlays(Object index) => 'album-track-plays-$index';
   static String entityAlbum(Object pid) => 'entity-album-$pid';
   static const String entityAllTracks = 'entity-all-tracks';
   static const String entityEditMetadata = 'entity-edit-metadata';

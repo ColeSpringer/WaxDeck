@@ -89,6 +89,22 @@ export class Music extends Surface {
     );
   }
 
+  /// The play count beside one album row's running time, drawn only on
+  /// a track the reading account has finished at least once.
+  trackPlays(nth: number): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.albumTrackPlays(nth)));
+  }
+
+  /// Open one album row's overflow and pick the facts sheet from it.
+  /// Settles on the sheet's own play row, which nothing else draws.
+  async openTrackFacts(nth: number): Promise<void> {
+    await chooseFromMenu(
+      this.ctx.page.locator(sem(SemanticsIds.albumTrackMore(nth))),
+      this.ctx.page.locator(sem(SemanticsIds.itemMenuDetails)),
+      this.ctx.page.locator(sem(SemanticsIds.itemFactsRow('plays'))),
+    );
+  }
+
   /// The entity header's overflow, and the pin row inside it.
   entityOverflow(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.entityOverflow));

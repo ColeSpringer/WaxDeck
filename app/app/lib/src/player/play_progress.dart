@@ -14,8 +14,24 @@ class PlayProgress {
     required this.positionMs,
     required this.played,
     required this.finished,
+    this.playCount = 0,
+    this.lastPlayedAt,
     this.updatedAt,
   });
+
+  /// One server play state as the UI reads it.
+  ///
+  /// The one place the two shapes are mapped. Four screens wrote this
+  /// out by hand and each one silently dropped whatever field the
+  /// contract had grown since it was written, which is a shelf drawing
+  /// a played item as never played and no test that can see it.
+  PlayProgress.of(PlayState state)
+    : positionMs = state.positionMs,
+      played = state.played,
+      finished = state.finished,
+      playCount = state.playCount,
+      lastPlayedAt = state.lastPlayedAt,
+      updatedAt = state.updatedAt;
 
   static const none = PlayProgress(
     positionMs: 0,
@@ -24,6 +40,15 @@ class PlayProgress {
   );
 
   final int positionMs;
+
+  /// How many plays the server has counted for the caller. Zero on an
+  /// item nobody has finished, which is what a row showing nothing
+  /// beside its duration means.
+  final int playCount;
+
+  /// When the last of those plays was counted; null when there were
+  /// none. A manual played mark leaves it null.
+  final DateTime? lastPlayedAt;
 
   /// When this position was last written, by any device. What orders a
   /// continue-listening shelf: a book left off on a phone leads the
@@ -97,12 +122,7 @@ class PlayProgressController extends AsyncNotifier<Map<String, PlayProgress>> {
     for (var at = 0; at < all.length; at += batchSize) {
       final slice = all.sublist(at, (at + batchSize).clamp(0, all.length));
       for (final state in await repository.listPlayStates(slice)) {
-        out[state.pid] = PlayProgress(
-          positionMs: state.positionMs,
-          played: state.played,
-          finished: state.finished,
-          updatedAt: state.updatedAt,
-        );
+        out[state.pid] = PlayProgress.of(state);
       }
     }
     return out;
@@ -118,9 +138,27 @@ class PlayProgressController extends AsyncNotifier<Map<String, PlayProgress>> {
   Future<bool> markPlayed(String pid, int durationMs) async {
     if (durationMs <= 0) return false;
     await ref.read(repositoryProvider).putPlayState(pid, durationMs);
+    // The count and its stamp come along because the server just
+    // counted this play: a fresh progress would read as never played
+    // beside a row that has just been marked heard.
+    //
+    // Only on the first mark, though. The server counts one play per
+    // listen-through and refuses a second on an item already played, so
+    // marking a finished item again writes nothing there - and adding
+    // one here would leave a count the next read silently corrects. The
+    // player's menu offers the mark whether or not it is needed, so this
+    // is a state a listener reaches by tapping twice.
+    final held = state.value?[pid];
+    final counted = !(held?.played ?? false);
     _write(
       pid,
-      PlayProgress(positionMs: durationMs, played: true, finished: true),
+      PlayProgress(
+        positionMs: durationMs,
+        played: true,
+        finished: true,
+        playCount: (held?.playCount ?? 0) + (counted ? 1 : 0),
+        lastPlayedAt: counted ? DateTime.now().toUtc() : held?.lastPlayedAt,
+      ),
     );
     return true;
   }

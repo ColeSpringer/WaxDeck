@@ -126,6 +126,21 @@ const baselineSchema = `
 		json          TEXT    NOT NULL,
 		updated_at_ns INTEGER NOT NULL
 	);
+	-- Which starter playlist each account was seeded with, and whether
+	-- they threw it away. The seeded list is an ordinary owned playlist
+	-- once it exists -- editable, renameable, deletable -- so this row
+	-- is the only thing that distinguishes it, and it exists to answer
+	-- one question: has this account already been offered this starter?
+	-- dismissed is what makes a deletion stick, since the boot-time
+	-- reconcile would otherwise mint it again on the next start.
+	CREATE TABLE starter_playlists (
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		kind          TEXT    NOT NULL,
+		playlist_pid  TEXT    NOT NULL DEFAULT '',
+		dismissed     INTEGER NOT NULL DEFAULT 0,
+		created_at_ns INTEGER NOT NULL,
+		PRIMARY KEY (user_id, kind)
+	);
 	CREATE TABLE oauth_state (
 		state         TEXT    PRIMARY KEY,
 		provider      TEXT    NOT NULL,

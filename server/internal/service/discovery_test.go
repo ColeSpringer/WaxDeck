@@ -15,6 +15,12 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/supervise"
 )
 
+// The identifiers the fixture's one identified track carries.
+const (
+	catalogFixtureISRC = "USRC17607839"
+	catalogFixtureMBID = "b9b3d3f9-1e2b-4a1e-9a4a-1a2b3c4d5e6f"
+)
+
 // newCatalogFixture is a real Library over a small scanned catalog of
 // tagged tracks, plus an admin context: enough for the import resolve
 // ladder and the discovery metadata fallback. Durations are distinct so
@@ -37,12 +43,21 @@ func newCatalogFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 			},
 		}
 	}
+	// One track carries the recording identifiers, the way a matched
+	// library does and a scanned one mostly does not: the read surfaces
+	// need both shapes in the same catalog to tell "absent" from
+	// "never read".
+	identified := func(spec fixtures.Spec) fixtures.Spec {
+		spec.Tags["ISRC"] = catalogFixtureISRC
+		spec.Tags["MUSICBRAINZ_TRACKID"] = catalogFixtureMBID
+		return spec
+	}
 	libDir := t.TempDir()
 	if _, err := fixtures.Generate(libDir,
 		track("amber", "Amber Waves", "Test Ensemble", "Ambient", 2*time.Second),
 		track("basalt", "Basalt Steps", "Test Ensemble", "Ambient", 2500*time.Millisecond),
 		track("cobalt", "Cobalt Sky", "Test Ensemble", "Ambient", 3*time.Second),
-		track("delta", "Delta Groove", "Brass Nine", "Jazz", 3500*time.Millisecond),
+		identified(track("delta", "Delta Groove", "Brass Nine", "Jazz", 3500*time.Millisecond)),
 	); err != nil {
 		t.Fatalf("generating fixtures: %v", err)
 	}

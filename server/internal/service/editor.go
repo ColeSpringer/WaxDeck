@@ -2327,6 +2327,7 @@ func editorScalarFields(it *model.ItemView, prov []model.FieldProvenance) map[st
 		set("genre", it.Genre)
 		setInt("year", it.Year)
 		set("asin", it.ASIN)
+		set("mbid", it.MBID)
 	case model.KindEpisode:
 		set("title", it.Title)
 		setInt("season", it.Season)
@@ -2342,14 +2343,18 @@ func editorScalarFields(it *model.ItemView, prov []model.FieldProvenance) map[st
 		setInt("track_no", it.TrackNo)
 		setInt("disc_no", it.DiscNo)
 		setInt("bpm", it.BPM)
+		set("isrc", it.ISRC)
+		set("mbid", it.MBID)
 		if it.Compilation {
 			fields["compilation"] = "true"
 		}
 	}
 	// Curated values cover the vocabulary the view does not surface
-	// (comment, identifiers, the episode extras); a tag-sourced value
-	// for those fields has no provenance row and stays absent until a
-	// fuller item read exists upstream.
+	// (comment, the episode extras); a tag-sourced value for those
+	// fields has no provenance row and stays absent until a fuller item
+	// read exists upstream. A curated identifier still wins over the
+	// view's, which is what an edit that has not been written back to
+	// the file yet looks like.
 	allowed := map[string]bool{}
 	for _, f := range editorFieldsForKind(it.Kind) {
 		allowed[f.Name] = true

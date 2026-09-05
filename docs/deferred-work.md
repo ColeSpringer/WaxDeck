@@ -706,19 +706,6 @@ here waits on upstream.
   dimension - a route, a bucket in the books hub, the books in
   sequence - can follow whenever the books hub grows one.
 
-- `[in-repo]` **A track's tempo has no read surface.** `bpm` is editable,
-  rides `Item`, and reaches Subsonic, but nothing in this client draws
-  it: the only technical-facts row is the album screen's chip line,
-  which describes a release through its first track, and a per-track
-  tempo there would be a wrong answer dressed as a fact. So the one
-  place a tempo is visible is the metadata editor, which answers a
-  `ForbiddenPage` to anyone without curate rights - a listener cannot
-  see it at all. The fix wants a per-track facts surface (a track detail
-  sheet, or a facts block on the editor's read half) that this client
-  has never had; BPM is simply the first field to want one. Subsonic
-  clients read it today, which is what makes this a gap rather than a
-  blocker.
-
 ## Discovery and stats
 
 - `[in-repo]` **The year in review draws no per-media-type split.** The

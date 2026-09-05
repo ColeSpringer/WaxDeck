@@ -58,6 +58,9 @@ class MediaTileData {
     this.progress,
     this.trailingText,
     this.trailingSpoken,
+    this.trailingDetail,
+    this.trailingDetailSpoken,
+    this.trailingDetailSemanticsId,
     this.badge,
     this.starred = false,
     this.downloaded = false,
@@ -91,6 +94,27 @@ class MediaTileData {
   /// caption and the wrong thing to read aloud; `WaxLocalizations`'s
   /// `spellDuration` is what belongs here. Defaults to the drawn text.
   final String? trailingSpoken;
+
+  /// A second right-aligned readout beside [trailingText]: a play count
+  /// on an album row is the one so far. A bare number carries nothing
+  /// aloud, so [trailingDetailSpoken] words it, and it is announced as
+  /// its own node rather than folded into the row's name - the row's
+  /// label excludes everything under it, which is what keeps a control
+  /// inside a row reachable.
+  ///
+  /// Rows only. A card has no trailing column to put it in, so
+  /// [MediaCard] ignores this and the same view data drawn as a grid
+  /// tile is the row without its detail, not a tile with one somewhere
+  /// else.
+  final String? trailingDetail;
+
+  /// What a screen reader hears in place of [trailingDetail]. Defaults
+  /// to the drawn text, which for a bare count is a number on its own.
+  final String? trailingDetailSpoken;
+
+  /// The identifier the detail's own node carries, for the surfaces the
+  /// e2e suite reads a count off.
+  final String? trailingDetailSemanticsId;
 
   /// A word over the artwork naming what kind of thing this is, where the
   /// kind changes what the item does rather than only what it holds: a

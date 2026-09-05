@@ -17,6 +17,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/add_to_library.dart';
 import 'item_detach.dart';
+import 'item_facts_sheet.dart';
 
 /// Whether this session gets an editor door on item rows: what the
 /// session already knows - the admin role, or the upload right while a
@@ -136,6 +137,25 @@ Future<void> showItemMenuSheet(
                   semanticsId: SemanticsIds.editMetadata(pid),
                   onTap: () => open(WaxRoute.metadata(pid)),
                 ),
+              // Every medium, right after the editor door: what the
+              // editor writes is what this reads back, plus the play
+              // record and the file's own facts, which nothing else
+              // shows.
+              WaxOptionRow(
+                title: l10n.libraryMenuDetails,
+                glyph: WaxIcons.info,
+                semanticsId: SemanticsIds.itemMenuDetails,
+                onTap: () {
+                  close();
+                  unawaited(
+                    showItemFactsSheet(
+                      rootContext,
+                      pid: pid,
+                      mediaType: mediaType,
+                    ),
+                  );
+                },
+              ),
               if (music && withGoToAlbum && albumPid != null)
                 WaxOptionRow(
                   title: l10n.libraryMenuGoToAlbum,

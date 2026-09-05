@@ -316,6 +316,21 @@ void main() {
                             trailingText: '32:00',
                           ),
                         ),
+                        // A count beside the duration, which is the one
+                        // row with two right-hand readouts: the baseline
+                        // is what says they sit apart rather than
+                        // running together into one number.
+                        MediaListRow(
+                          data: const MediaTileData(
+                            title: 'Harbour Lights',
+                            subtitle: 'Nightjar',
+                            trailingText: '4:18',
+                            trailingDetail: '12',
+                          ),
+                          leadingIndex: 5,
+                          onTap: () {},
+                          onMore: () {},
+                        ),
                       ],
                     ),
                   ),

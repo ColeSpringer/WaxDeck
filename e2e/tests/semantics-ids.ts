@@ -335,9 +335,13 @@ export const SemanticsIds = {
   itemDelete: 'item-delete',
   itemDeleteConfirm: 'item-delete-confirm',
   itemDeleteMode: (mode: string | number) => `item-delete-mode-${mode}`,
+  itemFactsError: 'item-facts-error',
+  itemFactsRow: (key: string | number) => `item-facts-${key}`,
+  itemFactsSheet: (pid: string | number) => `item-facts-sheet-${pid}`,
   itemMenuDetach: 'item-menu-detach',
   itemMenuDetachConfirm: 'item-menu-detach-confirm',
   itemMenuDetachWriteBack: 'item-menu-detach-writeback',
+  itemMenuDetails: 'item-menu-details',
   itemMenuGoAlbum: 'item-menu-go-album',
   itemMenuGoArtist: 'item-menu-go-artist',
   itemMenuMix: 'item-menu-mix',
@@ -437,6 +441,7 @@ export const SemanticsIds = {
 
   // music: The music hub, its indexes, and the buckets they drill.
   albumTrackMore: (index: string | number) => `album-track-more-${index}`,
+  albumTrackPlays: (index: string | number) => `album-track-plays-${index}`,
   entityAlbum: (pid: string | number) => `entity-album-${pid}`,
   entityAllTracks: 'entity-all-tracks',
   entityEditMetadata: 'entity-edit-metadata',
@@ -977,6 +982,8 @@ export const SemanticsIdPrefixes = {
   // library: The complete item listings and the per-item rows the sync specs drive.
   item: 'item-',
   itemDeleteMode: 'item-delete-mode-',
+  itemFactsRow: 'item-facts-',
+  itemFactsSheet: 'item-facts-sheet-',
   itemMenuSheet: 'item-menu-sheet-',
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
@@ -1000,6 +1007,7 @@ export const SemanticsIdPrefixes = {
 
   // music: The music hub, its indexes, and the buckets they drill.
   albumTrackMore: 'album-track-more-',
+  albumTrackPlays: 'album-track-plays-',
   entityAlbum: 'entity-album-',
   indexBucket: 'index-bucket-',
   indexBucketMore: 'index-bucket-more-',

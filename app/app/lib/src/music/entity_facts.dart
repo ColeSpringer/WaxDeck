@@ -11,9 +11,15 @@ import '../providers.dart';
 /// Auto-disposing and per-pid: an album screen asks for exactly one of
 /// these - the first track speaks for the release - and a listing that
 /// asked per row would be a fetch per row for a caption.
+///
+/// A refusal is final, on [retryUnlessRefused]'s reasoning: the facts
+/// sheet draws an error with a retry on it, and thirteen seconds of
+/// invisible backoff before that error appears is a sheet that looks
+/// broken while it works.
 final itemDetailProvider = FutureProvider.autoDispose
     .family<ItemDetail, String>(
       (ref, pid) => ref.watch(repositoryProvider).getItem(pid),
+      retry: retryUnlessRefused,
     );
 
 /// An album's items in the order it was pressed.
@@ -108,10 +114,10 @@ String formatRunningTime(WaxLocalizations l10n, Duration d) {
 /// Either half can be missing, and the label is whatever is left rather
 /// than a space where the other one would have been. Empty when both
 /// are; the caller draws no chip for that.
-String codecChipLabel(ItemDetail detail) {
+String codecChipLabel(AppLocalizations l10n, ItemDetail detail) {
   final codec = (detail.codec ?? '').toUpperCase();
   final rate = detail.sampleRate;
   if (rate == null || rate <= 0) return codec;
-  final khz = (rate / 1000).toStringAsFixed(rate % 1000 == 0 ? 0 : 1);
-  return codec.isEmpty ? '$khz kHz' : '$codec $khz kHz';
+  final khz = l10n.formatSampleRate(rate);
+  return codec.isEmpty ? khz : '$codec $khz';
 }

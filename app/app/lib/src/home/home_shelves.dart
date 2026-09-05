@@ -75,13 +75,7 @@ Future<HomeShelfItems> readShelf(
       for (final item in page.items) item.pid,
     ]);
     progress = PlayProgressView(<String, PlayProgress>{
-      for (final state in states)
-        state.pid: PlayProgress(
-          positionMs: state.positionMs,
-          played: state.played,
-          finished: state.finished,
-          updatedAt: state.updatedAt,
-        ),
+      for (final state in states) state.pid: PlayProgress.of(state),
     });
   }
   final kept = <ItemSummary>[];

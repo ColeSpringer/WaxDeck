@@ -1282,6 +1282,10 @@ func (l *Library) DeletePlaylist(ctx context.Context, uc *UserCtx, apiPlaylistPI
 	if err := l.db.DeletePlaylistSource(ctx, string(pl.PID)); err != nil {
 		l.log.Warn("clearing playlist source binding", "playlist", pl.PID, "err", err)
 	}
+	// A deleted starter stays deleted: without this the boot reconcile
+	// would find it missing from the catalog and seed it again. Both
+	// delete paths, REST and Subsonic, come through here.
+	l.dismissStarterPlaylist(ctx, uc, pl.PID)
 	l.emitPlaylistEvent(ctx, uc, wasShared, string(pl.PID))
 	l.Audit(ctx, uc, "playlist.delete",
 		AuditTarget{Kind: "playlist", PID: apiPID(PrefixPlaylist, pl.PID), Name: pl.Name},

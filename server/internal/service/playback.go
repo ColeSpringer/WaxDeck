@@ -180,6 +180,9 @@ func playStateDTO(apiItemPID string, st *model.PlayState) PlayState {
 			r := st.Rating
 			out.Rating = &r
 		}
+		if st.LastPlayedAt > 0 {
+			out.LastPlayedAt = time.Unix(0, st.LastPlayedAt).UTC()
+		}
 		if st.UpdatedAt > 0 {
 			out.UpdatedAt = time.Unix(0, st.UpdatedAt).UTC()
 		}

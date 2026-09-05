@@ -102,6 +102,25 @@ All calendar bucketing happens in your preferred timezone (the
 server does the calendar math per user, so a midnight-crossing session
 lands on the right day for you, not for the server.
 
+### Track details
+
+The aggregate has a per-track half. `GET /api/v1/items/{pid}/play-state`
+carries `playCount` and `lastPlayedAt`: how often you have played one
+item and when the last of those plays was counted. Marking something
+played by hand sets the flags without stamping `lastPlayedAt`, so the
+stamp reads as the listening record rather than as the flag's age. It
+does raise the count to one, though, so a hand-marked item reads as one
+play at an unknown time - which is what the sheet below says, rather
+than "never".
+
+In the app, Details in any item's overflow menu opens a sheet holding
+both, alongside what the catalog knows about the file: tempo, length,
+year, genres, codec, container, sample rate, bitrate, when it entered
+the library, and the recording's MusicBrainz ID and ISRC where it
+carries them. An album's track rows show the play count beside the
+running time, so a release reads as a listening history without
+opening anything.
+
 ## Year in review
 
 `GET /api/v1/stats/year-in-review` is your listening recap for any

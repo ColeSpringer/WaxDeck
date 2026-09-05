@@ -1,6 +1,7 @@
 import { test, expect } from './fixtures';
 import { subsonic } from './driver/subsonic';
 import { clickThrough } from './driver/gestures';
+import { SemanticsIds } from './semantics-ids';
 
 // The playlists slice over the real stack: the rule editor building a
 // smart playlist in the browser, live re-evaluation when user state
@@ -405,3 +406,56 @@ test('an NSP export reports every gap, and offers the partial', async ({ app }) 
   await app.seed.clearPlaylistsNamed('Two Sorts');
 });
 
+
+test('a fresh account is seeded with Most played', async ({ app, otherAccount }) => {
+  // An account of this test's own, minted through the production API
+  // and never deleted from: the sibling below throws its starter away,
+  // and that is permanent by design, so a stack this file has already
+  // run against would hand a reused login an account that has one for
+  // the wrong reason. Nothing here creates the subject - a seeder that
+  // made the missing playlist would turn "the server seeds this" into
+  // an assertion about the seeder.
+  const fresh = await otherAccount('starter');
+  const theirs = app.api.as(fresh.token);
+  const named = ((await theirs.get('/playlists')).playlists ?? []).filter(
+    (pl) => pl.name === 'Most played',
+  );
+  expect(named).toHaveLength(1);
+  // Ordinary in every way that matters: the account owns it, it is the
+  // smart list the rule describes, and nothing marks it as special.
+  expect(named[0].kind).toBe('smart');
+  expect(named[0].isOwner).toBe(true);
+  expect(named[0].visibility).toBe('private');
+});
+
+test('deleting the starter sticks', async ({ app }) => {
+  await app.nav.enter('playlists');
+
+  // On a stack this test has already run against, the starter is gone
+  // already and staying gone is the whole claim - so the delete runs
+  // only when there is one to delete, and the absence below is asserted
+  // either way.
+  const owned = await app.seed.playlistsNamed('Most played');
+  if (owned.length > 0) {
+    const starter = owned[0]!;
+    await expect(app.playlists.row(starter)).toBeVisible();
+    // The owner's own overflow and the same confirm every other
+    // playlist gets: it is not special-cased on the way out either.
+    await app.playlists.openShowing(starter, app.playlists.ruleSummary());
+    await app.playlists.fromOverflow(
+      app.playlists.control(SemanticsIds.playlistDelete),
+      app.playlists.control(SemanticsIds.playlistDeleteConfirm),
+    );
+    await clickThrough(
+      app.playlists.control(SemanticsIds.playlistDeleteConfirm),
+      app.playlists.add(),
+    );
+    await expect(app.playlists.row(starter)).toHaveCount(0);
+  }
+
+  // Re-seeding happens at boot, which this cannot cause, so the reload
+  // proves the narrower thing it can: the delete reached the server and
+  // the grid draws the server's answer rather than a local hole.
+  await app.nav.reload(app.playlists.add());
+  expect(await app.seed.playlistsNamed('Most played')).toHaveLength(0);
+});

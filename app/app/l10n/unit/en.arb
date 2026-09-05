@@ -1,0 +1,34 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "unitBpm": "{bpm} BPM",
+  "@unitBpm": {
+    "description": "A track's tempo. BPM is beats per minute, which is written the same way in most languages.",
+    "placeholders": {
+      "bpm": {
+        "type": "int",
+        "example": "128"
+      }
+    }
+  },
+  "unitKbps": "{kbps} kbps",
+  "@unitKbps": {
+    "description": "An audio bitrate. kbps is kilobits per second.",
+    "placeholders": {
+      "kbps": {
+        "type": "int",
+        "example": "320"
+      }
+    }
+  },
+  "unitKilohertz": "{khz} kHz",
+  "@unitKilohertz": {
+    "description": "A sample rate. {khz} arrives already written for this language, so a locale that separates decimals differently is already handled.",
+    "placeholders": {
+      "khz": {
+        "type": "String",
+        "example": "44.1"
+      }
+    }
+  }
+}

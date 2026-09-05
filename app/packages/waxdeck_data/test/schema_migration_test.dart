@@ -300,7 +300,7 @@ void main() {
     expect(await db.select(db.clientSettings).get(), isEmpty);
 
     final version = await db.customSelect('pragma user_version').getSingle();
-    expect(version.data.values.first, 4);
+    expect(version.data.values.first, db.schemaVersion);
   });
 
   test('v3 upgrades: downloaded parts survive without durations', () async {
@@ -317,7 +317,7 @@ void main() {
     expect(records.first.localPath, '/tmp/media/ess0.m4b');
 
     final version = await db.customSelect('pragma user_version').getSingle();
-    expect(version.data.values.first, 4);
+    expect(version.data.values.first, db.schemaVersion);
   });
 
   test('v2 upgrades: the queue survives and gains its cursor', () async {
@@ -337,7 +337,7 @@ void main() {
     expect(await db.select(db.clientSettings).get(), isEmpty);
 
     final version = await db.customSelect('pragma user_version').getSingle();
-    expect(version.data.values.first, 4);
+    expect(version.data.values.first, db.schemaVersion);
   });
 
   test('an upgraded database holds per-device settings', () async {

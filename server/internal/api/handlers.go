@@ -1078,6 +1078,9 @@ func playStateJSON(st service.PlayState) PlayState {
 		Starred:    st.Starred,
 		Rating:     st.Rating,
 	}
+	if !st.LastPlayedAt.IsZero() {
+		out.LastPlayedAt = &st.LastPlayedAt
+	}
 	if !st.UpdatedAt.IsZero() {
 		out.UpdatedAt = &st.UpdatedAt
 	}
@@ -1240,6 +1243,12 @@ func itemJSON(d service.ItemDetail) Item {
 	}
 	if !d.AddedAt.IsZero() {
 		it.AddedAt = &d.AddedAt
+	}
+	if d.MBID != "" {
+		it.Mbid = ptr(d.MBID)
+	}
+	if d.ISRC != "" {
+		it.Isrc = ptr(d.ISRC)
 	}
 	it.ArtSource = artSourceJSON(d.ArtSource)
 	return it

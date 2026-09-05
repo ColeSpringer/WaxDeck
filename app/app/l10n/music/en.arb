@@ -623,6 +623,15 @@
       }
     }
   },
+  "musicTrackPlaysSpoken": "{count, plural, =1{played once} other{played {count} times}}",
+  "@musicTrackPlaysSpoken": {
+    "description": "What a screen reader hears in place of the bare play count beside an album track's duration.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "musicTracksTitle": "Tracks",
   "@musicTracksTitle": {
     "description": "The listing of every track in the library, named on the hub tile that opens it and as its own title."

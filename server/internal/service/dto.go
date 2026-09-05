@@ -54,7 +54,11 @@ type ItemDetail struct {
 	SampleRate int
 	Bitrate    int
 	AddedAt    time.Time
-	ArtSource  ArtSourceDTO
+	// MBID and ISRC are the recording's own identifiers, empty for the
+	// items carrying neither, which is most of an untagged library.
+	MBID      string
+	ISRC      string
+	ArtSource ArtSourceDTO
 }
 
 // AlbumDetail is one album entity's identity and counts. Everything
@@ -185,7 +189,11 @@ type PlayState struct {
 	PlayCount  int
 	Starred    bool
 	Rating     *int
-	UpdatedAt  time.Time
+	// LastPlayedAt is when a play was last counted; zero until one has
+	// been. A manual played mark leaves it alone, so it reads as the
+	// listening record rather than as the flag's age.
+	LastPlayedAt time.Time
+	UpdatedAt    time.Time
 }
 
 // ListenSession is one reported listen, API-shaped.

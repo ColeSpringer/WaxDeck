@@ -43,6 +43,13 @@ class MirrorPlayStates extends Table {
   IntColumn get rating => integer().nullable()();
   DateTimeColumn get updatedAt => dateTime().nullable()();
 
+  /// When the last counted play was, for the facts sheet read offline.
+  /// Null on a state nobody has finished, and on one marked played by
+  /// hand, which raises the count and stamps no time.
+  ///
+  /// Last on purpose, for the reason [DownloadRecords.durationMs] gives.
+  DateTimeColumn get lastPlayedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {pid};
 }
@@ -265,7 +272,7 @@ class MirrorDatabase extends _$MirrorDatabase {
   }
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -295,6 +302,11 @@ class MirrorDatabase extends _$MirrorDatabase {
         // download_records is a v1 table, so every upgrade path arrives
         // with it already built and missing this column.
         await m.addColumn(downloadRecords, downloadRecords.durationMs);
+      }
+      if (from < 5) {
+        // mirror_play_states is a v1 table, so this needs no version
+        // guard for the reason the step above gives.
+        await m.addColumn(mirrorPlayStates, mirrorPlayStates.lastPlayedAt);
       }
     },
   );

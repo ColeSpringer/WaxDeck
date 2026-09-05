@@ -18,6 +18,7 @@ part 'play_state.g.dart';
 /// * [playCount] - How many times the item has been played.
 /// * [starred] - Whether the caller starred the item.
 /// * [rating] - The caller's rating (0 to 100); absent or null when unrated.
+/// * [lastPlayedAt] - When a play was last counted for the caller. Absent until one has been; a manual played mark sets the flags without standing in for a listen, so it does not set this. 
 /// * [updatedAt] - When this state last changed.
 @BuiltValue()
 abstract class PlayState implements Built<PlayState, PlayStateBuilder> {
@@ -48,6 +49,10 @@ abstract class PlayState implements Built<PlayState, PlayStateBuilder> {
   /// The caller's rating (0 to 100); absent or null when unrated.
   @BuiltValueField(wireName: r'rating')
   int? get rating;
+
+  /// When a play was last counted for the caller. Absent until one has been; a manual played mark sets the flags without standing in for a listen, so it does not set this. 
+  @BuiltValueField(wireName: r'lastPlayedAt')
+  DateTime? get lastPlayedAt;
 
   /// When this state last changed.
   @BuiltValueField(wireName: r'updatedAt')
@@ -111,6 +116,13 @@ class _$PlayStateSerializer implements PrimitiveSerializer<PlayState> {
       yield serializers.serialize(
         object.rating,
         specifiedType: const FullType.nullable(int),
+      );
+    }
+    if (object.lastPlayedAt != null) {
+      yield r'lastPlayedAt';
+      yield serializers.serialize(
+        object.lastPlayedAt,
+        specifiedType: const FullType(DateTime),
       );
     }
     if (object.updatedAt != null) {
@@ -192,6 +204,13 @@ class _$PlayStateSerializer implements PrimitiveSerializer<PlayState> {
           ) as int?;
           if (valueDes == null) continue;
           result.rating = valueDes;
+          break;
+        case r'lastPlayedAt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(DateTime),
+          ) as DateTime;
+          result.lastPlayedAt = valueDes;
           break;
         case r'updatedAt':
           final valueDes = serializers.deserialize(

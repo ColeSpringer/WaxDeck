@@ -1,4 +1,5 @@
 import { test, expect } from './fixtures';
+import { SemanticsIds } from './semantics-ids';
 
 // The entity screens and the queue surface over the real stack: an
 // artist bucket opening the artist rather than a filtered list, an
@@ -23,6 +24,53 @@ test('an album is its own location, and playing a row queues the album', async (
   // Shuffle is the first one in the app, and it starts playback rather
   // than only setting a toggle.
   await app.music.playEntity('shuffle');
+});
+
+test('an album row wears its play count, and the row menu opens the facts', async ({
+  app,
+}) => {
+  await app.nav.enter('albums');
+  await app.music.openEntity(0);
+
+  // Every track on the release counted once, not just the one this
+  // asserts: the screen orders by disc and track number while the
+  // catalog answers in its own stable order, so seeding the whole
+  // album is what makes the first row's number knowable from here.
+  const albumPid = app.nav.location().split('/').pop() ?? '';
+  const page = await app.api.get('/library/items', {
+    query: { facet: 'album', facetKey: albumPid.slice(3), limit: 100 },
+  });
+  const tracks = page.items ?? [];
+  expect(tracks.length).toBeGreaterThan(0);
+  await app.api.post('/listens', {
+    data: {
+      // Keyed on the track's own pid, not on where it sat in this
+      // listing: ingest dedupes on the session id, accounts outlive a
+      // run, and an album whose stable order moved under a re-scan
+      // would then have one row's listen dropped as a duplicate of
+      // another row's.
+      sessions: tracks.map((track) => ({
+        sessionId: `facts-${track.pid}`,
+        pid: track.pid,
+        startedAt: new Date().toISOString(),
+        msPlayed: 1000,
+        finished: true,
+        source: 'live' as const,
+      })),
+    },
+  });
+
+  // The count rides the row beside the running time. What the node
+  // carries is the spoken form rather than the drawn digit: a bare
+  // number read aloud says nothing, so the count is a sentence to the
+  // accessibility tree and the suite reads what a listener would hear.
+  await app.nav.reload(app.music.entityShuffle());
+  await expect(app.music.trackPlays(0)).toHaveText('played once');
+
+  // And the same count again in the sheet the row's menu opens, which
+  // is where the rest of what the catalog holds about a track lives.
+  await app.music.openTrackFacts(0);
+  await expect(app.music.control(SemanticsIds.itemFactsRow('plays'))).toContainText('1');
 });
 
 test('an artist bucket opens the artist, not a filtered list', async ({ app }) => {

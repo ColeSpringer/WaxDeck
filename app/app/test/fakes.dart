@@ -676,7 +676,18 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<ItemDetail> getItem(String pid) async {
     await getItemGate?.future;
-    final item = libraryItems.firstWhere((i) => i.pid == pid);
+    // The server's own answer for a pid it does not hold, as getAlbum
+    // above gives it: a `StateError` out of `firstWhere` is a bug in
+    // the test, and the surfaces that draw an error state need the
+    // refusal that tells them to stop asking.
+    final item = libraryItems.where((i) => i.pid == pid).firstOrNull;
+    if (item == null) {
+      throw WaxDeckApiException(
+        statusCode: 404,
+        code: 'not-found',
+        message: 'no item with pid $pid',
+      );
+    }
     return ItemDetail(
       pid: item.pid,
       mediaType: item.mediaType,
@@ -690,8 +701,36 @@ class FakeRepository implements WaxDeckRepository {
       albumPid: item.albumPid,
       durationMs: item.durationMs,
       artUrl: item.artUrl,
+      // The technical half a real detail carries. Kept on the fake
+      // rather than left null because the facts sheet is entirely these
+      // rows, and a fake answering none of them would certify a sheet
+      // that draws nothing.
+      year: itemDetailYear,
+      genres: itemDetailGenres,
+      bpm: itemDetailBpm[pid],
+      codec: itemDetailCodec,
+      container: itemDetailContainer,
+      sampleRate: itemDetailSampleRate,
+      bitrate: itemDetailBitrate,
+      addedAt: itemDetailAddedAt,
+      mbid: itemDetailMbid[pid],
+      isrc: itemDetailIsrc[pid],
     );
   }
+
+  /// What [getItem] answers for the fields an item summary does not
+  /// carry. One set for every item, since no test wants two different
+  /// codecs; the per-pid maps are for the fields a test does vary.
+  int? itemDetailYear = 1975;
+  List<String> itemDetailGenres = const ['Blues'];
+  String? itemDetailCodec = 'flac';
+  String? itemDetailContainer = 'flac';
+  int? itemDetailSampleRate = 44100;
+  int? itemDetailBitrate = 986;
+  DateTime? itemDetailAddedAt = DateTime.utc(2026, 1, 2, 3, 4);
+  final Map<String, int> itemDetailBpm = {};
+  final Map<String, String> itemDetailMbid = {};
+  final Map<String, String> itemDetailIsrc = {};
 
   @override
   Future<PlayInfo> getPlayInfo(
@@ -868,12 +907,18 @@ class FakeRepository implements WaxDeckRepository {
     playCount: finishedPids.contains(pid) ? 1 : 0,
     starred: starredByPid[pid] ?? false,
     rating: ratingByPid[pid],
+    lastPlayedAt: playStateLastPlayedAt[pid],
     updatedAt: playStateUpdatedAt[pid],
   );
 
   /// When each position was last written, for the surfaces ordered by
   /// recency (a continue-listening shelf).
   final Map<String, DateTime> playStateUpdatedAt = {};
+
+  /// When a play was last counted, which the facts sheet reads. Its own
+  /// map because the server only stamps it on a counted play: an item
+  /// marked played by hand carries a position and no stamp.
+  final Map<String, DateTime> playStateLastPlayedAt = {};
 
   /// Holds every checkpoint until completed, so a test can stand a
   /// write up mid-flight and act around it.

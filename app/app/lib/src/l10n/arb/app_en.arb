@@ -4087,16 +4087,6 @@
   "@healthIssuesError": {
     "description": "Title of the error state when a rule's failing items could not be read."
   },
-  "healthKbps": "{kbps} kbps",
-  "@healthKbps": {
-    "description": "One copy's bitrate, in a comma-separated run of its properties. kbps is the unit.",
-    "placeholders": {
-      "kbps": {
-        "type": "int",
-        "example": "320"
-      }
-    }
-  },
   "healthKeepBest": "Keep the best version",
   "@healthKeepBest": {
     "description": "Accessible name of the button that resolves one quality finding."
@@ -4618,6 +4608,70 @@
       }
     }
   },
+  "libraryFactsAdded": "Added",
+  "@libraryFactsAdded": {
+    "description": "Facts sheet row label: when the item entered the library."
+  },
+  "libraryFactsBitrate": "Bitrate",
+  "@libraryFactsBitrate": {
+    "description": "Facts sheet row label: the source file's bitrate."
+  },
+  "libraryFactsBpm": "Tempo",
+  "@libraryFactsBpm": {
+    "description": "Facts sheet row label: the track's stated tempo, shown in beats per minute."
+  },
+  "libraryFactsCodec": "Codec",
+  "@libraryFactsCodec": {
+    "description": "Facts sheet row label: the audio codec the file is encoded with."
+  },
+  "libraryFactsContainer": "Container",
+  "@libraryFactsContainer": {
+    "description": "Facts sheet row label: the file format holding the audio."
+  },
+  "libraryFactsDuration": "Length",
+  "@libraryFactsDuration": {
+    "description": "Facts sheet row label: how long the item runs."
+  },
+  "libraryFactsGenres": "Genres",
+  "@libraryFactsGenres": {
+    "description": "Facts sheet row label: the item's genres, comma separated."
+  },
+  "libraryFactsIsrc": "ISRC",
+  "@libraryFactsIsrc": {
+    "description": "Facts sheet row label: the recording's ISRC. An international standard code, so the acronym stands untranslated."
+  },
+  "libraryFactsLastPlayed": "Last played",
+  "@libraryFactsLastPlayed": {
+    "description": "Facts sheet row label: when a play was last counted for the reader."
+  },
+  "libraryFactsLastPlayedUnknown": "Unknown",
+  "@libraryFactsLastPlayedUnknown": {
+    "description": "Value of the last-played row for an item that has a play count but no time attached, which is what a played mark made by hand leaves behind."
+  },
+  "libraryFactsMbid": "MusicBrainz ID",
+  "@libraryFactsMbid": {
+    "description": "Facts sheet row label: the MusicBrainz identifier. A product name, so it stands untranslated."
+  },
+  "libraryFactsNeverPlayed": "Never",
+  "@libraryFactsNeverPlayed": {
+    "description": "Value of the last-played row for an item the reader has never finished."
+  },
+  "libraryFactsPlayCount": "Plays",
+  "@libraryFactsPlayCount": {
+    "description": "Facts sheet row label: how many times the reader has played the item."
+  },
+  "libraryFactsSampleRate": "Sample rate",
+  "@libraryFactsSampleRate": {
+    "description": "Facts sheet row label: the source sample rate, shown in kilohertz."
+  },
+  "libraryFactsTitle": "Details",
+  "@libraryFactsTitle": {
+    "description": "Heading of the sheet listing one item's facts."
+  },
+  "libraryFactsYear": "Year",
+  "@libraryFactsYear": {
+    "description": "Facts sheet row label: the release or publication year."
+  },
   "libraryKindAlbum": "album",
   "@libraryKindAlbum": {
     "description": "The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case."
@@ -4645,6 +4699,10 @@
   "libraryMenuDetached": "Detached from the release.",
   "@libraryMenuDetached": {
     "description": "Message after a detach lands."
+  },
+  "libraryMenuDetails": "Details",
+  "@libraryMenuDetails": {
+    "description": "Row in an item's overflow menu that opens the facts sheet."
   },
   "libraryMenuGoToAlbum": "Go to album",
   "@libraryMenuGoToAlbum": {
@@ -6136,6 +6194,15 @@
   "musicTrackCount": "{count, plural, =1{1 track} other{{count} tracks}}",
   "@musicTrackCount": {
     "description": "How many tracks a bucket, a release, or an album tile holds.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "musicTrackPlaysSpoken": "{count, plural, =1{played once} other{played {count} times}}",
+  "@musicTrackPlaysSpoken": {
+    "description": "What a screen reader hears in place of the bare play count beside an album track's duration.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -13047,6 +13114,36 @@
   "toolsTitle": "Tool tasks",
   "@toolsTitle": {
     "description": "Title of the screen following long-running library work: merges, splits, downloads, imports."
+  },
+  "unitBpm": "{bpm} BPM",
+  "@unitBpm": {
+    "description": "A track's tempo. BPM is beats per minute, which is written the same way in most languages.",
+    "placeholders": {
+      "bpm": {
+        "type": "int",
+        "example": "128"
+      }
+    }
+  },
+  "unitKbps": "{kbps} kbps",
+  "@unitKbps": {
+    "description": "An audio bitrate. kbps is kilobits per second.",
+    "placeholders": {
+      "kbps": {
+        "type": "int",
+        "example": "320"
+      }
+    }
+  },
+  "unitKilohertz": "{khz} kHz",
+  "@unitKilohertz": {
+    "description": "A sample rate. {khz} arrives already written for this language, so a locale that separates decimals differently is already handled.",
+    "placeholders": {
+      "khz": {
+        "type": "String",
+        "example": "44.1"
+      }
+    }
   },
   "uploadsAcquireQueued": "Downloading. It will appear in the review queue when ready.",
   "@uploadsAcquireQueued": {

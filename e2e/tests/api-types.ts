@@ -2908,6 +2908,8 @@ export interface paths {
         /**
          * List playlists visible to the caller
          * @description Keyset-paginated list of the caller's own playlists plus every shared playlist, ordered by name then pid. A static entry carries a live `itemCount`, exact for this caller. Smart entries omit it (evaluating every rule to draw a page of tiles is work a listing does not do); fetch the playlist detail for a computed count.
+         *
+         *     Every account is seeded with one smart playlist, "Most played" (music, play count above zero, most played first, capped at 50). It is ordinary in every other way: the account owns it and may rename it, re-rule it, share it, or delete it, and a deletion sticks.
          */
         get: operations["listPlaylists"];
         put?: never;
@@ -2999,7 +3001,7 @@ export interface paths {
          *
          *     `notContains` imports as a `not` node wrapping `contains`; every other operator has a WaxDeck spelling of the same name.
          *
-         *     Mapping is **all-or-nothing** by default. A field, an operator, or a top-level key with no faithful counterpart rejects the whole document, naming **every** offender, rather than importing a rule that means something else - a document that imported as a quietly different playlist is worse than one that did not import. That covers fields the catalog has no answer for (`bitrate`, `size`, `bpm`, the `mbz_*` identifiers, and the rest), `limitPercent` and any other unrecognised top-level key, `inPlaylist`/`notInPlaylist`, and the absolute date operators (`before`, `after`, `is`) on `dateAdded` and `lastPlayed`, whose naive local dates have no faithful reading against the catalog's stored instants. `sort: random` maps to the random limit mode and needs a positive `limit`.
+         *     Mapping is **all-or-nothing** by default. A field, an operator, or a top-level key with no faithful counterpart rejects the whole document, naming **every** offender, rather than importing a rule that means something else - a document that imported as a quietly different playlist is worse than one that did not import. That covers fields the catalog has no answer for (`bitrate`, `size`, the `mbz_*` identifiers, and the rest), `limitPercent` and any other unrecognised top-level key, `inPlaylist`/`notInPlaylist`, and the absolute date operators (`before`, `after`, `is`) on `dateAdded` and `lastPlayed`, whose naive local dates have no faithful reading against the catalog's stored instants. `sort: random` maps to the random limit mode and needs a positive `limit`.
          *
          *     `partial=true` accepts the loss instead: the unmappable parts are dropped and what is left becomes the rule. Still refused when nothing survives, since a rule with every condition dropped matches the whole library, and when the document is malformed rather than merely unmappable. Ask `POST /playlists/nsp/report` first to see what would go.
          */
@@ -6723,6 +6725,16 @@ export interface components {
              * @description When the item entered the library.
              */
             addedAt?: string;
+            /**
+             * @description MusicBrainz identifier for what this item is - a recording for a track, a release for a book. Absent unless the file was tagged with one or matching found one.
+             * @example b9b3d3f9-1e2b-4a1e-9a4a-1a2b3c4d5e6f
+             */
+            mbid?: string;
+            /**
+             * @description The recording's ISRC, as tagged or matched. Absent for anything carrying none, which is most of a library.
+             * @example USRC17607839
+             */
+            isrc?: string;
             artSource?: components["schemas"]["ArtSource"];
         };
         /** @description One keyset-paginated page of items. */
@@ -7753,6 +7765,11 @@ export interface components {
             starred: boolean;
             /** @description The caller's rating (0 to 100); absent or null when unrated. */
             rating?: number | null;
+            /**
+             * Format: date-time
+             * @description When a play was last counted for the caller. Absent until one has been; a manual played mark sets the flags without standing in for a listen, so it does not set this.
+             */
+            lastPlayedAt?: string;
             /**
              * Format: date-time
              * @description When this state last changed.

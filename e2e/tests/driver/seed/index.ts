@@ -179,6 +179,19 @@ export class Seed {
     return hit?.pid ?? this.createPlaylist(name, pids);
   }
 
+  /// Every playlist this account owns under a name, as pids. Makes
+  /// nothing.
+  ///
+  /// The lookup half of `playlistNamed` without the create half, for a
+  /// spec whose subject is a playlist somebody else made: a seeder that
+  /// quietly creates the missing subject turns "the server seeded this"
+  /// into an assertion about the seeder, and the failure it eventually
+  /// raises names whatever the substitute could not do rather than the
+  /// absence that caused it.
+  async playlistsNamed(name: string): Promise<string[]> {
+    return (await this.myPlaylists()).filter((p) => p.name === name).map((p) => p.pid);
+  }
+
   /// Every playlist this account owns, across pages.
   ///
   /// Owned, because `GET /playlists` answers with the caller's own plus

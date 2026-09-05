@@ -366,6 +366,21 @@ class _ComponentsPageState extends State<ComponentsPage> {
                   trailingText: '32:00',
                 ),
               ),
+              // A second readout beside the duration: an album row's
+              // play count, which is a bare number drawn and a sentence
+              // read aloud.
+              MediaListRow(
+                data: const MediaTileData(
+                  title: 'Harbour Lights',
+                  subtitle: 'Nightjar',
+                  trailingText: '4:18',
+                  trailingDetail: '12',
+                  trailingDetailSpoken: 'played 12 times',
+                ),
+                leadingIndex: 5,
+                onTap: () {},
+                onMore: () {},
+              ),
             ],
           ),
         ),

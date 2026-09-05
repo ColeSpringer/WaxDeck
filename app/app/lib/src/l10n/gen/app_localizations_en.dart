@@ -2993,11 +2993,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get healthIssuesError => 'Could not load issues';
 
   @override
-  String healthKbps(int kbps) {
-    return '$kbps kbps';
-  }
-
-  @override
   String get healthKeepBest => 'Keep the best version';
 
   @override
@@ -3395,6 +3390,54 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get libraryFactsAdded => 'Added';
+
+  @override
+  String get libraryFactsBitrate => 'Bitrate';
+
+  @override
+  String get libraryFactsBpm => 'Tempo';
+
+  @override
+  String get libraryFactsCodec => 'Codec';
+
+  @override
+  String get libraryFactsContainer => 'Container';
+
+  @override
+  String get libraryFactsDuration => 'Length';
+
+  @override
+  String get libraryFactsGenres => 'Genres';
+
+  @override
+  String get libraryFactsIsrc => 'ISRC';
+
+  @override
+  String get libraryFactsLastPlayed => 'Last played';
+
+  @override
+  String get libraryFactsLastPlayedUnknown => 'Unknown';
+
+  @override
+  String get libraryFactsMbid => 'MusicBrainz ID';
+
+  @override
+  String get libraryFactsNeverPlayed => 'Never';
+
+  @override
+  String get libraryFactsPlayCount => 'Plays';
+
+  @override
+  String get libraryFactsSampleRate => 'Sample rate';
+
+  @override
+  String get libraryFactsTitle => 'Details';
+
+  @override
+  String get libraryFactsYear => 'Year';
+
+  @override
   String get libraryKindAlbum => 'album';
 
   @override
@@ -3416,6 +3459,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get libraryMenuDetached => 'Detached from the release.';
+
+  @override
+  String get libraryMenuDetails => 'Details';
 
   @override
   String get libraryMenuGoToAlbum => 'Go to album';
@@ -4706,6 +4752,17 @@ class AppLocalizationsEn extends AppLocalizations {
       locale: localeName,
       other: '$count tracks',
       one: '1 track',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String musicTrackPlaysSpoken(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'played $count times',
+      one: 'played once',
     );
     return '$_temp0';
   }
@@ -9853,6 +9910,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toolsTitle => 'Tool tasks';
+
+  @override
+  String unitBpm(int bpm) {
+    return '$bpm BPM';
+  }
+
+  @override
+  String unitKbps(int kbps) {
+    return '$kbps kbps';
+  }
+
+  @override
+  String unitKilohertz(String khz) {
+    return '$khz kHz';
+  }
 
   @override
   String get uploadsAcquireQueued =>

@@ -243,6 +243,11 @@ func (l *Library) ApproveSignup(ctx context.Context, actor *UserCtx, userID stri
 	if err := l.db.UpdateUser(ctx, u, false); err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
+	// A signup is created pending and gets no starter playlists then;
+	// approval is when it becomes an account, so it is where they land.
+	// An approval of a row somebody disabled meanwhile still gets none:
+	// the predicate lives in the helper, not here.
+	l.seedStartersFor(ctx, u)
 	l.Audit(ctx, actor, "user.approve", AuditTarget{Kind: "user", PID: u.ID, Name: u.Username}, nil)
 	return l.accountFor(ctx, u)
 }
