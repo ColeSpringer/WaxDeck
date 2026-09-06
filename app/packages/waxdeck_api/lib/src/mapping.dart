@@ -356,6 +356,7 @@ PlayInfo playInfoFromGen(gen.PlayInfo info, {String baseUrl = ''}) {
 
 QueueTimeline queueTimelineFromGen(gen.TimelineInfo tl, {String baseUrl = ''}) {
   return QueueTimeline(
+    pid: tl.pid,
     url: resolveMediaUrl(baseUrl, tl.url),
     mimeType: tl.mimeType,
     durationMs: tl.durationMs,
@@ -371,6 +372,16 @@ QueueTimeline queueTimelineFromGen(gen.TimelineInfo tl, {String baseUrl = ''}) {
           durationSamples: b.durationSamples,
         ),
     ],
+  );
+}
+
+MigrationExport migrationExportFromGen(gen.MigrationExport e) {
+  return MigrationExport(
+    pid: e.pid,
+    source: e.source_.name,
+    files: e.files.toList(growable: false),
+    sizeBytes: e.sizeBytes,
+    expiresAt: e.expiresAt,
   );
 }
 

@@ -12,34 +12,44 @@ part 'migration_create.g.dart';
 /// A migration import to start.
 ///
 /// Properties:
-/// * [source_] - Where to pull from: `navidrome` and `subsonic` (a running server's Subsonic API), or `audiobookshelf` (its REST API). An open string; unknown sources answer `invalid-request` naming the supported set. 
-/// * [serverUrl] - The source server's base URL.
-/// * [username] - Login for Subsonic-API sources.
-/// * [password] - Password for Subsonic-API sources.
-/// * [token] - API token for token-authenticated sources.
+/// * [source_] - Where to pull from: `navidrome` and `subsonic` (a running server's Subsonic API), `audiobookshelf` (its REST API), `jellyfin` (its REST API), `lastfm` and `listenbrainz` (scrobbling history), or `spotify` (an account data export, staged first). An open string; unknown sources answer `invalid-request` naming the supported set. 
+/// * [serverUrl] - The source server's base URL. Required for `navidrome`, `subsonic`, `audiobookshelf` and `jellyfin`; optional for `listenbrainz`, where it names a compatible server and defaults to `https://api.listenbrainz.org`. `lastfm` and `spotify` take none. 
+/// * [accountId] - The account the imported state lands on. Defaults to the caller, which is what a household administrator moving their own library wants; naming another account is how the rest of the household is moved without knowing their passwords. The target must exist, be enabled, and not be a pending signup. 
+/// * [username] - Login for Subsonic-API sources and Jellyfin; the account name to read for `lastfm` and `listenbrainz`. 
+/// * [password] - Password for Subsonic-API sources and Jellyfin.
+/// * [token] - API token for token-authenticated sources: an Audiobookshelf token, a Jellyfin API key (with `username` naming whose state to read), or a ListenBrainz user token. 
+/// * [exportId] - A staged account export to read, from `stageMigrationExport`. Required for `spotify` and refused for every source that reads a server. 
 /// * [options] 
 /// * [dryRun] - Match and report without writing anything.
 @BuiltValue()
 abstract class MigrationCreate implements Built<MigrationCreate, MigrationCreateBuilder> {
-  /// Where to pull from: `navidrome` and `subsonic` (a running server's Subsonic API), or `audiobookshelf` (its REST API). An open string; unknown sources answer `invalid-request` naming the supported set. 
+  /// Where to pull from: `navidrome` and `subsonic` (a running server's Subsonic API), `audiobookshelf` (its REST API), `jellyfin` (its REST API), `lastfm` and `listenbrainz` (scrobbling history), or `spotify` (an account data export, staged first). An open string; unknown sources answer `invalid-request` naming the supported set. 
   @BuiltValueField(wireName: r'source')
   String get source_;
 
-  /// The source server's base URL.
+  /// The source server's base URL. Required for `navidrome`, `subsonic`, `audiobookshelf` and `jellyfin`; optional for `listenbrainz`, where it names a compatible server and defaults to `https://api.listenbrainz.org`. `lastfm` and `spotify` take none. 
   @BuiltValueField(wireName: r'serverUrl')
-  String get serverUrl;
+  String? get serverUrl;
 
-  /// Login for Subsonic-API sources.
+  /// The account the imported state lands on. Defaults to the caller, which is what a household administrator moving their own library wants; naming another account is how the rest of the household is moved without knowing their passwords. The target must exist, be enabled, and not be a pending signup. 
+  @BuiltValueField(wireName: r'accountId')
+  String? get accountId;
+
+  /// Login for Subsonic-API sources and Jellyfin; the account name to read for `lastfm` and `listenbrainz`. 
   @BuiltValueField(wireName: r'username')
   String? get username;
 
-  /// Password for Subsonic-API sources.
+  /// Password for Subsonic-API sources and Jellyfin.
   @BuiltValueField(wireName: r'password')
   String? get password;
 
-  /// API token for token-authenticated sources.
+  /// API token for token-authenticated sources: an Audiobookshelf token, a Jellyfin API key (with `username` naming whose state to read), or a ListenBrainz user token. 
   @BuiltValueField(wireName: r'token')
   String? get token;
+
+  /// A staged account export to read, from `stageMigrationExport`. Required for `spotify` and refused for every source that reads a server. 
+  @BuiltValueField(wireName: r'exportId')
+  String? get exportId;
 
   @BuiltValueField(wireName: r'options')
   MigrationOptions? get options;
@@ -77,11 +87,20 @@ class _$MigrationCreateSerializer implements PrimitiveSerializer<MigrationCreate
       object.source_,
       specifiedType: const FullType(String),
     );
-    yield r'serverUrl';
-    yield serializers.serialize(
-      object.serverUrl,
-      specifiedType: const FullType(String),
-    );
+    if (object.serverUrl != null) {
+      yield r'serverUrl';
+      yield serializers.serialize(
+        object.serverUrl,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.accountId != null) {
+      yield r'accountId';
+      yield serializers.serialize(
+        object.accountId,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.username != null) {
       yield r'username';
       yield serializers.serialize(
@@ -100,6 +119,13 @@ class _$MigrationCreateSerializer implements PrimitiveSerializer<MigrationCreate
       yield r'token';
       yield serializers.serialize(
         object.token,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.exportId != null) {
+      yield r'exportId';
+      yield serializers.serialize(
+        object.exportId,
         specifiedType: const FullType(String),
       );
     }
@@ -154,6 +180,13 @@ class _$MigrationCreateSerializer implements PrimitiveSerializer<MigrationCreate
           ) as String;
           result.serverUrl = valueDes;
           break;
+        case r'accountId':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.accountId = valueDes;
+          break;
         case r'username':
           final valueDes = serializers.deserialize(
             value,
@@ -174,6 +207,13 @@ class _$MigrationCreateSerializer implements PrimitiveSerializer<MigrationCreate
             specifiedType: const FullType(String),
           ) as String;
           result.token = valueDes;
+          break;
+        case r'exportId':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.exportId = valueDes;
           break;
         case r'options':
           final valueDes = serializers.deserialize(

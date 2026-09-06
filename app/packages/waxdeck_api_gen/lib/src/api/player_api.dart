@@ -137,7 +137,7 @@ class PlayerApi {
   }
 
   /// Mint a gapless queue timeline
-  /// Renders an ordered queue of visible items as one continuous stream through the streaming engine: sample-exact seams, no discontinuities, with optional equal-power crossfade. The response&#39;s single HLS URL plays the whole queue; &#x60;boundaries&#x60; map each item onto the combined timeline (offsets in samples at &#x60;envelopeRate&#x60;; under a crossfade consecutive members overlap), so a client can render per-track position and seek across members without probing. Timelines are immutable: editing the queue means minting a new timeline and switching URLs. The URL is media-token authenticated, and the token lives at least the timeline&#39;s duration plus margin (&#x60;expiresAt&#x60; reflects it), so a queue never expires mid-listen; a member file changing on disk surfaces as &#x60;stream-stale&#x60;, and a timeline aged out of the engine&#39;s store answers &#x60;not-found&#x60; on fetch. Re-request this endpoint in either case. Minting may first need to measure member lengths (MP3 sources are scanned); the server absorbs short measurements into this request, and when one outlasts the request budget it answers 202 with a job to poll, after which re-requesting answers 201 immediately. A rendering counts against the concurrent transcode limits like a stream does: one slot a listener, however many timelines they hold live at once, taken at the mint and given back once every one of them has gone unfetched for a minute - so a mint over the cap answers &#x60;transcode-limited&#x60; before anything plays, and a fetch resuming a listen whose slot was released can answer it too. A caller that can only decode some formats says so in &#x60;formats&#x60;; the rendering format is part of a timeline&#39;s identity, so the same queue asked for in two formats is two streams. Requires the streaming engine with timeline support (&#x60;feature-unavailable&#x60; otherwise). Items whose delivery cannot join a timeline (unfetched podcast episodes, unsupported sources) answer &#x60;conflict&#x60; naming the pid, and a &#x60;crossfadeSeconds&#x60; longer than the shortest queue member can carry answers &#x60;invalid-request&#x60; naming it. 
+  /// Renders an ordered queue of visible items as one continuous stream through the streaming engine: sample-exact seams, no discontinuities, with optional equal-power crossfade. The response&#39;s single HLS URL plays the whole queue; &#x60;boundaries&#x60; map each item onto the combined timeline (offsets in samples at &#x60;envelopeRate&#x60;; under a crossfade consecutive members overlap), so a client can render per-track position and seek across members without probing. Timelines are immutable: editing the queue means minting a new timeline and switching URLs. The URL is media-token authenticated, and the token lives at least the timeline&#39;s duration plus margin (&#x60;expiresAt&#x60; reflects it), so a queue never expires mid-listen; a member file changing on disk surfaces as &#x60;stream-stale&#x60;, and a timeline aged out of the engine&#39;s store answers &#x60;not-found&#x60; on fetch. Re-request this endpoint in either case. Minting may first need to measure member lengths (MP3 sources are scanned); the server absorbs short measurements into this request, and when one outlasts the request budget it answers 202 with a job to poll, after which re-requesting answers 201 immediately. A rendering counts against the concurrent transcode limits like a stream does: one slot a listener, however many timelines they hold live at once, taken at the mint and given back once every one of them has gone unfetched for a minute - so a mint over the cap answers &#x60;transcode-limited&#x60; before anything plays, and a fetch resuming a listen whose slot was released can answer it too. A client that stops playing releases the rendering it holds (&#x60;releaseQueueTimeline&#x60;) rather than waiting the minute out; the sweep stays the backstop for the client that cannot, a closed browser tab being the case. A caller that can only decode some formats says so in &#x60;formats&#x60;; the rendering format is part of a timeline&#39;s identity, so the same queue asked for in two formats is two streams. Requires the streaming engine with timeline support (&#x60;feature-unavailable&#x60; otherwise). Items whose delivery cannot join a timeline (unfetched podcast episodes, unsupported sources) answer &#x60;conflict&#x60; naming the pid, and a &#x60;crossfadeSeconds&#x60; longer than the shortest queue member can carry answers &#x60;invalid-request&#x60; naming it. 
   ///
   /// Parameters:
   /// * [timelineCreate] 
@@ -806,6 +806,64 @@ class PlayerApi {
       statusMessage: _response.statusMessage,
       extra: _response.extra,
     );
+  }
+
+  /// Release a gapless queue timeline
+  /// Drops the caller from this rendering&#39;s listeners and gives back their transcode slot when none of their other renderings has been fetched inside the idle window. What a client sends when it stops playing a timeline, so the next listener is not refused for the minute the sweep would otherwise take to notice. The rendering itself is not destroyed: another listener may be on it, and the caller&#39;s own URL keeps working until it expires (a fetch takes the slot again). Releasing one that is unknown or already expired answers &#x60;not-found&#x60;, as does a server with no streaming engine, which holds no renderings to release; there is nothing to retry either way. 
+  ///
+  /// Parameters:
+  /// * [pid] - Timeline PID (e.g. `tl-01JZX5N8QW3F4V9T2B7KD3M9R6`), from the mint.
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future]
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<void>> releaseQueueTimeline({ 
+    required String pid,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/player/timeline/{pid}'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'DELETE',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    return _response;
   }
 
   /// Transfer a session to another endpoint

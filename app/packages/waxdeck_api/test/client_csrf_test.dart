@@ -58,6 +58,8 @@ Map<String, Object> _loginJson({
 }
 
 void main() {
+  _exitBeaconTests();
+
   test(
     'cookie mode: mutations echo the CSRF token from the session probe',
     () async {
@@ -176,5 +178,48 @@ void main() {
       adapter.requests.single.headers['Authorization'],
       'Bearer tok-restored',
     );
+  });
+}
+
+// Each exit beacon stands alone. A closing tab can hold a gapless
+// rendering and have nothing to check point beside it - the session
+// already reported, or the item went away while the stream played on -
+// and that release is the one thing here nothing else can do later:
+// the server counts the listener as listening until it hears otherwise.
+void _exitBeaconTests() {
+  test('a release rides on its own with nothing to check point', () {
+    final (_, client) = _client();
+    final sent = client.exitRequests(timelinePids: const ['tl-alone']);
+    expect(sent, hasLength(1));
+    expect(sent.single.method, 'DELETE');
+    expect(sent.single.path, endsWith('/api/v1/player/timeline/tl-alone'));
+  });
+
+  // A queue edit mints a replacement beside the rendering playing, and
+  // the server counts the listener as being on both: a slot is per
+  // listener, so releasing one and leaving the other means the release
+  // frees nothing at all.
+  test('every rendering held is handed back, not just the one playing', () {
+    final (_, client) = _client();
+    final sent = client.exitRequests(
+      pid: 'tr-1',
+      positionMs: 10,
+      timelinePids: const ['tl-playing', 'tl-pending'],
+    );
+    final released = [
+      for (final r in sent)
+        if (r.method == 'DELETE') r.path,
+    ];
+    expect(released, hasLength(2));
+    expect(released.first, endsWith('tl-playing'));
+    expect(released.last, endsWith('tl-pending'));
+  });
+
+  test('a checkpoint with no rendering rides on its own too', () {
+    final (_, client) = _client();
+    final sent = client.exitRequests(pid: 'tr-1', positionMs: 4200);
+    expect(sent, hasLength(1));
+    expect(sent.single.method, 'PUT');
+    expect(sent.single.path, endsWith('/api/v1/items/tr-1/play-state'));
   });
 }

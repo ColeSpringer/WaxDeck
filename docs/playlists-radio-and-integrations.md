@@ -385,3 +385,17 @@ The test suite replays the startup, browse, and play request
 sequences of DSub, Feishin, and Symfonium against a live server on
 every run, so a regression on any of those paths fails CI rather than
 a user's first connection.
+
+Streaming honors `maxBitRate`: a client that asks for a cap gets an
+encode at that number, clamped to a range a codec can actually speak
+and then to the account's own transcode ceiling, and a lossy track
+already inside the cap streams untouched rather than being re-encoded
+to satisfy it. The habit several clients have of sending `maxBitRate=0`
+or an empty value means "no cap" and still serves the original bytes.
+A `format` pinned alongside a cap is honored where the server can
+produce it, so a client that asks for 192 kbps mp3 gets mp3 rather than
+whatever the ladder would have picked; one the server cannot produce
+falls back to the ladder. `format=raw` beats a cap outright and serves
+the file as it is, which is what that value means everywhere else in the
+protocol. A `format` on its own, with no cap beside it, changes nothing:
+there is no encode for it to aim.

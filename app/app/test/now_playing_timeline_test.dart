@@ -30,13 +30,48 @@ const _album = QueueSource(
   pid: 'al-1',
 );
 
-({ProviderContainer container, FakeRepository repo, FakeEngine engine})
+/// Records which renderings were handed back while the engine was
+/// still on the stream they replaced, which is the one moment a release
+/// can take a listener's slot away from the stream about to use it.
+class _TimingRepository extends FakeRepository {
+  _TimingRepository(this.engine, {required super.items});
+
+  final FakeEngine engine;
+
+  /// The pids released while the engine had not yet loaded anything
+  /// other than that same rendering.
+  final releasedWhileLoading = <String>[];
+
+  @override
+  Future<void> releaseQueueTimeline(String pid) {
+    final playing = engine.loadedTimeline?.url;
+    if (playing != null && playing == _urlOf(pid)) {
+      releasedWhileLoading.add(pid);
+    }
+    return super.releaseQueueTimeline(pid);
+  }
+
+  /// The URL the fake minted for one pid, so a release can be matched
+  /// against what the engine is actually playing.
+  String? _urlOf(String pid) {
+    final n = int.tryParse(pid.replaceFirst('tl-fake', ''));
+    if (n == null) return null;
+    return timelineCalls.length >= n
+        ? '/media/hls/master.m3u8?tl=${timelineCalls[n - 1].pids.join('.')}'
+              '&rk=${timelineCalls[n - 1].formats?.firstOrNull ?? 'aac'}'
+              '&mt=test-token-$n'
+        : null;
+  }
+}
+
+({ProviderContainer container, _TimingRepository repo, FakeEngine engine})
 _harness({List<ItemSummary>? items, bool gapless = true}) {
-  final repo = FakeRepository(
-    items: items ?? [testItem(_a), testItem(_b), testItem(_c)],
-  );
   final engine = FakeEngine(
     mediaDuration: const Duration(milliseconds: _trackMs),
+  );
+  final repo = _TimingRepository(
+    engine,
+    items: items ?? [testItem(_a), testItem(_b), testItem(_c)],
   );
   final container = ProviderContainer(
     overrides: [
@@ -76,7 +111,7 @@ Future<void> _play(FakeEngine engine, int ms, {int stepMs = 2000}) async {
 
 /// One member per pid at 48 kHz, carrying the rendering the server
 /// chose - which is not always one the caller asked for.
-QueueTimeline _mint(List<String> pids, {required String format}) {
+QueueTimeline _mint(List<String> pids, {required String format, String? pid}) {
   const samples = _trackMs * 48000 ~/ 1000;
   var offset = 0;
   final members = <QueueTimelineMember>[];
@@ -91,6 +126,7 @@ QueueTimeline _mint(List<String> pids, {required String format}) {
     offset += samples;
   }
   return QueueTimeline(
+    pid: pid,
     url: '/media/hls/master.m3u8?tl=${pids.join('.')}&mt=t',
     mimeType: 'application/vnd.apple.mpegurl',
     durationMs: offset * 1000 ~/ 48000,
@@ -366,7 +402,8 @@ void main() {
       // What the server actually rendered, which is what decides: with
       // none of the caller's formats producible it falls back to its own
       // ladder, and playing that is silence with nothing to explain it.
-      h.repo.timelines = (pids) => _mint(pids, format: 'aac');
+      h.repo.timelines = (pids) =>
+          _mint(pids, format: 'aac', pid: 'tl-undecodable');
       h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
       await pumpEventQueue();
 
@@ -374,6 +411,13 @@ void main() {
       expect(h.engine.loadedTimeline, isNull);
       expect(h.engine.loadedUrl, contains(_a));
       expect(h.container.read(webGaplessStatusProvider), 'gapless-format');
+      // And handed straight back. The server minted it: a slot is taken
+      // and a rendering is stashed listing this listener, for a stream
+      // nothing here will ever fetch. What plays instead is a
+      // progressive stream per track, each wanting a slot of its own, so
+      // at a cap of one the next track is refused by the rendering
+      // nobody is on.
+      expect(h.repo.timelineReleases, hasLength(1));
     },
   );
 
@@ -486,10 +530,32 @@ void main() {
       expect(h.engine.loadedTimeline!.url, first, reason: 'still waiting');
 
       // And it takes over as this one runs out.
+      final outgoing = h.container.playback.loadedTimelinePid;
       await _play(h.engine, _trackMs + 4000);
       expect(h.container.read(nowPlayingProvider).item?.pid, _c);
       expect(h.engine.loadedTimeline!.url, isNot(first));
       expect(h.repo.timelineCalls, hasLength(2));
+
+      // The rendering nobody is on any more goes back at the swap. The
+      // server counts a listener as listening until it hears otherwise,
+      // so one dropped silently keeps their slot alive for the minute
+      // the release exists to save - including past the stop, where the
+      // release for the stream they were actually on would find this
+      // one still inside the idle window.
+      expect(h.repo.timelineReleases, [outgoing]);
+      expect(h.container.playback.loadedTimelinePid, isNot(outgoing));
+      // And it goes back after the replacement is loaded, not before.
+      // A slot is per listener, and a release only reaches the gate
+      // when none of this listener's renderings has been fetched inside
+      // the idle minute - which a replacement minted a track ago is.
+      // Letting go first puts the slot back before the new stream asks
+      // for its first fragment, and on a full server that fetch is
+      // refused with a code the player is told not to recover from.
+      expect(
+        h.repo.releasedWhileLoading,
+        isEmpty,
+        reason: 'a rendering was handed back before its replacement loaded',
+      );
     },
   );
 
@@ -593,5 +659,45 @@ void main() {
     expect(resumed.repo.timelineCalls.single.pids, [_b]);
     expect(resumed.engine.currentMember, 0);
     expect(resumed.engine.playing, isFalse);
+  });
+
+  test('stopping hands the rendering back', () async {
+    final h = _harness();
+    h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+    await pumpEventQueue();
+    expect(h.container.playback.loadedTimelinePid, isNotNull);
+    final held = h.container.playback.loadedTimelinePid;
+    expect(h.repo.timelineReleases, isEmpty);
+
+    await h.container.playback.goingAway();
+    await pumpEventQueue();
+
+    // The slot goes back at the stop rather than a minute later, and
+    // once: a rendering released twice is a second request for nothing.
+    expect(h.repo.timelineReleases, [held]);
+    expect(h.container.playback.loadedTimelinePid, isNull);
+  });
+
+  test('a lost rendering is released only when the re-mint differs', () async {
+    final h = _harness();
+    h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+    await pumpEventQueue();
+    final was = h.container.playback.loadedTimelinePid;
+
+    h.engine.loseTimeline();
+    await pumpEventQueue();
+
+    expect(h.repo.timelineCalls, hasLength(2));
+    expect(h.repo.timelineReleases, [was]);
+    expect(h.container.playback.loadedTimelinePid, isNot(was));
+
+    // A server that answers the same rendering back is not released:
+    // that would hand back the slot the new stream is about to fetch on.
+    final again = h.container.playback.loadedTimelinePid;
+    h.repo.timelines = (pids) => _mint(pids, format: 'aac', pid: again);
+    h.engine.loseTimeline();
+    await pumpEventQueue();
+    expect(h.repo.timelineReleases, [was]);
+    expect(again, isNotNull);
   });
 }

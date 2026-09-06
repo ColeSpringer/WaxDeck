@@ -20,10 +20,14 @@ const int kTimelineMembers = 50;
 /// and what a member has to answer is "is *this* entry the one playing",
 /// which only the id can.
 class _Minted {
-  const _Minted(this.media, this.queueIds);
+  const _Minted(this.media, this.queueIds, this.pid);
 
   final TimelineMedia media;
   final List<String> queueIds;
+
+  /// The rendering's own id, for handing its transcode slot back when
+  /// this stops being played. Null from a server that mints none.
+  final String? pid;
 
   int indexOf(String queueId) => queueIds.indexOf(queueId);
 }
@@ -88,8 +92,19 @@ class TimelineFeeder {
 
   _Minted? _loaded;
   _Minted? _pending;
+
+  /// A rendering a promote handed off, held until the one that replaced
+  /// it is being fetched. See the promote in [slotFor].
+  _Minted? _handedOff;
+
   Timer? _retry;
   bool _minting = false;
+
+  /// Bumped by every teardown. A mint already awaiting cannot be
+  /// cancelled, so the callback that installed it compares this and
+  /// hands the rendering back instead of storing it somewhere nothing
+  /// will ever look again.
+  int _generation = 0;
 
   /// The queue id a replacement is being minted to reach. Asked once
   /// per entry: an entry no timeline can hold - a podcast, a book, an
@@ -134,6 +149,7 @@ class TimelineFeeder {
     ItemSummary item,
     QueueState queue,
   ) async {
+    _flushHandedOff();
     if (!_admits(item)) return null;
     if (!await _engineCanPlay()) return null;
     final held = _slotIn(_loaded, entry);
@@ -142,12 +158,22 @@ class TimelineFeeder {
     // this start landed on it, it is simply the timeline now.
     final promoted = _slotIn(_pending, entry);
     if (promoted != null) {
+      // Handed off rather than let go of. The caller loads the promoted
+      // rendering after this returns, and a slot is per listener: a
+      // release only reaches the gate when none of this listener's
+      // renderings has been fetched inside the idle minute, and a
+      // replacement minted a track ago is exactly that. Letting the
+      // outgoing one go here would put the slot back before the new
+      // stream asks for its first fragment, which on a full server is a
+      // refusal the player is told not to recover from.
+      _handedOff = _loaded;
       _loaded = _pending;
       _pending = null;
       return promoted;
     }
     final minted = await _mintFrom(queue, entry);
     if (minted == null) return null;
+    _releaseAll([_loaded, _pending], keeping: minted);
     _loaded = minted;
     _pending = null;
     return _slotIn(minted, entry);
@@ -155,7 +181,25 @@ class TimelineFeeder {
 
   /// The member [entry] is on the loaded timeline, without minting.
   /// What a crossing needs: the stream is already playing it.
-  TimelineSlot? slotAt(QueueEntry entry) => _slotIn(_loaded, entry);
+  TimelineSlot? slotAt(QueueEntry entry) {
+    _flushHandedOff();
+    return _slotIn(_loaded, entry);
+  }
+
+  /// The start this feeder handed a slot to is loaded and fetching.
+  ///
+  /// Which is when a rendering a promote handed off can go back: the
+  /// stream that replaced it is holding the slot itself now, so the
+  /// release cannot leave the listener with none.
+  void started() => _flushHandedOff();
+
+  /// Lets go of a rendering handed off by a promote, now that the one
+  /// that replaced it is being fetched.
+  void _flushHandedOff() {
+    final gone = _handedOff;
+    _handedOff = null;
+    _replace(gone, _loaded);
+  }
 
   /// The next member as the controller's preload record, so a crossing
   /// knows what it crossed into.
@@ -166,6 +210,10 @@ class TimelineFeeder {
   /// which lands well before the seam unless the edit was made in the
   /// last moment of a track.
   Future<({QueueEntry entry, PlayInfo info})?> armNext(QueueState queue) async {
+    // The caller arms the next member once the start it just asked for
+    // has loaded, which is where a promote's hand-off is safe to let
+    // go of: the new stream is fetching and holding the slot itself.
+    _flushHandedOff();
     final loaded = _loaded;
     final engine = _timelineEngine;
     if (loaded == null || engine == null) return null;
@@ -246,6 +294,7 @@ class TimelineFeeder {
     if (pending == null || engine == null) return true;
     final member = pending.indexOf(entry.queueId);
     if (member < 0) return true;
+    final outgoing = _loaded;
     _pending = null;
     _loaded = pending;
     try {
@@ -255,9 +304,19 @@ class TimelineFeeder {
         position: engine.position,
         play: true,
       );
+      // After the load, not before it: until this returns the outgoing
+      // stream may still be the one playing, and handing its slot back
+      // early leaves it fetching against a cap it no longer counts
+      // towards.
+      _replace(outgoing, pending);
       return true;
     } on Object catch (error) {
       debugPrint('timeline swap failed: $error');
+      // A replacement always has a new URL, so the load tore the
+      // outgoing stream down before it began: neither rendering is
+      // playing and both go back.
+      _replace(outgoing, null);
+      _release(pending);
       _loaded = null;
       return false;
     }
@@ -287,17 +346,31 @@ class TimelineFeeder {
       clear();
       return false;
     }
+    final outgoing = <_Minted?>[_loaded, _pending];
     _loaded = null;
     _pending = null;
+    // After the mint rather than before it, so the pid it answers is
+    // known: a re-mint of a queue the server still holds answers the
+    // same one.
     final minted = await _mintFrom(queue, entry);
+    for (final gone in outgoing) {
+      _replace(gone, minted);
+    }
     final slot = _slotIn(minted, entry);
-    if (minted == null || slot == null) return false;
+    if (minted == null || slot == null) {
+      // The mint may have landed while the queue moved out from under
+      // it, which leaves a rendering listing this listener and a slot
+      // taken for a stream nothing will ever fetch.
+      _release(minted);
+      return false;
+    }
     _loaded = minted;
     try {
       await session.reloadTimeline(slot, resume: resume);
       return true;
     } on Object catch (error) {
       debugPrint('timeline reload failed: $error');
+      _release(_loaded);
       _loaded = null;
       return false;
     }
@@ -310,17 +383,84 @@ class TimelineFeeder {
 
   /// Drops everything. The engine is stopped by whoever called this.
   void clear() {
+    _generation++;
     _retry?.cancel();
     _retry = null;
+    _releaseAll([_handedOff, _loaded, _pending]);
+    _handedOff = null;
     _loaded = null;
     _pending = null;
     _wanted = null;
   }
 
-  void dispose() {
-    _retry?.cancel();
-    _retry = null;
+  /// The rendering currently playing, or null when none is.
+  String? get loadedPid => _loaded?.pid;
+
+  /// Every rendering this feeder is holding, for a client that has to
+  /// release them somewhere the feeder is not around to: a browser tab
+  /// closing sends them on the exit path.
+  ///
+  /// All of them, not only the one playing. A queue edit mints a
+  /// replacement the server already counts this listener as being on,
+  /// and a slot is per listener: releasing the playing one alone leaves
+  /// the replacement holding it, and the release then does nothing at
+  /// all because the server can still see a live rendering of theirs.
+  List<String> get heldPids {
+    final out = <String>[];
+    for (final held in [_loaded, _pending, _handedOff]) {
+      final pid = held?.pid;
+      if (pid != null && !out.contains(pid)) out.add(pid);
+    }
+    return out;
   }
+
+  /// Lets go of one rendering in favour of another, handing the
+  /// outgoing one's slot back.
+  ///
+  /// Not when the two are the same rendering: re-minting a queue the
+  /// server still holds answers the same pid, and releasing that would
+  /// take back the slot the new stream is about to fetch on. Every
+  /// place that stops holding a `_Minted` goes through here, because
+  /// the server keeps counting a listener as listening until it hears
+  /// otherwise - one dropped silently keeps the slot alive for the
+  /// minute the release exists to save.
+  void _replace(_Minted? outgoing, _Minted? incoming) {
+    if (outgoing == null || outgoing.pid == incoming?.pid) return;
+    _release(outgoing);
+  }
+
+  /// Hands back the transcode slot a rendering was holding. Fire and
+  /// forget in both directions: the server's idle sweep releases it a
+  /// minute later anyway, so this must never delay a teardown and a
+  /// failure is not worth reporting.
+  void _release(_Minted? minted) => _releasePid(minted?.pid);
+
+  /// Hands back everything named here, each rendering once and none of
+  /// them [keeping]. A re-mint of a queue the server still holds answers
+  /// the same pid, so two of these can name one rendering - and the
+  /// second DELETE for it is a request for nothing, which is what
+  /// [_replace]'s guard exists to avoid one transition at a time.
+  void _releaseAll(Iterable<_Minted?> held, {_Minted? keeping}) {
+    final done = <String>{?keeping?.pid};
+    for (final one in held) {
+      final pid = one?.pid;
+      if (pid == null || !done.add(pid)) continue;
+      _releasePid(pid);
+    }
+  }
+
+  /// [_release] by pid, for a rendering the server minted that never
+  /// became a [_Minted] here.
+  void _releasePid(String? pid) {
+    if (pid == null) return;
+    unawaited(repository.releaseQueueTimeline(pid).catchError((Object _) {}));
+  }
+
+  /// Teardown, which is [clear]: a rendering dropped without a release
+  /// keeps its slot for the idle minute, and on every platform but a
+  /// browser tab this is the only teardown there is - there is no exit
+  /// beacon anywhere else to send one.
+  void dispose() => clear();
 
   /// Whether the engine can take a timeline at all, asked once.
   ///
@@ -442,11 +582,21 @@ class TimelineFeeder {
           rendered != null &&
           rendered.isNotEmpty &&
           !decodable.contains(rendered)) {
+        // The server minted it: a slot is taken and a rendering is
+        // stashed listing this listener, for a stream this end cannot
+        // play. Handing it straight back matters more here than
+        // anywhere else, because what happens next is a progressive
+        // stream per track and each of those wants a slot of its own -
+        // at a cap of one, the next track is refused by the rendering
+        // nobody is listening to.
+        _releasePid(tl.pid);
         _giveUp('gapless-format');
         return null;
       }
       _say(null);
-      return _Minted(_mediaFrom(tl), <String>[for (final e in run) e.queueId]);
+      return _Minted(_mediaFrom(tl), <String>[
+        for (final e in run) e.queueId,
+      ], tl.pid);
     } on WaxDeckApiException catch (e) {
       _handleMintRefusal(e, queue, entry);
       return null;
@@ -494,14 +644,28 @@ class TimelineFeeder {
   void _scheduleRemint(QueueState queue, {Duration? delay}) {
     if (_off) return;
     _retry?.cancel();
+    final generation = _generation;
     _retry = Timer(delay ?? remintDelay, () async {
       _retry = null;
       final entry = queue.currentEntry;
       if (entry == null) return;
       final minted = await _mintFrom(queue, entry);
       if (minted == null) return;
+      if (generation != _generation) {
+        // Stopped, or torn down, while the mint was in flight.
+        // Cancelling the timer cannot reach an await that had already
+        // begun, and installing here would leave a rendering the server
+        // already counts this listener as being on with nothing left to
+        // hand it back - on the web the exit beacon has fired by now,
+        // so the idle sweep is the only thing that would.
+        _release(minted);
+        return;
+      }
       // Held rather than installed: the stream playing is the one the
-      // listener is hearing, and the swap belongs at a seam.
+      // listener is hearing, and the swap belongs at a seam. A
+      // replacement this one displaces was never played, so its slot
+      // goes straight back.
+      _replace(_pending, minted);
       _pending = minted;
     });
   }

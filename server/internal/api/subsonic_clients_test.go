@@ -431,6 +431,10 @@ func TestSubsonicStreamIgnoresClientBitrateHints(t *testing.T) {
 		"&maxBitRate=",  // the same intent, empty
 		"&format=raw",   // "give me the file"
 		"&maxBitRate=0&bitRate=0",
+		// raw is the protocol's own "do not transcode", so it beats a
+		// cap sent beside it rather than being overridden by one.
+		"&format=raw&maxBitRate=128",
+		"&format=RAW&maxBitRate=128",
 	} {
 		t.Run(strings.TrimPrefix(hint, "&"), func(t *testing.T) {
 			streamAndAssertBytes(t, h, "/rest/stream.view?apiKey="+secret+"&id="+songID+hint)
@@ -438,11 +442,70 @@ func TestSubsonicStreamIgnoresClientBitrateHints(t *testing.T) {
 	}
 }
 
-// streamAndAssertBytes follows the stream redirect into the tokenized
-// proxy and asserts audio bytes arrive. It also pins that the location
-// it redirects to carries none of the caller's query: the adapter
-// assembles the sidecar's parameters server-side.
-func streamAndAssertBytes(t *testing.T, h *harness, path string) {
+// TestSubsonicStreamHonoursMaxBitRate is the other half: a real cap is
+// parsed, clamped and handed to the bridge, so a client on a phone
+// network gets an encode at the number it asked for rather than the
+// lossless file. It pins the flac song, because a lossy source already
+// inside the cap is meant to stream unchanged and would prove nothing.
+func TestSubsonicStreamHonoursMaxBitRate(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	const c = "test"
+
+	env := mustOK(t, h, secret, c, "search3.view", "&query=Alpha")
+	songID, _ := jmap(jlist(jmap(env["searchResult3"])["song"])[0])["id"].(string)
+	if !strings.HasPrefix(songID, "tr-") {
+		t.Fatalf("songID = %q", songID)
+	}
+
+	for _, tc := range []struct {
+		hint       string
+		want       string // the br= the redirect must carry
+		wantFormat string // and the format it lands in
+	}{
+		{hint: "&maxBitRate=128", want: "128"},
+		// Below the floor no codec speaks; above the ceiling a cap
+		// cannot beat direct play. Neither may reach the mint unclamped.
+		{hint: "&maxBitRate=8", want: "32"},
+		{hint: "&maxBitRate=9999", want: "320"},
+		// The request DSub and Symfonium actually send. What a client
+		// pins beside a cap is what it can decode, so the encode lands
+		// there rather than on the ladder's own pick.
+		{hint: "&maxBitRate=192&format=mp3", want: "192", wantFormat: "mp3"},
+		// A format this engine cannot produce falls back to the ladder
+		// rather than advertising bytes the stream will never serve.
+		{hint: "&maxBitRate=192&format=wma", want: "192"},
+	} {
+		t.Run(strings.TrimPrefix(tc.hint, "&"), func(t *testing.T) {
+			loc := streamRedirect(t, h, "/rest/stream.view?apiKey="+secret+"&id="+songID+tc.hint)
+			q, err := url.ParseQuery(strings.TrimPrefix(loc, "/media/stream?"))
+			if err != nil {
+				t.Fatalf("parsing %s: %v", loc, err)
+			}
+			if q.Get("br") != tc.want || q.Get("fmt") == "" {
+				t.Fatalf("capped redirect = %s, want br=%s and a format", loc, tc.want)
+			}
+			if tc.wantFormat != "" && q.Get("fmt") != tc.wantFormat {
+				t.Fatalf("capped redirect = %s, want the client's own %s", loc, tc.wantFormat)
+			}
+			resp, err := http.Get(h.ts.URL + loc)
+			if err != nil {
+				t.Fatal(err)
+			}
+			audio, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if resp.StatusCode != 200 || len(audio) == 0 {
+				t.Fatalf("capped stream status = %d bytes = %d", resp.StatusCode, len(audio))
+			}
+		})
+	}
+}
+
+// streamRedirect issues a /rest/stream call and returns the location it
+// redirects to, asserting that the adapter assembled that URL itself:
+// none of the caller's own query may appear on it.
+func streamRedirect(t *testing.T, h *harness, path string) string {
 	t.Helper()
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Get(h.ts.URL + path)
@@ -459,7 +522,19 @@ func streamAndAssertBytes(t *testing.T, h *harness, path string) {
 			t.Fatalf("stream redirect forwarded the client's %s: %s", forwarded, loc)
 		}
 	}
-	resp, err = http.Get(h.ts.URL + loc)
+	return loc
+}
+
+// streamAndAssertBytes follows the stream redirect into the tokenized
+// proxy and asserts the original bytes arrive: no cap was applied, so
+// the URL carries no bitrate of its own either.
+func streamAndAssertBytes(t *testing.T, h *harness, path string) {
+	t.Helper()
+	loc := streamRedirect(t, h, path)
+	if strings.Contains(loc, "br=") {
+		t.Fatalf("an uncapped hint minted a bitrate: %s", loc)
+	}
+	resp, err := http.Get(h.ts.URL + loc)
 	if err != nil {
 		t.Fatal(err)
 	}

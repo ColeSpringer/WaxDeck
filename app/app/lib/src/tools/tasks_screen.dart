@@ -142,6 +142,10 @@ String _typeLabel(AppLocalizations l10n, String type) => switch (type) {
   'import-navidrome' => l10n.toolsTaskImportFrom('Navidrome'),
   'import-subsonic' => l10n.toolsTaskImportFrom('Subsonic'),
   'import-audiobookshelf' => l10n.toolsTaskImportFrom('Audiobookshelf'),
+  'import-jellyfin' => l10n.toolsTaskImportFrom('Jellyfin'),
+  'import-lastfm' => l10n.toolsTaskImportFrom('Last.fm'),
+  'import-listenbrainz' => l10n.toolsTaskImportFrom('ListenBrainz'),
+  'import-spotify' => l10n.toolsTaskImportFrom('Spotify'),
   _ => type,
 };
 
@@ -314,6 +318,15 @@ class _TaskRow extends ConsumerWidget {
         l10n.toolsSummaryUnmatched('${summary['unmatched']}'),
       if (summary['listens'] != null)
         l10n.toolsSummaryListens('${summary['listens']}'),
+      // Only when there were any. An import onto a household member the
+      // administrator has restricted matches thousands and writes none
+      // of them, and without this the report says so with a zero and no
+      // reason.
+      if (summary['refused'] != null)
+        l10n.toolsSummaryRefused('${summary['refused']}'),
+      // Only when it is true: a history that fit says nothing, and a
+      // count beside it would read as a number of anything.
+      if (summary['historyTruncated'] == true) l10n.toolsSummaryTruncated,
     ];
     if (parts.isEmpty) return null;
     return parts.join(', ');

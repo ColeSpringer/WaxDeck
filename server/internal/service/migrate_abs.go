@@ -2,13 +2,9 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
@@ -27,37 +23,17 @@ import (
 // absClient is a minimal Audiobookshelf API client: bearer token,
 // JSON answers.
 type absClient struct {
-	base  string
+	migrateSource
 	token string
-	hc    *http.Client
 }
 
 func newABSClient(base, token string) *absClient {
-	return &absClient{base: strings.TrimRight(base, "/"), token: token, hc: migrateHTTPClient()}
+	return &absClient{migrateSource: newMigrateSource("audiobookshelf", base), token: token}
 }
 
 func (c *absClient) get(ctx context.Context, path string, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.token)
-	resp, err := c.hc.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return &migrateHTTPError{Status: resp.StatusCode, URL: c.base + path}
-	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-	if err != nil {
-		return err
-	}
-	if err := json.Unmarshal(body, out); err != nil {
-		return fmt.Errorf("audiobookshelf %s: unparseable answer: %w", path, err)
-	}
-	return nil
+	return c.migrateSource.get(ctx, path,
+		http.Header{"Authorization": {"Bearer " + c.token}}, out)
 }
 
 // absMediaProgress is one row of the profile's mediaProgress: times in

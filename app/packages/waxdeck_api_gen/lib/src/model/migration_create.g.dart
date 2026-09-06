@@ -10,13 +10,17 @@ class _$MigrationCreate extends MigrationCreate {
   @override
   final String source_;
   @override
-  final String serverUrl;
+  final String? serverUrl;
+  @override
+  final String? accountId;
   @override
   final String? username;
   @override
   final String? password;
   @override
   final String? token;
+  @override
+  final String? exportId;
   @override
   final MigrationOptions? options;
   @override
@@ -27,10 +31,12 @@ class _$MigrationCreate extends MigrationCreate {
 
   _$MigrationCreate._({
     required this.source_,
-    required this.serverUrl,
+    this.serverUrl,
+    this.accountId,
     this.username,
     this.password,
     this.token,
+    this.exportId,
     this.options,
     this.dryRun,
   }) : super._();
@@ -47,9 +53,11 @@ class _$MigrationCreate extends MigrationCreate {
     return other is MigrationCreate &&
         source_ == other.source_ &&
         serverUrl == other.serverUrl &&
+        accountId == other.accountId &&
         username == other.username &&
         password == other.password &&
         token == other.token &&
+        exportId == other.exportId &&
         options == other.options &&
         dryRun == other.dryRun;
   }
@@ -59,9 +67,11 @@ class _$MigrationCreate extends MigrationCreate {
     var _$hash = 0;
     _$hash = $jc(_$hash, source_.hashCode);
     _$hash = $jc(_$hash, serverUrl.hashCode);
+    _$hash = $jc(_$hash, accountId.hashCode);
     _$hash = $jc(_$hash, username.hashCode);
     _$hash = $jc(_$hash, password.hashCode);
     _$hash = $jc(_$hash, token.hashCode);
+    _$hash = $jc(_$hash, exportId.hashCode);
     _$hash = $jc(_$hash, options.hashCode);
     _$hash = $jc(_$hash, dryRun.hashCode);
     _$hash = $jf(_$hash);
@@ -73,9 +83,11 @@ class _$MigrationCreate extends MigrationCreate {
     return (newBuiltValueToStringHelper(r'MigrationCreate')
           ..add('source_', source_)
           ..add('serverUrl', serverUrl)
+          ..add('accountId', accountId)
           ..add('username', username)
           ..add('password', password)
           ..add('token', token)
+          ..add('exportId', exportId)
           ..add('options', options)
           ..add('dryRun', dryRun))
         .toString();
@@ -94,6 +106,10 @@ class MigrationCreateBuilder
   String? get serverUrl => _$this._serverUrl;
   set serverUrl(String? serverUrl) => _$this._serverUrl = serverUrl;
 
+  String? _accountId;
+  String? get accountId => _$this._accountId;
+  set accountId(String? accountId) => _$this._accountId = accountId;
+
   String? _username;
   String? get username => _$this._username;
   set username(String? username) => _$this._username = username;
@@ -105,6 +121,10 @@ class MigrationCreateBuilder
   String? _token;
   String? get token => _$this._token;
   set token(String? token) => _$this._token = token;
+
+  String? _exportId;
+  String? get exportId => _$this._exportId;
+  set exportId(String? exportId) => _$this._exportId = exportId;
 
   MigrationOptionsBuilder? _options;
   MigrationOptionsBuilder get options =>
@@ -124,9 +144,11 @@ class MigrationCreateBuilder
     if ($v != null) {
       _source_ = $v.source_;
       _serverUrl = $v.serverUrl;
+      _accountId = $v.accountId;
       _username = $v.username;
       _password = $v.password;
       _token = $v.token;
+      _exportId = $v.exportId;
       _options = $v.options?.toBuilder();
       _dryRun = $v.dryRun;
       _$v = null;
@@ -158,14 +180,12 @@ class MigrationCreateBuilder
               r'MigrationCreate',
               'source_',
             ),
-            serverUrl: BuiltValueNullFieldError.checkNotNull(
-              serverUrl,
-              r'MigrationCreate',
-              'serverUrl',
-            ),
+            serverUrl: serverUrl,
+            accountId: accountId,
             username: username,
             password: password,
             token: token,
+            exportId: exportId,
             options: _options?.build(),
             dryRun: dryRun,
           );

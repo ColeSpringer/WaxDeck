@@ -558,6 +558,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminLibraryUnnamedPath => 'sin ruta en este sistema de archivos';
 
   @override
+  String get adminMigrateAccountHelp =>
+      'Las estrellas, valoraciones, historial y progreso se guardan en esta cuenta.';
+
+  @override
+  String get adminMigrateAccountLabel => 'Importar en';
+
+  @override
+  String get adminMigrateAccountSelf => 'Tú';
+
+  @override
   String get adminMigrateDryRunHelp =>
       'Informa de lo que coincidiría; no cambia nada';
 
@@ -565,10 +575,41 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminMigrateDryRunTitle => 'Simulación';
 
   @override
+  String get adminMigrateExportPick => 'Elegir el archivo de exportación';
+
+  @override
+  String adminMigrateExportStaged(int files, String name) {
+    String _temp0 = intl.Intl.pluralLogic(
+      files,
+      locale: localeName,
+      other: '$files archivos listos para leer de $name',
+      one: '1 archivo listo para leer de $name',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get adminMigrateHistoryHelp => 'Qué se reprodujo allí, y cuándo';
 
   @override
   String get adminMigrateHistoryTitle => 'Historial de escucha';
+
+  @override
+  String get adminMigrateJellyfin => 'Jellyfin';
+
+  @override
+  String get adminMigrateLastfm => 'Last.fm';
+
+  @override
+  String get adminMigrateLastfmKeyMissing =>
+      'Importar desde Last.fm requiere la clave de API de Last.fm del servidor, en Scrobbling.';
+
+  @override
+  String get adminMigrateListenBrainz => 'ListenBrainz';
+
+  @override
+  String get adminMigrateListenBrainzServerHelp =>
+      'Déjalo vacío para listenbrainz.org, o indica un servidor compatible.';
 
   @override
   String get adminMigratePasswordLabel => 'Contraseña';
@@ -592,6 +633,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminMigrateServerUrlLabel => 'URL del servidor';
+
+  @override
+  String get adminMigrateSpotifyExport => 'Exportación de datos de Spotify';
 
   @override
   String get adminMigrateStarsHelp =>
@@ -10133,6 +10177,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String toolsSummaryMatched(String count) {
     return 'coincidencias $count';
   }
+
+  @override
+  String toolsSummaryRefused(String count) {
+    return 'rechazadas $count';
+  }
+
+  @override
+  String get toolsSummaryTruncated => 'historial más antiguo sin leer';
 
   @override
   String toolsSummaryUnmatched(String count) {

@@ -689,6 +689,7 @@ func TestQueueTimelineEndpoint(t *testing.T) {
 	pidB := items.Items[1].Pid
 
 	var tl struct {
+		Pid           string
 		Url, MimeType string
 		Format        string
 		DurationMs    int64
@@ -712,7 +713,7 @@ func TestQueueTimelineEndpoint(t *testing.T) {
 	// says what it actually rendered. A different rendering is a
 	// different URL, so the two live side by side.
 	var flac struct {
-		Url, Format string
+		Pid, Url, Format string
 	}
 	pPost(t, h, "/api/v1/player/timeline", h.token, map[string]any{
 		"itemPids": []string{pidA, pidB},
@@ -783,6 +784,40 @@ func TestQueueTimelineEndpoint(t *testing.T) {
 	body := string(buf[:n])
 	if !strings.Contains(body, "media.m3u8") || !strings.Contains(body, "mt=") {
 		t.Fatalf("master body %q", body)
+	}
+
+	// Stopping releases the rendering, so the slot goes back without
+	// waiting the idle sweep out. The endpoint needs a credential, and
+	// an id it never minted is a 404.
+	if !strings.HasPrefix(tl.Pid, "tl-") {
+		t.Fatalf("timeline pid %q, want a tl- id", tl.Pid)
+	}
+	release := func(pid, token string) int {
+		req, _ := http.NewRequest(http.MethodDelete, h.ts.URL+"/api/v1/player/timeline/"+pid, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if got := release(tl.Pid, ""); got != http.StatusUnauthorized {
+		t.Fatalf("releasing without a token: status %d, want 401", got)
+	}
+	if got := release("tl-01JZX5N8QW3F4V9T2B7KD3M9R6", h.token); got != http.StatusNotFound {
+		t.Fatalf("releasing an unminted id: status %d, want 404", got)
+	}
+	if got := release(tl.Pid, h.token); got != http.StatusNoContent {
+		t.Fatalf("releasing: status %d, want 204", got)
+	}
+	// The flac rendering is still live and still counted, so the
+	// listener keeps the one slot they had; releasing that too ends it.
+	pGet(t, h, "/api/v1/admin/transcoding/activity", h.token, &activity)
+	if activity.ActiveTimelines < 1 {
+		t.Fatalf("activity %+v, want the other rendering still counted", activity)
 	}
 }
 

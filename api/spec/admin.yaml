@@ -1109,6 +1109,72 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /admin/migrations/exports:
+    post:
+      operationId: stageMigrationExport
+      summary: Upload an account data export to import from
+      description: >
+        Stages an account data export - the zip a streaming service
+        hands over when somebody asks for their data - so a migration
+        can read it. The body is the raw zip. What was recognised is
+        reported back (`source` and the files that will be read), and
+        the id goes on `createMigration` as `exportId`. A staged
+        export expires after a day, is deleted once the import that
+        read it finishes, and never reaches the library: nothing here
+        writes into the catalog. Something that is not a zip, or a zip
+        holding nothing this server can read, answers
+        `invalid-request`. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "201":
+          description: The staged export.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MigrationExport"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          description: The export exceeds the server's size limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "507":
+          $ref: "#/components/responses/StorageFull"
+
+  /admin/migrations/exports/{exportId}:
+    delete:
+      operationId: discardMigrationExport
+      summary: Discard a staged export
+      description: >
+        Deletes a staged export and its file, for one uploaded by
+        mistake or left behind by an import that was never started.
+        Administrators only.
+      tags: [admin]
+      parameters:
+        - $ref: "#/components/parameters/MigrationExportId"
+      responses:
+        "204":
+          description: Discarded.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /admin/migrations:
     post:
       operationId: createMigration
@@ -1122,16 +1188,24 @@ paths:
         bookmarks from a running server over its Subsonic API
         (`serverUrl` + `username` + `password`); `audiobookshelf`
         pulls book progress over its REST API (`serverUrl` +
-        `token`). Podcast subscriptions migrate via the existing
+        `token`); `jellyfin` pulls favourites, play counts and
+        positions over its REST API (`serverUrl` + `username` with
+        either `password` or an API key in `token`); `lastfm` and
+        `listenbrainz` pull scrobbling history for a `username`; and
+        `spotify` reads an account data export uploaded first
+        (`exportId`). Podcast subscriptions migrate via the existing
         OPML import. Items are matched through the portable-ref
         ladder (identifiers, then fingerprints, then descriptive
-        metadata); play history lands as backdated import-source
-        listen sessions with deterministic idempotency ids, so
-        re-running an import never doubles anything. `dryRun`
-        matches and reports without writing. The URL must resolve
-        to a global address unless the server allows private
-        fetches. Credentials are held only for the task's duration.
-        Administrators only.
+        metadata); play history lands as import-source listen
+        sessions with deterministic idempotency ids, so re-running an
+        import never doubles anything. Last.fm, ListenBrainz and
+        Spotify carry a time per play, so their history lands at the
+        times it happened; the sources that report only a play count
+        are spread backwards a week apart. Imported listens are never
+        forwarded to connected scrobblers. `dryRun` matches and
+        reports without writing. A URL must resolve to a global
+        address unless the server allows private fetches. Credentials
+        are held only for the task's duration. Administrators only.
       tags: [admin]
       requestBody:
         required: true
@@ -1155,6 +1229,14 @@ paths:
 
 components:
   parameters:
+    MigrationExportId:
+      name: exportId
+      in: path
+      required: true
+      description: Staged export id (e.g. `mx-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^mx-[0-9A-HJKMNP-TV-Z]{26}$"
     BackupId:
       name: backupId
       in: path
@@ -2015,41 +2097,109 @@ components:
     MigrationCreate:
       type: object
       description: A migration import to start.
-      required: [source, serverUrl]
+      required: [source]
       properties:
         source:
           type: string
           description: >
             Where to pull from: `navidrome` and `subsonic` (a running
-            server's Subsonic API), or `audiobookshelf` (its REST
-            API). An open string; unknown sources answer
-            `invalid-request` naming the supported set.
+            server's Subsonic API), `audiobookshelf` (its REST API),
+            `jellyfin` (its REST API), `lastfm` and `listenbrainz`
+            (scrobbling history), or `spotify` (an account data
+            export, staged first). An open string; unknown sources
+            answer `invalid-request` naming the supported set.
           example: navidrome
         serverUrl:
           type: string
           maxLength: 512
-          description: The source server's base URL.
+          description: >
+            The source server's base URL. Required for `navidrome`,
+            `subsonic`, `audiobookshelf` and `jellyfin`; optional for
+            `listenbrainz`, where it names a compatible server and
+            defaults to `https://api.listenbrainz.org`. `lastfm` and
+            `spotify` take none.
           example: "https://navidrome.example.net"
+        accountId:
+          type: string
+          pattern: "^us-[0-9A-HJKMNP-TV-Z]{26}$"
+          description: >
+            The account the imported state lands on. Defaults to the
+            caller, which is what a household administrator moving
+            their own library wants; naming another account is how the
+            rest of the household is moved without knowing their
+            passwords. The target must exist, be enabled, and not be
+            a pending signup.
+          example: us-01JZX5N8QW3F4V9T2B7KD3M9R6
         username:
           type: string
           maxLength: 128
-          description: Login for Subsonic-API sources.
+          description: >
+            Login for Subsonic-API sources and Jellyfin; the account
+            name to read for `lastfm` and `listenbrainz`.
         password:
           type: string
           maxLength: 256
           format: password
-          description: Password for Subsonic-API sources.
+          description: Password for Subsonic-API sources and Jellyfin.
         token:
           type: string
           maxLength: 512
           format: password
-          description: API token for token-authenticated sources.
+          description: >
+            API token for token-authenticated sources: an
+            Audiobookshelf token, a Jellyfin API key (with
+            `username` naming whose state to read), or a ListenBrainz
+            user token.
+        exportId:
+          type: string
+          pattern: "^mx-[0-9A-HJKMNP-TV-Z]{26}$"
+          description: >
+            A staged account export to read, from
+            `stageMigrationExport`. Required for `spotify` and refused
+            for every source that reads a server.
+          example: mx-01JZX5N8QW3F4V9T2B7KD3M9R6
         options:
           $ref: "#/components/schemas/MigrationOptions"
         dryRun:
           type: boolean
           default: false
           description: Match and report without writing anything.
+
+    MigrationExport:
+      type: object
+      description: >
+        One uploaded account data export, staged for an import to read.
+      required: [pid, source, files, sizeBytes, expiresAt]
+      properties:
+        pid:
+          type: string
+          pattern: "^mx-[0-9A-HJKMNP-TV-Z]{26}$"
+          description: Goes on `createMigration` as `exportId`.
+          example: mx-01JZX5N8QW3F4V9T2B7KD3M9R6
+        source:
+          type: string
+          enum: [spotify, unknown]
+          description: >
+            Which service's export this was recognised as. `unknown` is
+            reserved for a server that stages an archive without naming
+            it; this one refuses what it cannot read, so nothing it
+            stages carries that value.
+        files:
+          type: array
+          description: The files inside the archive this import will read.
+          items:
+            type: string
+          example: ["Streaming_History_Audio_2024_1.json", "YourLibrary.json"]
+        sizeBytes:
+          type: integer
+          format: int64
+          description: The uploaded archive's size on disk.
+        expiresAt:
+          type: string
+          format: date-time
+          description: >
+            When the staged file is swept. An import that has not
+            started by then has to upload the export again.
 
     MigrationOptions:
       type: object

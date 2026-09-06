@@ -500,6 +500,22 @@ here waits on upstream.
   and "how far ahead" are numbers worth setting against the perf run's
   measurements rather than before them - so take it with the entry above.
 
+- `[in-repo]` **A listen claimed but never marked stays uncounted.**
+  Ingest claims each session first (the insert on the idempotency id is
+  what makes a replay safe), then marks the item played, so a process
+  death between the two leaves the listen recorded and the play
+  uncounted: the retry reads the claim as a duplicate and skips the mark
+  for good. A transient mark failure is already compensated - the claims
+  behind it come back out so the retry redoes both - but a crash has
+  nobody to run that. The window used to be the one row in flight and is
+  now up to the batch, since the claims commit together rather than a
+  transaction apiece, which is what keeps a history import off the single
+  write connection. Closing it wants the claim to record whether its mark
+  landed plus a sweep that finishes the ones that did not, which is a
+  schema column and a worker rather than a fix in place. The listening
+  history is never what is at risk here, only the play count derived from
+  it.
+
 ## Connect and casting
 
 
@@ -757,51 +773,3 @@ here waits on upstream.
   replaces rather than duplicates.
 
 ## Admin and ops
-
-- `[in-repo]` **Importers beyond Navidrome/Subsonic and
-  Audiobookshelf.** The migration framework (portable-ref matching,
-  backdated idempotent listen ingest, dry runs, task reports) is
-  built; Jellyfin, Last.fm and ListenBrainz history, and the Spotify
-  GDPR export ride it as fast-follows, as the roadmap allows.
-- `[in-repo]` **Forcing the source's own format still spends an
-  admission slot.** A client that pins `fmt=X` on a whole file already
-  in format X (some Subsonic clients always pin a format) is routed
-  through the engine and charged a concurrent-session slot, though the
-  auto ladder would direct-play the same bytes as a seekable passthrough.
-  Device endpoints no longer walk into this: DLNA negotiation forces
-  nothing at all when the renderer already plays the source's container,
-  which is the same answer this entry wants and is reachable there
-  because the decision is made with the source in hand. What is left is
-  the client-pinned case, where the format arrives on the URL.
-  `ServeStream` clears `Seekable` for any forced format unconditionally,
-  and passthrough is signaled by `format=auto`, not by the source's own
-  format name, so the guard is not a one-liner: it must match the forced
-  format against the source container and still exclude voice boost and
-  virtual tracks (and reconcile container-versus-format naming for
-  mp4/adts/aac) so a real encode never escapes admission. Conservative
-  today (it over-counts sessions, never under-counts); worth doing only
-  if concurrent-session limits get tight.
-- `[in-repo]` **A gapless listener's slot outlives the listening by up
-  to a minute.** A queue rendered as one stream takes one transcode slot
-  per listener, counted into the same caps a progressive stream is, and
-  it is given back by an idle sweep: sixty seconds with none of that
-  listener's renderings fetched, checked on a fifteen-second ticker.
-  There is no "the listener left" signal - a browser that closed its tab
-  says nothing, and hls.js never re-fetches the master, so the fetch that
-  would say otherwise is a fragment. That is fine at a generous cap and
-  sharp at a tight one: with `maxConcurrentPerUser` at 1, a gapless music
-  run that reaches a podcast asks for a progressive stream and is refused
-  for as long as the sweep takes, because the run it just left is still
-  holding the listener's only slot. Closing it properly wants a release
-  the client sends when it stops playing a timeline, which is a contract
-  change (a DELETE on the mint, or a field on the existing session
-  teardown) rather than a tuning of the window.
-- `[in-repo]` **Subsonic's `maxBitRate` is still documented-ignored.**
-  The capped-transcode machinery it needs now exists
-  (`flow.PlayOptions.MaxBitrateKbps`, minted as `fmt=`/`br=` on the
-  stream URL and clamped against the per-user ceiling at both mint and
-  fetch), so honoring the parameter is a small adapter change: read it
-  where the stream view resolves, pass it through `PlayOptions`, and
-  decide how it composes with a format the client may also pin - which
-  is the same decision the "forcing the source's own format" entry
-  above already holds.

@@ -596,6 +596,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/migrations/exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload an account data export to import from
+         * @description Stages an account data export - the zip a streaming service hands over when somebody asks for their data - so a migration can read it. The body is the raw zip. What was recognised is reported back (`source` and the files that will be read), and the id goes on `createMigration` as `exportId`. A staged export expires after a day, is deleted once the import that read it finishes, and never reaches the library: nothing here writes into the catalog. Something that is not a zip, or a zip holding nothing this server can read, answers `invalid-request`. Administrators only.
+         */
+        post: operations["stageMigrationExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/migrations/exports/{exportId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Discard a staged export
+         * @description Deletes a staged export and its file, for one uploaded by mistake or left behind by an import that was never started. Administrators only.
+         */
+        delete: operations["discardMigrationExport"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/migrations": {
         parameters: {
             query?: never;
@@ -607,7 +647,7 @@ export interface paths {
         put?: never;
         /**
          * Import listening state from another server
-         * @description Starts a migration import as a background task and answers with the tool task to follow (type `import-<source>`; the finished task's `summary` carries the report: what matched, what did not, and what was written). Sources: `navidrome` and `subsonic` pull stars, ratings, play counts, and bookmarks from a running server over its Subsonic API (`serverUrl` + `username` + `password`); `audiobookshelf` pulls book progress over its REST API (`serverUrl` + `token`). Podcast subscriptions migrate via the existing OPML import. Items are matched through the portable-ref ladder (identifiers, then fingerprints, then descriptive metadata); play history lands as backdated import-source listen sessions with deterministic idempotency ids, so re-running an import never doubles anything. `dryRun` matches and reports without writing. The URL must resolve to a global address unless the server allows private fetches. Credentials are held only for the task's duration. Administrators only.
+         * @description Starts a migration import as a background task and answers with the tool task to follow (type `import-<source>`; the finished task's `summary` carries the report: what matched, what did not, and what was written). Sources: `navidrome` and `subsonic` pull stars, ratings, play counts, and bookmarks from a running server over its Subsonic API (`serverUrl` + `username` + `password`); `audiobookshelf` pulls book progress over its REST API (`serverUrl` + `token`); `jellyfin` pulls favourites, play counts and positions over its REST API (`serverUrl` + `username` with either `password` or an API key in `token`); `lastfm` and `listenbrainz` pull scrobbling history for a `username`; and `spotify` reads an account data export uploaded first (`exportId`). Podcast subscriptions migrate via the existing OPML import. Items are matched through the portable-ref ladder (identifiers, then fingerprints, then descriptive metadata); play history lands as import-source listen sessions with deterministic idempotency ids, so re-running an import never doubles anything. Last.fm, ListenBrainz and Spotify carry a time per play, so their history lands at the times it happened; the sources that report only a play count are spread backwards a week apart. Imported listens are never forwarded to connected scrobblers. `dryRun` matches and reports without writing. A URL must resolve to a global address unless the server allows private fetches. Credentials are held only for the task's duration. Administrators only.
          */
         post: operations["createMigration"];
         delete?: never;
@@ -2941,10 +2981,30 @@ export interface paths {
         put?: never;
         /**
          * Mint a gapless queue timeline
-         * @description Renders an ordered queue of visible items as one continuous stream through the streaming engine: sample-exact seams, no discontinuities, with optional equal-power crossfade. The response's single HLS URL plays the whole queue; `boundaries` map each item onto the combined timeline (offsets in samples at `envelopeRate`; under a crossfade consecutive members overlap), so a client can render per-track position and seek across members without probing. Timelines are immutable: editing the queue means minting a new timeline and switching URLs. The URL is media-token authenticated, and the token lives at least the timeline's duration plus margin (`expiresAt` reflects it), so a queue never expires mid-listen; a member file changing on disk surfaces as `stream-stale`, and a timeline aged out of the engine's store answers `not-found` on fetch. Re-request this endpoint in either case. Minting may first need to measure member lengths (MP3 sources are scanned); the server absorbs short measurements into this request, and when one outlasts the request budget it answers 202 with a job to poll, after which re-requesting answers 201 immediately. A rendering counts against the concurrent transcode limits like a stream does: one slot a listener, however many timelines they hold live at once, taken at the mint and given back once every one of them has gone unfetched for a minute - so a mint over the cap answers `transcode-limited` before anything plays, and a fetch resuming a listen whose slot was released can answer it too. A caller that can only decode some formats says so in `formats`; the rendering format is part of a timeline's identity, so the same queue asked for in two formats is two streams. Requires the streaming engine with timeline support (`feature-unavailable` otherwise). Items whose delivery cannot join a timeline (unfetched podcast episodes, unsupported sources) answer `conflict` naming the pid, and a `crossfadeSeconds` longer than the shortest queue member can carry answers `invalid-request` naming it.
+         * @description Renders an ordered queue of visible items as one continuous stream through the streaming engine: sample-exact seams, no discontinuities, with optional equal-power crossfade. The response's single HLS URL plays the whole queue; `boundaries` map each item onto the combined timeline (offsets in samples at `envelopeRate`; under a crossfade consecutive members overlap), so a client can render per-track position and seek across members without probing. Timelines are immutable: editing the queue means minting a new timeline and switching URLs. The URL is media-token authenticated, and the token lives at least the timeline's duration plus margin (`expiresAt` reflects it), so a queue never expires mid-listen; a member file changing on disk surfaces as `stream-stale`, and a timeline aged out of the engine's store answers `not-found` on fetch. Re-request this endpoint in either case. Minting may first need to measure member lengths (MP3 sources are scanned); the server absorbs short measurements into this request, and when one outlasts the request budget it answers 202 with a job to poll, after which re-requesting answers 201 immediately. A rendering counts against the concurrent transcode limits like a stream does: one slot a listener, however many timelines they hold live at once, taken at the mint and given back once every one of them has gone unfetched for a minute - so a mint over the cap answers `transcode-limited` before anything plays, and a fetch resuming a listen whose slot was released can answer it too. A client that stops playing releases the rendering it holds (`releaseQueueTimeline`) rather than waiting the minute out; the sweep stays the backstop for the client that cannot, a closed browser tab being the case. A caller that can only decode some formats says so in `formats`; the rendering format is part of a timeline's identity, so the same queue asked for in two formats is two streams. Requires the streaming engine with timeline support (`feature-unavailable` otherwise). Items whose delivery cannot join a timeline (unfetched podcast episodes, unsupported sources) answer `conflict` naming the pid, and a `crossfadeSeconds` longer than the shortest queue member can carry answers `invalid-request` naming it.
          */
         post: operations["createQueueTimeline"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/player/timeline/{pid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Release a gapless queue timeline
+         * @description Drops the caller from this rendering's listeners and gives back their transcode slot when none of their other renderings has been fetched inside the idle window. What a client sends when it stops playing a timeline, so the next listener is not refused for the minute the sweep would otherwise take to notice. The rendering itself is not destroyed: another listener may be on it, and the caller's own URL keeps working until it expires (a fetch takes the slot again). Releasing one that is unknown or already expired answers `not-found`, as does a server with no streaming engine, which holds no renderings to release; there is nothing to retry either way.
+         */
+        delete: operations["releaseQueueTimeline"];
         options?: never;
         head?: never;
         patch?: never;
@@ -5639,33 +5699,74 @@ export interface components {
         /** @description A migration import to start. */
         MigrationCreate: {
             /**
-             * @description Where to pull from: `navidrome` and `subsonic` (a running server's Subsonic API), or `audiobookshelf` (its REST API). An open string; unknown sources answer `invalid-request` naming the supported set.
+             * @description Where to pull from: `navidrome` and `subsonic` (a running server's Subsonic API), `audiobookshelf` (its REST API), `jellyfin` (its REST API), `lastfm` and `listenbrainz` (scrobbling history), or `spotify` (an account data export, staged first). An open string; unknown sources answer `invalid-request` naming the supported set.
              * @example navidrome
              */
             source: string;
             /**
-             * @description The source server's base URL.
+             * @description The source server's base URL. Required for `navidrome`, `subsonic`, `audiobookshelf` and `jellyfin`; optional for `listenbrainz`, where it names a compatible server and defaults to `https://api.listenbrainz.org`. `lastfm` and `spotify` take none.
              * @example https://navidrome.example.net
              */
-            serverUrl: string;
-            /** @description Login for Subsonic-API sources. */
+            serverUrl?: string;
+            /**
+             * @description The account the imported state lands on. Defaults to the caller, which is what a household administrator moving their own library wants; naming another account is how the rest of the household is moved without knowing their passwords. The target must exist, be enabled, and not be a pending signup.
+             * @example us-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            accountId?: string;
+            /** @description Login for Subsonic-API sources and Jellyfin; the account name to read for `lastfm` and `listenbrainz`. */
             username?: string;
             /**
              * Format: password
-             * @description Password for Subsonic-API sources.
+             * @description Password for Subsonic-API sources and Jellyfin.
              */
             password?: string;
             /**
              * Format: password
-             * @description API token for token-authenticated sources.
+             * @description API token for token-authenticated sources: an Audiobookshelf token, a Jellyfin API key (with `username` naming whose state to read), or a ListenBrainz user token.
              */
             token?: string;
+            /**
+             * @description A staged account export to read, from `stageMigrationExport`. Required for `spotify` and refused for every source that reads a server.
+             * @example mx-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            exportId?: string;
             options?: components["schemas"]["MigrationOptions"];
             /**
              * @description Match and report without writing anything.
              * @default false
              */
             dryRun: boolean;
+        };
+        /** @description One uploaded account data export, staged for an import to read. */
+        MigrationExport: {
+            /**
+             * @description Goes on `createMigration` as `exportId`.
+             * @example mx-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            pid: string;
+            /**
+             * @description Which service's export this was recognised as. `unknown` is reserved for a server that stages an archive without naming it; this one refuses what it cannot read, so nothing it stages carries that value.
+             * @enum {string}
+             */
+            source: "spotify" | "unknown";
+            /**
+             * @description The files inside the archive this import will read.
+             * @example [
+             *       "Streaming_History_Audio_2024_1.json",
+             *       "YourLibrary.json"
+             *     ]
+             */
+            files: string[];
+            /**
+             * Format: int64
+             * @description The uploaded archive's size on disk.
+             */
+            sizeBytes: number;
+            /**
+             * Format: date-time
+             * @description When the staged file is swept. An import that has not started by then has to upload the export again.
+             */
+            expiresAt: string;
         };
         /** @description What to import. Everything defaults to true. */
         MigrationOptions: {
@@ -8034,7 +8135,7 @@ export interface components {
             pid: string;
             /**
              * Format: date-time
-             * @description When playback started. Historical for backdated imports; the server preserves it as reported.
+             * @description When playback started. Historical for backdated imports; the server preserves it as reported. A session dated before the Unix epoch, or more than a day ahead of the server, is permanently rejected: it would sort above or below everything real in every surface ordered by listening time.
              */
             startedAt: string;
             /**
@@ -8055,7 +8156,7 @@ export interface components {
              */
             client?: string;
             /**
-             * @description Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history.
+             * @description Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. An `import` session counts towards play state exactly as a live one does and is never forwarded to connected scrobblers - a history moving in has usually been scrobbled once already, and re-sending it would be a second copy on somebody else's service.
              * @default live
              * @enum {string}
              */
@@ -8525,6 +8626,11 @@ export interface components {
         };
         /** @description A minted gapless timeline: one HLS stream URL that plays the whole queue, plus the per-member boundaries to map positions. */
         TimelineInfo: {
+            /**
+             * @description Identifies this rendering, for releasing it when playback stops. Absent from an older server, which relies on the idle sweep alone.
+             * @example tl-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            pid?: string;
             /**
              * @description Origin-relative, media-token-authenticated HLS playlist URL for the whole timeline. The token lives at least the timeline's duration plus margin; re-request this endpoint on `stream-stale`, on a `not-found` fetch (the engine aged the timeline out), or after `expiresAt`.
              * @example /media/hls/master.m3u8?tl=abc&mt=xyz
@@ -11237,6 +11343,8 @@ export interface components {
     parameters: {
         /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
         Pid: string;
+        /** @description Staged export id (e.g. `mx-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+        MigrationExportId: string;
         /** @description Backup PID (e.g. `bu-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
         BackupId: string;
         /** @description Trash entry PID (e.g. `th-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
@@ -11263,6 +11371,8 @@ export interface components {
         TargetId: string;
         /** @description Player endpoint PID (e.g. `pe-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
         PlayerEndpointId: string;
+        /** @description Timeline PID (e.g. `tl-01JZX5N8QW3F4V9T2B7KD3M9R6`), from the mint. */
+        TimelinePid: string;
         /** @description Playback session PID (e.g. `ps-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
         PlaybackSessionId: string;
         /** @description Review entry PID (e.g. `rv-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
@@ -12224,6 +12334,67 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    stageMigrationExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description The staged export. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MigrationExport"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            /** @description The export exceeds the server's size limit. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            507: components["responses"]["StorageFull"];
+        };
+    };
+    discardMigrationExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Staged export id (e.g. `mx-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                exportId: components["parameters"]["MigrationExportId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Discarded. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     createMigration: {
@@ -15917,6 +16088,29 @@ export interface operations {
             409: components["responses"]["Conflict"];
             429: components["responses"]["TranscodeLimited"];
             501: components["responses"]["FeatureUnavailable"];
+        };
+    };
+    releaseQueueTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Timeline PID (e.g. `tl-01JZX5N8QW3F4V9T2B7KD3M9R6`), from the mint. */
+                pid: components["parameters"]["TimelinePid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Released. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["NotFound"];
         };
     };
     getCastPreflight: {

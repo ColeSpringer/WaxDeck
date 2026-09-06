@@ -136,3 +136,52 @@ func TestPlayInfoCapLeavesALossySourceInsideIt(t *testing.T) {
 		t.Fatalf("uncapped url carries cap params: %s", info.URL)
 	}
 }
+
+// A cap on a source that is already in the format the cap picked. The
+// hint on the URL is then indistinguishable by name from one asking for
+// a copy of the file, and reading it as one served the original bytes
+// at the source's own bitrate - uncharged, and larger than the number
+// the client had been handed.
+func TestBitrateCapOnASourceAlreadyInTheCapsFormat(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "song.opus")
+	if err := os.WriteFile(path, []byte("opusbytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Lossy, and over the cap, so the cap is a real encode - into opus,
+	// which is what this file already is.
+	src := Source{Path: path, Size: 9, MTimeNS: 42, Codec: "opus", Container: "ogg", BitrateKbps: 256}
+	var got url.Values
+	b := newTestBridge(t, func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query()
+		io.WriteString(w, "capped")
+	}, src)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+
+	info, err := b.PlayInfoFor(context.Background(), "us-1", "tr-X", PlayOptions{MaxBitrateKbps: 128})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.AppliedBitrateKbps != 128 || info.Seekable {
+		t.Fatalf("info = %+v, want an unseekable 128 encode", info)
+	}
+	if !strings.Contains(info.URL, "br=128") {
+		t.Fatalf("URL = %s, want the cap on it", info.URL)
+	}
+
+	rec := httptest.NewRecorder()
+	b.ServeStream(rec, httptest.NewRequest("GET", info.URL, nil))
+	if rec.Code != 200 {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	if got.Get("bitrate") != "128" {
+		t.Fatalf("engine bitrate = %q, want the cap the client was promised", got.Get("bitrate"))
+	}
+	if got.Get("format") != "opus" {
+		t.Fatalf("engine format = %q, want the capped encode", got.Get("format"))
+	}
+	if gate.acquired != 1 {
+		t.Fatalf("admissions = %d, want the encode charged", gate.acquired)
+	}
+}

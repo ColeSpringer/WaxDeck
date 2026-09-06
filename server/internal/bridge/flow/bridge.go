@@ -235,6 +235,12 @@ type PlayOptions struct {
 	// source already inside the cap streams unchanged. Zero (every
 	// caller but the client play-info surface) changes nothing.
 	MaxBitrateKbps int
+	// CapFormat is the lossy format a capped encode should land in when
+	// the caller named one it can decode. Only a preference, and only
+	// where a cap applies at all: the ladder decides otherwise. A client
+	// that asks for a cap in mp3 and is handed Ogg gets silence with
+	// nothing to explain it, which is what this exists to prevent.
+	CapFormat string
 }
 
 // forceFormats is the closed set of client-visible format hints. The
@@ -296,6 +302,13 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 	// have to agree or the mime advertised here would describe bytes the
 	// stream never serves.
 	forced = forced && hasOutput(b.caps, force)
+	// Forcing the source's own format is not a transcode: the fetch side
+	// keeps the auto shape for it, so the URL must not carry the hint
+	// either, and the client is told the container's own media type -
+	// which is what the untouched shape already carries.
+	if forced && shape.Seekable && SameAsSource(src, force) {
+		forced = false
+	}
 	if forced {
 		// Proxy mode carries the forced format on the URL (&fmt= below), so the
 		// shape's Format is never read here; only the client-facing MimeType and
@@ -316,7 +329,13 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 	// one, so a forced format and a cap cannot meet.
 	capKbps := 0
 	if opts.MaxBitrateKbps > 0 && !forced {
-		capKbps = opts.MaxBitrateKbps
+		// Clamped here, so "a minted br is a bitrate this engine can
+		// speak" is the mint's own invariant rather than something each
+		// caller is trusted to have applied first. The REST surface
+		// still refuses an out-of-range field outright - that is its
+		// contract - and the fetch side re-validates what it is handed
+		// like every other stream parameter.
+		capKbps = min(max(opts.MaxBitrateKbps, MinStreamBitrateKbps), MaxStreamBitrateKbps)
 		if b.gate != nil {
 			if ceiling := b.gate.MaxBitrateKbps(ctx, user); ceiling > 0 {
 				capKbps = min(capKbps, ceiling)
@@ -324,6 +343,15 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 		}
 		capped, applied := CappedShape(src, b.caps, shape, capKbps)
 		if applied {
+			// The caller's own target wins over the ladder's when it is
+			// one the closed hint set carries and this engine produces:
+			// the fetch side gates on the same two, so anything else
+			// would advertise a type the stream never serves.
+			if f := opts.CapFormat; lossyBitrateFormats[f] && hasOutput(b.caps, f) {
+				if mime, closed := forceFormats[f]; closed {
+					capped.Format, capped.MimeType = f, mime
+				}
+			}
 			shape = capped
 		} else {
 			capKbps = 0
@@ -574,7 +602,21 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	// The format hint is client-visible but closed: it can only pick a
 	// narrow-endpoint format for an item the token already authorizes.
 	if f := q.Get("fmt"); f != "" {
-		if _, ok := forceFormats[f]; ok && hasOutput(b.caps, f) {
+		_, known := forceFormats[f]
+		// A hint naming what the file already holds asks for a copy of
+		// the source, so the auto shape stands and the original bytes
+		// serve: no engine, no session, no slot. Seekable is exactly
+		// "not virtual and not boosted", and either of those means the
+		// source is not what would be served.
+		//
+		// A cap on the URL is what says this hint is not that hint: the
+		// mint pairs br= with the format it chose for a real encode, and
+		// on a source that happens to already be in that format the
+		// name alone is indistinguishable. Reading it as a copy served
+		// the original bytes at the source's own bitrate, uncharged,
+		// while the client had been told a smaller number.
+		copyOfSource := shape.Seekable && q.Get("br") == "" && SameAsSource(src, f)
+		if known && hasOutput(b.caps, f) && !copyOfSource {
 			shape.Format = f
 			// Clear Seekable so this stream routes through the admission control
 			// below: a forced format engages the engine (a transcode), not a

@@ -136,6 +136,136 @@ test.describe.serial('backup lifecycle', () => {
   });
 });
 
+// A store-only zip, built here because the suite carries no archive
+// library and an account data export is the one upload with no server
+// endpoint that produces one.
+function storeZip(entries: { name: string; body: string }[]): Buffer {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc32 = (buf: Buffer) => {
+    let c = 0xffffffff;
+    for (const byte of buf) c = crcTable[(c ^ byte) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const locals: Buffer[] = [];
+  const central: Buffer[] = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name, 'utf8');
+    const data = Buffer.from(entry.body, 'utf8');
+    const sum = crc32(data);
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4); // version needed
+    local.writeUInt16LE(0, 6); // flags
+    local.writeUInt16LE(0, 8); // stored
+    local.writeUInt32LE(sum, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    locals.push(local, name, data);
+
+    const dir = Buffer.alloc(46);
+    dir.writeUInt32LE(0x02014b50, 0);
+    dir.writeUInt16LE(20, 4);
+    dir.writeUInt16LE(20, 6);
+    dir.writeUInt16LE(0, 8);
+    dir.writeUInt16LE(0, 10);
+    dir.writeUInt32LE(sum, 16);
+    dir.writeUInt32LE(data.length, 20);
+    dir.writeUInt32LE(data.length, 24);
+    dir.writeUInt16LE(name.length, 28);
+    dir.writeUInt32LE(offset, 42);
+    central.push(dir, name);
+    offset += local.length + name.length + data.length;
+  }
+  const body = Buffer.concat(locals);
+  const directory = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0);
+  end.writeUInt16LE(entries.length, 8);
+  end.writeUInt16LE(entries.length, 10);
+  end.writeUInt32LE(directory.length, 12);
+  end.writeUInt32LE(body.length, 16);
+  return Buffer.concat([body, directory, end]);
+}
+
+// The whole staged-export path over the real stack: an account data
+// export is uploaded, recognised, and read by an import that lands on
+// somebody else's account. A dry run, because what is under test is
+// the matching and the plumbing rather than a write nothing here can
+// undo on a shared server.
+test('a data export imports onto another account', async ({ app, otherAccount }) => {
+  // Named tracks, because the export carries no identifiers: what the
+  // import has to match on is the artist and the title, so a fixture
+  // that carries neither would prove nothing about the matching.
+  const items = await app.api.get('/library/items', {
+    query: { mediaType: 'music', limit: 50 },
+  });
+  const tracks = (items.items ?? []).filter((i) => i.artist && i.title).slice(0, 2);
+  expect(tracks.length, 'the fixture library should hold named music').toBeGreaterThan(0);
+
+  const plays = tracks.map((t) => ({
+    ts: '2026-02-01T10:00:00Z',
+    ms_played: 120000,
+    master_metadata_track_name: t.title,
+    master_metadata_album_artist_name: t.artist ?? '',
+    master_metadata_album_album_name: t.album ?? '',
+  }));
+  const archive = storeZip([
+    {
+      name: 'Spotify Account Data/Streaming_History_Audio_2026_1.json',
+      body: JSON.stringify(plays),
+    },
+  ]);
+
+  const staged = await app.api.raw.upload('/admin/migrations/exports', archive);
+  expect(staged.status(), await staged.text()).toBe(201);
+  const exportRow = await staged.json();
+  expect(exportRow.source).toBe('spotify');
+  expect(exportRow.files).toHaveLength(1);
+
+  const target = await otherAccount('import-target');
+  const session = await app.api.as(target.token).get('/auth/session');
+  const started = await app.api.post('/admin/migrations', {
+    data: {
+      source: 'spotify',
+      exportId: exportRow.pid,
+      accountId: session.user!.id,
+      dryRun: true,
+    },
+  });
+  expect(started.id, 'the import answers a task to follow').toBeTruthy();
+  expect(started.type).toBe('import-spotify');
+
+  try {
+    await expect(async () => {
+      const task = await app.api.get('/tools/tasks/{taskId}', {
+        path: { taskId: started.id },
+      });
+      expect(task.state, `the import should finish: ${JSON.stringify(task.summary)}`).toBe('done');
+      const summary = (task.summary ?? {}) as Record<string, unknown>;
+      expect(
+        Number(summary.matched ?? 0),
+        `the export's plays should match the library they were named from: ${JSON.stringify(task)}`,
+      ).toBeGreaterThan(0);
+    }).toPass({ timeout: T.fetch });
+  } finally {
+    // A dry run deliberately keeps the archive, so this one hands it
+    // back rather than leaving a household's listening history on the
+    // shared stack until the expiry sweep reaches it a day later. In a
+    // finally, because a run that failed above is exactly the one that
+    // would otherwise leave it there.
+    const discarded = await app.api.raw.delete('/admin/migrations/exports/{exportId}', {
+      path: { exportId: exportRow.pid },
+    });
+    expect(discarded.status()).toBe(204);
+  }
+});
+
 test('signup requests await approval and invites pre-approve', async ({ app }) => {
   const anon = app.api.as('');
   const suffix = Date.now().toString(36);

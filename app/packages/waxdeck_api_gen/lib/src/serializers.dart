@@ -184,6 +184,7 @@ import 'package:waxdeck_api_gen/src/model/metadata_edit.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_edit_result.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_fields.dart';
 import 'package:waxdeck_api_gen/src/model/migration_create.dart';
+import 'package:waxdeck_api_gen/src/model/migration_export.dart';
 import 'package:waxdeck_api_gen/src/model/migration_options.dart';
 import 'package:waxdeck_api_gen/src/model/mix_basis.dart';
 import 'package:waxdeck_api_gen/src/model/model_library.dart';
@@ -567,6 +568,7 @@ part 'serializers.g.dart';
   MetadataEditResult,
   MetadataFields,
   MigrationCreate,
+  MigrationExport,
   MigrationOptions,
   MixBasis,
   ModelLibrary,$ModelLibrary,

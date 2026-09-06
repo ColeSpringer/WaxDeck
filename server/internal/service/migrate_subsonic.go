@@ -334,10 +334,21 @@ func (c *subsonicClient) bookmarks(ctx context.Context) ([]subsonicBookmark, err
 // anything unparseable means no anchor and the caller decides what
 // that costs.
 func parseSubsonicTime(s string) time.Time {
+	return parseSourceTime(s, time.RFC3339Nano, "2006-01-02 15:04:05")
+}
+
+// parseSourceTime reads a source server's timestamp against the layouts
+// that server might have written, in order, and answers the zero time
+// when none of them fits - which the state writers read as "no recorded
+// time" rather than as a date. Fractional seconds need no layout of
+// their own: time.Parse takes them after the seconds field whether or
+// not the layout signifies them.
+func parseSourceTime(s string, layouts ...string) time.Time {
+	s = strings.TrimSpace(s)
 	if s == "" {
 		return time.Time{}
 	}
-	for _, layout := range []string{time.RFC3339Nano, "2006-01-02 15:04:05"} {
+	for _, layout := range layouts {
 		if ts, err := time.Parse(layout, s); err == nil {
 			return ts
 		}
@@ -548,7 +559,7 @@ func (l *Library) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 			if p.DryRun {
 				sum.Listens += count
 			} else {
-				n, err := l.migrateListens(ctx, uc, p.Source, s.ID, pid,
+				n, err := l.migrateListens(ctx, uc, &sum, p.Source, s.ID, pid,
 					it.DurationMS, count, parseSubsonicTime(s.Played))
 				if err != nil {
 					return sum, err
@@ -663,15 +674,6 @@ func (l *Library) importSubsonicEntityStars(ctx context.Context, t *wdb.ToolTask
 	}
 
 	albumEntity := func(it *model.ItemView) model.PID { return it.AlbumPID }
-	// The protocol's starred artist is an album artist; the catalog's
-	// own album-artist handle does not fall back to the track artist,
-	// so mirror the fallback the rest of the surface applies.
-	artistEntity := func(it *model.ItemView) model.PID {
-		if it.AlbumArtistPID != "" {
-			return it.AlbumArtistPID
-		}
-		return it.ArtistPID
-	}
 
 	// Every group renews the task lease: this pass can spend many
 	// requests, and prog.report is the importer's only renewal point.
@@ -704,7 +706,7 @@ func (l *Library) importSubsonicEntityStars(ctx context.Context, t *wdb.ToolTask
 		// walk stops at the first that resolves, so the leading ones
 		// repeat across artists.
 		cache.remember(albumIDs...)
-		if err := star(albumIDs, ar.Name, artistEntity, PrefixArtist, ar.Starred, &sum.ArtistStars); err != nil {
+		if err := star(albumIDs, ar.Name, migrateArtistEntity, PrefixArtist, ar.Starred, &sum.ArtistStars); err != nil {
 			return err
 		}
 	}

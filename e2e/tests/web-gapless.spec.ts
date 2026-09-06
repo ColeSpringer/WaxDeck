@@ -56,6 +56,7 @@ test('a music queue plays as one stream and crosses inside it', async ({ app, pa
   const master: string[] = [];
   const segments: string[] = [];
   const streams: string[] = [];
+  const releases: string[] = [];
 
   page.on('response', (response) => {
     const request = response.request();
@@ -72,6 +73,9 @@ test('a music queue plays as one stream and crosses inside it', async ({ app, pa
     if (url.includes('/media/hls/master.m3u8?tl=')) master.push(url);
     else if (url.includes('/media/hls/')) segments.push(url);
     else if (url.includes('/media/stream?')) streams.push(url);
+    else if (request.method() === 'DELETE' && url.includes('/player/timeline/')) {
+      releases.push(url);
+    }
   });
 
   // Reached the way a listener reaches it, which also lands the row on
@@ -157,6 +161,33 @@ test('a music queue plays as one stream and crosses inside it', async ({ app, pa
     mints.filter((m) => m.status !== 201 && m.status !== 202),
     `every mint should be a rendering or a measurement; got ${trace}`,
   ).toEqual([]);
+
+  // Stopping hands the rendering back. Without this the transcode slot
+  // the listener was holding stays charged until an idle sweep notices,
+  // which is a minute a second listener spends refused.
+  //
+  // Through the queue screen, which is where clearing lives, and the
+  // player has to be up to reach it: play lands in the dock.
+  await app.player.ready();
+  await app.queue.openFromPlayer();
+  await app.queue.clear().click();
+  await expect(app.queue.text('Nothing queued')).toBeVisible();
+  await expect
+    .poll(() => releases.length, {
+      timeout: T.fetch,
+      message: `stopping should release the rendering; got ${trace}`,
+    })
+    .toBeGreaterThan(0);
+  expect(releases[0]).toMatch(/\/player\/timeline\/tl-[0-9A-HJKMNP-TV-Z]{26}$/);
+
+  // And the pid is the mint's own: an id this server never minted is a
+  // 404 rather than a silent success.
+  const answer = await minted.json();
+  expect(answer.pid).toMatch(/^tl-/);
+  const unknown = await app.api.raw.delete('/player/timeline/{pid}', {
+    path: { pid: 'tl-01JZX5N8QW3F4V9T2B7KD3M9R6' },
+  });
+  expect(unknown.status()).toBe(404);
 });
 
 test('the switch is a browser-only row, found the way any other is', async ({ app }) => {

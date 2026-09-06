@@ -1059,6 +1059,24 @@ abstract class AppLocalizations {
   /// **'unnamed on this filesystem'**
   String get adminLibraryUnnamedPath;
 
+  /// Line under the account picker in the import form, saying what is written where.
+  ///
+  /// In en, this message translates to:
+  /// **'The stars, ratings, history, and progress land on this account.'**
+  String get adminMigrateAccountHelp;
+
+  /// Picker naming which account the imported listening lands on.
+  ///
+  /// In en, this message translates to:
+  /// **'Import onto'**
+  String get adminMigrateAccountLabel;
+
+  /// The option in the account picker standing for the signed-in administrator's own account.
+  ///
+  /// In en, this message translates to:
+  /// **'You'**
+  String get adminMigrateAccountSelf;
+
   /// Line under the dry run switch in the import form.
   ///
   /// In en, this message translates to:
@@ -1071,6 +1089,18 @@ abstract class AppLocalizations {
   /// **'Dry run'**
   String get adminMigrateDryRunTitle;
 
+  /// Button that opens the file picker for an account data export archive.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose the export file'**
+  String get adminMigrateExportPick;
+
+  /// Line after an export was uploaded, saying how much of it will be read. {name} is the file's own name and is not translated.
+  ///
+  /// In en, this message translates to:
+  /// **'{files, plural, =1{1 file ready to read from {name}} other{{files} files ready to read from {name}}}'**
+  String adminMigrateExportStaged(int files, String name);
+
   /// Line under the listen history switch in the import form.
   ///
   /// In en, this message translates to:
@@ -1082,6 +1112,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Listen history'**
   String get adminMigrateHistoryTitle;
+
+  /// One of the servers WaxDeck can import from. A product name, unchanged in every language.
+  ///
+  /// In en, this message translates to:
+  /// **'Jellyfin'**
+  String get adminMigrateJellyfin;
+
+  /// One of the services WaxDeck can import listening history from. A product name, unchanged in every language.
+  ///
+  /// In en, this message translates to:
+  /// **'Last.fm'**
+  String get adminMigrateLastfm;
+
+  /// Banner on the import form when Last.fm is picked on a server that holds no Last.fm API credentials. Scrobbling is the name of the settings page that sets them.
+  ///
+  /// In en, this message translates to:
+  /// **'Importing from Last.fm needs the server\'s Last.fm API key, set under Scrobbling.'**
+  String get adminMigrateLastfmKeyMissing;
+
+  /// One of the services WaxDeck can import listening history from. A product name, unchanged in every language.
+  ///
+  /// In en, this message translates to:
+  /// **'ListenBrainz'**
+  String get adminMigrateListenBrainz;
+
+  /// Line under the server field when importing from ListenBrainz, where the field is optional.
+  ///
+  /// In en, this message translates to:
+  /// **'Leave empty for listenbrainz.org, or name a compatible server.'**
+  String get adminMigrateListenBrainzServerHelp;
 
   /// Field for the password on the server being imported from.
   ///
@@ -1124,6 +1184,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Server URL'**
   String get adminMigrateServerUrlLabel;
+
+  /// One of the sources WaxDeck can import from: the zip Spotify hands somebody who asks for their data. Spotify stays as it is; the words beside it do not.
+  ///
+  /// In en, this message translates to:
+  /// **'Spotify data export'**
+  String get adminMigrateSpotifyExport;
 
   /// Line under the stars switch in the import form.
   ///
@@ -15691,6 +15757,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'matched {count}'**
   String toolsSummaryMatched(String count);
+
+  /// Headline counter from an import's report, counting plays the server would not record: the account being imported onto is not allowed the item (it is in a library that account cannot see, or a content rule hides it), or the source described the play in a way no listening record can be made from. Distinct from unmatched, which is the catalog not holding the recording at all. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'refused {count}'**
+  String toolsSummaryRefused(String count);
+
+  /// Headline note on an import whose history ran past what one run reads: the most recent part landed. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'oldest history not read'**
+  String get toolsSummaryTruncated;
 
   /// Headline counter from a task's report. Lower case: it sits in a comma-separated run of counters.
   ///

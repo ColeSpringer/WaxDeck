@@ -19,6 +19,8 @@
   "toolsStateRunningPct": "En curso · {percent}%",
   "toolsSummaryListens": "escuchas {count}",
   "toolsSummaryMatched": "coincidencias {count}",
+  "toolsSummaryRefused": "rechazadas {count}",
+  "toolsSummaryTruncated": "historial más antiguo sin leer",
   "toolsSummaryUnmatched": "sin coincidencia {count}",
   "toolsTapForReport": "Toca para ver el informe",
   "toolsTapToOpenResult": "Toca para abrir lo que ha producido",

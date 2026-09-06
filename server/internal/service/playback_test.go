@@ -1,6 +1,8 @@
 package service
 
 import (
+	"fmt"
+	"slices"
 	"testing"
 	"time"
 )
@@ -37,7 +39,11 @@ func TestCrossedPlayedThreshold(t *testing.T) {
 
 func TestInvalidSession(t *testing.T) {
 	t.Parallel()
-	valid := ListenSession{SessionID: "s-1", PID: "tr-01JZX5N8QW3F4V9T2B7KD3M9R6"}
+	valid := ListenSession{
+		SessionID: "s-1",
+		PID:       "tr-01JZX5N8QW3F4V9T2B7KD3M9R6",
+		StartedAt: time.Now().UTC(),
+	}
 	cases := []struct {
 		name   string
 		mutate func(*ListenSession)
@@ -52,6 +58,11 @@ func TestInvalidSession(t *testing.T) {
 		{"negative msPlayed", func(s *ListenSession) { s.MsPlayed = -1 }, true},
 		{"overlong client", func(s *ListenSession) { s.Client = string(make([]byte, 129)) }, true},
 		{"unknown source", func(s *ListenSession) { s.Source = "scrobble" }, true},
+		{"a decade ago", func(s *ListenSession) { s.StartedAt = time.Now().AddDate(-10, 0, 0) }, false},
+		{"a clock an hour fast", func(s *ListenSession) { s.StartedAt = time.Now().Add(time.Hour) }, false},
+		{"no start at all", func(s *ListenSession) { s.StartedAt = time.Time{} }, true},
+		{"before there were files", func(s *ListenSession) { s.StartedAt = time.Unix(-1, 0) }, true},
+		{"dated next year", func(s *ListenSession) { s.StartedAt = time.Now().AddDate(1, 0, 0) }, true},
 	}
 	for _, c := range cases {
 		s := valid
@@ -153,5 +164,143 @@ func TestItemDetailCarriesRecordingIdentifiers(t *testing.T) {
 	}
 	if d.MBID != "" || d.ISRC != "" {
 		t.Fatalf("an untagged track carries %q/%q, want neither", d.MBID, d.ISRC)
+	}
+}
+
+// TestIngestResolvesEachItemOnce pins the shape a history import
+// depends on. Every session in a batch that names one item shares a
+// single resolve - the catalog read, the library attribution and the
+// content rules behind it run once, not once per play - and a pid that
+// resolves to nothing is refused once per session naming it, so a
+// client can still drop exactly the sessions it was told about.
+func TestIngestResolvesEachItemOnce(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	amber, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
+	basalt, _ := fixtureTrackPID(t, ctx, svc, uc, "Basalt Steps")
+	const absent = "tr-01JZX5N8QW3F4V9T2B7KD3M9R6"
+
+	var sessions []ListenSession
+	for i, pid := range []string{amber, absent, amber, basalt, absent, amber} {
+		sessions = append(sessions, ListenSession{
+			SessionID: fmt.Sprintf("s-%d", i),
+			PID:       pid,
+			StartedAt: time.Now().UTC(),
+			MsPlayed:  1500,
+		})
+	}
+	rows, rejected, err := svc.resolveListens(ctx, uc, sessions)
+	if err != nil {
+		t.Fatalf("resolveListens: %v", err)
+	}
+	if len(rows) != 4 {
+		t.Fatalf("resolved %d sessions, want 4", len(rows))
+	}
+	// A fresh read allocates a fresh view, so sharing the pointer is
+	// what says the answer was remembered rather than re-read.
+	for _, i := range []int{1, 3} {
+		if rows[i].it != rows[0].it {
+			t.Fatalf("session %s re-resolved %s", rows[i].s.SessionID, rows[i].s.PID)
+		}
+	}
+	if rows[2].it == rows[0].it {
+		t.Fatalf("two different items share one resolve")
+	}
+	if len(rejected) != 2 {
+		t.Fatalf("rejected %+v, want one per session naming the absent item", rejected)
+	}
+	for _, r := range rejected {
+		if r.Code != "not-found" || r.SessionID == "" {
+			t.Fatalf("rejection = %+v, want a not-found carrying its session", r)
+		}
+	}
+}
+
+// TestIngestBatchRecordsEveryPlay pins that sharing one resolve across a
+// batch shares nothing else: each session is its own play, a session id
+// repeated inside one batch is the replay it looks like, and the item's
+// count is what actually landed.
+func TestIngestBatchRecordsEveryPlay(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	amber, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
+
+	var sessions []ListenSession
+	for i := range 4 {
+		sessions = append(sessions, ListenSession{
+			SessionID: fmt.Sprintf("play-%d", i),
+			PID:       amber,
+			StartedAt: time.Now().UTC().Add(time.Duration(-i) * time.Hour),
+			MsPlayed:  1500,
+			Finished:  true,
+		})
+	}
+	// The offline queue flushing a session the live report already
+	// carries: both ride the same call.
+	sessions = append(sessions, sessions[0])
+
+	res, err := svc.IngestListens(ctx, uc, sessions)
+	if err != nil {
+		t.Fatalf("ingest: %v", err)
+	}
+	if res.Accepted != 4 || res.Duplicates != 1 || len(res.Rejected) != 0 {
+		t.Fatalf("ingest = %+v, want four accepted and one duplicate", res)
+	}
+	st, err := svc.PlayState(ctx, uc, amber)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.PlayCount != 4 {
+		t.Fatalf("play count = %d, want 4", st.PlayCount)
+	}
+}
+
+// TestUnmarkedTail pins the compensating delete's reach. A fatal mark
+// leaves its own row and everything behind it claimed without a mark,
+// and a retry would read those claims as duplicates and skip the mark
+// forever, so they come back out. What was already marked stays, and so
+// does a row this call did not claim: that one belongs to an earlier
+// ingest that marked it, and taking it back out would let the retry
+// count its play a second time.
+func TestUnmarkedTail(t *testing.T) {
+	t.Parallel()
+	rows := make([]resolvedListen, 5)
+	for i := range rows {
+		rows[i].s.SessionID = fmt.Sprintf("s-%d", i)
+	}
+	// s-3 was already recorded by an earlier ingest.
+	claimed := []bool{true, true, true, false, true}
+
+	got := unmarkedTail(rows, claimed, 2)
+	want := []string{"s-2", "s-4"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("tail from the third row = %v, want %v", got, want)
+	}
+	if got := unmarkedTail(rows, claimed, 0); len(got) != 4 {
+		t.Fatalf("tail from the first row = %v, want every claim", got)
+	}
+	if got := unmarkedTail(rows, claimed, len(rows)); len(got) != 0 {
+		t.Fatalf("tail past the last row = %v, want nothing", got)
+	}
+}
+
+// TestConnectListenLands pins that a session played out on a remote
+// device reaches the record. It rides the same ingest a client's own
+// report does, so the source it declares has to be one that ingest
+// accepts: anything else is a per-session refusal the caller only logs,
+// and the listen is gone without anything saying so.
+func TestConnectListenLands(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	amber, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
+
+	svc.PlayerListen(ctx, uc.ID, amber, 2000, time.Now().UTC().Add(-2*time.Second))
+
+	st, err := svc.PlayState(ctx, uc, amber)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.PlayCount != 1 || !st.Played {
+		t.Fatalf("play state = %+v, want one counted play", st)
 	}
 }

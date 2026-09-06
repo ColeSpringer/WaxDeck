@@ -683,7 +683,28 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 			"&mt="+url.QueryEscape(token)+"&id="+url.QueryEscape(res.File.ETag), http.StatusFound)
 		return
 	}
-	info, err := h.bridge.PlayInfoFor(r.Context(), uc.ID, id, flow.PlayOptions{})
+	// A bitrate cap is the one stream parameter this surface honours.
+	// It is clamped here because the mint does not range-check one: an
+	// out-of-range br reaches the URL and is refused at fetch, after a
+	// session slot was already charged.
+	//
+	// `format` is read only alongside it, and only as the encode's
+	// target. `raw` is the protocol's own "do not transcode", so it
+	// beats the cap outright; anything else is what the client says it
+	// decodes, and a cap that landed in another container would be
+	// silence on a client that asked for the best quality it could
+	// play. A format on its own still changes nothing: without a cap
+	// there is no encode to aim.
+	opts := flow.PlayOptions{}
+	format := strings.ToLower(strings.TrimSpace(r.Form.Get("format")))
+	if br := formInt(r, "maxBitRate", 0); br > 0 && format != "raw" {
+		// Passed on as asked: the protocol has no way to refuse a number
+		// and clients send whatever their setting says, so the mint's own
+		// clamp is what makes it a bitrate the engine can speak.
+		opts.MaxBitrateKbps = br
+		opts.CapFormat = format
+	}
+	info, err := h.bridge.PlayInfoFor(r.Context(), uc.ID, id, opts)
 	if err != nil {
 		if h.redirectToEnclosure(w, r, uc.ID, id, err) {
 			return

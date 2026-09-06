@@ -81,6 +81,9 @@ type TimelineBoundary struct {
 // loads. When JobPID is set instead, measurement outlasted the inline
 // wait: poll the job, then mint again.
 type TimelineResult struct {
+	// PID addresses this rendering for release. Minted with the stash
+	// row and stable across a re-mint of the same rendering.
+	PID              string
 	URL              string
 	MimeType         string
 	DurationMS       int64
@@ -99,6 +102,11 @@ type TimelineResult struct {
 // into a not-found; without a store it is memory only and a restart
 // costs one re-mint per live timeline.
 type stashedTimeline struct {
+	// id names this row on the client-facing surface, so a client can
+	// release the rendering it stopped playing. The stash key holds a
+	// slash and cannot be a path segment; this is minted per row and
+	// outlives a re-mint of the same rendering.
+	id           string
 	signedMaster string
 	expires      time.Time
 	// listeners is when each listener last asked for any part of this
@@ -167,7 +175,13 @@ type TimelineStore interface {
 type timelineState struct {
 	mu    sync.Mutex
 	stash map[string]stashedTimeline // timeline key -> signed master
+	ids   map[string]string          // row id -> timeline key
 	jobs  map[string]string          // WaxDeck job pid -> upstream job id
+	// minting counts each listener's mints that have taken a slot and
+	// not yet stashed a rendering. In that window nothing in the stash
+	// speaks for them, so a release arriving mid-mint would read as
+	// "listening to nothing" and hand the slot back.
+	minting map[string]int
 	// slots holds one transcode slot per listener with live timelines,
 	// not one per timeline. The feeder mints a replacement on a queue
 	// edit while the one playing is still being fetched, and a per-mint
@@ -186,12 +200,23 @@ type timelineSlot struct {
 	taken   time.Time
 }
 
+// forget drops one stash row and the id that addressed it. The caller
+// holds the lock.
+func (ts *timelineState) forget(key string) {
+	if st, ok := ts.stash[key]; ok {
+		delete(ts.ids, st.id)
+	}
+	delete(ts.stash, key)
+}
+
 func (b *Bridge) timelines() *timelineState {
 	b.tlOnce.Do(func() {
 		b.tl = &timelineState{
-			stash: make(map[string]stashedTimeline),
-			jobs:  make(map[string]string),
-			slots: make(map[string]timelineSlot),
+			stash:   make(map[string]stashedTimeline),
+			ids:     make(map[string]string),
+			jobs:    make(map[string]string),
+			minting: make(map[string]int),
+			slots:   make(map[string]timelineSlot),
 		}
 	})
 	return b.tl
@@ -209,9 +234,11 @@ func (b *Bridge) loadTimelineStash(ctx context.Context) error {
 	defer ts.mu.Unlock()
 	for _, r := range rows {
 		ts.stash[r.Key] = stashedTimeline{
+			id:           r.ID,
 			signedMaster: r.SignedMaster,
 			expires:      time.Unix(0, r.ExpiresAtNS),
 		}
+		ts.ids[r.ID] = r.Key
 	}
 	return nil
 }
@@ -236,7 +263,7 @@ func deadTimelineStatus(status int) bool {
 func (b *Bridge) forgetTimeline(ctx context.Context, key string) {
 	ts := b.timelines()
 	ts.mu.Lock()
-	delete(ts.stash, key)
+	ts.forget(key)
 	ts.mu.Unlock()
 	if b.tlStore == nil {
 		return
@@ -364,6 +391,35 @@ func (b *Bridge) holdTimelineSlot(ctx context.Context, user string) (fresh bool,
 // timeline streaming outside the cap and outside what the admin console
 // reports.
 func (b *Bridge) dropTimelineSlot(user string) {
+	// A rendering they are on at all, not only one they are fetching:
+	// the mint that failed is the one holding this slot, so a slot taken
+	// moments ago is exactly what has to go back here.
+	b.dropTimelineSlotUnless(user, func(st stashedTimeline, _ time.Time) bool {
+		_, on := st.listeners[user]
+		return on
+	})
+}
+
+// dropTimelineSlotUnless gives a listener's slot back unless one of
+// their live renderings still holds it, which `holds` decides. A failed
+// mint keeps the slot for any rendering they are on at all; a release
+// keeps it only for one they are still fetching, because a rendering
+// paused an hour ago is not holding the server's capacity.
+//
+// A mint of theirs still assembling a rendering keeps it either way,
+// because that is the window where the stash says nothing about them.
+// A release needs it: a client that stopped and started again inside
+// one round trip sends its release while the restart's mint is running,
+// and without this that release takes the slot the new rendering is
+// about to stream on - live, uncounted, and outside the per-user cap.
+// So does a failed mint, for the same window on the other side: one of
+// two concurrent mints failing must not hand back the slot the other is
+// about to stream on. Which is why TimelineFor stops counting itself
+// before this runs - a mint that spared its own slot would leak it to
+// the sweep. The sweep guards the same window with the slot's own age;
+// a re-mint reuses the slot it finds rather than taking a fresh one, so
+// age says nothing here and the mint in flight has to say it itself.
+func (b *Bridge) dropTimelineSlotUnless(user string, holds func(stashedTimeline, time.Time) bool) {
 	now := time.Now()
 	ts := b.timelines()
 	ts.mu.Lock()
@@ -371,10 +427,14 @@ func (b *Bridge) dropTimelineSlot(user string) {
 		if now.After(st.expires) {
 			continue
 		}
-		if _, ok := st.listeners[user]; ok {
+		if holds(st, now) {
 			ts.mu.Unlock()
 			return
 		}
+	}
+	if ts.minting[user] > 0 {
+		ts.mu.Unlock()
+		return
 	}
 	slot, ok := ts.slots[user]
 	delete(ts.slots, user)
@@ -382,6 +442,46 @@ func (b *Bridge) dropTimelineSlot(user string) {
 	if ok {
 		slot.release()
 	}
+}
+
+// ReleaseTimeline drops a listener from one rendering and gives their
+// slot back when none of their other renderings has been fetched inside
+// the idle window. It reports whether there was a rendering of theirs
+// to release: an unknown or expired id answers false, and so does one
+// they are not a listener on, which the handler turns into a 404.
+//
+// The rendering itself stays. Another listener may be on it, and the
+// caller's own URL keeps working until it expires - a fetch simply
+// takes the slot again, the way resuming a paused listen does.
+func (b *Bridge) ReleaseTimeline(user, id string) bool {
+	now := time.Now()
+	ts := b.timelines()
+	ts.mu.Lock()
+	key, ok := ts.ids[id]
+	if !ok {
+		ts.mu.Unlock()
+		return false
+	}
+	st, live := ts.stash[key]
+	if !live || now.After(st.expires) {
+		ts.mu.Unlock()
+		return false
+	}
+	if _, on := st.listeners[user]; !on {
+		// Not theirs to let go of. Answering 204 to a pid the caller was
+		// never on makes this an oracle for whether somebody else's
+		// rendering is live, and drops the caller's own slot as a side
+		// effect of asking.
+		ts.mu.Unlock()
+		return false
+	}
+	delete(st.listeners, user)
+	ts.stash[key] = st
+	ts.mu.Unlock()
+	b.dropTimelineSlotUnless(user, func(st stashedTimeline, now time.Time) bool {
+		return st.listening(user, now)
+	})
+	return true
 }
 
 // SweepTimelineSlots gives back the slot of every listener whose
@@ -395,7 +495,7 @@ func (b *Bridge) SweepTimelineSlots() {
 	listening := make(map[string]bool, len(ts.slots))
 	for key, st := range ts.stash {
 		if now.After(st.expires) {
-			delete(ts.stash, key)
+			ts.forget(key)
 			continue
 		}
 		for user, at := range st.listeners {
@@ -436,21 +536,43 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 	if !b.TimelinesSupported() {
 		return nil, fmt.Errorf("flow: sidecar mints no timelines")
 	}
-	// Before the render, not after: a listener over the cap is told so
-	// before the server spends anything on them, exactly as a
-	// progressive stream refuses before it opens.
-	fresh, err := b.holdTimelineSlot(ctx, user)
-	if err != nil {
-		return nil, err
-	}
+	// Marked before the slot is taken and cleared after the row is
+	// stashed: everything between is a window where this listener holds
+	// capacity that nothing in the stash accounts for.
+	ts := b.timelines()
+	ts.mu.Lock()
+	ts.minting[user]++
+	ts.mu.Unlock()
 	// Given back on every way out that is not a live timeline: a mint
 	// that failed is not a listener holding capacity.
-	minted := false
+	//
+	// Registered before the decrement below and so running after it, on
+	// purpose: the drop spares a slot while another mint of this
+	// listener's is in flight, and a mint still counting itself would
+	// spare its own and leak it to the sweep.
+	fresh, minted := false, false
 	defer func() {
 		if fresh && !minted {
 			b.dropTimelineSlot(user)
 		}
 	}()
+	defer func() {
+		ts.mu.Lock()
+		if ts.minting[user] <= 1 {
+			delete(ts.minting, user)
+		} else {
+			ts.minting[user]--
+		}
+		ts.mu.Unlock()
+	}()
+	// Before the render, not after: a listener over the cap is told so
+	// before the server spends anything on them, exactly as a
+	// progressive stream refuses before it opens.
+	var err error
+	fresh, err = b.holdTimelineSlot(ctx, user)
+	if err != nil {
+		return nil, err
+	}
 	req := client.TimelineRequest{CrossfadeSeconds: opts.CrossfadeSeconds}
 	var totalMS int64
 	for _, m := range members {
@@ -526,7 +648,6 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 	key := timelineKey(tl.Tl, render)
 	token, exp := b.tokens.MintFor(user, "tl-"+key, ttl)
 	now := time.Now()
-	ts := b.timelines()
 	ts.mu.Lock()
 	// Merged rather than replaced: another listener may already be on
 	// this rendering, and dropping their last fetch would take their
@@ -535,6 +656,10 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 	if held.listeners == nil {
 		held.listeners = map[string]time.Time{}
 	}
+	if held.id == "" {
+		held.id = ulid.Make().String()
+	}
+	ts.ids[held.id] = key
 	held.signedMaster = signed.URL
 	held.expires = exp
 	// A rendering nobody has fetched yet is not idle: the player is
@@ -542,10 +667,11 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 	// back a second before the first fragment.
 	held.listeners[user] = now
 	ts.stash[key] = held
+	id := held.id
 	minted = true
 	for k, st := range ts.stash {
 		if now.After(st.expires) {
-			delete(ts.stash, k)
+			ts.forget(k)
 		}
 	}
 	ts.mu.Unlock()
@@ -553,13 +679,14 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 		// A failed write degrades to the memory-only behavior this stash
 		// had before it was persisted: the URL works until the next
 		// restart, which then costs one re-mint.
-		row := db.TimelineStash{Key: key, SignedMaster: signed.URL, ExpiresAtNS: exp.UnixNano()}
+		row := db.TimelineStash{Key: key, ID: id, SignedMaster: signed.URL, ExpiresAtNS: exp.UnixNano()}
 		if err := b.tlStore.PutTimelineStash(ctx, row, now.UnixNano()); err != nil {
 			b.log.Warn("persisting a minted timeline", "timeline", key, "err", err)
 		}
 	}
 
 	out := &TimelineResult{
+		PID: "tl-" + id,
 		URL: "/media/hls/master.m3u8?tl=" + url.QueryEscape(tl.Tl) +
 			"&rk=" + url.QueryEscape(render) + "&mt=" + url.QueryEscape(token),
 		MimeType:         "application/vnd.apple.mpegurl",

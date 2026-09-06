@@ -135,7 +135,12 @@ func (l *Library) PlayerListen(ctx context.Context, userID, pid string, msPlayed
 		StartedAt: startedAt,
 		MsPlayed:  msPlayed,
 		Client:    "connect",
-		Source:    "remote",
+		// Live, because that is what it is: a session playing now, on a
+		// device the server is driving. Which device it was is the
+		// client field's to say, and "remote" was neither a source the
+		// ingest accepts nor one the contract declares, so every one of
+		// these was refused before it reached a row.
+		Source: "live",
 	}
 	if _, err := l.IngestListens(ctx, uc, []ListenSession{sess}); err != nil {
 		l.log.Warn("player listen ingest", "pid", pid, "err", err)

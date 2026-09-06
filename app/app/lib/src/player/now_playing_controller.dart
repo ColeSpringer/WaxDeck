@@ -97,6 +97,18 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// to cross a boundary at all. Inert everywhere else: the flag is off
   /// and the engine plays no timelines.
   late final TimelineFeeder _feeder;
+
+  /// The gapless rendering loaded right now, for a client that has to
+  /// release it from outside this controller. Read off the notifier
+  /// rather than published on [NowPlaying]: a rendering swaps at seams
+  /// the listener is not told about, and every surface reading the
+  /// state would rebuild for a fact none of them show.
+  String? get loadedTimelinePid => _feeder.loadedPid;
+
+  /// Every gapless rendering this session is holding, for the exit
+  /// path: a queue edit mints a replacement beside the one playing, and
+  /// the server counts the listener as being on both.
+  List<String> get heldTimelinePids => _feeder.heldPids;
   StreamSubscription<void>? _completedSub;
   StreamSubscription<Object>? _failedSub;
   StreamSubscription<Duration>? _positionFeed;
@@ -688,6 +700,10 @@ class NowPlayingController extends Notifier<NowPlaying> {
       _install(session, entry);
       await starting;
       if (_superseded(token)) return;
+      // The stream this start asked for is loaded and fetching, which
+      // is when a rendering the feeder handed off to make room for it
+      // is safe to let go of.
+      _feeder.started();
       _skipRun = 0;
       state = NowPlaying(entry: entry, item: item, session: session);
       await _syncPreload();

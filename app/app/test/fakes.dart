@@ -839,6 +839,9 @@ class FakeRepository implements WaxDeckRepository {
       offset += samples;
     }
     return QueueTimeline(
+      // One pid per rendering, so a test can tell which mint a release
+      // was for.
+      pid: 'tl-fake${timelineCalls.length}',
       // A fresh token per mint, the way the real one signs one: a
       // re-mint that answered the same URL byte for byte let every
       // engine take its "already loaded, just seek" path, so the reload
@@ -861,6 +864,14 @@ class FakeRepository implements WaxDeckRepository {
     ({List<String> pids, double? crossfadeSeconds, List<String>? formats})
   >
   timelineCalls = [];
+
+  /// Every timeline release, in order.
+  final List<String> timelineReleases = [];
+
+  @override
+  Future<void> releaseQueueTimeline(String pid) async {
+    timelineReleases.add(pid);
+  }
 
   /// Thrown by [createQueueTimeline] when set; a
   /// `WaxDeckApiException(code: 'feature-unavailable', statusCode: 501)`
@@ -5177,10 +5188,12 @@ class FakeRepository implements WaxDeckRepository {
   final List<
     ({
       String source,
-      String serverUrl,
+      String? serverUrl,
       String? username,
       String? password,
       String? token,
+      String? accountId,
+      String? exportId,
       MigrationOptions? options,
       bool dryRun,
     })
@@ -5190,10 +5203,12 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<ToolTask> createMigration({
     required String source,
-    required String serverUrl,
+    String? serverUrl,
     String? username,
     String? password,
     String? token,
+    String? accountId,
+    String? exportId,
     MigrationOptions? options,
     bool dryRun = false,
   }) async {
@@ -5205,6 +5220,8 @@ class FakeRepository implements WaxDeckRepository {
       username: username,
       password: password,
       token: token,
+      accountId: accountId,
+      exportId: exportId,
       options: options,
       dryRun: dryRun,
     ));
@@ -5216,6 +5233,38 @@ class FakeRepository implements WaxDeckRepository {
     );
     toolTasksById[task.id] = task;
     return task;
+  }
+
+  /// Exports staged by [stageMigrationExport], newest last.
+  final List<MigrationExport> stagedExports = [];
+
+  /// Thrown by [stageMigrationExport] when set.
+  Object? stageExportError;
+
+  @override
+  Future<MigrationExport> stageMigrationExport({
+    required int sizeBytes,
+    required Stream<List<int>> Function() openRead,
+  }) async {
+    final error = stageExportError;
+    if (error != null) throw error;
+    final export = MigrationExport(
+      pid: 'mx-FAKE${stagedExports.length}',
+      source: 'spotify',
+      files: const ['Streaming_History_Audio_2026_1.json'],
+      sizeBytes: sizeBytes,
+      expiresAt: DateTime.utc(2026, 7, 21, 14),
+    );
+    stagedExports.add(export);
+    return export;
+  }
+
+  /// Export pids discarded, in order.
+  final List<String> discardedExports = [];
+
+  @override
+  Future<void> discardMigrationExport(String pid) async {
+    discardedExports.add(pid);
   }
 
   /// Trash entries served by [listTrash].
@@ -5343,23 +5392,32 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   List<ExitRequest> exitRequests({
-    required String pid,
-    required int positionMs,
+    String? pid,
+    int? positionMs,
     ListenSession? listen,
+    List<String> timelinePids = const <String>[],
   }) {
     final headers = <String, String>{'X-CSRF-Token': ?csrfToken};
     final built = <ExitRequest>[
-      ExitRequest(
-        path: '/api/v1/items/${Uri.encodeComponent(pid)}/play-state',
-        method: 'PUT',
-        body: '{"positionMs":$positionMs}',
-        headers: headers,
-      ),
+      if (pid != null && positionMs != null)
+        ExitRequest(
+          path: '/api/v1/items/${Uri.encodeComponent(pid)}/play-state',
+          method: 'PUT',
+          body: '{"positionMs":$positionMs}',
+          headers: headers,
+        ),
       if (listen != null)
         ExitRequest(
           path: '/api/v1/listens',
           method: 'POST',
           body: '{"sessions":[{"sessionId":"${listen.sessionId}"}]}',
+          headers: headers,
+        ),
+      for (final pid in timelinePids)
+        ExitRequest(
+          path: '/api/v1/player/timeline/$pid',
+          method: 'DELETE',
+          body: '',
           headers: headers,
         ),
     ];

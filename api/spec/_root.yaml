@@ -80,7 +80,8 @@ info:
       `pl-` playlist, `rs-` radio station, `nt-` notification target,
       `pe-` player endpoint, `ps-` playback session, `rv-` review
       entry, `up-` upload, `tk-` tool task, `iv-` invite, `bu-` backup
-      archive, `th-` trash entry, `sh-` share link).
+      archive, `th-` trash entry, `sh-` share link, `nf-` inbox row,
+      `mx-` staged migration export, `tl-` gapless rendering).
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
@@ -120,8 +121,9 @@ info:
       take; the request was well formed and the endpoint is connected,
       so what failed is neither the caller nor the server),
       `quota-exceeded` (the upload would exceed the caller's storage
-      quota, or an imported backup archive exceeds the server's size
-      limit), `storage-full` (the server has no room to stage what
+      quota, or it exceeds a fixed size limit this server puts on that
+      kind of upload - an imported backup archive, a staged account
+      data export), `storage-full` (the server has no room to stage what
       the request declared - its own disk, not the caller's allowance,
       so the caller has nothing to clear), `field-locked`
       (the edit targets a locked metadata field and did not set

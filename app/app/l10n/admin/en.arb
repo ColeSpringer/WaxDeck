@@ -655,6 +655,18 @@
   "@adminLibraryUnnamedPath": {
     "description": "Fills the path cell of a library that has no directory of its own, such as a catalog library. Lower case: it fills a table cell rather than starting a sentence."
   },
+  "adminMigrateAccountHelp": "The stars, ratings, history, and progress land on this account.",
+  "@adminMigrateAccountHelp": {
+    "description": "Line under the account picker in the import form, saying what is written where."
+  },
+  "adminMigrateAccountLabel": "Import onto",
+  "@adminMigrateAccountLabel": {
+    "description": "Picker naming which account the imported listening lands on."
+  },
+  "adminMigrateAccountSelf": "You",
+  "@adminMigrateAccountSelf": {
+    "description": "The option in the account picker standing for the signed-in administrator's own account."
+  },
   "adminMigrateDryRunHelp": "Report what would match; change nothing",
   "@adminMigrateDryRunHelp": {
     "description": "Line under the dry run switch in the import form."
@@ -663,6 +675,24 @@
   "@adminMigrateDryRunTitle": {
     "description": "Switch making an import report what it would do without changing anything."
   },
+  "adminMigrateExportPick": "Choose the export file",
+  "@adminMigrateExportPick": {
+    "description": "Button that opens the file picker for an account data export archive."
+  },
+  "adminMigrateExportStaged": "{files, plural, =1{1 file ready to read from {name}} other{{files} files ready to read from {name}}}",
+  "@adminMigrateExportStaged": {
+    "description": "Line after an export was uploaded, saying how much of it will be read. {name} is the file's own name and is not translated.",
+    "placeholders": {
+      "files": {
+        "type": "int",
+        "example": "3"
+      },
+      "name": {
+        "type": "String",
+        "example": "my_spotify_data.zip"
+      }
+    }
+  },
   "adminMigrateHistoryHelp": "What was played there, and when",
   "@adminMigrateHistoryHelp": {
     "description": "Line under the listen history switch in the import form."
@@ -670,6 +700,26 @@
   "adminMigrateHistoryTitle": "Listen history",
   "@adminMigrateHistoryTitle": {
     "description": "Switch including what was played in an import."
+  },
+  "adminMigrateJellyfin": "Jellyfin",
+  "@adminMigrateJellyfin": {
+    "description": "One of the servers WaxDeck can import from. A product name, unchanged in every language."
+  },
+  "adminMigrateLastfm": "Last.fm",
+  "@adminMigrateLastfm": {
+    "description": "One of the services WaxDeck can import listening history from. A product name, unchanged in every language."
+  },
+  "adminMigrateLastfmKeyMissing": "Importing from Last.fm needs the server's Last.fm API key, set under Scrobbling.",
+  "@adminMigrateLastfmKeyMissing": {
+    "description": "Banner on the import form when Last.fm is picked on a server that holds no Last.fm API credentials. Scrobbling is the name of the settings page that sets them."
+  },
+  "adminMigrateListenBrainz": "ListenBrainz",
+  "@adminMigrateListenBrainz": {
+    "description": "One of the services WaxDeck can import listening history from. A product name, unchanged in every language."
+  },
+  "adminMigrateListenBrainzServerHelp": "Leave empty for listenbrainz.org, or name a compatible server.",
+  "@adminMigrateListenBrainzServerHelp": {
+    "description": "Line under the server field when importing from ListenBrainz, where the field is optional."
   },
   "adminMigratePasswordLabel": "Password",
   "@adminMigratePasswordLabel": {
@@ -698,6 +748,10 @@
   "adminMigrateServerUrlLabel": "Server URL",
   "@adminMigrateServerUrlLabel": {
     "description": "Field for the address of the server being imported from."
+  },
+  "adminMigrateSpotifyExport": "Spotify data export",
+  "@adminMigrateSpotifyExport": {
+    "description": "One of the sources WaxDeck can import from: the zip Spotify hands somebody who asks for their data. Spotify stays as it is; the words beside it do not."
   },
   "adminMigrateStarsHelp": "Which tracks and albums the other server had starred",
   "@adminMigrateStarsHelp": {

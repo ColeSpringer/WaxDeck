@@ -79,7 +79,8 @@ info:
       `pl-` playlist, `rs-` radio station, `nt-` notification target,
       `pe-` player endpoint, `ps-` playback session, `rv-` review
       entry, `up-` upload, `tk-` tool task, `iv-` invite, `bu-` backup
-      archive, `th-` trash entry, `sh-` share link).
+      archive, `th-` trash entry, `sh-` share link, `nf-` inbox row,
+      `mx-` staged migration export, `tl-` gapless rendering).
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
@@ -119,8 +120,9 @@ info:
       take; the request was well formed and the endpoint is connected,
       so what failed is neither the caller nor the server),
       `quota-exceeded` (the upload would exceed the caller's storage
-      quota, or an imported backup archive exceeds the server's size
-      limit), `storage-full` (the server has no room to stage what
+      quota, or it exceeds a fixed size limit this server puts on that
+      kind of upload - an imported backup archive, a staged account
+      data export), `storage-full` (the server has no room to stage what
       the request declared - its own disk, not the caller's allowance,
       so the caller has nothing to clear), `field-locked`
       (the edit targets a locked metadata field and did not set
@@ -1532,6 +1534,72 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /admin/migrations/exports:
+    post:
+      operationId: stageMigrationExport
+      summary: Upload an account data export to import from
+      description: >
+        Stages an account data export - the zip a streaming service
+        hands over when somebody asks for their data - so a migration
+        can read it. The body is the raw zip. What was recognised is
+        reported back (`source` and the files that will be read), and
+        the id goes on `createMigration` as `exportId`. A staged
+        export expires after a day, is deleted once the import that
+        read it finishes, and never reaches the library: nothing here
+        writes into the catalog. Something that is not a zip, or a zip
+        holding nothing this server can read, answers
+        `invalid-request`. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "201":
+          description: The staged export.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MigrationExport"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "413":
+          description: The export exceeds the server's size limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "507":
+          $ref: "#/components/responses/StorageFull"
+
+  /admin/migrations/exports/{exportId}:
+    delete:
+      operationId: discardMigrationExport
+      summary: Discard a staged export
+      description: >
+        Deletes a staged export and its file, for one uploaded by
+        mistake or left behind by an import that was never started.
+        Administrators only.
+      tags: [admin]
+      parameters:
+        - $ref: "#/components/parameters/MigrationExportId"
+      responses:
+        "204":
+          description: Discarded.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /admin/migrations:
     post:
       operationId: createMigration
@@ -1545,16 +1613,24 @@ paths:
         bookmarks from a running server over its Subsonic API
         (`serverUrl` + `username` + `password`); `audiobookshelf`
         pulls book progress over its REST API (`serverUrl` +
-        `token`). Podcast subscriptions migrate via the existing
+        `token`); `jellyfin` pulls favourites, play counts and
+        positions over its REST API (`serverUrl` + `username` with
+        either `password` or an API key in `token`); `lastfm` and
+        `listenbrainz` pull scrobbling history for a `username`; and
+        `spotify` reads an account data export uploaded first
+        (`exportId`). Podcast subscriptions migrate via the existing
         OPML import. Items are matched through the portable-ref
         ladder (identifiers, then fingerprints, then descriptive
-        metadata); play history lands as backdated import-source
-        listen sessions with deterministic idempotency ids, so
-        re-running an import never doubles anything. `dryRun`
-        matches and reports without writing. The URL must resolve
-        to a global address unless the server allows private
-        fetches. Credentials are held only for the task's duration.
-        Administrators only.
+        metadata); play history lands as import-source listen
+        sessions with deterministic idempotency ids, so re-running an
+        import never doubles anything. Last.fm, ListenBrainz and
+        Spotify carry a time per play, so their history lands at the
+        times it happened; the sources that report only a play count
+        are spread backwards a week apart. Imported listens are never
+        forwarded to connected scrobblers. `dryRun` matches and
+        reports without writing. A URL must resolve to a global
+        address unless the server allows private fetches. Credentials
+        are held only for the task's duration. Administrators only.
       tags: [admin]
       requestBody:
         required: true
@@ -6748,7 +6824,10 @@ paths:
         of them has gone unfetched for a minute - so a mint over the
         cap answers `transcode-limited` before anything plays, and a
         fetch resuming a listen whose slot was released can answer it
-        too. A caller
+        too. A client that stops playing releases the rendering it
+        holds (`releaseQueueTimeline`) rather than waiting the minute
+        out; the sweep stays the backstop for the client that cannot,
+        a closed browser tab being the case. A caller
         that can only decode some formats says so in `formats`; the
         rendering format is part of a timeline's identity, so the
         same queue asked for in two formats is two streams. Requires
@@ -6792,6 +6871,33 @@ paths:
           $ref: "#/components/responses/TranscodeLimited"
         "501":
           $ref: "#/components/responses/FeatureUnavailable"
+
+  /player/timeline/{pid}:
+    delete:
+      operationId: releaseQueueTimeline
+      summary: Release a gapless queue timeline
+      description: >
+        Drops the caller from this rendering's listeners and gives back
+        their transcode slot when none of their other renderings has
+        been fetched inside the idle window. What a client sends when
+        it stops playing a timeline, so the next listener is not
+        refused for the minute the sweep would otherwise take to notice.
+        The rendering itself is not destroyed: another listener may be
+        on it, and the caller's own URL keeps working until it expires
+        (a fetch takes the slot again). Releasing one that is unknown
+        or already expired answers `not-found`, as does a server with
+        no streaming engine, which holds no renderings to release;
+        there is nothing to retry either way.
+      tags: [player]
+      parameters:
+        - $ref: "#/components/parameters/TimelinePid"
+      responses:
+        "204":
+          description: Released.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /player/cast/preflight:
     get:
@@ -11534,6 +11640,14 @@ components:
         type: string
         pattern: "^[a-z]{2}-[0-9A-HJKMNP-TV-Z]{26}$"
 
+    MigrationExportId:
+      name: exportId
+      in: path
+      required: true
+      description: Staged export id (e.g. `mx-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+      schema:
+        type: string
+        pattern: "^mx-[0-9A-HJKMNP-TV-Z]{26}$"
     BackupId:
       name: backupId
       in: path
@@ -11655,6 +11769,14 @@ components:
       schema:
         type: string
         pattern: "^pe-[0-9A-HJKMNP-TV-Z]{26}$"
+    TimelinePid:
+      name: pid
+      in: path
+      required: true
+      description: Timeline PID (e.g. `tl-01JZX5N8QW3F4V9T2B7KD3M9R6`), from the mint.
+      schema:
+        type: string
+        pattern: "^tl-[0-9A-HJKMNP-TV-Z]{26}$"
     PlaybackSessionId:
       name: sessionId
       in: path
@@ -12990,41 +13112,109 @@ components:
     MigrationCreate:
       type: object
       description: A migration import to start.
-      required: [source, serverUrl]
+      required: [source]
       properties:
         source:
           type: string
           description: >
             Where to pull from: `navidrome` and `subsonic` (a running
-            server's Subsonic API), or `audiobookshelf` (its REST
-            API). An open string; unknown sources answer
-            `invalid-request` naming the supported set.
+            server's Subsonic API), `audiobookshelf` (its REST API),
+            `jellyfin` (its REST API), `lastfm` and `listenbrainz`
+            (scrobbling history), or `spotify` (an account data
+            export, staged first). An open string; unknown sources
+            answer `invalid-request` naming the supported set.
           example: navidrome
         serverUrl:
           type: string
           maxLength: 512
-          description: The source server's base URL.
+          description: >
+            The source server's base URL. Required for `navidrome`,
+            `subsonic`, `audiobookshelf` and `jellyfin`; optional for
+            `listenbrainz`, where it names a compatible server and
+            defaults to `https://api.listenbrainz.org`. `lastfm` and
+            `spotify` take none.
           example: "https://navidrome.example.net"
+        accountId:
+          type: string
+          pattern: "^us-[0-9A-HJKMNP-TV-Z]{26}$"
+          description: >
+            The account the imported state lands on. Defaults to the
+            caller, which is what a household administrator moving
+            their own library wants; naming another account is how the
+            rest of the household is moved without knowing their
+            passwords. The target must exist, be enabled, and not be
+            a pending signup.
+          example: us-01JZX5N8QW3F4V9T2B7KD3M9R6
         username:
           type: string
           maxLength: 128
-          description: Login for Subsonic-API sources.
+          description: >
+            Login for Subsonic-API sources and Jellyfin; the account
+            name to read for `lastfm` and `listenbrainz`.
         password:
           type: string
           maxLength: 256
           format: password
-          description: Password for Subsonic-API sources.
+          description: Password for Subsonic-API sources and Jellyfin.
         token:
           type: string
           maxLength: 512
           format: password
-          description: API token for token-authenticated sources.
+          description: >
+            API token for token-authenticated sources: an
+            Audiobookshelf token, a Jellyfin API key (with
+            `username` naming whose state to read), or a ListenBrainz
+            user token.
+        exportId:
+          type: string
+          pattern: "^mx-[0-9A-HJKMNP-TV-Z]{26}$"
+          description: >
+            A staged account export to read, from
+            `stageMigrationExport`. Required for `spotify` and refused
+            for every source that reads a server.
+          example: mx-01JZX5N8QW3F4V9T2B7KD3M9R6
         options:
           $ref: "#/components/schemas/MigrationOptions"
         dryRun:
           type: boolean
           default: false
           description: Match and report without writing anything.
+
+    MigrationExport:
+      type: object
+      description: >
+        One uploaded account data export, staged for an import to read.
+      required: [pid, source, files, sizeBytes, expiresAt]
+      properties:
+        pid:
+          type: string
+          pattern: "^mx-[0-9A-HJKMNP-TV-Z]{26}$"
+          description: Goes on `createMigration` as `exportId`.
+          example: mx-01JZX5N8QW3F4V9T2B7KD3M9R6
+        source:
+          type: string
+          enum: [spotify, unknown]
+          description: >
+            Which service's export this was recognised as. `unknown` is
+            reserved for a server that stages an archive without naming
+            it; this one refuses what it cannot read, so nothing it
+            stages carries that value.
+        files:
+          type: array
+          description: The files inside the archive this import will read.
+          items:
+            type: string
+          example: ["Streaming_History_Audio_2024_1.json", "YourLibrary.json"]
+        sizeBytes:
+          type: integer
+          format: int64
+          description: The uploaded archive's size on disk.
+        expiresAt:
+          type: string
+          format: date-time
+          description: >
+            When the staged file is swept. An import that has not
+            started by then has to upload the export again.
 
     MigrationOptions:
       type: object
@@ -17418,7 +17608,10 @@ components:
           format: date-time
           description: >
             When playback started. Historical for backdated imports; the
-            server preserves it as reported.
+            server preserves it as reported. A session dated before the
+            Unix epoch, or more than a day ahead of the server, is
+            permanently rejected: it would sort above or below everything
+            real in every surface ordered by listening time.
         msPlayed:
           type: integer
           format: int64
@@ -17445,7 +17638,11 @@ components:
           description: >
             Where the session originates. `live` is a WaxDeck client
             reporting its own playback; `import` is a backdated session from
-            another service's history.
+            another service's history. An `import` session counts towards
+            play state exactly as a live one does and is never forwarded
+            to connected scrobblers - a history moving in has usually
+            been scrobbled once already, and re-sending it would be a
+            second copy on somebody else's service.
           enum: [live, import]
           default: live
 
@@ -18268,6 +18465,14 @@ components:
       required:
         [url, mimeType, durationMs, expiresAt, envelopeRate, boundaries]
       properties:
+        pid:
+          type: string
+          description: >
+            Identifies this rendering, for releasing it when playback
+            stops. Absent from an older server, which relies on the
+            idle sweep alone.
+          pattern: "^tl-[0-9A-HJKMNP-TV-Z]{26}$"
+          example: tl-01JZX5N8QW3F4V9T2B7KD3M9R6
         url:
           type: string
           description: >

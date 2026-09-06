@@ -837,6 +837,7 @@ class QueueTimelineMember {
 class QueueTimeline {
   const QueueTimeline({
     required this.url,
+    this.pid,
     required this.mimeType,
     required this.durationMs,
     required this.expiresAt,
@@ -845,6 +846,11 @@ class QueueTimeline {
     this.crossfadeSeconds,
     this.format,
   });
+
+  /// Identifies this rendering, for releasing it when playback stops;
+  /// null from a server that does not offer the release, which leaves
+  /// the server's idle sweep as the only way the slot comes back.
+  final String? pid;
 
   /// HLS playlist URL for the whole queue, already resolved against the
   /// client base URL the way [PlayInfo.url] is.
@@ -4986,6 +4992,32 @@ class ExitRequest {
 
   /// Everything but `Content-Type`, which the sender adds.
   final Map<String, String> headers;
+}
+
+/// One uploaded account data export, staged for the import that reads
+/// it. [pid] is what `createMigration` names as its `exportId`.
+class MigrationExport {
+  const MigrationExport({
+    required this.pid,
+    required this.source,
+    required this.files,
+    required this.sizeBytes,
+    required this.expiresAt,
+  });
+
+  final String pid;
+
+  /// Which service's export this was recognised as.
+  final String source;
+
+  /// The files inside the archive the import will read.
+  final List<String> files;
+
+  final int sizeBytes;
+
+  /// When the staged file is swept, after which it has to be uploaded
+  /// again.
+  final DateTime expiresAt;
 }
 
 /// What the generated-thumbnail cache holds, beside what the source

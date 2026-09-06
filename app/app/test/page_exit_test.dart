@@ -6,6 +6,7 @@ import 'package:waxdeck/src/player/page_exit_binder.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
@@ -38,8 +39,18 @@ class _FakeExit implements PageExitPort {
   void dispose() => disposed = true;
 }
 
+/// The gapless switch, forced without a settings store behind it.
+class _Gapless extends WebGapless {
+  _Gapless(this.on);
+
+  final bool on;
+
+  @override
+  bool build() => on;
+}
+
 class _Harness {
-  _Harness()
+  _Harness({bool gapless = false})
     : engine = FakeEngine(),
       exit = _FakeExit(),
       repo = FakeRepository(items: [testItem(_a)]) {
@@ -48,6 +59,7 @@ class _Harness {
         repositoryProvider.overrideWithValue(repo),
         audioEngineProvider.overrideWithValue(engine),
         pageExitPortProvider.overrideWithValue(exit),
+        webGaplessProvider.overrideWith(() => _Gapless(gapless)),
       ],
     );
     // Registered at construction, not left to `end`: a container that
@@ -147,6 +159,31 @@ void main() {
     expect(sent, hasLength(1));
     expect(sent.single.path, contains('play-state'));
     expect(h.container.read(nowPlayingProvider).session, isNotNull);
+
+    await h.end();
+  });
+
+  test('a closing document hands back the rendering it was playing', () async {
+    // The case the idle sweep was the only answer to: a browser tab
+    // that closes says nothing, so the slot it held stayed charged for
+    // a minute after the listening stopped.
+    final h = _Harness(gapless: true);
+    await h.start();
+    await h.play(10000);
+    final held = h.container
+        .read(nowPlayingProvider.notifier)
+        .loadedTimelinePid;
+    expect(held, isNotNull);
+
+    final sent = h.exit.onExit!();
+    final release = sent.where((r) => r.method == 'DELETE').toList();
+    expect(release, hasLength(1));
+    expect(release.single.path, contains('player/timeline/$held'));
+    expect(release.single.headers, contains('X-CSRF-Token'));
+
+    // A tab going hidden is still listening: releasing there would take
+    // the slot from somebody about to switch straight back.
+    expect(h.exit.onHidden!().where((r) => r.method == 'DELETE'), isEmpty);
 
     await h.end();
   });

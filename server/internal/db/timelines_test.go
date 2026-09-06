@@ -9,8 +9,8 @@ func TestTimelineStashPrunesOnLoadAndPut(t *testing.T) {
 	d := openTest(t)
 	ctx := context.Background()
 
-	live := TimelineStash{Key: "live/flac~off~0", SignedMaster: "/hls/master.m3u8?sig=a", ExpiresAtNS: 2000}
-	dead := TimelineStash{Key: "dead/flac~off~0", SignedMaster: "/hls/master.m3u8?sig=b", ExpiresAtNS: 500}
+	live := TimelineStash{Key: "live/flac~off~0", ID: "idlive", SignedMaster: "/hls/master.m3u8?sig=a", ExpiresAtNS: 2000}
+	dead := TimelineStash{Key: "dead/flac~off~0", ID: "iddead", SignedMaster: "/hls/master.m3u8?sig=b", ExpiresAtNS: 500}
 	for _, row := range []TimelineStash{live, dead} {
 		if err := d.PutTimelineStash(ctx, row, 100); err != nil {
 			t.Fatalf("put %s: %v", row.Key, err)
@@ -27,12 +27,12 @@ func TestTimelineStashPrunesOnLoadAndPut(t *testing.T) {
 	if len(rows) != 1 || rows[0].Key != "live/flac~off~0" || rows[0].SignedMaster != live.SignedMaster {
 		t.Fatalf("load = %+v, want only the live row", rows)
 	}
-	if rows[0].ExpiresAtNS != live.ExpiresAtNS {
-		t.Fatalf("expiry = %d, want %d", rows[0].ExpiresAtNS, live.ExpiresAtNS)
+	if rows[0].ExpiresAtNS != live.ExpiresAtNS || rows[0].ID != live.ID {
+		t.Fatalf("row = %+v, want %+v", rows[0], live)
 	}
 
 	// A mint sweeps too, so rows do not pile up across a long uptime.
-	if err := d.PutTimelineStash(ctx, TimelineStash{Key: "next/aac~off~0", SignedMaster: "/c", ExpiresAtNS: 9000}, 3000); err != nil {
+	if err := d.PutTimelineStash(ctx, TimelineStash{Key: "next/aac~off~0", ID: "idnext", SignedMaster: "/c", ExpiresAtNS: 9000}, 3000); err != nil {
 		t.Fatal(err)
 	}
 	rows, err = d.LoadTimelineStash(ctx, 3000)
@@ -45,13 +45,20 @@ func TestTimelineStashPrunesOnLoadAndPut(t *testing.T) {
 
 	// Re-minting the same rendering replaces the signed URL rather than
 	// conflicting: the digest is content-addressed, the signature is not.
-	again := TimelineStash{Key: "next/aac~off~0", SignedMaster: "/c2", ExpiresAtNS: 9500}
+	again := TimelineStash{Key: "next/aac~off~0", ID: "idother", SignedMaster: "/c2", ExpiresAtNS: 9500}
 	if err := d.PutTimelineStash(ctx, again, 3000); err != nil {
 		t.Fatal(err)
 	}
 	rows, _ = d.LoadTimelineStash(ctx, 3000)
 	if len(rows) != 1 || rows[0].SignedMaster != "/c2" || rows[0].ExpiresAtNS != 9500 {
 		t.Fatalf("re-mint = %+v, want the replaced row", rows)
+	}
+	// And so is the id: a re-mint passes the id it already holds, and
+	// where it does not, memory had forgotten the row and the pid the
+	// client is holding is the new one. Keeping the old id would strand
+	// it across a restart, on a row this write just refreshed.
+	if rows[0].ID != "idother" {
+		t.Fatalf("re-mint left the row named %q", rows[0].ID)
 	}
 
 	if err := d.ForgetTimelineStash(ctx, "next/aac~off~0"); err != nil {
@@ -72,8 +79,8 @@ func TestTimelineStashHoldsRenderingsApart(t *testing.T) {
 	ctx := context.Background()
 
 	for _, row := range []TimelineStash{
-		{Key: "digest1/aac~off~0", SignedMaster: "/a", ExpiresAtNS: 9000},
-		{Key: "digest1/flac~off~0", SignedMaster: "/f", ExpiresAtNS: 9000},
+		{Key: "digest1/aac~off~0", ID: "idaac", SignedMaster: "/a", ExpiresAtNS: 9000},
+		{Key: "digest1/flac~off~0", ID: "idflac", SignedMaster: "/f", ExpiresAtNS: 9000},
 	} {
 		if err := d.PutTimelineStash(ctx, row, 100); err != nil {
 			t.Fatalf("put %s: %v", row.Key, err)

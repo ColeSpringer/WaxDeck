@@ -440,6 +440,31 @@ func hasOutput(caps *client.Caps, name string) bool {
 	return false
 }
 
+// SameAsSource reports whether a forced format would produce exactly
+// what the file already holds, so the engine has nothing to do and the
+// original bytes can serve. It is deliberately narrow: only the pairs
+// where one of this server's output names and the stored codec plus
+// container describe the same bitstream in the same wrapper. Anything
+// unrecognised, and any remux (aac in ADTS against the MP4-framed aac
+// this engine emits), answers false and takes the encode path.
+func SameAsSource(src Source, format string) bool {
+	codec := strings.ToLower(strings.TrimSpace(src.Codec))
+	container := NormalizeContainer(src.Container)
+	switch format {
+	case "mp3":
+		return codec == "mp3" && container == "mp3"
+	case "flac":
+		return codec == "flac" && container == "flac"
+	case "wav":
+		return codec == "pcm" && container == "wav"
+	case "opus":
+		return codec == "opus" && (container == "ogg" || container == "opus")
+	case "aac":
+		return codec == "aac" && (container == "mp4" || container == "m4a" || container == "m4b")
+	}
+	return false
+}
+
 // MinStreamBitrateKbps and MaxStreamBitrateKbps bound a client bitrate
 // cap: below the floor no codec speaks, above the ceiling a cap cannot
 // beat direct play.

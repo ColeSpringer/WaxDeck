@@ -343,6 +343,7 @@ func (l *Library) DrainToolTasks(ctx context.Context) bool {
 		l.log.Warn("retiring exhausted tool tasks", "err", err)
 	} else {
 		for _, id := range ids {
+			l.settleMigrationExport(ctx, id)
 			l.scrubTaskSecrets(ctx, id)
 			l.notifyToolTask(ctx, id)
 		}
@@ -425,6 +426,9 @@ func (l *Library) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
 	if err := l.db.UpdateToolTask(ctx, *t); err != nil {
 		l.log.Warn("recording tool task completion", "task", t.ID, "err", err)
 	}
+	// Before the scrub, which drops an export id once the upload it
+	// names is gone: settling is what makes that true.
+	l.settleMigrationExport(ctx, t.ID)
 	l.scrubTaskSecrets(ctx, t.ID)
 	l.notifyToolTask(ctx, t.ID)
 	return nil
@@ -1174,6 +1178,7 @@ func (l *Library) failToolTask(ctx context.Context, t *wdb.ToolTask, cause error
 	if err := l.db.UpdateToolTask(ctx, *t); err != nil {
 		l.log.Warn("recording tool task failure", "task", t.ID, "err", err)
 	}
+	l.settleMigrationExport(ctx, t.ID)
 	l.scrubTaskSecrets(ctx, t.ID)
 	l.notifyToolTask(ctx, t.ID)
 }
@@ -1192,10 +1197,27 @@ func (l *Library) scrubTaskSecrets(ctx context.Context, taskID string) {
 	if err := json.Unmarshal([]byte(t.Params), &params); err != nil {
 		return
 	}
-	if _, held := params["secretSealed"]; !held {
+	_, sealed := params["secretSealed"]
+	// The export id goes only once the archive it names is gone. A task
+	// naming an upload that was deleted reads as a thing somebody could
+	// still act on; a task naming one that is still there is the only
+	// handle left on it, because the screen that ordered the import let
+	// go of its own as soon as the task was accepted. A dry run keeps
+	// the archive on purpose, and so does a failure and a run told to
+	// read only half of it - scrubbing the id from those stranded a
+	// household's listening history until its day was up.
+	dropExport := false
+	if id, ok := params["exportId"].(string); ok && id != "" {
+		_, err := l.db.MigrationExportByID(ctx, id)
+		dropExport = errors.Is(err, wdb.ErrNotFound)
+	}
+	if !sealed && !dropExport {
 		return
 	}
 	delete(params, "secretSealed")
+	if dropExport {
+		delete(params, "exportId")
+	}
 	raw, err := json.Marshal(params)
 	if err != nil {
 		return

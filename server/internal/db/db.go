@@ -522,6 +522,30 @@ const baselineSchema = `
 	);
 	CREATE INDEX playback_sessions_user ON playback_sessions (user_id, active, updated_at_ns);
 
+	-- Uploaded account data exports waiting for the import that reads
+	-- them. The file lives under the staging directory; the row is what
+	-- the import addresses it by, and both go when the import finishes
+	-- or the expiry sweep runs.
+	CREATE TABLE migration_exports (
+		id            TEXT    PRIMARY KEY,
+		user_id       TEXT    NOT NULL,
+		file_name     TEXT    NOT NULL,
+		size_bytes    INTEGER NOT NULL,
+		source        TEXT    NOT NULL,
+		files_json    TEXT    NOT NULL,
+		created_at_ns INTEGER NOT NULL,
+		expires_at_ns INTEGER NOT NULL,
+		-- The tool task currently reading this upload, empty for one
+		-- nobody holds. An import reads the archive over minutes and
+		-- deletes it when it is done, so two tasks naming the same
+		-- upload would have one destroy what the other is reading and
+		-- the second report a successful import as a missing file.
+		-- A claim left behind by a task that is no longer live is
+		-- stale, which is what makes a crashed run reclaimable.
+		claimed_by    TEXT    NOT NULL DEFAULT ''
+	);
+	CREATE INDEX migration_exports_expiry ON migration_exports (expires_at_ns);
+
 	-- Minted gapless timelines. The HLS proxy reconstructs the signed
 	-- upstream master URL for a key a client presents; without a row
 	-- here every live timeline URL dies with the process. The key is the
@@ -532,8 +556,12 @@ const baselineSchema = `
 	-- as well as on each mint, so a server that was down past every
 	-- stored expiry does not carry dead rows until the next mint happens
 	-- to sweep them.
+	-- The id is what a client releases the rendering by: the key
+	-- carries a slash and cannot be a path segment, and a client that
+	-- stopped playing should not have to wait out the idle sweep.
 	CREATE TABLE timeline_stash (
 		tl_key        TEXT    PRIMARY KEY,
+		id            TEXT    NOT NULL UNIQUE,
 		signed_master TEXT    NOT NULL,
 		expires_at_ns INTEGER NOT NULL
 	);

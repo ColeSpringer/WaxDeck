@@ -225,6 +225,12 @@ abstract interface class WaxDeckRepository {
     List<String>? formats,
   });
 
+  /// `DELETE /player/timeline/{pid}`: gives back the transcode slot this
+  /// rendering was holding, for a player that has stopped. Best effort:
+  /// the server's idle sweep releases it anyway a minute later, so a
+  /// failure here is not worth surfacing or retrying.
+  Future<void> releaseQueueTimeline(String pid);
+
   /// `GET /items/{pid}/play-state`: the caller's resume state for one item.
   Future<PlayState> getPlayState(String pid);
 
@@ -1714,18 +1720,41 @@ abstract interface class WaxDeckRepository {
   /// (administrators).
   Future<void> cancelStagedRestore();
 
-  /// `POST /admin/migrations`: starts a server-side import from
-  /// another server as a background task; [source] is
-  /// `navidrome`, `subsonic`, or `audiobookshelf` (administrators).
+  /// `POST /admin/migrations`: starts a server-side import as a
+  /// background task (administrators).
+  ///
+  /// [source] is one of `navidrome`, `subsonic`, `audiobookshelf`,
+  /// `jellyfin`, `lastfm`, `listenbrainz`, or `spotify`. The first four
+  /// read another server and need its address and a credential; the two
+  /// listening services need an account name; `spotify` reads an
+  /// account data export staged through [stageMigrationExport] and
+  /// named by [exportId].
   Future<ToolTask> createMigration({
     required String source,
-    required String serverUrl,
+    String? serverUrl,
     String? username,
     String? password,
     String? token,
+    String? accountId,
+    String? exportId,
     MigrationOptions? options,
     bool dryRun = false,
   });
+
+  /// `POST /admin/migrations/exports`: uploads an account data export
+  /// for a migration to read, answering what was recognised in it. The
+  /// file is read lazily and its length declared up front, so the
+  /// server can refuse one too large for its volume before reading a
+  /// byte of it; on native the bytes then flow through in
+  /// transport-sized pieces (administrators).
+  Future<MigrationExport> stageMigrationExport({
+    required int sizeBytes,
+    required Stream<List<int>> Function() openRead,
+  });
+
+  /// `DELETE /admin/migrations/exports/{pid}`: discards a staged export
+  /// and its file (administrators).
+  Future<void> discardMigrationExport(String pid);
 
   /// `GET /admin/trash`: the server-side trash (administrators).
   Future<TrashList> listTrash({bool includeRestored = false, int? limit});
@@ -1770,11 +1799,23 @@ abstract interface class WaxDeckRepository {
   ///
   /// [listen] is the session's own listen report, sent only when the
   /// client is really ending - a tab merely going hidden checkpoints
-  /// and nothing else.
+  /// and nothing else. [timelinePids] releases the gapless renderings
+  /// the tab was holding, for the same reason: a closed tab is the one
+  /// listener that cannot say it stopped. Plural because a queue edit
+  /// mints a replacement beside the one playing and the server counts
+  /// the listener as being on both - releasing one of them leaves the
+  /// other holding the slot, and the release then frees nothing.
+  ///
+  /// Every part is optional and each stands alone. A tab can have a
+  /// rendering to hand back and nothing to check point - the session
+  /// already reported, or the item went away while the stream played on
+  /// - and that release is the one that costs a listener their slot for
+  /// a minute if it does not go out.
   List<ExitRequest> exitRequests({
-    required String pid,
-    required int positionMs,
+    String? pid,
+    int? positionMs,
     ListenSession? listen,
+    List<String> timelinePids = const <String>[],
   });
 
   /// `GET /jobs`: currently known background jobs (administrators).
@@ -2263,6 +2304,11 @@ class WaxDeckClient implements WaxDeckRepository {
         params: <String, String>{'job': measuring},
       );
     }
+  });
+
+  @override
+  Future<void> releaseQueueTimeline(String pid) => _guard(() async {
+    await _gen.getPlayerApi().releaseQueueTimeline(pid: pid);
   });
 
   /// The job pid from a 202 answer to a timeline mint, or null for any
@@ -5057,10 +5103,12 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<ToolTask> createMigration({
     required String source,
-    required String serverUrl,
+    String? serverUrl,
     String? username,
     String? password,
     String? token,
+    String? accountId,
+    String? exportId,
     MigrationOptions? options,
     bool dryRun = false,
   }) => _guard(() async {
@@ -5072,6 +5120,8 @@ class WaxDeckClient implements WaxDeckRepository {
           ..username = username
           ..password = password
           ..token = token
+          ..accountId = accountId
+          ..exportId = exportId
           ..options = options == null
               ? null
               : migrationOptionsToGen(options).toBuilder()
@@ -5079,6 +5129,28 @@ class WaxDeckClient implements WaxDeckRepository {
       ),
     );
     return toolTaskFromGen(_require(response.data));
+  });
+
+  @override
+  Future<MigrationExport> stageMigrationExport({
+    required int sizeBytes,
+    required Stream<List<int>> Function() openRead,
+  }) => _guard(() async {
+    final response = await _gen.getAdminApi().stageMigrationExport(
+      body: MultipartFile.fromStream(openRead, sizeBytes),
+      // A stream body is sent chunked unless the length is declared,
+      // and the server checks its room and its cap against what the
+      // request says it is sending: without this both checks meet a
+      // body of unknown size and only fire once it is already on disk.
+      headers: {Headers.contentLengthHeader: sizeBytes},
+      extra: const {_longOperation: true},
+    );
+    return migrationExportFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> discardMigrationExport(String pid) => _guard(() async {
+    await _gen.getAdminApi().discardMigrationExport(exportId: pid);
   });
 
   @override
@@ -5160,9 +5232,10 @@ class WaxDeckClient implements WaxDeckRepository {
 
   @override
   List<ExitRequest> exitRequests({
-    required String pid,
-    required int positionMs,
+    String? pid,
+    int? positionMs,
     ListenSession? listen,
+    List<String> timelinePids = const <String>[],
   }) {
     // Whatever the interceptor would have added, added by the same
     // code: these go out through the browser rather than through Dio,
@@ -5179,15 +5252,16 @@ class WaxDeckClient implements WaxDeckRepository {
     );
 
     return <ExitRequest>[
-      ExitRequest(
-        path: '$_baseUrl/api/v1/items/${Uri.encodeComponent(pid)}/play-state',
-        method: 'PUT',
-        headers: headers,
-        body: encode(
-          gen.PlayStateUpdate((b) => b..positionMs = positionMs),
-          const FullType(gen.PlayStateUpdate),
+      if (pid != null && positionMs != null)
+        ExitRequest(
+          path: '$_baseUrl/api/v1/items/${Uri.encodeComponent(pid)}/play-state',
+          method: 'PUT',
+          headers: headers,
+          body: encode(
+            gen.PlayStateUpdate((b) => b..positionMs = positionMs),
+            const FullType(gen.PlayStateUpdate),
+          ),
         ),
-      ),
       if (listen != null)
         ExitRequest(
           path: '$_baseUrl/api/v1/listens',
@@ -5199,6 +5273,15 @@ class WaxDeckClient implements WaxDeckRepository {
             ),
             const FullType(gen.ListenReport),
           ),
+        ),
+      for (final pid in timelinePids)
+        ExitRequest(
+          path:
+              '$_baseUrl/api/v1/player/timeline/'
+              '${Uri.encodeComponent(pid)}',
+          method: 'DELETE',
+          headers: headers,
+          body: '',
         ),
     ];
   }

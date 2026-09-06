@@ -68,6 +68,11 @@ abstract final class SemanticsIds {
   static String libraryRow(Object id) => 'library-row-$id';
   static const String librarySubmit = 'library-submit';
   static const String libraryWarning = 'library-warning';
+  static const String migrateAccount = 'migrate-account';
+  static String migrateAccountOption(Object id) => 'migrate-account-$id';
+  static const String migrateExportPick = 'migrate-export-pick';
+  static const String migrateExportStatus = 'migrate-export-status';
+  static const String migrateLastfmMissingKey = 'migrate-lastfm-missing-key';
   static const String migratePassword = 'migrate-password';
   static const String migrateServerUrl = 'migrate-server-url';
   static const String migrateSource = 'migrate-source';

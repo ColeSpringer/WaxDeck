@@ -30,7 +30,11 @@ import (
 // rest, the way shares already derive their capability tokens rather
 // than storing them.
 type TimelineStash struct {
-	Key          string
+	Key string
+	// ID names the row on the client-facing surface. The key holds a
+	// slash, so it cannot be a path segment; this can, which is what a
+	// client releasing a rendering it stopped playing addresses.
+	ID           string
 	SignedMaster string
 	ExpiresAtNS  int64
 }
@@ -55,14 +59,14 @@ func (d *DB) LoadTimelineStash(ctx context.Context, nowNS int64) ([]TimelineStas
 		return nil, fmt.Errorf("db: pruning the timeline stash: %w", err)
 	}
 	rows, err := tx.QueryContext(ctx,
-		`SELECT tl_key, signed_master, expires_at_ns FROM timeline_stash`)
+		`SELECT tl_key, id, signed_master, expires_at_ns FROM timeline_stash`)
 	if err != nil {
 		return nil, fmt.Errorf("db: reading the timeline stash: %w", err)
 	}
 	var out []TimelineStash
 	for rows.Next() {
 		var t TimelineStash
-		if err := rows.Scan(&t.Key, &t.SignedMaster, &t.ExpiresAtNS); err != nil {
+		if err := rows.Scan(&t.Key, &t.ID, &t.SignedMaster, &t.ExpiresAtNS); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("db: reading the timeline stash: %w", err)
 		}
@@ -88,13 +92,21 @@ func (d *DB) PutTimelineStash(ctx context.Context, t TimelineStash, nowNS int64)
 		return fmt.Errorf("db: writing the timeline stash: %w", err)
 	}
 	defer tx.Rollback()
+	// The id is taken from the mint, conflict or not. A re-mint of a
+	// rendering the server still holds passes the id it already has, so
+	// the update is a no-op there; where it differs, memory had forgotten
+	// the row and minted a new one, and the pid the client is holding is
+	// that one. Leaving the old id would strand it: the row survives the
+	// prune below on its refreshed expiry, and a restart would restore
+	// an id the server itself no longer hands out.
 	if _, err := tx.ExecContext(ctx, `
-		INSERT INTO timeline_stash (tl_key, signed_master, expires_at_ns)
-		VALUES (?, ?, ?)
+		INSERT INTO timeline_stash (tl_key, id, signed_master, expires_at_ns)
+		VALUES (?, ?, ?, ?)
 		ON CONFLICT (tl_key) DO UPDATE SET
+			id = excluded.id,
 			signed_master = excluded.signed_master,
 			expires_at_ns = excluded.expires_at_ns`,
-		t.Key, t.SignedMaster, t.ExpiresAtNS); err != nil {
+		t.Key, t.ID, t.SignedMaster, t.ExpiresAtNS); err != nil {
 		return fmt.Errorf("db: writing the timeline stash: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,

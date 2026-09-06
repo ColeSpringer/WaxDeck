@@ -210,6 +210,18 @@ table match_queue
   column lease_until_ns|INTEGER|notnull=1|default=0|pk=0
   column next_at_ns|INTEGER|notnull=1|default=0|pk=0
   autoindex u|unique=1|(entry_id)
+table migration_exports
+  column claimed_by|TEXT|notnull=1|default=''|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column expires_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column file_name|TEXT|notnull=1|default=<none>|pk=0
+  column files_json|TEXT|notnull=1|default=<none>|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column size_bytes|INTEGER|notnull=1|default=<none>|pk=0
+  column source|TEXT|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  autoindex pk|unique=1|(id)
+  index migration_exports_expiry|unique=0|partial=0|(expires_at_ns)
 table notification_targets
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
   column dedupe_key|TEXT|notnull=0|default=<none>|pk=0
@@ -545,9 +557,11 @@ table sync_state
   autoindex pk|unique=1|(key)
 table timeline_stash
   column expires_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column id|TEXT|notnull=1|default=<none>|pk=0
   column signed_master|TEXT|notnull=1|default=<none>|pk=0
   column tl_key|TEXT|notnull=0|default=<none>|pk=1
   autoindex pk|unique=1|(tl_key)
+  autoindex u|unique=1|(id)
   index timeline_stash_expiry|unique=0|partial=0|(expires_at_ns)
 table tool_tasks
   column attempts|INTEGER|notnull=1|default=0|pk=0

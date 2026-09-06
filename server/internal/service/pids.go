@@ -38,6 +38,10 @@ const (
 	// PrefixNotification names an inbox row: a thing that happened to
 	// one account, not a thing in the library.
 	PrefixNotification = "nf"
+	// PrefixMigrationExport names an uploaded account data export
+	// waiting for the import that reads it. Never in the library: it is
+	// a file this server parses and then deletes.
+	PrefixMigrationExport = "mx"
 )
 
 // prefixForKind maps an item kind to its API prefix.

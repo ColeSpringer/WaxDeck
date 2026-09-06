@@ -332,7 +332,11 @@ knows the user: a server-wide concurrent cap, a per-account cap
 (administrators exempt), and a default bitrate ceiling for accounts
 without their own. Direct-played originals never count. An over-limit
 stream answers `transcode-limited` (HTTP 429); the streaming engine's
-own admission control remains the hard backstop.
+own admission control remains the hard backstop. A client that pins the
+format the file is already in counts as a direct play too: nothing is
+transcoded, so nothing is charged. Pinning any other format, asking for
+one on a track carved out of a larger file, or turning voice boost on
+is a real encode and takes a slot.
 
 A queue playing gaplessly - a cast speaker, or a browser with the
 gapless switch on - is a rendering the engine holds open, and it counts
@@ -340,11 +344,13 @@ too. One slot per listener rather than one per rendering: a queue edit
 mints a replacement while the one playing is still being fetched, and
 charging both would refuse the edit's own music. The slot is taken when
 a timeline is minted, so a listener over the cap is told before anything
-plays, and given back once every timeline of theirs has gone unfetched
-for a minute. Resuming a paused listen takes it again on the next
-fragment, which can be refused in turn - the player says so rather than
-falling back, since the ordinary path sits under the same cap. The
-admin console's activity line says how much of its count is this.
+plays, and given back when the client says it stopped - a browser tab
+closing says so on its way out. The idle sweep is the backstop for the
+client that could not: every timeline of theirs unfetched for a minute.
+Resuming a paused listen takes it again on the next fragment, which can
+be refused in turn - the player says so rather than falling back, since
+the ordinary path sits under the same cap. The admin console's activity
+line says how much of its count is this.
 
 A per-account bitrate ceiling applies to a rendered queue too: with one
 set, the queue is rendered in a lossy format even when the player asks
@@ -379,12 +385,43 @@ metadata):
   counts, and bookmark positions, over the server's own Subsonic API.
 - **Audiobookshelf** - book progress and finished flags, over its
   REST API with an API token.
+- **Jellyfin** - favourites, play counts, last-played times and resume
+  positions, over its REST API with either a login or a server API key
+  (a key names nobody, so the username still says whose state to read).
+- **Last.fm** - scrobble history and loved tracks, read from a public
+  account with this server's own Last.fm API key. Set that under
+  Settings > Scrobbling first; the import says so when it is missing.
+- **ListenBrainz** - listens and loved recordings, from
+  listenbrainz.org or a compatible server. A user token is optional and
+  only widens what the service answers with.
+- **Spotify** - the account data export Spotify hands over on request.
+  Upload the zip on the import screen; the server reads the music
+  streaming history and the saved tracks out of it, ignores the podcast
+  and audiobook siblings, and deletes the file once the import has read
+  it (a staged export that is never used is swept after a day).
 - **Podcast apps** - subscriptions migrate via OPML import on the
   podcasts screen (Pocket Casts, AntennaPod, and friends all export
   it).
 
-Play history lands as backdated import-source listen sessions with
-deterministic ids, so re-running an import never double-counts.
+An import lands on the account you name, which defaults to your own.
+That is how the rest of the household moves without anybody handing
+over their password: one administrator holds the old server's
+credentials and imports each person's listening onto their own login.
+
+Last.fm, ListenBrainz and Spotify record a time per play, so their
+history lands at the times it happened. The sources that report only a
+play count are spread backwards a week apart instead, which keeps
+charts from stacking a decade of listening on one day. Either way the
+listen sessions carry deterministic ids, so re-running an import never
+double-counts, and nothing imported is forwarded to a connected
+scrobbler - the history has usually been scrobbled once already.
+
+One caveat on very long histories: WaxDeck's catalog stamps
+"last played" at the moment the import writes, not at the time the play
+happened, so a freshly imported library reads as played today while the
+listen records underneath carry the real dates. What sorts by recency
+in the catalog is therefore the import, not the listening.
+
 A dry run matches and reports without writing anything; the finished
 task's summary shows what matched, what did not, and what was
 written. Credentials for the source server are used for the run and

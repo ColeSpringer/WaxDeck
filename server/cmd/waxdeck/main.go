@@ -965,6 +965,7 @@ func run() error {
 				svc.PruneScrobbleOutbox(ctx)
 				svc.PruneNotifyOutbox(ctx)
 				svc.PruneNotifications(ctx)
+				svc.SweepMigrationExports(ctx)
 			}
 		}
 	})

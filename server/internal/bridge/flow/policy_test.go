@@ -434,3 +434,42 @@ func TestTimelineGainDB(t *testing.T) {
 		})
 	}
 }
+
+// SameAsSource decides whether a forced format is a copy of the file or
+// a real encode, which is the difference between serving bytes and
+// charging a session slot. The false rows are the ones that matter: a
+// remux still runs the engine.
+func TestSameAsSource(t *testing.T) {
+	cases := []struct {
+		name   string
+		src    Source
+		format string
+		want   bool
+	}{
+		{"mp3 in mp3", Source{Codec: "mp3", Container: "mp3"}, "mp3", true},
+		{"flac in flac", Source{Codec: "flac", Container: "flac"}, "flac", true},
+		{"pcm in wav", Source{Codec: "pcm", Container: "wav"}, "wav", true},
+		{"opus in ogg", Source{Codec: "opus", Container: "ogg"}, "opus", true},
+		{"opus in its own container", Source{Codec: "opus", Container: "opus"}, "opus", true},
+		{"aac in m4a", Source{Codec: "aac", Container: "m4a"}, "aac", true},
+		{"aac in an audiobook", Source{Codec: "aac", Container: "m4b"}, "aac", true},
+		// The probe labels this one "aac (adts)", so the container fold
+		// has to run before the comparison does.
+		{"aac in adts is a remux", Source{Codec: "aac", Container: "aac (adts)"}, "aac", false},
+		{"a label with a qualifier still folds", Source{Codec: "FLAC", Container: "flac (native)"}, "flac", true},
+		{"vorbis in ogg is not opus", Source{Codec: "vorbis", Container: "ogg"}, "opus", false},
+		{"alac in mp4 is not aac", Source{Codec: "alac", Container: "mp4"}, "aac", false},
+		{"mp3 in matroska is a remux", Source{Codec: "mp3", Container: "mka"}, "mp3", false},
+		{"a flac source asked for mp3", Source{Codec: "flac", Container: "flac"}, "mp3", false},
+		{"a format nothing here outputs", Source{Codec: "wavpack", Container: "wv"}, "wavpack", false},
+		{"no format at all", Source{Codec: "flac", Container: "flac"}, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := SameAsSource(tc.src, tc.format); got != tc.want {
+				t.Fatalf("SameAsSource(%q/%q, %q) = %v, want %v",
+					tc.src.Codec, tc.src.Container, tc.format, got, tc.want)
+			}
+		})
+	}
+}

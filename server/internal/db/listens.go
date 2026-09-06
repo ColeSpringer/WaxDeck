@@ -21,27 +21,59 @@ type ListenSession struct {
 	Source    string
 }
 
-// InsertListen records one session. inserted is false when the same
-// (user, sessionId) was already recorded: the replay is acknowledged
-// and ignored, which is what makes ingest idempotent.
-func (d *DB) InsertListen(ctx context.Context, s ListenSession) (inserted bool, err error) {
-	res, err := d.w.ExecContext(ctx, `
+// InsertListens records a batch of sessions and reports, per input
+// row, whether it was new. False is the same (user, sessionId) already
+// being recorded - the replay that is acknowledged and ignored, which
+// is what makes ingest idempotent. A batch carrying the same id twice
+// reads the same way: the first occurrence is new and the rest are
+// replays of it.
+//
+// One transaction rather than a row at a time because the write pool
+// is a single connection: a five-hundred-session flush would otherwise
+// take and release it five hundred times with every other writer
+// interleaving. Nothing but the inserts is inside it, so the batch
+// commits before its caller touches the catalog.
+func (d *DB) InsertListens(ctx context.Context, sessions []ListenSession) ([]bool, error) {
+	inserted := make([]bool, len(sessions))
+	if len(sessions) == 0 {
+		return inserted, nil
+	}
+	tx, err := d.w.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("db: inserting listens: %w", err)
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO listen_sessions
 			(user_id, session_id, item_pid, media_type, started_at_ns,
 			 ms_played, skipped_ms, finished, client, source, received_at_ns)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (user_id, session_id) DO NOTHING`,
-		s.UserID, s.SessionID, s.ItemPID, s.MediaType, s.StartedAt.UnixNano(),
-		s.MsPlayed, s.SkippedMs, boolInt(s.Finished), s.Client, s.Source, time.Now().UnixNano(),
-	)
+		ON CONFLICT (user_id, session_id) DO NOTHING`)
 	if err != nil {
-		return false, fmt.Errorf("db: inserting listen: %w", err)
+		return nil, fmt.Errorf("db: inserting listens: %w", err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("db: inserting listen: %w", err)
+	defer stmt.Close()
+	// One received-at for the batch: they arrived together, and the
+	// column records arrival rather than ordering anything.
+	now := time.Now().UnixNano()
+	for i, s := range sessions {
+		res, err := stmt.ExecContext(ctx,
+			s.UserID, s.SessionID, s.ItemPID, s.MediaType, s.StartedAt.UnixNano(),
+			s.MsPlayed, s.SkippedMs, boolInt(s.Finished), s.Client, s.Source, now,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("db: inserting listens: %w", err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return nil, fmt.Errorf("db: inserting listens: %w", err)
+		}
+		inserted[i] = n > 0
 	}
-	return n > 0, nil
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("db: inserting listens: %w", err)
+	}
+	return inserted, nil
 }
 
 // UpsertRadioListen records - or extends - one radio tune-in.
@@ -77,16 +109,34 @@ func (d *DB) UpsertRadioListen(ctx context.Context, s ListenSession) error {
 	return nil
 }
 
-// DeleteListen removes one session by its idempotency key. Ingest uses
-// it as a compensating delete: when the played-mark that belongs with a
-// freshly inserted session fails transiently, the row is removed so the
-// client's retry re-runs both the insert and the mark.
-func (d *DB) DeleteListen(ctx context.Context, userID, sessionID string) error {
-	_, err := d.w.ExecContext(ctx,
-		`DELETE FROM listen_sessions WHERE user_id = ? AND session_id = ?`,
-		userID, sessionID)
+// DeleteListens removes sessions by their idempotency keys, in one
+// transaction. Ingest uses it as a compensating delete: when a
+// played-mark fails transiently, the sessions it claimed but never
+// marked come back out, so the client's retry re-runs both the insert
+// and the mark instead of reading them as duplicates and skipping the
+// mark forever.
+func (d *DB) DeleteListens(ctx context.Context, userID string, sessionIDs []string) error {
+	if len(sessionIDs) == 0 {
+		return nil
+	}
+	tx, err := d.w.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("db: deleting listen: %w", err)
+		return fmt.Errorf("db: deleting listens: %w", err)
+	}
+	defer tx.Rollback()
+	stmt, err := tx.PrepareContext(ctx,
+		`DELETE FROM listen_sessions WHERE user_id = ? AND session_id = ?`)
+	if err != nil {
+		return fmt.Errorf("db: deleting listens: %w", err)
+	}
+	defer stmt.Close()
+	for _, id := range sessionIDs {
+		if _, err := stmt.ExecContext(ctx, userID, id); err != nil {
+			return fmt.Errorf("db: deleting listens: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db: deleting listens: %w", err)
 	}
 	return nil
 }

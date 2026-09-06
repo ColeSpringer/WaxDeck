@@ -166,8 +166,14 @@ func TestStreamItemsNeverInflatesALossySource(t *testing.T) {
 	if got := u.Query().Get("fmt"); got == "flac" {
 		t.Fatal("an mp3 source was transcoded to flac for a renderer that merely accepts flac")
 	}
-	if got := u.Query().Get("fmt"); got != "mp3" {
-		t.Fatalf("forced format = %q, want the mp3 floor", got)
+	// The floor the negotiation lands on is mp3, which this source
+	// already is, so the mint drops the hint and the renderer is handed
+	// the file itself: same media type, no re-encode, no session slot.
+	if got := u.Query().Get("fmt"); got != "" {
+		t.Fatalf("forced format = %q, want the source's own bytes", got)
+	}
+	if items[0].MimeType != "audio/mpeg" {
+		t.Fatalf("mime type = %q, want audio/mpeg", items[0].MimeType)
 	}
 }
 

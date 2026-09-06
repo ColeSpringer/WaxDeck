@@ -11,6 +11,21 @@ note.
 
 ## WaxBin
 
+- **`MarkPlayed` with an explicit play time.** Every counted play
+  stamps `last_played_at` at the moment of the write, and no write path
+  takes a time. That is right for live listening and wrong for imported
+  history: a household moving in from Last.fm, ListenBrainz or a
+  Spotify export carries a real date per play, and the catalog records
+  every one of them as "played today". What sorts by recency after an
+  import is therefore the import itself. Wanted: a play time on the
+  mark, applied the way the star writes already take a recorded time -
+  never moving the stamp backwards past a later play, so a replay can
+  only ever fill in history rather than rewrite the present. Shipped
+  workaround: WaxDeck's `listen_sessions` rows carry the true times, so
+  the listening log and everything derived from it are correct; only
+  the catalog's own `lastPlayedAt` reads as the import instant, and the
+  import's documentation says so.
+
 - **A name-keyed artist-art walk.** The artist-art backfill queue picks
   its subjects with a predicate that requires `artist.mbid`, which the
   identity phase fills only for artists MusicBrainz matched. An artist

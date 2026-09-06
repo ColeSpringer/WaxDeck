@@ -598,8 +598,20 @@ func (h *Handler) scrobble(w http.ResponseWriter, r *http.Request, uc *service.U
 		timed := false
 		if i < len(times) {
 			if ms, err := strconv.ParseInt(times[i], 10, 64); err == nil && ms > 0 {
-				started = time.UnixMilli(ms)
-				timed = true
+				// Milliseconds is what the protocol says, and clients
+				// have sent seconds and microseconds instead; a device
+				// with a badly set clock sends a real number that is
+				// simply wrong. One outside the window the ingest keeps
+				// is read as untimed rather than passed on: the ingest
+				// refuses it per session, and this adapter's answer to
+				// any refusal is to fail the whole submission - which a
+				// client's offline queue reads as retryable and replays
+				// forever, re-sending every id beside it.
+				at := time.UnixMilli(ms)
+				if !at.Before(subsonicOldestScrobble) && !at.After(time.Now().Add(subsonicClockSkew)) {
+					started = at
+					timed = true
+				}
 			}
 		}
 		s := service.ListenSession{
@@ -629,6 +641,14 @@ func (h *Handler) scrobble(w http.ResponseWriter, r *http.Request, uc *service.U
 	}
 	h.ok(w, r, envelope{})
 }
+
+var (
+	// subsonicOldestScrobble and subsonicClockSkew bound a submitted
+	// scrobble time to what the ingest will keep, so a value outside it
+	// costs one play's timestamp rather than the whole submission.
+	subsonicOldestScrobble = time.Unix(0, 0)
+	subsonicClockSkew      = 24 * time.Hour
+)
 
 // scrobbleSessionID derives the listen's idempotency id. A timed
 // submission hashes deterministically, so an offline queue replaying

@@ -291,7 +291,10 @@ paths:
         of them has gone unfetched for a minute - so a mint over the
         cap answers `transcode-limited` before anything plays, and a
         fetch resuming a listen whose slot was released can answer it
-        too. A caller
+        too. A client that stops playing releases the rendering it
+        holds (`releaseQueueTimeline`) rather than waiting the minute
+        out; the sweep stays the backstop for the client that cannot,
+        a closed browser tab being the case. A caller
         that can only decode some formats says so in `formats`; the
         rendering format is part of a timeline's identity, so the
         same queue asked for in two formats is two streams. Requires
@@ -335,6 +338,33 @@ paths:
           $ref: "#/components/responses/TranscodeLimited"
         "501":
           $ref: "#/components/responses/FeatureUnavailable"
+
+  /player/timeline/{pid}:
+    delete:
+      operationId: releaseQueueTimeline
+      summary: Release a gapless queue timeline
+      description: >
+        Drops the caller from this rendering's listeners and gives back
+        their transcode slot when none of their other renderings has
+        been fetched inside the idle window. What a client sends when
+        it stops playing a timeline, so the next listener is not
+        refused for the minute the sweep would otherwise take to notice.
+        The rendering itself is not destroyed: another listener may be
+        on it, and the caller's own URL keeps working until it expires
+        (a fetch takes the slot again). Releasing one that is unknown
+        or already expired answers `not-found`, as does a server with
+        no streaming engine, which holds no renderings to release;
+        there is nothing to retry either way.
+      tags: [player]
+      parameters:
+        - $ref: "#/components/parameters/TimelinePid"
+      responses:
+        "204":
+          description: Released.
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
   /player/cast/preflight:
     get:
@@ -429,6 +459,14 @@ components:
       schema:
         type: string
         pattern: "^pe-[0-9A-HJKMNP-TV-Z]{26}$"
+    TimelinePid:
+      name: pid
+      in: path
+      required: true
+      description: Timeline PID (e.g. `tl-01JZX5N8QW3F4V9T2B7KD3M9R6`), from the mint.
+      schema:
+        type: string
+        pattern: "^tl-[0-9A-HJKMNP-TV-Z]{26}$"
     PlaybackSessionId:
       name: sessionId
       in: path
@@ -931,6 +969,14 @@ components:
       required:
         [url, mimeType, durationMs, expiresAt, envelopeRate, boundaries]
       properties:
+        pid:
+          type: string
+          description: >
+            Identifies this rendering, for releasing it when playback
+            stops. Absent from an older server, which relies on the
+            idle sweep alone.
+          pattern: "^tl-[0-9A-HJKMNP-TV-Z]{26}$"
+          example: tl-01JZX5N8QW3F4V9T2B7KD3M9R6
         url:
           type: string
           description: >

@@ -725,6 +725,10 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 		ExpiresAt:    res.ExpiresAt,
 		EnvelopeRate: res.EnvelopeRate,
 	}
+	if res.PID != "" {
+		pid := res.PID
+		out.Pid = &pid
+	}
 	if res.Format != "" {
 		format := res.Format
 		out.Format = &format
@@ -741,6 +745,22 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 		})
 	}
 	return out, nil
+}
+
+// ReleaseQueueTimeline hands a listener's transcode slot back the
+// moment they stop, rather than the minute later the idle sweep would.
+// A server with no engine has nothing to release, which is the same
+// answer an id it never minted gets.
+func (s *Server) ReleaseQueueTimeline(ctx context.Context, req ReleaseQueueTimelineRequestObject) (ReleaseQueueTimelineResponseObject, error) {
+	_, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id := strings.TrimPrefix(req.Pid, "tl-")
+	if s.bridge == nil || !s.bridge.ReleaseTimeline(p.User.ID, id) {
+		return ReleaseQueueTimeline404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no live timeline with pid "+req.Pid))}, nil
+	}
+	return ReleaseQueueTimeline204Response{}, nil
 }
 
 func (s *Server) GetCastPreflight(ctx context.Context, _ GetCastPreflightRequestObject) (GetCastPreflightResponseObject, error) {

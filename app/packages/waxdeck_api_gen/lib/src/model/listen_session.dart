@@ -14,12 +14,12 @@ part 'listen_session.g.dart';
 /// Properties:
 /// * [sessionId] - Client-generated idempotency ID for this session, unique across all of the user's clients (use a ULID or UUID). 
 /// * [pid] - The item that was played.
-/// * [startedAt] - When playback started. Historical for backdated imports; the server preserves it as reported. 
+/// * [startedAt] - When playback started. Historical for backdated imports; the server preserves it as reported. A session dated before the Unix epoch, or more than a day ahead of the server, is permanently rejected: it would sort above or below everything real in every surface ordered by listening time. 
 /// * [msPlayed] - Milliseconds actually heard (excludes pauses and seeks).
 /// * [skippedMs] - Milliseconds of content the listener did not sit through thanks to silence trimming and playback speed above 1x, for the time-saved counter. Omit when neither applies. 
 /// * [finished] - Whether playback reached the end of the item.
 /// * [client] - Client identifier (app name and platform).
-/// * [source_] - Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. 
+/// * [source_] - Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. An `import` session counts towards play state exactly as a live one does and is never forwarded to connected scrobblers - a history moving in has usually been scrobbled once already, and re-sending it would be a second copy on somebody else's service. 
 @BuiltValue()
 abstract class ListenSession implements Built<ListenSession, ListenSessionBuilder> {
   /// Client-generated idempotency ID for this session, unique across all of the user's clients (use a ULID or UUID). 
@@ -30,7 +30,7 @@ abstract class ListenSession implements Built<ListenSession, ListenSessionBuilde
   @BuiltValueField(wireName: r'pid')
   String get pid;
 
-  /// When playback started. Historical for backdated imports; the server preserves it as reported. 
+  /// When playback started. Historical for backdated imports; the server preserves it as reported. A session dated before the Unix epoch, or more than a day ahead of the server, is permanently rejected: it would sort above or below everything real in every surface ordered by listening time. 
   @BuiltValueField(wireName: r'startedAt')
   DateTime get startedAt;
 
@@ -50,7 +50,7 @@ abstract class ListenSession implements Built<ListenSession, ListenSessionBuilde
   @BuiltValueField(wireName: r'client')
   String? get client;
 
-  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. 
+  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. An `import` session counts towards play state exactly as a live one does and is never forwarded to connected scrobblers - a history moving in has usually been scrobbled once already, and re-sending it would be a second copy on somebody else's service. 
   @BuiltValueField(wireName: r'source')
   ListenSessionSource_Enum? get source_;
   // enum source_Enum {  live,  import,  };
@@ -237,13 +237,13 @@ class _$ListenSessionSerializer implements PrimitiveSerializer<ListenSession> {
 
 class ListenSessionSource_Enum extends EnumClass {
 
-  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. 
+  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. An `import` session counts towards play state exactly as a live one does and is never forwarded to connected scrobblers - a history moving in has usually been scrobbled once already, and re-sending it would be a second copy on somebody else's service. 
   @BuiltValueEnumConst(wireName: r'live')
   static const ListenSessionSource_Enum live = _$listenSessionSourceEnum_live;
-  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. 
+  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. An `import` session counts towards play state exactly as a live one does and is never forwarded to connected scrobblers - a history moving in has usually been scrobbled once already, and re-sending it would be a second copy on somebody else's service. 
   @BuiltValueEnumConst(wireName: r'import')
   static const ListenSessionSource_Enum import_ = _$listenSessionSourceEnum_import_;
-  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. 
+  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. An `import` session counts towards play state exactly as a live one does and is never forwarded to connected scrobblers - a history moving in has usually been scrobbled once already, and re-sending it would be a second copy on somebody else's service. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const ListenSessionSource_Enum unknownDefaultOpenApi = _$listenSessionSourceEnum_unknownDefaultOpenApi;
 

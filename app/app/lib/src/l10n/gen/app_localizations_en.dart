@@ -549,6 +549,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminLibraryUnnamedPath => 'unnamed on this filesystem';
 
   @override
+  String get adminMigrateAccountHelp =>
+      'The stars, ratings, history, and progress land on this account.';
+
+  @override
+  String get adminMigrateAccountLabel => 'Import onto';
+
+  @override
+  String get adminMigrateAccountSelf => 'You';
+
+  @override
   String get adminMigrateDryRunHelp =>
       'Report what would match; change nothing';
 
@@ -556,10 +566,41 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminMigrateDryRunTitle => 'Dry run';
 
   @override
+  String get adminMigrateExportPick => 'Choose the export file';
+
+  @override
+  String adminMigrateExportStaged(int files, String name) {
+    String _temp0 = intl.Intl.pluralLogic(
+      files,
+      locale: localeName,
+      other: '$files files ready to read from $name',
+      one: '1 file ready to read from $name',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get adminMigrateHistoryHelp => 'What was played there, and when';
 
   @override
   String get adminMigrateHistoryTitle => 'Listen history';
+
+  @override
+  String get adminMigrateJellyfin => 'Jellyfin';
+
+  @override
+  String get adminMigrateLastfm => 'Last.fm';
+
+  @override
+  String get adminMigrateLastfmKeyMissing =>
+      'Importing from Last.fm needs the server\'s Last.fm API key, set under Scrobbling.';
+
+  @override
+  String get adminMigrateListenBrainz => 'ListenBrainz';
+
+  @override
+  String get adminMigrateListenBrainzServerHelp =>
+      'Leave empty for listenbrainz.org, or name a compatible server.';
 
   @override
   String get adminMigratePasswordLabel => 'Password';
@@ -582,6 +623,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminMigrateServerUrlLabel => 'Server URL';
+
+  @override
+  String get adminMigrateSpotifyExport => 'Spotify data export';
 
   @override
   String get adminMigrateStarsHelp =>
@@ -9998,6 +10042,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String toolsSummaryMatched(String count) {
     return 'matched $count';
   }
+
+  @override
+  String toolsSummaryRefused(String count) {
+    return 'refused $count';
+  }
+
+  @override
+  String get toolsSummaryTruncated => 'oldest history not read';
 
   @override
   String toolsSummaryUnmatched(String count) {

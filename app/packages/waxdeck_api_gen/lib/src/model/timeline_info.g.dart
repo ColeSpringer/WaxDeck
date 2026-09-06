@@ -8,6 +8,8 @@ part of 'timeline_info.dart';
 
 class _$TimelineInfo extends TimelineInfo {
   @override
+  final String? pid;
+  @override
   final String url;
   @override
   final String mimeType;
@@ -28,6 +30,7 @@ class _$TimelineInfo extends TimelineInfo {
       (TimelineInfoBuilder()..update(updates))._build();
 
   _$TimelineInfo._({
+    this.pid,
     required this.url,
     required this.mimeType,
     required this.durationMs,
@@ -48,6 +51,7 @@ class _$TimelineInfo extends TimelineInfo {
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
     return other is TimelineInfo &&
+        pid == other.pid &&
         url == other.url &&
         mimeType == other.mimeType &&
         durationMs == other.durationMs &&
@@ -61,6 +65,7 @@ class _$TimelineInfo extends TimelineInfo {
   @override
   int get hashCode {
     var _$hash = 0;
+    _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, url.hashCode);
     _$hash = $jc(_$hash, mimeType.hashCode);
     _$hash = $jc(_$hash, durationMs.hashCode);
@@ -76,6 +81,7 @@ class _$TimelineInfo extends TimelineInfo {
   @override
   String toString() {
     return (newBuiltValueToStringHelper(r'TimelineInfo')
+          ..add('pid', pid)
           ..add('url', url)
           ..add('mimeType', mimeType)
           ..add('durationMs', durationMs)
@@ -91,6 +97,10 @@ class _$TimelineInfo extends TimelineInfo {
 class TimelineInfoBuilder
     implements Builder<TimelineInfo, TimelineInfoBuilder> {
   _$TimelineInfo? _$v;
+
+  String? _pid;
+  String? get pid => _$this._pid;
+  set pid(String? pid) => _$this._pid = pid;
 
   String? _url;
   String? get url => _$this._url;
@@ -134,6 +144,7 @@ class TimelineInfoBuilder
   TimelineInfoBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
+      _pid = $v.pid;
       _url = $v.url;
       _mimeType = $v.mimeType;
       _durationMs = $v.durationMs;
@@ -166,6 +177,7 @@ class TimelineInfoBuilder
       _$result =
           _$v ??
           _$TimelineInfo._(
+            pid: pid,
             url: BuiltValueNullFieldError.checkNotNull(
               url,
               r'TimelineInfo',

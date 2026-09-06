@@ -586,77 +586,198 @@ func (l *Library) setPlayedLocked(ctx context.Context, uc *UserCtx, it *model.It
 // idempotency IDs make safe. Conflating the two here silently loses
 // listens.
 func (l *Library) IngestListens(ctx context.Context, uc *UserCtx, sessions []ListenSession) (ListenIngestResult, error) {
+	return l.ingestListens(ctx, uc, sessions, listenIngestOptions{})
+}
+
+// listenIngestOptions carries what the calling path knows and the
+// session rows cannot say.
+//
+// A row's `source` is not the same thing. It describes the play - live,
+// or backdated history moved in from elsewhere - and the one decision
+// it still carries, whether to re-scrobble, is a property of the play
+// and right for whoever reports it. Announcing is not: that depends on
+// what the caller does afterwards, which the row cannot say.
+type listenIngestOptions struct {
+	// announcedByCaller suppresses the per-listen play-state event.
+	// Only the in-process importers set it, and only because they
+	// announce once per item when the run ends: a history is thousands
+	// of plays of hundreds of tracks, and a row plus a device wake for
+	// each would have every client re-polling the delta for as long as
+	// the import runs. Nothing reachable from the API may set it - a
+	// client reporting backdated sessions still needs the other devices
+	// to learn, and it has no end-of-run pass to announce in.
+	announcedByCaller bool
+}
+
+func (l *Library) ingestListens(ctx context.Context, uc *UserCtx, sessions []ListenSession, opts listenIngestOptions) (ListenIngestResult, error) {
 	var res ListenIngestResult
+	// Resolve, then claim, then mark. Splitting the batch that way is
+	// what keeps a long import off the write connection: the catalog
+	// answers each distinct item once instead of once per play, and the
+	// claims commit together instead of a transaction apiece.
+	rows, rejected, err := l.resolveListens(ctx, uc, sessions)
+	res.Rejected = rejected
+	if err != nil || len(rows) == 0 {
+		return res, err
+	}
+	claims := make([]wdb.ListenSession, len(rows))
+	for i, r := range rows {
+		claims[i] = wdb.ListenSession{
+			UserID:    uc.ID,
+			SessionID: r.s.SessionID,
+			ItemPID:   string(r.it.PID),
+			MediaType: r.mt,
+			StartedAt: r.s.StartedAt,
+			MsPlayed:  r.s.MsPlayed,
+			SkippedMs: r.s.SkippedMs,
+			Finished:  r.s.Finished,
+			Client:    r.s.Client,
+			Source:    r.source,
+		}
+	}
+	claimed, err := l.db.InsertListens(ctx, claims)
+	if err != nil {
+		return res, &Error{Kind: KindInternal, Err: err}
+	}
+	for i, r := range rows {
+		if !claimed[i] {
+			res.Duplicates++
+			continue
+		}
+		res.Accepted++
+		out := l.markListenPlayed(ctx, uc, r.it, r.s, r.mt)
+		if out.permanent != nil {
+			// The mark can never apply (the item vanished mid-batch);
+			// the listen itself is still valid data, so keep it.
+			l.log.Warn("marking played", "pid", r.s.PID, "err", out.permanent)
+		}
+		if out.fatal != nil {
+			// This row and every row behind it hold a claim their mark
+			// never ran under, and a retry would read those claims as
+			// duplicates and skip the mark forever, so they come back
+			// out; what is already marked stays, and the retry redoes
+			// exactly the rest.
+			res.Accepted--
+			undo := unmarkedTail(rows, claimed, i)
+			// Detached from the request's context on purpose: a
+			// cancelled one is the likeliest reason the mark failed at
+			// all, and a compensating delete that fails leaves exactly
+			// the claims the retry has to skip.
+			undoCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listenUndoTimeout)
+			delErr := l.db.DeleteListens(undoCtx, uc.ID, undo)
+			cancel()
+			if delErr != nil {
+				l.log.Error("compensating listen delete", "sessions", len(undo), "err", delErr)
+			}
+			return res, out.fatal
+		}
+		if out.marked {
+			// One event per marked listen, unless the caller announces
+			// the run itself; see listenIngestOptions.
+			if !opts.announcedByCaller {
+				l.emitUserEvent(ctx, uc.ID, eventPlayState, string(r.it.PID))
+			}
+			// A crossed music listen is exactly the scrobble threshold;
+			// deliveries drain from the durable outbox. Never for a
+			// session the reporter calls imported, whoever reports it: a
+			// household moving in has usually scrobbled that history
+			// already, and re-sending years of it would be a second copy
+			// on somebody else's service.
+			if r.mt == "music" && r.source != "import" {
+				l.enqueueScrobbles(ctx, uc, r.it, r.s.StartedAt)
+			}
+		}
+	}
+	return res, nil
+}
+
+// listenUndoTimeout bounds the compensating delete, which runs on a
+// context detached from the caller's and so has none of its own.
+const listenUndoTimeout = 5 * time.Second
+
+// unmarkedTail names the sessions a fatal mark at row `from` leaves
+// claimed but unmarked - that row, whose mark failed, and every row
+// behind it, which the loop never reached. Only claims this call made:
+// a row that came back a duplicate belongs to an earlier ingest that
+// marked it, and deleting that would let the retry count its play a
+// second time.
+func unmarkedTail(rows []resolvedListen, claimed []bool, from int) []string {
+	undo := make([]string, 0, len(rows)-from)
+	for j := from; j < len(rows); j++ {
+		if claimed[j] {
+			undo = append(undo, rows[j].s.SessionID)
+		}
+	}
+	return undo
+}
+
+// resolvedListen is one well-formed session with the item it names.
+type resolvedListen struct {
+	s      ListenSession
+	it     *model.ItemView
+	mt     string
+	source string
+}
+
+// resolveListens validates a batch, pairing each surviving session with
+// its item and naming the permanent rejections separately.
+//
+// Each distinct pid resolves once. A flush of an offline queue is
+// usually one item reported a handful of times, and a history import is
+// hundreds of plays of the same few tracks; the resolve behind them is
+// a catalog read, a library attribution and the content rules, so
+// repeating it per play is the whole cost of a batch. The answer is
+// remembered for the call only, misses included, which also fixes the
+// visibility of an item deleted mid-batch at one value rather than
+// letting half the batch land: a mark against a vanished item is
+// already the permanent outcome the caller logs and keeps the listen
+// for.
+func (l *Library) resolveListens(ctx context.Context, uc *UserCtx, sessions []ListenSession) ([]resolvedListen, []RejectedListen, error) {
+	// answer is one pid's resolution: the item, or the rejection every
+	// session naming it earns.
+	type answer struct {
+		it   *model.ItemView
+		code string
+		msg  string
+	}
+	seen := make(map[string]answer, len(sessions))
+	rows := make([]resolvedListen, 0, len(sessions))
+	var rejected []RejectedListen
 	for _, s := range sessions {
 		if reason := invalidSession(s); reason != "" {
-			res.Rejected = append(res.Rejected, RejectedListen{
+			rejected = append(rejected, RejectedListen{
 				SessionID: s.SessionID, Code: "invalid-request", Message: reason,
 			})
 			continue
 		}
-		it, err := l.getVisibleItem(ctx, uc, s.PID)
-		if err != nil {
-			switch KindOf(err) {
-			case KindNotFound, KindInvalid:
-				res.Rejected = append(res.Rejected, RejectedListen{
-					SessionID: s.SessionID, Code: string(KindOf(err)), Message: "unknown item " + s.PID,
-				})
-				continue
+		a, known := seen[s.PID]
+		if !known {
+			it, err := l.getVisibleItem(ctx, uc, s.PID)
+			switch {
+			case err == nil:
+				a = answer{it: it}
+			case KindOf(err) == KindNotFound || KindOf(err) == KindInvalid:
+				a = answer{code: string(KindOf(err)), msg: "unknown item " + s.PID}
 			default:
-				return res, err
+				return nil, rejected, err
 			}
+			seen[s.PID] = a
+		}
+		if a.it == nil {
+			rejected = append(rejected, RejectedListen{
+				SessionID: s.SessionID, Code: a.code, Message: a.msg,
+			})
+			continue
 		}
 		source := s.Source
 		if source == "" {
 			source = "live"
 		}
-		inserted, err := l.db.InsertListen(ctx, wdb.ListenSession{
-			UserID:    uc.ID,
-			SessionID: s.SessionID,
-			ItemPID:   string(it.PID),
-			MediaType: mediaTypeForKind(it.Kind),
-			StartedAt: s.StartedAt,
-			MsPlayed:  s.MsPlayed,
-			SkippedMs: s.SkippedMs,
-			Finished:  s.Finished,
-			Client:    s.Client,
-			Source:    source,
+		rows = append(rows, resolvedListen{
+			s: s, it: a.it, mt: mediaTypeForKind(a.it.Kind), source: source,
 		})
-		if err != nil {
-			return res, &Error{Kind: KindInternal, Err: err}
-		}
-		if !inserted {
-			res.Duplicates++
-			continue
-		}
-		res.Accepted++
-		mt := mediaTypeForKind(it.Kind)
-		out := l.markListenPlayed(ctx, uc, it, s, mt)
-		if out.permanent != nil {
-			// The mark can never apply (the item vanished mid-batch);
-			// the listen itself is still valid data, so keep it.
-			l.log.Warn("marking played", "pid", s.PID, "err", out.permanent)
-		}
-		if out.fatal != nil {
-			// The inserted row would make a retry a duplicate that skips
-			// the mark forever, so take the row back out and fail the
-			// batch; the retry redoes both.
-			res.Accepted--
-			if delErr := l.db.DeleteListen(ctx, uc.ID, s.SessionID); delErr != nil {
-				l.log.Error("compensating listen delete", "session", s.SessionID, "err", delErr)
-			}
-			return res, out.fatal
-		}
-		if out.marked {
-			l.emitUserEvent(ctx, uc.ID, eventPlayState, string(it.PID))
-			// A crossed music listen is exactly the scrobble threshold;
-			// deliveries drain from the durable outbox.
-			if mt == "music" {
-				l.enqueueScrobbles(ctx, uc, it, s.StartedAt)
-			}
-		}
 	}
-	return res, nil
+	return rows, rejected, nil
 }
 
 // listenMarkOutcome is what one accepted listen's played decide-act
@@ -748,9 +869,29 @@ func invalidSession(s ListenSession) string {
 		return "client must be at most 128 characters"
 	case s.Source != "" && s.Source != "live" && s.Source != "import":
 		return "source must be live or import"
+	case s.StartedAt.Before(listenEpochFloor):
+		// The zero time reaches the store as a nanosecond count that
+		// overflowed, which reads back as a date nothing ordered by it
+		// can place. A backdated import is welcome; one from before
+		// there were files to play is not what any of them mean.
+		return "startedAt is too far in the past"
+	case s.StartedAt.After(time.Now().Add(listenFutureSkew)):
+		// Ahead of the server by more than a clock is ever wrong by. A
+		// play dated next year sorts above everything real in the
+		// resume dock and the history feed for as long as it stands.
+		return "startedAt is in the future"
 	}
 	return ""
 }
+
+var (
+	// listenEpochFloor and listenFutureSkew bound when a reported
+	// session may claim to have happened. Wide enough that a device
+	// with a badly set clock still records, narrow enough that a
+	// corrupt account export cannot date a play past everything real.
+	listenEpochFloor = time.Unix(0, 0)
+	listenFutureSkew = 24 * time.Hour
+)
 
 // crossedPlayedThreshold applies the per-medium played rules.
 func crossedPlayedThreshold(mediaType string, msPlayed, durationMS int64) bool {

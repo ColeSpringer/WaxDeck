@@ -105,6 +105,20 @@
       }
     }
   },
+  "toolsSummaryRefused": "refused {count}",
+  "@toolsSummaryRefused": {
+    "description": "Headline counter from an import's report, counting plays the server would not record: the account being imported onto is not allowed the item (it is in a library that account cannot see, or a content rule hides it), or the source described the play in a way no listening record can be made from. Distinct from unmatched, which is the catalog not holding the recording at all. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "String",
+        "example": "84"
+      }
+    }
+  },
+  "toolsSummaryTruncated": "oldest history not read",
+  "@toolsSummaryTruncated": {
+    "description": "Headline note on an import whose history ran past what one run reads: the most recent part landed. Lower case: it sits in a comma-separated run of counters."
+  },
   "toolsSummaryUnmatched": "unmatched {count}",
   "@toolsSummaryUnmatched": {
     "description": "Headline counter from a task's report. Lower case: it sits in a comma-separated run of counters.",

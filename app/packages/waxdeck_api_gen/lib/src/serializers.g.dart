@@ -197,6 +197,8 @@ Serializers _$serializers =
           ..add(MetadataEditResult.serializer)
           ..add(MetadataFields.serializer)
           ..add(MigrationCreate.serializer)
+          ..add(MigrationExport.serializer)
+          ..add(MigrationExportSource_Enum.serializer)
           ..add(MigrationOptions.serializer)
           ..add(MixBasis.serializer)
           ..add(MonthListening.serializer)
@@ -989,6 +991,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

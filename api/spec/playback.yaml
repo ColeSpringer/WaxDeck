@@ -1096,7 +1096,10 @@ components:
           format: date-time
           description: >
             When playback started. Historical for backdated imports; the
-            server preserves it as reported.
+            server preserves it as reported. A session dated before the
+            Unix epoch, or more than a day ahead of the server, is
+            permanently rejected: it would sort above or below everything
+            real in every surface ordered by listening time.
         msPlayed:
           type: integer
           format: int64
@@ -1123,7 +1126,11 @@ components:
           description: >
             Where the session originates. `live` is a WaxDeck client
             reporting its own playback; `import` is a backdated session from
-            another service's history.
+            another service's history. An `import` session counts towards
+            play state exactly as a live one does and is never forwarded
+            to connected scrobblers - a history moving in has usually
+            been scrobbled once already, and re-sending it would be a
+            second copy on somebody else's service.
           enum: [live, import]
           default: live
 

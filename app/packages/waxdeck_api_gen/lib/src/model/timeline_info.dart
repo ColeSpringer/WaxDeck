@@ -13,6 +13,7 @@ part 'timeline_info.g.dart';
 /// A minted gapless timeline: one HLS stream URL that plays the whole queue, plus the per-member boundaries to map positions. 
 ///
 /// Properties:
+/// * [pid] - Identifies this rendering, for releasing it when playback stops. Absent from an older server, which relies on the idle sweep alone. 
 /// * [url] - Origin-relative, media-token-authenticated HLS playlist URL for the whole timeline. The token lives at least the timeline's duration plus margin; re-request this endpoint on `stream-stale`, on a `not-found` fetch (the engine aged the timeline out), or after `expiresAt`. 
 /// * [mimeType] - Always an HLS playlist type.
 /// * [durationMs] - The combined timeline's duration.
@@ -23,6 +24,10 @@ part 'timeline_info.g.dart';
 /// * [boundaries] - Per-member placement, in queue order.
 @BuiltValue()
 abstract class TimelineInfo implements Built<TimelineInfo, TimelineInfoBuilder> {
+  /// Identifies this rendering, for releasing it when playback stops. Absent from an older server, which relies on the idle sweep alone. 
+  @BuiltValueField(wireName: r'pid')
+  String? get pid;
+
   /// Origin-relative, media-token-authenticated HLS playlist URL for the whole timeline. The token lives at least the timeline's duration plus margin; re-request this endpoint on `stream-stale`, on a `not-found` fetch (the engine aged the timeline out), or after `expiresAt`. 
   @BuiltValueField(wireName: r'url')
   String get url;
@@ -78,6 +83,13 @@ class _$TimelineInfoSerializer implements PrimitiveSerializer<TimelineInfo> {
     TimelineInfo object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
+    if (object.pid != null) {
+      yield r'pid';
+      yield serializers.serialize(
+        object.pid,
+        specifiedType: const FullType(String),
+      );
+    }
     yield r'url';
     yield serializers.serialize(
       object.url,
@@ -145,6 +157,13 @@ class _$TimelineInfoSerializer implements PrimitiveSerializer<TimelineInfo> {
       final key = serializedList[i] as String;
       final value = serializedList[i + 1];
       switch (key) {
+        case r'pid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.pid = valueDes;
+          break;
         case r'url':
           final valueDes = serializers.deserialize(
             value,

@@ -569,7 +569,6 @@ func TestTimelineStashSurvivesRestart(t *testing.T) {
 	if restored != 1 {
 		t.Fatalf("restored %d stash rows, want 1", restored)
 	}
-
 	get := func(b *Bridge, u string) *httptest.ResponseRecorder {
 		rec := httptest.NewRecorder()
 		b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, u, nil))
@@ -581,6 +580,14 @@ func TestTimelineStashSurvivesRestart(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "media.m3u8?v=abc&sig=child1&mt=") {
 		t.Fatalf("child URI not stamped: %s", rec.Body.String())
+	}
+
+	// The id came back with the row, so a pid a client minted before the
+	// restart still names something to release. Its listener did not:
+	// nothing about who was on a rendering is persisted, and the fetch
+	// above is what puts them back on it.
+	if !second.ReleaseTimeline("us-alice", strings.TrimPrefix(res.PID, "tl-")) {
+		t.Fatalf("pid %q did not survive the restart", res.PID)
 	}
 
 	// The other half of persisting: a restored row the sidecar will not
@@ -871,5 +878,234 @@ func TestTimelineFormatHonoursTheBitrateCeiling(t *testing.T) {
 	}
 	if res.Format != "aac" {
 		t.Fatalf("format %q, want the lossy one a ceiling leaves", res.Format)
+	}
+}
+
+// A client that stops playing releases its rendering, and the slot goes
+// back without waiting the idle window out. The rendering itself stays:
+// the URL keeps working, and a fetch takes the slot again.
+func TestReleaseTimelineGivesTheSlotBack(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	members := []TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}
+
+	res, err := b.TimelineFor(context.Background(), "us-alice", members, TimelineOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.PID == "" || !strings.HasPrefix(res.PID, "tl-") {
+		t.Fatalf("pid = %q, want a tl- id", res.PID)
+	}
+	if gate.held != 1 {
+		t.Fatalf("held %d, want one slot", gate.held)
+	}
+
+	id := strings.TrimPrefix(res.PID, "tl-")
+	if !b.ReleaseTimeline("us-alice", id) {
+		t.Fatal("releasing a live timeline answered false")
+	}
+	if gate.held != 0 {
+		t.Fatalf("held %d after the release, want the slot back at once", gate.held)
+	}
+
+	// The rendering is still there for anyone still on it, and resuming
+	// takes a slot again the way a swept listen does.
+	rec := httptest.NewRecorder()
+	b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, res.URL, nil))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("master after the release: %d: %s", rec.Code, rec.Body.String())
+	}
+	if gate.acquired != 2 || gate.held != 1 {
+		t.Fatalf("acquired %d held %d, want the slot taken again", gate.acquired, gate.held)
+	}
+}
+
+// The listener with two renderings: releasing one keeps the slot the
+// other is still being fetched for, and releasing a rendering they
+// stopped fetching an hour ago keeps nothing.
+func TestReleaseTimelineWeighsTheOtherRenderings(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	members := []TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}
+
+	first, err := b.TimelineFor(context.Background(), "us-alice", members, TimelineOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := b.TimelineFor(context.Background(), "us-alice", members,
+		TimelineOptions{Formats: []string{"flac"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.PID == second.PID {
+		t.Fatalf("two renderings share one pid: %s", first.PID)
+	}
+	if gate.acquired != 1 || gate.held != 1 {
+		t.Fatalf("acquired %d held %d, want the one shared slot", gate.acquired, gate.held)
+	}
+
+	if !b.ReleaseTimeline("us-alice", strings.TrimPrefix(first.PID, "tl-")) {
+		t.Fatal("releasing the first rendering answered false")
+	}
+	if gate.held != 1 {
+		t.Fatalf("held %d, want the slot the second rendering is on", gate.held)
+	}
+
+	// Back on both, then quiet on both. Releasing one now leaves the
+	// other still listing this listener, so presence alone would keep
+	// the slot: what decides is that nothing of hers has been fetched
+	// inside the idle window.
+	if _, err := b.TimelineFor(context.Background(), "us-alice", members, TimelineOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	ageTimelines(b, 2*timelineIdle)
+	if !b.ReleaseTimeline("us-alice", strings.TrimPrefix(second.PID, "tl-")) {
+		t.Fatal("releasing the second rendering answered false")
+	}
+	if gate.held != 0 {
+		t.Fatalf("held %d, want the slot back", gate.held)
+	}
+}
+
+// An id that names nothing live is not a release: the handler turns
+// this into a 404 rather than pretending a slot went back.
+func TestReleaseTimelineRefusesUnknownIds(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	res, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}, TimelineOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.ReleaseTimeline("us-alice", "01JZX5N8QW3F4V9T2B7KD3M9R6") {
+		t.Fatal("an id nothing minted answered true")
+	}
+
+	id := strings.TrimPrefix(res.PID, "tl-")
+	ts := b.timelines()
+	ts.mu.Lock()
+	for key, st := range ts.stash {
+		st.expires = time.Now().Add(-time.Minute)
+		ts.stash[key] = st
+	}
+	ts.mu.Unlock()
+	if b.ReleaseTimeline("us-alice", id) {
+		t.Fatal("an expired rendering answered true")
+	}
+}
+
+// A release that arrives while the same listener's next mint is still
+// assembling its rendering. The stash says nothing about them in that
+// window, so a release reading it would hand back the slot the new
+// rendering is about to stream on.
+func TestReleaseDuringAMintKeepsTheSlot(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	members := []TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}
+
+	first, err := b.TimelineFor(context.Background(), "us-alice", members, TimelineOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gate.held != 1 {
+		t.Fatalf("held %d, want the mint's slot", gate.held)
+	}
+
+	// The restart: its mint has taken the slot the first one held and
+	// has not stashed anything yet. The release for the rendering that
+	// stopped lands in exactly that window.
+	ts := b.timelines()
+	ts.mu.Lock()
+	ts.minting["us-alice"]++
+	ts.mu.Unlock()
+	if !b.ReleaseTimeline("us-alice", strings.TrimPrefix(first.PID, "tl-")) {
+		t.Fatal("releasing a live timeline answered false")
+	}
+	if gate.held != 1 {
+		t.Fatalf("held %d, want the slot the mint in flight is on", gate.held)
+	}
+
+	// And when that mint gives up, its own failure path is what hands
+	// the slot back: nothing is stashed for this listener any more and
+	// no mint of theirs is left in flight, which is exactly the pair of
+	// questions dropTimelineSlot asks.
+	ts.mu.Lock()
+	delete(ts.minting, "us-alice")
+	ts.mu.Unlock()
+	b.dropTimelineSlot("us-alice")
+	if gate.held != 0 {
+		t.Fatalf("held %d, want the slot back", gate.held)
+	}
+}
+
+// TestFailedMintWithNothingLiveGivesTheSlotBack pins the other side of
+// the in-flight window. A failed mint spares a slot while another mint
+// of the same listener's is still assembling, which means it must stop
+// counting itself first: a mint that spared its own slot would leave it
+// held until the idle sweep, with nothing streaming on it.
+func TestFailedMintWithNothingLiveGivesTheSlotBack(t *testing.T) {
+	b, _ := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+
+	// A member outside every root, so the mint takes a slot and then
+	// refuses, with nothing of this listener's live behind it.
+	_, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: filepath.Join(t.TempDir(), "elsewhere.flac"), DurationMS: 1000}}},
+		TimelineOptions{})
+	if !errors.Is(err, ErrTimelineUnrenderable) {
+		t.Fatalf("mint error %v, want the unrenderable refusal", err)
+	}
+	if gate.held != 0 {
+		t.Fatalf("held %d after the only mint failed, want the slot back", gate.held)
+	}
+}
+
+// TestReleaseRefusesARenderingTheCallerIsNotOn pins that a release is
+// about the caller's own listening. Answering a pid they were never on
+// makes this an oracle for whether somebody else's rendering is live,
+// and hands back the caller's slot as a side effect of asking.
+func TestReleaseRefusesARenderingTheCallerIsNotOn(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	members := []TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}
+
+	alice, err := b.TimelineFor(context.Background(), "us-alice", members, TimelineOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A different rendering, not just a different queue: the sidecar
+	// keys renderings by the digest and the encoder settings, so two
+	// listeners asking for the same format are on the same one.
+	bob, err := b.TimelineFor(context.Background(), "us-bob", members,
+		TimelineOptions{Formats: []string{"flac"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bob.PID == alice.PID {
+		t.Fatal("both mints landed on one rendering")
+	}
+	if gate.held != 2 {
+		t.Fatalf("held %d, want a slot each", gate.held)
+	}
+
+	if b.ReleaseTimeline("us-bob", strings.TrimPrefix(alice.PID, "tl-")) {
+		t.Fatal("releasing a rendering the caller is not on answered true")
+	}
+	if gate.held != 2 {
+		t.Fatalf("held %d, want both slots left alone", gate.held)
+	}
+	// Their own still works, which is what says the refusal was about
+	// whose rendering it is rather than about the id.
+	if !b.ReleaseTimeline("us-bob", strings.TrimPrefix(bob.PID, "tl-")) {
+		t.Fatal("releasing their own rendering answered false")
+	}
+	if gate.held != 1 {
+		t.Fatalf("held %d, want alice's alone", gate.held)
 	}
 }

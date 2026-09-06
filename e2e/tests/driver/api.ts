@@ -151,6 +151,17 @@ export class RawApi {
     return this.send('delete', path as string, options as never);
   }
 
+  /// A raw binary body, for the endpoints whose request is a file
+  /// rather than JSON. The generated body type for `format: binary` is
+  /// a string, which a Buffer is not, so the bytes are handed over
+  /// here rather than cast at every call site.
+  upload<P extends PathOf<'post'>>(path: P, bytes: Buffer) {
+    return this.send('post', path as string, {
+      data: bytes as never,
+      headers: { 'Content-Type': 'application/octet-stream' },
+    });
+  }
+
   /// An absolute or already-built URL the server itself minted - a share
   /// link, a media relay URL, a `nextCursor` page. Typing those would
   /// mean typing the server's own strings, which is not a contract this

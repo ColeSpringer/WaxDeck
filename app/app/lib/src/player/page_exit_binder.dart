@@ -33,15 +33,30 @@ final pageExitBinderProvider = Provider.autoDispose<void>((ref) {
   /// every time somebody checked their mail.
   List<ExitRequest> beacons({required bool ending}) {
     final now = ref.read(nowPlayingProvider);
+    // Read first and sent on its own if it has to be. A tab can hold a
+    // rendering with nothing to check point beside it - the session
+    // already reported, or the item went away while the stream played
+    // on - and that release is the one thing here nothing else can do
+    // later: the server counts this listener as listening until it
+    // hears otherwise.
+    //
+    // Only on the way out, though. A tab going hidden is still
+    // listening, and handing its rendering back would take the slot
+    // from a listener who is about to switch straight back to it.
+    final timelinePids = ending
+        ? ref.read(nowPlayingProvider.notifier).heldTimelinePids
+        : const <String>[];
     final session = now.session;
     final item = now.item;
-    if (session == null || item == null) return const <ExitRequest>[];
-    final report = session.exitReport(ending: ending);
-    if (report == null) return const <ExitRequest>[];
+    final report = session?.exitReport(ending: ending);
+    if (item == null || report == null) {
+      return repository.exitRequests(timelinePids: timelinePids);
+    }
     return repository.exitRequests(
       pid: item.pid,
       positionMs: report.positionMs,
       listen: report.listen,
+      timelinePids: timelinePids,
     );
   }
 

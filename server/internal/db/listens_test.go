@@ -29,22 +29,46 @@ func TestInsertListenDeduplicates(t *testing.T) {
 		StartedAt: time.Now(),
 		MsPlayed:  900,
 	}
-	ins, err := d.InsertListen(ctx, s)
-	if err != nil || !ins {
-		t.Fatalf("first insert = (%v, %v), want (true, nil)", ins, err)
+	ins, err := d.InsertListens(ctx, []ListenSession{s})
+	if err != nil || !ins[0] {
+		t.Fatalf("first insert = (%v, %v), want ([true], nil)", ins, err)
 	}
-	ins, err = d.InsertListen(ctx, s)
-	if err != nil || ins {
-		t.Fatalf("replay insert = (%v, %v), want (false, nil)", ins, err)
+	ins, err = d.InsertListens(ctx, []ListenSession{s})
+	if err != nil || ins[0] {
+		t.Fatalf("replay insert = (%v, %v), want ([false], nil)", ins, err)
 	}
 
 	// The same session ID under another user is a distinct session.
 	s2 := s
 	s2.UserID = "us-2"
-	if ins, err = d.InsertListen(ctx, s2); err != nil || !ins {
-		t.Fatalf("other-user insert = (%v, %v), want (true, nil)", ins, err)
+	if ins, err = d.InsertListens(ctx, []ListenSession{s2}); err != nil || !ins[0] {
+		t.Fatalf("other-user insert = (%v, %v), want ([true], nil)", ins, err)
 	}
 
+	n, err := d.ListenCount(ctx, "us-1", s.ItemPID)
+	if err != nil || n != 1 {
+		t.Fatalf("ListenCount = (%d, %v), want (1, nil)", n, err)
+	}
+}
+
+// A batch is deduplicated against itself as well as against what is
+// stored: a client flushing an offline queue that already holds a
+// session it is also reporting live sends both in one call.
+func TestInsertListensDeduplicatesWithinABatch(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	s := ListenSession{
+		UserID:    "us-1",
+		SessionID: "sess-twice",
+		ItemPID:   "01JZX5N8QW3F4V9T2B7KDEXAMPLE",
+		MediaType: "music",
+		StartedAt: time.Now(),
+		MsPlayed:  900,
+	}
+	ins, err := d.InsertListens(ctx, []ListenSession{s, s})
+	if err != nil || !ins[0] || ins[1] {
+		t.Fatalf("same-batch replay = (%v, %v), want ([true false], nil)", ins, err)
+	}
 	n, err := d.ListenCount(ctx, "us-1", s.ItemPID)
 	if err != nil || n != 1 {
 		t.Fatalf("ListenCount = (%d, %v), want (1, nil)", n, err)
@@ -117,18 +141,26 @@ func TestDeleteListenReopensTheIdempotencySlot(t *testing.T) {
 		StartedAt: time.Now(),
 		MsPlayed:  900,
 	}
-	if ins, err := d.InsertListen(ctx, s); err != nil || !ins {
-		t.Fatalf("insert = (%v, %v), want (true, nil)", ins, err)
+	other := s
+	other.SessionID = "sess-del-2"
+	if ins, err := d.InsertListens(ctx, []ListenSession{s, other}); err != nil || !ins[0] || !ins[1] {
+		t.Fatalf("insert = (%v, %v), want ([true true], nil)", ins, err)
 	}
-	if err := d.DeleteListen(ctx, s.UserID, s.SessionID); err != nil {
+	// A fatal mark takes back the whole unmarked tail, so the delete is
+	// the same shape as the claim it undoes.
+	if err := d.DeleteListens(ctx, s.UserID, []string{s.SessionID, other.SessionID}); err != nil {
 		t.Fatal(err)
 	}
-	// The compensating delete must let a retry insert the row again.
-	if ins, err := d.InsertListen(ctx, s); err != nil || !ins {
-		t.Fatalf("reinsert = (%v, %v), want (true, nil)", ins, err)
+	// The compensating delete must let a retry insert the rows again.
+	if ins, err := d.InsertListens(ctx, []ListenSession{s, other}); err != nil || !ins[0] || !ins[1] {
+		t.Fatalf("reinsert = (%v, %v), want ([true true], nil)", ins, err)
 	}
-	// Deleting a session that is not there is not an error.
-	if err := d.DeleteListen(ctx, s.UserID, "sess-absent"); err != nil {
+	// Deleting a session that is not there is not an error, and neither
+	// is deleting nothing.
+	if err := d.DeleteListens(ctx, s.UserID, []string{"sess-absent"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.DeleteListens(ctx, s.UserID, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -148,8 +180,8 @@ func TestInsertListenStoresSkippedMs(t *testing.T) {
 		Client:    "phone",
 		Source:    "live",
 	}
-	if ins, err := d.InsertListen(ctx, s); err != nil || !ins {
-		t.Fatalf("insert = (%v, %v), want (true, nil)", ins, err)
+	if ins, err := d.InsertListens(ctx, []ListenSession{s}); err != nil || !ins[0] {
+		t.Fatalf("insert = (%v, %v), want ([true], nil)", ins, err)
 	}
 	var got []ListenRow
 	err := d.ListensInRange(ctx, "us-1", time.Time{}, time.Now().Add(time.Hour), func(r ListenRow) {
@@ -169,7 +201,7 @@ func TestInsertListenStoresSkippedMs(t *testing.T) {
 // the item pid doubles as the row marker assertions match on.
 func insertListenAt(t *testing.T, d *DB, user, item, client string, at time.Time) {
 	t.Helper()
-	ins, err := d.InsertListen(context.Background(), ListenSession{
+	ins, err := d.InsertListens(context.Background(), []ListenSession{{
 		UserID:    user,
 		SessionID: "sess-" + item,
 		ItemPID:   item,
@@ -177,9 +209,9 @@ func insertListenAt(t *testing.T, d *DB, user, item, client string, at time.Time
 		StartedAt: at,
 		MsPlayed:  1000,
 		Client:    client,
-	})
-	if err != nil || !ins {
-		t.Fatalf("insert %s = (%v, %v), want (true, nil)", item, ins, err)
+	}})
+	if err != nil || !ins[0] {
+		t.Fatalf("insert %s = (%v, %v), want ([true], nil)", item, ins, err)
 	}
 }
 

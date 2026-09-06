@@ -206,6 +206,7 @@ export 'package:waxdeck_api_gen/src/model/metadata_edit.dart';
 export 'package:waxdeck_api_gen/src/model/metadata_edit_result.dart';
 export 'package:waxdeck_api_gen/src/model/metadata_fields.dart';
 export 'package:waxdeck_api_gen/src/model/migration_create.dart';
+export 'package:waxdeck_api_gen/src/model/migration_export.dart';
 export 'package:waxdeck_api_gen/src/model/migration_options.dart';
 export 'package:waxdeck_api_gen/src/model/mix_basis.dart';
 export 'package:waxdeck_api_gen/src/model/model_library.dart';

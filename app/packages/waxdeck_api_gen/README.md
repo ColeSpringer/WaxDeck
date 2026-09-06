@@ -73,7 +73,8 @@ Conventions:
   `pl-` playlist, `rs-` radio station, `nt-` notification target,
   `pe-` player endpoint, `ps-` playback session, `rv-` review
   entry, `up-` upload, `tk-` tool task, `iv-` invite, `bu-` backup
-  archive, `th-` trash entry, `sh-` share link).
+  archive, `th-` trash entry, `sh-` share link, `nf-` inbox row,
+  `mx-` staged migration export, `tl-` gapless rendering).
 - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
   never offsets.
 - Errors are always the `Error` schema. `code` is a stable machine-readable
@@ -113,8 +114,9 @@ Conventions:
   take; the request was well formed and the endpoint is connected,
   so what failed is neither the caller nor the server),
   `quota-exceeded` (the upload would exceed the caller's storage
-  quota, or an imported backup archive exceeds the server's size
-  limit), `storage-full` (the server has no room to stage what
+  quota, or it exceeds a fixed size limit this server puts on that
+  kind of upload - an imported backup archive, a staged account
+  data export), `storage-full` (the server has no room to stage what
   the request declared - its own disk, not the caller's allowance,
   so the caller has nothing to clear), `field-locked`
   (the edit targets a locked metadata field and did not set
@@ -357,6 +359,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**createLibrary**](doc/AdminApi.md#createlibrary) | **POST** /libraries | Create a library at runtime
 [*AdminApi*](doc/AdminApi.md) | [**createMigration**](doc/AdminApi.md#createmigration) | **POST** /admin/migrations | Import listening state from another server
 [*AdminApi*](doc/AdminApi.md) | [**deleteBackup**](doc/AdminApi.md#deletebackup) | **DELETE** /admin/backups/{backupId} | Delete a backup archive
+[*AdminApi*](doc/AdminApi.md) | [**discardMigrationExport**](doc/AdminApi.md#discardmigrationexport) | **DELETE** /admin/migrations/exports/{exportId} | Discard a staged export
 [*AdminApi*](doc/AdminApi.md) | [**downloadBackup**](doc/AdminApi.md#downloadbackup) | **GET** /admin/backups/{backupId}/archive | Download a backup archive
 [*AdminApi*](doc/AdminApi.md) | [**emptyTrash**](doc/AdminApi.md#emptytrash) | **POST** /admin/trash/empty | Empty the trash
 [*AdminApi*](doc/AdminApi.md) | [**getAdminSettings**](doc/AdminApi.md#getadminsettings) | **GET** /admin/settings | Read the server&#39;s runtime settings
@@ -386,6 +389,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**rescanLibrary**](doc/AdminApi.md#rescanlibrary) | **POST** /library/rescan | Start a library rescan
 [*AdminApi*](doc/AdminApi.md) | [**restoreTrashEntry**](doc/AdminApi.md#restoretrashentry) | **POST** /admin/trash/{trashId}/restore | Restore a trashed file
 [*AdminApi*](doc/AdminApi.md) | [**setLibraryReadOnly**](doc/AdminApi.md#setlibraryreadonly) | **PUT** /libraries/{pid}/read-only | Set a library&#39;s read-only mode
+[*AdminApi*](doc/AdminApi.md) | [**stageMigrationExport**](doc/AdminApi.md#stagemigrationexport) | **POST** /admin/migrations/exports | Upload an account data export to import from
 [*AdminApi*](doc/AdminApi.md) | [**stageRestore**](doc/AdminApi.md#stagerestore) | **POST** /admin/backups/{backupId}/restore | Stage a restore from a backup
 [*AuthApi*](doc/AuthApi.md) | [**bootstrap**](doc/AuthApi.md#bootstrap) | **POST** /auth/bootstrap | Create the first administrator
 [*AuthApi*](doc/AuthApi.md) | [**exchangeOidcCode**](doc/AuthApi.md#exchangeoidccode) | **POST** /auth/oidc/exchange | Exchange a one-time OIDC code for a session
@@ -513,6 +517,7 @@ Class | Method | HTTP request | Description
 [*PlayerApi*](doc/PlayerApi.md) | [**listPlaybackSessions**](doc/PlayerApi.md#listplaybacksessions) | **GET** /player/sessions | List playback sessions
 [*PlayerApi*](doc/PlayerApi.md) | [**listPlayerEndpoints**](doc/PlayerApi.md#listplayerendpoints) | **GET** /player/endpoints | List player endpoints
 [*PlayerApi*](doc/PlayerApi.md) | [**probeCastEndpoint**](doc/PlayerApi.md#probecastendpoint) | **POST** /player/cast/preflight/{endpointId} | Play a probe on a cast device or renderer
+[*PlayerApi*](doc/PlayerApi.md) | [**releaseQueueTimeline**](doc/PlayerApi.md#releasequeuetimeline) | **DELETE** /player/timeline/{pid} | Release a gapless queue timeline
 [*PlayerApi*](doc/PlayerApi.md) | [**transferPlaybackSession**](doc/PlayerApi.md#transferplaybacksession) | **POST** /player/sessions/{sessionId}/transfer | Transfer a session to another endpoint
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**addPlaylistItems**](doc/PlaylistsApi.md#addplaylistitems) | **POST** /playlists/{pid}/items | Append items to a static playlist
 [*PlaylistsApi*](doc/PlaylistsApi.md) | [**createPlaylist**](doc/PlaylistsApi.md#createplaylist) | **POST** /playlists | Create a playlist
@@ -807,6 +812,7 @@ Class | Method | HTTP request | Description
  - [MetadataEditResult](doc/MetadataEditResult.md)
  - [MetadataFields](doc/MetadataFields.md)
  - [MigrationCreate](doc/MigrationCreate.md)
+ - [MigrationExport](doc/MigrationExport.md)
  - [MigrationOptions](doc/MigrationOptions.md)
  - [MixBasis](doc/MixBasis.md)
  - [ModelLibrary](doc/ModelLibrary.md)

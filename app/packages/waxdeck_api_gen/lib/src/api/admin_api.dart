@@ -25,6 +25,7 @@ import 'package:waxdeck_api_gen/src/model/library_create.dart';
 import 'package:waxdeck_api_gen/src/model/library_created.dart';
 import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/migration_create.dart';
+import 'package:waxdeck_api_gen/src/model/migration_export.dart';
 import 'package:waxdeck_api_gen/src/model/rescan_options.dart';
 import 'package:waxdeck_api_gen/src/model/restore_plan.dart';
 import 'package:waxdeck_api_gen/src/model/schedule.dart';
@@ -488,7 +489,7 @@ class AdminApi {
   }
 
   /// Import listening state from another server
-  /// Starts a migration import as a background task and answers with the tool task to follow (type &#x60;import-&lt;source&gt;&#x60;; the finished task&#39;s &#x60;summary&#x60; carries the report: what matched, what did not, and what was written). Sources: &#x60;navidrome&#x60; and &#x60;subsonic&#x60; pull stars, ratings, play counts, and bookmarks from a running server over its Subsonic API (&#x60;serverUrl&#x60; + &#x60;username&#x60; + &#x60;password&#x60;); &#x60;audiobookshelf&#x60; pulls book progress over its REST API (&#x60;serverUrl&#x60; + &#x60;token&#x60;). Podcast subscriptions migrate via the existing OPML import. Items are matched through the portable-ref ladder (identifiers, then fingerprints, then descriptive metadata); play history lands as backdated import-source listen sessions with deterministic idempotency ids, so re-running an import never doubles anything. &#x60;dryRun&#x60; matches and reports without writing. The URL must resolve to a global address unless the server allows private fetches. Credentials are held only for the task&#39;s duration. Administrators only. 
+  /// Starts a migration import as a background task and answers with the tool task to follow (type &#x60;import-&lt;source&gt;&#x60;; the finished task&#39;s &#x60;summary&#x60; carries the report: what matched, what did not, and what was written). Sources: &#x60;navidrome&#x60; and &#x60;subsonic&#x60; pull stars, ratings, play counts, and bookmarks from a running server over its Subsonic API (&#x60;serverUrl&#x60; + &#x60;username&#x60; + &#x60;password&#x60;); &#x60;audiobookshelf&#x60; pulls book progress over its REST API (&#x60;serverUrl&#x60; + &#x60;token&#x60;); &#x60;jellyfin&#x60; pulls favourites, play counts and positions over its REST API (&#x60;serverUrl&#x60; + &#x60;username&#x60; with either &#x60;password&#x60; or an API key in &#x60;token&#x60;); &#x60;lastfm&#x60; and &#x60;listenbrainz&#x60; pull scrobbling history for a &#x60;username&#x60;; and &#x60;spotify&#x60; reads an account data export uploaded first (&#x60;exportId&#x60;). Podcast subscriptions migrate via the existing OPML import. Items are matched through the portable-ref ladder (identifiers, then fingerprints, then descriptive metadata); play history lands as import-source listen sessions with deterministic idempotency ids, so re-running an import never doubles anything. Last.fm, ListenBrainz and Spotify carry a time per play, so their history lands at the times it happened; the sources that report only a play count are spread backwards a week apart. Imported listens are never forwarded to connected scrobblers. &#x60;dryRun&#x60; matches and reports without writing. A URL must resolve to a global address unless the server allows private fetches. Credentials are held only for the task&#39;s duration. Administrators only. 
   ///
   /// Parameters:
   /// * [migrationCreate] 
@@ -617,6 +618,64 @@ class AdminApi {
     ProgressCallback? onReceiveProgress,
   }) async {
     final _path = r'/admin/backups/{backupId}'.replaceAll('{' r'backupId' '}', encodeQueryParameter(_serializers, backupId, const FullType(String)).toString());
+    final _options = Options(
+      method: r'DELETE',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    return _response;
+  }
+
+  /// Discard a staged export
+  /// Deletes a staged export and its file, for one uploaded by mistake or left behind by an import that was never started. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [exportId] - Staged export id (e.g. `mx-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future]
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<void>> discardMigrationExport({ 
+    required String exportId,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/admin/migrations/exports/{exportId}'.replaceAll('{' r'exportId' '}', encodeQueryParameter(_serializers, exportId, const FullType(String)).toString());
     final _options = Options(
       method: r'DELETE',
       headers: <String, dynamic>{
@@ -3302,6 +3361,111 @@ class AdminApi {
     }
 
     return Response<LibraryReadOnly>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Upload an account data export to import from
+  /// Stages an account data export - the zip a streaming service hands over when somebody asks for their data - so a migration can read it. The body is the raw zip. What was recognised is reported back (&#x60;source&#x60; and the files that will be read), and the id goes on &#x60;createMigration&#x60; as &#x60;exportId&#x60;. A staged export expires after a day, is deleted once the import that read it finishes, and never reaches the library: nothing here writes into the catalog. Something that is not a zip, or a zip holding nothing this server can read, answers &#x60;invalid-request&#x60;. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [body] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [MigrationExport] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<MigrationExport>> stageMigrationExport({ 
+    required MultipartFile body,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/admin/migrations/exports';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/octet-stream',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      _bodyData = body.finalize();
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    MigrationExport? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(MigrationExport),
+      ) as MigrationExport;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<MigrationExport>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

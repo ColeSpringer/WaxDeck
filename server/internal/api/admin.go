@@ -598,6 +598,68 @@ func libraryDTO(lib service.LibraryInfo) Library {
 
 // --- migration ---------------------------------------------------------------------
 
+func (s *Server) StageMigrationExport(ctx context.Context, req StageMigrationExportRequestObject) (StageMigrationExportResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return StageMigrationExport403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if req.Body == nil {
+		return StageMigrationExport400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an export body is required"))}, nil
+	}
+	// The declared length, when the client gave one: room is checked
+	// before the body is read rather than after it is on disk. A chunked
+	// body says nothing, and the cap on the copy is what bounds it.
+	declared := declaredBodyBytes(ctx)
+	export, err := s.svc.StageMigrationExport(ctx, uc, req.Body, declared)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return StageMigrationExport400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindQuota:
+			return StageMigrationExport413JSONResponse(errObj("quota-exceeded", err.Error())), nil
+		case service.KindStorageFull:
+			return StageMigrationExport507JSONResponse{StorageFullJSONResponse(errObj("storage-full", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return StageMigrationExport201JSONResponse(migrationExportJSON(export)), nil
+}
+
+func (s *Server) DiscardMigrationExport(ctx context.Context, req DiscardMigrationExportRequestObject) (DiscardMigrationExportResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return DiscardMigrationExport403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if err := s.svc.DiscardMigrationExport(ctx, uc, string(req.ExportId)); err != nil {
+		if service.KindOf(err) == service.KindNotFound {
+			return DiscardMigrationExport404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return DiscardMigrationExport204Response{}, nil
+}
+
+// migrationExportJSON renders a staged export for the API.
+func migrationExportJSON(e service.MigrationExportDTO) MigrationExport {
+	files := e.Files
+	if files == nil {
+		files = []string{}
+	}
+	return MigrationExport{
+		Pid:       e.PID,
+		Source:    MigrationExportSource(e.Source),
+		Files:     files,
+		SizeBytes: e.SizeBytes,
+		ExpiresAt: e.ExpiresAt,
+	}
+}
+
 func (s *Server) CreateMigration(ctx context.Context, req CreateMigrationRequestObject) (CreateMigrationResponseObject, error) {
 	uc, p, err := s.requireUserCtx(ctx)
 	if err != nil {
@@ -611,10 +673,12 @@ func (s *Server) CreateMigration(ctx context.Context, req CreateMigrationRequest
 	}
 	in := service.MigrationRequest{
 		Source:    req.Body.Source,
-		ServerURL: req.Body.ServerUrl,
+		ServerURL: deref(req.Body.ServerUrl),
 		Username:  deref(req.Body.Username),
 		Password:  deref(req.Body.Password),
 		Token:     deref(req.Body.Token),
+		AccountID: deref(req.Body.AccountId),
+		ExportID:  deref(req.Body.ExportId),
 		Stars:     true, Ratings: true, History: true, Progress: true,
 		DryRun: derefBool(req.Body.DryRun),
 	}
