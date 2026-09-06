@@ -202,9 +202,21 @@ type mediaQueueItem struct {
 	Media  mediaInformation `json:"media"`
 }
 
+// inbound is one reply as the read loop read it: the payload, and
+// where it sits in the connection's arrival order. State cached from a
+// reply carries that number, so an observation the device sent before
+// the reply can be told from one it sent after.
+type inbound struct {
+	seq uint64
+	raw json.RawMessage
+}
+
 // statusUpdate is one parsed status broadcast, solicited or not.
-// Exactly one field is set.
+// Exactly one field is set. seq is its place in the connection's
+// arrival order, which is what tells an observation of the device
+// apart from one the device made obsolete before the pump read it.
 type statusUpdate struct {
+	seq      uint64
 	receiver *receiverStatus
 	media    *mediaStatus
 }
@@ -224,9 +236,12 @@ type conn struct {
 
 	writeMu sync.Mutex
 
-	mu      sync.Mutex
-	nextID  int
-	pending map[int]chan json.RawMessage
+	mu     sync.Mutex
+	nextID int
+	// seq numbers the messages taken off the socket. The read loop is
+	// the only reader, so the numbers are the device's own order.
+	seq     uint64
+	pending map[int]chan inbound
 	closed  bool
 	deadErr error
 
@@ -262,7 +277,7 @@ func dialConn(ctx context.Context, group *supervise.Group, log Logger, host stri
 		log:      log,
 		runCtx:   runCtx,
 		cancel:   cancel,
-		pending:  make(map[int]chan json.RawMessage),
+		pending:  make(map[int]chan inbound),
 		dead:     make(chan struct{}),
 		statuses: make(chan statusUpdate, 16),
 	}
@@ -387,29 +402,40 @@ func (c *conn) dispatch(msg Message) {
 		c.log.Warn("castv2: dropping unparseable payload", "host", c.host, "namespace", msg.Namespace)
 		return
 	}
+	var ch chan inbound
+	c.mu.Lock()
+	c.seq++
+	seq := c.seq
 	if probe.RequestID != 0 {
-		c.mu.Lock()
-		ch := c.pending[probe.RequestID]
+		ch = c.pending[probe.RequestID]
 		delete(c.pending, probe.RequestID)
-		c.mu.Unlock()
-		if ch != nil {
-			ch <- raw
-		}
+	}
+	c.mu.Unlock()
+	if ch != nil {
+		ch <- inbound{seq: seq, raw: raw}
 	}
 	switch probe.Type {
 	case "RECEIVER_STATUS":
 		var rs receiverStatusMessage
 		if err := json.Unmarshal(raw, &rs); err == nil {
-			c.pushStatus(statusUpdate{receiver: &rs.Status})
+			c.pushStatus(statusUpdate{seq: seq, receiver: &rs.Status})
 		}
 	case "MEDIA_STATUS":
 		var ms mediaStatusMessage
 		if err := json.Unmarshal(raw, &ms); err == nil {
 			for i := range ms.Status {
-				c.pushStatus(statusUpdate{media: &ms.Status[i]})
+				c.pushStatus(statusUpdate{seq: seq, media: &ms.Status[i]})
 			}
 		}
 	}
+}
+
+// observed is how far along that order the connection has got, for
+// state made current by a request rather than by a reply.
+func (c *conn) observed() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.seq
 }
 
 // pushStatus delivers to the status channel without ever blocking the
@@ -431,8 +457,8 @@ func (c *conn) pushStatus(u statusUpdate) {
 
 // roundTrip sends one request and waits for the reply correlated by
 // requestId.
-func (c *conn) roundTrip(ctx context.Context, dest, namespace string, build func(requestID int) any) (json.RawMessage, error) {
-	ch := make(chan json.RawMessage, 1)
+func (c *conn) roundTrip(ctx context.Context, dest, namespace string, build func(requestID int) any) (inbound, error) {
+	ch := make(chan inbound, 1)
 	c.mu.Lock()
 	c.nextID++
 	id := c.nextID
@@ -444,15 +470,15 @@ func (c *conn) roundTrip(ctx context.Context, dest, namespace string, build func
 		c.mu.Unlock()
 	}()
 	if err := c.sendJSON(dest, namespace, build(id)); err != nil {
-		return nil, err
+		return inbound{}, err
 	}
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return inbound{}, ctx.Err()
 	case <-c.dead:
-		return nil, c.deathErr()
-	case raw := <-ch:
-		return raw, nil
+		return inbound{}, c.deathErr()
+	case in := <-ch:
+		return in, nil
 	}
 }
 
@@ -496,38 +522,42 @@ func decodeReceiverStatus(raw json.RawMessage) (*receiverStatus, error) {
 	return &msg.Status, nil
 }
 
-// getReceiverStatus asks the platform for its running apps and volume.
-func (c *conn) getReceiverStatus(ctx context.Context) (*receiverStatus, error) {
-	raw, err := c.roundTrip(ctx, platformID, NamespaceReceiver, func(id int) any {
+// getReceiverStatus asks the platform for its running apps and volume,
+// with the answer's place in arrival order.
+func (c *conn) getReceiverStatus(ctx context.Context) (*receiverStatus, uint64, error) {
+	in, err := c.roundTrip(ctx, platformID, NamespaceReceiver, func(id int) any {
 		return getStatusRequest{Type: "GET_STATUS", RequestID: id}
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return decodeReceiverStatus(raw)
+	st, err := decodeReceiverStatus(in.raw)
+	return st, in.seq, err
 }
 
-// launch starts an app on the device.
-func (c *conn) launch(ctx context.Context, appID string) (*receiverStatus, error) {
-	raw, err := c.roundTrip(ctx, platformID, NamespaceReceiver, func(id int) any {
+// launch starts an app on the device, with the answer's place in
+// arrival order.
+func (c *conn) launch(ctx context.Context, appID string) (*receiverStatus, uint64, error) {
+	in, err := c.roundTrip(ctx, platformID, NamespaceReceiver, func(id int) any {
 		return launchRequest{Type: "LAUNCH", RequestID: id, AppID: appID}
 	})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return decodeReceiverStatus(raw)
+	st, err := decodeReceiverStatus(in.raw)
+	return st, in.seq, err
 }
 
 // setVolume sets the device volume; volume is a platform concern, not
 // a media session one.
 func (c *conn) setVolume(ctx context.Context, level float64) error {
-	raw, err := c.roundTrip(ctx, platformID, NamespaceReceiver, func(id int) any {
+	in, err := c.roundTrip(ctx, platformID, NamespaceReceiver, func(id int) any {
 		return setVolumeRequest{Type: "SET_VOLUME", RequestID: id, Volume: volumeLevel{Level: level}}
 	})
 	if err != nil {
 		return err
 	}
-	_, err = decodeReceiverStatus(raw)
+	_, err = decodeReceiverStatus(in.raw)
 	return err
 }
 
@@ -540,15 +570,15 @@ func (c *conn) connectTransport(transportID string) error {
 // mediaCall runs one media namespace round trip and returns the first
 // status of the MEDIA_STATUS reply (nil when the reply carries none).
 func (c *conn) mediaCall(ctx context.Context, dest string, build func(requestID int) any) (*mediaStatus, error) {
-	raw, err := c.roundTrip(ctx, dest, NamespaceMedia, build)
+	in, err := c.roundTrip(ctx, dest, NamespaceMedia, build)
 	if err != nil {
 		return nil, err
 	}
-	if err := replyError(raw); err != nil {
+	if err := replyError(in.raw); err != nil {
 		return nil, err
 	}
 	var msg mediaStatusMessage
-	if err := json.Unmarshal(raw, &msg); err != nil {
+	if err := json.Unmarshal(in.raw, &msg); err != nil {
 		return nil, fmt.Errorf("castv2: decoding media status: %w", err)
 	}
 	if len(msg.Status) == 0 {

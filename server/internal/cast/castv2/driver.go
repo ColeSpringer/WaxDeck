@@ -86,10 +86,18 @@ type driver struct {
 
 	closeOnce sync.Once
 
-	mu             sync.Mutex
-	transportID    string
-	sessionID      string
+	mu          sync.Mutex
+	transportID string
+	sessionID   string
+	// transportSeq is where the launch that cached the transport sits
+	// in the connection's arrival order, so a status the device sent
+	// before it cannot be read as the app having gone away.
+	transportSeq   uint64
 	mediaSessionID int
+	// loadSeq is where the load that this media state belongs to went
+	// out, so a status the device sent about the session before it
+	// cannot be folded in as this one.
+	loadSeq        uint64
 	itemIDs        []int
 	loaded         bool
 	played         bool
@@ -122,13 +130,13 @@ func (d *driver) ensureApp(ctx context.Context) (string, error) {
 	if transport != "" {
 		return transport, nil
 	}
-	st, err := d.conn.getReceiverStatus(ctx)
+	st, seq, err := d.conn.getReceiverStatus(ctx)
 	if err != nil {
 		return "", err
 	}
 	app := findApp(st, DefaultMediaReceiverApp)
 	if app == nil {
-		if st, err = d.conn.launch(ctx, DefaultMediaReceiverApp); err != nil {
+		if st, seq, err = d.conn.launch(ctx, DefaultMediaReceiverApp); err != nil {
 			return "", err
 		}
 		if app = findApp(st, DefaultMediaReceiverApp); app == nil {
@@ -138,8 +146,13 @@ func (d *driver) ensureApp(ctx context.Context) (string, error) {
 	if err := d.conn.connectTransport(app.TransportID); err != nil {
 		return "", err
 	}
+	// seq is the reply that found the app running, not where the
+	// connection happens to be now: a status the device broadcast
+	// while the transport connect was queued behind the write lock is
+	// news, and taking it for one of the answers above would lose it.
 	d.mu.Lock()
 	d.transportID, d.sessionID = app.TransportID, app.SessionID
+	d.transportSeq = seq
 	d.mu.Unlock()
 	return app.TransportID, nil
 }
@@ -171,7 +184,7 @@ func findApp(st *receiverStatus, appID string) *receiverApp {
 // broken, and a load about to fail with the device's own error says
 // more than a refusal invented here.
 func (d *driver) Idle(ctx context.Context) (bool, string) {
-	st, err := d.conn.getReceiverStatus(ctx)
+	st, _, err := d.conn.getReceiverStatus(ctx)
 	if err != nil {
 		return true, ""
 	}
@@ -244,8 +257,11 @@ func (d *driver) Load(ctx context.Context, items []connect.MediaItem, index int,
 	}
 	// Load-scoped state resets before the request goes out: the
 	// reply's statuses race the reply itself through the pump, and a
-	// PLAYING observed there must count for this load.
+	// PLAYING observed there must count for this load. Everything the
+	// connection read before this point describes what the load is
+	// about to replace, whichever session it named.
 	d.mu.Lock()
+	d.loadSeq = d.conn.observed()
 	d.loaded = true
 	d.played = false
 	d.itemIDs = nil
@@ -253,6 +269,11 @@ func (d *driver) Load(ctx context.Context, items []connect.MediaItem, index int,
 	if len(items) > 1 {
 		d.lastIndex = index
 	}
+	// What was asked for, until the device says otherwise: a receiver
+	// status carries these two forward, and the previous session's
+	// playhead is not this one's.
+	d.lastPlaying = play
+	d.lastPositionMS = positionMS
 	d.mu.Unlock()
 	startSeconds := float64(positionMS) / 1000
 	var st *mediaStatus
@@ -423,7 +444,10 @@ func (d *driver) handleStatus(u statusUpdate) {
 	case u.receiver != nil:
 		// A vanished app (someone stopped it from the device side)
 		// invalidates the cached transport so the next Load relaunches.
-		if d.transportID != "" && findApp(u.receiver, DefaultMediaReceiverApp) == nil {
+		// Only where the device said so after the launch: the status
+		// calls that precede one answer with nothing running, and the
+		// pump reads those answers whenever it gets to them.
+		if d.transportID != "" && u.seq > d.transportSeq && findApp(u.receiver, DefaultMediaReceiverApp) == nil {
 			d.transportID, d.sessionID = "", ""
 			d.mediaSessionID = 0
 			d.loaded = false
@@ -433,6 +457,12 @@ func (d *driver) handleStatus(u statusUpdate) {
 		ev.PositionMS = d.lastPositionMS
 		ev.Volume = u.receiver.Volume.Level
 	case u.media != nil:
+		if u.seq <= d.loadSeq {
+			// The previous session, answering a question asked before
+			// this load: its session id, queue, and playhead are all
+			// the wrong ones to carry forward.
+			return
+		}
 		ms := u.media
 		if ms.MediaSessionID != 0 {
 			d.mediaSessionID = ms.MediaSessionID
