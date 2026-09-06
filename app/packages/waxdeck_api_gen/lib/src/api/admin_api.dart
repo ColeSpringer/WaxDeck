@@ -2199,7 +2199,7 @@ class AdminApi {
   }
 
   /// List the scheduled jobs
-  /// Every schedulable job kind with its cron expression, enabled state, and last and next run. Kinds are fixed: &#x60;scan&#x60; (a full library scan), &#x60;backup&#x60; (a backup archive with retention applied), &#x60;prune&#x60; (event log, replay-guard stamp, audit history, and playback session history pruning, under server-owned horizons), and &#x60;analyze&#x60; (the audio-decoding pass behind loudness, fingerprints, and waveforms). Administrators only. 
+  /// Every schedulable job kind with its cron expression, enabled state, and last and next run. Kinds are fixed: &#x60;scan&#x60; (a full library scan), &#x60;backup&#x60; (a backup archive with retention applied), &#x60;prune&#x60; (event log, replay-guard stamp, audit history, and playback session history pruning, under server-owned horizons), &#x60;analyze&#x60; (the audio-decoding pass behind loudness, fingerprints, and waveforms), and &#x60;enrich&#x60; (the whole-library enrichment pass, capped per night). Administrators only. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation

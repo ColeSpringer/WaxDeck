@@ -12,11 +12,16 @@ part 'artwork_lock.g.dart';
 ///
 /// Properties:
 /// * [locked] - True when the slot is pinned. On a write this is what the request asks for; on a read, and in a write's response, it is the **effective** lock - so pinning an auxiliary role answers true, and unpinning one under a standing whole-artwork pin answers true as well, because that pin still holds the slot.  The role is the query parameter's, not a field here: one schema serves the request body and the response, and a role in the body would be a second spelling the server ignores. 
+/// * [roleLocked] - The slot's **own** pin, ignoring the entity's whole-artwork one - what a per-role pin control draws, since it is what says whether unpinning this role would change anything. On `front` the two pins are one field, so this equals `locked` there.  Read only: ignored on a write, where `locked` is the requested value and the role is the query parameter's. In a write's response it is the value that was requested, since the write set exactly that pin.  Absent on a server predating the field, where `locked` is the only reading available; see `ArtRoleInfo.roleLocked` for why absent must not be read as false. 
 @BuiltValue()
 abstract class ArtworkLock implements Built<ArtworkLock, ArtworkLockBuilder> {
   /// True when the slot is pinned. On a write this is what the request asks for; on a read, and in a write's response, it is the **effective** lock - so pinning an auxiliary role answers true, and unpinning one under a standing whole-artwork pin answers true as well, because that pin still holds the slot.  The role is the query parameter's, not a field here: one schema serves the request body and the response, and a role in the body would be a second spelling the server ignores. 
   @BuiltValueField(wireName: r'locked')
   bool get locked;
+
+  /// The slot's **own** pin, ignoring the entity's whole-artwork one - what a per-role pin control draws, since it is what says whether unpinning this role would change anything. On `front` the two pins are one field, so this equals `locked` there.  Read only: ignored on a write, where `locked` is the requested value and the role is the query parameter's. In a write's response it is the value that was requested, since the write set exactly that pin.  Absent on a server predating the field, where `locked` is the only reading available; see `ArtRoleInfo.roleLocked` for why absent must not be read as false. 
+  @BuiltValueField(wireName: r'roleLocked')
+  bool? get roleLocked;
 
   ArtworkLock._();
 
@@ -46,6 +51,13 @@ class _$ArtworkLockSerializer implements PrimitiveSerializer<ArtworkLock> {
       object.locked,
       specifiedType: const FullType(bool),
     );
+    if (object.roleLocked != null) {
+      yield r'roleLocked';
+      yield serializers.serialize(
+        object.roleLocked,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -75,6 +87,13 @@ class _$ArtworkLockSerializer implements PrimitiveSerializer<ArtworkLock> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.locked = valueDes;
+          break;
+        case r'roleLocked':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.roleLocked = valueDes;
           break;
         default:
           unhandled.add(key);

@@ -215,13 +215,23 @@ func TestSchedulesAndReadOnlyToggles(t *testing.T) {
 	for _, row := range rows {
 		enabled[row.Kind] = row.Enabled
 	}
-	// Only prune ships on: it bounds tables that otherwise grow without
-	// bound. Everything else costs enough that an administrator opts in,
-	// analyze most of all.
+	// Prune and enrich ship on: prune bounds tables that otherwise grow
+	// without bound, and enrich is the only route to artwork and lyrics
+	// nobody asked the server to skip. The rest cost enough that an
+	// administrator opts in, analyze most of all.
 	for kind, on := range enabled {
-		if want := kind == "prune"; on != want {
+		if want := kind == "prune" || kind == "enrich"; on != want {
 			t.Errorf("%s ships enabled=%v, want %v", kind, on, want)
 		}
+	}
+	// The nightly enrichment lands after prune's window and the scan
+	// slot, so a scan an administrator enabled feeds the same night.
+	byKind := map[string]ScheduleDTO{}
+	for _, row := range rows {
+		byKind[row.Kind] = row
+	}
+	if got := byKind["enrich"].Cron; got != "45 3 * * *" {
+		t.Errorf("enrich cron = %q, want the slot after prune and scan", got)
 	}
 	if _, err := svc.PutSchedule(ctx, admin, "scan", "not a cron", true); KindOf(err) != KindInvalid {
 		t.Fatalf("bad cron: got %v, want invalid", err)

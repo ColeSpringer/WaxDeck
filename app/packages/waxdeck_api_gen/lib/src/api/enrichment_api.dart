@@ -22,7 +22,7 @@ class EnrichmentApi {
   const EnrichmentApi(this._dio, this._serializers);
 
   /// Enrichment status and coverage
-  /// The registered enrichment providers (built-ins and the ones this server adds, with what each can supply and whether it is configured) and the catalog&#39;s enrichment coverage, plus whether a whole-library pass is currently running. 
+  /// The registered enrichment providers (built-ins and the ones this server adds, with what each can supply and whether it is configured) and the catalog&#39;s enrichment coverage, plus whether a whole-library pass is currently running and which phases one would execute. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -106,7 +106,7 @@ class EnrichmentApi {
   }
 
   /// Run a whole-library enrichment pass
-  /// Starts the catalog&#39;s enrichment pass as a background job (identity resolution first, then providers in priority order, provider-paced). &#x60;force&#x60; re-enriches entities that already enriched once. Locked and unofficial-marked content is respected. Returns the catalog job to follow. Administrators only.  Refuses with &#x60;source-unavailable&#x60; when the server has no MusicBrainz contact configured, which is what &#x60;enrichmentStatus.configured&#x60; reports: read it first rather than offering a button that errors. 
+  /// Starts the catalog&#39;s enrichment pass as a background job (identity resolution first, then providers in priority order, provider-paced). &#x60;force&#x60; re-enriches entities that already enriched once. Locked and unofficial-marked content is respected. Returns the catalog job to follow. Administrators only.  Refuses with &#x60;source-unavailable&#x60; when no phase could run: neither a MusicBrainz contact nor a provider gating a phase of its own. That is what &#x60;enrichmentStatus.configured&#x60; reports, and &#x60;enrichmentStatus.phases&#x60; says which phases a run would execute - read them first rather than offering a button that errors, or one that promises identity resolution a contact-less server will not do. 
   ///
   /// Parameters:
   /// * [enrichmentRunRequest] 

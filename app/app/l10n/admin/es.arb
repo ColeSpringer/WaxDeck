@@ -198,6 +198,8 @@
   "adminScheduleCronHint": "minuto hora día mes día-de-la-semana",
   "adminScheduleCronLabel": "Cron",
   "adminScheduleEnabledLabel": "{name} se ejecuta de forma programada",
+  "adminScheduleEnrich": "Enriquecer los metadatos",
+  "adminScheduleEnrichBlurb": "Rellena los metadatos, las carátulas y las letras que faltan a partir de los proveedores configurados. Se limita a 2000 elementos por noche, así que una biblioteca grande se completa a lo largo de varias noches; una ejecución iniciada a mano no tiene límite. Un proveedor que rechaza algo no se vuelve a consultar hasta que se fuerza una ejecución.",
   "adminScheduleLastRun": "Última ejecución {stamp}",
   "adminScheduleLastRunStatus": "Última ejecución {stamp} ({status})",
   "adminScheduleNextRun": "Siguiente {stamp}",

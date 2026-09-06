@@ -65,6 +65,7 @@ var bridgeCapabilities = map[string]enrich.Capability{
 	"book":       enrich.CapBookMeta,
 	"aux-art":    enrich.CapAuxArt,
 	"artist-art": enrich.CapArtistArt,
+	"fields":     enrich.CapFields,
 }
 
 const (
@@ -163,6 +164,8 @@ type bridgeRequest struct {
 	MBID        string `json:"mbid,omitempty"`
 	ASIN        string `json:"asin,omitempty"`
 	ISBN        string `json:"isbn,omitempty"`
+	ISRC        string `json:"isrc,omitempty"`
+	Barcode     string `json:"barcode,omitempty"`
 	DurationSec int    `json:"durationSec,omitempty"`
 }
 
@@ -198,6 +201,7 @@ func (b *HTTPBridge) Enrich(ctx context.Context, req enrich.Request) (*enrich.Ca
 		Type: string(req.Type), Force: req.Force,
 		Title: req.Title, Artist: req.Artist, Album: req.Album,
 		MBID: req.MBID, ASIN: req.ASIN, ISBN: req.ISBN,
+		ISRC: req.ISRC, Barcode: req.Barcode,
 		DurationSec: req.DurationSec,
 	})
 	if err != nil {

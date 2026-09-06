@@ -714,7 +714,10 @@ func (s *Server) GetEntityArtworkLock(ctx context.Context, req GetEntityArtworkL
 		}
 		return nil, err
 	}
-	return GetEntityArtworkLock200JSONResponse(ArtworkLock{Locked: locked}), nil
+	return GetEntityArtworkLock200JSONResponse(ArtworkLock{
+		Locked:     locked.Locked,
+		RoleLocked: ptr(locked.RoleLocked),
+	}), nil
 }
 
 func (s *Server) SetEntityArtworkLock(ctx context.Context, req SetEntityArtworkLockRequestObject) (SetEntityArtworkLockResponseObject, error) {
@@ -738,7 +741,10 @@ func (s *Server) SetEntityArtworkLock(ctx context.Context, req SetEntityArtworkL
 		}
 		return nil, err
 	}
-	return SetEntityArtworkLock200JSONResponse(ArtworkLock{Locked: locked}), nil
+	return SetEntityArtworkLock200JSONResponse(ArtworkLock{
+		Locked:     locked.Locked,
+		RoleLocked: ptr(locked.RoleLocked),
+	}), nil
 }
 
 // --- custom tags ------------------------------------------------------------------

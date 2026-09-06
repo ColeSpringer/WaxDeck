@@ -11,76 +11,29 @@ note.
 
 ## WaxBin
 
-- **`MarkPlayed` with an explicit play time.** Every counted play
-  stamps `last_played_at` at the moment of the write, and no write path
-  takes a time. That is right for live listening and wrong for imported
-  history: a household moving in from Last.fm, ListenBrainz or a
-  Spotify export carries a real date per play, and the catalog records
-  every one of them as "played today". What sorts by recency after an
-  import is therefore the import itself. Wanted: a play time on the
-  mark, applied the way the star writes already take a recorded time -
-  never moving the stamp backwards past a later play, so a replay can
-  only ever fill in history rather than rewrite the present. Shipped
-  workaround: WaxDeck's `listen_sessions` rows carry the true times, so
-  the listening log and everything derived from it are correct; only
-  the catalog's own `lastPlayedAt` reads as the import instant, and the
-  import's documentation says so.
+- **A re-ask TTL on a missed art marker.** The artist-art and
+  auxiliary-art backfills mark a target nothing answered for, and the
+  marker is a plain existence check with no expiry: an artist Deezer
+  does not hold today is never asked about again, however long the
+  catalog runs. Providers gain images, so "nothing found once" is not a
+  durable fact the way a match is. Wanted: an age on the marker, so a
+  walk re-asks a miss after some window (a config knob, or a fixed one
+  in the tens of days) without a forced run re-searching everything.
+  Shipped workaround: none that is cheap - a forced enrichment run
+  re-asks every target, matched ones included, so WaxDeck documents the
+  rule in the curation doc rather than working around it.
 
-- **A name-keyed artist-art walk.** The artist-art backfill queue picks
-  its subjects with a predicate that requires `artist.mbid`, which the
-  identity phase fills only for artists MusicBrainz matched. An artist
-  that never matched - a local band, a mis-tagged name, anything the
-  library holds that the database does not - is never asked about, so
-  the pass that exists to fill artist portraits skips exactly the
-  artists most likely to be missing one. Wanted: the queue widened to
-  artists without an mbid, asking capable providers by name the way the
-  release-group passes already fall back to title and artist text.
-  Shipped workaround: WaxDeck keeps its own artist-art sweep, narrowed
-  to mbid-less artists and asking Deezer by name, with a 30-day miss
-  memory; the catalog pass covers the matched rest. The sweep retires
-  the day this lands, and its header comment says so.
-
-- **Engine application of `Candidate.Fields`.** A provider can return
-  scalar fields on a candidate, and the engine ignores them: the slot
-  is documented as reserved for injected providers, and only WaxDeck's
-  own per-item propose/commit path reads it. That leaves any field a
-  provider knows unreachable from the catalog's own passes - a
-  recording-target BPM from Deezer is the case that wants it, since
-  the tempo is per track and no capability bit asks for one. Wanted: a
-  `CapFields` bit and an apply pass for `Candidate.Fields` under the
-  same fill-when-empty, lock-respecting, provenance-stamped rules the
-  other capabilities get, and one that distinguishes an entity-rung
-  field from an item one. That last part is not a nicety: WaxDeck tried
-  to fill a release's year and label from Deezer and iTunes through its
-  own per-item path and reverted it, because `year` is in
-  `editKeyFields` (writing it on one member forks that member off its
-  album) and `label` is an entity column whose lock an item's
-  provenance map cannot see. Gating also matters: the library-wide genre
-  pass stamps `Want: CapGenres` and reads only `cand.Genres`, so a
-  provider that answers facts under that bit pays an extra request per
-  release group for a value the engine discards. Shipped workaround:
-  WaxDeck reads `Candidate.Fields` itself in its per-item
-  propose/commit path, which is how an Audnexus book gets its publisher
-  and year - an item-scoped field on an item somebody asked about, and
-  nowhere else. A per-track value (Deezer knows a track's BPM, ISRC and
-  explicit flag) is out of reach entirely: it needs a recording-target
-  request, and no capability bit asks for one. BPM arrives from tags
-  instead.
-
-- **`ArtRoleInfo.locked` cannot say which pin set it.** The field is the
-  effective lock on a slot: the entity's whole-artwork pin, which gates
-  the front cover and enrichment's fills in every other role, or that
-  role's own `art.<role>` pin. A reader cannot tell the two apart, and
-  neither can `ArtLocked`, which reports the same effective value. So a
-  client drawing per-role pin controls cannot say whether unpinning one
-  will do anything, and cannot caption a slot as held by the cover pin
-  rather than its own. Wanted: the role's own lock beside the effective
-  one - a second bool on `ArtRoleInfo`, or the effective one plus its
-  source. Shipped workaround: WaxDeck offers the per-role toggle
-  unconditionally and lets the read tell the truth afterwards. An
-  earlier attempt to infer the distinction from an empty slot was worse
-  than not knowing: it disabled the toggle on exactly the
-  cleared-and-pinned slot the control exists to release.
+- **A barcode on the release-rung art request.** The release-rung art
+  request carries the group's MBID, title and artist and no printed
+  identifier, so a provider keyed on one cannot tell which pressing is
+  being asked about - and a picture chosen by title search on that rung
+  is the wrong edition's as often as not, which is the failure the rung
+  exists to avoid. The fields walk already carries `Barcode` on the same
+  target for exactly this reason. Wanted: `Barcode` filled on the
+  release-rung art request too, so a UPC-keyed provider can answer for
+  the pressing rather than for the record. Shipped workaround: Deezer
+  declines art on that rung and answers only its fields, so a
+  per-edition cover comes from the Cover Art Archive alone.
 
 ## WaxTap
 

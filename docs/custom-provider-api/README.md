@@ -1,7 +1,7 @@
 # Custom enrichment providers
 
-WaxDeck's enrichment fills artwork, genres, lyrics, and book metadata
-from pluggable providers. Besides the built-ins, an install can point
+WaxDeck's enrichment fills artwork, genres, lyrics, scalar metadata
+fields, and book metadata from pluggable providers. Besides the built-ins, an install can point
 the server at any HTTP service implementing the small contract in
 [`openapi.yaml`](openapi.yaml) - a regional lyrics database, a
 scene-specific cover source, a house genre taxonomy - and it joins the
@@ -13,8 +13,8 @@ Two endpoints. `GET /capabilities` answers who the provider is (the
 `name` becomes the provenance mark on everything it supplies) and which
 kinds of enrichment it serves. `POST /enrich` answers one lookup:
 WaxDeck sends the identity hints it holds for a target (titles, names,
-MBID/ASIN/ISBN, a track duration), and the service answers `200` with
-everything it found or `204` for a clean no-match. That is the whole
+MBID/ASIN/ISBN/ISRC/barcode, a track duration), and the service answers
+`200` with everything it found or `204` for a clean no-match. That is the whole
 surface - it mirrors WaxDeck's in-process provider port one-to-one, so
 there is no search/match handshake to implement.
 
@@ -43,6 +43,11 @@ that is version skew, not misconfiguration.
 
 - Values land fill-when-empty and never over a locked field; a
   candidate may return more than was asked and WaxDeck keeps what fits.
+- The `fields` capability is scalar metadata and gates two walks that
+  differ only by request type: `recording` for a track's tempo, ISRC
+  and composer, `release` for an album's label and year. Answer nothing
+  for the rung you do not know. An album year fans out to every track
+  on it, so WaxDeck refuses one where the members already disagree.
 - Covers are refused over 8 MiB, or when the bytes are not a
   recognizable image.
 - A non-200/204 answer is treated as transient: logged, skipped,

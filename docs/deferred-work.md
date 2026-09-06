@@ -221,62 +221,6 @@ here waits on upstream.
   nothing on touch either way, because a `MouseRegion` reports no hover
   to a finger.
 
-- `[in-repo]` **The per-edition cover rung has no injected producer.**
-  With `MatchReleases` on, `enrich.go` asks for `TargetRelease` art once
-  an album is matched to a pressing; every injected provider declines,
-  and the Cover Art Archive takes it uncontested - the source measured
-  at 24-37s per lookup with no hit when radio was leaning on it.
-  Declining is what the port asks of a provider that only knows groups,
-  so the fix is not simply to answer: it is to decide whether a Deezer
-  or iTunes album is close enough to a named edition to answer for it,
-  and to say so.
-
-  **Their fields go unused**, and an attempt at it was reverted with
-  three specific obstacles measured, so the next attempt starts from
-  them rather than from scratch. A Deezer album carries a label and
-  genres, an iTunes hit a primary genre and a release date, and the port
-  already has `Candidate.Fields` and `Candidate.Genres` to put them in.
-  What stopped it:
-
-  * **`year` cannot be filled per item.** It is in upstream's
-    `editKeyFields` and in `identity.AlbumKey`, so writing it on the one
-    track a curator opened re-keys that track alone: a twelve-track
-    heuristic album silently became eleven plus a fork, with the enrich
-    report saying only `fields:year: itunes`. Filling a release's year
-    means moving every member at once, which is the rename verb, not an
-    item-scoped fill.
-  * **`label` is a shared-entity write on a curate-gated path.** Every
-    other enrich commit is item-scoped. `EnrichItemFor` admits the
-    uploader who brought an item in, while `editEntity` is
-    administrators-only, so filling an album's label there let a
-    non-admin uploader who owns one track rewrite a shared album's
-    column - and the item's own lock map cannot even see that column's
-    lock, since `label` is an entity field and `st.locked` is built from
-    item provenance.
-  * **A Deezer genre costs a request per release group.** Genres live on
-    `/album/{id}`, not the search hit, and upstream's library-wide genre
-    pass stamps `Want: CapGenres` while reading only `cand.Genres` - so
-    advertising the bit fires a second paced request per matched group
-    whose label the engine discards. Advertising it on iTunes is free by
-    comparison, but the genre ladder returns at the first hit and the
-    provider list is `[deezer, itunes, discogs?]`, so it would demote an
-    operator's configured Discogs (genres *and* styles) below one coarse
-    album genre.
-
-  The shape that answers all three is the `CapFields` ask in
-  `docs/upstream-requests.md`: a bit the engine gates on, and an apply
-  pass that knows an entity-rung field from an item one. Also still out
-  of reach per-track - a Deezer track carries an ISRC, a BPM, a duration
-  and an explicit flag - which needs a recording-target request the port
-  has no capability for either.
-
-  Not a gap: there is no track-level cover search, and there should not
-  be. `CapCover` is defined as release-group cover-art bytes and a track
-  draws its album's picture, so an album search is the right query for a
-  catalog cover. Radio is the exception that proves it - it searches by
-  track because a station announces a song and nothing else, and it
-  wants the album carrying it.
-
 - `[in-repo]` **The enrichment source set has an order but no operator
   control.** The per-field precedence is now stated and enforced
   (`docs/curation-and-metadata.md`): MusicBrainz matching is
@@ -357,10 +301,9 @@ here waits on upstream.
 - `[in-repo]` **An artist screen has no biography.** "Appears on" landed
   on the `credit-artist` browse dimension. The biography still needs an
   enrichment field nothing writes yet: artist art filled the pictures
-  half of that gap (the catalog's enrichment pass for matched artists,
-  the name-matched sweep for the rest), but no provider supplies prose
-  and no catalog field holds it, so this stays sequenced behind that
-  rather than behind a query.
+  half of that gap, but no provider supplies prose and no catalog field
+  holds it, so this stays sequenced behind that rather than behind a
+  query.
 - `[in-repo]` **A browse sort this client predates is erased by the
   next preference write.** `Prefs.browseSorts` values are a closed enum
   in the spec, so an order only a newer server knows deserializes to
@@ -499,22 +442,6 @@ here waits on upstream.
   page). Left unwired rather than guessed at because "when a scroll stops"
   and "how far ahead" are numbers worth setting against the perf run's
   measurements rather than before them - so take it with the entry above.
-
-- `[in-repo]` **A listen claimed but never marked stays uncounted.**
-  Ingest claims each session first (the insert on the idempotency id is
-  what makes a replay safe), then marks the item played, so a process
-  death between the two leaves the listen recorded and the play
-  uncounted: the retry reads the claim as a duplicate and skips the mark
-  for good. A transient mark failure is already compensated - the claims
-  behind it come back out so the retry redoes both - but a crash has
-  nobody to run that. The window used to be the one row in flight and is
-  now up to the batch, since the claims commit together rather than a
-  transaction apiece, which is what keeps a history import off the single
-  write connection. Closing it wants the claim to record whether its mark
-  landed plus a sweep that finishes the ones that did not, which is a
-  schema column and a worker rather than a fix in place. The listening
-  history is never what is at risk here, only the play count derived from
-  it.
 
 ## Connect and casting
 
@@ -773,3 +700,18 @@ here waits on upstream.
   replaces rather than duplicates.
 
 ## Admin and ops
+
+- `[in-repo]` **The enrichment status surface has no client reader.**
+  `GET /library/enrichment` answers `configured`,
+  `musicbrainzConfigured`, `phases` and a `lastRun` block carrying
+  fourteen counters, and the app's hand-written `EnrichmentStatus`
+  carries three fields: providers, coverage, and whether a pass is
+  running. So the spec's own instruction - read `phases` before offering
+  a button that errors, and do not say "enrichment is off" when only the
+  identity half is - is unfollowable by WaxDeck's own client, and the
+  last-run counters have nobody to show them. Not a mapping oversight:
+  there is no admin enrichment screen to put them on, and the two halves
+  land together. Take it with that screen, which also wants the operator
+  ordering and per-source enable that already have their own entry
+  above; the mapping is four lines once there is somewhere to draw
+  them.

@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -29,6 +30,39 @@ func nameMatch(a, b string) bool {
 
 func collapseSpace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
+}
+
+// releaseYear reads the leading four-digit year off a provider's
+// release date, which arrives as a bare year, a date, or a full
+// timestamp depending on the service. Anything else answers empty
+// rather than a guess: a year is fanned across every track on an album,
+// so a wrong one is not a small error.
+func releaseYear(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) < 4 {
+		return ""
+	}
+	year := s[:4]
+	for _, r := range year {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	// A date before recorded music and one past the near future are both
+	// a parse landing on the wrong field rather than a release.
+	n, err := strconv.Atoi(year)
+	if err != nil || n < 1860 || n > time.Now().Year()+2 {
+		return ""
+	}
+	return year
+}
+
+// abs is the integer absolute value, for duration comparisons.
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // coverImage builds the cover a provider hands back to the enrichment
@@ -122,20 +156,4 @@ func (n noArtistArt) Enrich(ctx context.Context, req enrich.Request) (*enrich.Ca
 		return nil, nil
 	}
 	return n.Provider.Enrich(ctx, req)
-}
-
-// candidateArt is the nil-safe role read the chain rungs need: a clean
-// miss is a nil candidate, and a candidate can carry a role map with
-// nothing usable in the slot asked for.
-func candidateArt(c *enrich.Candidate, role model.ArtRole) *model.ArtImage {
-	if c == nil {
-		return nil
-	}
-	if img := c.Art[role]; img != nil && len(img.Data) > 0 {
-		return img
-	}
-	if role == model.ArtRoleFront && c.Cover != nil && len(c.Cover.Data) > 0 {
-		return c.Cover
-	}
-	return nil
 }

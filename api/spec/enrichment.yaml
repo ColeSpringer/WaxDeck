@@ -8,7 +8,8 @@ paths:
         The registered enrichment providers (built-ins and the ones
         this server adds, with what each can supply and whether it
         is configured) and the catalog's enrichment coverage, plus
-        whether a whole-library pass is currently running.
+        whether a whole-library pass is currently running and which
+        phases one would execute.
       tags: [enrichment]
       responses:
         "200":
@@ -37,10 +38,13 @@ paths:
         Administrators only.
 
 
-        Refuses with `source-unavailable` when the server has no
-        MusicBrainz contact configured, which is what
-        `enrichmentStatus.configured` reports: read it first rather
-        than offering a button that errors.
+        Refuses with `source-unavailable` when no phase could run:
+        neither a MusicBrainz contact nor a provider gating a phase of
+        its own. That is what `enrichmentStatus.configured` reports,
+        and `enrichmentStatus.phases` says which phases a run would
+        execute - read them first rather than offering a button that
+        errors, or one that promises identity resolution a
+        contact-less server will not do.
       tags: [enrichment]
       requestBody:
         required: false
@@ -71,7 +75,7 @@ components:
     EnrichmentStatus:
       type: object
       description: Enrichment providers and coverage.
-      required: [providers, coverage, running, configured]
+      required: [providers, coverage, running, configured, musicbrainzConfigured, phases]
       properties:
         providers:
           type: array
@@ -88,19 +92,56 @@ components:
         configured:
           type: boolean
           description: >
-            Whether the whole-library pass can run at all. It needs a
-            MusicBrainz contact, which is boot configuration
-            (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and
-            not a runtime setting, because MusicBrainz requires an
-            identifying agent before anything is sent.
+            Whether a whole-library pass would do anything: some phase
+            can run. That is true on any server carrying a provider
+            that gates a phase of its own, and true on every server
+            with a MusicBrainz contact. Read `phases` for which half.
 
 
             False means every run refuses with `source-unavailable`, so
             a console should say so rather than offer a button that
             errors. Distinct from a provider's own `configured`, which
-            is about that provider's key: every provider can be
-            configured and the pass still refuse, because the contact
-            gates the identity spine they hang off.
+            is about that provider's key.
+        musicbrainzConfigured:
+          type: boolean
+          description: >
+            Whether the MusicBrainz identity phases can run. They need
+            an identifying contact, which is boot configuration
+            (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and
+            not a runtime setting, because MusicBrainz requires an
+            identifying agent before anything is sent.
+
+
+            It gates the lyrics phase too, whose built-in provider
+            needs no key but is not dialled without an identifying
+            agent. The phases that answer to registered providers
+            (artwork, fields, book metadata, and lyrics where a provider
+            supplies them) run without it, so a server with no contact
+            still enriches - just not identity. A console that says
+            "enrichment is off" on this being false would be wrong about
+            the half that does run.
+        phases:
+          type: array
+          description: >
+            The phases a run started now would execute, in no
+            particular order. Empty exactly when `configured` is false.
+            `identity` and `releases` need the MusicBrainz contact, and
+            so does `lyrics` unless a registered provider supplies them;
+            the rest need a registered provider advertising the matching
+            capability.
+          items:
+            type: string
+            enum:
+              [
+                identity,
+                releases,
+                aux-art,
+                artist-art,
+                lyrics,
+                track-fields,
+                book-fields,
+                album-fields,
+              ]
         lastRun:
           $ref: "#/components/schemas/EnrichmentLastRun"
 
@@ -117,20 +158,30 @@ components:
           type: array
           description: >
             What it supplies: `identity`, `genres`, `cover`,
-            `lyrics`, `book`, `aux-art`, `artist-art`. Strings, not a
-            closed enum. `cover` is the front cover of a release group;
-            `aux-art` its other slots (back, disc, booklet,
-            background); `artist-art` an artist's own images. The three
-            are separate because they gate separate passes - a provider
-            that only knows front covers must not pull the whole artist
-            catalogue into a walk it cannot answer.
+            `lyrics`, `book`, `aux-art`, `artist-art`, `fields`.
+            Strings, not a closed enum. `cover` is the front cover of a
+            release group; `aux-art` its other slots (back, disc,
+            booklet, background); `artist-art` an artist's own images.
+            The three are separate because they gate separate passes -
+            a provider that only knows front covers must not pull the
+            whole artist catalogue into a walk it cannot answer.
+
+
+            `fields` is scalar metadata with no artwork in it - a
+            track's tempo, ISRC or composer, an album's label or year -
+            and gates the two fields walks, one per rung. `book` covers
+            the same ground for audiobooks (publisher, narrator, the
+            identifiers) and gates the book walk.
           items:
             type: string
         configured:
           type: boolean
           description: >
-            Whether the provider can run (key-free providers always;
-            keyed ones once their key is set).
+            Whether the provider can run: a keyed one once its key is
+            set, a built-in once the MusicBrainz contact is. Key-free is
+            not the same as configured - the built-ins are public
+            services that want an identifying agent, and the catalog
+            does not register them without one.
         builtin:
           type: boolean
           description: True for the catalog's built-ins.
@@ -152,6 +203,14 @@ components:
         [
           albumsSearched,
           albumsMatched,
+          artistArtEnriched,
+          artistArtMatched,
+          trackFieldsEnriched,
+          trackFieldsMatched,
+          bookFieldsEnriched,
+          bookFieldsMatched,
+          albumFieldsEnriched,
+          albumFieldsMatched,
           tagsWritten,
           tagsFailed,
           tagsUnrepresented,
@@ -170,6 +229,41 @@ components:
             Albums it pinned to a release. Searched without matched is
             a library whose albums carry no identifiers, not a broken
             pass.
+        artistArtEnriched:
+          type: integer
+          description: >
+            Artists the artwork walk looked at. It reaches every artist
+            by name, so this counts the ones still missing a portrait
+            rather than the ones MusicBrainz matched.
+        artistArtMatched:
+          type: integer
+          description: Artists some provider answered a picture for.
+        trackFieldsEnriched:
+          type: integer
+          description: >
+            Tracks the fields walk looked up, filling tempo, ISRC and
+            composer where they were empty and unlocked.
+        trackFieldsMatched:
+          type: integer
+          description: Tracks some provider answered for.
+        bookFieldsEnriched:
+          type: integer
+          description: >
+            Audiobooks the fields walk looked up, filling publisher,
+            year, description, narrator, subtitle, edition and the
+            identifiers where they were empty and unlocked.
+        bookFieldsMatched:
+          type: integer
+          description: Audiobooks some provider answered for.
+        albumFieldsEnriched:
+          type: integer
+          description: >
+            Albums the fields walk looked up, filling label and year. A
+            year fans out to every track on the album, and is refused
+            where the tracks already disagree.
+        albumFieldsMatched:
+          type: integer
+          description: Albums some provider answered for.
         tagsWritten:
           type: integer
           description: >

@@ -1332,13 +1332,21 @@ components:
         why an entity can list a role at all while holding no image.
 
 
-        Every role can be locked. `locked` is the **effective** lock on
-        this slot: the entity's whole-artwork pin, which is the front
-        cover's own and also gates enrichment's fills in every other
-        role, or the role's own pin, which gates that slot alone. So a
-        `true` on an auxiliary role does not say which of the two put it
-        there, and a hand-set image in that role answers to the role's
-        own pin regardless.
+        Every role can be locked, and there are two pins. `locked` is the
+        **effective** lock on this slot: the entity's whole-artwork pin,
+        which is the front cover's own and also gates enrichment's fills
+        in every other role, or the role's own pin, which gates that slot
+        alone. `roleLocked` is the slot's own pin by itself, so a
+        per-role pin control reads that one - it is what says whether
+        unpinning this role would change anything.
+
+
+        On `front` the two pins are one field, so `roleLocked` always
+        equals `locked` there. An auxiliary slot with `locked: true` and
+        `roleLocked: false` is held by the whole-artwork pin alone:
+        releasing its own pin opens nothing, and a client can caption it
+        as held by the cover pin rather than draw a toggle that does
+        nothing.
       required: [role]
       properties:
         role:
@@ -1393,6 +1401,19 @@ components:
             Whether this slot is pinned against enrichment and scan
             re-derives, under the whole-artwork pin or its own. See the
             schema description for which.
+        roleLocked:
+          type: boolean
+          description: >
+            Whether this slot's **own** pin is set, ignoring the
+            entity's whole-artwork one. Equal to `locked` on `front`,
+            where the two are one field.
+
+
+            Absent on a server predating the field. Absent is not
+            false: a client that reads it as one would draw an
+            own-pinned slot as open and offer a toggle that re-pins it,
+            leaving no way to release the slot. Fall back to `locked`,
+            which is the only reading that server had.
 
     ArtRoles:
       type: object

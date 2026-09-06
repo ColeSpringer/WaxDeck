@@ -22,10 +22,16 @@ func (s *Server) GetEnrichmentStatus(ctx context.Context, _ GetEnrichmentStatusR
 		}
 		return nil, err
 	}
+	phases := make([]EnrichmentStatusPhases, 0, len(st.Phases))
+	for _, ph := range st.Phases {
+		phases = append(phases, EnrichmentStatusPhases(ph))
+	}
 	out := EnrichmentStatus{
-		Running:    st.Running,
-		Configured: st.Configured,
-		Providers:  make([]EnrichmentProvider, 0, len(st.Providers)),
+		Running:               st.Running,
+		Configured:            st.Configured,
+		MusicbrainzConfigured: st.MusicbrainzConfigured,
+		Phases:                phases,
+		Providers:             make([]EnrichmentProvider, 0, len(st.Providers)),
 		Coverage: EnrichmentCoverage{
 			Artists:       CoverageCount{Enriched: st.Coverage.Artists.Enriched, Total: st.Coverage.Artists.Total},
 			ReleaseGroups: CoverageCount{Enriched: st.Coverage.ReleaseGroups.Enriched, Total: st.Coverage.ReleaseGroups.Total},
@@ -35,12 +41,20 @@ func (s *Server) GetEnrichmentStatus(ctx context.Context, _ GetEnrichmentStatusR
 	}
 	if r := st.LastRun; r != nil {
 		last := EnrichmentLastRun{
-			AlbumsSearched:    r.AlbumsSearched,
-			AlbumsMatched:     r.AlbumsMatched,
-			TagsWritten:       r.TagsWritten,
-			TagsFailed:        r.TagsFailed,
-			TagsUnrepresented: r.TagsUnrepresented,
-			TagsSkipped:       r.TagsSkipped,
+			AlbumsSearched:      r.AlbumsSearched,
+			AlbumsMatched:       r.AlbumsMatched,
+			ArtistArtEnriched:   r.ArtistArtEnriched,
+			ArtistArtMatched:    r.ArtistArtMatched,
+			TrackFieldsEnriched: r.TrackFieldsEnriched,
+			TrackFieldsMatched:  r.TrackFieldsMatched,
+			BookFieldsEnriched:  r.BookFieldsEnriched,
+			BookFieldsMatched:   r.BookFieldsMatched,
+			AlbumFieldsEnriched: r.AlbumFieldsEnriched,
+			AlbumFieldsMatched:  r.AlbumFieldsMatched,
+			TagsWritten:         r.TagsWritten,
+			TagsFailed:          r.TagsFailed,
+			TagsUnrepresented:   r.TagsUnrepresented,
+			TagsSkipped:         r.TagsSkipped,
 		}
 		if r.FinishedAtNS > 0 {
 			last.FinishedAt = ptr(time.Unix(0, r.FinishedAtNS).UTC())

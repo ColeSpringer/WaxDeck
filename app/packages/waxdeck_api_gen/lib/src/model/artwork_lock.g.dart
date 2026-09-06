@@ -9,11 +9,13 @@ part of 'artwork_lock.dart';
 class _$ArtworkLock extends ArtworkLock {
   @override
   final bool locked;
+  @override
+  final bool? roleLocked;
 
   factory _$ArtworkLock([void Function(ArtworkLockBuilder)? updates]) =>
       (ArtworkLockBuilder()..update(updates))._build();
 
-  _$ArtworkLock._({required this.locked}) : super._();
+  _$ArtworkLock._({required this.locked, this.roleLocked}) : super._();
   @override
   ArtworkLock rebuild(void Function(ArtworkLockBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -24,22 +26,26 @@ class _$ArtworkLock extends ArtworkLock {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is ArtworkLock && locked == other.locked;
+    return other is ArtworkLock &&
+        locked == other.locked &&
+        roleLocked == other.roleLocked;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, locked.hashCode);
+    _$hash = $jc(_$hash, roleLocked.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'ArtworkLock',
-    )..add('locked', locked)).toString();
+    return (newBuiltValueToStringHelper(r'ArtworkLock')
+          ..add('locked', locked)
+          ..add('roleLocked', roleLocked))
+        .toString();
   }
 }
 
@@ -50,6 +56,10 @@ class ArtworkLockBuilder implements Builder<ArtworkLock, ArtworkLockBuilder> {
   bool? get locked => _$this._locked;
   set locked(bool? locked) => _$this._locked = locked;
 
+  bool? _roleLocked;
+  bool? get roleLocked => _$this._roleLocked;
+  set roleLocked(bool? roleLocked) => _$this._roleLocked = roleLocked;
+
   ArtworkLockBuilder() {
     ArtworkLock._defaults(this);
   }
@@ -58,6 +68,7 @@ class ArtworkLockBuilder implements Builder<ArtworkLock, ArtworkLockBuilder> {
     final $v = _$v;
     if ($v != null) {
       _locked = $v.locked;
+      _roleLocked = $v.roleLocked;
       _$v = null;
     }
     return this;
@@ -85,6 +96,7 @@ class ArtworkLockBuilder implements Builder<ArtworkLock, ArtworkLockBuilder> {
             r'ArtworkLock',
             'locked',
           ),
+          roleLocked: roleLocked,
         );
     replace(_$result);
     return _$result;

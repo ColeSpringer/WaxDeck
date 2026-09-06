@@ -132,7 +132,7 @@ func run() error {
 		enrichURLs = flag.String("enrich-provider-urls", envOr("WAXDECK_ENRICH_PROVIDER_URLS", ""), "custom enrichment providers as name=url pairs, comma separated, each implementing the contract in docs/custom-provider-api/. Validated at startup (the capabilities document must answer and advertise a name) and registered ahead of every built-in provider")
 		enrichAuth = flag.String("enrich-provider-auth", envOr("WAXDECK_ENRICH_PROVIDER_AUTH", ""), "bearer tokens for custom enrichment providers as name=token pairs, comma separated; names must match -enrich-provider-urls")
 
-		artistArtOn = flag.Bool("artist-art", envOr("WAXDECK_ARTIST_ART", "true") == "true", "fill missing artist portraits. Artists MusicBrainz matched are filled by the catalog's own enrichment pass, from fanart.tv when its key is set and from Deezer otherwise; the artists it cannot reach, which are the ones with no MusicBrainz id, are filled by a daily background sweep asking Deezer by name. On by default; set WAXDECK_ARTIST_ART=false and the server never asks either service for one, on either path")
+		artistArtOn = flag.Bool("artist-art", envOr("WAXDECK_ARTIST_ART", "true") == "true", "fill missing artist portraits during enrichment. The catalog's artist walk asks fanart.tv by MusicBrainz id where its key is set, and Deezer by name for every artist including the ones MusicBrainz never matched. On by default; set WAXDECK_ARTIST_ART=false and the providers stop advertising artist art, so the walk never asks either service for one")
 
 		enrichContact = flag.String("enrichment-contact", envOr("WAXDECK_ENRICHMENT_CONTACT", ""), "MusicBrainz contact (an email or a URL) the catalog's whole-library enrichment pass identifies itself with. MusicBrainz requires an identifying agent, so empty leaves that pass disabled and /admin/enrichment/run refuses")
 		enrichMatch   = flag.Bool("enrichment-match-releases", envOr("WAXDECK_ENRICHMENT_MATCH_RELEASES", "true") == "true", "during enrichment, resolve which pressing of a record the library holds from its barcode or catalog number, deciding ties on medium and country. On by default; needs -enrichment-contact to have any effect")
@@ -319,15 +319,14 @@ func run() error {
 			}),
 		}
 	}
-	// One Deezer client, shared: radio's artwork rung, enrichment, and
-	// the artist portrait sweep all go at api.deezer.com, and more
-	// would be that many unpaced callers.
+	// One Deezer client, shared: radio's artwork rung and every
+	// enrichment rung go at api.deezer.com, and more clients would be
+	// that many unpaced callers.
 	deezer := waxproviders.NewDeezer(waxproviders.DeezerConfig{})
-	// The artist-art switch reaches the enrichment port, not just the
-	// sweep goroutine: both Deezer and fanart.tv answer the artist
-	// target now, so leaving them advertising it would make "the server
-	// never asks either service for one" false the moment the catalog
-	// ran its own artist pass.
+	// The artist-art switch is applied to the enrichment port itself:
+	// hiding the capability is what takes the artist rung out of the
+	// catalog's walk, since a provider that does not advertise it is
+	// never dispatched for one.
 	hideArtistArt := func(p enrich.Provider) enrich.Provider {
 		if *artistArtOn {
 			return p
@@ -353,24 +352,14 @@ func run() error {
 		waxproviders.NewGoogleBooks(waxproviders.GoogleBooksConfig{APIKey: *googleBooksKey}),
 		waxproviders.NewOpenLibrary(waxproviders.OpenLibraryConfig{}),
 	)
-	// The sweep's chain: fanart.tv first when keyed (an mbid hit cannot
-	// be the wrong artist), Deezer's name match as the fallback. Both
-	// rungs matter, because the sweep covers whatever the catalog's own
-	// artist pass leaves - and with no enrichment contact that pass
-	// does not run at all, so mbid-carrying artists are the sweep's too.
-	//
-	// fanart.tv also rides ahead of everything else that answers art on
-	// the port: the engine stops asking once every slot is held, so
+	// fanart.tv rides ahead of everything else that answers art on the
+	// port: the engine stops asking once every slot is held, so
 	// registration order is precedence, and it is the only provider
 	// that answers per role. One client for the same pacing reason as
 	// Deezer's.
-	artistArt := waxproviders.ArtistArtChain{Deezer: deezer}
 	if *fanartKey != "" {
 		fanart := waxproviders.NewFanartTV(waxproviders.FanartTVConfig{APIKey: *fanartKey})
 		enrichProviders = append([]enrich.Provider{hideArtistArt(fanart)}, enrichProviders...)
-		if *artistArtOn {
-			artistArt.Fanart = fanart
-		}
 	}
 	// Custom providers ride ahead of everything: an operator who wired a
 	// regional service wants its answers to win. Each is validated at
@@ -488,11 +477,6 @@ func run() error {
 		})
 	}
 	svcCfg.RadioArtResolver = radioArt
-	// Nil when switched off, which is what disables the sweep at the
-	// service too: a build with nothing wired cannot reach out.
-	if *artistArtOn {
-		svcCfg.ArtistArtProvider = artistArt
-	}
 	svc, err := service.Open(ctx, svcCfg, store, group)
 	if err != nil {
 		return err
@@ -566,36 +550,6 @@ func run() error {
 		}
 	})
 
-	// Artist portraits: fill what the enrichment pass structurally
-	// cannot (its providers target release groups). Daily, because the
-	// set of artists without findable images is stable and every ask is
-	// a network call; the wake channel runs a pass alongside each
-	// admin-started enrichment run. The first pass waits out the
-	// startup scan's opening minutes so it walks a populated catalog.
-	// WAXDECK_ARTIST_ART=false spawns no worker at all.
-	if *artistArtOn {
-		group.Go(ctx, "artist-art-sweep", func(ctx context.Context) error {
-			first := time.NewTimer(2 * time.Minute)
-			defer first.Stop()
-			tick := time.NewTicker(24 * time.Hour)
-			defer tick.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return nil
-				case <-first.C:
-				case <-tick.C:
-				case <-svc.ArtistArtWake():
-				}
-				if res, err := svc.ArtistArtSweep(ctx); err != nil {
-					log.Warn("artist art sweep", "err", err)
-				} else if res.Filled > 0 || res.Misses > 0 {
-					log.Info("artist art sweep", "scanned", res.Scanned, "filled", res.Filled, "misses", res.Misses)
-				}
-			}
-		})
-	}
-
 	// Trash retention: purge trashed files older than the configured
 	// window (0 disables it). Self-gates on the runtime admin setting so
 	// administrators change the policy without a restart, and a slow
@@ -620,6 +574,35 @@ func run() error {
 			if rep.Purged > 0 || rep.Errored > 0 {
 				log.Info("trash retention sweep",
 					"purged", rep.Purged, "errored", rep.Errored, "reclaimedBytes", rep.ReclaimedBytes)
+			}
+		}
+	})
+
+	// Stranded listen marks: a listen row is claimed, then marked, then
+	// recorded as marked, and a crash between the last two leaves a
+	// claim whose play was never counted. This re-runs those marks at
+	// the session's own time, so a play that arrived before a restart
+	// still lands where it belongs on the recency lists.
+	group.Go(ctx, "listen-mark-sweep", func(ctx context.Context) error {
+		first := time.NewTimer(2 * time.Minute)
+		defer first.Stop()
+		tick := time.NewTicker(time.Hour)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-first.C:
+			case <-tick.C:
+			}
+			rep, err := svc.SweepListenMarks(ctx)
+			if err != nil {
+				log.Warn("listen mark sweep", "err", err)
+				continue
+			}
+			if rep.Marked > 0 || rep.Settled > 0 {
+				log.Info("listen mark sweep",
+					"scanned", rep.Scanned, "marked", rep.Marked, "settled", rep.Settled)
 			}
 		}
 	})
@@ -731,7 +714,7 @@ func run() error {
 		// replaced.
 		lastCheck := map[string]time.Time{}
 		start := time.Now()
-		for _, kind := range []string{"prune", "scan", "analyze", "backup"} {
+		for _, kind := range []string{"prune", "scan", "analyze", "enrich", "backup"} {
 			lastCheck[kind] = start
 		}
 		// due reports whether the kind should run now; ran records that
@@ -751,13 +734,13 @@ func run() error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case now := <-tick.C:
-				// Order matters: prune, scan, and analyze finish fast
-				// (both passes are async catalog jobs), so the one
-				// long-running kind, backup, goes last and can only delay
-				// the next tick, never a sibling due in this one. Delayed
-				// firings are caught up, not lost: DueSchedule measures
-				// from the last run, not from the tick that should have
-				// fired.
+				// Order matters: prune, scan, analyze and enrich finish
+				// fast (the three passes are async catalog jobs), so the
+				// one long-running kind, backup, goes last and can only
+				// delay the next tick, never a sibling due in this one.
+				// Delayed firings are caught up, not lost: DueSchedule
+				// measures from the last run, not from the tick that
+				// should have fired.
 				if due("prune", now) {
 					svc.MarkScheduleRun(ctx, "prune", svc.RunPrune(ctx))
 					ran("prune", now)
@@ -779,6 +762,27 @@ func run() error {
 					} else {
 						svc.MarkScheduleRun(ctx, "analyze", err)
 						ran("analyze", now)
+					}
+				}
+				if due("enrich", now) {
+					// A pass an administrator started by hand holds the
+					// lease; same reasoning as analyze above, and the
+					// nightly cadence makes the retry cheap.
+					err := svc.RunScheduledEnrichment(ctx)
+					switch {
+					case service.KindOf(err) == service.KindConflict:
+						log.Info("scheduled enrichment waiting on a running pass")
+					case service.KindOf(err) == service.KindUnsupported:
+						// Nothing configured to enrich with. The
+						// schedule is on by default, so this is an
+						// ordinary state rather than a fault; marking
+						// the run keeps the log quiet until something
+						// is wired.
+						svc.MarkScheduleRun(ctx, "enrich", nil)
+						ran("enrich", now)
+					default:
+						svc.MarkScheduleRun(ctx, "enrich", err)
+						ran("enrich", now)
 					}
 				}
 				if due("backup", now) {

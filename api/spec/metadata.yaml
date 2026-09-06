@@ -539,8 +539,8 @@ paths:
         podcast entity. Album front covers may additionally embed into
         member files with `writeBack=true`; other slots and entity types
         are catalog-only. An artist portrait lands under `front` - the
-        slot the artist screen and index tiles resolve, and the one the
-        server's own portrait sweep fills; `background` is the scenic
+        slot the artist screen and index tiles resolve, and the one
+        enrichment's artist walk fills; `background` is the scenic
         slot, which no surface draws yet. Catalog entities are
         administrators-only, with two exceptions: a playlist cover is set
         by its owner, and replaces the cover the server generates from the
@@ -644,10 +644,10 @@ paths:
         pin, which `managePodcasts` holders read too.
 
 
-        The reading for an auxiliary role is the **effective** lock -
-        the whole-artwork pin or that role's own - so a `true` there
-        does not say which of the two set it. `ArtRoleInfo.locked` on
-        the artwork read reports the same thing.
+        `locked` for an auxiliary role is the **effective** lock - the
+        whole-artwork pin or that role's own - and `roleLocked` is the
+        slot's own pin by itself, so the pair says which of the two set
+        it. `ArtRoleInfo` on the artwork read carries the same pair.
       tags: [metadata]
       parameters:
         - name: role
@@ -690,8 +690,9 @@ paths:
         entity's whole-artwork pin, which gates the front cover and also
         enrichment's fills in every other role; a named auxiliary role
         writes that slot's own pin alone. Unpinning one auxiliary role
-        therefore does not lift a whole-artwork pin standing over it,
-        and the read reports the effective lock either way.
+        therefore does not lift a whole-artwork pin standing over it:
+        the response's `locked` is the effective reading and still true,
+        while `roleLocked` is the pin that was just cleared.
 
 
         `playlist` is refused with `invalid-request`. A playlist's cover
@@ -1271,8 +1272,9 @@ paths:
       summary: Enrich one item now
       description: >
         Runs the registered enrichment providers for the wanted
-        artifacts (cover art, lyrics, genres, book metadata) against
-        this one item synchronously and applies what they return,
+        artifacts (cover art, lyrics, genres, track fields, book
+        metadata) against this one item synchronously and applies what
+        they return,
         respecting locks and never overwriting a non-empty curated
         value. This is the editor's "fetch for me" button; the
         whole-library pass lives under `/library/enrichment`.
@@ -1861,6 +1863,25 @@ components:
             The role is the query parameter's, not a field here: one
             schema serves the request body and the response, and a role
             in the body would be a second spelling the server ignores.
+        roleLocked:
+          type: boolean
+          description: >
+            The slot's **own** pin, ignoring the entity's whole-artwork
+            one - what a per-role pin control draws, since it is what
+            says whether unpinning this role would change anything. On
+            `front` the two pins are one field, so this equals `locked`
+            there.
+
+
+            Read only: ignored on a write, where `locked` is the
+            requested value and the role is the query parameter's. In a
+            write's response it is the value that was requested, since
+            the write set exactly that pin.
+
+
+            Absent on a server predating the field, where `locked` is
+            the only reading available; see `ArtRoleInfo.roleLocked` for
+            why absent must not be read as false.
 
     Credit:
       type: object
@@ -2656,10 +2677,15 @@ components:
         want:
           type: array
           minItems: 1
-          description: The artifacts to fetch.
+          description: >
+            The artifacts to fetch. `fields` is a track's scalar
+            metadata (tempo, ISRC, composer) and is refused for
+            anything else; `book` is the audiobook equivalent
+            (publisher, year, description, narrator, subtitle,
+            edition, and the identifiers).
           items:
             type: string
-            enum: [cover, lyrics, genres, book]
+            enum: [cover, lyrics, genres, book, fields]
         proposal:
           $ref: "#/components/schemas/EnrichProposal"
 
@@ -2684,8 +2710,10 @@ components:
       description: >
         One field an enrichment provider would fill. `lyrics` carries
         the full text (LRC when the provider answered timed lines);
-        `genre` the joined, normalized genre scalar; a book want
-        proposes each scalar it can fill as its own row.
+        `genre` the joined, normalized genre scalar; the `fields` and
+        `book` wants propose each scalar they can fill as its own row,
+        and each of those two commits as one edit, so all its rows name
+        the same provider.
 
 
         Every row is fill-when-empty and lock-respecting: enrichment

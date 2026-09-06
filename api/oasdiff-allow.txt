@@ -12,3 +12,14 @@
 # WaxDeck's own app ships with the server pre-1.0, and no external
 # client has had a release to write to this admin-only endpoint.
 PUT /libraries/{pid}/matching added the new required request property 'singlesAutoApply'
+
+# `ScheduleKind` gains `enrich` in the release that adds the nightly
+# enrichment schedule. The enum is closed on purpose (it is a path
+# parameter as well as a response field, and a shared named schema so
+# the Dart generator emits one enum class rather than two), so a new
+# kind is always this shape. A client that predates it reads the row as
+# the generator's sentinel and shows the raw kind - the schedules screen
+# already falls through to the kind string for exactly this - and never
+# writes one, since the screen builds the path from the row it read.
+GET /admin/schedules added the new 'enrich' enum value to the 'schedules/items/kind' response property for the response status '200'
+PUT /admin/schedules/{kind} added the new 'enrich' enum value to the 'kind' response property for the response status '200'

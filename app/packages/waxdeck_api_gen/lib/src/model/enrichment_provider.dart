@@ -13,8 +13,8 @@ part 'enrichment_provider.g.dart';
 ///
 /// Properties:
 /// * [name] - Stable provider id.
-/// * [capabilities] - What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`, `aux-art`, `artist-art`. Strings, not a closed enum. `cover` is the front cover of a release group; `aux-art` its other slots (back, disc, booklet, background); `artist-art` an artist's own images. The three are separate because they gate separate passes - a provider that only knows front covers must not pull the whole artist catalogue into a walk it cannot answer. 
-/// * [configured] - Whether the provider can run (key-free providers always; keyed ones once their key is set). 
+/// * [capabilities] - What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`, `aux-art`, `artist-art`, `fields`. Strings, not a closed enum. `cover` is the front cover of a release group; `aux-art` its other slots (back, disc, booklet, background); `artist-art` an artist's own images. The three are separate because they gate separate passes - a provider that only knows front covers must not pull the whole artist catalogue into a walk it cannot answer.  `fields` is scalar metadata with no artwork in it - a track's tempo, ISRC or composer, an album's label or year - and gates the two fields walks, one per rung. `book` covers the same ground for audiobooks (publisher, narrator, the identifiers) and gates the book walk. 
+/// * [configured] - Whether the provider can run: a keyed one once its key is set, a built-in once the MusicBrainz contact is. Key-free is not the same as configured - the built-ins are public services that want an identifying agent, and the catalog does not register them without one. 
 /// * [builtin] - True for the catalog's built-ins.
 @BuiltValue()
 abstract class EnrichmentProvider implements Built<EnrichmentProvider, EnrichmentProviderBuilder> {
@@ -22,11 +22,11 @@ abstract class EnrichmentProvider implements Built<EnrichmentProvider, Enrichmen
   @BuiltValueField(wireName: r'name')
   String get name;
 
-  /// What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`, `aux-art`, `artist-art`. Strings, not a closed enum. `cover` is the front cover of a release group; `aux-art` its other slots (back, disc, booklet, background); `artist-art` an artist's own images. The three are separate because they gate separate passes - a provider that only knows front covers must not pull the whole artist catalogue into a walk it cannot answer. 
+  /// What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`, `aux-art`, `artist-art`, `fields`. Strings, not a closed enum. `cover` is the front cover of a release group; `aux-art` its other slots (back, disc, booklet, background); `artist-art` an artist's own images. The three are separate because they gate separate passes - a provider that only knows front covers must not pull the whole artist catalogue into a walk it cannot answer.  `fields` is scalar metadata with no artwork in it - a track's tempo, ISRC or composer, an album's label or year - and gates the two fields walks, one per rung. `book` covers the same ground for audiobooks (publisher, narrator, the identifiers) and gates the book walk. 
   @BuiltValueField(wireName: r'capabilities')
   BuiltList<String> get capabilities;
 
-  /// Whether the provider can run (key-free providers always; keyed ones once their key is set). 
+  /// Whether the provider can run: a keyed one once its key is set, a built-in once the MusicBrainz contact is. Key-free is not the same as configured - the built-ins are public services that want an identifying agent, and the catalog does not register them without one. 
   @BuiltValueField(wireName: r'configured')
   bool get configured;
 

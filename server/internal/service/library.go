@@ -181,10 +181,6 @@ type Config struct {
 	// rung unavailable whatever the admin toggle says, so a build with
 	// no providers wired cannot reach out by accident.
 	RadioArtResolver RadioArtResolver
-	// ArtistArtProvider answers artist portraits for the artist-art
-	// sweep. Nil disables the sweep entirely, same rule as
-	// RadioArtResolver: a build with nothing wired cannot reach out.
-	ArtistArtProvider ArtistArtProvider
 	// SonicAnalysisDefault is the embedded analyzer's boot default
 	// (WAXDECK_SONIC_ANALYSIS); the runtime admin setting overrides it
 	// once saved.
@@ -408,10 +404,14 @@ type Library struct {
 	workerLocalPaths bool
 	// isrcResolver mirrors Config.ISRCResolver.
 	isrcResolver ISRCResolver
-	// enrichmentConfigured mirrors whether Config.EnrichmentContact was
-	// set, which is what decides whether the catalog's whole-library
-	// enrichment pass can run at all.
-	enrichmentConfigured bool
+	// musicbrainzConfigured mirrors whether Config.EnrichmentContact was
+	// set, which is what decides whether the enrichment pass's identity
+	// phases can run. The provider-gated phases run without it, so this
+	// is not "enrichment is configured" - see enrichmentPhases.
+	musicbrainzConfigured bool
+	// enrichmentMatchReleases mirrors Config.EnrichmentMatchReleases,
+	// which with the contact gates the release-match phase.
+	enrichmentMatchReleases bool
 	// sonicAnalysisDefault and workerAPIConfigured mirror their Config
 	// fields.
 	sonicAnalysisDefault bool
@@ -427,11 +427,6 @@ type Library struct {
 	// radioArtCache holds what it has answered.
 	radioArtResolver RadioArtResolver
 	radioArtCache    radioArt
-	// artistArt mirrors Config.ArtistArtProvider; artistArtWake is the
-	// one-slot kick RunEnrichment gives the sweep loop, so admin-run
-	// enrichment and the portrait pass move together.
-	artistArt     ArtistArtProvider
-	artistArtWake chan struct{}
 	// radioWrites hands radio bookkeeping from the goroutine relaying a
 	// listener's audio to the writer Open starts. Everything the relay
 	// loop does that touches SQLite goes through here, and nothing else
@@ -591,8 +586,6 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		workerAPIConfigured:      cfg.WorkerAPIConfigured,
 		workers:                  group,
 		radioArtResolver:         cfg.RadioArtResolver,
-		artistArt:                cfg.ArtistArtProvider,
-		artistArtWake:            make(chan struct{}, 1),
 		watchQueue:               newWatchPending(cfg.WatchSettle),
 		watchScans:               make(chan []string, 1),
 		watchNudge:               make(chan struct{}, 1),
@@ -651,7 +644,8 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		}
 	}
 	l.enrichProviders = namedEnrichProviders(cfg.EnrichmentProviders, l.log)
-	l.enrichmentConfigured = cfg.EnrichmentContact != ""
+	l.musicbrainzConfigured = cfg.EnrichmentContact != ""
+	l.enrichmentMatchReleases = cfg.EnrichmentMatchReleases
 	l.sourceProviders = cfg.SourceProviders
 	if err := l.initSync(ctx); err != nil {
 		paths.Close()

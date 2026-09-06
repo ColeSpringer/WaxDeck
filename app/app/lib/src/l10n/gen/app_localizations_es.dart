@@ -739,6 +739,13 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get adminScheduleEnrich => 'Enriquecer los metadatos';
+
+  @override
+  String get adminScheduleEnrichBlurb =>
+      'Rellena los metadatos, las carátulas y las letras que faltan a partir de los proveedores configurados. Se limita a 2000 elementos por noche, así que una biblioteca grande se completa a lo largo de varias noches; una ejecución iniciada a mano no tiene límite. Un proveedor que rechaza algo no se vuelve a consultar hasta que se fuerza una ejecución.';
+
+  @override
   String adminScheduleLastRun(String stamp) {
     return 'Última ejecución $stamp';
   }
@@ -1716,6 +1723,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String artworkDropHint(String slot) {
     return 'Suelta una imagen en $slot';
   }
+
+  @override
+  String get artworkHeldByCoverPin => 'Retenido por la fijación de la portada';
 
   @override
   String get artworkLockHelp =>

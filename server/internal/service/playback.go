@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"hash/fnv"
 	"time"
 
@@ -291,8 +292,14 @@ func (l *Library) checkpointLocked(ctx context.Context, uc *UserCtx, it *model.I
 	unlock := l.lockPlayed(uc.ID, it.PID)
 	defer unlock()
 	stampNS := time.Now().UnixNano()
-	if recordedAt != nil {
-		recNS := clampRecorded(*recordedAt)
+	// A replay's catalog writes land at the time they were recorded,
+	// not now: the catalog stamps last-progress there and never moves a
+	// stamp backwards, so a checkpoint flushed from an offline outbox
+	// keeps its place on the in-progress shelf instead of jumping to
+	// the top. A live checkpoint passes nil and stamps the server clock.
+	at := asOfNS(recordedAt)
+	if at != nil {
+		recNS := *at
 		stamp, err := l.db.PlayStamp(ctx, uc.ID, string(it.PID))
 		if err != nil {
 			return false, &Error{Kind: KindInternal, Err: err}
@@ -321,13 +328,13 @@ func (l *Library) checkpointLocked(ctx context.Context, uc *UserCtx, it *model.I
 			stampNS = stamp.PositionNS
 		}
 	}
-	if err := l.writePosition(ctx, uc, it, positionMS); err != nil {
+	if err := l.writePosition(ctx, uc, it, positionMS, at); err != nil {
 		return false, err
 	}
 	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), stampNS); err != nil {
 		l.log.Warn("stamping position", "pid", string(it.PID), "err", err)
 	}
-	l.markSpokenWordProgress(ctx, uc, it, positionMS)
+	l.markSpokenWordProgress(ctx, uc, it, positionMS, at)
 	return true, nil
 }
 
@@ -340,8 +347,8 @@ func (l *Library) checkpointLocked(ctx context.Context, uc *UserCtx, it *model.I
 // tell this caller their own item is gone and, worse, would look like a
 // refusal they could act on. Only maintenance survives as itself; the
 // rest becomes an internal failure naming what did not happen.
-func (l *Library) writePosition(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64) error {
-	err := l.lib.Playback().Checkpoint(ctx, model.PID(uc.CatalogPID), it.PID, positionMS)
+func (l *Library) writePosition(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, asOf *int64) error {
+	err := l.lib.Playback().Checkpoint(ctx, model.PID(uc.CatalogPID), it.PID, positionMS, asOf)
 	if err == nil {
 		return nil
 	}
@@ -359,12 +366,12 @@ func (l *Library) writePosition(ctx context.Context, uc *UserCtx, it *model.Item
 // cannot distort the thresholds; for multi-file books the position is
 // already book-timeline by contract. Best effort on the checkpoint
 // path: a missed mark self-heals at the next checkpoint.
-func (l *Library) markSpokenWordProgress(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64) {
-	crossed, finished, err := l.spokenWordCrossing(ctx, uc, it, positionMS)
+func (l *Library) markSpokenWordProgress(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, asOf *int64) {
+	crossed, finished, err := l.spokenWordCrossing(ctx, uc, it, positionMS, asOf)
 	if err != nil || !crossed {
 		return
 	}
-	if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, finished); err != nil {
+	if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, finished, asOf); err != nil {
 		l.log.Warn("marking spoken word played", "pid", string(it.PID), "err", err)
 	}
 }
@@ -373,7 +380,12 @@ func (l *Library) markSpokenWordProgress(ctx context.Context, uc *UserCtx, it *m
 // podcasts and audiobooks: whether a mark is due now (a transition the
 // stored state has not recorded) and whether it also finishes the
 // item. Non-spoken-word items never cross here.
-func (l *Library) spokenWordCrossing(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64) (crossed, finished bool, err error) {
+//
+// recordedAt is the time a derived crossing was taken at, for a
+// replayed checkpoint; nil for a live one and for a listen session's
+// own mark, which is a distinct event and counts whatever the flags
+// say. See the deferral below for why the two differ.
+func (l *Library) spokenWordCrossing(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, recordedAt *int64) (crossed, finished bool, err error) {
 	mt := mediaTypeForKind(it.Kind)
 	if mt != "podcast" && mt != "audiobook" {
 		return false, false, nil
@@ -413,6 +425,21 @@ func (l *Library) spokenWordCrossing(ctx context.Context, uc *UserCtx, it *model
 		// one play, which is the truth that matters.
 		return false, false, nil
 	}
+	if recordedAt != nil && st != nil && st.PlayedChangedAt > *recordedAt {
+		// A flag change recorded after this checkpoint - an un-mark on
+		// another device - already decided the item's played state, and
+		// the catalog honours it: a mark carrying an older recorded time
+		// leaves the flag alone. But the count increments regardless,
+		// and the dedupe above is the only thing that stops this
+		// crossing repeating, so without this an outbox of checkpoints
+		// past the bar would count one play each, for ever, on an item
+		// that never reads played.
+		//
+		// A listen session passes nil here and still counts: it is a
+		// play that happened, and an un-mark that keeps the count says
+		// so. A crossing is derived state, not an event, so it defers.
+		return false, false, nil
+	}
 	return true, finished, nil
 }
 
@@ -427,6 +454,30 @@ func asOfNS(recordedAt *time.Time) *int64 {
 	}
 	ns := clampRecorded(*recordedAt)
 	return &ns
+}
+
+// listenMaxPlayedMS is the longest single play any reported session may
+// contribute to its own end time; see listenPlayedAt.
+const listenMaxPlayedMS = int64(24 * time.Hour / time.Millisecond)
+
+// listenPlayedAt is when a reported session's play actually happened:
+// the moment it stopped, which is its start plus what was played,
+// clamped to the server clock like any client-reported time. It is
+// what a mark derived from that session stamps in the catalog, so a
+// history moved in from elsewhere leaves the recency lists reading the
+// plays' own dates rather than the import instant, and a listen that
+// arrives late cannot pretend to be newer than one that arrived on
+// time.
+func listenPlayedAt(s ListenSession) int64 {
+	// Bounded before the multiplication, which is nanoseconds and
+	// overflows int64 somewhere past three hundred years: a session
+	// claiming a duration in the wrong unit would wrap to a negative
+	// duration and date the play in the seventeenth century. The bound
+	// is the one the history import already applies to a source's
+	// claimed play length - past it the number is not a measurement of
+	// anything, and the start alone is the honest reading.
+	ms := min(max(s.MsPlayed, 0), listenMaxPlayedMS)
+	return clampRecorded(s.StartedAt.Add(time.Duration(ms) * time.Millisecond))
 }
 
 // SetStar stars or unstars the item for the acting user and returns the
@@ -551,7 +602,7 @@ func (l *Library) setPlayedLocked(ctx context.Context, uc *UserCtx, it *model.It
 	unlock := l.lockPlayed(uc.ID, it.PID)
 	defer unlock()
 	if positionMS != nil {
-		if err := l.writePosition(ctx, uc, it, *positionMS); err != nil {
+		if err := l.writePosition(ctx, uc, it, *positionMS, nil); err != nil {
 			return false, err
 		}
 		// Stamped at server-now, which is what makes this the newest
@@ -639,6 +690,13 @@ func (l *Library) ingestListens(ctx context.Context, uc *UserCtx, sessions []Lis
 	if err != nil {
 		return res, &Error{Kind: KindInternal, Err: err}
 	}
+	// The outcome per claimed row, written back once the batch's marks
+	// are done. A crash anywhere in between leaves claims the sweep
+	// retries; that window is the batch rather than a single statement,
+	// which is what the ten-minute arrival grace is sized for. Two
+	// lists rather than a write apiece: the batch may be a whole
+	// imported history.
+	var landed, notOwed []string
 	for i, r := range rows {
 		if !claimed[i] {
 			res.Duplicates++
@@ -650,6 +708,14 @@ func (l *Library) ingestListens(ctx context.Context, uc *UserCtx, sessions []Lis
 			// The mark can never apply (the item vanished mid-batch);
 			// the listen itself is still valid data, so keep it.
 			l.log.Warn("marking played", "pid", r.s.PID, "err", out.permanent)
+		}
+		switch {
+		case out.marked:
+			landed = append(landed, r.s.SessionID)
+		case out.fatal == nil:
+			// Did not cross, or can never apply: nothing is owed and
+			// the sweep must not look at it again.
+			notOwed = append(notOwed, r.s.SessionID)
 		}
 		if out.fatal != nil {
 			// This row and every row behind it hold a claim their mark
@@ -669,6 +735,7 @@ func (l *Library) ingestListens(ctx context.Context, uc *UserCtx, sessions []Lis
 			if delErr != nil {
 				l.log.Error("compensating listen delete", "sessions", len(undo), "err", delErr)
 			}
+			l.recordListenMarks(ctx, uc.ID, landed, notOwed)
 			return res, out.fatal
 		}
 		if out.marked {
@@ -688,12 +755,201 @@ func (l *Library) ingestListens(ctx context.Context, uc *UserCtx, sessions []Lis
 			}
 		}
 	}
+	l.recordListenMarks(ctx, uc.ID, landed, notOwed)
 	return res, nil
+}
+
+// recordListenMarks writes back what each claimed row's mark did. Best
+// effort: a failure here leaves the rows claimed, which is exactly what
+// the sweep is for, and failing the ingest over it would take back
+// listens whose marks already landed.
+func (l *Library) recordListenMarks(ctx context.Context, userID string, landed, notOwed []string) {
+	// Detached from the request's context for the same reason the
+	// compensating delete is: a cancelled one is the likeliest reason
+	// the batch stopped where it did, and leaving the states unwritten
+	// hands the sweep work it does not need.
+	//
+	// Its own bound rather than the compensating delete's five seconds.
+	// Losing this write costs the sweep a re-mark of the whole batch an
+	// hour later - every play counted twice - so it is worth waiting
+	// out a scan or a backup holding the write connection, which the
+	// tighter bound would not.
+	stateCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), listenMarkWriteTimeout)
+	defer cancel()
+	for _, w := range []struct {
+		ids   []string
+		state int
+	}{{landed, wdb.ListenMarkLanded}, {notOwed, wdb.ListenMarkNotOwed}} {
+		if err := l.db.SetListenMarkStates(stateCtx, userID, w.ids, w.state); err != nil {
+			l.log.Warn("recording listen mark states", "state", w.state, "sessions", len(w.ids), "err", err)
+		}
+	}
 }
 
 // listenUndoTimeout bounds the compensating delete, which runs on a
 // context detached from the caller's and so has none of its own.
 const listenUndoTimeout = 5 * time.Second
+
+// listenMarkWriteTimeout bounds the mark-state write-back, which runs
+// detached the same way; see recordListenMarks for why it is longer.
+const listenMarkWriteTimeout = 60 * time.Second
+
+const (
+	// listenMarkGrace is how long a claimed row is left alone, measured
+	// from when it arrived, before the sweep calls it stranded. A batch
+	// is claimed and then marked row by row, so anything younger than
+	// this may simply still be in flight; ten minutes is longer than
+	// any batch takes and far shorter than the hour between passes.
+	listenMarkGrace = 10 * time.Minute
+	// listenMarkSweepLimit bounds one pass, so a log that stranded
+	// thousands of claims is worked off over hours instead of holding
+	// the catalog for one long run.
+	listenMarkSweepLimit = 500
+)
+
+// ListenMarkSweep is what one stranded-mark pass did.
+type ListenMarkSweep struct {
+	Scanned int
+	Marked  int
+	Settled int // rows that turned out to owe nothing
+}
+
+// SweepListenMarks re-runs the played-mark for listens that were
+// claimed but whose outcome was never written back - the window
+// between a mark landing and the statement that records it, which a
+// crash or a lost write connection can fall into.
+//
+// This deliberately trades at-most-once for at-least-once. A crash in
+// that window makes this pass mark the same listen a second time, and
+// the catalog's play count always increments, so the play is counted
+// twice; the alternative was losing it, which is what the log looked
+// like before. The mark carries the session's own end time either way,
+// so nothing about the catalog's recency moves.
+//
+// Scrobbles are deliberately not re-enqueued here. A delivery an hour
+// late is worse than none, and the ingest that already marked this
+// listen may well have enqueued one before it died - a second copy on
+// somebody else's service is not recoverable the way a play count is.
+func (l *Library) SweepListenMarks(ctx context.Context) (ListenMarkSweep, error) {
+	return l.sweepListenMarks(ctx, time.Now().Add(-listenMarkGrace).UnixNano())
+}
+
+// sweepListenMarks is the pass with its arrival cutoff supplied, so a
+// test can drive it without waiting out the grace.
+func (l *Library) sweepListenMarks(ctx context.Context, cutoffNS int64) (ListenMarkSweep, error) {
+	var rep ListenMarkSweep
+	rows, err := l.db.PendingListenMarks(ctx, cutoffNS, listenMarkSweepLimit)
+	if err != nil {
+		return rep, &Error{Kind: KindInternal, Err: err}
+	}
+	rep.Scanned = len(rows)
+	// A stranded batch is one user's, so the contexts are resolved once
+	// and the outcomes batch per user exactly as ingest's do.
+	ucs := map[string]sweptUser{}
+	landed := map[string][]string{}
+	notOwed := map[string][]string{}
+	for _, r := range rows {
+		who, known := ucs[r.UserID]
+		if !known {
+			who = l.sweptUserFor(ctx, r.UserID)
+			ucs[r.UserID] = who
+		}
+		switch {
+		case who.uc != nil:
+		case who.gone:
+			// The account is gone; the listen row survives it as data
+			// and the mark it owed can never be made.
+			rep.Settled++
+			notOwed[r.UserID] = append(notOwed[r.UserID], r.SessionID)
+			continue
+		default:
+			// The account could not be read - a busy database, a
+			// cancelled context. Settling on that would drop the play
+			// for good, which is the loss this sweep exists to prevent,
+			// so the claim stands for the next pass.
+			continue
+		}
+		uc := who.uc
+		it, err := l.lib.Get(ctx, model.PID(r.ItemPID))
+		if err != nil {
+			switch KindOf(classify(err)) {
+			case KindNotFound, KindInvalid:
+				rep.Settled++
+				notOwed[r.UserID] = append(notOwed[r.UserID], r.SessionID)
+			default:
+				// Transient: leave the claim standing for the next pass.
+			}
+			continue
+		}
+		out := l.markListenPlayed(ctx, uc, it, ListenSession{
+			SessionID: r.SessionID,
+			PID:       apiPID(prefixForKind(it.Kind), it.PID),
+			StartedAt: r.StartedAt,
+			MsPlayed:  r.MsPlayed,
+			SkippedMs: r.SkippedMs,
+			Finished:  r.Finished,
+			Client:    r.Client,
+			Source:    r.Source,
+		}, mediaTypeForKind(it.Kind))
+		switch {
+		case out.fatal != nil:
+			// The catalog is unavailable, not this row's problem;
+			// every row behind it would fail the same way.
+			l.log.Warn("sweeping stranded listen marks", "err", out.fatal)
+			l.recordSweptMarks(ctx, landed, notOwed)
+			return rep, out.fatal
+		case out.marked:
+			rep.Marked++
+			landed[r.UserID] = append(landed[r.UserID], r.SessionID)
+			l.emitUserEvent(ctx, r.UserID, eventPlayState, string(it.PID))
+		default:
+			rep.Settled++
+			notOwed[r.UserID] = append(notOwed[r.UserID], r.SessionID)
+		}
+	}
+	l.recordSweptMarks(ctx, landed, notOwed)
+	return rep, nil
+}
+
+// sweptUser is what the sweep could learn about one row's account: a
+// usable context, a definite absence, or neither. The three are kept
+// apart because only the middle one may settle a row - collapsing a
+// transient read failure into "gone" would write the row off for good.
+type sweptUser struct {
+	uc   *UserCtx
+	gone bool
+}
+
+// sweptUserFor resolves one account for the sweep, distinguishing an
+// account that is gone from one that could not be read. userCtxByID
+// cannot: it answers not-found for every failure, which is right for a
+// request (the caller sees no such user either way) and wrong here.
+func (l *Library) sweptUserFor(ctx context.Context, userID string) sweptUser {
+	u, err := l.db.UserByID(ctx, userID)
+	switch {
+	case errors.Is(err, wdb.ErrNotFound), err == nil && u == nil:
+		return sweptUser{gone: true}
+	case err != nil:
+		l.log.Warn("sweeping listen marks: reading the account", "user", userID, "err", err)
+		return sweptUser{}
+	}
+	uc, err := l.UserCtx(ctx, u)
+	if err != nil {
+		l.log.Warn("sweeping listen marks: building the account context", "user", userID, "err", err)
+		return sweptUser{}
+	}
+	return sweptUser{uc: uc}
+}
+
+// recordSweptMarks writes back the sweep's outcomes per user.
+func (l *Library) recordSweptMarks(ctx context.Context, landed, notOwed map[string][]string) {
+	for userID, ids := range landed {
+		l.recordListenMarks(ctx, userID, ids, nil)
+	}
+	for userID, ids := range notOwed {
+		l.recordListenMarks(ctx, userID, nil, ids)
+	}
+}
 
 // unmarkedTail names the sessions a fatal mark at row `from` leaves
 // claimed but unmarked - that row, whose mark failed, and every row
@@ -795,6 +1051,12 @@ type listenMarkOutcome struct {
 // stripe so the read it decides from and the write it makes are one
 // step against a concurrent checkpoint or undo.
 //
+// The mark carries the session's own end time, so the catalog's
+// recency follows the play rather than the report: an import of last
+// year's history leaves last-played where the plays were, and the
+// catalog's never-backwards rule means a late arrival cannot regress
+// one that came in on time.
+//
 // Event emission and the scrobble enqueue are the caller's, so nothing
 // under the stripe reaches past the catalog.
 func (l *Library) markListenPlayed(ctx context.Context, uc *UserCtx, it *model.ItemView, s ListenSession, mt string) listenMarkOutcome {
@@ -823,7 +1085,10 @@ func (l *Library) markListenPlayed(ctx context.Context, uc *UserCtx, it *model.I
 			pos = st.PositionMS
 		}
 		var evalErr error
-		crossed, finished, evalErr = l.spokenWordCrossing(ctx, uc, it, pos)
+		// nil, not the session's own time: a listen is an event, and a
+		// later un-mark keeps the count by contract. See the deferral
+		// in spokenWordCrossing.
+		crossed, finished, evalErr = l.spokenWordCrossing(ctx, uc, it, pos, nil)
 		if evalErr != nil {
 			return listenMarkOutcome{fatal: evalErr}
 		}
@@ -837,7 +1102,8 @@ func (l *Library) markListenPlayed(ctx context.Context, uc *UserCtx, it *model.I
 	if !crossed {
 		return listenMarkOutcome{}
 	}
-	if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, finished); err != nil {
+	playedAt := listenPlayedAt(s)
+	if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, finished, &playedAt); err != nil {
 		err = classify(err)
 		switch KindOf(err) {
 		case KindNotFound, KindInvalid:

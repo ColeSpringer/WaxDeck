@@ -440,8 +440,12 @@ func TestEnrichmentStatusAndItemEnrich(t *testing.T) {
 	if len(st.Providers) != 3 {
 		t.Fatalf("providers = %+v, want the three built-ins", st.Providers)
 	}
+	// The harness configures no MusicBrainz contact, and the catalog
+	// does not register its built-ins without one: key-free is not the
+	// same as configured, and reporting them ready here would promise a
+	// lyrics or cover fill this server cannot make.
 	for _, p := range st.Providers {
-		if !p.Builtin || !p.Configured {
+		if !p.Builtin || p.Configured {
 			t.Fatalf("built-in %q reported builtin=%v configured=%v", p.Name, p.Builtin, p.Configured)
 		}
 	}

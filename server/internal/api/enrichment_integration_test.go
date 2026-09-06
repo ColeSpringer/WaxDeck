@@ -583,3 +583,269 @@ func TestEnrichApplyRefusesWantMismatchAndForeignProviders(t *testing.T) {
 		t.Fatalf("garbage cover status = %d, want 400", resp.StatusCode)
 	}
 }
+
+// fakeFieldsProvider answers the fields capability on both rungs,
+// recording the request so a test can prove the identifiers rode along.
+type fakeFieldsProvider struct {
+	mu     sync.Mutex
+	name   string
+	seen   []enrich.Request
+	fields map[string]string
+}
+
+func (f *fakeFieldsProvider) Name() string {
+	if f.name != "" {
+		return f.name
+	}
+	return "factdb"
+}
+func (f *fakeFieldsProvider) Capabilities() enrich.Capability { return enrich.CapFields }
+func (f *fakeFieldsProvider) Enrich(_ context.Context, req enrich.Request) (*enrich.Candidate, error) {
+	f.mu.Lock()
+	f.seen = append(f.seen, req)
+	f.mu.Unlock()
+	if req.Type != enrich.TargetRecording {
+		return nil, nil
+	}
+	return &enrich.Candidate{Confidence: 0.7, Fields: f.fields}, nil
+}
+
+func (f *fakeFieldsProvider) lastRecording() (enrich.Request, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := len(f.seen) - 1; i >= 0; i-- {
+		if f.seen[i].Type == enrich.TargetRecording {
+			return f.seen[i], true
+		}
+	}
+	return enrich.Request{}, false
+}
+
+// The editor's Fetch offers a track's scalar fields, and the preview
+// and commit halves agree: what the sheet showed is what lands.
+func TestEnrichItemFillsTrackFields(t *testing.T) {
+	t.Parallel()
+	p := &fakeFieldsProvider{fields: map[string]string{
+		"bpm": "123", "isrc": "GBDUW0000059", "composer": "Bangalter",
+		// A key the track fill set does not take: dropped, never
+		// written, and never proposed.
+		"label": "Virgin",
+	}}
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = []enrich.Provider{p}
+	})
+	page := h.items(t, "?mediaType=music")
+	if len(page.Items) == 0 {
+		t.Fatal("no music items in the demo library")
+	}
+	pid := page.Items[0].Pid
+
+	resp := h.postJSON(t, "/api/v1/items/"+pid+"/enrich/preview",
+		map[string]any{"want": []string{"fields"}})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("preview track fields status = %d", resp.StatusCode)
+	}
+	preview := decode[EnrichPreview](t, resp)
+	got := map[string]string{}
+	for _, f := range preview.Fields {
+		got[f.Name] = f.Proposed
+		if f.Provider != "factdb" {
+			t.Errorf("%s cites provider %q", f.Name, f.Provider)
+		}
+	}
+	if got["bpm"] != "123" || got["isrc"] != "GBDUW0000059" || got["composer"] != "Bangalter" {
+		t.Fatalf("preview fields = %v, want the track's own three", got)
+	}
+	if _, ok := got["label"]; ok {
+		t.Errorf("preview offered an album field on the track rung: %v", got)
+	}
+
+	resp = h.postJSON(t, "/api/v1/items/"+pid+"/enrich", map[string]any{
+		"want":     []string{"fields"},
+		"proposal": map[string]any{"fields": preview.Fields},
+	})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("apply track fields status = %d", resp.StatusCode)
+	}
+	res := decode[EnrichItemResult](t, resp)
+	if !containsString(res.Applied, "fields: factdb") {
+		t.Fatalf("applied = %v, want the fields edit", res.Applied)
+	}
+	meta := h.itemMeta(t, pid)
+	if meta.Fields["bpm"] != "123" || meta.Fields["isrc"] != "GBDUW0000059" ||
+		meta.Fields["composer"] != "Bangalter" {
+		t.Fatalf("stored fields = %v", meta.Fields)
+	}
+
+	// A second fetch has nothing left to fill, and says so without
+	// asking a provider at all - every key in the set is filled, so
+	// there is nothing an answer could land.
+	asked := len(p.seen)
+	resp = h.postJSON(t, "/api/v1/items/"+pid+"/enrich", map[string]any{
+		"want": []string{"fields"},
+	})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("second fetch status = %d", resp.StatusCode)
+	}
+	res = decode[EnrichItemResult](t, resp)
+	if !containsString(res.Skipped, "fields: nothing new to fill") {
+		t.Fatalf("skipped = %v, want the fill-when-empty guard", res.Skipped)
+	}
+	if len(p.seen) != asked {
+		t.Errorf("a full item still asked %d providers", len(p.seen)-asked)
+	}
+
+	// The request carries the identifier the walk keys on. A second
+	// track with only its ISRC set is the shape that shows it: something
+	// still to fill, and an identifier to ask by.
+	if len(page.Items) < 2 {
+		t.Fatal("the demo library holds one music item")
+	}
+	other := page.Items[1].Pid
+	resp = h.patchJSON(t, "/api/v1/items/"+other+"/metadata", map[string]any{
+		"fields": map[string]string{"isrc": "GBAYE0601498"},
+	})
+	wantStatus(t, resp, 200, "set isrc")
+	resp = h.postJSON(t, "/api/v1/items/"+other+"/enrich/preview",
+		map[string]any{"want": []string{"fields"}})
+	wantStatus(t, resp, 200, "preview the second track")
+
+	req, ok := p.lastRecording()
+	if !ok {
+		t.Fatal("the provider was never asked about a recording")
+	}
+	if req.ISRC != "GBAYE0601498" {
+		t.Errorf("request ISRC = %q, want the stored one", req.ISRC)
+	}
+	if req.Title == "" || req.Artist == "" {
+		t.Errorf("request = %+v, want the track's names for a text match", req)
+	}
+}
+
+// The fields want is a track's. Asking for it on an audiobook is
+// refused with the reason rather than silently filling nothing.
+func TestEnrichItemRefusesFieldsForABook(t *testing.T) {
+	t.Parallel()
+	p := &fakeFieldsProvider{fields: map[string]string{"bpm": "123"}}
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = []enrich.Provider{p}
+	})
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook")
+	if len(books.Items) == 0 {
+		t.Fatal("no audiobook scanned")
+	}
+	resp := h.postJSON(t, "/api/v1/items/"+books.Items[0].Pid+"/enrich",
+		map[string]any{"want": []string{"fields"}})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("fields on a book status = %d", resp.StatusCode)
+	}
+	res := decode[EnrichItemResult](t, resp)
+	if !containsString(res.Skipped, "fields: not a track") {
+		t.Fatalf("skipped = %v, want the kind guard", res.Skipped)
+	}
+}
+
+// The book want now fills upstream's whole book set, so the editor's
+// Fetch offers exactly what the catalog's book walk would.
+func TestEnrichBookFillsTheWholeFillSet(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = []enrich.Provider{fakeBookProvider{
+			name: "bookfacts",
+			cand: &enrich.Candidate{
+				Publisher: "Beta House",
+				Fields: map[string]string{
+					"subtitle": "A Study", "edition": "Unabridged",
+					"narrator": "Reader One", "description": "Blurb.",
+				},
+			},
+		}}
+	})
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook")
+	if len(books.Items) == 0 {
+		t.Fatal("no audiobook scanned")
+	}
+	book := books.Items[0].Pid
+	resp := h.patchJSON(t, "/api/v1/items/"+book+"/metadata", map[string]any{
+		"fields": map[string]string{"asin": "B000002L5R"},
+	})
+	wantStatus(t, resp, 200, "set asin")
+
+	resp = h.postJSON(t, "/api/v1/items/"+book+"/enrich", map[string]any{"want": []string{"book"}})
+	wantStatus(t, resp, 200, "enrich book")
+	fields := h.itemMeta(t, book).Fields
+	for name, want := range map[string]string{
+		"publisher": "Beta House", "subtitle": "A Study",
+		"edition": "Unabridged", "narrator": "Reader One", "description": "Blurb.",
+	} {
+		if fields[name] != want {
+			t.Errorf("%s = %q, want %q", name, fields[name], want)
+		}
+	}
+}
+
+// The editor's Fetch offers what a nightly pass would fill, and the
+// catalog's walk keeps the first answer per key across every capable
+// provider. Two providers commonly split the set, so stopping at the
+// first would leave the other's field for a later pass to find - and
+// the sheet would promise less than the schedule delivers.
+func TestEnrichItemMergesFieldsAcrossProviders(t *testing.T) {
+	t.Parallel()
+	tempo := &fakeFieldsProvider{fields: map[string]string{"bpm": "123"}}
+	credits := &fakeFieldsProvider{fields: map[string]string{"composer": "Bangalter"}}
+	credits.name = "creditdb"
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = []enrich.Provider{tempo, credits}
+	})
+	page := h.items(t, "?mediaType=music")
+	if len(page.Items) == 0 {
+		t.Fatal("no music items in the demo library")
+	}
+	pid := page.Items[0].Pid
+
+	resp := h.postJSON(t, "/api/v1/items/"+pid+"/enrich/preview",
+		map[string]any{"want": []string{"fields"}})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("preview status = %d", resp.StatusCode)
+	}
+	preview := decode[EnrichPreview](t, resp)
+	got := map[string]string{}
+	for _, f := range preview.Fields {
+		got[f.Name] = f.Provider
+	}
+	if got["bpm"] != "factdb" || got["composer"] != "creditdb" {
+		t.Fatalf("preview providers = %v, want each field to cite the one that answered it", got)
+	}
+
+	// And the commit lands both, one edit per provider, so the
+	// provenance the sheet showed is the provenance stored.
+	resp = h.postJSON(t, "/api/v1/items/"+pid+"/enrich", map[string]any{
+		"want":     []string{"fields"},
+		"proposal": map[string]any{"fields": preview.Fields},
+	})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("apply status = %d", resp.StatusCode)
+	}
+	res := decode[EnrichItemResult](t, resp)
+	if !containsString(res.Applied, "fields: creditdb, factdb") {
+		t.Fatalf("applied = %v, want both providers named", res.Applied)
+	}
+	meta := h.itemMeta(t, pid)
+	if meta.Fields["bpm"] != "123" || meta.Fields["composer"] != "Bangalter" {
+		t.Fatalf("stored fields = %v, want both providers' values", meta.Fields)
+	}
+}

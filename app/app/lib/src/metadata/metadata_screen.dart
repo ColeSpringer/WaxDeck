@@ -256,8 +256,12 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
     );
   });
 
+  /// `fields` is the track rung of the catalog's own fields walk -
+  /// tempo, ISRC, composer - so the editor's Fetch offers a track
+  /// exactly what a nightly pass would fill. The server refuses it for
+  /// anything that is not a track, which is why it rides music alone.
   static List<String> _wantsFor(MediaType mediaType) => switch (mediaType) {
-    MediaType.music => const ['cover', 'genres'],
+    MediaType.music => const ['cover', 'genres', 'fields'],
     MediaType.audiobook => const ['cover', 'book'],
     MediaType.podcast => const ['cover'],
   };

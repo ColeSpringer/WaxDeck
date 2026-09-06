@@ -1388,7 +1388,9 @@ abstract interface class WaxDeckRepository {
   Future<String> rematchItem(String pid);
 
   /// `POST /items/{pid}/enrich`: fetches the wanted artifacts
-  /// (`cover`, `lyrics`, `genres`, `book`) for one item now. With a
+  /// (`cover`, `lyrics`, `genres`, `book`, `fields`) for one item now.
+  /// `fields` is a track's scalar metadata and `book` an audiobook's;
+  /// the server refuses either for the wrong kind. With a
   /// [proposal] nothing is fetched: the server commits exactly what
   /// the preview answered, so what was approved is what lands (the
   /// catalog's un-previewable built-ins still backfill after it).

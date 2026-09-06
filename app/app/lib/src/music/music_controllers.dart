@@ -75,7 +75,7 @@ enum MusicDimension {
   /// The dimensions whose buckets have artwork worth fetching.
   ///
   /// Albums and artists. Artists earned their place when the server
-  /// grew its portrait sweep: artist-level artwork now exists without an
+  /// grew its artist-art walk: artist-level artwork now exists without an
   /// admin setting it by hand, so the index row's ask stopped being a
   /// round trip for a statically known no. Genre and year buckets carry
   /// no `entityPid` on this surface (the server deliberately mints none

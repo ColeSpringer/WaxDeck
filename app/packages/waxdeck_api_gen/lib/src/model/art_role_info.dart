@@ -9,7 +9,7 @@ import 'package:built_value/serializer.dart';
 
 part 'art_role_info.g.dart';
 
-/// One artwork slot an entity holds at its own level, with where its image came from and whether it is pinned.  A slot that reports `locked: true` and no `format` is a lock with nothing behind it: the cover was cleared and pinned cleared, which means \"do not refill this\" rather than \"this has no cover yet\". It is the one artwork state that was previously invisible, and it is why an entity can list a role at all while holding no image.  Every role can be locked. `locked` is the **effective** lock on this slot: the entity's whole-artwork pin, which is the front cover's own and also gates enrichment's fills in every other role, or the role's own pin, which gates that slot alone. So a `true` on an auxiliary role does not say which of the two put it there, and a hand-set image in that role answers to the role's own pin regardless. 
+/// One artwork slot an entity holds at its own level, with where its image came from and whether it is pinned.  A slot that reports `locked: true` and no `format` is a lock with nothing behind it: the cover was cleared and pinned cleared, which means \"do not refill this\" rather than \"this has no cover yet\". It is the one artwork state that was previously invisible, and it is why an entity can list a role at all while holding no image.  Every role can be locked, and there are two pins. `locked` is the **effective** lock on this slot: the entity's whole-artwork pin, which is the front cover's own and also gates enrichment's fills in every other role, or the role's own pin, which gates that slot alone. `roleLocked` is the slot's own pin by itself, so a per-role pin control reads that one - it is what says whether unpinning this role would change anything.  On `front` the two pins are one field, so `roleLocked` always equals `locked` there. An auxiliary slot with `locked: true` and `roleLocked: false` is held by the whole-artwork pin alone: releasing its own pin opens nothing, and a client can caption it as held by the cover pin rather than draw a toggle that does nothing. 
 ///
 /// Properties:
 /// * [role] 
@@ -21,6 +21,7 @@ part 'art_role_info.g.dart';
 /// * [sourceUrl] - Where a fetched cover's bytes came from, redacted exactly as `ArtSource.sourceUrl` is: scheme, host and path only, and withheld altogether for a `feed` cover on a show with stored credentials. 
 /// * [updatedAt] - When this slot was last written.
 /// * [locked] - Whether this slot is pinned against enrichment and scan re-derives, under the whole-artwork pin or its own. See the schema description for which. 
+/// * [roleLocked] - Whether this slot's **own** pin is set, ignoring the entity's whole-artwork one. Equal to `locked` on `front`, where the two are one field.  Absent on a server predating the field. Absent is not false: a client that reads it as one would draw an own-pinned slot as open and offer a toggle that re-pins it, leaving no way to release the slot. Fall back to `locked`, which is the only reading that server had. 
 @BuiltValue()
 abstract class ArtRoleInfo implements Built<ArtRoleInfo, ArtRoleInfoBuilder> {
   @BuiltValueField(wireName: r'role')
@@ -58,6 +59,10 @@ abstract class ArtRoleInfo implements Built<ArtRoleInfo, ArtRoleInfoBuilder> {
   /// Whether this slot is pinned against enrichment and scan re-derives, under the whole-artwork pin or its own. See the schema description for which. 
   @BuiltValueField(wireName: r'locked')
   bool? get locked;
+
+  /// Whether this slot's **own** pin is set, ignoring the entity's whole-artwork one. Equal to `locked` on `front`, where the two are one field.  Absent on a server predating the field. Absent is not false: a client that reads it as one would draw an own-pinned slot as open and offer a toggle that re-pins it, leaving no way to release the slot. Fall back to `locked`, which is the only reading that server had. 
+  @BuiltValueField(wireName: r'roleLocked')
+  bool? get roleLocked;
 
   ArtRoleInfo._();
 
@@ -140,6 +145,13 @@ class _$ArtRoleInfoSerializer implements PrimitiveSerializer<ArtRoleInfo> {
       yield r'locked';
       yield serializers.serialize(
         object.locked,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.roleLocked != null) {
+      yield r'roleLocked';
+      yield serializers.serialize(
+        object.roleLocked,
         specifiedType: const FullType(bool),
       );
     }
@@ -228,6 +240,13 @@ class _$ArtRoleInfoSerializer implements PrimitiveSerializer<ArtRoleInfo> {
             specifiedType: const FullType(bool),
           ) as bool;
           result.locked = valueDes;
+          break;
+        case r'roleLocked':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.roleLocked = valueDes;
           break;
         default:
           unhandled.add(key);

@@ -225,14 +225,12 @@ provider.
   role, so it supplies disc art and artist backgrounds as well as front
   covers, and it is registered ahead of the others because the
   enrichment engine stops asking once every slot is held.
-- `WAXDECK_ARTIST_ART` (default `true`): fill missing artist portraits.
-  Artists MusicBrainz matched are filled by the catalog's own
-  enrichment pass, from fanart.tv when its key is set (keyed on the
-  MusicBrainz artist id) and from Deezer otherwise; the artists that
-  pass cannot reach, which are the ones with no MusicBrainz id, are
-  filled by a daily background sweep asking Deezer by name. Set `false`
-  and the server never asks either service for a portrait on either
-  path.
+- `WAXDECK_ARTIST_ART` (default `true`): fill missing artist portraits
+  during the catalog's enrichment pass, which walks every artist by
+  name - the ones MusicBrainz matched and the ones it did not. fanart.tv
+  answers by MusicBrainz artist id where its key is set; Deezer answers
+  by name. Set `false` and the providers stop advertising artist art, so
+  the pass never asks either service for one.
 - `WAXDECK_DISCOGS_TOKEN`: Discogs personal access token; empty leaves
   that artwork and genre provider unconfigured.
 - `WAXDECK_HARDCOVER_KEY`: Hardcover API token; empty leaves that
@@ -254,8 +252,15 @@ provider.
   the archive rung only exists when matching is on.
 - `WAXDECK_ENRICHMENT_CONTACT`: MusicBrainz contact (an email or a
   URL) the whole-library enrichment pass identifies itself with.
-  MusicBrainz requires an identifying agent, so empty leaves that pass
-  disabled.
+  MusicBrainz requires an identifying agent, so empty leaves the
+  identity phases disabled - matching artists, release groups and books
+  against MusicBrainz, and the release match below. It also gates
+  lyrics: LRCLIB needs no key, but the catalog registers it only when it
+  has an identifying agent to dial with. The phases that answer to
+  WaxDeck's own providers run without a contact: artist art, auxiliary
+  artwork, and the fields walks, plus lyrics where a provider supplies
+  them. The enrichment status surface reports both halves and names the
+  phases a run would execute.
 - `WAXDECK_ENRICHMENT_MATCH_RELEASES` (default `true`): during
   enrichment, resolve which pressing of a record the library holds
   from its barcode or catalog number, deciding ties on medium and

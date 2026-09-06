@@ -640,8 +640,9 @@ paths:
         library scan), `backup` (a backup archive with retention
         applied), `prune` (event log, replay-guard stamp, audit
         history, and playback session history pruning, under
-        server-owned horizons), and `analyze` (the audio-decoding pass
-        behind loudness, fingerprints, and waveforms). Administrators
+        server-owned horizons), `analyze` (the audio-decoding pass
+        behind loudness, fingerprints, and waveforms), and `enrich` (the
+        whole-library enrichment pass, capped per night). Administrators
         only.
       tags: [admin]
       responses:
@@ -1508,6 +1509,13 @@ components:
             under. Optional on PUT so settings writers predating this
             field never change it: absent keeps the current value.
             Always present in responses.
+
+
+            Switching it on catches up: an unlimited pass writes every
+            value the catalog holds that is not yet on disk, including
+            ones filled by earlier passes that ran with it off. A pass
+            that was capped or scoped writes only within its own reach,
+            so the nightly schedule catches up a night at a time.
         radioExternalArt:
           type: boolean
           description: >
@@ -1625,7 +1633,7 @@ components:
 
     ScheduleKind:
       type: string
-      enum: [scan, backup, prune, analyze]
+      enum: [scan, backup, prune, analyze, enrich]
       description: >
         A schedulable job kind. A shared named schema on purpose (the
         path parameter and the schedule object both use it): identical
@@ -1637,6 +1645,18 @@ components:
         it costs. A firing that collides with an analyze pass already
         running is skipped rather than recorded as run, so it retries on
         the next tick instead of waiting for the next scheduled window.
+
+        `enrich` is on by default and runs the whole-library enrichment
+        pass, capped per night so a large library's first pass is paid
+        over several nights rather than in one long unattended run; an
+        administrator's own run through `POST
+        /library/enrichment/run` is uncapped. The cap is spent in phase
+        order, so on a server with a MusicBrainz contact the identity
+        phases drain first and the artwork and fields walks wait behind
+        them. It is not forced, so a
+        target some provider already declined is not asked again until
+        a forced run. A firing that collides with a pass already
+        running is skipped the way `analyze` is.
 
     ScrobblingAdminConfig:
       type: object

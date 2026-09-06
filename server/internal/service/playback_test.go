@@ -5,6 +5,8 @@ import (
 	"slices"
 	"testing"
 	"time"
+
+	"github.com/colespringer/waxbin/model"
 )
 
 func TestCrossedPlayedThreshold(t *testing.T) {
@@ -302,5 +304,129 @@ func TestConnectListenLands(t *testing.T) {
 	}
 	if st.PlayCount != 1 || !st.Played {
 		t.Fatalf("play state = %+v, want one counted play", st)
+	}
+}
+
+// TestListenMarksStampTheSessionsOwnTime pins the rule the catalog's
+// recency now follows: a play is stamped when it happened, not when it
+// was reported. A history moved in from another service therefore
+// leaves last-played on the plays' own dates, and because the catalog
+// never moves a stamp backwards, a listen that arrives late cannot
+// regress one that arrived on time.
+func TestListenMarksStampTheSessionsOwnTime(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	pid, _ := fixtureTrackPID(t, ctx, svc, uc, "Amber Waves")
+
+	lastYear := time.Now().UTC().AddDate(-1, 0, 0).Truncate(time.Second)
+	res, err := svc.IngestListens(ctx, uc, []ListenSession{{
+		SessionID: "s-import",
+		PID:       pid,
+		StartedAt: lastYear,
+		MsPlayed:  2000,
+		Finished:  true,
+		Source:    "import",
+	}})
+	if err != nil || res.Accepted != 1 {
+		t.Fatalf("ingest = %+v (%v), want one accepted", res, err)
+	}
+	st, err := svc.PlayState(ctx, uc, pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.PlayCount != 1 {
+		t.Fatalf("play count = %d, want 1", st.PlayCount)
+	}
+	// The end of the session, which is where the play actually
+	// finished; anywhere near now would be the import instant leaking
+	// into the record.
+	wantAt := lastYear.Add(2 * time.Second)
+	if diff := st.LastPlayedAt.Sub(wantAt); diff < -time.Second || diff > time.Second {
+		t.Fatalf("lastPlayedAt = %v, want the session's own end %v", st.LastPlayedAt, wantAt)
+	}
+
+	// A later live listen still advances it: the stamp follows the
+	// newest play, and this one is newer than last year's.
+	before := time.Now().UTC().Add(-time.Second)
+	res, err = svc.IngestListens(ctx, uc, []ListenSession{{
+		SessionID: "s-live",
+		PID:       pid,
+		StartedAt: time.Now().UTC(),
+		MsPlayed:  2000,
+		Finished:  true,
+	}})
+	if err != nil || res.Accepted != 1 {
+		t.Fatalf("live ingest = %+v (%v), want one accepted", res, err)
+	}
+	st, err = svc.PlayState(ctx, uc, pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.PlayCount != 2 {
+		t.Fatalf("play count = %d, want 2", st.PlayCount)
+	}
+	if st.LastPlayedAt.Before(before) {
+		t.Fatalf("lastPlayedAt = %v, want the live play at or after %v", st.LastPlayedAt, before)
+	}
+
+	// And the older one arriving last does not drag the stamp back.
+	res, err = svc.IngestListens(ctx, uc, []ListenSession{{
+		SessionID: "s-import-late",
+		PID:       pid,
+		StartedAt: lastYear.Add(time.Hour),
+		MsPlayed:  2000,
+		Finished:  true,
+		Source:    "import",
+	}})
+	if err != nil || res.Accepted != 1 {
+		t.Fatalf("late ingest = %+v (%v), want one accepted", res, err)
+	}
+	st, err = svc.PlayState(ctx, uc, pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.LastPlayedAt.Before(before) {
+		t.Fatalf("a late import dragged lastPlayedAt back to %v", st.LastPlayedAt)
+	}
+	if st.PlayCount != 3 {
+		t.Fatalf("play count = %d, want the late play counted too", st.PlayCount)
+	}
+}
+
+// TestReplayedCheckpointStampsItsRecordedTime pins the other half of
+// the recorded-time work: a checkpoint flushed from an offline outbox
+// records progress when it was taken, so the item keeps its rank on
+// the in-progress shelf instead of jumping to the top of it.
+func TestReplayedCheckpointStampsItsRecordedTime(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	pid, catalogPID := fixtureTrackPID(t, ctx, svc, uc, "Cobalt Sky")
+
+	yesterday := time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Second)
+	applied, err := svc.Checkpoint(ctx, uc, pid, 1200, &yesterday)
+	if err != nil || !applied {
+		t.Fatalf("replayed checkpoint = %v (%v), want applied", applied, err)
+	}
+	st, err := svc.lib.Playback().State(ctx, model.PID(uc.CatalogPID), catalogPID)
+	if err != nil || st == nil {
+		t.Fatalf("catalog state = %+v (%v)", st, err)
+	}
+	at := time.Unix(0, st.LastProgressAt).UTC()
+	if diff := at.Sub(yesterday); diff < -time.Second || diff > time.Second {
+		t.Fatalf("lastProgressAt = %v, want the recorded time %v", at, yesterday)
+	}
+
+	// A live checkpoint after it stamps now, and the catalog's
+	// never-backwards rule means the replay cannot pull it back.
+	before := time.Now().UTC().Add(-time.Second)
+	if _, err := svc.Checkpoint(ctx, uc, pid, 1800, nil); err != nil {
+		t.Fatal(err)
+	}
+	st, err = svc.lib.Playback().State(ctx, model.PID(uc.CatalogPID), catalogPID)
+	if err != nil || st == nil {
+		t.Fatalf("catalog state = %+v (%v)", st, err)
+	}
+	if at := time.Unix(0, st.LastProgressAt).UTC(); at.Before(before) {
+		t.Fatalf("lastProgressAt = %v, want the live checkpoint at or after %v", at, before)
 	}
 }

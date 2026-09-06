@@ -307,7 +307,7 @@ export interface paths {
         };
         /**
          * List the scheduled jobs
-         * @description Every schedulable job kind with its cron expression, enabled state, and last and next run. Kinds are fixed: `scan` (a full library scan), `backup` (a backup archive with retention applied), `prune` (event log, replay-guard stamp, audit history, and playback session history pruning, under server-owned horizons), and `analyze` (the audio-decoding pass behind loudness, fingerprints, and waveforms). Administrators only.
+         * @description Every schedulable job kind with its cron expression, enabled state, and last and next run. Kinds are fixed: `scan` (a full library scan), `backup` (a backup archive with retention applied), `prune` (event log, replay-guard stamp, audit history, and playback session history pruning, under server-owned horizons), `analyze` (the audio-decoding pass behind loudness, fingerprints, and waveforms), and `enrich` (the whole-library enrichment pass, capped per night). Administrators only.
          */
         get: operations["listSchedules"];
         put?: never;
@@ -1127,7 +1127,7 @@ export interface paths {
         };
         /**
          * Enrichment status and coverage
-         * @description The registered enrichment providers (built-ins and the ones this server adds, with what each can supply and whether it is configured) and the catalog's enrichment coverage, plus whether a whole-library pass is currently running.
+         * @description The registered enrichment providers (built-ins and the ones this server adds, with what each can supply and whether it is configured) and the catalog's enrichment coverage, plus whether a whole-library pass is currently running and which phases one would execute.
          */
         get: operations["getEnrichmentStatus"];
         put?: never;
@@ -1151,7 +1151,7 @@ export interface paths {
          * Run a whole-library enrichment pass
          * @description Starts the catalog's enrichment pass as a background job (identity resolution first, then providers in priority order, provider-paced). `force` re-enriches entities that already enriched once. Locked and unofficial-marked content is respected. Returns the catalog job to follow. Administrators only.
          *
-         *     Refuses with `source-unavailable` when the server has no MusicBrainz contact configured, which is what `enrichmentStatus.configured` reports: read it first rather than offering a button that errors.
+         *     Refuses with `source-unavailable` when no phase could run: neither a MusicBrainz contact nor a provider gating a phase of its own. That is what `enrichmentStatus.configured` reports, and `enrichmentStatus.phases` says which phases a run would execute - read them first rather than offering a button that errors, or one that promises identity resolution a contact-less server will not do.
          */
         post: operations["runEnrichment"];
         delete?: never;
@@ -1823,7 +1823,7 @@ export interface paths {
         get?: never;
         /**
          * Set entity artwork
-         * @description Stores the raw image bytes in one artwork slot (`role`, default `front`) of an album, artist, release group, genre, playlist, or podcast entity. Album front covers may additionally embed into member files with `writeBack=true`; other slots and entity types are catalog-only. An artist portrait lands under `front` - the slot the artist screen and index tiles resolve, and the one the server's own portrait sweep fills; `background` is the scenic slot, which no surface draws yet. Catalog entities are administrators-only, with two exceptions: a playlist cover is set by its owner, and replaces the cover the server generates from the members until it is cleared, and a podcast show cover is set by `managePodcasts` holders as well, replacing the feed's image until it is cleared.
+         * @description Stores the raw image bytes in one artwork slot (`role`, default `front`) of an album, artist, release group, genre, playlist, or podcast entity. Album front covers may additionally embed into member files with `writeBack=true`; other slots and entity types are catalog-only. An artist portrait lands under `front` - the slot the artist screen and index tiles resolve, and the one enrichment's artist walk fills; `background` is the scenic slot, which no surface draws yet. Catalog entities are administrators-only, with two exceptions: a playlist cover is set by its owner, and replaces the cover the server generates from the members until it is cleared, and a podcast show cover is set by `managePodcasts` holders as well, replacing the feed's image until it is cleared.
          */
         put: operations["setEntityArtwork"];
         post?: never;
@@ -1853,14 +1853,14 @@ export interface paths {
          * Read an entity's artwork lock
          * @description Whether one of an album, artist, release group, genre, or podcast's artwork slots is pinned against enrichment and scan re-derives. This is what explains an entity that shows no cover and refuses every attempt to give it one: the cover was cleared and the pin left standing, which says "do not refill this" rather than "this has no cover yet". Administrators only, like every other catalog-entity curation read, except the podcast pin, which `managePodcasts` holders read too.
          *
-         *     The reading for an auxiliary role is the **effective** lock - the whole-artwork pin or that role's own - so a `true` there does not say which of the two set it. `ArtRoleInfo.locked` on the artwork read reports the same thing.
+         *     `locked` for an auxiliary role is the **effective** lock - the whole-artwork pin or that role's own - and `roleLocked` is the slot's own pin by itself, so the pair says which of the two set it. `ArtRoleInfo` on the artwork read carries the same pair.
          */
         get: operations["getEntityArtworkLock"];
         /**
          * Pin or unpin an entity's artwork
          * @description Sets or clears one slot's pin without touching the image itself, which setting artwork cannot express: that always writes the image slot too, so unpinning through it would mean supplying the picture again. Unpinning here is the way out of a cover that was cleared and left pinned. Administrators only, except the podcast pin, which `managePodcasts` holders set too - the pin is what keeps a hand-set show cover from being refetched on the next feed sync, so it belongs to whoever may set the cover.
          *
-         *     `role` decides the reach. The default `front` writes the entity's whole-artwork pin, which gates the front cover and also enrichment's fills in every other role; a named auxiliary role writes that slot's own pin alone. Unpinning one auxiliary role therefore does not lift a whole-artwork pin standing over it, and the read reports the effective lock either way.
+         *     `role` decides the reach. The default `front` writes the entity's whole-artwork pin, which gates the front cover and also enrichment's fills in every other role; a named auxiliary role writes that slot's own pin alone. Unpinning one auxiliary role therefore does not lift a whole-artwork pin standing over it: the response's `locked` is the effective reading and still true, while `roleLocked` is the pin that was just cleared.
          *
          *     `playlist` is refused with `invalid-request`. A playlist's cover authority is its own custom/generated origin marker rather than this pin, and a pin left standing on one would make the mosaic the server builds from the members unwritable - which the read path retries on every read, forever.
          */
@@ -2137,7 +2137,7 @@ export interface paths {
         put?: never;
         /**
          * Enrich one item now
-         * @description Runs the registered enrichment providers for the wanted artifacts (cover art, lyrics, genres, book metadata) against this one item synchronously and applies what they return, respecting locks and never overwriting a non-empty curated value. This is the editor's "fetch for me" button; the whole-library pass lives under `/library/enrichment`.
+         * @description Runs the registered enrichment providers for the wanted artifacts (cover art, lyrics, genres, track fields, book metadata) against this one item synchronously and applies what they return, respecting locks and never overwriting a non-empty curated value. This is the editor's "fetch for me" button; the whole-library pass lives under `/library/enrichment`.
          *
          *     With a `proposal` in the body, nothing is fetched: the call commits exactly the proposal a preview returned, so what was approved is what lands - a fresh fetch could answer with a different value than the one the user saw. The proposal is validated whole before anything writes: its parts must answer the requested wants, its providers must be registered on this server, and a cover must be a storable image (decodable, at most 16 MiB) - a proposal that fails any of it is refused with nothing committed. The local guards still run at commit (a field locked or filled since the preview is skipped with the reason, never overwritten). The catalog's own key-free built-ins run fill-when-empty after the commit either way, as they do on a blind fetch: they live inside the catalog's engine and cannot propose without writing, so they are the un-previewable remainder.
          */
@@ -5366,6 +5366,8 @@ export interface components {
              * @description Whether the whole-library enrichment pass writes what it filled back into the files, which is what makes enrichment survive a rescan: the catalog is authoritative either way, but a rescan re-reads the tags and would otherwise clear values only the catalog held.
              *
              *     Off by default, because it modifies the listener's own files. Files whose format cannot store a key are counted in `enrichmentStatus.lastRun.tagsUnrepresented` and left byte-identical, which is not a failure. Applies to the next pass; a run already in flight keeps the setting it started under. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses.
+             *
+             *     Switching it on catches up: an unlimited pass writes every value the catalog holds that is not yet on disk, including ones filled by earlier passes that ran with it off. A pass that was capped or scoped writes only within its own reach, so the nightly schedule catches up a night at a time.
              */
             enrichmentWriteTags?: boolean;
             /**
@@ -5407,9 +5409,10 @@ export interface components {
         /**
          * @description A schedulable job kind. A shared named schema on purpose (the path parameter and the schedule object both use it): identical inline enums make the Dart generator emit one enum class into two files, which does not compile.
          *     `analyze` is off by default and costs a full audio decode per file; see `POST /library/analyze` for what it produces and what it costs. A firing that collides with an analyze pass already running is skipped rather than recorded as run, so it retries on the next tick instead of waiting for the next scheduled window.
+         *     `enrich` is on by default and runs the whole-library enrichment pass, capped per night so a large library's first pass is paid over several nights rather than in one long unattended run; an administrator's own run through `POST /library/enrichment/run` is uncapped. The cap is spent in phase order, so on a server with a MusicBrainz contact the identity phases drain first and the artwork and fields walks wait behind them. It is not forced, so a target some provider already declined is not asked again until a forced run. A firing that collides with a pass already running is skipped the way `analyze` is.
          * @enum {string}
          */
-        ScheduleKind: "scan" | "backup" | "prune" | "analyze";
+        ScheduleKind: "scan" | "backup" | "prune" | "analyze" | "enrich";
         /** @description The server-level scrobbling credential state. */
         ScrobblingAdminConfig: {
             /** @description Whether a usable Last.fm API credential pair is in effect (users can link accounts and the connect button enables). */
@@ -6198,11 +6201,19 @@ export interface components {
             /** @description Whether a whole-library pass is running now. */
             running: boolean;
             /**
-             * @description Whether the whole-library pass can run at all. It needs a MusicBrainz contact, which is boot configuration (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and not a runtime setting, because MusicBrainz requires an identifying agent before anything is sent.
+             * @description Whether a whole-library pass would do anything: some phase can run. That is true on any server carrying a provider that gates a phase of its own, and true on every server with a MusicBrainz contact. Read `phases` for which half.
              *
-             *     False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key: every provider can be configured and the pass still refuse, because the contact gates the identity spine they hang off.
+             *     False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key.
              */
             configured: boolean;
+            /**
+             * @description Whether the MusicBrainz identity phases can run. They need an identifying contact, which is boot configuration (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and not a runtime setting, because MusicBrainz requires an identifying agent before anything is sent.
+             *
+             *     It gates the lyrics phase too, whose built-in provider needs no key but is not dialled without an identifying agent. The phases that answer to registered providers (artwork, fields, book metadata, and lyrics where a provider supplies them) run without it, so a server with no contact still enriches - just not identity. A console that says "enrichment is off" on this being false would be wrong about the half that does run.
+             */
+            musicbrainzConfigured: boolean;
+            /** @description The phases a run started now would execute, in no particular order. Empty exactly when `configured` is false. `identity` and `releases` need the MusicBrainz contact, and so does `lyrics` unless a registered provider supplies them; the rest need a registered provider advertising the matching capability. */
+            phases: ("identity" | "releases" | "aux-art" | "artist-art" | "lyrics" | "track-fields" | "book-fields" | "album-fields")[];
             lastRun?: components["schemas"]["EnrichmentLastRun"];
         };
         /** @description One enrichment provider. */
@@ -6212,9 +6223,13 @@ export interface components {
              * @example fanarttv
              */
             name: string;
-            /** @description What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`, `aux-art`, `artist-art`. Strings, not a closed enum. `cover` is the front cover of a release group; `aux-art` its other slots (back, disc, booklet, background); `artist-art` an artist's own images. The three are separate because they gate separate passes - a provider that only knows front covers must not pull the whole artist catalogue into a walk it cannot answer. */
+            /**
+             * @description What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`, `aux-art`, `artist-art`, `fields`. Strings, not a closed enum. `cover` is the front cover of a release group; `aux-art` its other slots (back, disc, booklet, background); `artist-art` an artist's own images. The three are separate because they gate separate passes - a provider that only knows front covers must not pull the whole artist catalogue into a walk it cannot answer.
+             *
+             *     `fields` is scalar metadata with no artwork in it - a track's tempo, ISRC or composer, an album's label or year - and gates the two fields walks, one per rung. `book` covers the same ground for audiobooks (publisher, narrator, the identifiers) and gates the book walk.
+             */
             capabilities: string[];
-            /** @description Whether the provider can run (key-free providers always; keyed ones once their key is set). */
+            /** @description Whether the provider can run: a keyed one once its key is set, a built-in once the MusicBrainz contact is. Key-free is not the same as configured - the built-ins are public services that want an identifying agent, and the catalog does not register them without one. */
             configured: boolean;
             /** @description True for the catalog's built-ins. */
             builtin: boolean;
@@ -6229,6 +6244,22 @@ export interface components {
             albumsSearched: number;
             /** @description Albums it pinned to a release. Searched without matched is a library whose albums carry no identifiers, not a broken pass. */
             albumsMatched: number;
+            /** @description Artists the artwork walk looked at. It reaches every artist by name, so this counts the ones still missing a portrait rather than the ones MusicBrainz matched. */
+            artistArtEnriched: number;
+            /** @description Artists some provider answered a picture for. */
+            artistArtMatched: number;
+            /** @description Tracks the fields walk looked up, filling tempo, ISRC and composer where they were empty and unlocked. */
+            trackFieldsEnriched: number;
+            /** @description Tracks some provider answered for. */
+            trackFieldsMatched: number;
+            /** @description Audiobooks the fields walk looked up, filling publisher, year, description, narrator, subtitle, edition and the identifiers where they were empty and unlocked. */
+            bookFieldsEnriched: number;
+            /** @description Audiobooks some provider answered for. */
+            bookFieldsMatched: number;
+            /** @description Albums the fields walk looked up, filling label and year. A year fans out to every track on the album, and is refused where the tracks already disagree. */
+            albumFieldsEnriched: number;
+            /** @description Albums some provider answered for. */
+            albumFieldsMatched: number;
             /** @description Files the pass wrote enriched values back into. Zero unless tag write-back is on, which is what makes enrichment survive a rescan. */
             tagsWritten: number;
             /** @description Files whose write failed. The catalog kept the values either way. */
@@ -7024,7 +7055,9 @@ export interface components {
          *
          *     A slot that reports `locked: true` and no `format` is a lock with nothing behind it: the cover was cleared and pinned cleared, which means "do not refill this" rather than "this has no cover yet". It is the one artwork state that was previously invisible, and it is why an entity can list a role at all while holding no image.
          *
-         *     Every role can be locked. `locked` is the **effective** lock on this slot: the entity's whole-artwork pin, which is the front cover's own and also gates enrichment's fills in every other role, or the role's own pin, which gates that slot alone. So a `true` on an auxiliary role does not say which of the two put it there, and a hand-set image in that role answers to the role's own pin regardless.
+         *     Every role can be locked, and there are two pins. `locked` is the **effective** lock on this slot: the entity's whole-artwork pin, which is the front cover's own and also gates enrichment's fills in every other role, or the role's own pin, which gates that slot alone. `roleLocked` is the slot's own pin by itself, so a per-role pin control reads that one - it is what says whether unpinning this role would change anything.
+         *
+         *     On `front` the two pins are one field, so `roleLocked` always equals `locked` there. An auxiliary slot with `locked: true` and `roleLocked: false` is held by the whole-artwork pin alone: releasing its own pin opens nothing, and a client can caption it as held by the cover pin rather than draw a toggle that does nothing.
          */
         ArtRoleInfo: {
             role: components["schemas"]["ArtRole"];
@@ -7050,6 +7083,12 @@ export interface components {
             updatedAt?: string;
             /** @description Whether this slot is pinned against enrichment and scan re-derives, under the whole-artwork pin or its own. See the schema description for which. */
             locked?: boolean;
+            /**
+             * @description Whether this slot's **own** pin is set, ignoring the entity's whole-artwork one. Equal to `locked` on `front`, where the two are one field.
+             *
+             *     Absent on a server predating the field. Absent is not false: a client that reads it as one would draw an own-pinned slot as open and offer a toggle that re-pins it, leaving no way to release the slot. Fall back to `locked`, which is the only reading that server had.
+             */
+            roleLocked?: boolean;
         };
         /** @description The artwork slots an entity holds at its own level, and the provenance of the cover a front-cover read would actually answer with. */
         ArtRoles: {
@@ -7269,6 +7308,14 @@ export interface components {
              *     The role is the query parameter's, not a field here: one schema serves the request body and the response, and a role in the body would be a second spelling the server ignores.
              */
             locked: boolean;
+            /**
+             * @description The slot's **own** pin, ignoring the entity's whole-artwork one - what a per-role pin control draws, since it is what says whether unpinning this role would change anything. On `front` the two pins are one field, so this equals `locked` there.
+             *
+             *     Read only: ignored on a write, where `locked` is the requested value and the role is the query parameter's. In a write's response it is the value that was requested, since the write set exactly that pin.
+             *
+             *     Absent on a server predating the field, where `locked` is the only reading available; see `ArtRoleInfo.roleLocked` for why absent must not be read as false.
+             */
+            roleLocked?: boolean;
         };
         /** @description One credit role with its people. */
         Credit: {
@@ -7701,8 +7748,8 @@ export interface components {
         };
         /** @description What to fetch for one item. */
         EnrichItemRequest: {
-            /** @description The artifacts to fetch. */
-            want: ("cover" | "lyrics" | "genres" | "book")[];
+            /** @description The artifacts to fetch. `fields` is a track's scalar metadata (tempo, ISRC, composer) and is refused for anything else; `book` is the audiobook equivalent (publisher, year, description, narrator, subtitle, edition, and the identifiers). */
+            want: ("cover" | "lyrics" | "genres" | "book" | "fields")[];
             proposal?: components["schemas"]["EnrichProposal"];
         };
         /** @description A previewed enrichment to commit as approved. Both halves are the preview's own, passed back verbatim; the server writes these values rather than fetching fresh ones. `proposal` on `previewEnrichItem` has no effect. */
@@ -7712,7 +7759,7 @@ export interface components {
             cover?: components["schemas"]["EnrichCoverProposal"];
         };
         /**
-         * @description One field an enrichment provider would fill. `lyrics` carries the full text (LRC when the provider answered timed lines); `genre` the joined, normalized genre scalar; a book want proposes each scalar it can fill as its own row.
+         * @description One field an enrichment provider would fill. `lyrics` carries the full text (LRC when the provider answered timed lines); `genre` the joined, normalized genre scalar; the `fields` and `book` wants propose each scalar they can fill as its own row, and each of those two commits as one edit, so all its rows name the same provider.
          *
          *     Every row is fill-when-empty and lock-respecting: enrichment never replaces a value someone else set, which is what makes the injected providers safe to run beside MusicBrainz matching. Matching is authoritative for identity and locks what it writes, so these fill only what nothing has claimed.
          */

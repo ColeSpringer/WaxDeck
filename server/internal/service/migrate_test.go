@@ -1150,9 +1150,14 @@ func TestMigrateLastfmImport(t *testing.T) {
 	if st.PlayCount != 3 {
 		t.Fatalf("alpha play count = %d, want 3", st.PlayCount)
 	}
-	// Upstream stamps last-played at the write, so the catalog's own
-	// time is the import instant; the real times are on the listen rows,
-	// which is what a history import is for.
+	// The catalog's last-played follows the newest imported play, not
+	// the import instant: each mark carries its session's own end time,
+	// and a walk that arrives newest-first cannot drag the stamp back
+	// because the catalog never moves one backwards.
+	newest := time.Unix(1767411845, 0).UTC()
+	if at := st.LastPlayedAt; at.Before(newest) || at.After(newest.Add(time.Minute)) {
+		t.Fatalf("alpha lastPlayedAt = %v, want the newest imported play at %v", at, newest)
+	}
 	rows, err := f.svc.db.ListenLog(ctx, f.uc.ID, "", 0, 0, 10)
 	if err != nil {
 		t.Fatal(err)

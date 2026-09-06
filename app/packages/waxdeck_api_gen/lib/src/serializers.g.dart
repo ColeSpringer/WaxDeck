@@ -100,6 +100,7 @@ Serializers _$serializers =
           ..add(EnrichmentRunRequest.serializer)
           ..add(EnrichmentRunResult.serializer)
           ..add(EnrichmentStatus.serializer)
+          ..add(EnrichmentStatusPhasesEnum.serializer)
           ..add(EntityCard.serializer)
           ..add(EntityCardKindEnum.serializer)
           ..add(EntityCardList.serializer)
@@ -551,6 +552,12 @@ Serializers _$serializers =
               const FullType(EnrichmentProvider),
             ]),
             () => ListBuilder<EnrichmentProvider>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
+              const FullType(EnrichmentStatusPhasesEnum),
+            ]),
+            () => ListBuilder<EnrichmentStatusPhasesEnum>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(EntityCard)]),

@@ -120,7 +120,7 @@ void main() {
 
   testWidgets('artist and album rows ask for artwork, and a release-group '
       'row does not', (tester) async {
-    // The server's portrait sweep writes artist-level artwork now, so
+    // The server's artist-art walk writes artist-level artwork now, so
     // the artist index asks like the album one does. The release-group
     // leg is the meaningful negative: its bucket carries an entityPid
     // (genre and year buckets carry none, so a leg over those would

@@ -1365,6 +1365,18 @@ abstract class AppLocalizations {
   /// **'{name} runs on a schedule'**
   String adminScheduleEnabledLabel(String name);
 
+  /// Name of the scheduled job that fills missing metadata, artwork and lyrics from external providers.
+  ///
+  /// In en, this message translates to:
+  /// **'Enrich metadata'**
+  String get adminScheduleEnrich;
+
+  /// What the scheduled enrichment does, its nightly cap, and the rule that a decline is not retried until an administrator forces a run.
+  ///
+  /// In en, this message translates to:
+  /// **'Fills missing metadata, artwork, and lyrics from the configured providers. Capped at 2000 items a night, so a large library fills in over several nights; a run started by hand is uncapped. A provider that declines something is not asked again until a forced run.'**
+  String get adminScheduleEnrichBlurb;
+
   /// When a scheduled job last ran. {stamp} is an already-formatted date and time.
   ///
   /// In en, this message translates to:
@@ -2930,6 +2942,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Drop an image into {slot}'**
   String artworkDropHint(String slot);
+
+  /// Caption on an artwork slot that the entity's whole-artwork (cover) pin holds while the slot carries no pin of its own, so unpinning the slot would change nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Held by the cover pin'**
+  String get artworkHeldByCoverPin;
 
   /// Help under the cover pin switch. The second sentence is the whole reason the pin is visible: a cleared-and-pinned cover refuses every later write.
   ///

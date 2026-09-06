@@ -30,6 +30,7 @@ func TestBridgeParsesEveryCapabilityBit(t *testing.T) {
 		{"book", enrich.CapBookMeta},
 		{"aux-art", enrich.CapAuxArt},
 		{"artist-art", enrich.CapArtistArt},
+		{"fields", enrich.CapFields},
 	}
 	for _, want := range all {
 		got, ok := bridgeCapabilities[want.name]

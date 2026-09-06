@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -69,15 +71,23 @@ func NewDeezer(cfg DeezerConfig) *Deezer {
 // Name is the stable provenance id.
 func (d *Deezer) Name() string { return "deezer" }
 
-// Capabilities reports the front cover and artist art. Not CapAuxArt:
-// Deezer serves one picture per album and one per artist, so it has
-// nothing to put in a back, disc, or booklet slot.
+// Capabilities reports the front cover, artist art, and scalar fields.
+//
+// Not CapAuxArt: Deezer serves one picture per album and one per
+// artist, so it has nothing to put in a back, disc, or booklet slot.
+//
+// Not CapGenres either, and that is a decision rather than a gap.
+// Deezer's genre names live behind a request per genre group, so
+// answering the genre rung would cost a lookup apiece on top of the
+// album fetch, and Discogs already owns genres in the chain ahead of
+// the built-ins.
 func (d *Deezer) Capabilities() enrich.Capability {
-	return enrich.CapCover | enrich.CapArtistArt
+	return enrich.CapCover | enrich.CapArtistArt | enrich.CapFields
 }
 
-// Enrich answers a release-group cover or an artist portrait, each from
-// its own search and each gated on a name match.
+// Enrich answers a release-group cover, an artist portrait, or the
+// scalar fields of one album or one track - each from its own lookup
+// and each gated on an identifier or a name match.
 func (d *Deezer) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
 	switch req.Type {
 	case enrich.TargetReleaseGroup:
@@ -94,10 +104,260 @@ func (d *Deezer) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candid
 			return nil, nil
 		}
 		return d.enrichArtist(ctx, req)
+	case enrich.TargetRelease:
+		// Fields only. Art on this rung stays declined: the release-rung
+		// art request carries the group's MBID, title and artist and no
+		// printed identifier, so Deezer has no way to tell which
+		// pressing is being asked about and would answer with whichever
+		// one its search ranked first - a picture of the wrong edition,
+		// which is the failure this rung exists to avoid. Carrying the
+		// barcode there is an upstream ask (docs/upstream-requests.md).
+		if !req.Wants(enrich.CapFields) {
+			return nil, nil
+		}
+		return d.enrichReleaseFields(ctx, req)
+	case enrich.TargetRecording:
+		if !req.Wants(enrich.CapFields) {
+			return nil, nil
+		}
+		return d.enrichRecordingFields(ctx, req)
 	default:
 		return nil, nil
 	}
 }
+
+// enrichReleaseFields answers an album's label and year. Keyed on the
+// barcode when the catalog holds one, since `/album/upc:{upc}` names a
+// pressing outright and a title search only names a record; falling
+// back to the same album search the cover rung uses otherwise.
+func (d *Deezer) enrichReleaseFields(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
+	album, err := d.releaseAlbum(ctx, req)
+	if err != nil || album == nil {
+		return nil, err
+	}
+	fields := map[string]string{}
+	if label := strings.TrimSpace(album.Label); label != "" {
+		fields["label"] = label
+	}
+	if year := releaseYear(album.ReleaseDate); year != "" {
+		fields["year"] = year
+	}
+	if len(fields) == 0 {
+		return nil, nil
+	}
+	return &enrich.Candidate{Confidence: 0.7, Fields: fields}, nil
+}
+
+// deezerAlbum is one album as the album endpoints answer it.
+type deezerAlbum struct {
+	ID          int64  `json:"id"`
+	Label       string `json:"label"`
+	ReleaseDate string `json:"release_date"`
+}
+
+// releaseAlbum resolves the Deezer album this request names, with the
+// fields already on it.
+//
+// The UPC endpoint answers the album itself rather than a reference to
+// one, so a barcode costs a single request; only the search fallback
+// pays a second, since a search hit carries no label or release date.
+// At half a second a request shared with every other Deezer rung, that
+// difference is hours across a first pass over a large library.
+func (d *Deezer) releaseAlbum(ctx context.Context, req enrich.Request) (*deezerAlbum, error) {
+	if upc := strings.TrimSpace(req.Barcode); upc != "" {
+		var hit deezerAlbum
+		if err := d.getJSON(ctx, d.base+"/album/upc:"+url.PathEscape(upc), &hit); err != nil {
+			return nil, err
+		}
+		if hit.ID != 0 {
+			return &hit, nil
+		}
+	}
+	if req.Title == "" {
+		return nil, nil
+	}
+	query := `album:"` + req.Title + `"`
+	if req.Artist != "" {
+		query = `artist:"` + req.Artist + `" ` + query
+	}
+	q := url.Values{}
+	q.Set("q", query)
+	var parsed struct {
+		Data []struct {
+			ID     int64  `json:"id"`
+			Title  string `json:"title"`
+			Artist struct {
+				Name string `json:"name"`
+			} `json:"artist"`
+		} `json:"data"`
+	}
+	if err := d.getJSON(ctx, d.base+"/search/album?"+q.Encode(), &parsed); err != nil {
+		return nil, err
+	}
+	for _, hit := range parsed.Data {
+		if hit.ID == 0 || !nameMatch(hit.Title, req.Title) {
+			continue
+		}
+		if req.Artist != "" && !nameMatch(hit.Artist.Name, req.Artist) {
+			continue
+		}
+		var album deezerAlbum
+		if err := d.getJSON(ctx, fmt.Sprintf("%s/album/%d", d.base, hit.ID), &album); err != nil {
+			return nil, err
+		}
+		return &album, nil
+	}
+	return nil, nil
+}
+
+// deezerDurationSlack is how far a search hit's length may sit from the
+// catalog's and still be the same recording. Wide enough for a tagged
+// duration rounded to the second and a store's own rounding, narrow
+// enough to reject an edit or a live take of the same title.
+const deezerDurationSlack = 2
+
+// enrichRecordingFields answers a track's tempo and ISRC. Keyed on the
+// ISRC when the catalog holds one, since that names the recording
+// outright; otherwise a track search matched on artist, title, and
+// duration, because a title alone selects the wrong take routinely.
+//
+// Composer is in the fill set and Deezer does not carry one, so it is
+// simply absent from the answer rather than guessed at.
+func (d *Deezer) enrichRecordingFields(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
+	track, err := d.recordingTrack(ctx, req)
+	if err != nil || track == nil {
+		return nil, err
+	}
+	fields := map[string]string{}
+	// Deezer reports 0 for a track it has not analyzed, which is not a
+	// tempo; writing it would put a false zero where nothing was known.
+	// The value is a float on the wire and a whole number in the
+	// catalog, which refuses a fraction outright rather than rounding a
+	// number nobody typed - so it is rounded here, where the rounding is
+	// a fact about the transport rather than about the listener.
+	if track.BPM > 0 {
+		fields["bpm"] = strconv.Itoa(int(math.Round(track.BPM)))
+	}
+	if isrc := strings.TrimSpace(track.ISRC); isrc != "" {
+		fields["isrc"] = isrc
+	}
+	if len(fields) == 0 {
+		return nil, nil
+	}
+	return &enrich.Candidate{Confidence: 0.7, Fields: fields}, nil
+}
+
+// deezerTrack is one track as the track endpoints answer it.
+type deezerTrack struct {
+	ID   int64   `json:"id"`
+	BPM  float64 `json:"bpm"`
+	ISRC string  `json:"isrc"`
+}
+
+// recordingTrack resolves the Deezer track this request names, with the
+// fields already on it. The ISRC endpoint answers the track itself, so
+// an identifier costs one request; see releaseAlbum.
+func (d *Deezer) recordingTrack(ctx context.Context, req enrich.Request) (*deezerTrack, error) {
+	if isrc := strings.TrimSpace(req.ISRC); isrc != "" {
+		var hit deezerTrack
+		if err := d.getJSON(ctx, d.base+"/track/isrc:"+url.PathEscape(isrc), &hit); err != nil {
+			return nil, err
+		}
+		if hit.ID != 0 {
+			return &hit, nil
+		}
+	}
+	if req.Title == "" || req.Artist == "" {
+		// A bare title names too many recordings for a by-name match to
+		// be worth a write.
+		return nil, nil
+	}
+	q := url.Values{}
+	q.Set("q", `artist:"`+req.Artist+`" track:"`+req.Title+`"`)
+	var parsed struct {
+		Data []struct {
+			ID       int64  `json:"id"`
+			Title    string `json:"title"`
+			Duration int    `json:"duration"`
+			Artist   struct {
+				Name string `json:"name"`
+			} `json:"artist"`
+		} `json:"data"`
+	}
+	if err := d.getJSON(ctx, d.base+"/search/track?"+q.Encode(), &parsed); err != nil {
+		return nil, err
+	}
+	for _, hit := range parsed.Data {
+		if hit.ID == 0 || !nameMatch(hit.Title, req.Title) || !nameMatch(hit.Artist.Name, req.Artist) {
+			continue
+		}
+		if req.DurationSec > 0 && abs(hit.Duration-req.DurationSec) > deezerDurationSlack {
+			continue
+		}
+		// The search hit carries neither tempo nor identifier, so this
+		// rung does pay the second request.
+		var track deezerTrack
+		if err := d.getJSON(ctx, fmt.Sprintf("%s/track/%d", d.base, hit.ID), &track); err != nil {
+			return nil, err
+		}
+		return &track, nil
+	}
+	return nil, nil
+}
+
+// getJSON fetches and decodes one paced Deezer read, refusing the
+// service's in-band error envelope; see deezerError.
+func (d *Deezer) getJSON(ctx context.Context, u string, out any) error {
+	body, status, err := d.core.get(ctx, u, d.ttl)
+	if err != nil {
+		return err
+	}
+	if status != http.StatusOK {
+		return fmt.Errorf("providers: deezer read: status %d", status)
+	}
+	if err := deezerError(body); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(body, out); err != nil {
+		return fmt.Errorf("providers: decode deezer read: %w", err)
+	}
+	return nil
+}
+
+// deezerError reports the service's in-band failure, which arrives as
+// HTTP 200 carrying an error object rather than as a status code.
+//
+// It has to be a failure rather than a miss. The enrichment engine
+// marks a target it asked about and got nothing for, and that marker
+// has no expiry - so reading a quota window as "this album has no
+// label" would retire every target a throttled night touched, and
+// nothing short of a forced whole-catalog pass would ask again.
+//
+// The one exception is the identifier lookups' own not-found, which
+// Deezer also reports this way: an unknown UPC or ISRC is a real miss
+// and the caller falls back to a search. It is told apart by the empty
+// id the caller reads, so this only has to let it through.
+func deezerError(body []byte) error {
+	var env struct {
+		Error *struct {
+			Type    string `json:"type"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(body, &env) != nil || env.Error == nil {
+		return nil
+	}
+	if env.Error.Type == deezerDataException {
+		// "No data" for the identifier this asked about: a miss, and
+		// the caller's zero id says so.
+		return nil
+	}
+	return fmt.Errorf("providers: deezer: %s: %s", env.Error.Type, env.Error.Message)
+}
+
+// deezerDataException is the error type Deezer answers an unknown
+// identifier with, as opposed to a quota or authentication failure.
+const deezerDataException = "DataException"
 
 // enrichReleaseGroup searches Deezer albums by artist and title, takes
 // the first hit whose names match, and fetches its extra-large cover.

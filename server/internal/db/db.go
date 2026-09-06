@@ -41,6 +41,18 @@ const baselineSchema = `
 	-- source. skipped_ms carries the client-reported silence-trim and
 	-- speed-up savings behind the time-saved counter, and the time
 	-- index serves the stats range scans.
+	--
+	-- mark_state is how a row says whether the played-mark it owes the
+	-- catalog ever landed: 0 claimed, 1 landed, 2 not owed (the mark
+	-- did not cross, could never apply, or the row is a radio tune-in,
+	-- which is not an item). Ingest writes the outcome right after the
+	-- marks, so a crash between the two leaves a 0 for the sweep to
+	-- retry. The partial index is what keeps that sweep off the whole
+	-- log, which is the largest table here, and it is keyed on arrival
+	-- rather than on the play's own time: the sweep's age bound exists
+	-- to leave a batch still being marked alone, and a replayed or
+	-- imported play is backdated by design, so started_at would leave
+	-- exactly those rows unprotected.
 	CREATE TABLE listen_sessions (
 		id            INTEGER PRIMARY KEY,
 		user_id       TEXT    NOT NULL,
@@ -54,10 +66,12 @@ const baselineSchema = `
 		client        TEXT    NOT NULL DEFAULT '',
 		source        TEXT    NOT NULL DEFAULT 'live',
 		received_at_ns INTEGER NOT NULL,
+		mark_state    INTEGER NOT NULL DEFAULT 0,
 		UNIQUE (user_id, session_id)
 	);
 	CREATE INDEX listen_sessions_by_item ON listen_sessions (user_id, item_pid, started_at_ns);
 	CREATE INDEX listen_sessions_by_time ON listen_sessions (user_id, started_at_ns, id);
+	CREATE INDEX listen_sessions_unmarked ON listen_sessions (received_at_ns) WHERE mark_state = 0;
 
 	-- Accounts, sessions, and per-user server state. The catalog user
 	-- (waxbin_user_pid) is created at provisioning; WaxDeck is the sole
@@ -709,19 +723,6 @@ const baselineSchema = `
 		next_at_ns     INTEGER NOT NULL DEFAULT 0,
 		last_error     TEXT    NOT NULL DEFAULT '',
 		UNIQUE (item_pid, rule)
-	);
-
-	-- The artist portrait sweep's miss memory: artists the providers
-	-- answered nothing for, keyed with the MBID the ask was made
-	-- under, so an artist with no findable image is not refetched
-	-- every pass while one that later gains an MBID is asked again
-	-- immediately. Misses only - a hit's own stored art is what gates
-	-- it, and remembering successes would block refilling a cover
-	-- somebody deliberately cleared.
-	CREATE TABLE artist_art_misses (
-		artist_pid      TEXT    PRIMARY KEY,
-		mbid            TEXT    NOT NULL DEFAULT '',
-		attempted_at_ns INTEGER NOT NULL
 	);
 
 	-- The administration surface. Invites store only a token hash (the

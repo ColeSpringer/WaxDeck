@@ -1958,6 +1958,9 @@ ArtRoleInfo artRoleInfoFromGen(gen.ArtRoleInfo r) => ArtRoleInfo(
   sourceUrl: r.sourceUrl,
   updatedAt: r.updatedAt?.toUtc(),
   locked: r.locked ?? false,
+  // Passed through as absent rather than defaulted: a server predating
+  // the field says nothing here, and false would be a claim.
+  roleLocked: r.roleLocked,
 );
 
 ArtRoles artRolesFromGen(gen.ArtRoles roles) => ArtRoles(

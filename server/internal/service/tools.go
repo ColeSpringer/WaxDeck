@@ -496,8 +496,8 @@ func (l *Library) runBookMerge(ctx context.Context, t *wdb.ToolTask, p toolTaskP
 		return nil, err
 	}
 	for userPID, byItem := range positions {
-		if pos := byItem[oldPID]; pos > 0 {
-			if err := l.lib.Playback().Checkpoint(ctx, userPID, newPID, pos); err != nil {
+		if pos := byItem[oldPID]; pos.positionMS > 0 {
+			if err := l.lib.Playback().Checkpoint(ctx, userPID, newPID, pos.positionMS, pos.asOf()); err != nil {
 				l.log.Warn("carrying merge resume position", "user", string(userPID), "err", err)
 			}
 		}
@@ -588,8 +588,8 @@ func (l *Library) runBookSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskP
 	// old single-file position is the same number on the new timeline,
 	// so one checkpoint per user carries the resume point.
 	for userPID, byItem := range positions {
-		if pos := byItem[oldPID]; pos > 0 {
-			if err := l.lib.Playback().Checkpoint(ctx, userPID, bookPID, pos); err != nil {
+		if pos := byItem[oldPID]; pos.positionMS > 0 {
+			if err := l.lib.Playback().Checkpoint(ctx, userPID, bookPID, pos.positionMS, pos.asOf()); err != nil {
 				l.log.Warn("carrying split resume position", "user", string(userPID), "err", err)
 			}
 		}
@@ -668,8 +668,8 @@ func (l *Library) runCueSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskPa
 	positions := l.collectToolPositions(ctx, sibPIDs)
 	for userPID, byItem := range positions {
 		for i, sib := range sibPIDs {
-			if pos := byItem[sib]; pos > 0 && i < len(piecePIDs) && piecePIDs[i] != "" {
-				if err := l.lib.Playback().Checkpoint(ctx, userPID, piecePIDs[i], pos); err != nil {
+			if pos := byItem[sib]; pos.positionMS > 0 && i < len(piecePIDs) && piecePIDs[i] != "" {
+				if err := l.lib.Playback().Checkpoint(ctx, userPID, piecePIDs[i], pos.positionMS, pos.asOf()); err != nil {
 					l.log.Warn("carrying cue split position", "user", string(userPID), "err", err)
 				}
 			}
@@ -1044,10 +1044,19 @@ func (l *Library) resolveToolImport(ctx context.Context, plan *inbox.Plan, src s
 	return it.PID, nil
 }
 
+// toolPosition is one account's saved place in an item, with the time
+// the catalog last recorded progress there. The carry writes the place
+// back at that time rather than now, so a merged or split book keeps
+// its rank on the in-progress shelf instead of jumping to the top.
+type toolPosition struct {
+	positionMS int64
+	atNS       int64
+}
+
 // collectToolPositions reads every account's saved position for the
 // given items; zero positions are omitted.
-func (l *Library) collectToolPositions(ctx context.Context, items []model.PID) map[model.PID]map[model.PID]int64 {
-	out := map[model.PID]map[model.PID]int64{}
+func (l *Library) collectToolPositions(ctx context.Context, items []model.PID) map[model.PID]map[model.PID]toolPosition {
+	out := map[model.PID]map[model.PID]toolPosition{}
 	l.forEachCatalogUser(ctx, func(userPID model.PID) {
 		for _, item := range items {
 			st, err := l.lib.Playback().State(ctx, userPID, item)
@@ -1056,13 +1065,22 @@ func (l *Library) collectToolPositions(ctx context.Context, items []model.PID) m
 			}
 			m := out[userPID]
 			if m == nil {
-				m = map[model.PID]int64{}
+				m = map[model.PID]toolPosition{}
 				out[userPID] = m
 			}
-			m[item] = st.PositionMS
+			m[item] = toolPosition{positionMS: st.PositionMS, atNS: st.LastProgressAt}
 		}
 	})
 	return out
+}
+
+// asOf projects a carried position's recorded time onto the catalog's
+// as-of argument; a state with no recorded progress stamps now.
+func (p toolPosition) asOf() *int64 {
+	if p.atNS <= 0 {
+		return nil
+	}
+	return &p.atNS
 }
 
 // forEachCatalogUser pages every WaxDeck account and hands the catalog

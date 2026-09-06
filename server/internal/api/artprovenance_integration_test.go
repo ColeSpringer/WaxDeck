@@ -285,3 +285,132 @@ func entityPinned(t *testing.T, h *harness, path string) bool {
 	}
 	return decode[ArtworkLock](t, resp).Locked
 }
+
+// entityLock reads both of a slot's pins.
+func entityLock(t *testing.T, h *harness, path string) ArtworkLock {
+	t.Helper()
+	resp := get(t, h.ts, path, h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("artwork lock GET %s status = %d", path, resp.StatusCode)
+	}
+	return decode[ArtworkLock](t, resp)
+}
+
+// TestAuxiliarySlotReportsWhichPinHoldsIt is the case the per-role
+// toggle exists for: an auxiliary slot with no image of its own, held
+// by the entity's whole-artwork pin. The effective lock says it is
+// held; the role's own pin says releasing it would change nothing.
+func TestAuxiliarySlotReportsWhichPinHoldsIt(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	page := h.items(t, "")
+	var albumPid string
+	for _, it := range page.Items {
+		if it.AlbumPid != nil && *it.AlbumPid != "" {
+			albumPid = *it.AlbumPid
+			break
+		}
+	}
+	if albumPid == "" {
+		t.Fatal("no demo item carries an album entity")
+	}
+	base := "/api/v1/entities/album/" + albumPid + "/artwork"
+
+	// The whole-artwork pin, set on the front and reaching every role.
+	wantStatus(t, putJSON(t, h.ts, base+"/lock", h.token, map[string]any{"locked": true}),
+		200, "pin the whole artwork")
+
+	front := entityLock(t, h, base+"/lock")
+	if !front.Locked || front.RoleLocked == nil || !*front.RoleLocked {
+		t.Fatalf("front lock = %+v, want both pins set: on the front they are one field", front)
+	}
+
+	// An auxiliary slot with no image and no pin of its own. It is held
+	// by the whole pin, and unpinning the role would open nothing - the
+	// caption the client draws instead of a live toggle.
+	back := entityLock(t, h, base+"/lock?role=back")
+	if !back.Locked {
+		t.Fatalf("back lock = %+v, want the whole-artwork pin reaching it", back)
+	}
+	if back.RoleLocked == nil || *back.RoleLocked {
+		t.Fatalf("back roleLocked = %v, want false: the slot has no pin of its own", back.RoleLocked)
+	}
+
+	// Pinning the role itself sets its own bit; the effective lock was
+	// already true and stays so.
+	resp := putJSON(t, h.ts, base+"/lock?role=back", h.token, map[string]any{"locked": true})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("pin the back slot status = %d", resp.StatusCode)
+	}
+	wrote := decode[ArtworkLock](t, resp)
+	if !wrote.Locked || wrote.RoleLocked == nil || !*wrote.RoleLocked {
+		t.Fatalf("write response = %+v, want both true", wrote)
+	}
+	back = entityLock(t, h, base+"/lock?role=back")
+	if !back.Locked || back.RoleLocked == nil || !*back.RoleLocked {
+		t.Fatalf("back lock = %+v, want its own pin now set", back)
+	}
+
+	// Releasing the role's own pin under the standing whole one: the
+	// write reports the effective lock still true and the role's pin
+	// clear, which is the distinction the whole change is for.
+	resp = putJSON(t, h.ts, base+"/lock?role=back", h.token, map[string]any{"locked": false})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("unpin the back slot status = %d", resp.StatusCode)
+	}
+	wrote = decode[ArtworkLock](t, resp)
+	if !wrote.Locked {
+		t.Errorf("write response locked = %v, want the whole pin still holding it", wrote.Locked)
+	}
+	if wrote.RoleLocked == nil || *wrote.RoleLocked {
+		t.Errorf("write response roleLocked = %v, want the cleared pin", wrote.RoleLocked)
+	}
+	back = entityLock(t, h, base+"/lock?role=back")
+	if !back.Locked || back.RoleLocked == nil || *back.RoleLocked {
+		t.Fatalf("back lock after unpin = %+v, want held by the whole pin alone", back)
+	}
+
+	// And with the whole pin gone, nothing holds the slot.
+	wantStatus(t, putJSON(t, h.ts, base+"/lock", h.token, map[string]any{"locked": false}),
+		200, "unpin the whole artwork")
+	back = entityLock(t, h, base+"/lock?role=back")
+	if back.Locked || (back.RoleLocked != nil && *back.RoleLocked) {
+		t.Fatalf("back lock = %+v, want nothing pinned", back)
+	}
+}
+
+// The art-roles read carries the same pair, which is where the artwork
+// manager reads it: a slot the whole pin holds draws its caption from
+// locked-and-not-roleLocked.
+func TestArtRolesCarryTheRolesOwnPin(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	page := h.items(t, "")
+	if len(page.Items) == 0 {
+		t.Fatal("no items in the demo library")
+	}
+	pid := page.Items[0].Pid
+	wantStatus(t, metadataPutBytes(t, h.ts, "/api/v1/items/"+pid+"/artwork", h.token, tinyPNG(t)),
+		200, "set front")
+
+	roles := decode[ArtRoles](t, get(t, h.ts, "/api/v1/items/"+pid+"/art-roles", h.token))
+	var front *ArtRoleInfo
+	for i := range roles.Roles {
+		if roles.Roles[i].Role == "front" {
+			front = &roles.Roles[i]
+		}
+	}
+	if front == nil {
+		t.Fatal("no front role after setting a cover")
+	}
+	// A hand-set cover pins itself, and on the front the two pins are
+	// one field.
+	if front.Locked == nil || !*front.Locked {
+		t.Fatalf("front locked = %v, want the hand-set pin", front.Locked)
+	}
+	if front.RoleLocked == nil || *front.RoleLocked != *front.Locked {
+		t.Fatalf("front roleLocked = %v, want it to equal locked", front.RoleLocked)
+	}
+}

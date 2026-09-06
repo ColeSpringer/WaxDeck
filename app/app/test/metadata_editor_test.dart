@@ -1759,15 +1759,18 @@ void main() {
   testWidgets('an auxiliary pin stays offered on a slot the cover pin holds', (
     tester,
   ) async {
-    // The wire reports the effective lock and cannot say which pin set
-    // it, so a slot held by the whole-artwork pin looks identical to
-    // one holding its own. Guessing disabled the toggle on exactly the
-    // cleared-and-pinned slot it exists to release, so it does not
-    // guess: the control is live, and unpinning writes this slot's own
-    // lock off whatever else stands over it.
+    // A slot the whole-artwork pin holds carries no pin of its own, so
+    // the toggle offers to give it one - which outlives the cover pin
+    // coming off. Disabling it here was the earlier bug: it disabled
+    // the control on exactly the cleared-and-pinned slot it exists to
+    // release. The caption is what explains the state instead.
     final repo = _repo()
-      ..artRoles.add(const ArtRoleInfo(role: 'back', locked: true));
+      ..artRoles.add(
+        const ArtRoleInfo(role: 'back', locked: true, roleLocked: false),
+      );
     await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('Held by the cover pin'), findsOneWidget);
 
     final pin = find.bySemanticsIdentifier(SemanticsIds.artLockRole('back'));
     await tester.ensureVisible(pin);
@@ -1779,6 +1782,78 @@ void main() {
     expect(repo.setItemLocksCalls.last.fields, const <String>[
       'art.back',
     ], reason: 'the pin wrote a different field');
+    expect(
+      repo.setItemLocksCalls.last.locked,
+      isTrue,
+      reason: 'the slot has no pin of its own, so the toggle sets one',
+    );
+  });
+
+  testWidgets('a whole-artwork pin captions the slots it holds', (
+    tester,
+  ) async {
+    // A pin with no image anywhere synthesizes a front row and nothing
+    // else, so an auxiliary slot it holds carries no row of its own -
+    // the caption has to come from the front row's pin, the way the
+    // server's own lock read answers for the same slot.
+    final repo = _repo()
+      ..artRoles.add(
+        const ArtRoleInfo(role: 'front', locked: true, roleLocked: true),
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    // One per auxiliary slot; the front's own pin is not "held by" it.
+    expect(find.text('Held by the cover pin'), findsNWidgets(4));
+  });
+
+  testWidgets('a server with no role pin still releases a slot', (
+    tester,
+  ) async {
+    // The field is absent from a server predating it, and absent is not
+    // false: reading it as false would draw an own-pinned slot as open
+    // and turn its toggle into a re-pin, with no way to release the
+    // slot at all. The fallback is the effective lock, which is what
+    // that server's reading meant.
+    final repo = _repo()
+      ..artRoles.add(const ArtRoleInfo(role: 'back', locked: true));
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('Held by the cover pin'), findsNothing);
+
+    final pin = find.bySemanticsIdentifier(SemanticsIds.artLockRole('back'));
+    await tester.ensureVisible(pin);
+    await tester.pumpAndSettle();
+    await tester.tap(pin);
+    await tester.pumpAndSettle();
+
+    expect(repo.setItemLocksCalls.last.fields, const <String>['art.back']);
+    expect(
+      repo.setItemLocksCalls.last.locked,
+      isFalse,
+      reason: 'the toggle re-pinned a slot instead of releasing it',
+    );
+  });
+
+  testWidgets("a slot holding its own pin offers to release it", (
+    tester,
+  ) async {
+    // Its own pin set: the toggle reads pinned and unpinning it is what
+    // opens the slot, so no caption about the cover pin appears.
+    final repo = _repo()
+      ..artRoles.add(
+        const ArtRoleInfo(role: 'back', locked: true, roleLocked: true),
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('Held by the cover pin'), findsNothing);
+
+    final pin = find.bySemanticsIdentifier(SemanticsIds.artLockRole('back'));
+    await tester.ensureVisible(pin);
+    await tester.pumpAndSettle();
+    await tester.tap(pin);
+    await tester.pumpAndSettle();
+
+    expect(repo.setItemLocksCalls.last.fields, const <String>['art.back']);
     expect(repo.setItemLocksCalls.last.locked, isFalse);
   });
 

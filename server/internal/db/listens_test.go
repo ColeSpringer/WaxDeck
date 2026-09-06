@@ -288,3 +288,116 @@ func TestListenLogPagesNewestFirstAndFiltersClient(t *testing.T) {
 		t.Fatalf("phone page = %+v, want it-3 then it-1", page)
 	}
 }
+
+// TestListenMarkStatesTrackWhatTheMarkDid pins the safety net's own
+// bookkeeping: a fresh claim is pending, and a recorded outcome takes
+// it out of the sweep's reach.
+func TestListenMarkStatesTrackWhatTheMarkDid(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	old := time.Now().Add(-time.Hour)
+	sessions := []ListenSession{
+		{UserID: "us-1", SessionID: "a", ItemPID: "01A", MediaType: "music", StartedAt: old, MsPlayed: 900},
+		{UserID: "us-1", SessionID: "b", ItemPID: "01B", MediaType: "music", StartedAt: old, MsPlayed: 900},
+	}
+	if _, err := d.InsertListens(ctx, sessions); err != nil {
+		t.Fatal(err)
+	}
+
+	ahead := time.Now().Add(time.Minute).UnixNano()
+	pending, err := d.PendingListenMarks(ctx, ahead, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("pending = %d rows, want both claims", len(pending))
+	}
+	for _, r := range pending {
+		if r.StartedAt.IsZero() || r.MediaType == "" || r.SessionID == "" {
+			t.Fatalf("pending row is missing what the re-mark needs: %+v", r)
+		}
+	}
+
+	if err := d.SetListenMarkStates(ctx, "us-1", []string{"a"}, ListenMarkLanded); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.SetListenMarkStates(ctx, "us-1", []string{"b"}, ListenMarkNotOwed); err != nil {
+		t.Fatal(err)
+	}
+	pending, err = d.PendingListenMarks(ctx, ahead, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("pending = %+v, want nothing left once both outcomes are recorded", pending)
+	}
+
+	// Another user's identically named session is not this one's.
+	if err := d.SetListenMarkStates(ctx, "us-2", []string{"a"}, ListenMarkLanded); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The age bound is on arrival, not on the play's own time. A backdated
+// listen - an offline queue flushing yesterday's plays, or a history
+// import - is claimed now and marked moments later, so bounding on
+// started_at would hand exactly those rows to a sweep running beside
+// the ingest that is about to mark them.
+func TestPendingListenMarksBoundsOnArrival(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	if _, err := d.InsertListens(ctx, []ListenSession{{
+		UserID: "us-1", SessionID: "backdated", ItemPID: "01A", MediaType: "music",
+		StartedAt: time.Now().AddDate(-1, 0, 0), MsPlayed: 900,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	cutoff := time.Now().Add(-time.Minute).UnixNano()
+	pending, err := d.PendingListenMarks(ctx, cutoff, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("pending = %+v, want a just-arrived backdated listen left alone", pending)
+	}
+	// And once its arrival is past the bound, it is the sweep's.
+	if pending, err = d.PendingListenMarks(ctx, time.Now().Add(time.Minute).UnixNano(), 10); err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 {
+		t.Fatalf("pending = %+v, want the stranded claim", pending)
+	}
+}
+
+// A radio tune-in names a station rather than an item, so it owes no
+// played mark and must never reach the sweep, which would resolve the
+// station as an item and fail forever.
+func TestRadioListenOwesNoMark(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	s := ListenSession{
+		UserID:    "us-1",
+		SessionID: "radio-1",
+		ItemPID:   "01JZX5N8QW3F4V9T2B7KDEXAMPLE",
+		MediaType: "radio",
+		StartedAt: time.Now().Add(-time.Hour),
+		MsPlayed:  60_000,
+		Client:    "web",
+		Source:    "live",
+	}
+	if err := d.UpsertRadioListen(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	// The extending upsert must not reopen the claim either.
+	s.MsPlayed = 120_000
+	if err := d.UpsertRadioListen(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := d.PendingListenMarks(ctx, time.Now().UnixNano(), 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("pending = %+v, want a radio row to owe nothing", pending)
+	}
+}

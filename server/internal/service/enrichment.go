@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +41,7 @@ const (
 	enrichWantLyrics = "lyrics"
 	enrichWantGenres = "genres"
 	enrichWantBook   = "book"
+	enrichWantFields = "fields"
 )
 
 // enrichGenreCap bounds how many provider genres a per-item apply joins
@@ -85,6 +87,18 @@ type EnrichmentLastRunDTO struct {
 	// albums carry no identifiers, not a broken pass.
 	AlbumsSearched int
 	AlbumsMatched  int
+	// The provider-gated walks: artists the artwork walk looked at, and
+	// the three fields walks, each with what some provider answered
+	// for. Enriched without matched is a library the providers do not
+	// know, not a broken pass.
+	ArtistArtEnriched   int
+	ArtistArtMatched    int
+	TrackFieldsEnriched int
+	TrackFieldsMatched  int
+	BookFieldsEnriched  int
+	BookFieldsMatched   int
+	AlbumFieldsEnriched int
+	AlbumFieldsMatched  int
 	// Zero unless the run wrote tags. Unrepresented is not a failure: the
 	// format cannot store the key and the bytes are unchanged.
 	TagsWritten       int
@@ -100,13 +114,82 @@ type EnrichmentStatusDTO struct {
 	Providers []EnrichmentProviderDTO
 	Coverage  EnrichmentCoverageDTO
 	Running   bool
-	// Configured reports whether the whole-library pass can run at all: it
-	// needs a MusicBrainz contact, which is boot config. Not a provider's
-	// own Configured -- every provider can have its key and the pass still
-	// refuse.
+	// Configured reports whether a whole-library pass would do anything:
+	// some phase can run. Not a provider's own Configured -- every
+	// provider can have its key and no phase still be runnable.
 	Configured bool
+	// MusicbrainzConfigured reports whether the identity phases can run,
+	// which needs the contact and is boot config. The provider-gated
+	// phases run without it, so this is the honest half of Configured.
+	MusicbrainzConfigured bool
+	// Phases names what a run started now would execute.
+	Phases []string
 	// LastRun is absent until a pass has finished on this catalog.
 	LastRun *EnrichmentLastRunDTO
+}
+
+// Enrichment phase names, as the status surface reports them. They are
+// coarser than the catalog's own phase labels: identity covers the
+// artist, album and book identity walks, which are one gate.
+const (
+	enrichPhaseIdentity    = "identity"
+	enrichPhaseReleases    = "releases"
+	enrichPhaseAuxArt      = "aux-art"
+	enrichPhaseArtistArt   = "artist-art"
+	enrichPhaseLyrics      = "lyrics"
+	enrichPhaseTrackFields = "track-fields"
+	enrichPhaseBookFields  = "book-fields"
+	enrichPhaseAlbumFields = "album-fields"
+)
+
+// enrichmentPhases names the phases a run started now would execute.
+//
+// This is a copy of the rule upstream's Run applies, because the facade
+// exports no phase list: identity (and, with the toggle, the release
+// match) needs the MusicBrainz contact; every other phase needs a
+// registered provider advertising the capability that gates it. A
+// change to that rule upstream has to be mirrored here, which is what
+// the integration test pinning Configured against the catalog's own
+// Doctor().EnrichmentEnabled is for.
+//
+// The catalog's key-free built-ins count too, and one of them gates a
+// phase: LRCLIB advertises lyrics. It is registered only with a
+// contact - the built-ins are public services that want an identifying
+// agent, so the catalog refuses to dial them without one - which makes
+// the lyrics phase contact-gated even though LRCLIB needs no key. The
+// Cover Art Archive answers front covers and ListenBrainz genres, and
+// neither gates a phase of its own.
+func (l *Library) enrichmentPhases() []string {
+	var caps enrich.Capability
+	for _, p := range l.enrichProviders {
+		caps |= p.Capabilities()
+	}
+	if l.musicbrainzConfigured {
+		caps |= enrich.CapLyrics // LRCLIB, registered with the contact
+	}
+	phases := []string{}
+	if l.musicbrainzConfigured {
+		phases = append(phases, enrichPhaseIdentity)
+		if l.enrichmentMatchReleases {
+			phases = append(phases, enrichPhaseReleases)
+		}
+	}
+	for _, g := range []struct {
+		cap   enrich.Capability
+		phase string
+	}{
+		{enrich.CapAuxArt, enrichPhaseAuxArt},
+		{enrich.CapArtistArt, enrichPhaseArtistArt},
+		{enrich.CapLyrics, enrichPhaseLyrics},
+		{enrich.CapFields, enrichPhaseTrackFields},
+		{enrich.CapBookMeta, enrichPhaseBookFields},
+		{enrich.CapFields, enrichPhaseAlbumFields},
+	} {
+		if caps.Has(g.cap) {
+			phases = append(phases, g.phase)
+		}
+	}
+	return phases
 }
 
 // capabilityStrings renders a provider capability bitset as the API's
@@ -134,6 +217,9 @@ func capabilityStrings(c enrich.Capability) []string {
 	if c.Has(enrich.CapArtistArt) {
 		out = append(out, "artist-art")
 	}
+	if c.Has(enrich.CapFields) {
+		out = append(out, "fields")
+	}
 	return out
 }
 
@@ -143,9 +229,14 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	if !uc.Admin {
 		return EnrichmentStatusDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
+	phases := l.enrichmentPhases()
 	out := EnrichmentStatusDTO{
-		Providers:  []EnrichmentProviderDTO{},
-		Configured: l.enrichmentConfigured,
+		Providers: []EnrichmentProviderDTO{},
+		// A pass does something exactly when it has a phase to run,
+		// which is the same rule the catalog refuses on.
+		Configured:            len(phases) > 0,
+		MusicbrainzConfigured: l.musicbrainzConfigured,
+		Phases:                phases,
 	}
 	// This server's own providers first (priority order). They are
 	// configured by construction: an injected provider is only wired
@@ -160,11 +251,21 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	// The catalog's key-free built-ins, listed statically: the facade
 	// does not enumerate them. The MusicBrainz identity spine is not a
 	// port provider and is not listed.
-	out.Providers = append(out.Providers,
-		EnrichmentProviderDTO{Name: "coverartarchive", Capabilities: []string{"cover"}, Configured: true, Builtin: true},
-		EnrichmentProviderDTO{Name: "listenbrainz", Capabilities: []string{"genres"}, Configured: true, Builtin: true},
-		EnrichmentProviderDTO{Name: "lrclib", Capabilities: []string{"lyrics"}, Configured: true, Builtin: true},
-	)
+	//
+	// Key-free is not the same as unconfigured: they are public
+	// services that want an identifying agent, and the catalog does not
+	// register them at all without the contact - so that is what
+	// decides whether they can run.
+	for _, name := range []struct{ id, cap string }{
+		{"coverartarchive", "cover"},
+		{"listenbrainz", "genres"},
+		{"lrclib", "lyrics"},
+	} {
+		out.Providers = append(out.Providers, EnrichmentProviderDTO{
+			Name: name.id, Capabilities: []string{name.cap},
+			Configured: l.musicbrainzConfigured, Builtin: true,
+		})
+	}
 
 	cov, err := l.lib.EnrichmentCoverage(ctx)
 	if err != nil {
@@ -216,13 +317,21 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 				var r enrich.Result
 				if json.Unmarshal([]byte(j.Result), &r) == nil {
 					out.LastRun = &EnrichmentLastRunDTO{
-						AlbumsSearched:    r.AlbumsSearched,
-						AlbumsMatched:     r.AlbumsMatched,
-						TagsWritten:       r.TagsWritten,
-						TagsFailed:        r.TagsFailed,
-						TagsUnrepresented: r.TagsUnrepresented,
-						TagsSkipped:       r.TagsSkipped,
-						FinishedAtNS:      j.FinishedAt,
+						AlbumsSearched:      r.AlbumsSearched,
+						AlbumsMatched:       r.AlbumsMatched,
+						ArtistArtEnriched:   r.ArtistArtEnriched,
+						ArtistArtMatched:    r.ArtistArtMatched,
+						TrackFieldsEnriched: r.TrackFieldsEnriched,
+						TrackFieldsMatched:  r.TrackFieldsMatched,
+						BookFieldsEnriched:  r.BookFieldsEnriched,
+						BookFieldsMatched:   r.BookFieldsMatched,
+						AlbumFieldsEnriched: r.AlbumFieldsEnriched,
+						AlbumFieldsMatched:  r.AlbumFieldsMatched,
+						TagsWritten:         r.TagsWritten,
+						TagsFailed:          r.TagsFailed,
+						TagsUnrepresented:   r.TagsUnrepresented,
+						TagsSkipped:         r.TagsSkipped,
+						FinishedAtNS:        j.FinishedAt,
 					}
 				}
 			}
@@ -246,37 +355,107 @@ func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool) (s
 		Force:     force,
 		WriteTags: l.currentToggles().enrichWriteTags,
 	})
+	if err == nil {
+		l.watchEnrichArtwork(pid)
+	}
 	if err != nil {
 		// The catalog's refusal names WAXBIN_ENRICH_CONTACT, a knob a
 		// WaxDeck operator does not have.
 		if KindOf(classify(err)) == KindUnsupported {
 			return "", &Error{
 				Kind: KindUnsupported,
-				Msg: "the catalog's enrichment pass is not configured on this server. " +
-					"MusicBrainz requires an identifying contact before anything is sent, " +
-					"so set -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) to an email " +
-					"or a URL and restart",
+				Msg: "this server has nothing for an enrichment pass to do. " +
+					"Set -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) to an email " +
+					"or a URL, which is what MusicBrainz requires before anything is " +
+					"sent and what the identity phases need, or configure a provider " +
+					"that supplies artwork, lyrics, fields or book metadata; then restart",
 				Err: err,
 			}
 		}
 		return "", classify(err)
 	}
-	// A forced run means "ask everything again", which for the portrait
-	// sweep is dropping its miss memory; an ordinary run leaves the
-	// 30-day holds standing.
-	if force && l.artistArt != nil {
-		if err := l.db.ClearArtistArtMisses(ctx); err != nil {
-			l.log.Warn("artist art: clearing miss memory for a forced run", "err", err)
-		}
-	}
-	// One-slot, non-blocking: the artist portrait sweep runs alongside
-	// the catalog pass this started, and a kick that finds the slot
-	// full is already answered.
-	select {
-	case l.artistArtWake <- struct{}{}:
-	default:
-	}
 	return apiPID(PrefixJob, pid), nil
+}
+
+// scheduledEnrichLimit caps one nightly pass. A first pass over a large
+// library is hours of provider-paced lookups, so it is paid over nights
+// rather than in one unattended run, and a limited pass bounds its tag
+// write-back to what it looked up. An administrator's own run is
+// uncapped: they are watching it.
+const scheduledEnrichLimit = 2000
+
+// RunScheduledEnrichment starts the nightly catalog pass. Non-forced,
+// so entities already enriched are left alone, and capped; the job row
+// carries the outcome the status surface reads.
+func (l *Library) RunScheduledEnrichment(ctx context.Context) error {
+	pid, err := l.lib.StartEnrich(l.procCtx, waxbin.EnrichOptions{
+		WriteTags: l.currentToggles().enrichWriteTags,
+		Limit:     scheduledEnrichLimit,
+	})
+	if err != nil {
+		return classify(err)
+	}
+	l.watchEnrichArtwork(pid)
+	return nil
+}
+
+const (
+	// enrichArtWatchInterval is how often the artwork watcher asks
+	// whether the pass it is following has ended. A whole-library pass
+	// runs for minutes to hours, so a slow poll costs nothing and the
+	// only thing waiting on it is a mosaic rebuild.
+	enrichArtWatchInterval = time.Minute
+	// enrichArtWatchLimit bounds the watch, so a job row that never
+	// reaches a terminal state does not leave a goroutine polling for
+	// the life of the process.
+	enrichArtWatchLimit = 12 * time.Hour
+)
+
+// watchEnrichArtwork bumps the artwork epoch once the pass ends, if it
+// gathered any pictures.
+//
+// The epoch is what tells a generated playlist cover to re-composite,
+// and enrichment is the one path that fills artwork without anybody
+// asking: a nightly pass that fetches two hundred portraits would
+// otherwise leave every mosaic built from them serving its old
+// composite until the playlist's membership changed. Every hand edit
+// bumps it at the write; a background job has no such moment, and the
+// catalog offers no completion hook, so this follows the job row.
+//
+// Best effort throughout: a missed bump costs a stale mosaic, which is
+// not worth failing a pass over.
+func (l *Library) watchEnrichArtwork(jobPID model.PID) {
+	l.workers.GoOnce(l.procCtx, "enrich-artwork-epoch", func(ctx context.Context) error {
+		deadline := time.Now().Add(enrichArtWatchLimit)
+		tick := time.NewTicker(enrichArtWatchInterval)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-tick.C:
+			}
+			job, err := l.lib.Job(ctx, jobPID)
+			if err != nil || job == nil {
+				return nil
+			}
+			if job.State == model.JobRunning {
+				if time.Now().After(deadline) {
+					l.log.Warn("enrichment artwork epoch: gave up waiting on the pass", "job", string(jobPID))
+					return nil
+				}
+				continue
+			}
+			var res enrich.Result
+			if job.Result == "" || json.Unmarshal([]byte(job.Result), &res) != nil {
+				return nil
+			}
+			if res.ArtFetched > 0 || res.AuxArtFetched > 0 {
+				l.noteArtworkChanged(ctx)
+			}
+			return nil
+		}
+	})
 }
 
 // EnrichFieldProposalDTO is one field an enrichment provider would
@@ -488,7 +667,7 @@ func (l *Library) EnrichItemNow(ctx context.Context, pid model.PID, wants []stri
 func validateEnrichWants(wants []string) error {
 	for _, w := range wants {
 		switch w {
-		case enrichWantCover, enrichWantLyrics, enrichWantGenres, enrichWantBook:
+		case enrichWantCover, enrichWantLyrics, enrichWantGenres, enrichWantBook, enrichWantFields:
 		default:
 			return errInvalid("unknown enrichment want " + w)
 		}
@@ -582,6 +761,10 @@ func (l *Library) enrichPropose(ctx context.Context, st enrichItemState, wants [
 			var ps []EnrichFieldProposalDTO
 			ps, s = l.proposeBook(ctx, st.it, st.locked)
 			out.Fields = append(out.Fields, ps...)
+		case enrichWantFields:
+			var ps []EnrichFieldProposalDTO
+			ps, s = l.proposeFields(ctx, st.it, st.locked)
+			out.Fields = append(out.Fields, ps...)
 		}
 		if s != "" {
 			out.Skipped = append(out.Skipped, s)
@@ -598,7 +781,9 @@ func enrichWantForField(name string) string {
 		return enrichWantGenres
 	case "lyrics":
 		return enrichWantLyrics
-	case "narrator", "publisher", "description", "year", "isbn":
+	case "bpm", "isrc", "composer":
+		return enrichWantFields
+	case "narrator", "publisher", "description", "year", "subtitle", "edition", "asin", "isbn":
 		return enrichWantBook
 	}
 	return ""
@@ -636,6 +821,12 @@ func (l *Library) validateEnrichProposal(wants []string, proposal EnrichProposal
 			return errInvalid("cover proposal: " + err.Error())
 		}
 	}
+	// The book want commits as one edit, so its rows have to agree on a
+	// provider - the shape an honest propose produces, and what keeps
+	// the commit from half-failing into a response that says nothing
+	// landed. The fields want does not: it merges per key across
+	// providers the way the catalog's own walk does, and commits one
+	// edit per provider.
 	bookProvider := ""
 	for _, f := range proposal.Fields {
 		w := enrichWantForField(f.Name)
@@ -700,20 +891,25 @@ func (l *Library) enrichCommit(ctx context.Context, st enrichItemState, wants []
 	if proposal.Cover != nil {
 		record(l.commitCover(ctx, st.it, *proposal.Cover, st.locked))
 	}
-	var bookFields []EnrichFieldProposalDTO
+	// Routed on the want each field belongs to, which enrichWantForField
+	// already owns: a second list of names here would let a field added
+	// there validate, preview, and then fall through to the wrong
+	// committer, where it would be dropped without a word.
+	byWant := map[string][]EnrichFieldProposalDTO{}
 	for _, f := range proposal.Fields {
-		switch f.Name {
-		case "genre":
-			record(l.commitGenres(ctx, st.it, f, st.locked))
-		case "lyrics":
-			record(l.commitLyrics(ctx, st.it, f, st.locked))
-		default:
-			// Validated above, so anything else is a book field.
-			bookFields = append(bookFields, f)
-		}
+		byWant[enrichWantForField(f.Name)] = append(byWant[enrichWantForField(f.Name)], f)
 	}
-	if len(bookFields) > 0 {
-		record(l.commitBook(ctx, st.it, bookFields, st.locked))
+	for _, f := range byWant[enrichWantGenres] {
+		record(l.commitGenres(ctx, st.it, f, st.locked))
+	}
+	for _, f := range byWant[enrichWantLyrics] {
+		record(l.commitLyrics(ctx, st.it, f, st.locked))
+	}
+	if fields := byWant[enrichWantFields]; len(fields) > 0 {
+		record(l.commitFields(ctx, st.it, fields, st.locked))
+	}
+	if books := byWant[enrichWantBook]; len(books) > 0 {
+		record(l.commitBook(ctx, st.it, books, st.locked))
 	}
 	return applied, skipped, nil
 }
@@ -1006,6 +1202,185 @@ func (l *Library) commitLyrics(ctx context.Context, it *model.ItemView, proposal
 	return "lyrics: " + proposal.Provider, ""
 }
 
+// fieldsGuard is the track-fields want's kind precondition. The walk's
+// fill set is a track's (tempo, ISRC, composer); a book's own scalars
+// are the book want's, and an episode has neither.
+func fieldsGuard(it *model.ItemView) (skippedEntry string) {
+	if it.Kind != model.KindTrack {
+		return "fields: not a track"
+	}
+	return ""
+}
+
+// trackFieldFillable reports whether one track scalar is still honestly
+// fillable: empty now and not locked. The set is upstream's own
+// EnrichFillFields(KindTrack), restated because the catalog's walk
+// applies it server-side and this is the per-item mirror of it.
+func trackFieldFillable(name string, it *model.ItemView, locked map[string]bool) bool {
+	if locked[name] {
+		return false
+	}
+	switch name {
+	case "bpm":
+		return it.BPM == 0
+	case "isrc":
+		return it.ISRC == ""
+	case "composer":
+		return it.Composer == ""
+	}
+	return false
+}
+
+// trackValueValid rejects a value the catalog would refuse on write.
+//
+// This matters more here than on the catalog's own walk. That walk
+// validates key by key and drops the failures with a warning; the
+// per-item commit hands the whole map to one edit, which the catalog
+// fails whole - so one bad number would cost the proposal's other
+// fields, and the user would see "could not be stored" after approving
+// a sheet that showed them.
+func trackValueValid(name, value string) bool {
+	if name != "bpm" {
+		return true
+	}
+	// Whole numbers only, which is what the catalog stores and what its
+	// edit path accepts: it refuses "120.5" rather than rounding a value
+	// nobody typed. A provider whose source is fractional rounds it
+	// before it gets here (Deezer does), so this only drops one that
+	// did not.
+	n, err := strconv.Atoi(value)
+	return err == nil && n > 0 && n <= model.MaxBPM
+}
+
+// proposeFields asks the fields providers for a track's tempo, ISRC and
+// composer, and returns the fill-when-empty edits as one proposal row
+// per field, writing nothing.
+//
+// The first answer per key across every capable provider, rather than
+// one provider's whole answer: that is what the catalog's own
+// track-fields walk does, and the editor's Fetch is meant to offer what
+// a nightly pass would fill. Two providers commonly split the set -
+// one knows a tempo, another a composer - and stopping at the first
+// would leave the second's field for the nightly pass to find later.
+// The walk stops early for the same reason upstream's does: once every
+// fillable key is answered there is nothing left to ask about.
+func (l *Library) proposeFields(ctx context.Context, it *model.ItemView, locked map[string]bool) (proposals []EnrichFieldProposalDTO, skippedEntry string) {
+	if s := fieldsGuard(it); s != "" {
+		return nil, s
+	}
+	providers := l.enrichProvidersWith(enrich.CapFields)
+	if len(providers) == 0 {
+		return nil, "fields: no provider"
+	}
+	fillable := 0
+	for name := range model.EnrichFillFields(model.KindTrack) {
+		if trackFieldFillable(name, it, locked) {
+			fillable++
+		}
+	}
+	if fillable == 0 {
+		return nil, "fields: nothing new to fill"
+	}
+	req := enrich.Request{
+		Type:        enrich.TargetRecording,
+		Title:       it.Title,
+		Artist:      it.Artist,
+		Album:       it.Album,
+		MBID:        it.MBID,
+		ISRC:        it.ISRC,
+		DurationSec: int(it.DurationMS / 1000),
+	}
+	answered := false
+	edits := map[string]EnrichFieldProposalDTO{}
+	for _, p := range providers {
+		cand, err := enrichAsk(ctx, p, req, enrich.CapFields)
+		if err != nil {
+			l.log.Warn("enrich: fields provider", "provider", p.Name(), "err", err)
+			continue
+		}
+		if cand == nil {
+			continue
+		}
+		answered = true
+		for name, value := range cand.Fields {
+			if value == "" || edits[name].Proposed != "" || !trackFieldFillable(name, it, locked) {
+				continue
+			}
+			if !trackValueValid(name, value) {
+				l.log.Debug("enrich: skipping malformed provider value",
+					"provider", p.Name(), "item", it.PID, "field", name, "value", value)
+				continue
+			}
+			edits[name] = EnrichFieldProposalDTO{Name: name, Proposed: value, Provider: p.Name()}
+		}
+		if len(edits) == fillable {
+			break
+		}
+	}
+	if len(edits) == 0 {
+		if answered {
+			return nil, "fields: nothing new to fill"
+		}
+		return nil, "fields: no provider hit"
+	}
+	names := make([]string, 0, len(edits))
+	for name := range edits {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]EnrichFieldProposalDTO, 0, len(edits))
+	for _, name := range names {
+		out = append(out, edits[name])
+	}
+	return out, ""
+}
+
+// commitFields writes proposed track fields, re-filtered through the
+// fill-when-empty rules. One edit per provider named in the proposal,
+// so each field carries the provenance the sheet showed for it: the
+// propose half merges per key across providers, so the rows here are
+// not all one provider's the way the book want's are.
+func (l *Library) commitFields(ctx context.Context, it *model.ItemView, proposals []EnrichFieldProposalDTO, locked map[string]bool) (appliedEntry, skippedEntry string) {
+	if s := fieldsGuard(it); s != "" {
+		return "", s
+	}
+	byProvider := map[string]map[string]string{}
+	for _, p := range proposals {
+		if p.Proposed == "" || !trackFieldFillable(p.Name, it, locked) || !trackValueValid(p.Name, p.Proposed) {
+			continue
+		}
+		if byProvider[p.Provider] == nil {
+			byProvider[p.Provider] = map[string]string{}
+		}
+		byProvider[p.Provider][p.Name] = p.Proposed
+	}
+	if len(byProvider) == 0 {
+		return "", "fields: nothing new to fill"
+	}
+	names := make([]string, 0, len(byProvider))
+	for provider := range byProvider {
+		names = append(names, provider)
+	}
+	sort.Strings(names)
+	var applied []string
+	for _, provider := range names {
+		if err := l.lib.EditFields(ctx, it.PID, byProvider[provider], waxbin.EditOptions{
+			Source: model.SourceEnrichment, Provider: provider, Lock: model.LockUnchanged,
+		}); err != nil {
+			// One provider's edit failing leaves the others standing:
+			// they are separate writes of separate fields, and taking
+			// the whole want down would lose values that did land.
+			l.log.Warn("enrich: applying track fields", "provider", provider, "item", it.PID, "err", err)
+			continue
+		}
+		applied = append(applied, provider)
+	}
+	if len(applied) == 0 {
+		return "", "fields: could not be stored"
+	}
+	return "fields: " + strings.Join(applied, ", "), ""
+}
+
 // bookGuard is the book want's kind precondition, shared by the
 // propose and commit halves. The identifier requirement lives with
 // each half's detail read, which is where the ISBN is known: the
@@ -1138,10 +1513,16 @@ func bookFieldFillable(name string, detail *model.BookDetail, it *model.ItemView
 		return detail.Publisher == ""
 	case "isbn":
 		return detail.ISBN == ""
+	case "asin":
+		return detail.ASIN == ""
 	case "narrator":
 		return it.Narrator == ""
 	case "description":
 		return detail.Description == ""
+	case "subtitle":
+		return detail.Subtitle == ""
+	case "edition":
+		return detail.Edition == ""
 	case "year":
 		return it.Year == 0
 	}
@@ -1155,6 +1536,8 @@ func bookValueValid(name, value string) bool {
 	switch name {
 	case "isbn":
 		return validISBN(value)
+	case "asin":
+		return validASIN(value)
 	case "year":
 		return validYear(value)
 	}
@@ -1180,11 +1563,14 @@ func bookEnrichEdits(cand *enrich.Candidate, detail *model.BookDetail, it *model
 	}
 	consider("publisher", cand.Publisher)
 	consider("isbn", cand.ISBN)
-	// Generic curated fields ride Candidate.Fields; only the book
-	// scalars this path can honestly fill-when-empty are accepted.
+	consider("asin", cand.ASIN)
+	// Generic curated fields ride Candidate.Fields. The accepted set is
+	// upstream's own EnrichFillFields(KindBook) minus the two with
+	// dedicated slots above, so the per-item fetch fills exactly what
+	// the catalog's book walk would.
 	for k, v := range cand.Fields {
 		switch k {
-		case "narrator", "description", "year":
+		case "narrator", "description", "year", "subtitle", "edition", "asin":
 			consider(k, v)
 		}
 	}

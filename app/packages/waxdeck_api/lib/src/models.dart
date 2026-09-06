@@ -3419,6 +3419,7 @@ class ArtRoleInfo {
     this.sourceUrl,
     this.updatedAt,
     this.locked = false,
+    this.roleLocked,
   });
 
   /// The slot: `front`, `back`, `disc`, `booklet`, or `background`.
@@ -3447,9 +3448,35 @@ class ArtRoleInfo {
 
   final DateTime? updatedAt;
 
-  /// Whether the front cover is pinned against enrichment and scan
-  /// re-derives. False on every other role.
+  /// Whether this slot is pinned against enrichment and scan
+  /// re-derives, under the entity's whole-artwork pin or its own. The
+  /// effective lock, so it does not say which of the two set it -
+  /// [roleLocked] does.
   final bool locked;
+
+  /// The slot's own pin, ignoring the entity's whole-artwork one. What
+  /// a per-role pin toggle draws, since it is what says whether
+  /// unpinning this role would change anything. Equal to [locked] on
+  /// `front`, where the two pins are one field.
+  ///
+  /// Null from a server that predates the field. Absent is not false:
+  /// reading it as one would draw an own-pinned slot as open and turn
+  /// its toggle into a re-pin, leaving no way to release the slot at
+  /// all. Read [ownPin] and [heldByCoverPin], which fall back to the
+  /// effective lock the way that server's own reading meant.
+  final bool? roleLocked;
+
+  /// The pin this slot's toggle draws and writes: its own where the
+  /// server reports one, else the effective lock, which is all a server
+  /// predating the field can say.
+  bool get ownPin => roleLocked ?? locked;
+
+  /// Held by the whole-artwork pin alone: releasing this slot's own pin
+  /// would open nothing, so the control captions the state rather than
+  /// offering a toggle that does not move. False where the server does
+  /// not report the role's own pin, since then the two cannot be told
+  /// apart.
+  bool get heldByCoverPin => locked && roleLocked == false;
 
   /// A pin with nothing behind it: the cover was cleared and the pin
   /// left standing, which says "do not refill this" rather than "no

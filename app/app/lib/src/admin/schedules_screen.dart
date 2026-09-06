@@ -106,18 +106,23 @@ class _ScheduleCardState extends ConsumerState<_ScheduleCard> {
     'backup' => l10n.adminScheduleBackup,
     'prune' => l10n.adminSchedulePrune,
     'analyze' => l10n.adminScheduleAnalyze,
+    'enrich' => l10n.adminScheduleEnrich,
     _ => kind,
   };
 
-  /// What a kind costs, where that is not obvious. Only analyze has one:
-  /// it is the sole pass that decodes audio, and an administrator who
-  /// reads it as another scan switches it on for a large library and
-  /// wonders why the machine is busy all night.
+  /// What a kind costs, where that is not obvious. Analyze has one
+  /// because it is the sole pass that decodes audio, and an
+  /// administrator who reads it as another scan switches it on for a
+  /// large library and wonders why the machine is busy all night.
+  /// Enrich has one because its two surprises are invisible from the
+  /// row: the nightly cap, and that a provider's refusal stands until
+  /// somebody forces a run.
   static String blurb(AppLocalizations l10n, String kind) => switch (kind) {
     'scan' => l10n.adminScheduleScanBlurb,
     'backup' => l10n.adminScheduleBackupBlurb,
     'prune' => l10n.adminSchedulePruneBlurb,
     'analyze' => l10n.adminScheduleAnalyzeBlurb,
+    'enrich' => l10n.adminScheduleEnrichBlurb,
     _ => '',
   };
 

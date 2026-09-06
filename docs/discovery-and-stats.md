@@ -106,9 +106,13 @@ lands on the right day for you, not for the server.
 
 The aggregate has a per-track half. `GET /api/v1/items/{pid}/play-state`
 carries `playCount` and `lastPlayedAt`: how often you have played one
-item and when the last of those plays was counted. Marking something
-played by hand sets the flags without stamping `lastPlayedAt`, so the
-stamp reads as the listening record rather than as the flag's age. It
+item and when the latest counted play happened - its own time, whether
+it arrived live, late from an offline queue, or in an import of a
+history from somewhere else. A play that reaches the server after a
+newer one therefore fills in behind it rather than jumping the item to
+the top of everything sorted by recency. Marking something played by
+hand sets the flags without stamping `lastPlayedAt`, so the stamp reads
+as the listening record rather than as the flag's age. It
 does raise the count to one, though, so a hand-marked item reads as one
 play at an unknown time - which is what the sheet below says, rather
 than "never".

@@ -771,10 +771,11 @@ func (s *Server) GetItemArtRoles(ctx context.Context, req GetItemArtRolesRequest
 	}
 	for _, i := range infos.Roles {
 		info := ArtRoleInfo{
-			Role:   ArtRole(i.Role),
-			Width:  ptr(i.Width),
-			Height: ptr(i.Height),
-			Locked: ptr(i.Locked),
+			Role:       ArtRole(i.Role),
+			Width:      ptr(i.Width),
+			Height:     ptr(i.Height),
+			Locked:     ptr(i.Locked),
+			RoleLocked: ptr(i.RoleLocked),
 		}
 		if i.Format != "" {
 			info.Format = ptr(i.Format)

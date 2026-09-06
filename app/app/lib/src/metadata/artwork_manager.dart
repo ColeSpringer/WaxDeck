@@ -292,9 +292,10 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
 
   /// Pins or unpins one auxiliary slot's own lock. The whole-artwork
   /// pin above gates every role's automatic fill as well, so a slot can
-  /// read pinned with nothing set here - and the wire cannot say which
-  /// pin a reading came from, so this stays offered either way rather
-  /// than guessing.
+  /// be held with nothing set here; the read says which pin holds it,
+  /// and the tile captions that state rather than hiding the toggle -
+  /// a slot the cover pin holds can still take a pin of its own, which
+  /// outlives the cover pin coming off.
   Future<void> _setSlotLock(ArtSlot slot, bool locked) =>
       _writeLock(slot, locked);
 
@@ -402,9 +403,25 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
                 // also wherever no pin is offered at all - a podcast
                 // episode, where the catalog refuses an art lock
                 // outright, is what `pinnable` is false for.
+                //
+                // The role's own pin, not the effective lock: the
+                // toggle writes this slot's own lock, so drawing the
+                // effective one would show a slot the cover pin holds
+                // as pinned and then not move when it was released.
                 locked: slot == ArtSlot.front || !offersPins
                     ? null
-                    : own[slot.role]?.locked ?? false,
+                    : own[slot.role]?.ownPin ?? false,
+                // The same fallback the server's own lock read applies:
+                // a slot with no row of its own has no pin of its own,
+                // so the only thing that can hold it is the front row's
+                // pin, which is the whole-artwork one. The catalog
+                // synthesizes a row only for a pin that is actually set,
+                // so a held-but-imageless auxiliary slot has no row at
+                // all and would otherwise draw no caption.
+                heldByCoverPin:
+                    slot != ArtSlot.front &&
+                    (own[slot.role]?.heldByCoverPin ??
+                        (own[ArtSlot.front.role]?.roleLocked ?? false)),
                 onTogglePin: (locked) => _setSlotLock(slot, locked),
                 onPick: () => _pick(slot),
                 onClear: () => _clear(slot),
@@ -468,6 +485,7 @@ class _SlotTile extends ConsumerWidget {
     required this.busy,
     required this.canPick,
     required this.locked,
+    required this.heldByCoverPin,
     required this.onTogglePin,
     required this.onPick,
     required this.onClear,
@@ -495,19 +513,26 @@ class _SlotTile extends ConsumerWidget {
   final bool busy;
   final bool canPick;
 
-  /// Whether this slot is pinned, or null where no pin is offered on
-  /// this slot at all: the front cover, whose pin is the entity's whole
-  /// one and gets its own switch under the grid, and every slot on an
-  /// item whose kind the catalog does not curate art for.
+  /// Whether this slot's **own** pin is set, or null where no pin is
+  /// offered on this slot at all: the front cover, whose pin is the
+  /// entity's whole one and gets its own switch under the grid, and
+  /// every slot on an item whose kind the catalog does not curate art
+  /// for.
   ///
-  /// The reading is the **effective** lock - this slot's own pin, or
-  /// the whole-artwork pin standing over it - and the wire cannot say
-  /// which. So the toggle is always live: unpinning a slot held by the
-  /// whole pin writes this slot's own lock off and truthfully still
-  /// reads pinned. Guessing at the difference is worse, and was: an
-  /// earlier reading of it disabled the toggle on exactly the
-  /// cleared-and-pinned slot the control exists to release.
+  /// The slot's own pin rather than the effective lock, because that is
+  /// what the toggle writes - falling back to the effective lock on a
+  /// server that reports no role pin, which is what that server's own
+  /// reading meant and is what keeps its slots releasable. The toggle
+  /// stays live either way: a slot the whole-artwork pin holds can
+  /// still take a pin of its own, and disabling it there was the
+  /// earlier bug - it disabled the control on exactly the
+  /// cleared-and-pinned slot it exists to release.
   final bool? locked;
+
+  /// Held by the entity's whole-artwork pin while carrying no pin of
+  /// its own, which is why the tile says so: unpinning here would leave
+  /// the slot just as held, and nothing else on the grid explains that.
+  final bool heldByCoverPin;
 
   final ValueChanged<bool> onTogglePin;
   final VoidCallback onPick;
@@ -610,6 +635,7 @@ class _SlotTile extends ConsumerWidget {
               ),
               ArtworkCaption(state, emphasis: info != null),
               if (source != null) ArtworkCaption(source),
+              if (heldByCoverPin) ArtworkCaption(l10n.artworkHeldByCoverPin),
               const SizedBox(height: WaxSpace.s4),
               Row(
                 children: <Widget>[

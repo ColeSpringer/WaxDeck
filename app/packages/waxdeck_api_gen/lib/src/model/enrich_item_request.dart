@@ -13,14 +13,14 @@ part 'enrich_item_request.g.dart';
 /// What to fetch for one item.
 ///
 /// Properties:
-/// * [want] - The artifacts to fetch.
+/// * [want] - The artifacts to fetch. `fields` is a track's scalar metadata (tempo, ISRC, composer) and is refused for anything else; `book` is the audiobook equivalent (publisher, year, description, narrator, subtitle, edition, and the identifiers). 
 /// * [proposal] 
 @BuiltValue()
 abstract class EnrichItemRequest implements Built<EnrichItemRequest, EnrichItemRequestBuilder> {
-  /// The artifacts to fetch.
+  /// The artifacts to fetch. `fields` is a track's scalar metadata (tempo, ISRC, composer) and is refused for anything else; `book` is the audiobook equivalent (publisher, year, description, narrator, subtitle, edition, and the identifiers). 
   @BuiltValueField(wireName: r'want')
   BuiltList<EnrichItemRequestWantEnum> get want;
-  // enum wantEnum {  cover,  lyrics,  genres,  book,  };
+  // enum wantEnum {  cover,  lyrics,  genres,  book,  fields,  };
 
   @BuiltValueField(wireName: r'proposal')
   EnrichProposal? get proposal;
@@ -136,6 +136,8 @@ class EnrichItemRequestWantEnum extends EnumClass {
   static const EnrichItemRequestWantEnum genres = _$enrichItemRequestWantEnum_genres;
   @BuiltValueEnumConst(wireName: r'book')
   static const EnrichItemRequestWantEnum book = _$enrichItemRequestWantEnum_book;
+  @BuiltValueEnumConst(wireName: r'fields')
+  static const EnrichItemRequestWantEnum fields = _$enrichItemRequestWantEnum_fields;
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const EnrichItemRequestWantEnum unknownDefaultOpenApi = _$enrichItemRequestWantEnum_unknownDefaultOpenApi;
 

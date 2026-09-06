@@ -25,6 +25,8 @@ class _$ArtRoleInfo extends ArtRoleInfo {
   final DateTime? updatedAt;
   @override
   final bool? locked;
+  @override
+  final bool? roleLocked;
 
   factory _$ArtRoleInfo([void Function(ArtRoleInfoBuilder)? updates]) =>
       (ArtRoleInfoBuilder()..update(updates))._build();
@@ -39,6 +41,7 @@ class _$ArtRoleInfo extends ArtRoleInfo {
     this.sourceUrl,
     this.updatedAt,
     this.locked,
+    this.roleLocked,
   }) : super._();
   @override
   ArtRoleInfo rebuild(void Function(ArtRoleInfoBuilder) updates) =>
@@ -59,7 +62,8 @@ class _$ArtRoleInfo extends ArtRoleInfo {
         provider == other.provider &&
         sourceUrl == other.sourceUrl &&
         updatedAt == other.updatedAt &&
-        locked == other.locked;
+        locked == other.locked &&
+        roleLocked == other.roleLocked;
   }
 
   @override
@@ -74,6 +78,7 @@ class _$ArtRoleInfo extends ArtRoleInfo {
     _$hash = $jc(_$hash, sourceUrl.hashCode);
     _$hash = $jc(_$hash, updatedAt.hashCode);
     _$hash = $jc(_$hash, locked.hashCode);
+    _$hash = $jc(_$hash, roleLocked.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -89,7 +94,8 @@ class _$ArtRoleInfo extends ArtRoleInfo {
           ..add('provider', provider)
           ..add('sourceUrl', sourceUrl)
           ..add('updatedAt', updatedAt)
-          ..add('locked', locked))
+          ..add('locked', locked)
+          ..add('roleLocked', roleLocked))
         .toString();
   }
 }
@@ -133,6 +139,10 @@ class ArtRoleInfoBuilder implements Builder<ArtRoleInfo, ArtRoleInfoBuilder> {
   bool? get locked => _$this._locked;
   set locked(bool? locked) => _$this._locked = locked;
 
+  bool? _roleLocked;
+  bool? get roleLocked => _$this._roleLocked;
+  set roleLocked(bool? roleLocked) => _$this._roleLocked = roleLocked;
+
   ArtRoleInfoBuilder() {
     ArtRoleInfo._defaults(this);
   }
@@ -149,6 +159,7 @@ class ArtRoleInfoBuilder implements Builder<ArtRoleInfo, ArtRoleInfoBuilder> {
       _sourceUrl = $v.sourceUrl;
       _updatedAt = $v.updatedAt;
       _locked = $v.locked;
+      _roleLocked = $v.roleLocked;
       _$v = null;
     }
     return this;
@@ -184,6 +195,7 @@ class ArtRoleInfoBuilder implements Builder<ArtRoleInfo, ArtRoleInfoBuilder> {
           sourceUrl: sourceUrl,
           updatedAt: updatedAt,
           locked: locked,
+          roleLocked: roleLocked,
         );
     replace(_$result);
     return _$result;

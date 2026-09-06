@@ -14,6 +14,8 @@ const EnrichItemRequestWantEnum _$enrichItemRequestWantEnum_genres =
     const EnrichItemRequestWantEnum._('genres');
 const EnrichItemRequestWantEnum _$enrichItemRequestWantEnum_book =
     const EnrichItemRequestWantEnum._('book');
+const EnrichItemRequestWantEnum _$enrichItemRequestWantEnum_fields =
+    const EnrichItemRequestWantEnum._('fields');
 const EnrichItemRequestWantEnum
 _$enrichItemRequestWantEnum_unknownDefaultOpenApi =
     const EnrichItemRequestWantEnum._('unknownDefaultOpenApi');
@@ -28,6 +30,8 @@ EnrichItemRequestWantEnum _$enrichItemRequestWantEnumValueOf(String name) {
       return _$enrichItemRequestWantEnum_genres;
     case 'book':
       return _$enrichItemRequestWantEnum_book;
+    case 'fields':
+      return _$enrichItemRequestWantEnum_fields;
     case 'unknownDefaultOpenApi':
       return _$enrichItemRequestWantEnum_unknownDefaultOpenApi;
     default:
@@ -41,6 +45,7 @@ final BuiltSet<EnrichItemRequestWantEnum> _$enrichItemRequestWantEnumValues =
       _$enrichItemRequestWantEnum_lyrics,
       _$enrichItemRequestWantEnum_genres,
       _$enrichItemRequestWantEnum_book,
+      _$enrichItemRequestWantEnum_fields,
       _$enrichItemRequestWantEnum_unknownDefaultOpenApi,
     ]);
 
@@ -54,6 +59,7 @@ class _$EnrichItemRequestWantEnumSerializer
     'lyrics': 'lyrics',
     'genres': 'genres',
     'book': 'book',
+    'fields': 'fields',
     'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
@@ -61,6 +67,7 @@ class _$EnrichItemRequestWantEnumSerializer
     'lyrics': 'lyrics',
     'genres': 'genres',
     'book': 'book',
+    'fields': 'fields',
     'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 

@@ -458,6 +458,34 @@ services implementing the contract in `docs/custom-provider-api/`. The
 editor's per-item fetch uses the same providers for one item at a
 time.
 
+The pass runs in two halves, and they are configured separately. The
+MusicBrainz identity phases - matching artists, release groups and
+books, and resolving which pressing the library holds - need
+`WAXDECK_ENRICHMENT_CONTACT`, because MusicBrainz requires an
+identifying agent before anything is sent. The contact gates lyrics as
+well: LRCLIB needs no key, but the catalog will not dial a public
+service without an agent to identify itself with. The provider-gated
+phases - artist art, auxiliary artwork, and the fields walks - answer to
+their own providers and run without it, and so does lyrics where a
+provider supplies them. So a server with no contact still enriches; it
+just does not resolve identity. The status surface says which half is
+live: `configured` is whether a pass would do anything at all,
+`musicbrainzConfigured` is the contact, and `phases` names exactly what
+a run started now would execute.
+
+A nightly pass runs by default (the `enrich` schedule, 03:45), capped
+at 2000 targets a night so a large library's first pass is paid over
+several nights rather than in one unattended run - and so a limited
+pass's tag write-back is bounded to what it looked up. An
+administrator's own run through the enrichment surface is uncapped.
+
+The cap is spent in phase order, which matters on a first pass: the
+identity phases come first and take what they need, so on a library
+with a contact configured the artwork and fields walks see nothing
+until the identity queues drain - several nights on a large library,
+and longer for the album rung. Switch the schedule off, or run an
+uncapped pass by hand, if that ordering is not what you want.
+
 The precedence between them is one rule, and it is what makes the
 key-free providers safe to run beside the identity pass. MusicBrainz
 matching is authoritative for identity fields and locks what it writes,
@@ -469,21 +497,42 @@ injected providers are asked first, because they answer where
 MusicBrainz has no genre at all - and even there a MusicBrainz genre is
 never evicted.
 
-Artist portraits come from two passes, split by whether the artist has
-a MusicBrainz id. An artist matching one rides the catalog's own
-enrichment pass, which asks fanart.tv and Deezer for artist art
-through the same provider port everything else goes through; fanart.tv
-also supplies a scenic background there, and disc art on a release
-group, since it is the one provider that answers per role.
+Artist portraits come from one pass. The catalog's enrichment walk
+reaches every artist by name, whether or not MusicBrainz matched one,
+and asks fanart.tv (by MusicBrainz id, where the artist has one and the
+key is set) and Deezer (by an exact-ish name match) through the same
+provider port everything else goes through; fanart.tv also supplies a
+scenic background there, and disc art on a release group, since it is
+the one provider that answers per role. Writes are fill-when-empty and
+pin-respecting like every other enrichment write, and compilation
+stand-ins like Various Artists are skipped rather than given a
+stranger's face. `WAXDECK_ARTIST_ART=false` takes artist art off the
+providers entirely, so the walk never asks.
 
-An artist with no MusicBrainz id is invisible to that pass, so a daily
-background sweep (also kicked by each admin-run enrichment) covers the
-remainder, asking Deezer under an exact-ish name match. It writes
-fill-when-empty and pin-respecting like every enrichment write,
-remembers artists with no findable image so they are not refetched
-every pass (a forced enrichment run drops that memory), and skips
-compilation stand-ins like Various Artists. `WAXDECK_ARTIST_ART=false`
-turns off both.
+Two more walks fill scalar metadata with no artwork in it. The track
+walk asks about a track's tempo, ISRC and composer; the album walk about
+an album's label and year, which fans out to every track on the album
+and is refused where the tracks already disagree. Deezer answers both
+(keyed on the ISRC or the barcode where the catalog holds one, and on a
+name-and-duration match otherwise), iTunes answers the album's year, and
+a custom provider joins them by advertising `fields`. The book walk is
+the same idea for audiobooks and now runs library-wide rather than only
+on an item somebody opened, filling publisher, year, description,
+narrator, subtitle, edition and the identifiers.
+
+What a first pass costs is worth knowing before switching write-back on.
+At Deezer's half-second pacing the track walk is a search plus a track
+fetch for each track still missing a value - about a second each - so a
+twenty-thousand-track library's first full pass is most of a day of
+Deezer time. Later passes touch only what is new. That is why the
+nightly schedule is capped and an administrator's own run is not.
+
+One thing to know about the walk's memory: an artist nothing could
+answer for is marked, and the mark has no expiry. A provider that gains
+a picture later will not be asked again on its own - it takes a forced
+run (`force` on the enrichment run, which re-asks everything), a rename,
+or a MusicBrainz id landing on the artist. The nightly schedule below
+therefore fills in what is new, not what was missing and stayed missing.
 
 That fetch previews before it applies. The editor's Fetch button asks
 `POST /items/{pid}/enrich/preview` what the providers would change -

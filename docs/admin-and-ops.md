@@ -416,12 +416,6 @@ listen sessions carry deterministic ids, so re-running an import never
 double-counts, and nothing imported is forwarded to a connected
 scrobbler - the history has usually been scrobbled once already.
 
-One caveat on very long histories: WaxDeck's catalog stamps
-"last played" at the moment the import writes, not at the time the play
-happened, so a freshly imported library reads as played today while the
-listen records underneath carry the real dates. What sorts by recency
-in the catalog is therefore the import, not the listening.
-
 A dry run matches and reports without writing anything; the finished
 task's summary shows what matched, what did not, and what was
 written. Credentials for the source server are used for the run and

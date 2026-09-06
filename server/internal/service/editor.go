@@ -990,22 +990,56 @@ func (l *Library) ClearItemArtwork(ctx context.Context, uc *UserCtx, apiPID, rol
 	return nil
 }
 
-// EntityArtworkLock reports whether an entity's slot in one role is
-// pinned; an empty role reads the front cover. It is what explains an
-// entity that shows no cover and refuses every attempt to give it one:
-// the cover was cleared and the pin left standing, which is the one
-// artwork state nothing else surfaces. A reading in an auxiliary role
-// is the effective lock - the whole-art pin or the role's own.
-func (l *Library) EntityArtworkLock(ctx context.Context, entityType, apiEntityPID, role string) (bool, error) {
+// ArtworkLockDTO is one artwork slot's two pins: the effective lock,
+// and the slot's own. They differ only on an auxiliary role, where a
+// standing whole-artwork pin holds a slot whose own pin is clear -
+// which is what a per-role pin control has to know before it draws a
+// toggle that would change nothing.
+type ArtworkLockDTO struct {
+	Locked     bool
+	RoleLocked bool
+}
+
+// EntityArtworkLock reports how an entity's slot in one role is pinned;
+// an empty role reads the front cover. It is what explains an entity
+// that shows no cover and refuses every attempt to give it one: the
+// cover was cleared and the pin left standing, which is the one artwork
+// state nothing else surfaces.
+//
+// Both bits come from one ArtRoles read rather than from ArtLocked,
+// which answers the effective lock alone. The catalog synthesizes a row
+// for a pin with no image behind it - the whole-entity pin as a front
+// row, a role's own pin as its own row - so the requested role's row
+// carries both values whenever either pin is set. No row for the role
+// means its own pin is clear, and the effective lock is then whatever
+// the front row's own pin says, since that is the whole-artwork pin
+// reaching across; no front row either means nothing is pinned at all.
+func (l *Library) EntityArtworkLock(ctx context.Context, entityType, apiEntityPID, role string) (ArtworkLockDTO, error) {
 	ent, pid, artRole, err := lockableArtSlot(entityType, apiEntityPID, role)
 	if err != nil {
-		return false, err
+		return ArtworkLockDTO{}, err
 	}
-	locked, err := l.lib.ArtLocked(ctx, ent, pid, artRole)
+	return l.artworkLockFor(ctx, ent, pid, artRole)
+}
+
+// artworkLockFor reads one slot's two pins from the entity's role list.
+func (l *Library) artworkLockFor(ctx context.Context, ent model.ArtEntity, pid model.PID, role model.ArtRole) (ArtworkLockDTO, error) {
+	infos, err := l.lib.ArtRoles(ctx, model.EntityRef{Type: ent, PID: pid})
 	if err != nil {
-		return false, classify(err)
+		return ArtworkLockDTO{}, classify(err)
 	}
-	return locked, nil
+	var out ArtworkLockDTO
+	for _, i := range infos {
+		switch i.Role {
+		case role:
+			return ArtworkLockDTO{Locked: i.Locked, RoleLocked: i.RoleLocked}, nil
+		case model.ArtRoleFront:
+			// The front row's own pin is the whole-artwork pin, which
+			// is the only thing that can hold a role with no row.
+			out.Locked = i.RoleLocked
+		}
+	}
+	return out, nil
 }
 
 // SetEntityArtworkLock pins or unpins one of an entity's artwork slots
@@ -1014,37 +1048,35 @@ func (l *Library) EntityArtworkLock(ctx context.Context, entityType, apiEntityPI
 // of a cover that was cleared and left pinned. An empty role writes the
 // front cover's pin, which also gates enrichment's fills in every other
 // role; a named role writes that slot's own pin alone.
-func (l *Library) SetEntityArtworkLock(ctx context.Context, entityType, apiEntityPID, role string, lock bool) (bool, error) {
+func (l *Library) SetEntityArtworkLock(ctx context.Context, entityType, apiEntityPID, role string, lock bool) (ArtworkLockDTO, error) {
 	ent, pid, artRole, err := lockableArtSlot(entityType, apiEntityPID, role)
 	if err != nil {
-		return false, err
+		return ArtworkLockDTO{}, err
 	}
 	was, err := l.lib.ArtLocked(ctx, ent, pid, artRole)
 	if err != nil {
-		return false, classify(err)
+		return ArtworkLockDTO{}, classify(err)
 	}
-	if err := l.lib.SetArtLock(ctx, ent, pid, artRole, lock); err != nil {
-		return false, classify(err)
-	}
-	// Read the slot back rather than reporting what was asked for. The
-	// two are not the same on an auxiliary role: the reading is the
-	// effective lock, so unpinning one slot under a standing
-	// whole-artwork pin leaves it locked, and answering "false" would
-	// have the caller record a slot as open while enrichment is still
-	// held off it. The read endpoint would then contradict the write.
-	now, err := l.lib.ArtLocked(ctx, ent, pid, artRole)
+	// The write reports the effective lock after it, so the response
+	// does not have to be a second read. That distinction matters on an
+	// auxiliary role: unpinning one slot under a standing whole-artwork
+	// pin leaves it locked, and answering "false" would have the caller
+	// record a slot as open while enrichment is still held off it - the
+	// read endpoint would then contradict the write. RoleLocked is the
+	// requested value, since the write set exactly that pin.
+	change, err := l.lib.SetArtLock(ctx, ent, pid, artRole, lock)
 	if err != nil {
-		return false, classify(err)
+		return ArtworkLockDTO{}, classify(err)
 	}
 	// Only on a change, and on a change in the effective lock, which is
-	// what both comparands now are. The artwork epoch is what tells
-	// every generated playlist cover to re-composite, and a pin moves
-	// no bytes: bumping it for a lock that reads the same either side
+	// what both comparands are. The artwork epoch is what tells every
+	// generated playlist cover to re-composite, and a pin moves no
+	// bytes: bumping it for a lock that reads the same either side
 	// would rebuild every mosaic in the library to record nothing.
-	if was != now {
+	if was != change.StillLocked {
 		l.noteArtworkChanged(ctx)
 	}
-	return now, nil
+	return ArtworkLockDTO{Locked: change.StillLocked, RoleLocked: lock}, nil
 }
 
 // lockableArtSlot resolves an entity type, pid and art role for the pin

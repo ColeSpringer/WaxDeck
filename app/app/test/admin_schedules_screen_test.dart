@@ -35,7 +35,13 @@ void main() {
     final repo = FakeRepository();
     await _pump(tester, _container(repo));
 
-    for (final kind in const <String>['scan', 'backup', 'prune', 'analyze']) {
+    for (final kind in const <String>[
+      'scan',
+      'backup',
+      'prune',
+      'analyze',
+      'enrich',
+    ]) {
       expect(
         find.bySemanticsIdentifier(SemanticsIds.scheduleRow(kind)),
         findsOneWidget,
@@ -47,6 +53,22 @@ void main() {
       find.descendant(
         of: find.bySemanticsIdentifier(SemanticsIds.scheduleRow('analyze')),
         matching: find.textContaining('Decodes every audio file'),
+      ),
+      findsOneWidget,
+    );
+    // Enrich has two an administrator cannot guess either: the nightly
+    // cap, and that a provider's refusal stands until a forced run.
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.scheduleRow('enrich')),
+        matching: find.textContaining('Capped at 2000 items a night'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.scheduleRow('enrich')),
+        matching: find.textContaining('Enrich metadata'),
       ),
       findsOneWidget,
     );

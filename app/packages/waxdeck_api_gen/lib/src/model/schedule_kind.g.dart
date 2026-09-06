@@ -10,6 +10,7 @@ const ScheduleKind _$scan = const ScheduleKind._('scan');
 const ScheduleKind _$backup = const ScheduleKind._('backup');
 const ScheduleKind _$prune = const ScheduleKind._('prune');
 const ScheduleKind _$analyze = const ScheduleKind._('analyze');
+const ScheduleKind _$enrich = const ScheduleKind._('enrich');
 const ScheduleKind _$unknownDefaultOpenApi = const ScheduleKind._(
   'unknownDefaultOpenApi',
 );
@@ -24,6 +25,8 @@ ScheduleKind _$valueOf(String name) {
       return _$prune;
     case 'analyze':
       return _$analyze;
+    case 'enrich':
+      return _$enrich;
     case 'unknownDefaultOpenApi':
       return _$unknownDefaultOpenApi;
     default:
@@ -37,6 +40,7 @@ final BuiltSet<ScheduleKind> _$values = BuiltSet<ScheduleKind>(
     _$backup,
     _$prune,
     _$analyze,
+    _$enrich,
     _$unknownDefaultOpenApi,
   ],
 );
@@ -47,6 +51,7 @@ class _$ScheduleKindMeta {
   ScheduleKind get backup => _$backup;
   ScheduleKind get prune => _$prune;
   ScheduleKind get analyze => _$analyze;
+  ScheduleKind get enrich => _$enrich;
   ScheduleKind get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   ScheduleKind valueOf(String name) => _$valueOf(name);
   BuiltSet<ScheduleKind> get values => _$values;
@@ -65,6 +70,7 @@ class _$ScheduleKindSerializer implements PrimitiveSerializer<ScheduleKind> {
     'backup': 'backup',
     'prune': 'prune',
     'analyze': 'analyze',
+    'enrich': 'enrich',
     'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
@@ -72,6 +78,7 @@ class _$ScheduleKindSerializer implements PrimitiveSerializer<ScheduleKind> {
     'backup': 'backup',
     'prune': 'prune',
     'analyze': 'analyze',
+    'enrich': 'enrich',
     'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 

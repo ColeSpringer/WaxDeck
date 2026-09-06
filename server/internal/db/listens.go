@@ -3,6 +3,8 @@ package db
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"time"
 )
 
@@ -90,13 +92,16 @@ func (d *DB) InsertListens(ctx context.Context, sessions []ListenSession) ([]boo
 //
 // ItemPID carries the station's bare ULID and MediaType is `radio`. A
 // station is not a catalog item, so nothing downstream may resolve it
-// through the item store - the station table answers for it.
+// through the item store - the station table answers for it. That is
+// why the row lands already marked not-owed: a zero there would have
+// the mark sweep re-resolving a station as an item forever.
 func (d *DB) UpsertRadioListen(ctx context.Context, s ListenSession) error {
 	_, err := d.w.ExecContext(ctx, `
 		INSERT INTO listen_sessions
 			(user_id, session_id, item_pid, media_type, started_at_ns,
-			 ms_played, skipped_ms, finished, client, source, received_at_ns)
-		VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+			 ms_played, skipped_ms, finished, client, source, received_at_ns,
+			 mark_state)
+		VALUES (?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?, 2)
 		ON CONFLICT (user_id, session_id) DO UPDATE SET
 			ms_played = excluded.ms_played,
 			received_at_ns = excluded.received_at_ns`,
@@ -107,6 +112,100 @@ func (d *DB) UpsertRadioListen(ctx context.Context, s ListenSession) error {
 		return fmt.Errorf("db: recording radio listen: %w", err)
 	}
 	return nil
+}
+
+// Listen mark states. A row records whether the played-mark it owes
+// the catalog ever landed, so a crash between the mark and the row's
+// own write leaves a claim the sweep can find and retry.
+const (
+	// ListenMarkClaimed is a row whose mark has not been accounted
+	// for. Every insert starts here.
+	ListenMarkClaimed = 0
+	// ListenMarkLanded is a mark the catalog accepted.
+	ListenMarkLanded = 1
+	// ListenMarkNotOwed is a row that owes no mark: it did not cross
+	// its medium's threshold, its mark can never apply (the item is
+	// gone), or it is a radio tune-in, which names a station rather
+	// than an item.
+	ListenMarkNotOwed = 2
+)
+
+// listenMarkChunk is how many session ids ride one UPDATE. Bounded
+// because the ids are bound parameters and SQLite caps those per
+// statement; well under any build's limit, and few enough statements
+// that a five-hundred-session flush is four round trips rather than
+// five hundred.
+const listenMarkChunk = 200
+
+// SetListenMarkStates records one outcome for a batch of sessions, as
+// one statement per chunk rather than one per row: a history import is
+// tens of thousands of rows and the write pool is a single connection,
+// so a statement apiece would hold it for the length of the import -
+// and losing this write to a timeout costs the sweep a re-mark of
+// every row in it.
+func (d *DB) SetListenMarkStates(ctx context.Context, userID string, sessionIDs []string, state int) error {
+	if len(sessionIDs) == 0 {
+		return nil
+	}
+	tx, err := d.w.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("db: recording listen mark states: %w", err)
+	}
+	defer tx.Rollback()
+	for chunk := range slices.Chunk(sessionIDs, listenMarkChunk) {
+		args := make([]any, 0, len(chunk)+2)
+		args = append(args, state, userID)
+		for _, id := range chunk {
+			args = append(args, id)
+		}
+		q := `UPDATE listen_sessions SET mark_state = ? WHERE user_id = ? AND session_id IN (?` +
+			strings.Repeat(", ?", len(chunk)-1) + `)`
+		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
+			return fmt.Errorf("db: recording listen mark states: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db: recording listen mark states: %w", err)
+	}
+	return nil
+}
+
+// PendingListenMarks pages the sessions still claimed but unaccounted
+// for, oldest arrival first, whose arrival is older than olderThanNS.
+//
+// The bound is on arrival rather than on the play's own time. It exists
+// to keep the sweep off a batch that is mid-ingest right now, and a
+// replayed or imported play is backdated by design - an offline queue
+// flushing yesterday's listens would otherwise be unprotected the
+// instant it claimed them, and the sweep would mark the same play the
+// ingest was about to. The partial index on mark_state = 0 is what
+// keeps this off the rest of the log.
+func (d *DB) PendingListenMarks(ctx context.Context, olderThanNS int64, limit int) ([]ListenRow, error) {
+	rows, err := d.r.QueryContext(ctx, `
+		SELECT id, user_id, session_id, item_pid, media_type, started_at_ns,
+		       ms_played, skipped_ms, finished, client, source
+		FROM listen_sessions
+		WHERE mark_state = 0 AND received_at_ns < ?
+		ORDER BY received_at_ns
+		LIMIT ?`, olderThanNS, limit)
+	if err != nil {
+		return nil, fmt.Errorf("db: reading pending listen marks: %w", err)
+	}
+	defer rows.Close()
+	var out []ListenRow
+	for rows.Next() {
+		var r ListenRow
+		var startedNS int64
+		var finished int
+		if err := rows.Scan(&r.RowID, &r.UserID, &r.SessionID, &r.ItemPID, &r.MediaType,
+			&startedNS, &r.MsPlayed, &r.SkippedMs, &finished, &r.Client, &r.Source); err != nil {
+			return nil, fmt.Errorf("db: reading pending listen marks: %w", err)
+		}
+		r.StartedAt = time.Unix(0, startedNS).UTC()
+		r.Finished = finished != 0
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // DeleteListens removes sessions by their idempotency keys, in one

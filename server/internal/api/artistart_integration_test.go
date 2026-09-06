@@ -2,42 +2,71 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
+	"time"
 
-	"github.com/colespringer/waxdeck/server/internal/providers"
+	"github.com/colespringer/waxbin/enrich"
+	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
-// fakeArtistArt is a scriptable ArtistArtProvider recording who was
-// asked, so the sweep tests can assert what was fetched and, as
-// importantly, what was not.
-type fakeArtistArt struct {
+// The claim the retired artist-portrait sweep rested on, kept as the
+// one test that proves the catalog's own walk now covers what the
+// sweep used to: an artist MusicBrainz never matched still gets a
+// portrait, from a provider answering the artist target by name.
+//
+// It is a whole-catalog pass rather than a per-item fetch, because the
+// artist rung has no per-item surface: the walk is the only thing that
+// reaches an artist entity, and the sweep is gone.
+
+// fakeArtistArtProvider answers the artist target by name, recording
+// who it was asked about, the way Deezer's artist search does.
+type fakeArtistArtProvider struct {
 	mu   sync.Mutex
 	asks []string
-	miss bool
 	img  []byte
 }
 
-func (f *fakeArtistArt) ArtistImage(ctx context.Context, name, mbid string) (providers.TitleCoverResult, error) {
+func (f *fakeArtistArtProvider) Name() string                    { return "fakeface" }
+func (f *fakeArtistArtProvider) Capabilities() enrich.Capability { return enrich.CapArtistArt }
+
+func (f *fakeArtistArtProvider) Enrich(_ context.Context, req enrich.Request) (*enrich.Candidate, error) {
+	if req.Type != enrich.TargetArtist {
+		return nil, nil
+	}
+	name := req.Artist
+	if name == "" {
+		name = req.Title
+	}
 	f.mu.Lock()
 	f.asks = append(f.asks, name)
 	f.mu.Unlock()
-	if f.miss {
-		return providers.TitleCoverResult{}, providers.ErrNoArtistImage
+	if name == "" {
+		return nil, nil
 	}
-	return providers.TitleCoverResult{
-		Data: f.img, MIME: "image/png",
-		Provider:  "fakeface",
-		SourceURL: "https://faces.example/fixture.png",
+	return &enrich.Candidate{
+		Confidence: 0.7,
+		Art: map[model.ArtRole]*model.ArtImage{model.ArtRoleFront: {
+			Data:        f.img,
+			Format:      "png",
+			Attribution: model.Attribution{SourceURL: "https://faces.example/fixture.png"},
+		}},
 	}, nil
 }
 
-func (f *fakeArtistArt) askCount() int {
+func (f *fakeArtistArtProvider) askedAbout(name string) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return len(f.asks)
+	for _, a := range f.asks {
+		if a == name {
+			return true
+		}
+	}
+	return false
 }
 
 // demoArtistPID resolves the fixture library's one artist entity.
@@ -51,25 +80,75 @@ func demoArtistPID(t *testing.T, h *harness) string {
 	return res.Artists[0].Pid
 }
 
-func TestArtistArtSweepFillsAndThenLeavesAlone(t *testing.T) {
+// runEnrichmentAndWait starts the catalog pass and polls it to done.
+func runEnrichmentAndWait(t *testing.T, h *harness) {
+	t.Helper()
+	resp := h.postJSON(t, "/api/v1/library/enrichment/run", map[string]any{})
+	if resp.StatusCode != 202 {
+		defer resp.Body.Close()
+		var body map[string]any
+		json.NewDecoder(resp.Body).Decode(&body)
+		t.Fatalf("enrichment run status = %d (%v), want 202", resp.StatusCode, body)
+	}
+	job := decode[EnrichmentRunResult](t, resp)
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		resp := get(t, h.ts, "/api/v1/jobs/"+job.JobPid, h.token)
+		j := decode[Job](t, resp)
+		switch j.State {
+		case "done":
+			return
+		case "failed", "crashed", "canceled":
+			t.Fatalf("enrichment job ended %s: %v", j.State, deref(j.Error))
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("enrichment job did not finish in time")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
+// TestCatalogPassFillsAnUnmatchedArtistsPortrait is the retirement's
+// load-bearing claim. The fixture library scans unmatched - no artist
+// carries a MusicBrainz id - and no contact is configured, so the
+// identity phases do not run at all. The artist-art phase still does,
+// because a registered provider advertises the capability that gates
+// it, and it asks by name.
+func TestCatalogPassFillsAnUnmatchedArtistsPortrait(t *testing.T) {
 	t.Parallel()
-	fake := &fakeArtistArt{img: tinyPNG(t)}
-	h := newHarnessWith(t, func(cfg *service.Config) { cfg.ArtistArtProvider = fake })
+	fake := &fakeArtistArtProvider{img: tinyPNG(t)}
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = []enrich.Provider{fake}
+		c.EnrichmentContact = ""
+	})
 	pid := demoArtistPID(t, h)
 
-	res, err := h.svc.ArtistArtSweep(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	// The status surface says as much before the run: a pass would do
+	// something, but not identity.
+	st := decode[EnrichmentStatus](t, get(t, h.ts, "/api/v1/library/enrichment", h.token))
+	if !st.Configured {
+		t.Fatal("configured = false with an artist-art provider registered")
 	}
-	if res.Filled != 1 {
-		t.Fatalf("first sweep filled %d, want the one fixture artist", res.Filled)
+	if st.MusicbrainzConfigured {
+		t.Fatal("musicbrainzConfigured = true with no contact")
+	}
+	if !hasPhase(st.Phases, EnrichmentStatusPhasesArtistArt) {
+		t.Fatalf("phases = %v, want the artist-art phase", st.Phases)
+	}
+	if hasPhase(st.Phases, EnrichmentStatusPhasesIdentity) {
+		t.Fatalf("phases = %v, want no identity phase without a contact", st.Phases)
 	}
 
+	runEnrichmentAndWait(t, h)
+
+	if !fake.askedAbout("Fixture Artist") {
+		t.Fatalf("the unmatched artist was never asked about; asks = %v", fake.asks)
+	}
 	// The portrait serves from the artist's own slot, marked as the
-	// enrichment write it is, with the provider and origin cited.
+	// enrichment write it is, with the provider cited.
 	roles := decode[ArtRoles](t, get(t, h.ts, "/api/v1/items/"+pid+"/art-roles", h.token))
 	if roles.ArtSource == nil {
-		t.Fatal("the swept artist reports no art source")
+		t.Fatal("the enriched artist reports no art source")
 	}
 	if roles.ArtSource.Source != "enrichment" {
 		t.Errorf("art source = %q, want enrichment", roles.ArtSource.Source)
@@ -77,142 +156,43 @@ func TestArtistArtSweepFillsAndThenLeavesAlone(t *testing.T) {
 	if roles.ArtSource.Provider == nil || *roles.ArtSource.Provider != "fakeface" {
 		t.Errorf("art provider = %v, want the supplying rung", roles.ArtSource.Provider)
 	}
+}
 
-	// A second pass finds the slot resolving and asks nobody.
-	asked := fake.askCount()
-	res, err = h.svc.ArtistArtSweep(context.Background())
-	if err != nil {
-		t.Fatal(err)
+// A server with neither a contact nor a phase-gating provider has
+// nothing to run, and says so rather than offering a button that
+// errors. The refusal names both routes back.
+func TestEnrichmentStatusReportsNothingToRun(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = nil
+		c.EnrichmentContact = ""
+	})
+	st := decode[EnrichmentStatus](t, get(t, h.ts, "/api/v1/library/enrichment", h.token))
+	if st.Configured || st.MusicbrainzConfigured {
+		t.Fatalf("status = %+v, want nothing configured", st)
 	}
-	if res.Filled != 0 || fake.askCount() != asked {
-		t.Errorf("second sweep filled %d and asked %d more times, want a no-op",
-			res.Filled, fake.askCount()-asked)
+	if len(st.Phases) != 0 {
+		t.Fatalf("phases = %v, want none", st.Phases)
 	}
-
-	// Clearing the portrait (the sweep pins nothing) hands the slot back
-	// to the next pass: fill-when-empty means empty-again refills, the
-	// same contract every enrichment write keeps.
-	resp := reqAs(t, h, "DELETE", "/api/v1/entities/artist/"+pid+"/artwork", h.token, nil)
-	wantStatus(t, resp, 204, "clear the swept portrait")
-	res, err = h.svc.ArtistArtSweep(context.Background())
-	if err != nil {
-		t.Fatal(err)
+	resp := h.postJSON(t, "/api/v1/library/enrichment/run", map[string]any{})
+	defer resp.Body.Close()
+	if resp.StatusCode != 501 {
+		t.Fatalf("run status = %d, want 501", resp.StatusCode)
 	}
-	if res.Filled != 1 {
-		t.Errorf("post-clear sweep filled %d, want the refill", res.Filled)
+	var body struct{ Message string }
+	json.NewDecoder(resp.Body).Decode(&body)
+	for _, want := range []string{"enrichment-contact", "provider"} {
+		if !strings.Contains(body.Message, want) {
+			t.Errorf("refusal %q does not name %q", body.Message, want)
+		}
 	}
 }
 
-func TestArtistArtSweepRemembersMisses(t *testing.T) {
-	t.Parallel()
-	fake := &fakeArtistArt{miss: true}
-	h := newHarnessWith(t, func(cfg *service.Config) { cfg.ArtistArtProvider = fake })
-
-	res, err := h.svc.ArtistArtSweep(context.Background())
-	if err != nil {
-		t.Fatal(err)
+func hasPhase(phases []EnrichmentStatusPhases, want EnrichmentStatusPhases) bool {
+	for _, p := range phases {
+		if p == want {
+			return true
+		}
 	}
-	if res.Misses != 1 || fake.askCount() != 1 {
-		t.Fatalf("first sweep = %+v with %d asks, want one recorded miss", res, fake.askCount())
-	}
-
-	// The miss holds: the next pass does not re-ask.
-	res, err = h.svc.ArtistArtSweep(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Misses != 0 || fake.askCount() != 1 {
-		t.Errorf("second sweep = %+v with %d asks, want the miss remembered", res, fake.askCount())
-	}
-}
-
-func TestArtistArtSweepRespectsAStandingPin(t *testing.T) {
-	t.Parallel()
-	fake := &fakeArtistArt{img: tinyPNG(t)}
-	h := newHarnessWith(t, func(cfg *service.Config) { cfg.ArtistArtProvider = fake })
-	pid := demoArtistPID(t, h)
-
-	// A pin on an empty slot is a person's "do not refill this".
-	resp := h.putJSON(t, "/api/v1/entities/artist/"+pid+"/artwork/lock", map[string]any{"locked": true})
-	wantStatus(t, resp, 200, "pin the empty slot")
-
-	res, err := h.svc.ArtistArtSweep(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.Filled != 0 || fake.askCount() != 0 {
-		t.Errorf("sweep over a pinned slot = %+v with %d asks, want neither", res, fake.askCount())
-	}
-}
-
-// TestArtistArtSweepCoversWhatTheCatalogPassDoesNot is the boundary
-// between the two passes that fill artist art, and the boundary moves.
-//
-// An artist carrying a MusicBrainz id belongs to the catalog's own
-// enrichment pass, which asks fanart.tv and Deezer by that id through
-// the port - so the sweep leaves it alone rather than racing a
-// name-matched face against an identity-matched one. But that pass
-// needs an enrichment contact and does not run without one, while a
-// library tagged by Picard or beets carries artist mbids straight off
-// the files. Skipping them unconditionally is how a stock install ends
-// up fetching no portraits at all with the flag still reporting on.
-func TestArtistArtSweepCoversWhatTheCatalogPassDoesNot(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct {
-		name             string
-		contact          string
-		sweptWhenMatched bool
-	}{
-		{name: "no contact", contact: "", sweptWhenMatched: true},
-		{name: "enrichment configured", contact: "waxdeck@example.test", sweptWhenMatched: false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			fake := &fakeArtistArt{img: tinyPNG(t)}
-			h := newHarnessWith(t, func(cfg *service.Config) {
-				cfg.ArtistArtProvider = fake
-				cfg.EnrichmentContact = tc.contact
-			})
-			pid := demoArtistPID(t, h)
-
-			// Unmatched, which is how the fixture library scans: the
-			// sweep's business either way.
-			res, err := h.svc.ArtistArtSweep(context.Background())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if res.Scanned == 0 || fake.askCount() == 0 {
-				t.Fatalf("an mbid-less artist was not swept: %+v, asks=%d", res, fake.askCount())
-			}
-
-			// Give the artist an identity and clear the portrait the
-			// first pass stored, so the only thing that can keep the
-			// next one away is the id.
-			resp := h.patchJSON(t, "/api/v1/entities/artist/"+pid, map[string]any{
-				"edits": map[string]string{"mbid": "11111111-2222-3333-4444-555555555555"},
-			})
-			if resp.StatusCode != 200 {
-				t.Fatalf("setting the artist mbid: status %d", resp.StatusCode)
-			}
-			resp.Body.Close()
-			wantStatus(t, h.deleteReq(t, "/api/v1/entities/artist/"+pid+"/artwork?force=true"), 204,
-				"clearing the swept portrait")
-			// The clear leaves the pin as it stood, and this artist was
-			// never pinned; unpinning explicitly would test the pin,
-			// not the filter.
-
-			before := fake.askCount()
-			res, err = h.svc.ArtistArtSweep(context.Background())
-			if err != nil {
-				t.Fatal(err)
-			}
-			asked := fake.askCount() != before
-			if asked != tc.sweptWhenMatched {
-				t.Errorf("matched artist asked = %v, want %v", asked, tc.sweptWhenMatched)
-			}
-			if scanned := res.Scanned > 0; scanned != tc.sweptWhenMatched {
-				t.Errorf("matched artist counted as scanned = %v, want %v", scanned, tc.sweptWhenMatched)
-			}
-		})
-	}
+	return false
 }

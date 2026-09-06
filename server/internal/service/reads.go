@@ -942,18 +942,22 @@ func (l *Library) artRef(ctx context.Context, uc *UserCtx, apiPID string) (model
 //
 // Locked is the effective pin on the slot: the entity's whole-artwork
 // pin, which gates the front cover and enrichment's fills in every other
-// role, or the role's own. It is passed through as upstream reports it,
-// so which of the two set it is not distinguishable here.
+// role, or the role's own. RoleLocked is the slot's own pin alone, so
+// the pair says which of the two set it - an auxiliary slot that is
+// Locked and not RoleLocked is held by the whole-artwork pin, and
+// releasing its own pin would open nothing. On the front the two pins
+// are one field and the two values agree.
 type ArtRoleInfoDTO struct {
-	Role      string
-	Format    string
-	Width     int
-	Height    int
-	Source    string
-	Provider  string
-	SourceURL string
-	UpdatedAt time.Time
-	Locked    bool
+	Role       string
+	Format     string
+	Width      int
+	Height     int
+	Source     string
+	Provider   string
+	SourceURL  string
+	UpdatedAt  time.Time
+	Locked     bool
+	RoleLocked bool
 }
 
 // ArtRolesDTO is an entity's own artwork slots plus the provenance of
@@ -992,14 +996,15 @@ func (l *Library) ItemArtRoles(ctx context.Context, uc *UserCtx, apiPID string) 
 			Source: string(i.Source), Provider: i.Provider, SourceURL: i.SourceURL,
 		})
 		role := ArtRoleInfoDTO{
-			Role:      string(i.Role),
-			Format:    i.Format,
-			Width:     i.Width,
-			Height:    i.Height,
-			Source:    string(i.Source),
-			Provider:  i.Provider,
-			SourceURL: mark.SourceURL,
-			Locked:    i.Locked,
+			Role:       string(i.Role),
+			Format:     i.Format,
+			Width:      i.Width,
+			Height:     i.Height,
+			Source:     string(i.Source),
+			Provider:   i.Provider,
+			SourceURL:  mark.SourceURL,
+			Locked:     i.Locked,
+			RoleLocked: i.RoleLocked,
 		}
 		if i.UpdatedAt != 0 {
 			role.UpdatedAt = time.Unix(0, i.UpdatedAt).UTC()

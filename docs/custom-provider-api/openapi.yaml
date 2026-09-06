@@ -103,9 +103,17 @@ components:
             artist's own images; the three are separate because each
             gates a separate pass, and a provider that only knows front
             covers must not be walked over every artist in a library.
+
+
+            `fields` is scalar metadata returned in `candidate.fields`
+            with no artwork in it, and gates two walks by request type:
+            `recording` for a track (tempo, ISRC, composer) and
+            `release` for an album (label, year). A provider that only
+            knows one rung answers nothing for the other. `book` is the
+            same idea for audiobooks and gates the book walk.
           items:
             type: string
-            enum: [identity, genres, cover, lyrics, book, aux-art, artist-art]
+            enum: [identity, genres, cover, lyrics, book, aux-art, artist-art, fields]
 
     EnrichRequest:
       type: object
@@ -117,9 +125,11 @@ components:
             Which entity the lookup concerns. `release_group` asks for
             genres and cover art; `release` is one specific pressing
             (answer nothing rather than the group's picture if you only
-            know groups); `recording` asks for lyrics; `book` for
-            audiobook metadata; `artist` asks for an artist's own art
-            (and is also the identity spine's own target).
+            know groups) and is also the album rung of the fields walk;
+            `recording` asks for lyrics and is the track rung of the
+            fields walk; `book` for audiobook metadata; `artist` asks
+            for an artist's own art (and is also the identity spine's
+            own target).
           enum: [artist, release_group, release, recording, book]
         force:
           type: boolean
@@ -144,6 +154,18 @@ components:
         isbn:
           type: string
           description: Known ISBN (books).
+        isrc:
+          type: string
+          description: >
+            Known ISRC for the recording, carried by the track fields
+            walk so a provider keyed on it can answer without a text
+            match. Absent when the catalog holds none.
+        barcode:
+          type: string
+          description: >
+            Known barcode (UPC/EAN) for the release, carried by the
+            album fields walk for the same reason. Absent when the
+            catalog holds none.
         durationSec:
           type: integer
           description: >
@@ -221,7 +243,18 @@ components:
           type: object
           description: >
             Generic curated values keyed by WaxDeck's metadata
-            vocabulary (`narrator`, `description`, `year`, ...), for a
-            value with no dedicated slot above.
+            vocabulary, for a value with no dedicated slot above. This
+            is what the `fields` capability answers with: `bpm`, `isrc`
+            and `composer` on a `recording`, `label` and `year` on a
+            `release`. The `book` capability reads it too, for
+            `publisher`, `year`, `description`, `narrator`, `subtitle`,
+            `edition`, `asin` and `isbn` alongside the dedicated slots
+            above.
+
+
+            Return what you found rather than pre-filtering: only the
+            keys the target's fill set accepts are applied, and the rest
+            are ignored. A year fills every member of an album at once,
+            so it is refused where the members disagree.
           additionalProperties:
             type: string

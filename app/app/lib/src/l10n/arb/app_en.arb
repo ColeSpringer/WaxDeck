@@ -966,6 +966,14 @@
       }
     }
   },
+  "adminScheduleEnrich": "Enrich metadata",
+  "@adminScheduleEnrich": {
+    "description": "Name of the scheduled job that fills missing metadata, artwork and lyrics from external providers."
+  },
+  "adminScheduleEnrichBlurb": "Fills missing metadata, artwork, and lyrics from the configured providers. Capped at 2000 items a night, so a large library fills in over several nights; a run started by hand is uncapped. A provider that declines something is not asked again until a forced run.",
+  "@adminScheduleEnrichBlurb": {
+    "description": "What the scheduled enrichment does, its nightly cap, and the rule that a decline is not retried until an administrator forces a run."
+  },
   "adminScheduleLastRun": "Last run {stamp}",
   "@adminScheduleLastRun": {
     "description": "When a scheduled job last ran. {stamp} is an already-formatted date and time.",
@@ -2300,6 +2308,10 @@
         "example": "front cover"
       }
     }
+  },
+  "artworkHeldByCoverPin": "Held by the cover pin",
+  "@artworkHeldByCoverPin": {
+    "description": "Caption on an artwork slot that the entity's whole-artwork (cover) pin holds while the slot carries no pin of its own, so unpinning the slot would change nothing."
   },
   "artworkLockHelp": "Keeps this cover through scans and enrichment runs, and holds the other slots against automatic fills too. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.",
   "@artworkLockHelp": {
