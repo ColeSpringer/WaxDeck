@@ -96,11 +96,47 @@ export class Player extends Surface {
   /// rect the semantics overlay held a frame earlier, which near a
   /// screen edge lands one row off - the difference between 1.5x and
   /// whatever sits beside it.
+  ///
+  /// Restored per attempt because on this face a press that lands one
+  /// row off can land on nothing at all: the scaffold dismisses on every
+  /// pixel its content islands do not claim, and the chips move while
+  /// the face is still resolving - an episode's notes arriving is enough
+  /// to lift the row out from under the pointer. A press that misses
+  /// that way collapses the player and takes the chip with it, which
+  /// leaves the retry reaching for a control that is nowhere.
+  ///
+  /// Inherits [reopen]'s precondition, and through it [ready]'s: this
+  /// drives the player of local playback, not a bar holding somebody
+  /// else's session.
   async setSpeed(percent: number): Promise<void> {
     await chooseFromMenu(
       this.speed(),
       this.ctx.page.locator(sem(SemanticsIds.playerSpeedPreset(percent))),
+      { restore: () => this.reopen() },
     );
+  }
+
+  /// Puts the player back when a press has taken it away, and does
+  /// nothing at all otherwise.
+  ///
+  /// `chooseFromMenu` calls this at the top of every attempt, so the
+  /// question it answers has to be the cheap and positive one: is the
+  /// deck bar on screen? The bar is drawn only while the player is down
+  /// - the player overlays the shell, and a menu's own barrier drops the
+  /// bar along with everything else behind it - so its expand
+  /// affordance is what separates "dismissed" from "merely covered".
+  /// Asking whether the trigger is gone cannot: both look identical
+  /// from outside, and answering "dismissed" to a menu that was open all
+  /// along spends [ready]'s whole budget failing to find a player that
+  /// is right there.
+  ///
+  /// Carries [ready]'s precondition with it: the expand identifier is
+  /// shared by every face of the bar, so one showing a remote session or
+  /// a restore offer expands to a different screen.
+  private async reopen(): Promise<void> {
+    const expand = this.ctx.page.locator(sem(SemanticsIds.deckExpand));
+    if (!(await expand.isVisible())) return;
+    await this.ready();
   }
 
   /// Open the player's overflow and choose "add to playlist".
@@ -109,12 +145,20 @@ export class Player extends Surface {
   /// item lives since the header was rebuilt onto the scaffold: it has
   /// two controls, and this is the second one's menu. Settles on the
   /// sheet's own "new list" row, which only the sheet draws.
+  ///
+  /// Restored per attempt for the reason [setSpeed] is - the overflow
+  /// sits on the same dismissing scaffold the rate chip does, and a
+  /// press that misses it leaves the same way - and inherits the same
+  /// precondition.
   async addToPlaylist(): Promise<void> {
     const page = this.ctx.page;
     await chooseFromMenu(
       page.locator(sem(SemanticsIds.playerMore)),
       page.locator(sem(SemanticsIds.addToPlaylist)),
-      page.locator(sem(SemanticsIds.addToPlaylistNew)),
+      {
+        settled: page.locator(sem(SemanticsIds.addToPlaylistNew)),
+        restore: () => this.reopen(),
+      },
     );
   }
 

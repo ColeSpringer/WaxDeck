@@ -101,7 +101,7 @@ export class Music extends Surface {
     await chooseFromMenu(
       this.ctx.page.locator(sem(SemanticsIds.albumTrackMore(nth))),
       this.ctx.page.locator(sem(SemanticsIds.itemMenuDetails)),
-      this.ctx.page.locator(sem(SemanticsIds.itemFactsRow('plays'))),
+      { settled: this.ctx.page.locator(sem(SemanticsIds.itemFactsRow('plays'))) },
     );
   }
 

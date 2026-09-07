@@ -147,7 +147,7 @@ export class Playlists extends Surface {
   /// which is what stops a menu repositioning near a screen edge from
   /// taking the row underneath the one aimed at.
   async fromOverflow(verb: Locator, showing: Locator): Promise<void> {
-    await chooseFromMenu(this.overflow(), verb, showing);
+    await chooseFromMenu(this.overflow(), verb, { settled: showing });
   }
 
   /// The synced-playlist settings sheet and its controls.
@@ -218,7 +218,7 @@ export class Playlists extends Surface {
     await chooseFromMenu(
       this.syncArm(),
       page.locator(sem(SemanticsIds.playlistSyncArmOption('matched'))),
-      this.syncSource(),
+      { settled: this.syncSource() },
     );
     await chooseFromMenu(
       this.syncSource(),

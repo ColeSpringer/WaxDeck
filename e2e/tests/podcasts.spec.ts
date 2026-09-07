@@ -5,7 +5,7 @@ import { J, T, retryCatalogBusy } from './driver';
 // serves a generated three-episode feed whose audio carries lead
 // silence.
 //
-// This was one 304-line journey. It is five tests now, by the rule that
+// This was one 304-line journey. It is six tests now, by the rule that
 // a scenario stays whole only when each step consumes state the previous
 // UI step produced and the seam is the assertion. Subscribing, fetching
 // and playing are that: the fetch is of the episode the subscription
@@ -21,7 +21,7 @@ import { J, T, retryCatalogBusy } from './driver';
 // one owner each for anything that writes:
 //
 //   [0] fetched by the unsubscribe test and left that way; played by the
-//       speed and location tests. Never unfetched.
+//       two speed tests and the location test. Never unfetched.
 //   [1] the passthrough test's alone: it fetches it, unfetches it - that
 //       unfetch is its subject - and then plays it with no bytes there.
 //   [2] the journey's alone: unfetched as a precondition, fetched
@@ -176,6 +176,36 @@ test('the speed sheet reaches any rate in one tap and remembers it', async ({ ap
       { timeout: T.assert, message: 'the chosen speed should be remembered for the show' },
     )
     .toBeCloseTo(1.5, 2);
+});
+
+test('the speed sheet is reachable again after the player is dismissed', async ({
+  app,
+}) => {
+  test.setTimeout(J.long);
+  const showPid = await app.seed.subscribePodcast(FEED_URL);
+  const [episode] = await app.seed.episodes(showPid);
+
+  await app.nav.enter('podcasts');
+  await app.podcasts.openShow(showPid);
+  await app.podcasts.playEpisode(episode.pid);
+  await app.player.ready();
+
+  // The pointer's way out, and also where a press that misses a chip
+  // ends up: the scaffold dismisses on every pixel its content islands
+  // do not claim, and the chips move while the face is still resolving.
+  // Coming back has to reach the rate, whatever the player was in the
+  // middle of drawing when it left - a soak spent forty-five seconds
+  // pressing at a chip that had gone down with the player.
+  const dismissed = await app.player.dismissByBackdrop(app.podcasts.unsubscribe());
+  test.skip(!dismissed, 'the backdrop gutter needs a window wider than the content');
+  // The precondition, stated: the press this test is about only means
+  // something with the chip actually gone. Without this the helper can
+  // answer "dismissed" for a player that was never up, and the recovery
+  // stops being exercised without anything going red.
+  await expect(app.player.speed()).toBeHidden();
+
+  await app.player.setSpeed(150);
+  await expect(app.player.speed()).toHaveAccessibleName(/1\.5x/);
 });
 
 test("an episode's location carries its show", async ({ app }) => {

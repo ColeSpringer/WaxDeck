@@ -82,7 +82,7 @@ export class Podcasts extends Surface {
     await chooseFromMenu(
       this.overflow(),
       this.ctx.page.locator(sem(SemanticsIds.showSetCover)),
-      settled,
+      { settled },
     );
   }
 

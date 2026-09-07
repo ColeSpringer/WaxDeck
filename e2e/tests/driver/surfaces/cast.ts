@@ -135,7 +135,7 @@ export class Cast extends Surface {
     await chooseFromMenu(
       this.ctx.page.locator(sem(SemanticsIds.pickerOverflow)),
       this.ctx.page.locator(sem(SemanticsIds.pickerCheck)),
-      this.preflight(),
+      { settled: this.preflight() },
     );
   }
 }

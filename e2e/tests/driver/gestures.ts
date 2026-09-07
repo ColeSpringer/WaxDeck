@@ -391,6 +391,20 @@ export async function rectAtRest(target: Locator) {
 // trigger.
 export const MENU_UNIT = 45_000;
 
+/// What a menu choice needs beyond its two locators. A bag for the
+/// reason `clickInView` has one: three optional tails are three
+/// questions at the call site rather than positions to count.
+export interface MenuChoice {
+  /// Something only the chosen row can produce.
+  readonly settled?: Locator;
+  /// Puts the surface the trigger lives on back on screen. Called at
+  /// the top of every attempt, so it has to be cheap and to judge for
+  /// itself whether anything is missing.
+  readonly restore?: () => Promise<void>;
+  /// Which button opens the menu.
+  readonly press?: Press;
+}
+
 // Open a menu and choose a row from it, as one retried unit.
 //
 // Not `clickThrough`: that re-clicks its trigger whenever the
@@ -401,14 +415,31 @@ export const MENU_UNIT = 45_000;
 // default the menu going away. Checked first, for the choice that
 // landed and then outran its own wait, which is why it must be
 // something only the chosen row can produce.
+//
+// `restore` puts the trigger's own surface back, for the triggers a
+// missed press can carry off with it. A forced press is aimed at a rect
+// read a moment earlier, and on the player every pixel the content
+// islands do not claim is a way out: a chip that moves between the read
+// and the press takes the press to the dismissing surface, and the face
+// leaves with the trigger on it. Without a way back every later attempt
+// reaches for a control that is nowhere, and the unit spends its whole
+// budget arriving at the failure it started from.
+//
+// Run every attempt and left to judge for itself, rather than gated
+// here on the trigger having gone missing: a menu's own barrier drops
+// every node behind it, so a covered trigger and a dismissed one read
+// the same from this side. Only the surface can tell them apart, and
+// guessing wrong spends a whole restore on a menu that was open all
+// along.
 export async function chooseFromMenu(
   trigger: Locator,
   item: Locator,
-  settled?: Locator,
-  press: Press = {},
+  options: MenuChoice = {},
 ) {
+  const { settled, restore, press } = options;
   await expect(async () => {
     if (settled && (await settled.isVisible())) return;
+    if (restore) await restore();
     await clickToward(trigger, { shows: item }, press);
     // At rest before the pick: near a screen edge the menu is
     // repositioned as it grows, which is how choosing "Off" once stored

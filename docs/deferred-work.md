@@ -388,6 +388,22 @@ here waits on upstream.
   gone, and the claim is withdrawn. Take it with the perf-measurement
   entry above.
 
+- `[in-repo]` **The player's dismissing surface catches a press aimed
+  at a control that moved.** `PlayerScaffold` gives every pixel its
+  content islands do not claim to the tap that collapses the player,
+  which is what a listener wants for the space around the artwork. The
+  face is also still assembling itself for a beat after it opens: the
+  session resolves and the action chips appear, then an episode's notes
+  land and the bottom region lifts the whole column. A press that
+  starts before one of those and arrives after it lands in the gap
+  beside an island and shuts the player, having been aimed squarely at
+  a chip. A soak caught this driving the rate chip - the e2e gesture
+  now puts the player back and tries again, which is a fix for the
+  suite and not for the thumb. The product answer is for the scaffold
+  to hold the dismissal back while the face is still resolving, or for
+  the islands to reserve their slots so the row cannot move under a
+  finger; neither is written.
+
 ## Connect and casting
 
 

@@ -62,7 +62,7 @@ export class Settings extends Surface {
   async choose(name: string, option: Locator, settled?: Locator): Promise<void> {
     const trigger = this.setting(name);
     await wheelIntoReach(this.ctx.page, trigger);
-    await chooseFromMenu(trigger, option, settled);
+    await chooseFromMenu(trigger, option, { settled });
   }
 
 
