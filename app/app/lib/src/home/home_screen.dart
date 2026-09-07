@@ -144,7 +144,7 @@ class _OnlineHome extends ConsumerWidget {
           // A server with nothing in it gets the first-run state rather
           // than eight empty shelves.
           isEmpty: (hasAnything) => !hasAnything,
-          empty: (context) => SliverFillRemaining(
+          empty: (context, _) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.homeEmptyTitle,

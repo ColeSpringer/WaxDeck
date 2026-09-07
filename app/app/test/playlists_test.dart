@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/gestures.dart' show kLongPressTimeout;
@@ -15,6 +16,8 @@ import 'package:waxdeck/src/playlists/playlists_screen.dart';
 import 'package:waxdeck/src/playlists/rule_editor_screen.dart';
 import 'package:waxdeck/src/playlists/rule_vocabulary.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/playlists/playlists_controller.dart';
+import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
@@ -114,7 +117,67 @@ Playlist _theirs({String pid = 'pl-THEIRS'}) => Playlist(
   updatedAt: DateTime.utc(2026),
 );
 
+/// The container the pumped tree is running in, for a test that has to
+/// invalidate a provider from outside the widgets.
+ProviderContainer _containerOf(WidgetTester tester) =>
+    ProviderScope.containerOf(tester.element(find.byType(WaxScaffold).first));
+
 void main() {
+  testWidgets('a refresh redraws the playlists it already has', (tester) async {
+    // Through the shared face, which decides from the value rather than
+    // from the state's runtime type: a reload carries what it had, and a
+    // switch on the type blanks the screen the reader was reading.
+    final repo = FakeRepository(items: const [_track]);
+    await repo.createPlaylist(name: 'Road Trip', kind: 'static');
+    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+    await tester.pumpAndSettle();
+    expect(find.byType(AsyncSliverFace<List<Playlist>>), findsOneWidget);
+    expect(find.text('Road Trip'), findsOneWidget);
+
+    final gate = Completer<void>();
+    repo.listPlaylistsGate = gate;
+    _containerOf(tester).invalidate(playlistsProvider);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Road Trip'), findsOneWidget);
+    expect(
+      find.byType(SkeletonShapes),
+      findsNothing,
+      reason: 'a reload must not blank the list it already holds',
+    );
+    gate.complete();
+    repo.listPlaylistsGate = null;
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('a playlist redraws its members through a refresh', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    final playlist = await repo.createPlaylist(
+      name: 'Road Trip',
+      kind: 'static',
+      itemPids: [_track.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: playlist.pid)));
+    await tester.pumpAndSettle();
+    expect(find.byType(AsyncSliverFace<PlaylistView>), findsOneWidget);
+    expect(find.text('Prancing Pony Blues'), findsOneWidget);
+
+    final gate = Completer<void>();
+    repo.getPlaylistGate = gate;
+    _containerOf(tester).invalidate(playlistDetailProvider(playlist.pid));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Prancing Pony Blues'), findsOneWidget);
+    expect(find.byType(SkeletonShapes), findsNothing);
+    gate.complete();
+    repo.getPlaylistGate = null;
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('lists playlists and opens the detail screen', (tester) async {
     final repo = FakeRepository(items: const [_track]);
     await repo.createPlaylist(

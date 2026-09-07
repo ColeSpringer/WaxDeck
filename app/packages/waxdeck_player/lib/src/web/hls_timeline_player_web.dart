@@ -2,10 +2,12 @@ import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:web/web.dart' as web;
 
 import '../audio_engine_port.dart';
 import '../timeline/timeline_media.dart';
+import 'hls_error_policy.dart';
 
 /// Plays a minted timeline in a browser, through hls.js over Media
 /// Source Extensions.
@@ -21,16 +23,23 @@ import '../timeline/timeline_media.dart';
 /// the script is injected the first time a timeline is loaded: a
 /// listener who never switches gapless playback on never fetches it.
 class HlsTimelinePlayer implements TimelineAudioEngine {
-  HlsTimelinePlayer({web.HTMLAudioElement? element, Duration? loadDeadline})
-    : _audio =
-          element ??
-          (web.document.createElement('audio') as web.HTMLAudioElement),
-      _loadDeadline = loadDeadline ?? const Duration(seconds: 15) {
+  HlsTimelinePlayer({
+    web.HTMLAudioElement? element,
+    Duration? loadDeadline,
+    Duration? recoveryWindow,
+  }) : _audio =
+           element ??
+           (web.document.createElement('audio') as web.HTMLAudioElement),
+       _loadDeadline = loadDeadline ?? const Duration(seconds: 15),
+       _recoveryWindow = recoveryWindow ?? const Duration(seconds: 30) {
     _audio.preload = 'auto';
     _listen('timeupdate', (_) => _tick());
     _listen('seeked', (_) => _tick());
     _listen('ended', (_) => _onEnded());
     _listen('play', (_) => _setPlaying(true));
+    // The element pauses for reasons of its own - a media key, a call
+    // taking the audio focus, a background tab suspended - and only its
+    // own event says so.
     _listen('pause', (_) => _setPlaying(false));
   }
 
@@ -54,7 +63,24 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
   final web.HTMLAudioElement _audio;
   final Duration _loadDeadline;
 
+  /// How long after a recovery a second media error is read as the
+  /// first recovery not taking, rather than as a new hiccup on a stream
+  /// that has been playing fine since.
+  final Duration _recoveryWindow;
+
   JSObject? _hls;
+  // Counts the players this engine has built, so an error a torn-down
+  // player raises late is told from the live player's.
+  int _hlsGeneration = 0;
+  // When the live player was last asked to recover from a media error.
+  // A second error inside the window is the pipeline saying the first
+  // recovery did not take, and asking again is how a listener sits in
+  // front of a silent player that never fails; one after a healthy
+  // stretch is a new hiccup, and gets the same first answer.
+  DateTime? _recoveredAt;
+  // Set from the ask until the element can play again, so the ticker
+  // does not read the reset clock as a crossing back to member 0.
+  bool _recovering = false;
   TimelineMedia? _media;
   int _member = 0;
   bool _disposed = false;
@@ -150,10 +176,18 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
     final ready = Completer<void>();
     final hls = _newHls();
     _hls = hls;
+    _recoveredAt = null;
+    _recovering = false;
+    final generation = ++_hlsGeneration;
     hls.callMethod<JSAny?>(
       'on'.toJS,
       'hlsError'.toJS,
-      ((JSAny? _, JSObject data) => _onHlsError(data, ready)).toJS,
+      ((JSAny? _, JSObject data) => _onHlsError(
+        hls,
+        generation,
+        data,
+        ready,
+      )).toJS,
     );
     void onCanPlay(web.Event _) {
       if (!ready.isCompleted) ready.complete();
@@ -465,19 +499,62 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
     hls.callMethod<JSAny?>('destroy'.toJS);
   }
 
-  void _onHlsError(JSObject data, Completer<void> ready) {
+  void _onHlsError(
+    JSObject hls,
+    int generation,
+    JSObject data,
+    Completer<void> ready,
+  ) {
+    // A player torn down mid-error can still deliver it; nothing it says
+    // is about the stream now loaded.
+    if (generation != _hlsGeneration) return;
     final fatal = data.getProperty<JSBoolean?>('fatal'.toJS)?.toDart ?? false;
     final status = data
         .getProperty<JSObject?>('response'.toJS)
         ?.getProperty<JSNumber?>('code'.toJS)
         ?.toDartInt;
     final type = data.getProperty<JSString?>('type'.toJS)?.toDart ?? '';
-    // The server's session cap, met on a fetch. Re-minting does not
-    // help - the ordinary path sits under the same limit.
-    final refused = status == 429;
-    // The token aged out, the render was let go, or the files moved
-    // underneath it. All three want the same answer: mint again.
-    final gone = status == 401 || status == 404 || status == 410;
+    // hls.js's own name for what went wrong (`bufferAppendError`,
+    // `bufferAddCodecError`, ...): the type says which subsystem, the
+    // detail says what, and only the detail tells a decoder that cannot
+    // play this rendering from a buffer that hiccuped under load.
+    final details = data.getProperty<JSString?>('details'.toJS)?.toDart ?? '';
+    // hls.js's own sentence about it, which for a media error names the
+    // element's error and what the buffer was doing at the time.
+    final reason =
+        data
+            .getProperty<JSObject?>('error'.toJS)
+            ?.getProperty<JSString?>('message'.toJS)
+            ?.toDart ??
+        '';
+    final kind = hlsErrorKind(status: status, type: type, details: details);
+    final refused = kind == HlsErrorKind.refused;
+    final gone = kind == HlsErrorKind.gone;
+    // A media error is the browser's pipeline, not the file, and hls.js
+    // documents the answer: ask it to recover in place, which rebuilds
+    // the source buffers where it stands. Tried once per player, before
+    // this is allowed to mean anything else - because the something
+    // else, below, is a re-mint mid-stream and a skip during a load,
+    // and a queue walked track by track over a buffer that stalled
+    // under load is the failure this exists to prevent.
+    final now = DateTime.now();
+    final recoveredAt = _recoveredAt;
+    final untried =
+        recoveredAt == null || now.difference(recoveredAt) > _recoveryWindow;
+    if (fatal && kind == HlsErrorKind.media && untried) {
+      _recoveredAt = now;
+      // Said out loud: the console is how a field report or a browser
+      // test sees that a hiccup happened and was survived, where the
+      // silence of a stream that kept playing says nothing.
+      debugPrint('timeline media error recovered in place: $details $reason');
+      // hls.js detaches, re-attaches and reloads at the position it had;
+      // what it does not do is play, and detaching pauses the element.
+      // Mid-stream the resume is this engine's to make, once the element
+      // can play again. During a load the load's own tail does all of it.
+      if (ready.isCompleted) _resumeAfterRecovery(_playingFlag);
+      hls.callMethod<JSAny?>('recoverMediaError'.toJS);
+      return;
+    }
     if (!ready.isCompleted) {
       // Still loading. Nothing has played, hls.js has nothing buffered
       // to keep playing while it retries, and each of these answers is
@@ -487,14 +564,18 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
       if (!fatal && !refused && !gone) return;
       _pauseNow();
       if (refused) _refuse();
+      // Only a rendering that is gone, or one this browser cannot
+      // decode, is the source's fault. A media error that survived a
+      // recovery is still the pipeline's: the caller offers a retry
+      // rather than stepping past a track that is fine.
       ready.completeError(
         MediaLoadException(
-          gone || (!refused && type == 'mediaError')
+          gone || kind == HlsErrorKind.unplayable
               ? MediaFault.source
               : MediaFault.transport,
           StateError(
             status == null
-                ? (type.isEmpty ? 'hls error' : type)
+                ? (type.isEmpty ? 'hls error' : '$type $details $reason'.trim())
                 : 'http $status',
           ),
         ),
@@ -520,6 +601,23 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
     if (!_losses.isClosed) _losses.add(wasPlaying);
   }
 
+  void _resumeAfterRecovery(bool wasPlaying) {
+    _recovering = true;
+    late final JSFunction onCanPlay;
+    void resume(web.Event _) {
+      _audio.removeEventListener('canplay', onCanPlay);
+      _recovering = false;
+      if (_disposed) return;
+      // Attaching reset these, as loadTimeline's tail says.
+      _audio.playbackRate = _speedValue;
+      _audio.volume = _volumeValue;
+      if (wasPlaying) unawaited(play());
+    }
+
+    onCanPlay = resume.toJS;
+    _audio.addEventListener('canplay', onCanPlay);
+  }
+
   void _refuse() {
     if (!_timelineRefusals.isClosed) _timelineRefusals.add('transcode-limited');
   }
@@ -542,6 +640,7 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
   }
 
   void _tick() {
+    if (_recovering) return;
     final media = _media;
     if (media == null) return;
     final abs = _absoluteMs;

@@ -20,6 +20,7 @@ import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../sharing/share_dialog.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/file_picker_port.dart';
@@ -97,23 +98,15 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                   onDismiss: () => setState(() => _conflict = null),
                 ),
         ),
-        switch (detail) {
-          AsyncData(:final value) => SliverMainAxisGroup(
-            slivers: _body(context, value),
-          ),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.playlistLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(playlistDetailProvider(pid)),
-            ),
-          ),
-          _ => const SliverFillRemaining(
-            hasScrollBody: false,
-            child: SkeletonShapes(shape: SkeletonShape.detail),
-          ),
-        },
+        AsyncSliverFace<PlaylistView>(
+          state: detail,
+          skeleton: SkeletonShape.detail,
+          skeletonFills: true,
+          errorTitle: l10n.playlistLoadError,
+          onRetry: () => ref.invalidate(playlistDetailProvider(pid)),
+          builder: (context, value) =>
+              SliverMainAxisGroup(slivers: _body(context, value)),
+        ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
     );

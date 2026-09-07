@@ -167,4 +167,30 @@ void main() {
     expect(frames, hasLength(1));
     expect(frames.single.id, 'ps-watched');
   });
+
+  test('tune names one station and remembers it for a reconnect', () {
+    final sent = <Map<String, Object?>>[];
+    final bus = ConnectBus(
+      send: (frame) {
+        sent.add(frame);
+        return true;
+      },
+    );
+
+    bus.tune('rs-jazz');
+    expect(sent.single, {'type': 'tune', 'station': 'rs-jazz'});
+    // Held, because the server forgets it with the socket: the binder
+    // re-sends this on every reconnect.
+    expect(bus.tuned, 'rs-jazz');
+
+    // A new tune replaces the old rather than adding to it.
+    bus.tune('rs-talk');
+    expect(sent.last, {'type': 'tune', 'station': 'rs-talk'});
+    expect(bus.tuned, 'rs-talk');
+
+    // And listening to nothing omits the station, which is what says so.
+    bus.tune(null);
+    expect(sent.last, {'type': 'tune'});
+    expect(bus.tuned, isNull);
+  });
 }

@@ -288,10 +288,13 @@ root).
   `WAXDECK_SEAL_URL=http://waxseal:4416` in `deploy/.env`. Without that
   URL the sidecar runs and is never contacted, and acquisitions stay on
   the key-free path. `WAXDECK_SEAL_API_KEY` is the whole key story -
-  `make up` mints one, compose gives it to the daemon as its only
-  tenant key and to WaxDeck as the key it sends, and the sidecar's
-  health check pings with it, so a container that goes healthy is one
-  this server can actually mint against.
+  `make up` mints one, and compose gives it to the daemon as its only
+  tenant key and to WaxDeck as the key it sends, so the key required
+  and the key presented cannot drift apart. The container's health is
+  the image's own probe, which since WaxSeal v1.3.0 needs no key: it
+  checks the shared browser and relaunches a dead one. An image cached
+  from before that answers a keyed daemon 401 and reports unhealthy
+  until `docker compose pull waxseal`; the sidecar still serves.
 
 
   The daemon keeps 12 seconds between an in-page mint and establishing

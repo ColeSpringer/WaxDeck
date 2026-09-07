@@ -417,6 +417,7 @@ Serializers _$serializers =
           ..add(WsSessionFrame.serializer)
           ..add(WsSessionReportFrame.serializer)
           ..add(WsSubscribeFrame.serializer)
+          ..add(WsTuneFrame.serializer)
           ..add(WsWatchFrame.serializer)
           ..add(YearInReview.serializer)
           ..addBuilderFactory(

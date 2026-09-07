@@ -157,9 +157,9 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     retry: catalogFanOut.retry,
   );
   final user = PacedRefresh(fanOut: userFanOut.sweep, retry: userFanOut.retry);
-  // Paced like the other two, and for a sharper reason: the server has no
-  // record of who is tuned to what, so a cover landing for anyone marks
-  // this topic on every connection - unpaced, each frame is a round trip.
+  // Paced like the other two: a station whose stream announces a new
+  // title every few minutes can land two rungs of artwork for it, and
+  // unpaced each frame is a round trip.
   final radio = PacedRefresh(
     fanOut: () {
       if (ref.mounted) {
@@ -177,6 +177,17 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
 
   final engine = ref.watch(syncEngineProvider);
   final connect = ref.watch(connectBinderProvider);
+  // What makes the radio invalidation addressed rather than broadcast:
+  // the server holds the station per connection and wakes only the
+  // sockets listening to the one a cover landed for. Tuning to nothing
+  // when playback stops is half the point - a client that walked away
+  // from the dial stops being told about covers it has nothing to draw.
+  ref.listen(radioPlaybackProvider.select((p) => p.station?.pid), (
+    _,
+    stationPid,
+  ) {
+    connect.bus.tune(stationPid);
+  }, fireImmediately: true);
   final tick = ref.read(userStreamTickProvider.notifier);
   if (engine != null) {
     final catalogSub = engine.catalogChanged.listen((_) => catalog.hint());

@@ -129,9 +129,11 @@ plus two cursorless topics:
   after the play-info poll that started it, and this is what fills a
   tuned face on the fetch rather than on its next fifteen-second poll.
   Re-read `/radio/stations/{pid}/play-info` for the station being
-  listened to; a client tuned to nothing ignores the frame. Fanned out
-  to every connection, because the hub holds no record of who is tuned
-  to what.
+  listened to. Addressed rather than broadcast: a client names the
+  station it is listening to with a `tune` frame (`WsTuneFrame`), and a
+  landing wakes the connections tuned to that station alone. A client
+  that never tunes hears nothing on this topic, which is what a client
+  with no station to draw wants.
 
 Cursors are opaque strings. Internally they bind a stream generation, so a
 rebuilt catalog or restored database invalidates stale cursors instead of
@@ -172,7 +174,8 @@ Everything below rides the same socket, after the subscribe frame. Frame
 payload shapes are OpenAPI components (`WsCommandFrame`, `WsAckFrame`,
 `WsErrorFrame`, `WsRegisterEndpointFrame`, `WsEndpointCommandFrame`,
 `WsCommandResultFrame`, `WsSessionReportFrame`, `WsSessionFrame`,
-`WsWatchFrame`, `WsPingFrame`, `WsPongFrame`). The REST surface
+`WsWatchFrame`, `WsPingFrame`, `WsPongFrame`); `WsTuneFrame` rides the
+same socket and belongs to the `radio` topic rather than to the bus. The REST surface
 (`/player/*`) owns endpoint listing, session creation, transfer, and
 teardown; the bus owns the live verbs, endpoint registration, state
 reporting, and clock sync. Server-to-client frames with an unrecognized
@@ -361,6 +364,23 @@ picker rendering many sessions refetches when opened and watches the
 one it focuses. What does invalidate `player` is lifecycle: sessions
 starting, ending, changing endpoint, or replacing their queue, and
 endpoints appearing or going offline.
+
+### Naming the station being listened to (client to server)
+
+A client with a station on screen names it, so a `radio` invalidation
+reaches the connections it is about:
+
+```json
+{ "type": "tune", "station": "rs-01..." }
+```
+
+One tuned station per connection; a new `tune` replaces the old one, and
+`tune` without `station` says this client is no longer listening. Never
+acked and never refused - an unknown pid simply matches no landing - so
+a client sends it on tuning and again on stopping, and re-sends it on
+reconnect the way `watch` is re-sent. This frame belongs to the `radio`
+topic rather than to the command bus, and works whether or not the bus
+is available.
 
 ### Clock sync
 

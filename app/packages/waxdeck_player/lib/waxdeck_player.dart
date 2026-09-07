@@ -11,4 +11,5 @@ export 'src/stream_probe/stream_probe.dart';
 export 'src/just_audio_engine.dart';
 export 'src/audio_service_handler.dart';
 export 'src/media_session_port.dart';
+export 'src/web/hls_error_policy.dart';
 export 'src/web/web_gapless.dart';

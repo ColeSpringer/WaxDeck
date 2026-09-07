@@ -14191,9 +14191,10 @@ components:
     WsSubscribeFrame:
       type: object
       description: >
-        The WebSocket subscribe frame, sent by the client as the first and
-        only client-to-server message on the event channel (transport in
-        `api/events.md`). Clients pass the cursors their mirror is at; a
+        The WebSocket subscribe frame, sent by the client as the first
+        message on the event channel (transport in `api/events.md`);
+        `cmd`, `watch`, `tune`, `register-endpoint` and `ping` follow it.
+        Clients pass the cursors their mirror is at; a
         client with no mirror yet omits them, receives only live
         invalidations, and snapshots through the sync endpoints (before
         or after subscribing; both orders are sound because invalidations
@@ -14616,6 +14617,28 @@ components:
           type: string
           description: The session to follow.
           example: ps-01JZX5N8QW3F4V9T2B7KD3M9R6
+
+    WsTuneFrame:
+      type: object
+      description: >
+        Client-to-server: name the station this client is listening to,
+        so a `radio` invalidation reaches the clients it is about rather
+        than every connection. A new tune replaces the previous one;
+        omitting `station` says this client is no longer listening.
+        Never acked, and never refused: an unknown pid simply matches no
+        landing. A client that never tunes hears no `radio`
+        invalidations, which is what a client with no station to draw
+        wants.
+      required: [type]
+      properties:
+        type:
+          type: string
+          description: Always `tune`.
+          example: tune
+        station:
+          type: string
+          description: The station being listened to.
+          example: rs-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     WsPingFrame:
       type: object

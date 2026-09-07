@@ -21,6 +21,7 @@ overrides:
       - "api/openapi.yaml#/components/schemas/WsSessionReportFrame"
       - "api/openapi.yaml#/components/schemas/WsSessionFrame"
       - "api/openapi.yaml#/components/schemas/WsWatchFrame"
+      - "api/openapi.yaml#/components/schemas/WsTuneFrame"
       - "api/openapi.yaml#/components/schemas/WsPingFrame"
       - "api/openapi.yaml#/components/schemas/WsPongFrame"
     rules:

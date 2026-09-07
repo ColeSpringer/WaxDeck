@@ -576,9 +576,14 @@ class MediaListRow extends StatelessWidget {
     this.actions = const <Widget>[],
     this.playing = false,
     this.selected = false,
-    this.artSize = 40,
+    this.artSize = defaultArtSize,
     super.key,
   });
+
+  /// The artwork edge a row draws at unless a caller says otherwise.
+  /// Named so a caller warming covers ahead of a scroll can ask for the
+  /// size rung the row will paint at rather than repeat the number.
+  static const double defaultArtSize = 40;
 
   final MediaTileData data;
   final VoidCallback? onTap;
@@ -646,7 +651,7 @@ class MediaListRow extends StatelessWidget {
   /// music indexes, whose rows have no position to draw.
   static double heightFor(
     BuildContext context, {
-    double artSize = 40,
+    double artSize = defaultArtSize,
     bool subtitle = true,
   }) {
     final scaler = MediaQuery.textScalerOf(context);

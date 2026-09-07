@@ -64,11 +64,11 @@ func TestPlaylistSnapshotKeepsOrderAndFlagsUnavailable(t *testing.T) {
 	}
 }
 
-// TestPlaylistSnapshotLeavesThrottledEntriesUnknown is the same
-// sentinel under the other status: the metadata throttle says nothing
-// about the video, so the entry must not come back marked unavailable -
-// a mirror would drop it, permanently, on nothing.
-func TestPlaylistSnapshotLeavesThrottledEntriesUnknown(t *testing.T) {
+// TestPlaylistSnapshotLeavesDeferredEntriesUnknown is the same
+// sentinel under the other status: an entry enumeration ran out of
+// budget on says nothing about the video, so it must not come back
+// marked unavailable - a mirror would drop it, permanently, on nothing.
+func TestPlaylistSnapshotLeavesDeferredEntriesUnknown(t *testing.T) {
 	f := &fakeTap{
 		playlist: waxtap.Playlist{
 			ID: "PL1", Title: "Road Tapes",
@@ -79,7 +79,7 @@ func TestPlaylistSnapshotLeavesThrottledEntriesUnknown(t *testing.T) {
 			},
 		},
 		infos:    map[string]*waxtap.Video{"vid-a": {ID: "vid-a", Title: "Track A"}},
-		infoErrs: map[string]error{"vid-b": throttleErr("vid-b")},
+		infoErrs: map[string]error{"vid-b": deferredErr()},
 	}
 	snap, err := snapshotProvider(f, 0).PlaylistSnapshot(context.Background(), "https://youtube.example/pl", syncsource.SnapshotOptions{})
 	if err != nil {
@@ -90,18 +90,40 @@ func TestPlaylistSnapshotLeavesThrottledEntriesUnknown(t *testing.T) {
 	}
 	b := snap.Entries[1]
 	if b.Unavailable || b.AvailabilityKnown {
-		t.Fatalf("throttled entry reported an availability verdict: %+v", b)
+		t.Fatalf("deferred entry reported an availability verdict: %+v", b)
 	}
 	if b.Title != "b" {
-		t.Fatalf("throttled entry lost its listing title: %+v", b)
+		t.Fatalf("deferred entry lost its listing title: %+v", b)
 	}
-	// The rest of the budget goes unspent: the next probe would be
-	// refused the same way, and its entry stays unknown too.
-	if len(f.infoCalls) != 2 {
-		t.Errorf("Info calls = %v, want the pass to stop at the throttle", f.infoCalls)
+	// The entries around it are settled all the same: enumeration owns
+	// the budget and spent it on them under a rotated identity.
+	if a := snap.Entries[0]; !a.AvailabilityKnown || a.Unavailable {
+		t.Errorf("entry before the deferral: %+v", a)
 	}
-	if c := snap.Entries[2]; c.AvailabilityKnown || c.Unavailable {
-		t.Errorf("an unprobed entry claimed an availability verdict: %+v", c)
+	if c := snap.Entries[2]; !c.AvailabilityKnown || c.Unavailable {
+		t.Errorf("entry after the deferral: %+v", c)
+	}
+}
+
+// TestPlaylistSnapshotLeavesAWhollyRefusedPassUnknown: a mirror that
+// believed a flagged address would drop every track in the playlist.
+func TestPlaylistSnapshotLeavesAWhollyRefusedPassUnknown(t *testing.T) {
+	var entries []waxtap.PlaylistEntry
+	errs := map[string]error{}
+	for i := range wholesaleFloor {
+		id := "vid-" + string(rune('a'+i))
+		entries = append(entries, waxtap.PlaylistEntry{VideoID: id, Title: id, Index: i})
+		errs[id] = provenUnplayableErr()
+	}
+	f := &fakeTap{playlist: waxtap.Playlist{ID: "PL1", Entries: entries}, infoErrs: errs}
+	snap, err := snapshotProvider(f, 0).PlaylistSnapshot(context.Background(), "u", syncsource.SnapshotOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range snap.Entries {
+		if e.AvailabilityKnown || e.Unavailable {
+			t.Fatalf("a wholly refused pass produced a verdict: %+v", e)
+		}
 	}
 }
 

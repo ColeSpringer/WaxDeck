@@ -21,6 +21,7 @@ import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../settings/client_prefs.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -123,8 +124,13 @@ class AlbumScreen extends ConsumerWidget {
         SliverToBoxAdapter(
           child: _Header(pid: pid, facts: facts, tracks: tracks),
         ),
-        switch (state) {
-          AsyncData() when tracks.isEmpty => SliverFillRemaining(
+        AsyncSliverFace<MusicItemsState>(
+          state: state,
+          skeletonFills: true,
+          errorTitle: context.l10n.musicAlbumLoadError,
+          onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
+          isEmpty: (_) => tracks.isEmpty,
+          empty: (context, _) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: context.l10n.musicAlbumEmptyTitle,
@@ -132,25 +138,13 @@ class AlbumScreen extends ConsumerWidget {
               glyph: WaxIcons.albums,
             ),
           ),
-          AsyncData() => _TrackList(
+          builder: (context, _) => _TrackList(
             tracks: tracks,
             albumArtist: facts.artist,
             albumPid: pid,
             albumTitle: facts.title,
           ),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: context.l10n.musicAlbumLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
-            ),
-          ),
-          _ => const SliverFillRemaining(
-            hasScrollBody: false,
-            child: SkeletonShapes(shape: SkeletonShape.list),
-          ),
-        },
+        ),
         if (tracks.isNotEmpty)
           SliverToBoxAdapter(child: _ReleaseDetail(track: tracks.first)),
         SliverToBoxAdapter(child: _AlbumIdentity(pid: pid)),

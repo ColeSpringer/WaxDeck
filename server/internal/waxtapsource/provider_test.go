@@ -43,11 +43,14 @@ type fakeTap struct {
 	// lastReq is the request the provider built, for the tests that are
 	// about the spec rather than about the bytes.
 	lastReq waxtap.Request
+	// lastEnum is the options the provider asked enumeration with.
+	lastEnum waxtap.EnumerateOptions
 }
 
 var _ tap = (*fakeTap)(nil)
 
-func (f *fakeTap) Enumerate(_ context.Context, _ string, opts waxtap.EnumerateOptions) (*waxtap.Playlist, error) {
+func (f *fakeTap) Enumerate(ctx context.Context, _ string, opts waxtap.EnumerateOptions) (*waxtap.Playlist, error) {
+	f.lastEnum = opts
 	out := &waxtap.Playlist{ID: f.playlist.ID, Title: f.playlist.Title, Author: f.playlist.Author}
 	for _, e := range f.playlist.Entries {
 		if opts.Stop != nil && opts.Stop(e.VideoID) {
@@ -57,6 +60,33 @@ func (f *fakeTap) Enumerate(_ context.Context, _ string, opts waxtap.EnumerateOp
 		if opts.MaxItems > 0 && len(out.Entries) >= opts.MaxItems {
 			break
 		}
+	}
+	if !opts.Enrich {
+		return out, nil
+	}
+	// Enrichment mirrors the real client: the leading MaxEnrich entries get a
+	// lookup, a success refreshes the entry's listing fields and attaches what
+	// it fetched, and a failure lands in Errors as an EnrichError naming the
+	// entry's own playlist position. The rotation the real one runs is not
+	// modeled - a test names the verdict it wants the caller to see.
+	total := len(out.Entries)
+	if opts.MaxEnrich > 0 && opts.MaxEnrich < total {
+		total = opts.MaxEnrich
+	}
+	for i := range total {
+		v, err := f.Info(ctx, out.Entries[i].VideoID, waxtap.InfoBasic, opts.EnrichOptions...)
+		if err != nil {
+			out.Errors = append(out.Errors, &waxtap.EnrichError{
+				VideoID: out.Entries[i].VideoID,
+				Index:   out.Entries[i].Index,
+				Err:     err,
+			})
+			continue
+		}
+		out.Entries[i].Video = v
+		out.Entries[i].Title = v.Title
+		out.Entries[i].Author = v.Author
+		out.Entries[i].Duration = v.Duration
 	}
 	return out, nil
 }
@@ -297,31 +327,62 @@ func TestEnumerateSkipsUnavailableEntry(t *testing.T) {
 	}
 }
 
-// throttleErr is the metadata throttle's shape: UNPLAYABLE with the
-// "Video unavailable" reason, classified as ErrVideoUnavailable. The
-// reason text cannot separate it from a dead video; only the status
-// can, which is why the predicate reads the status.
-func throttleErr(id string) error {
-	return fmt.Errorf("enrich %s: %w", id, &waxerr.PlayabilityError{
+// deferredErr is what enumeration reports for an entry it never got to
+// prove: the throttle shape relabeled ErrTemporarilyUnavailable, which
+// is upstream's word for "the budget ran out, come back".
+func deferredErr() error {
+	return fmt.Errorf("%w: %w", waxtap.ErrTemporarilyUnavailable, &waxerr.PlayabilityError{
 		Status: "UNPLAYABLE", Reason: "Video unavailable",
 		Sentinel: waxtap.ErrVideoUnavailable,
 	})
 }
 
 // deadErr is what a removed, private, or nonexistent video answers:
-// the same sentinel under status ERROR.
-func deadErr(id string) error {
-	return fmt.Errorf("enrich %s: %w", id, &waxerr.PlayabilityError{
+// ErrVideoUnavailable under status ERROR.
+func deadErr() error {
+	return &waxerr.PlayabilityError{
 		Status: "ERROR", Reason: "Video unavailable",
 		Sentinel: waxtap.ErrVideoUnavailable,
-	})
+	}
 }
 
-func TestEnumerateKeepsThrottledEntriesAndStopsEnriching(t *testing.T) {
+// provenUnplayableErr is the throttle's own shape arriving unrelabeled:
+// enumeration retired the identity that refused it and a fresh one
+// refused it again, so it is a verdict about the video.
+func provenUnplayableErr() error {
+	return &waxerr.PlayabilityError{
+		Status: "UNPLAYABLE", Reason: "Video unavailable",
+		Sentinel: waxtap.ErrVideoUnavailable,
+	}
+}
+
+// TestEnumerateAsksEnumerationToEnrich pins where the per-entry budget
+// is spent. It has to be inside enumeration: that is the only place the
+// metadata throttle is escaped, because escaping it means retiring the
+// identity the refusals came from and asking again.
+func TestEnumerateAsksEnumerationToEnrich(t *testing.T) {
+	f := channelFake(3)
+	p := testProvider(t, f, nil)
+
+	if _, err := p.Enumerate(context.Background(), source.Request{URL: "u"}); err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if !f.lastEnum.Enrich {
+		t.Error("enumeration was asked without Enrich")
+	}
+	if f.lastEnum.MaxEnrich != enrichLimit {
+		t.Errorf("MaxEnrich = %d, want the budget %d", f.lastEnum.MaxEnrich, enrichLimit)
+	}
+	if len(f.lastEnum.EnrichOptions) != 1 {
+		t.Errorf("EnrichOptions = %d, want the full-metadata pass", len(f.lastEnum.EnrichOptions))
+	}
+}
+
+func TestEnumerateKeepsDeferredEntriesBare(t *testing.T) {
 	f := channelFake(4)
-	// The newest entry is enriched; the second is throttled, which ends
-	// the pass. Entries are newest first, so vid(4) leads.
-	f.infoErrs = map[string]error{vid(3): throttleErr(vid(3))}
+	// Entries are newest first, so vid(4) leads; the second entry is the
+	// one enumeration ran out of budget on.
+	f.infoErrs = map[string]error{vid(3): deferredErr()}
 	var logs bytes.Buffer
 	p := testProvider(t, f, &logs)
 
@@ -329,13 +390,13 @@ func TestEnumerateKeepsThrottledEntriesAndStopsEnriching(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Enumerate: %v", err)
 	}
-	// Every entry survives: the throttle is about the identity asking,
-	// not about the videos. This is the regression - the same sentinel
-	// under a different status once dropped a third of a catalogue.
+	// Every entry survives: a deferral is about the identity asking, not
+	// about the videos. This is the regression - the same sentinel under
+	// a different status once dropped a third of a catalogue.
 	if len(enum.Feed.Episodes) != 4 {
 		t.Fatalf("episodes = %d, want all 4 kept", len(enum.Feed.Episodes))
 	}
-	// The throttled entry keeps the listing's own title rather than the
+	// The deferred entry keeps the listing's own title rather than the
 	// enriched one, which is exactly what "unenriched" means.
 	byID := map[string]string{}
 	for _, ep := range enum.Feed.Episodes {
@@ -345,33 +406,35 @@ func TestEnumerateKeepsThrottledEntriesAndStopsEnriching(t *testing.T) {
 		t.Errorf("first entry title = %q, want the enriched one", got)
 	}
 	if got := byID[vid(3)]; got != "upload "+vid(3) {
-		t.Errorf("throttled entry title = %q, want the listing's", got)
+		t.Errorf("deferred entry title = %q, want the listing's", got)
 	}
-	// The budget stops being spent: no Info call after the refusal.
-	if len(f.infoCalls) != 2 {
-		t.Errorf("Info calls = %v, want the pass to stop at the throttle", f.infoCalls)
+	// The entries after it are enriched all the same: enumeration spent
+	// the budget on them under a rotated identity, so there is nothing
+	// left for this pass to save by stopping.
+	if got := byID[vid(2)]; got != "full title "+vid(2) {
+		t.Errorf("entry after the deferral = %q, want it enriched", got)
 	}
-	if !strings.Contains(logs.String(), "youtube metadata throttled") {
-		t.Error("the throttle was not logged")
+	if !strings.Contains(logs.String(), "youtube metadata deferred") {
+		t.Error("the deferral was not logged")
 	}
 	if strings.Contains(logs.String(), "skipping unavailable youtube entry") {
-		t.Error("a throttled entry was reported as unavailable")
+		t.Error("a deferred entry was reported as unavailable")
 	}
 	// The cursor does not move past entries this pass could not enrich.
 	// Advancing it would make the gap permanent: the next run's Stop
 	// lists nothing at or below the cursor, so those episodes would keep
 	// the listing's bare title for the life of the subscription.
 	if enum.ETag != "" {
-		t.Errorf("ETag = %q on a throttled first sync, want the cursor held", enum.ETag)
+		t.Errorf("ETag = %q on a deferred first sync, want the cursor held", enum.ETag)
 	}
 }
 
-// TestEnumerateHoldsTheCursorWhenThrottled is the incremental half: a
-// later run that throttles must leave the stored cursor where it was,
-// so the entries it could not enrich are listed again next time.
-func TestEnumerateHoldsTheCursorWhenThrottled(t *testing.T) {
+// TestEnumerateHoldsTheCursorWhenDeferred is the incremental half: a
+// later run that defers must leave the stored cursor where it was, so
+// the entries it could not enrich are listed again next time.
+func TestEnumerateHoldsTheCursorWhenDeferred(t *testing.T) {
 	f := channelFake(4)
-	f.infoErrs = map[string]error{vid(3): throttleErr(vid(3))}
+	f.infoErrs = map[string]error{vid(3): deferredErr()}
 	p := testProvider(t, f, nil)
 
 	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u", ETag: vid(2)})
@@ -387,7 +450,7 @@ func TestEnumerateHoldsTheCursorWhenThrottled(t *testing.T) {
 // dropped entry is genuinely gone, so the cursor moves past it.
 func TestEnumerateAdvancesTheCursorWhenOnlySkipping(t *testing.T) {
 	f := channelFake(4)
-	f.infoErrs = map[string]error{vid(3): deadErr(vid(3))}
+	f.infoErrs = map[string]error{vid(3): deadErr()}
 	p := testProvider(t, f, nil)
 
 	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
@@ -401,7 +464,7 @@ func TestEnumerateAdvancesTheCursorWhenOnlySkipping(t *testing.T) {
 
 func TestEnumerateStillSkipsAnErrorStatusVideo(t *testing.T) {
 	f := channelFake(3)
-	f.infoErrs = map[string]error{vid(2): deadErr(vid(2))}
+	f.infoErrs = map[string]error{vid(2): deadErr()}
 	var logs bytes.Buffer
 	p := testProvider(t, f, &logs)
 
@@ -427,34 +490,77 @@ func TestEnumerateStillSkipsAnErrorStatusVideo(t *testing.T) {
 	}
 }
 
-// TestEnumerateTreatsAnyUnplayableAsThrottled pins the edge of the
-// predicate. Upstream classifies only "members" and "country" reasons
-// specially, so an UNPLAYABLE blocked for anything else - a copyright
-// claim, a policy takedown - also folds to ErrVideoUnavailable and
-// matches the throttle shape. That is deliberate and it is the safe
-// direction: a false throttle defers enrichment to the next run, while
-// a false skip drops the episode from the feed for good.
-func TestEnumerateTreatsAnyUnplayableAsThrottled(t *testing.T) {
+// TestEnumerateDropsAProvenUnplayableEntry is the half of the taxonomy
+// that changed when enumeration took the budget over. An UNPLAYABLE
+// refusal used to be kept on the chance it was the throttle, because a
+// lone lookup could not tell; enumeration can, by retiring the identity
+// and asking again, so one that arrives unrelabeled has already been
+// re-asked under a fresh identity and is a verdict about the video.
+func TestEnumerateDropsAProvenUnplayableEntry(t *testing.T) {
 	f := channelFake(3)
-	f.infoErrs = map[string]error{
-		vid(2): fmt.Errorf("enrich %s: %w", vid(2), &waxerr.PlayabilityError{
-			Status: "UNPLAYABLE", Reason: "This video is no longer available due to a copyright claim",
-			Sentinel: waxtap.ErrVideoUnavailable,
-		}),
-	}
+	f.infoErrs = map[string]error{vid(2): provenUnplayableErr()}
 	p := testProvider(t, f, nil)
 
 	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
 	if err != nil {
 		t.Fatalf("Enumerate: %v", err)
 	}
-	// Kept, not dropped: the entry is cataloged bare and the cursor
-	// holds, so the next run re-lists it and can settle the question.
-	if len(enum.Feed.Episodes) != 3 {
-		t.Fatalf("episodes = %d, want the entry kept for a later pass", len(enum.Feed.Episodes))
+	if len(enum.Feed.Episodes) != 2 {
+		t.Fatalf("episodes = %d, want the proven-unplayable entry dropped", len(enum.Feed.Episodes))
+	}
+	if enum.ETag != vid(3) {
+		t.Errorf("ETag = %q, want the cursor advanced past a settled verdict", enum.ETag)
+	}
+}
+
+// TestEnumerateKeepsAWhollyRefusedPass is the address the platform has
+// flagged: every identity minted from it is refused the same way, and
+// WaxTap's rule that a pass recovering nothing proves the failures real
+// reports the whole budget as removed videos. A channel does not lose
+// twenty-five episodes in one poll; the pass is kept bare and re-listed.
+func TestEnumerateKeepsAWhollyRefusedPass(t *testing.T) {
+	f := channelFake(30)
+	f.infoErrs = map[string]error{}
+	for i := 30; i > 5; i-- {
+		f.infoErrs[vid(i)] = provenUnplayableErr()
+	}
+	var logs bytes.Buffer
+	p := testProvider(t, f, &logs)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if len(enum.Feed.Episodes) != 30 {
+		t.Fatalf("episodes = %d, want all 30 kept", len(enum.Feed.Episodes))
 	}
 	if enum.ETag != "" {
-		t.Errorf("ETag = %q, want the cursor held so the entry is re-listed", enum.ETag)
+		t.Errorf("ETag = %q, want the cursor held so the pass is re-listed", enum.ETag)
+	}
+	if !strings.Contains(logs.String(), "every youtube entry the budget reached was refused") {
+		t.Error("the refused pass was not logged")
+	}
+	if strings.Contains(logs.String(), "skipping unavailable youtube entry") {
+		t.Error("a refused pass was reported as removals")
+	}
+}
+
+// TestEnumerateStillDropsAPartlyRefusedPass is the contrast that keeps
+// the guard honest: verdicts among successes are verdicts.
+func TestEnumerateStillDropsAPartlyRefusedPass(t *testing.T) {
+	f := channelFake(30)
+	f.infoErrs = map[string]error{vid(30): provenUnplayableErr(), vid(29): provenUnplayableErr()}
+	p := testProvider(t, f, nil)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if len(enum.Feed.Episodes) != 28 {
+		t.Fatalf("episodes = %d, want the two verdicts dropped", len(enum.Feed.Episodes))
+	}
+	if enum.ETag != vid(30) {
+		t.Errorf("ETag = %q, want the cursor advanced", enum.ETag)
 	}
 }
 

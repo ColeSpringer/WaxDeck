@@ -246,7 +246,7 @@ final libraryHasAnythingProvider = FutureProvider.autoDispose<bool>((
 ) async {
   final page = await ref.watch(repositoryProvider).listItems(limit: 1);
   return page.items.isNotEmpty;
-});
+}, retry: retryUnlessRefused);
 
 /// Every home read, for the pull-to-refresh gesture and for the catalog
 /// fan-out: a scan changes what is on all of them at once.

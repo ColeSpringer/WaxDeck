@@ -182,6 +182,7 @@ class BooksController extends AsyncNotifier<BooksState> {
 
 final booksProvider = AsyncNotifierProvider<BooksController, BooksState>(
   BooksController.new,
+  retry: retryUnlessRefused,
 );
 
 /// The authors on [books], each with how many they wrote, biggest first

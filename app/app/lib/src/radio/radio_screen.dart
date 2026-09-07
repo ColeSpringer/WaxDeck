@@ -81,7 +81,7 @@ class RadioScreen extends ConsumerWidget {
           errorTitle: l10n.radioLoadError,
           onRetry: () => ref.invalidate(radioStationsProvider),
           isEmpty: (value) => value.isEmpty,
-          empty: (context) => SliverFillRemaining(
+          empty: (context, _) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.radioEmptyTitle,

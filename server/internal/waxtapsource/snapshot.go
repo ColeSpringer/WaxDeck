@@ -2,6 +2,7 @@ package waxtapsource
 
 import (
 	"context"
+	"errors"
 
 	waxtap "github.com/colespringer/waxtap/v3"
 
@@ -15,8 +16,8 @@ var _ syncsource.Snapshotter = (*Provider)(nil)
 // dropped - the shape a mutable playlist's mirror needs, where
 // Enumerate's feed shape fits only an append-only subscription. The
 // first opts.EnrichLimit entries (default enrichLimit) get a per-video
-// Info call that settles their availability and thumbnail; later
-// entries keep the listing fields with availability unknown, so a long
+// lookup that settles their availability and thumbnail; later entries
+// keep the listing fields with availability unknown, so a long
 // playlist's snapshot stays one listing plus a bounded number of
 // lookups. CoverURL is the first available entry's thumbnail: WaxTap
 // surfaces no playlist-level image, and that entry is also what the
@@ -30,7 +31,7 @@ func (p *Provider) PlaylistSnapshot(ctx context.Context, url string, opts syncso
 	if budget <= 0 {
 		budget = enrichLimit
 	}
-	pl, err := p.tap.Enumerate(ctx, url, waxtap.EnumerateOptions{MaxItems: maxEntries})
+	pl, err := p.tap.Enumerate(ctx, url, enrichedOptions(maxEntries, budget))
 	if err != nil {
 		return nil, err
 	}
@@ -41,8 +42,7 @@ func (p *Provider) PlaylistSnapshot(ctx context.Context, url string, opts syncso
 		Author:      pl.Author,
 		Truncated:   pl.Continuation != "" || (maxEntries > 0 && len(pl.Entries) >= maxEntries),
 	}
-	infoCalls := 0
-	throttled := false
+	failures, wholesale := p.enrichFailures(pl, budget)
 	for i := range pl.Entries {
 		entry := pl.Entries[i]
 		e := syncsource.PlaylistSnapshotEntry{
@@ -52,40 +52,33 @@ func (p *Provider) PlaylistSnapshot(ctx context.Context, url string, opts syncso
 			Title:      entry.Title,
 			DurationMS: entry.Duration.Milliseconds(),
 		}
-		if infoCalls < budget && !throttled {
-			infoCalls++
-			v, ierr := p.tap.Info(ctx, entry.VideoID, waxtap.InfoBasic, waxtap.WithFullMetadata())
-			switch {
-			case isMetadataThrottle(ierr):
-				// The throttle says nothing about this video, so the
-				// entry keeps AvailabilityKnown false rather than being
-				// marked unavailable - which is what once retired a
-				// third of a channel for good. The rest of the budget
-				// goes unspent: the next call is refused the same way.
-				throttled = true
-				p.log.Info("youtube metadata throttled; probing no further this pass",
-					"video", entry.VideoID, "probed", infoCalls-1, "err", ierr)
-			case ierr == nil:
+		switch ferr, failed := failures[entry.Index]; {
+		case !failed:
+			if entry.Video != nil {
 				e.AvailabilityKnown = true
-				if v.Title != "" {
-					e.Title = v.Title
-				}
-				if v.Duration > 0 {
-					e.DurationMS = v.Duration.Milliseconds()
-				}
-				if len(v.Thumbnails) > 0 {
-					e.ThumbnailURL = v.Thumbnails[0].URL
+				if len(entry.Video.Thumbnails) > 0 {
+					e.ThumbnailURL = entry.Video.Thumbnails[0].URL
 				}
 				if snap.CoverURL == "" && e.ThumbnailURL != "" {
 					snap.CoverURL = e.ThumbnailURL
 				}
-			case isSkipClass(ierr):
-				e.AvailabilityKnown = true
-				e.Unavailable = true
-				p.log.Warn("unavailable youtube playlist entry", "video", entry.VideoID, "err", ierr)
-			default:
-				return nil, ierr
 			}
+		case wholesale || errors.Is(ferr, waxtap.ErrTemporarilyUnavailable):
+			// Or the whole pass was refused, which is the same silence
+			// about every video in it.
+			// Enrichment ran out of budget before a fresh identity could
+			// settle this entry, so it says nothing about the video: the
+			// entry keeps AvailabilityKnown false rather than being marked
+			// unavailable, which is what once retired a third of a channel
+			// for good.
+			p.log.Info("youtube metadata deferred; entry availability unknown",
+				"video", entry.VideoID, "err", ferr)
+		case isSkipClass(ferr):
+			e.AvailabilityKnown = true
+			e.Unavailable = true
+			p.log.Warn("unavailable youtube playlist entry", "video", entry.VideoID, "err", ferr)
+		default:
+			return nil, ferr
 		}
 		snap.Entries = append(snap.Entries, e)
 	}

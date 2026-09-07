@@ -1020,6 +1020,7 @@ Class | Method | HTTP request | Description
  - [WsSessionFrame](doc/WsSessionFrame.md)
  - [WsSessionReportFrame](doc/WsSessionReportFrame.md)
  - [WsSubscribeFrame](doc/WsSubscribeFrame.md)
+ - [WsTuneFrame](doc/WsTuneFrame.md)
  - [WsWatchFrame](doc/WsWatchFrame.md)
  - [YearInReview](doc/YearInReview.md)
 

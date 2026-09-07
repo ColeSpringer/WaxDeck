@@ -102,9 +102,13 @@ class DiagnosticsController extends AsyncNotifier<DiagnosticsState> {
   }
 }
 
+/// A refusal here is a right this account does not have, or a filter
+/// the server will not take: neither becomes a table on the fourth ask,
+/// and the screen awaits this to draw its error.
 final diagnosticsProvider =
     AsyncNotifierProvider<DiagnosticsController, DiagnosticsState>(
       DiagnosticsController.new,
+      retry: retryUnlessRefused,
     );
 
 /// The file-diagnostics dashboard: counts by code over a filtered table

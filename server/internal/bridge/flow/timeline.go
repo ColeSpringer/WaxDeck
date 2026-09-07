@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -149,9 +150,39 @@ func timelineKey(digest, render string) string { return digest + "/" + render }
 
 // renderKey names one rendering's encoder settings. Readable rather
 // than hashed: it rides the client's URL, and a support answer about a
-// timeline is easier when the URL says which one it is.
-func renderKey(format, gain string, crossfadeSeconds float64) string {
-	return format + "~" + gain + "~" + trimFloat(crossfadeSeconds)
+// timeline is easier when the URL says which one it is. A requested
+// depth is one more setting and rides on the end; a rendering that asked
+// for none keeps the shape every key had before there was one.
+func renderKey(format, gain string, crossfadeSeconds float64, bits int) string {
+	key := format + "~" + gain + "~" + trimFloat(crossfadeSeconds)
+	if bits != 0 {
+		key += "~" + strconv.Itoa(bits)
+	}
+	return key
+}
+
+// timelineBits is the sample depth a timeline render is asked for, or 0
+// to leave it to the encoder. named says whether the caller named the
+// formats it can decode, which is what a browser does and a cast
+// receiver or a native client does not.
+//
+// A browser's FLAC is pinned to 16 as a workaround for the sidecar's init
+// segment, whose sample entry declares 16 bits whatever the STREAMINFO
+// carries. Chromium refuses the two disagreeing, and a queue reaches
+// another depth easily: one lossy member decodes to float, the envelope
+// goes float, and the encoder quantizes an unrequested depth to 24 - so
+// the browser refused the whole stream at its first append. Asking for
+// 16 makes the fields agree at the cost of quantizing a lossless 24-bit
+// source on this path, which is why it is asked only where the defect
+// bites: a receiver playing the same rendering through its own decoder
+// keeps the depth its library has. The lossy renderings carry no
+// STREAMINFO and are left alone. Comes out with the muxer fix; see
+// docs/upstream-requests.md.
+func timelineBits(format string, named bool) int {
+	if named && format == "flac" {
+		return 16
+	}
+	return 0
 }
 
 // TimelineStore persists the stash across restarts. *db.DB implements
@@ -630,6 +661,10 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 		"format": format,
 		"gain":   gain,
 	}
+	bits := timelineBits(format, len(opts.Formats) > 0)
+	if bits != 0 {
+		params["bits"] = strconv.Itoa(bits)
+	}
 	if opts.CrossfadeSeconds > 0 {
 		// The identical value must ride the render, or the minted
 		// boundaries describe a different presentation.
@@ -644,7 +679,7 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 		return nil, fmt.Errorf("flow: signing timeline master: %w", err)
 	}
 
-	render := renderKey(format, gain, opts.CrossfadeSeconds)
+	render := renderKey(format, gain, opts.CrossfadeSeconds, bits)
 	key := timelineKey(tl.Tl, render)
 	token, exp := b.tokens.MintFor(user, "tl-"+key, ttl)
 	now := time.Now()

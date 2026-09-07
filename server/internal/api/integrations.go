@@ -117,7 +117,7 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 		// answer and the client falls back to the rungs below.
 		if pid := s.svc.RadioNowPlayingItem(ctx, uc, req.Pid, station.Name, title); pid != "" {
 			out.NowPlayingItemPid = ptr(pid)
-		} else if key, tryExternal := s.svc.EnsureRadioAnnouncedArt(artURL, title); key != "" {
+		} else if key, tryExternal := s.svc.EnsureRadioAnnouncedArt(req.Pid, artURL, title); key != "" {
 			// The station's own answer, and the better one: it names the
 			// picture for this exact broadcast, where an external lookup
 			// guesses a release from a parsed title.
@@ -130,7 +130,7 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 			// later one answers a key - it never waits on a paced third
 			// party. tryExternal is false only while an announced fetch
 			// is in flight, which is worth one poll's wait.
-			if key := s.svc.EnsureRadioNowPlayingArt(station.Name, title); key != "" {
+			if key := s.svc.EnsureRadioNowPlayingArt(req.Pid, station.Name, title); key != "" {
 				out.NowPlayingArtKey = ptr(key)
 				out.NowPlayingArtSource = artSourceJSON(s.svc.RadioNowPlayingArtSource(key))
 			}

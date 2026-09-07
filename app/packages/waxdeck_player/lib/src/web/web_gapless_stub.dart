@@ -15,7 +15,11 @@ import '../audio_engine_port.dart';
 /// type is deliberately loose: naming `package:web` in this half would
 /// undo the split the conditional export exists for.
 class HlsTimelinePlayer implements TimelineAudioEngine {
-  HlsTimelinePlayer({Object? element, Duration? loadDeadline}) {
+  HlsTimelinePlayer({
+    Object? element,
+    Duration? loadDeadline,
+    Duration? recoveryWindow,
+  }) {
     throw UnsupportedError('the timeline engine exists only in a browser');
   }
 

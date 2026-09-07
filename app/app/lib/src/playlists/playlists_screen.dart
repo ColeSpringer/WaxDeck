@@ -10,6 +10,7 @@ import '../l10n/l10n.dart';
 import '../media_view.dart';
 import '../search/search_chrome.dart';
 import '../settings/client_prefs.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'playlist_create.dart';
@@ -50,8 +51,13 @@ class PlaylistsScreen extends ConsumerWidget {
         const SearchAction(),
       ],
       slivers: <Widget>[
-        switch (state) {
-          AsyncData() when all.isEmpty => SliverFillRemaining(
+        AsyncSliverFace<List<Playlist>>(
+          state: state,
+          skeleton: SkeletonShape.grid,
+          errorTitle: l10n.playlistsLoadError,
+          onRetry: () => ref.invalidate(playlistsProvider),
+          isEmpty: (value) => value.isEmpty,
+          empty: (context, _) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.playlistsEmptyTitle,
@@ -61,19 +67,9 @@ class PlaylistsScreen extends ConsumerWidget {
               onAction: () => unawaited(showCreatePlaylistDialog(context)),
             ),
           ),
-          AsyncData() => _Sections(mine: mine, shared: shared, split: split),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.playlistsLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(playlistsProvider),
-            ),
-          ),
-          _ => const SliverToBoxAdapter(
-            child: SkeletonShapes(shape: SkeletonShape.grid),
-          ),
-        },
+          builder: (context, _) =>
+              _Sections(mine: mine, shared: shared, split: split),
+        ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
     );

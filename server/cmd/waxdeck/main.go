@@ -487,8 +487,9 @@ func run() error {
 	// subscribers as coalesced invalidation frames.
 	hub := events.New(svc)
 	// Radio artwork lands on a detached worker seconds after the poll
-	// that started it; this is what saves the face a poll interval.
-	svc.SetRadioInvalidator(hub.MarkRadioAll)
+	// that started it; this is what saves the face a poll interval, and
+	// it reaches the connections tuned to that station alone.
+	svc.SetRadioInvalidator(hub.MarkRadio)
 	group.Go(ctx, "event-hub", hub.Run)
 
 	// One media-token instance signs both streaming and download URLs.

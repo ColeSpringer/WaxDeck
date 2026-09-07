@@ -277,10 +277,10 @@ type Library struct {
 	// radioArtLookupBudget is its default and its only production value.
 	// Tests set it short to reach the deadline without waiting a minute.
 	radioArtBudget time.Duration
-	// radioWake wakes listening clients when a cover lands, so the face
-	// fills on the fetch rather than on the next poll boundary. Set by
-	// SetRadioInvalidator; unset is a no-op.
-	radioWake          atomic.Pointer[func()]
+	// radioWake wakes the clients listening to one station when a cover
+	// lands, so the face fills on the fetch rather than on the next poll
+	// boundary. Set by SetRadioInvalidator; unset is a no-op.
+	radioWake          atomic.Pointer[func(stationPID string)]
 	radioDirectoryBase string
 	// radioDirectoryMirrorList overrides mirror discovery, and
 	// radioMirrors caches what discovery found. radioMirrorCold holds

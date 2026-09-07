@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
+import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -105,15 +106,12 @@ class UploadsScreen extends ConsumerWidget {
           padding: sizeClass.gutter.add(
             const EdgeInsets.only(bottom: WaxSpace.s32),
           ),
-          child: switch (uploads) {
-            AsyncData(:final value) => _body(context, ref, value, canUpload),
-            AsyncError(:final error) => ErrorState(
-              title: l10n.uploadsLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(uploadsProvider),
-            ),
-            _ => const SkeletonShapes(shape: SkeletonShape.list),
-          },
+          child: AsyncBoxFace<UploadsState>(
+            state: uploads,
+            errorTitle: l10n.uploadsLoadError,
+            onRetry: () => ref.invalidate(uploadsProvider),
+            builder: (context, value) => _body(context, ref, value, canUpload),
+          ),
         ),
       ),
     );

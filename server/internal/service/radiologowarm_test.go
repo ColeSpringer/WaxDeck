@@ -31,7 +31,7 @@ func TestCreateRadioStationWarmsTheLogo(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	svc.allowPrivateRadioHosts = true
 	var woke atomic.Int64
-	svc.SetRadioInvalidator(func() { woke.Add(1) })
+	svc.SetRadioInvalidator(func(string) { woke.Add(1) })
 	var hits atomic.Int64
 	host := artHost(t, &hits, "image/png", coverPNG(t, 80))
 
@@ -70,7 +70,7 @@ func TestCreateRadioStationCachesAWarmMiss(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	svc.allowPrivateRadioHosts = true
 	var woke atomic.Int64
-	svc.SetRadioInvalidator(func() { woke.Add(1) })
+	svc.SetRadioInvalidator(func(string) { woke.Add(1) })
 	var hits atomic.Int64
 	host := artHost(t, &hits, "text/html", []byte("<html>not a logo</html>"))
 

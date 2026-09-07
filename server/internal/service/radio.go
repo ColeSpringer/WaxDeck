@@ -801,7 +801,7 @@ func (l *Library) warmRadioLogo(apiStationPID string, row wdb.RadioStation) {
 		if err == nil {
 			// A tuned placeholder repaints on the wake, not on its next
 			// interaction.
-			l.wakeRadioListeners()
+			l.wakeRadioListeners(apiStationPID)
 		}
 		return nil
 	})

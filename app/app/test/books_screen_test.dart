@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
@@ -5,6 +7,7 @@ import 'package:waxdeck/src/books/books_controller.dart';
 import 'package:waxdeck/src/books/books_screen.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -82,6 +85,31 @@ List<String> _order(WidgetTester tester) => <String>[
 ];
 
 void main() {
+  testWidgets('a refresh redraws the books it already has', (tester) async {
+    // Through the shared face, which decides from the value rather than
+    // from the state's runtime type: a reload carries what it had, and
+    // the three empty arms are told apart inside the empty face.
+    final repo = _repo();
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+    expect(find.byType(AsyncSliverFace<BooksState>), findsOneWidget);
+    final before = _order(tester);
+    expect(before, isNotEmpty);
+
+    final gate = Completer<void>();
+    repo.listItemsGate = gate;
+    ProviderScope.containerOf(
+      tester.element(find.byType(WaxScaffold).first),
+    ).invalidate(booksProvider);
+    await tester.pump();
+    await tester.pump();
+
+    expect(_order(tester), before);
+    gate.complete();
+    repo.listItemsGate = null;
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('an uploader gets the add every other hub has', (tester) async {
     final repo = _repo()
       ..sessionState = const SessionState(

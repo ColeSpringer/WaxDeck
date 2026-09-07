@@ -9,7 +9,7 @@ import 'package:built_value/serializer.dart';
 
 part 'ws_subscribe_frame.g.dart';
 
-/// The WebSocket subscribe frame, sent by the client as the first and only client-to-server message on the event channel (transport in `api/events.md`). Clients pass the cursors their mirror is at; a client with no mirror yet omits them, receives only live invalidations, and snapshots through the sync endpoints (before or after subscribing; both orders are sound because invalidations carry no data). 
+/// The WebSocket subscribe frame, sent by the client as the first message on the event channel (transport in `api/events.md`); `cmd`, `watch`, `tune`, `register-endpoint` and `ping` follow it. Clients pass the cursors their mirror is at; a client with no mirror yet omits them, receives only live invalidations, and snapshots through the sync endpoints (before or after subscribing; both orders are sound because invalidations carry no data). 
 ///
 /// Properties:
 /// * [catalogSince] - The client's opaque catalog change cursor.

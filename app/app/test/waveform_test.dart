@@ -9,6 +9,7 @@ import 'fakes.dart';
 import 'player_host.dart';
 
 const _pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
+const _otherPid = 'tr-01JZX5N8QW3F4V9T2B7KDSECOND1';
 
 void main() {
   group('normalising peaks', () {
@@ -142,6 +143,70 @@ void main() {
       // and report `AsyncLoading` in between, which never settles.
       expect(container.read(trackWaveformProvider(_pid)).hasError, isTrue);
       expect(repo.waveformCalls, <String>[_pid]);
+    });
+
+    testWidgets('the playing track keeps its envelope until it stops being '
+        'the playing track', (tester) async {
+      // Re-asking is a full re-read, and the surfaces that read this
+      // come and go: the command palette is a dialog whose gate reads
+      // the envelope, so with the player face unmounted every open paid
+      // for the peaks again.
+      final other = testItem(_otherPid, title: 'Second');
+      final repo = FakeRepository(items: [testItem(_pid), other])
+        ..waveforms[_pid] = const Waveform(
+          state: 'ready',
+          peaks: [0, 128, 255],
+          resolution: 3,
+        );
+      final container = playbackContainer(repo: repo, engine: FakeEngine());
+      final harness = PlayerHarness(container);
+      harness.play([testItem(_pid)]);
+      await tester.pumpAndSettle();
+
+      container.listen(trackWaveformProvider(_pid), (_, _) {}).close();
+      await tester.pumpAndSettle();
+      container.listen(trackWaveformProvider(_pid), (_, _) {}).close();
+      await tester.pumpAndSettle();
+      expect(repo.waveformCalls, <String>[_pid]);
+
+      // The track changing is what lets it go, and nothing else has to:
+      // no timer outlives the tree, which is what the grace-period
+      // shape of this could not promise.
+      harness.play([other]);
+      await tester.pumpAndSettle();
+      container.listen(trackWaveformProvider(_pid), (_, _) {}).close();
+      await tester.pumpAndSettle();
+      expect(repo.waveformCalls, <String>[_pid, _pid]);
+
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a failed read is not held for the rest of the track', (
+      tester,
+    ) async {
+      // The envelope is kept for an answer. A read the network lost, or a
+      // refusal, is let go, so a face that mounts again re-asks rather
+      // than drawing the failure until the track changes.
+      final repo = FakeRepository(items: [testItem(_pid)])
+        ..waveformError = const WaxDeckApiException(
+          code: 'catalog-maintenance',
+          message: 'the catalog is being rebuilt',
+          statusCode: 503,
+        );
+      final container = playbackContainer(repo: repo, engine: FakeEngine());
+      final harness = PlayerHarness(container);
+      harness.play([testItem(_pid)]);
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < 2; i++) {
+        container
+            .listen(trackWaveformProvider(_pid), (_, _) {}, onError: (_, _) {})
+            .close();
+        await tester.pumpAndSettle();
+      }
+      expect(repo.waveformCalls, <String>[_pid, _pid]);
+
+      await harness.endPlayback(tester);
     });
 
     test('one request answers both the bar and the offer', () async {

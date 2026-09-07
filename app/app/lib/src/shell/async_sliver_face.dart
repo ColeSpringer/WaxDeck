@@ -2,28 +2,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import 'async_face.dart';
 
 /// The one face a hub's main sliver wears: rows, an empty state, a
-/// failure, or a skeleton, decided in that order from an [AsyncValue].
+/// failure, or a skeleton, decided by [resolveAsyncFace].
 ///
 /// It lives in app code rather than in `waxdeck_ui` because it takes an
 /// `AsyncValue`, which is Riverpod's, and the design system depends on
-/// Flutter alone.
-///
-/// The order is the whole point, and it is not the order a `switch` on
-/// the runtime type produces. A refresh hands the screen an
-/// `AsyncLoading` **carrying the previous value**, which matches
-/// neither `AsyncData` nor `AsyncError`, so a type switch falls through
-/// to its default arm and replaces content the screen already has with
-/// a skeleton: subscribing to a show blanked the whole subscription
-/// grid, every radio pin blanked the station grid. Reading `.value`
-/// and `hasError` instead means a reload redraws in place and a retry
-/// keeps the error card it is retrying.
-///
-/// Failure comes before content deliberately, matching the stats
-/// screen's `_SectionFace` this follows: a list that failed to reload
-/// is a list that may be wrong, and saying so is better than showing
-/// stale rows with no sign anything went wrong.
+/// Flutter alone. [AsyncBoxFace] is the same decision for a body that is
+/// a box rather than a sliver.
 class AsyncSliverFace<T> extends StatelessWidget {
   const AsyncSliverFace({
     required this.state,
@@ -68,37 +55,32 @@ class AsyncSliverFace<T> extends StatelessWidget {
   /// right for a list that draws its own empty row.
   final bool Function(T value)? isEmpty;
 
-  /// The empty face, as a sliver.
-  final Widget Function(BuildContext context)? empty;
+  /// The empty face, as a sliver, handed the value it is empty for: a
+  /// face that has to say why - filtered to nothing, or nothing at all -
+  /// reads that off the value rather than off state it re-derives.
+  final Widget Function(BuildContext context, T value)? empty;
 
   @override
   Widget build(BuildContext context) {
-    if (state case AsyncValue<T>(hasError: true, error: final Object error)) {
-      return SliverFillRemaining(
+    return switch (resolveAsyncFace(state, isEmpty: isEmpty)) {
+      AsyncFaceFailed(:final error, :final retrying) => SliverFillRemaining(
         hasScrollBody: false,
         child: ErrorState(
           title: errorTitle,
           message: context.explain(error),
           onRetry: onRetry,
-          // Riverpod retries on its own, so the press has to show in
-          // the control rather than in a face change.
-          retrying: state.isLoading,
+          retrying: retrying,
         ),
-      );
-    }
-    final value = state.value;
-    if (value != null) {
-      if (empty != null && (isEmpty?.call(value) ?? false)) {
-        return empty!(context);
-      }
-      return builder(context, value);
-    }
-    if (skeletonFills) {
-      return SliverFillRemaining(
+      ),
+      AsyncFaceEmpty(:final value) => empty!(context, value),
+      AsyncFaceLoaded(:final value) => builder(context, value),
+      AsyncFaceWaiting() when skeletonFills => SliverFillRemaining(
         hasScrollBody: false,
         child: SkeletonShapes(shape: skeleton),
-      );
-    }
-    return SliverToBoxAdapter(child: SkeletonShapes(shape: skeleton));
+      ),
+      AsyncFaceWaiting() => SliverToBoxAdapter(
+        child: SkeletonShapes(shape: skeleton),
+      ),
+    };
   }
 }

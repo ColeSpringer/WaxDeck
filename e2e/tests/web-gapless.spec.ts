@@ -42,7 +42,7 @@ test('a music queue plays as one stream and crosses inside it', async ({ app, pa
     const text = message.text();
     // The app's own debugPrint reaches the console in a release web
     // build, and it is where every give-up on this path says so.
-    if (/timeline|preload/i.test(text)) noise.push(text.slice(0, 200));
+    if (/timeline|preload|playback start failed/i.test(text)) noise.push(text.slice(0, 200));
     else if (message.type() === 'error' && !/art\?size|woff2|Failed to load resource/.test(text)) {
       noise.push(text.slice(0, 120));
     }
@@ -153,6 +153,21 @@ test('a music queue plays as one stream and crosses inside it', async ({ app, pa
       .join(', ')}; ${master.length} masters, ${segments.length} segments, ` +
     `${streams.length} per-item streams; console ` +
     JSON.stringify(noise.slice(0, 12));
+  // The structural half of the same claim. The first track starts
+  // through the ordinary engine while the rendering is minted, which is
+  // one per-item stream in every healthy run; a queue the browser could
+  // not play as one stream is walked per item, which is a second.
+  expect(
+    streams.length,
+    `the run should never fall back to per-item streams; got ${trace}`,
+  ).toBeLessThanOrEqual(1);
+  // Said by the engine, not inferred from the deck: the titles above are
+  // the queue's, and a queue walked by skips names them just the same. A
+  // start that failed and a rendering the browser refused both end here.
+  expect(
+    noise.filter((line) => /playback start failed/i.test(line)),
+    `every start should succeed; got ${trace}`,
+  ).toEqual([]);
   expect(
     mints.filter((m) => m.status === 201).length,
     `one rendering for the run; got ${trace}`,

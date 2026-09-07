@@ -183,7 +183,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	h.bridge = bridge
 
 	hub := events.New(svc)
-	svc.SetRadioInvalidator(hub.MarkRadioAll)
+	svc.SetRadioInvalidator(hub.MarkRadio)
 	group.Go(ctx, "event-hub", hub.Run)
 
 	connectSvc, err := connect.New(ctx, connect.Config{

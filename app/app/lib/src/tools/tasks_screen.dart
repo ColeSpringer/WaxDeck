@@ -10,6 +10,7 @@ import '../home/item_shelf.dart';
 import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 
@@ -125,6 +126,7 @@ class ToolTasksController extends AsyncNotifier<ToolTasksState> {
 final toolTasksProvider =
     AsyncNotifierProvider<ToolTasksController, ToolTasksState>(
       ToolTasksController.new,
+      retry: retryUnlessRefused,
     );
 
 /// Whether a task has reached a terminal state.
@@ -161,10 +163,11 @@ class TasksScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final tasks = ref.watch(toolTasksProvider);
-    final anyFinished = switch (tasks) {
-      AsyncData(:final value) => value.tasks.any(_finished),
-      _ => false,
-    };
+    // Read off the value rather than the runtime type, for the same
+    // reason the face below does: a refresh carries the previous value
+    // under an AsyncLoading, and a toolbar control that vanished on
+    // every reload would be its own bug.
+    final anyFinished = tasks.value?.tasks.any(_finished) ?? false;
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
         final metrics = notification.metrics;
@@ -185,17 +188,20 @@ class TasksScreen extends ConsumerWidget {
             ),
         ],
         slivers: <Widget>[
-          switch (tasks) {
-            AsyncData(:final value) when value.tasks.isEmpty =>
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: EmptyState(
-                  title: l10n.toolsEmptyTitle,
-                  message: l10n.toolsEmptyMessage,
-                  glyph: WaxIcons.check,
-                ),
+          AsyncSliverFace<ToolTasksState>(
+            state: tasks,
+            errorTitle: l10n.toolsLoadError,
+            onRetry: () => ref.invalidate(toolTasksProvider),
+            isEmpty: (value) => value.tasks.isEmpty,
+            empty: (context, _) => SliverFillRemaining(
+              hasScrollBody: false,
+              child: EmptyState(
+                title: l10n.toolsEmptyTitle,
+                message: l10n.toolsEmptyMessage,
+                glyph: WaxIcons.check,
               ),
-            AsyncData(:final value) => SliverPadding(
+            ),
+            builder: (context, value) => SliverPadding(
               padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
               sliver: SliverList.builder(
                 itemCount: value.tasks.length + (value.loadingMore ? 1 : 0),
@@ -210,18 +216,7 @@ class TasksScreen extends ConsumerWidget {
                 },
               ),
             ),
-            AsyncError(:final error) => SliverFillRemaining(
-              hasScrollBody: false,
-              child: ErrorState(
-                title: l10n.toolsLoadError,
-                message: context.explain(error),
-                onRetry: () => ref.invalidate(toolTasksProvider),
-              ),
-            ),
-            _ => const SliverToBoxAdapter(
-              child: SkeletonShapes(shape: SkeletonShape.list),
-            ),
-          },
+          ),
         ],
       ),
     );

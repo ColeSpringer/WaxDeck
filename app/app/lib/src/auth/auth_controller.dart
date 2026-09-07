@@ -23,7 +23,7 @@ final bootstrapStatusProvider = FutureProvider<BootstrapStatus>((ref) {
     return const BootstrapStatus(required: false);
   }
   return ref.watch(repositoryProvider).bootstrapStatus();
-});
+}, retry: retryUnlessRefused);
 
 /// Whether the server is waiting for its first administrator.
 final bootstrapRequiredProvider = FutureProvider<bool>(
@@ -220,8 +220,17 @@ class AuthController extends AsyncNotifier<SessionState> {
   }
 }
 
+/// A refusal is final here in the sharpest way: a rejected credential
+/// is not a dropped connection, and re-asking it ten times over
+/// thirteen seconds is a lockout counter climbing while the login form
+/// shows a spinner. Everything that is not the server saying no keeps
+/// the ladder - the session probe is exactly the read a reconnecting
+/// client wants retried.
 final authControllerProvider =
-    AsyncNotifierProvider<AuthController, SessionState>(AuthController.new);
+    AsyncNotifierProvider<AuthController, SessionState>(
+      AuthController.new,
+      retry: retryUnlessRefused,
+    );
 
 /// Who is signed in, as a value that changes exactly when the account
 /// does.

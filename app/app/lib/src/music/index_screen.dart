@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/artwork_precache.dart';
 import '../artwork/artwork_providers.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
@@ -57,8 +58,12 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
   /// paging loop on top of the first.
   bool _jumping = false;
 
+  /// This screen's own precacher, released with the screen.
+  final ArtworkPrecacher _precacher = ArtworkPrecacher();
+
   @override
   void dispose() {
+    _precacher.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -68,7 +73,8 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
     sort: ref.read(musicIndexSortProvider(widget.dimension)),
   );
 
-  void _onScroll(ScrollMetrics metrics) {
+  void _onScroll(ScrollNotification notification) {
+    final metrics = notification.metrics;
     // The listener wraps the whole screen, and the toolbar's sort chips
     // are a horizontal scroller inside it. A drag on those sits at pixel
     // zero of a very short extent, which satisfies any "near the end"
@@ -77,6 +83,23 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
     if (metrics.pixels >= metrics.maxScrollExtent - 600) {
       ref.read(musicIndexProvider(_key).notifier).loadMore();
     }
+    if (notification is! ScrollEndNotification) return;
+    // A bucket carries the entity behind it rather than an art URL, and
+    // the art endpoint serves entity pids: the same URL _BucketRow draws.
+    final buckets = ref.read(musicIndexProvider(_key)).value?.buckets;
+    if (buckets == null || !widget.dimension.hasArtwork) return;
+    final repository = ref.read(repositoryProvider);
+    warmArtworkAhead(
+      context: context,
+      precacher: _precacher,
+      store: ref.read(artworkStoreProvider),
+      metrics: metrics,
+      count: buckets.length,
+      urlAt: (index) {
+        final pid = buckets[index].entityPid;
+        return pid == null ? null : repository.artUrlFor(pid);
+      },
+    );
   }
 
   /// Scrolls to the first bucket under [letter], re-anchoring the window
@@ -197,7 +220,7 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
 
     return NotificationListener<ScrollNotification>(
       onNotification: (notification) {
-        _onScroll(notification.metrics);
+        _onScroll(notification);
         return false;
       },
       child: Stack(

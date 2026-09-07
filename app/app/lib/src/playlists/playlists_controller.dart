@@ -117,6 +117,7 @@ Future<void> evictPlaylistCover(Ref ref, String? artUrl) async {
 final playlistsProvider =
     AsyncNotifierProvider<PlaylistsController, List<Playlist>>(
       PlaylistsController.new,
+      retry: retryUnlessRefused,
     );
 
 /// One playlist's header plus its full member list. Playlist pages are
@@ -276,7 +277,7 @@ final playlistDetailProvider =
       PlaylistDetailController,
       PlaylistView,
       String
-    >(PlaylistDetailController.new);
+    >(PlaylistDetailController.new, retry: retryUnlessRefused);
 
 /// The rule vocabulary, fetched once per session and on invalidation.
 final ruleFieldsProvider = FutureProvider<RuleFields>((ref) {

@@ -131,6 +131,10 @@ type radioArt struct {
 	order    []string
 	bytes    int
 	inFlight map[string]bool
+	// waiters are the stations whose poll asked for a key while its
+	// lookup was in flight, the claimant included: two stations on one
+	// feed share a key, and the landing has to wake both.
+	waiters map[string]map[string]struct{}
 }
 
 // radioArtKey names one cover by the normalized artist and title it was
@@ -255,7 +259,7 @@ func announcedArtKey(artURL, announced string) string {
 // 512 KB cap read as one-past-and-refuse, the declared-type gate, and
 // the served type decided by sniffing the bytes rather than by what the
 // host called them.
-func (l *Library) EnsureRadioAnnouncedArt(artURL, announced string) (string, bool) {
+func (l *Library) EnsureRadioAnnouncedArt(stationPID, artURL, announced string) (string, bool) {
 	if artURL == "" {
 		return "", true
 	}
@@ -274,7 +278,7 @@ func (l *Library) EnsureRadioAnnouncedArt(artURL, announced string) (string, boo
 		}
 		return key, false
 	}
-	if !l.claimRadioArtLookup(key) {
+	if !l.claimRadioArtLookup(key, stationPID) {
 		return "", false
 	}
 	// procCtx for the same reason the external lookup uses it: the poll
@@ -295,7 +299,7 @@ func (l *Library) EnsureRadioAnnouncedArt(artURL, announced string) (string, boo
 				// it and no provider supplied it.
 				source: ArtSourceDTO{Source: artSourceFeed, SourceURL: artURL},
 			})
-			l.wakeRadioListeners()
+			l.wakeRadioArtWaiters(key)
 		// A body that is not a picture will not be one tomorrow either:
 		// a station that set its homepage here answers HTML every time.
 		// Remembered for a day, so that costs one fetch a day rather
@@ -338,7 +342,7 @@ func (l *Library) EnsureRadioAnnouncedArt(artURL, announced string) (string, boo
 // cancel. The cache read is a mutex and a map, and the lookup runs on
 // procCtx - taking a request context would say the poll can call the
 // work off, which is the opposite of the point.
-func (l *Library) EnsureRadioNowPlayingArt(stationName, announced string) string {
+func (l *Library) EnsureRadioNowPlayingArt(stationPID, stationName, announced string) string {
 	if l.radioArtResolver == nil || !l.RadioExternalArtEnabled() {
 		return ""
 	}
@@ -365,7 +369,7 @@ func (l *Library) EnsureRadioNowPlayingArt(stationName, announced string) string
 		}
 		return key
 	}
-	if !l.claimRadioArtLookup(key) {
+	if !l.claimRadioArtLookup(key, stationPID) {
 		return ""
 	}
 	// procCtx, not the request's: the poll that started this is answered
@@ -400,7 +404,7 @@ func (l *Library) EnsureRadioNowPlayingArt(stationName, announced string) string
 					SourceURL: got.SourceURL,
 				},
 			})
-			l.wakeRadioListeners()
+			l.wakeRadioArtWaiters(key)
 		case errors.Is(err, ErrNoRadioArt):
 			l.storeRadioArt(key, radioArtEntry{fetched: time.Now(), fresh: radioArtMissFreshFor})
 		default:
@@ -418,19 +422,20 @@ func (l *Library) EnsureRadioNowPlayingArt(stationName, announced string) string
 	return ""
 }
 
-// wakeRadioListeners tells live clients a cover landed, so a tuned face
-// fills on the fetch rather than on its next poll. Never on a miss: a
-// miss changes nothing to draw.
-func (l *Library) wakeRadioListeners() {
+// wakeRadioListeners tells the clients listening to stationPID that a
+// cover landed, so a tuned face fills on the fetch rather than on its
+// next poll. Never on a miss: a miss changes nothing to draw. An empty
+// pid reaches every connection, for a landing with no station to name.
+func (l *Library) wakeRadioListeners(stationPID string) {
 	if fn := l.radioWake.Load(); fn != nil {
-		(*fn)()
+		(*fn)(stationPID)
 	}
 }
 
 // SetRadioInvalidator installs the fan-out called when radio artwork
 // lands. A setter rather than a Config field because the event hub is
 // built over the service, so it does not exist when Config is.
-func (l *Library) SetRadioInvalidator(fn func()) {
+func (l *Library) SetRadioInvalidator(fn func(stationPID string)) {
 	if fn == nil {
 		l.radioWake.Store(nil)
 		return
@@ -542,9 +547,20 @@ func (l *Library) forgetRadioArt() {
 // reaches this from every device at once; without the claim each would
 // start its own pair of paced calls against a service that rate-limits
 // at one request a second.
-func (l *Library) claimRadioArtLookup(key string) bool {
+func (l *Library) claimRadioArtLookup(key, stationPID string) bool {
 	l.radioArtCache.mu.Lock()
 	defer l.radioArtCache.mu.Unlock()
+	if l.radioArtCache.waiters == nil {
+		l.radioArtCache.waiters = map[string]map[string]struct{}{}
+	}
+	if l.radioArtCache.waiters[key] == nil {
+		l.radioArtCache.waiters[key] = map[string]struct{}{}
+	}
+	// Whoever asks is woken when the cover lands, whether or not they
+	// own the lookup: the key is the title's, not the station's.
+	if stationPID != "" {
+		l.radioArtCache.waiters[key][stationPID] = struct{}{}
+	}
 	if l.radioArtCache.inFlight[key] {
 		return false
 	}
@@ -555,8 +571,24 @@ func (l *Library) claimRadioArtLookup(key string) bool {
 	return true
 }
 
+// wakeRadioArtWaiters wakes every station that asked for key, and
+// forgets them: the next poll that asks is after the landing, and finds
+// the cover cached.
+func (l *Library) wakeRadioArtWaiters(key string) {
+	l.radioArtCache.mu.Lock()
+	waiting := l.radioArtCache.waiters[key]
+	delete(l.radioArtCache.waiters, key)
+	l.radioArtCache.mu.Unlock()
+	for pid := range waiting {
+		l.wakeRadioListeners(pid)
+	}
+}
+
 func (l *Library) releaseRadioArtLookup(key string) {
 	l.radioArtCache.mu.Lock()
 	defer l.radioArtCache.mu.Unlock()
 	delete(l.radioArtCache.inFlight, key)
+	// A miss wakes nobody, and nobody should wait on a key past its
+	// lookup either: the next poll claims afresh.
+	delete(l.radioArtCache.waiters, key)
 }

@@ -9,6 +9,7 @@ import '../player/play_progress.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
 import '../settings/client_prefs.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/add_to_library.dart';
@@ -97,51 +98,60 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
         const SliverToBoxAdapter(child: _SeriesShelf()),
         if (loaded.isNotEmpty)
           SliverToBoxAdapter(child: _Filters(books: loaded)),
-        switch (state) {
-          AsyncData() when loaded.isEmpty => SliverFillRemaining(
-            hasScrollBody: false,
-            child: EmptyState(
-              title: l10n.booksEmptyTitle,
-              message: l10n.booksEmptyMessage,
-              glyph: WaxIcons.audiobooks,
+        AsyncSliverFace<BooksState>(
+          state: state,
+          skeleton: SkeletonShape.grid,
+          errorTitle: l10n.booksLoadError,
+          onRetry: () => ref.invalidate(booksProvider),
+          isEmpty: (_) => shown.isEmpty,
+          // Three empties, told apart by why nothing is showing: no
+          // books at all, every book filtered out with pages still
+          // unread, or every book filtered out with nothing left to
+          // fetch. The way out differs each time - a scan, a fetch, or
+          // the chips above.
+          empty: (context, _) => switch (loaded.isEmpty) {
+            true => SliverFillRemaining(
+              hasScrollBody: false,
+              child: EmptyState(
+                title: l10n.booksEmptyTitle,
+                message: l10n.booksEmptyMessage,
+                glyph: WaxIcons.audiobooks,
+              ),
             ),
-          ),
-          // Loaded, but every book is filtered out. Distinct from an
-          // empty library and answered differently: the way out is the
-          // chips above, not a scan - unless there are pages the chips
-          // have not seen, which is a fetch rather than an answer.
-          AsyncData() when shown.isEmpty && more => SliverFillRemaining(
-            hasScrollBody: false,
-            child: EmptyState(
-              title: l10n.booksNothingMatchesYet,
-              message: l10n.booksNothingMatchesYetMessage(loaded.length),
-              glyph: WaxIcons.filter,
-              actionLabel: loadingMore
-                  ? l10n.booksLoadingMore
-                  : l10n.booksLoadMore,
-              onAction: loadingMore
-                  ? null
-                  : () => ref.read(booksProvider.notifier).loadMore(),
+            false when more => SliverFillRemaining(
+              hasScrollBody: false,
+              child: EmptyState(
+                title: l10n.booksNothingMatchesYet,
+                message: l10n.booksNothingMatchesYetMessage(loaded.length),
+                glyph: WaxIcons.filter,
+                actionLabel: loadingMore
+                    ? l10n.booksLoadingMore
+                    : l10n.booksLoadMore,
+                onAction: loadingMore
+                    ? null
+                    : () => ref.read(booksProvider.notifier).loadMore(),
+              ),
             ),
-          ),
-          AsyncData() when shown.isEmpty => SliverFillRemaining(
-            hasScrollBody: false,
-            child: EmptyState(
-              title: l10n.booksNothingMatches,
-              // The whole sentence per chip rather than the chip's own
-              // word lower-cased into a frame: the casing was an English
-              // rule, and the frame is the language's business.
-              message: l10n.booksFilterEmptyMessage(view.filter.name),
-              glyph: WaxIcons.filter,
-              actionLabel: l10n.booksShowAll,
-              onAction: () =>
-                  ref.read(bookViewProvider.notifier).filterBy(BookFilter.all),
+            false => SliverFillRemaining(
+              hasScrollBody: false,
+              child: EmptyState(
+                title: l10n.booksNothingMatches,
+                // The whole sentence per chip rather than the chip's own
+                // word lower-cased into a frame: the casing was an
+                // English rule, and the frame is the language's business.
+                message: l10n.booksFilterEmptyMessage(view.filter.name),
+                glyph: WaxIcons.filter,
+                actionLabel: l10n.booksShowAll,
+                onAction: () => ref
+                    .read(bookViewProvider.notifier)
+                    .filterBy(BookFilter.all),
+              ),
             ),
-          ),
+          },
           // The footer rides with the grid rather than sitting beside
-          // the switch: a load state that keeps its previous value would
+          // the face: a load state that keeps its previous value would
           // otherwise draw a live control under a skeleton.
-          AsyncData() => SliverMainAxisGroup(
+          builder: (context, _) => SliverMainAxisGroup(
             slivers: <Widget>[
               _BookGrid(books: shown, progress: progress),
               // Under the grid, so a shelf long enough to scroll has
@@ -164,18 +174,7 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
                 ),
             ],
           ),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.booksLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(booksProvider),
-            ),
-          ),
-          _ => const SliverToBoxAdapter(
-            child: SkeletonShapes(shape: SkeletonShape.grid),
-          ),
-        },
+        ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
     );

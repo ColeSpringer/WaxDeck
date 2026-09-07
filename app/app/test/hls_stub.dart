@@ -39,10 +39,12 @@ void fireHlsError({
   int? status,
   bool fatal = true,
   String type = 'networkError',
+  String details = '',
 }) {
   final data = JSObject();
   data['fatal'] = fatal.toJS;
   data['type'] = type.toJS;
+  if (details.isNotEmpty) data['details'] = details.toJS;
   if (status != null) {
     final response = JSObject();
     response['code'] = status.toJS;
@@ -94,6 +96,17 @@ void forgetHlsPlayer() => globalContext.callMethod<JSAny?>(
 /// Whether the stub has constructed a player since [forgetHlsPlayer].
 bool hlsPlayerExists() => globalContext['__waxdeckHls'].isDefinedAndNotNull;
 
+/// How many times the engine asked the player the stub last constructed
+/// to recover in place, which is hls.js's own answer to a media error.
+int hlsRecoveries() =>
+    (globalContext['__waxdeckRecovered'] as JSNumber?)?.toDartInt ?? 0;
+
+/// How many times anything asked the attached element to play. A
+/// headless runner refuses the call, so the count is what a resume
+/// leaves behind.
+int hlsPlays() =>
+    (globalContext['__waxdeckPlays'] as JSNumber?)?.toDartInt ?? 0;
+
 void _setGlobal(String name, JSAny value) => globalContext[name] = value;
 
 /// A `data:` URI holding [seconds] of 8 kHz 8-bit mono silence.
@@ -137,12 +150,27 @@ const String _stub = r'''
     this.config = config;
     this.handlers = {};
     window.__waxdeckHls = this;
+    window.__waxdeckRecovered = 0;
   }
+  Hls.prototype.recoverMediaError = function () {
+    window.__waxdeckRecovered = (window.__waxdeckRecovered || 0) + 1;
+    // The real one detaches and re-attaches, which pauses the element
+    // and, once media is back, fires canplay again.
+    if (this.media) { this.detachMedia(); this.attachMedia(this.media); }
+  };
   Hls.isMSESupported = function () { return window.__waxdeckMse !== false; };
   Hls.prototype.on = function (event, cb) { this.handlers[event] = cb; };
   Hls.prototype.attachMedia = function (media) {
     this.media = media;
     media.muted = true;
+    if (!media.__waxdeckCounted) {
+      media.__waxdeckCounted = true;
+      var play = media.play;
+      media.play = function () {
+        window.__waxdeckPlays = (window.__waxdeckPlays || 0) + 1;
+        return play.call(media);
+      };
+    }
     // A stall stands in for a fetch that never became media: the
     // element is emptied and given no source, so `canplay` never fires
     // and the load stays open for whatever the test answers it with.

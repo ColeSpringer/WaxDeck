@@ -3,11 +3,13 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/connect/connect_providers.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/player/radio_face.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
+import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
@@ -746,4 +748,42 @@ void main() {
     );
     expect(container.read(radioPlaybackProvider).station, isNull);
   });
+
+  test(
+    'the socket is told which station this client is listening to',
+    () async {
+      // What makes the radio invalidation addressed: the server wakes the
+      // sockets tuned to the station a cover landed for, so a client that
+      // never says which one it is on hears nothing - and one that walked
+      // away from the dial must stop hearing about covers.
+      final container = ProviderContainer(
+        overrides: [
+          repositoryProvider.overrideWithValue(FakeRepository()),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+          clientSettingsStoreProvider.overrideWithValue(
+            MemoryClientSettingsStore(),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final sent = <Map<String, Object?>>[];
+      container.read(connectSenderProvider).impl = (frame) {
+        sent.add(frame);
+        return true;
+      };
+      // Listened rather than read: the binder is what carries the station
+      // onto the socket, and the signed-in shell is what holds it open.
+      final alive = container.listen(syncBinderProvider, (_, _) {});
+      addTearDown(alive.close);
+
+      await container.read(radioPlaybackProvider.notifier).play(_station());
+      await pumpEventQueue();
+      expect(sent.last, {'type': 'tune', 'station': _stationPid});
+
+      await container.read(radioPlaybackProvider.notifier).stop();
+      await pumpEventQueue();
+      expect(sent.last, {'type': 'tune'});
+    },
+  );
 }

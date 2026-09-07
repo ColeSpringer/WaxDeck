@@ -57,7 +57,7 @@ class PodcastsScreen extends ConsumerWidget {
           errorTitle: l10n.podcastsLoadError,
           onRetry: () => ref.invalidate(subscriptionsProvider),
           isEmpty: (value) => value.isEmpty,
-          empty: (context) => SliverFillRemaining(
+          empty: (context, _) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.podcastsEmptyTitle,

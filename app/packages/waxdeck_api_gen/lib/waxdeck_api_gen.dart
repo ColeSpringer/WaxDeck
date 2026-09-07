@@ -414,6 +414,7 @@ export 'package:waxdeck_api_gen/src/model/ws_register_endpoint_frame.dart';
 export 'package:waxdeck_api_gen/src/model/ws_session_frame.dart';
 export 'package:waxdeck_api_gen/src/model/ws_session_report_frame.dart';
 export 'package:waxdeck_api_gen/src/model/ws_subscribe_frame.dart';
+export 'package:waxdeck_api_gen/src/model/ws_tune_frame.dart';
 export 'package:waxdeck_api_gen/src/model/ws_watch_frame.dart';
 export 'package:waxdeck_api_gen/src/model/year_in_review.dart';
 

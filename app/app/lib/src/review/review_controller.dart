@@ -202,6 +202,7 @@ final reviewQueueProvider =
 /// Queue counters for the filter chips.
 final reviewStatsProvider = FutureProvider<ReviewStats>(
   (ref) => ref.watch(repositoryProvider).getReviewStats(),
+  retry: retryUnlessRefused,
 );
 
 /// How many pending entries the caller can see.

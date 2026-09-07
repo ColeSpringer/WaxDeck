@@ -1,6 +1,7 @@
 @TestOn('browser')
 library;
 
+import 'dart:async';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
 
@@ -241,6 +242,122 @@ void main() {
       expect(codes, <String>['transcode-limited']);
     },
   );
+
+  test('a media error during a load is recovered in place, once', () async {
+    // The buffer hiccuping under load says nothing about the file. hls.js
+    // documents the answer - rebuild the source buffers where it stands -
+    // and the load stays open for it rather than failing as a bad track.
+    setStubStalled(true);
+    forgetHlsPlayer();
+    addTearDown(() => setStubStalled(false));
+    final loading = engine.loadTimeline(media());
+    await waitFor(hlsPlayerExists, what: 'the player to be constructed');
+    fireHlsError(type: 'mediaError', details: 'bufferAppendError');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+
+    expect(hlsRecoveries(), 1);
+    var settled = false;
+    unawaited(
+      loading.then((_) => settled = true, onError: (_) => settled = true),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(settled, isFalse, reason: 'a recovery keeps the load open');
+
+    // The second is the pipeline saying the first did not take. Still
+    // not the file: the load fails as transport, which offers a retry
+    // and never walks the queue.
+    fireHlsError(type: 'mediaError', details: 'bufferAppendError');
+    await expectLater(
+      loading,
+      throwsA(
+        isA<MediaLoadException>().having(
+          (e) => e.fault,
+          'fault',
+          MediaFault.transport,
+        ),
+      ),
+    );
+    expect(hlsRecoveries(), 1, reason: 'recovery is asked for once');
+  });
+
+  test(
+    'a codec this browser cannot play fails the load as the source',
+    () async {
+      setStubStalled(true);
+      forgetHlsPlayer();
+      addTearDown(() => setStubStalled(false));
+      final loading = engine.loadTimeline(media());
+      await waitFor(hlsPlayerExists, what: 'the player to be constructed');
+      fireHlsError(type: 'mediaError', details: 'bufferAddCodecError');
+
+      await expectLater(
+        loading,
+        throwsA(
+          isA<MediaLoadException>().having(
+            (e) => e.fault,
+            'fault',
+            MediaFault.source,
+          ),
+        ),
+      );
+      expect(hlsRecoveries(), 0, reason: 'no recovery answers a codec');
+    },
+  );
+
+  test('a media error mid-stream is recovered before it is a loss', () async {
+    var lost = 0;
+    final l = engine.timelineLost.listen((_) => lost++);
+    addTearDown(l.cancel);
+
+    await engine.loadTimeline(media());
+    grantPlayback(element);
+    await engine.setSpeed(1.5);
+    final playsBefore = hlsPlays();
+    fireHlsError(type: 'mediaError', details: 'bufferStalledError');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(hlsRecoveries(), 1);
+    expect(lost, 0, reason: 'a recovery in place is not a re-mint');
+    // hls.js re-attaches but never plays, and attaching reset the rate:
+    // the engine resumes what the listener had once the element can.
+    await waitFor(() => hlsPlays() > playsBefore, what: 'the resume');
+    expect(element.playbackRate, 1.5);
+
+    // Twice inside the window is the stream gone, and a fresh mint is
+    // the recovery.
+    fireHlsError(type: 'mediaError', details: 'bufferStalledError');
+    await waitFor(() => lost == 1, what: 'the loss to be announced');
+    expect(hlsRecoveries(), 1);
+  });
+
+  test('a media error after a healthy stretch is a new hiccup', () async {
+    // The window is what tells "the recovery did not take" from "an
+    // hour later something else stalled": outside it the second error
+    // gets the same first answer rather than a re-mint.
+    engine = HlsTimelinePlayer(element: element, recoveryWindow: Duration.zero);
+    var lost = 0;
+    final l = engine.timelineLost.listen((_) => lost++);
+    addTearDown(l.cancel);
+
+    await engine.loadTimeline(media());
+    grantPlayback(element);
+    fireHlsError(type: 'mediaError', details: 'bufferStalledError');
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+    fireHlsError(type: 'mediaError', details: 'bufferStalledError');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(hlsRecoveries(), 2);
+    expect(lost, 0);
+  });
+
+  test('the element pausing on its own is heard', () async {
+    // A media key, a call, a suspended tab: the element pauses and only
+    // its own event says so. Without hearing it the deck draws a pause
+    // button over silence and the ticker polls a clock that stopped.
+    await engine.loadTimeline(media());
+    grantPlayback(element);
+    expect(engine.playing, isTrue);
+    element.dispatchEvent(web.Event('pause'));
+    expect(engine.playing, isFalse);
+  });
 
   test('a fetch hls.js is still retrying does not end the stream', () async {
     var lost = 0;

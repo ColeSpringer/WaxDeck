@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +7,8 @@ import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
+import 'package:waxdeck/src/shell/async_box_face.dart';
+import 'package:waxdeck/src/uploads/uploads_controller.dart';
 import 'package:waxdeck/src/uploads/uploads_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -64,6 +67,36 @@ Widget _host(FakeRepository repo, {FilePickerPort? picker}) => ProviderScope(
 );
 
 void main() {
+  testWidgets('a refresh redraws the sessions it already has', (tester) async {
+    // The box-shaped sibling of the sliver face, and for the same
+    // reason: a reload carries the value it had, and a switch on the
+    // state's runtime type blanks the screen the reader was reading.
+    final repo = FakeRepository();
+    repo.uploadsById['up-1'] = testUpload('up-1', fileName: 'one.flac');
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+    expect(find.byType(AsyncBoxFace<UploadsState>), findsOneWidget);
+    expect(find.text('one.flac'), findsWidgets);
+
+    final gate = Completer<void>();
+    repo.listUploadsGate = gate;
+    ProviderScope.containerOf(
+      tester.element(find.byType(AsyncBoxFace<UploadsState>)),
+    ).invalidate(uploadsProvider);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('one.flac'), findsWidgets);
+    expect(
+      find.byType(SkeletonShapes),
+      findsNothing,
+      reason: 'a reload must not blank the sessions it already holds',
+    );
+    gate.complete();
+    repo.listUploadsGate = null;
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('renders session states and the duplicate warning', (
     tester,
   ) async {

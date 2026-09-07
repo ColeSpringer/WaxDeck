@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
 import 'package:waxdeck/src/home/pinned_controller.dart';
@@ -39,12 +40,17 @@ FacetBucket _album(String name, {int count = 9}) => FacetBucket(
   entityPid: 'al-01JZX$name',
 );
 
-ItemSummary _track(String title, {String artist = 'Nightjar'}) => ItemSummary(
+ItemSummary _track(
+  String title, {
+  String artist = 'Nightjar',
+  String? artUrl,
+}) => ItemSummary(
   pid: 'tr-$title',
   mediaType: MediaType.music,
   title: title,
   artist: artist,
   durationMs: 245000,
+  artUrl: artUrl,
 );
 
 /// Overridden rather than reached through the real controller, which
@@ -65,6 +71,7 @@ Future<ProviderContainer> _pump(
   Size size = const Size(900, 1200),
   bool engine = false,
   Prefs? prefs,
+  FakeArtworkStore? artwork,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
@@ -78,6 +85,7 @@ Future<ProviderContainer> _pump(
       if (engine) audioEngineProvider.overrideWithValue(FakeEngine()),
       if (prefs != null)
         prefsControllerProvider.overrideWith(() => _StubPrefs(prefs)),
+      if (artwork != null) artworkStoreProvider.overrideWithValue(artwork),
     ],
   );
   addTearDown(container.dispose);
@@ -169,6 +177,78 @@ void main() {
       tester.widget<MediaListRow>(find.byType(MediaListRow)).data.artwork,
       isNull,
       reason: 'a release-group row must not ask an endpoint with no rg- arm',
+    );
+  });
+
+  testWidgets('a scroll that stops warms the covers just past it', (
+    tester,
+  ) async {
+    // The precacher was built and wired to nothing. What it needs is a
+    // caller that knows where its viewport ends, which a list that
+    // tracks its own builder does.
+    final repository = FakeRepository(
+      items: <ItemSummary>[
+        for (var i = 0; i < 200; i++)
+          _track('Track $i', artUrl: '/art/track-$i'),
+      ],
+    );
+    final artwork = FakeArtworkStore();
+    await _pump(
+      tester,
+      const MusicListingScreen(),
+      repository,
+      artwork: artwork,
+    );
+
+    // Nothing yet: a screen that has not scrolled has nothing past its
+    // viewport it can name.
+    expect(artwork.warmed, isEmpty);
+
+    final drawn = artwork.requested.toSet();
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -600));
+    await tester.pumpAndSettle();
+
+    expect(artwork.warmed, isNotEmpty);
+    // Only rows the list had not built when the scroll stopped: the ones
+    // on screen are already being fetched by the rows themselves.
+    expect(
+      artwork.warmed.where((w) => drawn.contains(w.url)),
+      isEmpty,
+      reason: 'a warm of a row already drawn buys nothing',
+    );
+    // At the rung the row will paint at: a warm at another size would
+    // put a second copy on the device and save the draw nothing.
+    expect(artwork.warmed.map((w) => w.px).toSet(), <int>{
+      MediaListRow.defaultArtSize.ceil(),
+    });
+  });
+
+  testWidgets('the index warms the entity art past its viewport', (
+    tester,
+  ) async {
+    final repository = FakeRepository()
+      ..facets['album'] = <FacetBucket>[
+        for (var i = 0; i < 200; i++) _album('Album $i'),
+      ];
+    final artwork = FakeArtworkStore();
+    await _pump(
+      tester,
+      const MusicIndexScreen(dimension: MusicDimension.albums),
+      repository,
+      artwork: artwork,
+    );
+    expect(artwork.warmed, isEmpty);
+
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -600));
+    await tester.pumpAndSettle();
+
+    expect(artwork.warmed, isNotEmpty);
+    // A bucket carries the entity rather than an art URL, so the warm
+    // has to build the same URL the row draws from.
+    expect(
+      artwork.warmed.every((w) => w.url.contains('/art')),
+      isTrue,
+      reason: 'a warm must ask the endpoint the row asks',
     );
   });
 

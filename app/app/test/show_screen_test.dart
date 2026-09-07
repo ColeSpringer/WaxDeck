@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
@@ -8,6 +10,7 @@ import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -60,6 +63,45 @@ Future<void> _stop(WidgetTester tester, ProviderContainer container) async {
 }
 
 void main() {
+  testWidgets('a refresh redraws the header and the episodes it has', (
+    tester,
+  ) async {
+    // Two faces on this screen, both deciding from the value rather
+    // than from the state's runtime type: a reload carries what it had.
+    final repo = _repo();
+    final container = await _pump(tester, repo);
+    expect(find.byType(AsyncSliverFace<PodcastDetail>), findsOneWidget);
+    expect(find.byType(AsyncSliverFace<EpisodeListState>), findsOneWidget);
+    final episode = find.bySemanticsIdentifier(
+      SemanticsIds.episode(downloadedPid),
+    );
+    expect(episode, findsOneWidget);
+
+    final detailGate = Completer<void>();
+    final episodesGate = Completer<void>();
+    repo.podcastGate = detailGate;
+    repo.listEpisodesGate = episodesGate;
+    container
+      ..invalidate(podcastDetailProvider(showPid))
+      ..invalidate(episodesProvider(showPid));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('The Prancing Pony Hour'), findsWidgets);
+    expect(episode, findsOneWidget);
+    expect(
+      find.byType(SkeletonShapes),
+      findsNothing,
+      reason: 'a reload must not blank the show it already holds',
+    );
+    detailGate.complete();
+    episodesGate.complete();
+    repo
+      ..podcastGate = null
+      ..listEpisodesGate = null;
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('renders the header and the episode list', (tester) async {
     await _pump(tester, _repo());
 

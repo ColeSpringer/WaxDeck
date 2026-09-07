@@ -17,12 +17,11 @@ import (
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/source"
 	waxtap "github.com/colespringer/waxtap/v3"
-	"github.com/colespringer/waxtap/v3/waxerr"
 )
 
-// enrichLimit caps the per-video metadata (Info) calls made during one
-// enumeration. Full metadata costs one extra fetch per video, so only the newest
-// new entries are enriched; older entries keep the basic listing fields.
+// enrichLimit caps the per-video metadata lookups made during one enumeration.
+// Full metadata costs two fetches per video, so only the newest new entries are
+// enriched; older entries keep the basic listing fields.
 const enrichLimit = 25
 
 // defaultMaxItems caps one enumeration when Config.MaxItems is zero.
@@ -181,11 +180,11 @@ func (p *Provider) Resolve(ctx context.Context, req source.Request) (*source.Res
 // this one. A channel uploads feed is newest-first and append-only, so
 // enumeration stops at the first already-seen id; when nothing precedes it the
 // source is unchanged and the answer is NotModified. Only new entries are
-// enriched with per-video metadata, capped at enrichLimit Info calls, so the
-// first sync of a large backlog stays cheap.
+// enriched with per-video metadata, capped at enrichLimit lookups, so the first
+// sync of a large backlog stays cheap.
 func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.Enumeration, error) {
 	lastSeen := req.ETag
-	opts := waxtap.EnumerateOptions{MaxItems: p.cfg.MaxItems}
+	opts := enrichedOptions(p.cfg.MaxItems, enrichLimit)
 	if lastSeen != "" {
 		opts.Stop = func(id string) bool { return id == lastSeen }
 	}
@@ -204,10 +203,33 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 	}
 
 	feed := &model.Feed{Title: pl.Title, Author: pl.Author}
-	infoCalls := 0
-	throttled := false
+	failures, wholesale := p.enrichFailures(pl, enrichLimit)
+	deferred := false
 	for i := range pl.Entries {
 		entry := pl.Entries[i]
+		if ferr, ok := failures[entry.Index]; ok {
+			switch {
+			case wholesale || errors.Is(ferr, waxtap.ErrTemporarilyUnavailable):
+				// Not a verdict about this video: enrichment ran out of
+				// budget before a fresh identity could settle it, or the
+				// whole pass was refused (see enrichFailures). The entry
+				// is cataloged unenriched - it keeps the listing's title and
+				// duration, which is what the basic page already gave - and
+				// the pass carries on, because the entries after it were
+				// asked about under the same rotation.
+				deferred = true
+				p.log.Info("youtube metadata deferred; entry left unenriched",
+					"video", entry.VideoID, "err", ferr)
+			case isSkipClass(ferr):
+				// The video exists but cannot be delivered (members-only,
+				// geo-blocked, removed, ...). Cataloging it would create an
+				// episode that can never download, so drop it and move on.
+				p.log.Warn("skipping unavailable youtube entry", "video", entry.VideoID, "err", ferr)
+				continue
+			default:
+				return nil, ferr
+			}
+		}
 		ep := model.FeedEpisode{
 			GUID:          entry.VideoID,
 			Title:         entry.Title,
@@ -215,35 +237,10 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 			EnclosureURL:  watchURL(entry.VideoID),
 			EnclosureType: "audio/mp4",
 		}
-		if infoCalls < enrichLimit && !throttled {
-			infoCalls++
-			v, ierr := p.tap.Info(ctx, entry.VideoID, waxtap.InfoBasic, waxtap.WithFullMetadata())
-			if ierr != nil {
-				if isMetadataThrottle(ierr) {
-					// Not a verdict about this video: YouTube is refusing
-					// metadata to this identity. The entry is cataloged
-					// unenriched - it keeps the listing's title and duration,
-					// which is what the basic page already gave - and the rest
-					// of the budget is left unspent, because every remaining
-					// call would be refused the same way.
-					throttled = true
-					p.log.Info("youtube metadata throttled; enriching no further this pass",
-						"video", entry.VideoID, "enriched", infoCalls-1, "err", ierr)
-					feed.Episodes = append(feed.Episodes, ep)
-					continue
-				}
-				if isSkipClass(ierr) {
-					// The video exists but cannot be delivered (members-only,
-					// geo-blocked, removed, ...). Cataloging it would create an
-					// episode that can never download, so drop it and move on.
-					p.log.Warn("skipping unavailable youtube entry", "video", entry.VideoID, "err", ierr)
-					continue
-				}
-				return nil, ierr
-			}
-			enrichEpisode(&ep, v)
-			if i == 0 && len(v.Thumbnails) > 0 {
-				feed.ImageURL = v.Thumbnails[0].URL
+		if entry.Video != nil {
+			enrichEpisode(&ep, entry.Video)
+			if i == 0 && len(entry.Video.Thumbnails) > 0 {
+				feed.ImageURL = entry.Video.Thumbnails[0].URL
 			}
 		}
 		feed.Episodes = append(feed.Episodes, ep)
@@ -255,10 +252,10 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 		// tracks what was seen, not what was cataloged.
 		etag = pl.Entries[0].VideoID
 	}
-	if throttled {
-		// A throttled pass is the one case where advancing the cursor would
+	if deferred {
+		// A deferred pass is the one case where advancing the cursor would
 		// make the gap permanent. The skip case above drops entries that are
-		// genuinely gone, so moving past them loses nothing; a throttled entry
+		// genuinely gone, so moving past them loses nothing; a deferred entry
 		// is cataloged but bare - listing title and duration only - and the
 		// next run's Stop would list nothing at or below this cursor, leaving
 		// those episodes without a description, a date or an image for the life
@@ -274,6 +271,91 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 		SourceID:    pl.ID,
 	}, nil
 }
+
+// enrichedOptions builds the enumeration options both listing paths share: a
+// listing capped at maxItems whose leading budget entries are refreshed with
+// full per-video metadata.
+//
+// Enrichment is asked of WaxTap rather than driven here with Info calls because
+// only WaxTap can escape the metadata throttle - a session that has asked about
+// enough videos is refused the rest, worded exactly like a removed video, and
+// telling the two apart takes retiring the identity and asking again, which is
+// internal to it.
+func enrichedOptions(maxItems, budget int) waxtap.EnumerateOptions {
+	return waxtap.EnumerateOptions{
+		MaxItems:      maxItems,
+		Enrich:        true,
+		MaxEnrich:     budget,
+		EnrichOptions: []waxtap.ReadOption{waxtap.WithFullMetadata()},
+	}
+}
+
+// enrichFailures indexes a playlist's per-entry enrichment failures by the
+// entry's own playlist position, and says whether the whole budget was
+// refused. The position is the key, not the video id: Skip leaves holes
+// in the listing so a slice index means nothing, and one playlist can list
+// the same video twice.
+//
+// A verdict in the map is trusted one entry at a time, and the trust
+// rests on what WaxTap does before reporting one: an entry refused with
+// the throttle's shape is re-asked under a fresh identity, and only one
+// still refused there is reported as it came. What that cannot tell apart
+// is an address the platform has flagged as a whole: every identity
+// minted from it is refused the same way, the re-ask recovers nothing,
+// and WaxTap - whose rule is that a pass recovering nothing proves the
+// failures real - reports twenty-five removed videos for a channel that
+// lost none. That is what wholesale catches: a pass in which every entry
+// the budget reached failed is a refusal of the pass, not a set of
+// verdicts, and the caller keeps its entries and its cursor - the same
+// answer a deferral gets, because a false deferral costs one more listing
+// and a false verdict costs the episodes for good. The rotation itself
+// needs an identity WaxTap can retire, which holds here because New passes
+// no HTTPClient - the default client's jar rotates - and both sidecar
+// providers implement potoken.SessionInvalidator.
+//
+// The signature is unanimity at scale, so two things bound it. Only
+// refusals count - a hard error, a rate limit or a fetch that never
+// answered, fails the run as it always did rather than being mistaken
+// for a verdict of either kind. And the pass has to have filled a budget
+// of at least wholesaleFloor entries: a short incremental poll whose one
+// new upload is members-only is a verdict, and holding the cursor on it
+// would re-list that video every poll for as long as it stood alone.
+//
+// Errors that are not per-entry enrichment failures are the listing's own
+// partial-page failures, which enumeration has always tolerated; they are
+// logged and the pass carries on.
+func (p *Provider) enrichFailures(pl *waxtap.Playlist, budget int) (failures map[int]error, wholesale bool) {
+	if len(pl.Errors) == 0 {
+		return nil, false
+	}
+	failures = make(map[int]error, len(pl.Errors))
+	refusals := 0
+	for _, err := range pl.Errors {
+		var ee *waxtap.EnrichError
+		if !errors.As(err, &ee) {
+			p.log.Warn("partial youtube enumeration", "err", err)
+			continue
+		}
+		failures[ee.Index] = err
+		if isSkipClass(err) || errors.Is(err, waxtap.ErrTemporarilyUnavailable) {
+			refusals++
+		}
+	}
+	attempted := len(pl.Entries)
+	if budget > 0 && budget < attempted {
+		attempted = budget
+	}
+	if attempted >= wholesaleFloor && refusals == attempted {
+		p.log.Warn("every youtube entry the budget reached was refused; keeping the pass unenriched",
+			"refused", refusals)
+		return failures, true
+	}
+	return failures, false
+}
+
+// wholesaleFloor is the smallest pass whose unanimous refusal reads as
+// the address being refused rather than as that many verdicts.
+const wholesaleFloor = 5
 
 // enrichEpisode overlays per-video metadata onto a listing-derived episode.
 func enrichEpisode(ep *model.FeedEpisode, v *waxtap.Video) {
@@ -314,27 +396,4 @@ func isSkipClass(err error) bool {
 		}
 	}
 	return false
-}
-
-// isMetadataThrottle reports whether an Info failure is YouTube's
-// metadata throttle rather than a verdict about the video.
-//
-// The two are the same sentinel - ErrVideoUnavailable - and only the
-// playability status separates them: the throttle answers UNPLAYABLE
-// while a deleted, private, or nonexistent video answers ERROR. This
-// mirrors WaxTap's own unexported throttleShaped, which its enumeration
-// uses to decide a rotation; nothing exports the predicate, and getting
-// it wrong here is the bug this exists for - a throttled channel had a
-// third of its catalogue marked permanently unavailable.
-//
-// ErrTemporarilyUnavailable is checked too even though no Info call
-// mints it today: it is minted only inside WaxTap's own enrichment, so
-// it arrives the day this package uses Enrich instead.
-func isMetadataThrottle(err error) bool {
-	if errors.Is(err, waxtap.ErrTemporarilyUnavailable) {
-		return true
-	}
-	var pe *waxerr.PlayabilityError
-	return errors.As(err, &pe) && pe.Status == "UNPLAYABLE" &&
-		errors.Is(err, waxtap.ErrVideoUnavailable)
 }

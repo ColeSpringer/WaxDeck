@@ -1,10 +1,13 @@
-import 'package:flutter/material.dart';
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
@@ -17,6 +20,42 @@ Widget _host(FakeRepository repo) => ProviderScope(
 Finder _row(String id) => find.bySemanticsIdentifier(SemanticsIds.taskRow(id));
 
 void main() {
+  testWidgets('a refresh redraws the tasks it already has', (tester) async {
+    // Through the shared face, which decides from the value rather than
+    // from the state's runtime type: a reload carries the rows it had.
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-1'] = ToolTask(
+      id: 'tt-1',
+      type: 'book-merge',
+      state: 'done',
+      itemPid: 'bk-1',
+      createdAt: DateTime.utc(2026, 7, 1),
+      finishedAt: DateTime.utc(2026, 7, 1, 1),
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+    expect(find.byType(AsyncSliverFace<ToolTasksState>), findsOneWidget);
+    expect(_row('tt-1'), findsOneWidget);
+
+    final gate = Completer<void>();
+    repo.listToolTasksGate = gate;
+    ProviderScope.containerOf(
+      tester.element(find.byType(WaxScaffold).first),
+    ).invalidate(toolTasksProvider);
+    await tester.pump();
+    await tester.pump();
+
+    expect(_row('tt-1'), findsOneWidget);
+    expect(
+      find.byType(SkeletonShapes),
+      findsNothing,
+      reason: 'a reload must not blank the rows it already holds',
+    );
+    gate.complete();
+    repo.listToolTasksGate = null;
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('renders task states, progress, and errors', (tester) async {
     final repo = FakeRepository();
     repo.toolTasksById['tt-1'] = ToolTask(

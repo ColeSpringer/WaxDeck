@@ -216,7 +216,7 @@ final podcastDetailProvider =
       PodcastDetailController,
       PodcastDetail,
       String
-    >(PodcastDetailController.new);
+    >(PodcastDetailController.new, retry: retryUnlessRefused);
 
 /// Accumulated pages of one show's episode listing.
 class EpisodeListState {
@@ -343,6 +343,7 @@ class EpisodesController extends AsyncNotifier<EpisodeListState> {
 final episodesProvider =
     AsyncNotifierProvider.family<EpisodesController, EpisodeListState, String>(
       EpisodesController.new,
+      retry: retryUnlessRefused,
     );
 
 /// One episode's full detail.

@@ -115,24 +115,13 @@ services:
     cap_drop: [ALL]
     security_opt:
       - no-new-privileges:true
-    # The image's own check pings /ping without a key, which a keyed
-    # daemon answers 401. Same probe, carrying the key WaxDeck itself
-    # authenticates with, so a green container means the acquisition
-    # path can actually mint.
-    healthcheck:
-      test:
-        - CMD
-        - waxseal
-        - ping
-        - --addr
-        - 127.0.0.1:4416
-        - --strict
-        - --key
-        - ${WAXDECK_SEAL_API_KEY:-}
-      interval: 30s
-      timeout: 110s
-      start_period: 120s
-      retries: 3
+    # No healthcheck override: since v1.3.0 the image's own probe pings
+    # /ping without a key, which a keyed daemon now answers by checking
+    # the shared browser and relaunching a dead one. An image cached
+    # from before that reports a keyed sidecar unhealthy until
+    # `docker compose pull waxseal`; nothing in the stack waits on the
+    # condition, so the sidecar still serves.
+    #
     # It drains in-flight mints for up to 60s on SIGTERM; a shorter
     # grace period would SIGKILL a browser mid-attestation.
     stop_grace_period: 70s

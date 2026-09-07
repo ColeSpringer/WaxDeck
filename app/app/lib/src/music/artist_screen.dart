@@ -16,6 +16,7 @@ import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../settings/settings_registry.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'music_controllers.dart';
@@ -89,8 +90,13 @@ class ArtistScreen extends ConsumerWidget {
             state: state.value,
           ),
         ),
-        switch (state) {
-          AsyncData() when items.isEmpty => SliverFillRemaining(
+        AsyncSliverFace<MusicItemsState>(
+          state: state,
+          skeletonFills: true,
+          errorTitle: l10n.musicArtistLoadError,
+          onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
+          isEmpty: (_) => items.isEmpty,
+          empty: (context, _) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: l10n.musicArtistEmptyTitle,
@@ -98,7 +104,7 @@ class ArtistScreen extends ConsumerWidget {
               glyph: WaxIcons.artists,
             ),
           ),
-          AsyncData() => SliverToBoxAdapter(
+          builder: (context, _) => SliverToBoxAdapter(
             child: _Body(
               pid: pid,
               name: name,
@@ -107,19 +113,7 @@ class ArtistScreen extends ConsumerWidget {
               state: state.value,
             ),
           ),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.musicArtistLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
-            ),
-          ),
-          _ => const SliverFillRemaining(
-            hasScrollBody: false,
-            child: SkeletonShapes(shape: SkeletonShape.list),
-          ),
-        },
+        ),
       ],
     );
   }

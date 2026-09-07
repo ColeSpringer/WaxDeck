@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
@@ -6,6 +8,7 @@ import 'package:waxdeck/src/downloads/downloads_controller.dart';
 import 'package:waxdeck/src/downloads/downloads_screen.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
@@ -113,6 +116,32 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('a refresh redraws the rows it already has', (tester) async {
+    // Through the shared face, which decides from the value rather than
+    // from the state's runtime type: a reload carries what it had.
+    await pump(tester, stored: <DownloadedItem>[_stored(_track)]);
+    expect(find.byType(AsyncSliverFace<DownloadsState>), findsOneWidget);
+    expect(find.text('Prancing Pony Blues'), findsWidgets);
+
+    final gate = Completer<void>();
+    downloads.storedGate = gate;
+    ProviderScope.containerOf(
+      tester.element(find.byType(AsyncSliverFace<DownloadsState>)),
+    ).invalidate(downloadsProvider);
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Prancing Pony Blues'), findsWidgets);
+    expect(
+      find.byType(SkeletonShapes),
+      findsNothing,
+      reason: 'a reload must not blank the rows it already holds',
+    );
+    gate.complete();
+    downloads.storedGate = null;
+    await tester.pumpAndSettle();
+  });
 
   testWidgets('nothing downloaded says what downloading is for', (
     tester,

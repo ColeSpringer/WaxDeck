@@ -21,14 +21,19 @@ import 'uploads/share_intake.dart';
 /// quietly re-asks every few seconds for a pid that will never resolve
 /// is a background loop nobody can see - and, for the ten seconds it
 /// runs, an error state the reader never gets shown. Anything that is
-/// not the server saying no keeps the default.
+/// not the server saying no keeps the default - literally: a supplied
+/// policy replaces [ProviderContainer.defaultRetry] rather than wrapping
+/// it, so the cap of ten attempts and the refusal to re-run an `Error`
+/// only survive by being asked for here. Without that, an unreachable
+/// server had a provider re-asking forever, and everything awaiting its
+/// future waited with it.
 Duration? retryUnlessRefused(int attempt, Object error) {
   if (error case WaxDeckApiException(
     statusCode: final int status,
   ) when status >= 400 && status < 500) {
     return null;
   }
-  return Duration(milliseconds: 200 * (1 << attempt.clamp(0, 6)));
+  return ProviderContainer.defaultRetry(attempt, error);
 }
 
 /// The compile-time server base, for native builds only: the

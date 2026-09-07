@@ -16,6 +16,7 @@ import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'credits.dart';
@@ -125,24 +126,20 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
           const SearchAction(),
         ],
         slivers: <Widget>[
-          switch (detail) {
-            AsyncData(:final value) => SliverToBoxAdapter(
+          AsyncSliverFace<PodcastDetail>(
+            state: detail,
+            skeleton: SkeletonShape.detail,
+            errorTitle: l10n.podcastShowLoadError,
+            onRetry: () => ref.invalidate(podcastDetailProvider(widget.pid)),
+            builder: (context, value) => SliverToBoxAdapter(
               child: _ShowHeader(pid: widget.pid, detail: value),
             ),
-            AsyncError(:final error) => SliverFillRemaining(
-              hasScrollBody: false,
-              child: ErrorState(
-                title: l10n.podcastShowLoadError,
-                message: context.explain(error),
-                onRetry: () =>
-                    ref.invalidate(podcastDetailProvider(widget.pid)),
-              ),
-            ),
-            _ => const SliverToBoxAdapter(
-              child: SkeletonShapes(shape: SkeletonShape.detail),
-            ),
-          },
-          if (detail.hasValue) ...<Widget>[
+          ),
+          // Gated the way the face above decides: a value carried under a
+          // failure draws the failure, and an episode list under a
+          // full-viewport error card would be the working half of a
+          // screen that says it is broken.
+          if (!detail.hasError && detail.hasValue) ...<Widget>[
             SliverToBoxAdapter(child: _toolbar(loaded)),
             _list(episodes, visible, view),
           ],
@@ -301,61 +298,55 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
   ) {
     final loadingMore = episodes.value?.loadingMore ?? false;
     final l10n = context.l10n;
-    return switch (episodes) {
-      AsyncError(:final error) => SliverFillRemaining(
-        hasScrollBody: false,
-        child: ErrorState(
-          title: l10n.podcastEpisodesLoadError,
-          message: context.explain(error),
-          onRetry: () => ref.invalidate(episodesProvider(widget.pid)),
-        ),
-      ),
-      // Narrowed to nothing, with more pages behind it. The filters run
-      // over what is loaded, so a show whose first page is all played
-      // has an empty Unplayed list and, this being the trap, nothing to
-      // scroll, so the notification that pages the next one can never
-      // fire. The way out is a control rather than a gesture.
-      AsyncData(:final value) when visible.isEmpty && (value.hasMore) =>
-        SliverToBoxAdapter(
-          child: EmptyState(
-            title: l10n.podcastNothingMatchesYet,
-            message: l10n.podcastNothingMatchesYetMessage(value.items.length),
-            glyph: WaxIcons.podcasts,
-            actionLabel: loadingMore
-                ? l10n.podcastLoadingMore
-                : l10n.podcastLoadMore,
-            onAction: loadingMore
-                ? null
-                : () => ref
-                      .read(episodesProvider(widget.pid).notifier)
-                      .loadMore(),
-          ),
-        ),
-      AsyncData() when visible.isEmpty => SliverToBoxAdapter(
-        child: EmptyState(
-          title: _narrowed
-              ? l10n.podcastNothingMatches
-              : l10n.podcastNoEpisodes,
-          message: _narrowed
-              ? l10n.podcastNothingMatchesMessage
-              : l10n.podcastNoEpisodesMessage,
-          glyph: WaxIcons.podcasts,
-        ),
+    return AsyncSliverFace<EpisodeListState>(
+      state: episodes,
+      errorTitle: l10n.podcastEpisodesLoadError,
+      onRetry: () => ref.invalidate(episodesProvider(widget.pid)),
+      isEmpty: (_) => visible.isEmpty,
+      empty: (context, value) => SliverToBoxAdapter(
+        // Narrowed to nothing, with more pages behind it, is its own
+        // answer. The filters run over what is loaded, so a show whose
+        // first page is all played has an empty Unplayed list and, this
+        // being the trap, nothing to scroll, so the notification that
+        // pages the next one can never fire. The way out is a control
+        // rather than a gesture.
+        child: value.hasMore
+            ? EmptyState(
+                title: l10n.podcastNothingMatchesYet,
+                message: l10n.podcastNothingMatchesYetMessage(
+                  value.items.length,
+                ),
+                glyph: WaxIcons.podcasts,
+                actionLabel: loadingMore
+                    ? l10n.podcastLoadingMore
+                    : l10n.podcastLoadMore,
+                onAction: loadingMore
+                    ? null
+                    : () => ref
+                          .read(episodesProvider(widget.pid).notifier)
+                          .loadMore(),
+              )
+            : EmptyState(
+                title: _narrowed
+                    ? l10n.podcastNothingMatches
+                    : l10n.podcastNoEpisodes,
+                message: _narrowed
+                    ? l10n.podcastNothingMatchesMessage
+                    : l10n.podcastNoEpisodesMessage,
+                glyph: WaxIcons.podcasts,
+              ),
       ),
       // The same trap one step short of empty: two matches of fifty read
       // as an answer, and are too short to scroll the next page in.
       // Read off the two lists rather than off the filters, so a list
       // drawn as long as the pages behind it keeps the plain gesture.
-      AsyncData(:final value) => _rows(
+      builder: (context, value) => _rows(
         visible,
         progress,
         loadingMore,
         loadMore: visible.length < value.items.length && value.hasMore,
       ),
-      _ => const SliverToBoxAdapter(
-        child: SkeletonShapes(shape: SkeletonShape.list),
-      ),
-    };
+    );
   }
 
   Widget _rows(

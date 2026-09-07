@@ -488,4 +488,5 @@ class UploadsController extends AsyncNotifier<UploadsState> {
 
 final uploadsProvider = AsyncNotifierProvider<UploadsController, UploadsState>(
   UploadsController.new,
+  retry: retryUnlessRefused,
 );

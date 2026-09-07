@@ -485,9 +485,13 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
 /// Keeping every drilled bucket's pages alive for the app's lifetime
 /// would grow without bound as someone browsed, and would serve the stale
 /// page set when they came back.
+/// A refusal is about the listing rather than the connection: a bucket
+/// whose entity was deleted answers 404 for good, and the screen draws
+/// its error state instead of spinning through the ladder.
 final musicItemsProvider = AsyncNotifierProvider.autoDispose
     .family<MusicItemsController, MusicItemsState, MusicListing>(
       MusicItemsController.new,
+      retry: retryUnlessRefused,
     );
 
 /// How many buckets an index holds, as far as one page can say.

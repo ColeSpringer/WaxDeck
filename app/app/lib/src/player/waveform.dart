@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import 'now_playing_controller.dart';
 
 /// The peaks the music seek bar paints, or null when there are none.
 ///
@@ -13,11 +14,9 @@ import '../providers.dart';
 /// changes when a pass runs, which is not something to poll for.
 ///
 /// Auto-disposing per pid: the player holds one at a time, rather than
-/// keeping a kilobyte of envelope per track played this session. Note
-/// that re-asking is a full re-read and not a revalidation - the
-/// generated client sends no `If-None-Match` (only the artwork store
-/// does) and dio carries no cache - so a surface that mounts and
-/// unmounts repeatedly pays for each one. See `docs/deferred-work.md`.
+/// keeping a kilobyte of envelope per track played this session. The
+/// playing track's own envelope is the exception, and
+/// [trackWaveformProvider] says why.
 ///
 /// Who asks is the caller's decision, not this provider's. The music
 /// face does. Podcast episodes are never analyzed, and a book's bar
@@ -63,11 +62,41 @@ final waveformProvider = FutureProvider.autoDispose
 /// previous error rather than `AsyncError` - so `.future` never settles,
 /// and anything awaiting it, [waveformProvider] included, waits out the
 /// whole backoff.
+///
+/// The playing track's envelope is held for as long as it is playing.
+/// Re-asking is a full re-read and not a revalidation - the generated
+/// client sends no `If-None-Match` (only the artwork store does) and dio
+/// carries no cache - and the surfaces that read it come and go: the
+/// command palette is a `showDialog`, so with the player face unmounted
+/// each open was the only listener and paid for the peaks again. The
+/// link closes the moment the track changes, and autoDispose reclaims
+/// the entry then. A grace timer was the other shape and is what this
+/// avoids: a kept-alive provider never reaches `onDispose`, so its timer
+/// outlives the widget tree and a test fails on a pending timer.
 final trackWaveformProvider = FutureProvider.autoDispose
-    .family<Waveform, String>(
-      (ref, pid) async => ref.watch(repositoryProvider).getWaveform(pid),
-      retry: (_, _) => null,
-    );
+    .family<Waveform, String>((ref, pid) async {
+      final held = ref.read(nowPlayingProvider).item?.pid == pid;
+      final link = held ? ref.keepAlive() : null;
+      if (link != null) {
+        ref.listen(nowPlayingProvider.select((now) => now.item?.pid), (
+          _,
+          playing,
+        ) {
+          if (playing != pid) link.close();
+        });
+      }
+      try {
+        return await ref.watch(repositoryProvider).getWaveform(pid);
+      } catch (_) {
+        // Held for an answer, not for a failure. A refusal is final for
+        // this build, and a read the network lost is worth asking again
+        // when a face next mounts: closing the link lets autoDispose
+        // reclaim the entry, so re-opening re-asks instead of drawing the
+        // failure for the rest of the track.
+        link?.close();
+        rethrow;
+      }
+    }, retry: (_, _) => null);
 
 /// Whether a peak-driven surface has anything to draw for [waveform].
 ///

@@ -230,9 +230,13 @@ class DownloadsController extends AsyncNotifier<DownloadsState> {
   Future<void> resume(String pid) async => _port?.resume(pid);
 }
 
+/// No ladder at all: this reads the local download store, so a failure
+/// is a database that would not open rather than a connection that
+/// might come back, and the screen's error state is the honest answer.
 final downloadsProvider =
     AsyncNotifierProvider<DownloadsController, DownloadsState>(
       DownloadsController.new,
+      retry: (_, _) => null,
     );
 
 /// Live progress per pid, for the transfers in flight.

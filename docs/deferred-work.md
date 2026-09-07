@@ -49,25 +49,6 @@ here waits on upstream.
   engine reports for those is a design question `load` did not have to
   answer.
 
-- `[in-repo]` **Riverpod 3's automatic retry is unaudited across the
-  app.** A provider that throws anything which is not an `Error` is
-  re-run ten times over about thirteen seconds, and between attempts it
-  reports `AsyncLoading` carrying the previous error - so `.future`
-  does not settle until the backoff is exhausted. Right for a dropped
-  connection, wrong for a refusal, and sharp for the nine places that
-  `await` a provider's `.future` (`auth_controller`, `prefs_controller`,
-  `account_sections`, `autoplay_gate`, `home_shelves`,
-  `downloads_controller`, `add_to_library`, `diagnostics_screen`): each
-  hangs for the whole backoff where it used to throw at once. Two
-  providers already answer it locally and differently -
-  `album_detail.dart`'s private `_retryUnlessRefused` (4xx is final,
-  everything else keeps the default) and `trackWaveformProvider`'s flat
-  `retry: (_, _) => null` - which is the shape of the fix: promote the
-  predicate somewhere shared, then decide per provider whether a
-  failure is final. Recorded rather than swept because the decision is
-  per provider and there is no default that is right for all of them.
-  The rule for new code is in CLAUDE.md.
-
 - `[in-repo]` **Some content rows and tiles still have no menu to
   answer a secondary tap with.** Most item rows got theirs: album and
   playlist track rows, queue rows, search track and episode hits, the
@@ -98,22 +79,6 @@ here waits on upstream.
   the hold on a touch pointer-down and releasing it on up, and a
   `Listener` per row on every platform is a poor trade for a menu that
   may never render.
-
-- `[in-repo]` **The command palette re-reads a track's waveform on every
-  open.** `trackWaveformProvider` is `autoDispose`, the palette is a
-  `showDialog` (so it unmounts on close), and `_visualizable` reads the
-  envelope above the needle filter to decide whether to offer the
-  visualizer - so with the player face unmounted the palette is the only
-  listener and each open pays for a fresh read. Nothing revalidates it:
-  the generated client sends no `If-None-Match` and dio carries no
-  cache, so this is a full re-download of the peaks rather than a 304,
-  and for the unanalyzed track the gate exists for the server answers
-  `Cache-Control: no-store` anyway. The obvious fix - a short
-  `ref.keepAlive()` grace on the family - was tried and backed out: a
-  kept-alive provider never reaches `onDispose`, so its timer outlives
-  the widget tree and fifteen widget tests fail on a pending timer.
-  Doing it properly means a cache link the test binding can retire, or
-  moving the gate off the envelope entirely.
 
 - `[in-repo]` **A shell message raised from outside the shell is
   dropped.** `_listenForMessages` (`adaptive_shell.dart`) is what draws
@@ -193,22 +158,6 @@ here waits on upstream.
   to one entity's state, while this is one whole-document singleton
   whose "intent" is a function over the document rather than a value.
 
-- `[in-repo]` **Ten screens still switch on an `AsyncValue`'s runtime
-  type.** `AsyncSliverFace` (`shell/`) is the shape that fixes it -
-  failure, then whatever value is held, then the skeleton - and the
-  three hubs, the home screen, and the review queue take it. The rest
-  still read `AsyncData(...) => rows, AsyncError(...) => error, _ =>
-  skeleton`, which a refresh matches nowhere: `playlists_screen`,
-  `downloads_screen`, `books_screen`, `show_screen`, `playlist_screen`,
-  `album_screen`, `artist_screen`, `uploads_screen`, and
-  `tasks_screen`. Several watch fan-out providers, so a catalog or user
-  event blanks them to a skeleton and back. Not swept in one change
-  because each one has its own empty and error faces to carry across,
-  and a mechanical conversion is how an empty state gets lost; the
-  search screen is deliberately *not* on this list, because its
-  providers watch the query and a value carried across a rebuild
-  answers the previous one.
-
 - `[in-repo]` **The hover play affordance is on the item shelves only.**
   `ArtworkImage` takes an `onPlay` and draws a scrim and a glyph under a
   pointer for whoever passes one, and the home shelves do: their cards
@@ -242,20 +191,6 @@ here waits on upstream.
   awkwardly, since its terms restrict artwork use to promoting store
   content and it shares a per-IP budget with the radio path if both
   ever ask it.
-
-- `[in-repo]` **The radio artwork wake is broadcast, not addressed.**
-  A cover landing marks the `radio` topic on every connection
-  (`hub.MarkRadioAll`), because the hub holds no record of who is tuned
-  to what: the guard is the client's `if (pid == null) return`. Station
-  identity exists at every producing layer - `radioTitles` is keyed by
-  station pid, `GetRadioPlayInfo` holds both the pid and the caller -
-  and is thrown away on the way to the hub. The cost is a socket write
-  for listeners it does not concern, plus a mobile radio wakeup, and it
-  is worst for a station that mints a fresh announced-art key on every
-  poll. Blunted at both ends for now (never woken on a miss; paced on
-  the client through `PacedRefresh`), and the fix is a per-connection
-  interest registry the socket layer does not have yet - the same one a
-  future per-station or per-user topic would want.
 
 - `[in-repo]` **The radio face's artwork shape follows a URL, not a
   picture.** The face draws a square with no platter ring when the
@@ -344,10 +279,10 @@ here waits on upstream.
   the run needs has now landed: the corpus writes one directory per album
   with its own synthesized cover (`corpusgen`, `-covers=false` for the
   comparison without art), the rAF collector and wheel loop are a
-  reusable helper (`e2e/tests/scroll-pacing.ts`), and `perf-web.spec.ts`
-  measures the music indexes, a bucket listing, and the tracks index with
-  a track playing alongside the plain tracks-index scenario. What is left
-  is running it and recording the numbers.
+  reusable helper (`e2e/tests/support/scroll-pacing.ts`), and
+  `perf-web.spec.ts` measures the music indexes, a bucket listing, and
+  the tracks index with a track playing alongside the plain tracks-index
+  scenario. What is left is running it and recording the numbers.
 
   **Still owed after the hardening phase, deliberately.** The phase that
   scheduled this is the one that flipped the URL strategy, swept the
@@ -428,20 +363,30 @@ here waits on upstream.
   that clears the mirror, the download store, and the artwork cache in
   one deliberate action.
 
-- `[in-repo]` **The artwork precacher is built, tested, and wired to
-  nothing.** `ArtworkPrecacher` warms the covers just past the viewport
-  when a scroll stops - batched three at a time, superseded by the next
-  call, never during a fling - and `artworkPrecacherProvider` scopes one
-  to the screen watching it. No screen watches it. The performance design
-  lists idle precache alongside the sized rungs and the bounded decodes
-  that did ship, so this is the one lever of that set that is still
-  potential rather than actual. What it needs is a caller: a scrolling
-  surface that notices its own scroll ending and can name the covers just
-  past its viewport, which the music listing and the index screens both
-  can (they already read `metrics.pixels` against `maxScrollExtent` to
-  page). Left unwired rather than guessed at because "when a scroll stops"
-  and "how far ahead" are numbers worth setting against the perf run's
-  measurements rather than before them - so take it with the entry above.
+- `[in-repo]` **How far ahead the artwork precacher warms is a guess.**
+  The music listing and the music indexes call it when a scroll stops,
+  naming the two viewports past the one on screen. Two viewports and "when the scroll stops" are
+  the numbers the entry that wired this deliberately left for the perf
+  run - one constant apiece (`_viewportsAhead`, the
+  `ScrollEndNotification` gate) in `artwork_precache.dart`.
+
+  Two things the run should weigh first, both about web. A warm is
+  only plainly cheap where there is a cache of our own to fill: on web
+  the cache is the browser's, the only way to fill it is a real request
+  through dio into the Dart heap, and that request shares a connection
+  pool and a main isolate with the media element. And the web warm asks
+  the server a slightly different question than the draw does: the warm
+  requests `size=artworkRung(px)` and the draw `size=artworkDrawSize(px)`.
+  The server answers both from the same rung, but a browser caches by
+  URL, and the two strings differ wherever the draw step is not itself a
+  rung - a row's 40 points at pixel ratio 2 is 80, drawing at 96 and
+  warming at 128 - so on such a display the warm fills a cache entry the
+  row never reads. A note here once blamed a
+  `web-gapless.spec.ts` failure on the web warm and switched it off; the
+  failure was a renderer defect the precacher had nothing to do with
+  (the WaxFlow entry in `docs/upstream-requests.md`), the switch is
+  gone, and the claim is withdrawn. Take it with the perf-measurement
+  entry above.
 
 ## Connect and casting
 

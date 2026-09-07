@@ -56,6 +56,9 @@ type wsClientFrame struct {
 	Repeat     string   `json:"repeat"`
 	Shuffle    *bool    `json:"shuffle"`
 
+	// tune
+	Station string `json:"station"`
+
 	// register-endpoint
 	Name          string `json:"name"`
 	VolumeControl bool   `json:"volumeControl"`
@@ -215,7 +218,7 @@ func (s *Server) ServeWS(hub *events.Hub) http.HandlerFunc {
 				}
 				return
 			}
-			s.dispatchWS(ctx, link, out, cancelAll, data)
+			s.dispatchWS(ctx, conn, link, out, cancelAll, data)
 		}
 	}
 }
@@ -224,7 +227,7 @@ func (s *Server) ServeWS(hub *events.Hub) http.HandlerFunc {
 // the out queue; a full queue on an answer frame closes the connection
 // (the contract answers every request exactly once, and a peer that
 // cannot absorb 64 pending frames is not reading anyway).
-func (s *Server) dispatchWS(ctx context.Context, link *connect.ClientLink, out chan any, cancel func(), data []byte) {
+func (s *Server) dispatchWS(ctx context.Context, conn *events.Conn, link *connect.ClientLink, out chan any, cancel func(), data []byte) {
 	enqueue := func(v any) {
 		select {
 		case out <- v:
@@ -235,6 +238,16 @@ func (s *Server) dispatchWS(ctx context.Context, link *connect.ClientLink, out c
 	var f wsClientFrame
 	if err := json.Unmarshal(data, &f); err != nil {
 		enqueue(wsErrorFrame{Type: "error", Code: "invalid-request", Message: "malformed frame"})
+		return
+	}
+	if f.Type == "tune" {
+		// Handled before the command-bus guard below: naming the station
+		// this client is listening to is a radio-topic concern, and it
+		// has to work on a server with no Connect service. Never acked
+		// and never refused - an unknown pid simply matches no landing.
+		// Bounded like an endpoint name: the frame is client input and
+		// the pid it should carry is thirty characters.
+		conn.Tune(truncateRunesafe(f.Station, 64))
 		return
 	}
 	if s.connect == nil || link == nil {

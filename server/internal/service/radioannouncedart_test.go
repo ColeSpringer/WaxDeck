@@ -55,7 +55,7 @@ func TestAnnouncedArtIsServedWithTheExternalRungOff(t *testing.T) {
 
 	// The first poll starts the fetch and holds the rung below: the
 	// station's own answer is seconds away and is the better one.
-	key, tryExternal := svc.EnsureRadioAnnouncedArt(host.URL+"/cover.png", "Fixture - Song")
+	key, tryExternal := svc.EnsureRadioAnnouncedArt(testStationPID, host.URL+"/cover.png", "Fixture - Song")
 	if key != "" || tryExternal {
 		t.Fatalf("first poll = (%q, %v), want the fetch started and the rung held", key, tryExternal)
 	}
@@ -66,7 +66,7 @@ func TestAnnouncedArtIsServedWithTheExternalRungOff(t *testing.T) {
 
 	// Ten more polls, as a household on one station makes: one fetch.
 	for range 10 {
-		key, tryExternal = svc.EnsureRadioAnnouncedArt(host.URL+"/cover.png", "Fixture - Song")
+		key, tryExternal = svc.EnsureRadioAnnouncedArt(testStationPID, host.URL+"/cover.png", "Fixture - Song")
 		if key == "" || tryExternal {
 			t.Fatalf("later poll = (%q, %v), want the cached key", key, tryExternal)
 		}
@@ -105,7 +105,7 @@ func TestAnnouncedArtFailureYieldsToTheExternalRung(t *testing.T) {
 	var hits atomic.Int64
 	host := artHost(t, &hits, "text/html", []byte("<html><body>Station of the year</body></html>"))
 
-	if key, tryExternal := svc.EnsureRadioAnnouncedArt(host.URL, "Fixture - Song"); key != "" || tryExternal {
+	if key, tryExternal := svc.EnsureRadioAnnouncedArt(testStationPID, host.URL, "Fixture - Song"); key != "" || tryExternal {
 		t.Fatalf("first poll = (%q, %v), want the fetch started and the rung held", key, tryExternal)
 	}
 	entry := waitForAnnouncedArt(t, svc, host.URL, "Fixture - Song")
@@ -121,7 +121,7 @@ func TestAnnouncedArtFailureYieldsToTheExternalRung(t *testing.T) {
 	// Every later poll answers at once and lets the external rung have
 	// its turn, without asking the station host again.
 	for range 10 {
-		key, tryExternal := svc.EnsureRadioAnnouncedArt(host.URL, "Fixture - Song")
+		key, tryExternal := svc.EnsureRadioAnnouncedArt(testStationPID, host.URL, "Fixture - Song")
 		if key != "" || !tryExternal {
 			t.Fatalf("cached failure = (%q, %v), want the external rung offered", key, tryExternal)
 		}
@@ -139,7 +139,7 @@ func TestAnnouncedArtIgnoresWhatIsNotAURL(t *testing.T) {
 	for _, announced := range []string{
 		"", "-", "no", "ftp://example.invalid/cover.png", "javascript:alert(1)", "http://",
 	} {
-		key, tryExternal := svc.EnsureRadioAnnouncedArt(announced, "Fixture - Song")
+		key, tryExternal := svc.EnsureRadioAnnouncedArt(testStationPID, announced, "Fixture - Song")
 		if key != "" || !tryExternal {
 			t.Fatalf("announced %q = (%q, %v), want it skipped and the rung offered", announced, key, tryExternal)
 		}

@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../search/search_chrome.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/semantics_ids.dart';
 import 'downloads_controller.dart';
 
@@ -44,8 +45,12 @@ class DownloadsScreen extends ConsumerWidget {
               fractions: fractions,
             ),
           ),
-        switch (state) {
-          AsyncData() when downloads.entries.isEmpty => SliverFillRemaining(
+        AsyncSliverFace<DownloadsState>(
+          state: state,
+          errorTitle: context.l10n.downloadsLoadError,
+          onRetry: () => ref.invalidate(downloadsProvider),
+          isEmpty: (value) => value.entries.isEmpty,
+          empty: (context, _) => SliverFillRemaining(
             hasScrollBody: false,
             child: EmptyState(
               title: context.l10n.downloadsEmptyTitle,
@@ -53,19 +58,8 @@ class DownloadsScreen extends ConsumerWidget {
               glyph: WaxIcons.downloads,
             ),
           ),
-          AsyncData() => _Groups(downloads: downloads),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: context.l10n.downloadsLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(downloadsProvider),
-            ),
-          ),
-          _ => const SliverToBoxAdapter(
-            child: SkeletonShapes(shape: SkeletonShape.list),
-          ),
-        },
+          builder: (context, _) => _Groups(downloads: downloads),
+        ),
         const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s32)),
       ],
     );

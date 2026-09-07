@@ -6301,7 +6301,7 @@ export interface components {
             /** @description The catalog job to follow. */
             jobPid: string;
         };
-        /** @description The WebSocket subscribe frame, sent by the client as the first and only client-to-server message on the event channel (transport in `api/events.md`). Clients pass the cursors their mirror is at; a client with no mirror yet omits them, receives only live invalidations, and snapshots through the sync endpoints (before or after subscribing; both orders are sound because invalidations carry no data). */
+        /** @description The WebSocket subscribe frame, sent by the client as the first message on the event channel (transport in `api/events.md`); `cmd`, `watch`, `tune`, `register-endpoint` and `ping` follow it. Clients pass the cursors their mirror is at; a client with no mirror yet omits them, receives only live invalidations, and snapshots through the sync endpoints (before or after subscribing; both orders are sound because invalidations carry no data). */
         WsSubscribeFrame: {
             /** @description The client's opaque catalog change cursor. */
             catalogSince?: string;
@@ -6551,6 +6551,19 @@ export interface components {
              * @example ps-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             sessionId?: string;
+        };
+        /** @description Client-to-server: name the station this client is listening to, so a `radio` invalidation reaches the clients it is about rather than every connection. A new tune replaces the previous one; omitting `station` says this client is no longer listening. Never acked, and never refused: an unknown pid simply matches no landing. A client that never tunes hears no `radio` invalidations, which is what a client with no station to draw wants. */
+        WsTuneFrame: {
+            /**
+             * @description Always `tune`.
+             * @example tune
+             */
+            type: string;
+            /**
+             * @description The station being listened to.
+             * @example rs-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            station?: string;
         };
         /** @description Client-to-server clock probe for NTP-style offset estimation (unrelated to WebSocket protocol pings). */
         WsPingFrame: {

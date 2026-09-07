@@ -118,6 +118,10 @@ class FakeRepository implements WaxDeckRepository {
   /// other two reads waited on it.
   Completer<void>? podcastGate;
 
+  /// Held open, an episode listing waits on it: a reload in flight is
+  /// what a screen's refresh test is about.
+  Completer<void>? listEpisodesGate;
+
   /// When set, position checkpoints fail with it.
   WaxDeckApiException? putPlayStateError;
 
@@ -359,6 +363,7 @@ class FakeRepository implements WaxDeckRepository {
       throw const WaxDeckApiException(
         code: 'not-found',
         message: 'no session with that id',
+        statusCode: 404,
       );
     }
     final was = deviceSessions[at];
@@ -427,9 +432,19 @@ class FakeRepository implements WaxDeckRepository {
   /// genuinely in flight while it starts another.
   Completer<void>? facetGate;
 
+  /// Held open, every item listing waits on it. What a screen's refresh
+  /// test needs: a reload genuinely in flight, which is the state that
+  /// carries the previous value and used to blank a screen.
+  Completer<void>? listItemsGate;
+
   /// Cursors this fake refuses with `invalid-request`, the way a server
   /// refuses one minted by a build with a different encoding.
   final Set<String> rejectedCursors = {};
+
+  /// Held open, the uploads and tool-task listings wait on theirs, for
+  /// the same reason [listItemsGate] exists.
+  Completer<void>? listUploadsGate;
+  Completer<void>? listToolTasksGate;
 
   @override
   Future<ItemPage> listItems({
@@ -441,6 +456,7 @@ class FakeRepository implements WaxDeckRepository {
   }) async {
     final error = listError;
     if (error != null) throw error;
+    await listItemsGate?.future;
     if (cursor != null && rejectedCursors.contains(cursor)) {
       throw const WaxDeckApiException(
         code: 'invalid-request',
@@ -1398,6 +1414,7 @@ class FakeRepository implements WaxDeckRepository {
   }) async {
     final error = listError;
     if (error != null) throw error;
+    await listEpisodesGate?.future;
     final episodes = episodesByShow[pid] ?? const [];
     final start = cursor == null ? 0 : int.parse(cursor);
     final pageSize = limit ?? 100;
@@ -1748,9 +1765,14 @@ class FakeRepository implements WaxDeckRepository {
       orElse: () => throw const WaxDeckApiException(
         code: 'not-found',
         message: 'no such item',
+        statusCode: 404,
       ),
     );
   }
+
+  /// Held open, the playlist listing waits on it: a reload in flight is
+  /// what a screen's refresh test is about.
+  Completer<void>? listPlaylistsGate;
 
   @override
   Future<PlaylistPage> listPlaylists({
@@ -1758,6 +1780,7 @@ class FakeRepository implements WaxDeckRepository {
     int? limit,
     String? containsItem,
   }) async {
+    await listPlaylistsGate?.future;
     var rows = playlistsByPid.values.toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     if (containsItem != null) {
@@ -1798,13 +1821,19 @@ class FakeRepository implements WaxDeckRepository {
     return pl;
   }
 
+  /// Held open, a playlist's own read waits on it, for the detail
+  /// screen's refresh test.
+  Completer<void>? getPlaylistGate;
+
   @override
   Future<Playlist> getPlaylist(String pid) async {
+    await getPlaylistGate?.future;
     final pl = playlistsByPid[pid];
     if (pl == null) {
       throw const WaxDeckApiException(
         code: 'not-found',
         message: 'no such playlist',
+        statusCode: 404,
       );
     }
     return pl;
@@ -2332,6 +2361,7 @@ class FakeRepository implements WaxDeckRepository {
       throw const WaxDeckApiException(
         code: 'not-found',
         message: 'no such endpoint',
+        statusCode: 404,
       );
     }
     return probe;
@@ -3174,6 +3204,7 @@ class FakeRepository implements WaxDeckRepository {
   Future<UploadPage> listUploads({String? cursor, int? limit}) async {
     final error = uploadError;
     if (error != null) throw error;
+    await listUploadsGate?.future;
     return UploadPage(
       uploads: uploadsById.values.toList(),
       quota: uploadPageQuota,
@@ -4547,6 +4578,7 @@ class FakeRepository implements WaxDeckRepository {
   Future<ToolTaskPage> listToolTasks({String? cursor, int? limit}) async {
     final error = toolError;
     if (error != null) throw error;
+    await listToolTasksGate?.future;
     return ToolTaskPage(tasks: toolTasksById.values.toList());
   }
 
@@ -6325,6 +6357,10 @@ class FakeDownloads implements DownloadManagerPort {
 
   void setStored(List<DownloadedItem> items) => _items = items;
 
+  /// Held open, [stored] waits on it: a reload in flight is what a
+  /// screen's refresh test is about.
+  Completer<void>? storedGate;
+
   @override
   Future<LocalPlayback?> localFor(String pid) async => byPid[pid];
 
@@ -6356,7 +6392,10 @@ class FakeDownloads implements DownloadManagerPort {
   }
 
   @override
-  Future<List<DownloadedItem>> stored() async => _items;
+  Future<List<DownloadedItem>> stored() async {
+    await storedGate?.future;
+    return _items;
+  }
 
   @override
   Future<void> cancel(String pid) async {
@@ -6444,8 +6483,12 @@ class FakeArtworkStore extends ArtworkStore {
     return bytes[artUrl];
   }
 
+  /// Every (url, px) a scroll asked this store to warm ahead of itself.
+  final List<({String url, int px})> warmed = <({String url, int px})>[];
+
   @override
-  Future<void> warm(String artUrl, int px) async {}
+  Future<void> warm(String artUrl, int px) async =>
+      warmed.add((url: artUrl, px: px));
 
   @override
   Future<void> pinForOffline(String pid, String? artUrl) async =>

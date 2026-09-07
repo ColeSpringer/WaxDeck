@@ -450,9 +450,11 @@ void main() {
   group('warming a scroll ahead', () {
     test('warms what it is given, skipping the items with no art', () async {
       final store = _RecordingStore();
-      ArtworkPrecacher(
-        store,
-      ).warmAhead(urls: <String?>['c', null, 'd'], px: 300);
+      ArtworkPrecacher().warmAhead(
+        store: store,
+        urls: <String?>['c', null, 'd'],
+        px: 300,
+      );
       await pumpEventQueue();
       expect(store.warmed, <String>['c', 'd']);
       expect(store.pixels, <int>[300, 300]);
@@ -460,13 +462,14 @@ void main() {
 
     test('a later scroll supersedes the run in flight', () async {
       final store = _RecordingStore(gate: true);
-      final precacher = ArtworkPrecacher(store);
+      final precacher = ArtworkPrecacher();
       precacher.warmAhead(
+        store: store,
         urls: <String?>['a', 'b', 'c', 'd', 'e', 'f'],
         px: 64,
       );
       await pumpEventQueue();
-      precacher.warmAhead(urls: <String?>['x', 'y'], px: 64);
+      precacher.warmAhead(store: store, urls: <String?>['x', 'y'], px: 64);
       store.release();
       await pumpEventQueue();
       // The first run got no further than the batch it was blocked on:
@@ -477,8 +480,9 @@ void main() {
 
     test('a disposed precacher stops warming', () async {
       final store = _RecordingStore(gate: true);
-      final precacher = ArtworkPrecacher(store);
+      final precacher = ArtworkPrecacher();
       precacher.warmAhead(
+        store: store,
         urls: <String?>['a', 'b', 'c', 'd', 'e', 'f'],
         px: 64,
       );
@@ -493,9 +497,11 @@ void main() {
       // Nothing awaits the loop, so an escaping error is an unhandled
       // one.
       final store = _RecordingStore(throws: true);
-      ArtworkPrecacher(
-        store,
-      ).warmAhead(urls: <String?>['a', 'b', 'c', 'd'], px: 64);
+      ArtworkPrecacher().warmAhead(
+        store: store,
+        urls: <String?>['a', 'b', 'c', 'd'],
+        px: 64,
+      );
       await pumpEventQueue();
       expect(store.warmed, <String>['a', 'b', 'c', 'd']);
     });

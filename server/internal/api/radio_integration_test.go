@@ -861,9 +861,26 @@ func TestRadioArtworkWakesAListeningSocket(t *testing.T) {
 	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"topics":["radio"]}`)); err != nil {
 		t.Fatalf("subscribing: %v", err)
 	}
+	// The wake is addressed, so a socket that has not named a station
+	// hears nothing. This is the other half of the line under test.
+	station := "rs-01JZX5N8QW3F4V9T2B7KDSTATN1"
+	if err := conn.Write(ctx, websocket.MessageText,
+		[]byte(`{"type":"tune","station":"`+station+`"}`)); err != nil {
+		t.Fatalf("tuning: %v", err)
+	}
+	// The tune is never acked, and the landing below must not race it.
+	// Frames are dispatched in order on one goroutine, so a ping's
+	// answer - a pong, or an error frame where there is no command bus -
+	// is proof the tune was applied first.
+	if err := conn.Write(ctx, websocket.MessageText, []byte(`{"type":"ping","t":1}`)); err != nil {
+		t.Fatalf("pinging: %v", err)
+	}
+	if _, _, err := conn.Read(ctx); err != nil {
+		t.Fatalf("waiting for the ping's answer: %v", err)
+	}
 
 	// Subscribed to radio alone, so nothing else can answer for it.
-	h.svc.EnsureRadioAnnouncedArt(art.URL+"/nowplaying.png", "Charlie Parker - Ornithology")
+	h.svc.EnsureRadioAnnouncedArt(station, art.URL+"/nowplaying.png", "Charlie Parker - Ornithology")
 
 	deadline := time.Now().Add(10 * time.Second)
 	rctx, rcancel := context.WithDeadline(ctx, deadline)

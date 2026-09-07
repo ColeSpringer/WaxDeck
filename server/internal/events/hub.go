@@ -9,7 +9,6 @@ package events
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -52,10 +51,12 @@ const coalesceWindow = 250 * time.Millisecond
 type Hub struct {
 	src wakeSource
 
-	// radioDirty is a cover landing waiting for the next tick. A flag
-	// rather than a channel because the frame carries no data: many
-	// landings inside one window are one invalidation.
-	radioDirty atomic.Bool
+	// radioDirty holds the stations whose artwork landed since the last
+	// tick. A set rather than a channel because the frame carries no
+	// data: many landings on one station inside one window are one
+	// invalidation.
+	radioMu    sync.Mutex
+	radioDirty map[string]struct{}
 
 	mu    sync.Mutex
 	conns map[*Conn]struct{}
@@ -72,7 +73,13 @@ type Conn struct {
 	userID string
 	topics map[string]bool // nil means every topic
 
-	mu      sync.Mutex
+	mu sync.Mutex
+	// station is the radio station this client says it is listening to,
+	// empty when it is listening to none, and tuned whether it has ever
+	// said. Together they decide which connections a cover landing
+	// reaches; see Tune.
+	station string
+	tuned   bool
 	pending struct {
 		catalog bool
 		user    bool
@@ -117,6 +124,37 @@ func (h *Hub) Unregister(c *Conn) {
 // wants reports whether the connection subscribed to the topic.
 func (c *Conn) wants(topic string) bool {
 	return c.topics == nil || c.topics[topic]
+}
+
+// Tune names the station this connection is listening to, replacing
+// whatever it named before; an empty pid says it is listening to none.
+// A connection that has tuned hears only its own station's landings. One
+// that never has keeps the topic's older contract - every landing, which
+// its subscription asked for before there was a frame to narrow it - so
+// a client from before the frame, or one that never sends it, loses
+// nothing it subscribed to.
+func (c *Conn) Tune(stationPID string) {
+	c.mu.Lock()
+	c.station = stationPID
+	c.tuned = true
+	c.mu.Unlock()
+}
+
+// tunedTo reports whether a landing on one of the stations concerns
+// this connection: yes for one that never tuned, and for one tuned to a
+// station in the set.
+func (c *Conn) tunedTo(stations map[string]struct{}) bool {
+	c.mu.Lock()
+	station, tuned := c.station, c.tuned
+	c.mu.Unlock()
+	if !tuned {
+		return true
+	}
+	if station == "" {
+		return false
+	}
+	_, ok := stations[station]
+	return ok
 }
 
 // Mark queues an invalidation (or, for TypeResync, a resync) and wakes
@@ -190,11 +228,11 @@ func (h *Hub) Run(ctx context.Context) error {
 		case uid := <-h.src.UserEventWakeups():
 			dirtyUsers[uid] = struct{}{}
 		case <-ticker.C:
-			radioDirty := h.radioDirty.Swap(false)
-			if !catalogDirty && len(dirtyUsers) == 0 && !radioDirty {
+			stations := h.takeRadio()
+			if !catalogDirty && len(dirtyUsers) == 0 && len(stations) == 0 {
 				continue
 			}
-			h.flush(catalogDirty, dirtyUsers, radioDirty)
+			h.flush(catalogDirty, dirtyUsers, stations)
 			catalogDirty = false
 			clear(dirtyUsers)
 		}
@@ -206,10 +244,32 @@ func (h *Hub) Run(ctx context.Context) error {
 // visibility, so fanning to everyone is cheap and leaks nothing.
 func (h *Hub) MarkPlayerAll() { h.markAll(TopicPlayer) }
 
-// MarkRadioAll queues a radio-topic invalidation on every connection at
-// the next tick. Coalesced rather than sent on the spot: covers land one
-// detached worker at a time, and every landing reaches every connection.
-func (h *Hub) MarkRadioAll() { h.radioDirty.Store(true) }
+// MarkRadio queues a radio-topic invalidation for the connections a
+// landing on stationPID concerns, at the next tick. Coalesced rather than
+// sent on the spot: covers land one detached worker at a time, and a
+// station whose stream announces a new title every three minutes can
+// land two rungs of artwork for it. A landing with no station to name
+// concerns nobody in particular and marks nothing.
+func (h *Hub) MarkRadio(stationPID string) {
+	if stationPID == "" {
+		return
+	}
+	h.radioMu.Lock()
+	defer h.radioMu.Unlock()
+	if h.radioDirty == nil {
+		h.radioDirty = map[string]struct{}{}
+	}
+	h.radioDirty[stationPID] = struct{}{}
+}
+
+// takeRadio drains the stations that landed since the last tick.
+func (h *Hub) takeRadio() map[string]struct{} {
+	h.radioMu.Lock()
+	defer h.radioMu.Unlock()
+	stations := h.radioDirty
+	h.radioDirty = nil
+	return stations
+}
 
 func (h *Hub) markAll(topic string) {
 	h.mu.Lock()
@@ -223,7 +283,7 @@ func (h *Hub) markAll(topic string) {
 	}
 }
 
-func (h *Hub) flush(catalog bool, users map[string]struct{}, radio bool) {
+func (h *Hub) flush(catalog bool, users map[string]struct{}, stations map[string]struct{}) {
 	h.mu.Lock()
 	conns := make([]*Conn, 0, len(h.conns))
 	for c := range h.conns {
@@ -237,7 +297,9 @@ func (h *Hub) flush(catalog bool, users map[string]struct{}, radio bool) {
 		if _, ok := users[c.userID]; ok {
 			c.Mark(TypeInvalidate, TopicUser)
 		}
-		if radio {
+		// Checked only when something landed: the connection's lock is
+		// not worth taking four times a second for nothing.
+		if len(stations) > 0 && c.tunedTo(stations) {
 			c.Mark(TypeInvalidate, TopicRadio)
 		}
 	}

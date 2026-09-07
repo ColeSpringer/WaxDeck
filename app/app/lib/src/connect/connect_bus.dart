@@ -28,6 +28,7 @@ class ConnectBus {
   final _watchFrames = StreamController<PlaybackSessionInfo>.broadcast();
   final _pending = <String, Completer<Map<String, Object?>>>{};
   String? _watched;
+  String? _tuned;
   int _seq = 0;
   DateTime? _pingSent;
 
@@ -191,6 +192,23 @@ class ConnectBus {
   /// The session this connection is watching, for re-watch after a
   /// reconnect.
   String? get watched => _watched;
+
+  /// Names the station this client is listening to, so a radio-artwork
+  /// invalidation reaches it rather than every connection in the house.
+  /// A new tune replaces the old; null says listening to nothing.
+  ///
+  /// Never acked and never refused, so nothing here waits on an answer:
+  /// an unknown pid simply matches no landing. It belongs to the `radio`
+  /// topic rather than to the command bus, and rides this socket because
+  /// there is only one.
+  void tune(String? stationPid) {
+    _tuned = stationPid;
+    send({'type': 'tune', 'station': ?stationPid});
+  }
+
+  /// The station this connection is listening to, for re-tuning after a
+  /// reconnect: the server forgets it with the socket.
+  String? get tuned => _tuned;
 
   /// Reports local playback state (the mirror contract: steady fields
   /// every report, the queue only when it changed).

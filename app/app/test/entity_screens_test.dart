@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
@@ -6,9 +8,11 @@ import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/entity_facts.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
+import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/metadata/metadata_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -81,8 +85,68 @@ List<String> _rowTitles(WidgetTester tester) => tester
     .map((row) => row.data.title)
     .toList();
 
+/// Holds a reload in flight and asserts the screen keeps drawing the
+/// rows it already has, through the shared face rather than a switch on
+/// the state's runtime type.
+///
+/// Both halves matter. The face is what fixes the order - value, then
+/// error, then skeleton - so a state that carries a value while loading
+/// or failing cannot fall through to a skeleton arm and blank a screen
+/// the reader was reading; asserting the screen uses it is what keeps a
+/// hand-rolled switch from coming back.
+Future<void> _expectRefreshKeepsRows(
+  WidgetTester tester,
+  ProviderContainer container,
+  FakeRepository repository,
+  MusicListing listing,
+) async {
+  expect(
+    find.byType(AsyncSliverFace<MusicItemsState>),
+    findsOneWidget,
+    reason: 'the screen decides its face from the value, not the type',
+  );
+  final before = _rowTitles(tester);
+  expect(before, isNotEmpty, reason: 'nothing to keep');
+  final gate = Completer<void>();
+  repository.listItemsGate = gate;
+  container.invalidate(musicItemsProvider(listing));
+  // Twice: Riverpod schedules the rebuild against the frame, so the
+  // first pump is the one that runs it and the second draws what it
+  // produced.
+  await tester.pump();
+  await tester.pump();
+
+  expect(_rowTitles(tester), before);
+  expect(
+    find.byType(SkeletonShapes),
+    findsNothing,
+    reason: 'a reload must not blank rows the screen already holds',
+  );
+  gate.complete();
+  repository.listItemsGate = null;
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('the album screen', () {
+    testWidgets('a refresh redraws the tracks it already has', (tester) async {
+      final repository = FakeRepository()
+        ..facetItems['album 1'] = <ItemSummary>[
+          _track('Bellwether', track: 1),
+          _track('Cinder', track: 2),
+        ];
+      final container = await _pump(
+        tester,
+        const AlbumScreen(pid: 'al-1'),
+        repository,
+      );
+
+      await _expectRefreshKeepsRows(tester, container, repository, (
+        dimension: MusicDimension.albums,
+        segment: 'al-1',
+      ));
+    });
+
     testWidgets('lists a release in the order it was pressed', (tester) async {
       // The listing arrives in the catalog's own stable order, which is
       // not track order. A release that came back alphabetically and was
@@ -454,7 +518,45 @@ void main() {
     });
   });
 
+  group('the music listing', () {
+    testWidgets('a refresh redraws the tracks it already has', (tester) async {
+      final repository = FakeRepository()
+        ..facetItems['genre ge-1'] = <ItemSummary>[
+          _track('One'),
+          _track('Two'),
+        ];
+      final container = await _pump(
+        tester,
+        const MusicListingScreen(
+          dimension: MusicDimension.genres,
+          segment: 'ge-1',
+        ),
+        repository,
+      );
+
+      await _expectRefreshKeepsRows(tester, container, repository, (
+        dimension: MusicDimension.genres,
+        segment: 'ge-1',
+      ));
+    });
+  });
+
   group('the artist screen', () {
+    testWidgets('a refresh redraws the tracks it already has', (tester) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One', track: 1)];
+      final container = await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-1', label: 'Nightjar'),
+        repository,
+      );
+
+      await _expectRefreshKeepsRows(tester, container, repository, (
+        dimension: MusicDimension.artists,
+        segment: 'ar-1',
+      ));
+    });
+
     testWidgets('is titled by the artist, never by a track credit', (
       tester,
     ) async {

@@ -361,8 +361,13 @@ class PrefsController extends AsyncNotifier<Prefs> {
       _write((current) => current.copyWith(autoplay: allowed));
 }
 
+/// Awaited by the nine places that read a preference before acting, so
+/// a refusal has to settle rather than spend thirteen seconds reporting
+/// AsyncLoading: a 401 here means signed out, which the router acts on,
+/// and a 4xx will not become a document on the fourth ask.
 final prefsControllerProvider = AsyncNotifierProvider<PrefsController, Prefs>(
   PrefsController.new,
+  retry: retryUnlessRefused,
 );
 
 /// The UI locale override from the synced preference; null follows the

@@ -37,41 +37,43 @@ note.
 
 ## WaxTap
 
-- **A bounded enrich option on `EnumerateOptions`.** Enumeration runs
-  its own enrichment internally, and that loop is the only place the
-  metadata-throttle rotation happens - a throttled response there is
-  minted as `ErrTemporarilyUnavailable` and retried against a rotated
-  identity. A caller that wants the same protection for its own budget
-  ("enrich the first n entries") has no way to ask: it must call `Info`
-  per entry outside enumeration, where a throttle arrives as a plain
-  `ErrVideoUnavailable` indistinguishable from a removed video, with no
-  rotation behind it. Wanted: a bounded enrich option on
-  `EnumerateOptions` (enrich the first n entries) so a caller's budget
-  runs inside the loop that already knows how to rotate, without
-  exporting identity rotation itself. Shipped workaround: WaxDeck
-  mirrors the unexported throttle shape (a `*waxerr.PlayabilityError`
-  with status `UNPLAYABLE` wrapping `ErrVideoUnavailable`), keeps such
-  an entry unenriched rather than unavailable, and stops spending the
-  run's budget. That recovers the entries, at two costs this ask would
-  remove: the predicate is a copy of an unexported one, which drifts
-  silently the day the shape changes, and a throttled run enriches
-  nothing at all where a rotation would have enriched everything.
+- **Enrich overwrites an entry's listing fields with whatever the lookup
+  answered, zeros included.** `enrichEntries` assigns `Title`, `Author`
+  and `Duration` from the fetched `Video` unconditionally, so an
+  `InfoBasic` answer for a live item or a premiere - duration 0 - clobbers
+  the listing's own duration, and a consumer overlaying the two has no
+  listing value left to fall back to. Wanted: the refresh to keep a
+  listing field where the fetched one is empty or zero, the way a
+  consumer's own overlay would. Shipped workaround: none; WaxDeck's
+  overlay guards are kept but cannot restore what the refresh already
+  replaced, and a live entry's duration reaches the catalog as 0.
 
 ## WaxSeal
 
-- **A keyed daemon fails its own image healthcheck.** `/ping` is
-  tenant-gated and the image's baked-in healthcheck
-  (`waxseal ping --addr 127.0.0.1:4416 --strict`) sends no key, so the
-  daemon answers its own probe 401 the moment it is started with
-  `--tenant-keys`. Every operator who keys the sidecar has to override
-  the healthcheck to fix it. Wanted: the image's own probe carrying a
-  key - an entrypoint that passes the daemon's single tenant key, an
-  environment variable the healthcheck reads, or a loopback exemption
-  on `/ping` so a local liveness probe needs no tenant at all. Shipped
-  workaround: WaxDeck's compose replaces the healthcheck with the same
-  probe plus `--key ${WAXDECK_SEAL_API_KEY}`, which works because the
-  `ping` subcommand does take a key; what is missing is the image
-  doing it without being told.
+(nothing outstanding)
+
+## WaxFlow
+
+- **The fMP4 FLAC sample entry declares 16 bits whatever the stream
+  holds.** `container/mp4/seg.go` `audioSampleEntry` writes the
+  AudioSampleEntry `samplesize` as a constant 16 for every codec, on the
+  grounds that the codec config box is authoritative. Chromium's MP4
+  parser does not agree for FLAC: it refuses the init segment unless
+  that field equals `STREAMINFO.bits_per_sample`
+  (`CHUNK_DEMUXER_ERROR_APPEND_FAILED: Failure parsing MP4: FLAC
+  AudioSampleEntry sample size mismatches FLACSpecificBox STREAMINFO
+  sample size`), so every FLAC rendering at a depth other than 16 is
+  unplayable over Media Source Extensions in every Chromium-based
+  browser. A timeline reaches that depth easily: any lossy member decodes
+  to float, the envelope goes float, and `waxflow.go`'s FLAC `adjust`
+  quantizes an unrequested depth to 24 - so a queue mixing one MP3 into
+  a FLAC album renders as 24-bit FLAC and the browser refuses the whole
+  stream at the first append. Wanted: `samplesize` written from the
+  STREAMINFO for FLAC (the ISOBMFF FLAC encapsulation spec says the two
+  shall agree). Shipped workaround: WaxDeck asks for `bits=16` on every
+  FLAC timeline render, which makes the two fields agree at the cost of
+  quantizing a lossless 24-bit source to 16 on that path; the request
+  comes out again when this lands.
 
 ## WaxLabel
 

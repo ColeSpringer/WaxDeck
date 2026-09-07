@@ -602,6 +602,30 @@ void main() {
     await _stop(tester, shell);
   });
 
+  testWidgets('reopening the palette does not re-read the same peaks', (
+    tester,
+  ) async {
+    // The visualizer gate reads the envelope and the palette is a
+    // `showDialog`, so with the player face unmounted each open was the
+    // only listener and paid for a fresh read of the same peaks -
+    // nothing revalidates them. The playing track's envelope is held
+    // for as long as it is playing.
+    final shell = await _pumpShell(tester);
+    await _play(tester, shell);
+
+    await _openPalette(tester);
+    await _type(tester, 'visual');
+    await _press(tester, LogicalKeyboardKey.escape);
+    expect(shell.repo.waveformCalls, <String>[_trackPid]);
+
+    await _openPalette(tester);
+    await _type(tester, 'visual');
+    await _press(tester, LogicalKeyboardKey.escape);
+    expect(shell.repo.waveformCalls, <String>[_trackPid]);
+
+    await _stop(tester, shell);
+  });
+
   test('every standing command is unique, and every key is spelled', () {
     final ids = <String>{};
     for (final command in waxStandingCommands) {

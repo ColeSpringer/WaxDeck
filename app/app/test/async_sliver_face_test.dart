@@ -60,7 +60,7 @@ class _Host extends ConsumerWidget {
           onRetry: () => ref.invalidate(_rowsProvider),
           isEmpty: withEmptyFace ? (value) => value.isEmpty : null,
           empty: withEmptyFace
-              ? (context) => const SliverToBoxAdapter(
+              ? (context, _) => const SliverToBoxAdapter(
                   child: EmptyState(title: 'Nothing here', message: 'Add one'),
                 )
               : null,

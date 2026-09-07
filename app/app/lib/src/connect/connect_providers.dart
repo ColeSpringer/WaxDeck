@@ -76,7 +76,8 @@ class ConnectBinder {
   }
 
   /// Runs on every successful (re)connect: register the endpoint,
-  /// restore the watch, and refresh the clock offset.
+  /// restore the watch and the tuned station, and refresh the clock
+  /// offset.
   void onConnected() {
     final controller = _ref.read(connectControllerProvider);
     if (!_started) {
@@ -87,6 +88,11 @@ class ConnectBinder {
     }
     final watched = bus.watched;
     if (watched != null) bus.watch(watched);
+    // The server holds the tuned station on the connection, so a
+    // reconnect starts untuned and a listening face would stop hearing
+    // its covers land.
+    final tuned = bus.tuned;
+    if (tuned != null) bus.tune(tuned);
     bus.ping();
     _pingTimer?.cancel();
     _pingTimer = Timer.periodic(const Duration(seconds: 60), (_) => bus.ping());

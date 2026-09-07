@@ -1,8 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
-import 'artwork_providers.dart';
 import 'artwork_store.dart';
 
 /// Fetches the artwork a scroll is about to reach, and only that.
@@ -18,10 +17,14 @@ import 'artwork_store.dart';
 /// Warming happens when a scroll stops, never during one: a fling needs
 /// its frames more than the next screenful needs its covers, and a
 /// hundred fetches started under one is how a scroll janks.
+///
+/// A scrolling screen owns one and disposes it with itself, rather than
+/// watching one from a provider: a warm in flight when the screen leaves
+/// has nothing left to warm for, and an auto-disposing provider is
+/// released by a scheduler rather than by the widget - which in a widget
+/// test is a timer outliving the tree it belonged to.
 class ArtworkPrecacher {
-  ArtworkPrecacher(this.store);
-
-  final ArtworkStore store;
+  ArtworkPrecacher();
 
   int _generation = 0;
   bool _disposed = false;
@@ -40,7 +43,15 @@ class ArtworkPrecacher {
   /// viewport ends. A second call supersedes the first: the scroll
   /// moved, and where it stopped is a better guess than where it stopped
   /// before.
-  void warmAhead({required List<String?> urls, required int px}) {
+  ///
+  /// The store is handed over per call rather than held: it is rebuilt
+  /// when the server address moves, and a warm holding the old one would
+  /// fetch from an origin nothing draws from any more.
+  void warmAhead({
+    required ArtworkStore store,
+    required List<String?> urls,
+    required int px,
+  }) {
     if (_disposed || urls.isEmpty) return;
     final generation = ++_generation;
     unawaited(() async {
@@ -66,11 +77,47 @@ class ArtworkPrecacher {
   void dispose() => _disposed = true;
 }
 
-/// The precacher for one scrolling surface, alive as long as the screen
-/// watching it is: a warm run in flight when a screen leaves has nothing
-/// left to warm for.
-final artworkPrecacherProvider = Provider.autoDispose<ArtworkPrecacher>((ref) {
-  final precacher = ArtworkPrecacher(ref.watch(artworkStoreProvider));
-  ref.onDispose(precacher.dispose);
-  return precacher;
-});
+/// How far past the built rows a warm reaches, in viewports.
+///
+/// Two, which is about what one flick covers: far enough that a scroll
+/// resumed in the same direction lands on warm covers, near enough that
+/// a stop halfway down a long list does not fetch a hundred pictures
+/// nobody looks at. Provisional until the perf run measures it.
+const int _viewportsAhead = 2;
+
+/// Warms the covers of the rows just past the viewport.
+///
+/// The caller passes what only it knows: how many rows there are and the
+/// art URL for each; where the viewport ends comes off [metrics]. The
+/// rows on screen are already being fetched by themselves, so the warm
+/// starts one past the last of them - estimated, since the slivers above
+/// the list count toward the offset and put the estimate a header's
+/// worth past the true edge, which the reach below swallows. Read off
+/// the metrics each time rather than remembered, because a remembered
+/// edge outlives the list it measured: a reload or a re-sorted index
+/// starts its rows at zero again.
+void warmArtworkAhead({
+  required BuildContext context,
+  required ArtworkPrecacher precacher,
+  required ArtworkStore store,
+  required ScrollMetrics metrics,
+  required int count,
+  required String? Function(int index) urlAt,
+}) {
+  final pitch = MediaListRow.heightFor(context);
+  if (pitch <= 0 || count == 0) return;
+  final from =
+      ((metrics.pixels + metrics.viewportDimension) / pitch).floor() + 1;
+  if (from >= count) return;
+  final rows = ((metrics.viewportDimension / pitch).ceil() * _viewportsAhead)
+      .clamp(1, count - from);
+  // The rung the row will paint at, which is the whole point of naming a
+  // size here: a warm at another one puts a second copy on the device
+  // and saves the draw nothing.
+  final ratio = MediaQuery.maybeDevicePixelRatioOf(context) ?? 1.0;
+  precacher.warmAhead(
+    store: store,
+    urls: <String?>[for (var i = from; i < from + rows; i++) urlAt(i)],
+    px: (MediaListRow.defaultArtSize * ratio).ceil(),
+  );
+}

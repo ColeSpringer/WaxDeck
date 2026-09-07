@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../artwork/artwork_precache.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
@@ -13,6 +14,7 @@ import '../providers.dart';
 import '../queue/queue_drag.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'music_controllers.dart';
@@ -50,6 +52,15 @@ class MusicListingScreen extends ConsumerStatefulWidget {
 class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
   MusicListing get _listing =>
       (dimension: widget.dimension, segment: widget.segment);
+
+  /// This screen's own precacher, released with the screen.
+  final ArtworkPrecacher _precacher = ArtworkPrecacher();
+
+  @override
+  void dispose() {
+    _precacher.dispose();
+    super.dispose();
+  }
 
   /// What to call this list when nothing handed it a name.
   ///
@@ -285,6 +296,16 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
         if (metrics.pixels >= metrics.maxScrollExtent - 600) {
           ref.read(musicItemsProvider(_listing).notifier).loadMore();
         }
+        if (notification is ScrollEndNotification) {
+          warmArtworkAhead(
+            context: context,
+            precacher: _precacher,
+            store: ref.read(artworkStoreProvider),
+            metrics: metrics,
+            count: items.length,
+            urlAt: (index) => items[index].artUrl,
+          );
+        }
         return false;
       },
       child: WaxScaffold(
@@ -312,21 +333,15 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
           const SearchAction(),
         ],
         slivers: <Widget>[
-          switch (state) {
-            AsyncData(:final value) => _list(value),
-            AsyncError(:final error) => SliverFillRemaining(
-              hasScrollBody: false,
-              child: ErrorState(
-                title: context.l10n.musicListingLoadError,
-                message: context.explain(error),
-                onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
-              ),
-            ),
-            _ => const SliverFillRemaining(
-              hasScrollBody: false,
-              child: SkeletonShapes(shape: SkeletonShape.list),
-            ),
-          },
+          AsyncSliverFace<MusicItemsState>(
+            state: state,
+            skeletonFills: true,
+            errorTitle: context.l10n.musicListingLoadError,
+            onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
+            // The list draws its own empty row, which names the bucket
+            // it is empty for, so there is no empty face here.
+            builder: (context, value) => _list(value),
+          ),
         ],
       ),
     );
