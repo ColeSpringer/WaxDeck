@@ -273,9 +273,14 @@ class LocalNotifications extends Notifier<List<WaxNotification>> {
     return const <WaxNotification>[];
   }
 
-  /// The instant the list was last opened, so the badge counts what has
-  /// arrived since. Null until it has been opened at all, which is why a
-  /// first launch with three notifications badges three.
+  /// How far down the list the reader has been shown: the newest hint
+  /// the bell has drawn them, so the badge counts what has arrived
+  /// since. The newest hint drawn rather than the instant it was drawn
+  /// at, because those differ by whatever landed between the build and
+  /// the press, and that difference is news nobody was shown. Null
+  /// until the bell has drawn a hint - an inbox row carries a read
+  /// stamp of its own and never moves this one - which is why a first
+  /// launch with three hints badges three.
   DateTime? _seenAt;
 
   /// When the list was last looked at, for the view that draws a hint's
@@ -344,12 +349,35 @@ class LocalNotifications extends Notifier<List<WaxNotification>> {
     state = kept.length <= cap ? kept : kept.sublist(0, cap);
   }
 
-  /// Marks everything currently held as seen. Run when the bell opens.
-  void markSeen() {
-    _seenAt = DateTime.now();
+  /// Marks seen exactly the news the bell opened with. Run when it
+  /// opens, with the rows it is drawing.
+  ///
+  /// Stamped from the newest row drawn rather than from the clock. A
+  /// menu holds the list it was built with, so a hint landing between
+  /// that build and the press is in neither the menu nor - with a clock
+  /// stamp - the bell that comes after it: read on behalf of somebody
+  /// who was never shown it, and the bell draws what is unseen, so
+  /// nothing brings it back. Inbox rows carry their own read stamp and
+  /// have no say in this one.
+  void markSeen(Iterable<WaxNotification> drawn) {
+    var latest = _seenAt;
+    for (final row in drawn) {
+      if (row.fromInbox) continue;
+      if (latest == null || row.at.isAfter(latest)) latest = row.at;
+    }
+    if (latest == _seenAt) return;
+    _seenAt = latest;
     // The badge is derived from state, so the notifier has to publish
     // something for a widget watching it to redraw. A new list of the
     // same rows is that something, and it is cheap: the rows are shared.
+    state = <WaxNotification>[...state];
+  }
+
+  /// Marks every hint seen, drawn or not: reading everything is what
+  /// the reader asked for, where opening the bell only says what it
+  /// managed to show them.
+  void markAllSeen() {
+    _seenAt = DateTime.now();
     state = <WaxNotification>[...state];
   }
 
@@ -498,7 +526,7 @@ class NotificationsController extends AsyncNotifier<InboxState> {
 
   /// Marks every unread inbox row read, and the session's hints seen.
   Future<void> markAllRead() async {
-    ref.read(localNotificationsProvider.notifier).markSeen();
+    ref.read(localNotificationsProvider.notifier).markAllSeen();
     if (_held.unread == 0) return;
     _publish(<WaxNotification>[for (final row in _held.rows) row.asRead()], 0);
     await _quietly(

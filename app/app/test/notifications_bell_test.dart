@@ -155,4 +155,52 @@ void main() {
     );
     handle.dispose();
   });
+
+  // The bell draws what is unseen, and opening it is the whole of what
+  // reading a hint can mean - so a press that reads one the menu never
+  // drew loses it for good. The press and the list it opens with are
+  // taken at two different instants, and this is the gap between them.
+  testWidgets('news landing in the frame of a press is not read on its '
+      'reader\'s behalf', (tester) async {
+    final container = await _pump(tester);
+    final local = container.read(localNotificationsProvider.notifier);
+    final drawn = _byId(
+      SemanticsIds.notificationRowPlain(NotificationKind.review.token),
+    );
+    final missed = _byId(
+      SemanticsIds.notificationRowPlain(NotificationKind.upload.token),
+    );
+
+    // A bell carrying a stamp, which is an open that drew something and
+    // nothing else: the press below has to be shown not to move a stamp
+    // that is already there, and an unstamped list would draw the row
+    // whatever the press did.
+    local.record(NotificationKind.review, at: DateTime.now());
+    await tester.pumpAndSettle();
+    await tester.tap(_byId(SemanticsIds.notificationsBell));
+    await tester.pumpAndSettle();
+    expect(drawn, findsOneWidget, reason: 'the open this stamps has to draw');
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+
+    // News lands, and the press comes before the frame that would draw
+    // it: no pump between the two.
+    local.record(NotificationKind.upload, at: DateTime.now());
+    await tester.tap(_byId(SemanticsIds.notificationsBell));
+    await tester.pumpAndSettle();
+    expect(missed, findsNothing, reason: 'this press cannot have drawn it');
+
+    // Which leaves the next open holding it, the way the e2e driver
+    // waits for its own news: closed, opened again, and there.
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+    await tester.tap(_byId(SemanticsIds.notificationsBell));
+    await tester.pumpAndSettle();
+
+    expect(
+      missed,
+      findsOneWidget,
+      reason: 'news nobody was shown is still news',
+    );
+  });
 }

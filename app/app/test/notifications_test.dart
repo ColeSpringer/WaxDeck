@@ -179,7 +179,7 @@ void main() {
       local.recordServerEvent(_marker('review'));
       expect(local.unseen, 1);
 
-      local.markSeen();
+      local.markSeen(container.read(notificationRowsProvider));
       expect(local.unseen, 0);
 
       local.record(
@@ -564,7 +564,7 @@ void main() {
     local.recordServerEvent(_marker('review'));
     expect(container.read(notificationsViewProvider).rows.single.read, isFalse);
 
-    local.markSeen();
+    local.markSeen(container.read(notificationRowsProvider));
     expect(container.read(notificationsViewProvider).rows.single.read, isTrue);
     expect(container.read(notificationRowsProvider), isEmpty);
   });

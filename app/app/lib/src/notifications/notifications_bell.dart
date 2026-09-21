@@ -45,7 +45,11 @@ class NotificationsBell extends ConsumerWidget {
       badge: unseen == 0 ? null : '$unseen',
       emptyLabel: l10n.bellNothingNew,
       emptySemanticsId: SemanticsIds.notificationsEmpty,
-      onOpen: ref.read(localNotificationsProvider.notifier).markSeen,
+      // The rows this build is handing the menu, not whatever is held
+      // when the press lands: the two are the same list only until news
+      // arrives between the build and the tap.
+      onOpen: () =>
+          ref.read(localNotificationsProvider.notifier).markSeen(rows),
       items: <WaxMenuItem<String>>[
         for (final row in rows)
           WaxMenuItem<String>(

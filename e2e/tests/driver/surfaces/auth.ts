@@ -231,8 +231,19 @@ export class Shell extends Surface {
       // the line above proved absent: only that tells a closed menu
       // from a click that dismissed one.
       await this.closeNotifications();
-      await openMenu(this.notificationsBell(), row);
-      await expect(row).toBeVisible({ timeout: T.step });
+      // Opened against the menu's own witness, never against the row:
+      // the menu's barrier sits over the bell, so a menu that opened
+      // before the news landed cannot be re-opened by clicking again,
+      // and an `openMenu` waiting on the row would spend its whole
+      // budget clicking a trigger nothing can reach. Asking the two
+      // questions apart costs a miss one cycle instead of the budget.
+      await this.openNotificationsPanel();
+      // Named, because the menu this opened may legitimately be empty -
+      // news still in flight, or news already drawn once and read by
+      // the drawing - and a bare locator timeout reports none of that.
+      await expect(row, `the bell should be listing ${kind} news`).toBeVisible({
+        timeout: T.step,
+      });
       // The assert tier by default, not the fetch one: a copy change
       // should not cost a minute of nothing. A caller whose news is
       // still in flight - because the badge it would have waited on is
