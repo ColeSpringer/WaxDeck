@@ -83,7 +83,13 @@ func demoArtistPID(t *testing.T, h *harness) string {
 // runEnrichmentAndWait starts the catalog pass and polls it to done.
 func runEnrichmentAndWait(t *testing.T, h *harness) {
 	t.Helper()
-	resp := h.postJSON(t, "/api/v1/library/enrichment/run", map[string]any{})
+	runEnrichmentWithAndWait(t, h, map[string]any{})
+}
+
+// runEnrichmentWithAndWait is runEnrichmentAndWait with a request body.
+func runEnrichmentWithAndWait(t *testing.T, h *harness, body map[string]any) {
+	t.Helper()
+	resp := h.postJSON(t, "/api/v1/library/enrichment/run", body)
 	if resp.StatusCode != 202 {
 		defer resp.Body.Close()
 		var body map[string]any
@@ -132,10 +138,10 @@ func TestCatalogPassFillsAnUnmatchedArtistsPortrait(t *testing.T) {
 	if st.MusicbrainzConfigured {
 		t.Fatal("musicbrainzConfigured = true with no contact")
 	}
-	if !hasPhase(st.Phases, EnrichmentStatusPhasesArtistArt) {
+	if !hasPhase(st.Phases, EnrichmentPhaseArtistArt) {
 		t.Fatalf("phases = %v, want the artist-art phase", st.Phases)
 	}
-	if hasPhase(st.Phases, EnrichmentStatusPhasesIdentity) {
+	if hasPhase(st.Phases, EnrichmentPhaseIdentity) {
 		t.Fatalf("phases = %v, want no identity phase without a contact", st.Phases)
 	}
 
@@ -156,6 +162,62 @@ func TestCatalogPassFillsAnUnmatchedArtistsPortrait(t *testing.T) {
 	if roles.ArtSource.Provider == nil || *roles.ArtSource.Provider != "fakeface" {
 		t.Errorf("art provider = %v, want the supplying rung", roles.ArtSource.Provider)
 	}
+	// And the pass's own tally says what it fetched.
+	st = decode[EnrichmentStatus](t, get(t, h.ts, "/api/v1/library/enrichment", h.token))
+	if st.LastRun == nil || st.LastRun.ArtistArtMatched != 1 || st.LastRun.ArtFetched != 1 {
+		t.Errorf("last run = %+v, want the one portrait matched and fetched", st.LastRun)
+	}
+}
+
+// A phase-scoped force re-asks a settled target, which a plain pass
+// does not, and is refused in the shapes the contract names.
+func TestRunEnrichmentForcesOnePhase(t *testing.T) {
+	t.Parallel()
+	fake := &fakeArtistArtProvider{img: tinyPNG(t)}
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = []enrich.Provider{fake}
+		c.EnrichmentContact = ""
+	})
+	asks := func() int {
+		fake.mu.Lock()
+		defer fake.mu.Unlock()
+		return len(fake.asks)
+	}
+	runEnrichmentAndWait(t, h)
+	runEnrichmentAndWait(t, h)
+	settled := asks()
+	if settled == 0 {
+		t.Fatal("the plain pass asked about no artist")
+	}
+	runEnrichmentWithAndWait(t, h, map[string]any{"forcePhases": []string{"artist-art"}})
+	if asks() <= settled {
+		t.Errorf("asks = %d after the forced phase, want more than the %d a settled catalog made", asks(), settled)
+	}
+
+	for _, tc := range []struct {
+		body   map[string]any
+		status int
+		names  string
+	}{
+		{map[string]any{"force": true, "forcePhases": []string{"artist-art"}}, 400, ""},
+		{map[string]any{"forcePhases": []string{"everything"}}, 400, ""},
+		{map[string]any{"forcePhases": []string{"identity"}}, 501, "WAXDECK_ENRICHMENT_CONTACT"},
+	} {
+		resp := h.postJSON(t, "/api/v1/library/enrichment/run", tc.body)
+		var body struct{ Code, Message string }
+		json.NewDecoder(resp.Body).Decode(&body)
+		resp.Body.Close()
+		if resp.StatusCode != tc.status || !strings.Contains(body.Message, tc.names) {
+			t.Errorf("%v = %d %q, want %d naming %q", tc.body, resp.StatusCode, body.Message, tc.status, tc.names)
+		}
+	}
+
+	// A user is refused whatever the phase says.
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{"username": "listener", "password": "long-enough-pw"})
+	wantStatus(t, resp, 201, "create non-admin user")
+	userToken := loginAs(t, h.ts, "listener", "long-enough-pw").Token
+	wantStatus(t, reqAs(t, h, "POST", "/api/v1/library/enrichment/run", userToken,
+		map[string]any{"forcePhases": []string{"everything"}}), 403, "a user's forced run")
 }
 
 // A server with neither a contact nor a phase-gating provider has
@@ -188,7 +250,7 @@ func TestEnrichmentStatusReportsNothingToRun(t *testing.T) {
 	}
 }
 
-func hasPhase(phases []EnrichmentStatusPhases, want EnrichmentStatusPhases) bool {
+func hasPhase(phases []EnrichmentPhase, want EnrichmentPhase) bool {
 	for _, p := range phases {
 		if p == want {
 			return true

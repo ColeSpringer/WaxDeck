@@ -4,6 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_phase.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_last_run.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_provider.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_coverage.dart';
@@ -19,8 +20,8 @@ part 'enrichment_status.g.dart';
 /// * [coverage] 
 /// * [running] - Whether a whole-library pass is running now.
 /// * [configured] - Whether a whole-library pass would do anything: some phase can run. That is true on any server carrying a provider that gates a phase of its own, and true on every server with a MusicBrainz contact. Read `phases` for which half.  False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key. 
-/// * [musicbrainzConfigured] - Whether the MusicBrainz identity phases can run. They need an identifying contact, which is boot configuration (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and not a runtime setting, because MusicBrainz requires an identifying agent before anything is sent.  It gates the lyrics phase too, whose built-in provider needs no key but is not dialled without an identifying agent. The phases that answer to registered providers (artwork, fields, book metadata, and lyrics where a provider supplies them) run without it, so a server with no contact still enriches - just not identity. A console that says \"enrichment is off\" on this being false would be wrong about the half that does run. 
-/// * [phases] - The phases a run started now would execute, in no particular order. Empty exactly when `configured` is false. `identity` and `releases` need the MusicBrainz contact, and so does `lyrics` unless a registered provider supplies them; the rest need a registered provider advertising the matching capability. 
+/// * [musicbrainzConfigured] - Whether the MusicBrainz identity phases can run, which needs the `WAXDECK_ENRICHMENT_CONTACT` boot setting. The Cover Art Archive and LRCLIB wait on it too; the provider-gated phases do not. 
+/// * [phases] - The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider, the rest a provider. 
 /// * [lastRun] 
 @BuiltValue()
 abstract class EnrichmentStatus implements Built<EnrichmentStatus, EnrichmentStatusBuilder> {
@@ -39,14 +40,13 @@ abstract class EnrichmentStatus implements Built<EnrichmentStatus, EnrichmentSta
   @BuiltValueField(wireName: r'configured')
   bool get configured;
 
-  /// Whether the MusicBrainz identity phases can run. They need an identifying contact, which is boot configuration (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and not a runtime setting, because MusicBrainz requires an identifying agent before anything is sent.  It gates the lyrics phase too, whose built-in provider needs no key but is not dialled without an identifying agent. The phases that answer to registered providers (artwork, fields, book metadata, and lyrics where a provider supplies them) run without it, so a server with no contact still enriches - just not identity. A console that says \"enrichment is off\" on this being false would be wrong about the half that does run. 
+  /// Whether the MusicBrainz identity phases can run, which needs the `WAXDECK_ENRICHMENT_CONTACT` boot setting. The Cover Art Archive and LRCLIB wait on it too; the provider-gated phases do not. 
   @BuiltValueField(wireName: r'musicbrainzConfigured')
   bool get musicbrainzConfigured;
 
-  /// The phases a run started now would execute, in no particular order. Empty exactly when `configured` is false. `identity` and `releases` need the MusicBrainz contact, and so does `lyrics` unless a registered provider supplies them; the rest need a registered provider advertising the matching capability. 
+  /// The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider, the rest a provider. 
   @BuiltValueField(wireName: r'phases')
-  BuiltList<EnrichmentStatusPhasesEnum> get phases;
-  // enum phasesEnum {  identity,  releases,  aux-art,  artist-art,  lyrics,  track-fields,  book-fields,  album-fields,  };
+  BuiltList<EnrichmentPhase> get phases;
 
   @BuiltValueField(wireName: r'lastRun')
   EnrichmentLastRun? get lastRun;
@@ -102,7 +102,7 @@ class _$EnrichmentStatusSerializer implements PrimitiveSerializer<EnrichmentStat
     yield r'phases';
     yield serializers.serialize(
       object.phases,
-      specifiedType: const FullType(BuiltList, [FullType(EnrichmentStatusPhasesEnum)]),
+      specifiedType: const FullType(BuiltList, [FullType(EnrichmentPhase)]),
     );
     if (object.lastRun != null) {
       yield r'lastRun';
@@ -172,8 +172,8 @@ class _$EnrichmentStatusSerializer implements PrimitiveSerializer<EnrichmentStat
         case r'phases':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(EnrichmentStatusPhasesEnum)]),
-          ) as BuiltList<EnrichmentStatusPhasesEnum>;
+            specifiedType: const FullType(BuiltList, [FullType(EnrichmentPhase)]),
+          ) as BuiltList<EnrichmentPhase>;
           result.phases.replace(valueDes);
           break;
         case r'lastRun':
@@ -210,34 +210,5 @@ class _$EnrichmentStatusSerializer implements PrimitiveSerializer<EnrichmentStat
     );
     return result.build();
   }
-}
-
-class EnrichmentStatusPhasesEnum extends EnumClass {
-
-  @BuiltValueEnumConst(wireName: r'identity')
-  static const EnrichmentStatusPhasesEnum identity = _$enrichmentStatusPhasesEnum_identity;
-  @BuiltValueEnumConst(wireName: r'releases')
-  static const EnrichmentStatusPhasesEnum releases = _$enrichmentStatusPhasesEnum_releases;
-  @BuiltValueEnumConst(wireName: r'aux-art')
-  static const EnrichmentStatusPhasesEnum auxArt = _$enrichmentStatusPhasesEnum_auxArt;
-  @BuiltValueEnumConst(wireName: r'artist-art')
-  static const EnrichmentStatusPhasesEnum artistArt = _$enrichmentStatusPhasesEnum_artistArt;
-  @BuiltValueEnumConst(wireName: r'lyrics')
-  static const EnrichmentStatusPhasesEnum lyrics = _$enrichmentStatusPhasesEnum_lyrics;
-  @BuiltValueEnumConst(wireName: r'track-fields')
-  static const EnrichmentStatusPhasesEnum trackFields = _$enrichmentStatusPhasesEnum_trackFields;
-  @BuiltValueEnumConst(wireName: r'book-fields')
-  static const EnrichmentStatusPhasesEnum bookFields = _$enrichmentStatusPhasesEnum_bookFields;
-  @BuiltValueEnumConst(wireName: r'album-fields')
-  static const EnrichmentStatusPhasesEnum albumFields = _$enrichmentStatusPhasesEnum_albumFields;
-  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
-  static const EnrichmentStatusPhasesEnum unknownDefaultOpenApi = _$enrichmentStatusPhasesEnum_unknownDefaultOpenApi;
-
-  static Serializer<EnrichmentStatusPhasesEnum> get serializer => _$enrichmentStatusPhasesEnumSerializer;
-
-  const EnrichmentStatusPhasesEnum._(String name): super(name);
-
-  static BuiltSet<EnrichmentStatusPhasesEnum> get values => _$enrichmentStatusPhasesEnumValues;
-  static EnrichmentStatusPhasesEnum valueOf(String name) => _$enrichmentStatusPhasesEnumValueOf(name);
 }
 

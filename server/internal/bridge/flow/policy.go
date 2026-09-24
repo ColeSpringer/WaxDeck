@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxflow/client"
 )
 
@@ -389,15 +390,8 @@ func DeviceFormat(src Source, shape Shape, caps *client.Caps, accepts []string, 
 }
 
 // lossless reports whether a codec can be transcoded without
-// generation loss. The labels are the scan's, which lowercases
-// WaxLabel's own names and folds Monkey's Audio onto "ape".
-func lossless(codec string) bool {
-	switch codec {
-	case "pcm", "flac", "alac", "wavpack", "ape":
-		return true
-	}
-	return false
-}
+// generation loss, by the catalog's own reading of its codec labels.
+func lossless(codec string) bool { return model.LosslessCodec(codec) }
 
 // ShapeFor is the format policy, version zero: a pure function of the
 // source and the sidecar's live capabilities. Whole files direct-play

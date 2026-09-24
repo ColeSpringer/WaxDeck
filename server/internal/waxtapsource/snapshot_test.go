@@ -127,6 +127,29 @@ func TestPlaylistSnapshotLeavesAWhollyRefusedPassUnknown(t *testing.T) {
 	}
 }
 
+func TestPlaylistSnapshotFlagsLiveEntriesUnavailable(t *testing.T) {
+	f := &fakeTap{playlist: waxtap.Playlist{ID: "PL1", Entries: []waxtap.PlaylistEntry{
+		{VideoID: "vid-a", Title: "a", Index: 0, LiveStatus: waxtap.LiveUpcoming},
+		{VideoID: "vid-b", Title: "b", Index: 1, LiveStatus: waxtap.LiveNow},
+		{VideoID: "vid-c", Title: "c", Index: 2, LiveStatus: waxtap.LiveWasLive},
+	}}}
+	snap, err := snapshotProvider(f, 0).PlaylistSnapshot(context.Background(), "u", syncsource.SnapshotOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snap.Entries) != 3 {
+		t.Fatalf("entries = %d, want all three", len(snap.Entries))
+	}
+	for _, e := range snap.Entries[:2] {
+		if !e.AvailabilityKnown || !e.Unavailable {
+			t.Errorf("live entry not flagged unavailable: %+v", e)
+		}
+	}
+	if c := snap.Entries[2]; !c.AvailabilityKnown || c.Unavailable {
+		t.Errorf("a finished stream is an ordinary entry: %+v", c)
+	}
+}
+
 func TestPlaylistSnapshotCoverIsFirstAvailableThumbnail(t *testing.T) {
 	f := &fakeTap{
 		playlist: waxtap.Playlist{

@@ -16,6 +16,32 @@ void main() {
       expect(await store.read(ClientSettingKeys.sidebarCollapsed), isNull);
     });
 
+    // Waits out the snapshot a new store loads, without a test-only hook.
+    Future<void> snapshotOf(ClientSettingsStore s, String key) async {
+      for (var i = 0; i < 200 && s.peek(key) == null; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    test('what is stored answers without waiting once loaded', () async {
+      await store.write(ClientSettingKeys.sidebarCollapsed, 'true');
+      final next = DriftClientSettingsStore(db);
+      await snapshotOf(next, ClientSettingKeys.sidebarCollapsed);
+      expect(next.peek(ClientSettingKeys.sidebarCollapsed)?.value, 'true');
+      expect(next.peek(ClientSettingKeys.recentSearches), isNotNull);
+      expect(next.peek(ClientSettingKeys.recentSearches)?.value, isNull);
+    });
+
+    test('a change made while the snapshot loads is not lost to it', () async {
+      await store.write(ClientSettingKeys.sidebarCollapsed, 'true');
+      final next = DriftClientSettingsStore(db);
+      await next.write(ClientSettingKeys.recentSearches, '["a"]');
+      await next.remove(ClientSettingKeys.sidebarCollapsed);
+      await snapshotOf(next, ClientSettingKeys.recentSearches);
+      expect(next.peek(ClientSettingKeys.recentSearches)?.value, '["a"]');
+      expect(next.peek(ClientSettingKeys.sidebarCollapsed)?.value, isNull);
+    });
+
     test('a write is what the next read answers', () async {
       await store.write(ClientSettingKeys.sidebarCollapsed, 'true');
       expect(await store.read(ClientSettingKeys.sidebarCollapsed), 'true');
@@ -72,6 +98,12 @@ void main() {
       expect(await store.read('k'), 'v');
       await store.remove('k');
       expect(await store.read('k'), isNull);
+    });
+
+    test('answers only through read, as the stores that wait do', () async {
+      final store = MemoryClientSettingsStore();
+      await store.write('k', 'v');
+      expect(store.peek('k'), isNull);
     });
   });
 }

@@ -1,18 +1,22 @@
 package providers
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/colespringer/waxbin/art"
 	"github.com/colespringer/waxbin/enrich"
+	"github.com/colespringer/waxbin/model"
 )
 
 // conformanceStub is a minimal service implementing the published
@@ -146,35 +150,197 @@ func TestHTTPBridgeConformance(t *testing.T) {
 	}
 }
 
-// TestHTTPBridgeRefusesMarkupCovers pins the same door fetchImage
-// guards on remote-chosen URLs: a declared type that is not a picture,
-// SVG in particular, must not ride inline base64 past it.
-func TestHTTPBridgeRefusesMarkupCovers(t *testing.T) {
+// The release rung asks once for fields and once for a cover, so the
+// request says which, with the pressing's identifiers; a group-front
+// answer maps back.
+func TestHTTPBridgeCarriesTheReleaseRung(t *testing.T) {
 	t.Parallel()
+	var got atomic.Value
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/capabilities" {
-			fmt.Fprint(w, `{"name":"marky","capabilities":["cover"]}`)
+			fmt.Fprint(w, `{"name":"pressings","capabilities":["cover","fields"]}`)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]any{
-			"cover": map[string]string{
-				"data":      base64.StdEncoding.EncodeToString([]byte("<svg xmlns='...'/>")),
-				"mediaType": "image/svg+xml",
-			},
-		})
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decoding enrich body: %v", err)
+		}
+		got.Store(body)
+		fmt.Fprint(w, `{"frontIsGroupFront": true}`)
 	}))
 	defer srv.Close()
 	bridge, err := NewHTTPBridge(context.Background(), HTTPBridgeConfig{
-		Label: "marky", BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
+		Label: "pressings", BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
+	cand, err := bridge.Enrich(context.Background(), enrich.Request{
+		Type: enrich.TargetRelease, Want: enrich.CapCover,
+		Title: "Discovery", Barcode: "0724384960650", CatalogNumber: "7243 8 49606 5 0",
+		ReleaseGroupMBID: "48117b0e-1a4b-4ac5-8c2b-5a0b5a6c8f9e", GroupFrontHash: "c0ffee",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cand == nil || !cand.FrontIsGroupFront {
+		t.Fatalf("candidate = %+v, want the group's front taken as this pressing's", cand)
+	}
+	body := got.Load().(map[string]any)
+	for key, want := range map[string]string{
+		"type": "release", "barcode": "0724384960650", "catalogNumber": "7243 8 49606 5 0",
+		"releaseGroupMbid": "48117b0e-1a4b-4ac5-8c2b-5a0b5a6c8f9e", "groupFrontHash": "c0ffee",
+	} {
+		if body[key] != want {
+			t.Errorf("%s = %v, want %q", key, body[key], want)
+		}
+	}
+	if wants, _ := body["wants"].([]any); len(wants) != 1 || wants[0] != "cover" {
+		t.Errorf("wants = %v, want [cover]", body["wants"])
+	}
+
+	// No want is the pre-want contract, everything, so nothing is named.
 	if _, err := bridge.Enrich(context.Background(), enrich.Request{
-		Type: enrich.TargetReleaseGroup, Title: "Anything",
-	}); err == nil {
-		t.Error("an SVG cover was accepted")
+		Type: enrich.TargetRelease, Title: "Discovery",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if wants, ok := got.Load().(map[string]any)["wants"]; ok {
+		t.Errorf("wants = %v on an unstamped request, want it omitted", wants)
+	}
+}
+
+// scriptedBridge serves the capabilities document and answers every
+// enrich call with body, for the tests about how an answer maps back.
+func scriptedBridge(t *testing.T, caps string, body any) *HTTPBridge {
+	t.Helper()
+	return scriptedBridgeLogging(t, caps, body, nil)
+}
+
+func scriptedBridgeLogging(t *testing.T, caps string, body any, log *slog.Logger) *HTTPBridge {
+	t.Helper()
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/capabilities" {
+			fmt.Fprint(w, caps)
+			return
+		}
+		json.NewEncoder(w).Encode(body)
+	}))
+	t.Cleanup(srv.Close)
+	bridge, err := NewHTTPBridge(context.Background(), HTTPBridgeConfig{
+		Label: "scripted", BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond, Log: log,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bridge
+}
+
+// One refused image costs only itself: the rest of the answer lands, and
+// the refusal is logged for whoever runs the service.
+func TestHTTPBridgeKeepsTheRestOfAnAnswerPastABadImage(t *testing.T) {
+	t.Parallel()
+	good := map[string]string{"data": base64.StdEncoding.EncodeToString(testPNG(t)), "mediaType": "image/png"}
+	var logged bytes.Buffer
+	bridge := scriptedBridgeLogging(t, `{"name":"sleeves","capabilities":["cover","aux-art","lyrics","fields"]}`,
+		map[string]any{
+			"cover": good,
+			"art": map[string]any{
+				"back":    map[string]string{"data": "%not base64%"},
+				"disc":    map[string]string{"data": base64.StdEncoding.EncodeToString([]byte("junk")), "mediaType": "image/jpeg"},
+				"booklet": good,
+			},
+			"lyrics": map[string]any{"unsynced": "la la la"},
+			"fields": map[string]string{"label": "Virgin"},
+		}, slog.New(slog.NewTextHandler(&logged, nil)))
+
+	cand, err := bridge.Enrich(context.Background(), enrich.Request{Type: enrich.TargetRelease, Title: "Discovery"})
+	if err != nil || cand == nil {
+		t.Fatalf("answer = %+v, %v; want what was usable", cand, err)
+	}
+	if cand.Cover == nil || cand.Lyrics == nil || cand.Fields["label"] != "Virgin" {
+		t.Errorf("cover %v, lyrics %v, fields %v; want all three kept", cand.Cover != nil, cand.Lyrics != nil, cand.Fields)
+	}
+	if len(cand.Art) != 1 || cand.Art[model.ArtRoleBooklet] == nil {
+		t.Errorf("art = %v, want the booklet alone", cand.Art)
+	}
+	for _, role := range []string{"back", "disc"} {
+		if !strings.Contains(logged.String(), role) {
+			t.Errorf("log = %q, want the refused %s named", logged.String(), role)
+		}
+	}
+}
+
+// The aux-art and artist-art walks read the role map alone, so a remote
+// delivers those roles through `art`, and an artist's cover rides there too.
+func TestHTTPBridgeCarriesArtRoles(t *testing.T) {
+	t.Parallel()
+	png := testPNG(t)
+	img := map[string]string{"data": base64.StdEncoding.EncodeToString(png), "mediaType": "image/png"}
+	bridge := scriptedBridge(t, `{"name":"sleeves","capabilities":["cover","aux-art","artist-art"]}`,
+		map[string]any{"cover": img, "art": map[string]any{"back": img, "disc": img, "spine": img}})
+
+	cand, err := bridge.Enrich(context.Background(), enrich.Request{
+		Type: enrich.TargetReleaseGroup, Want: enrich.CapAuxArt, Title: "Discovery",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cand == nil || len(cand.Art) != 2 || cand.Art[model.ArtRoleBack] == nil || cand.Art[model.ArtRoleDisc] == nil {
+		t.Fatalf("art = %+v, want back and disc and no unknown role", cand)
+	}
+	if cand.Art[model.ArtRoleBack].Hash != art.Hash(png) {
+		t.Error("a bridged role image is not content-addressed")
+	}
+
+	cand, err = bridge.Enrich(context.Background(), enrich.Request{
+		Type: enrich.TargetArtist, Want: enrich.CapArtistArt, Artist: "Daft Punk",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cand == nil || cand.Art[model.ArtRoleFront] == nil {
+		t.Fatalf("artist answer = %+v, want its cover in the front role", cand)
+	}
+}
+
+// A group-front claim counts only on the release request that named the
+// group's front; anywhere else it would end the walk with no picture.
+func TestHTTPBridgeIgnoresAnUnaskedGroupFront(t *testing.T) {
+	t.Parallel()
+	bridge := scriptedBridge(t, `{"name":"claims","capabilities":["cover"]}`,
+		map[string]any{"frontIsGroupFront": true})
+	for _, req := range []enrich.Request{
+		{Type: enrich.TargetReleaseGroup, Want: enrich.CapCover, Title: "Discovery", GroupFrontHash: "c0ffee"},
+		{Type: enrich.TargetRelease, Want: enrich.CapCover, Title: "Discovery"},
+	} {
+		cand, err := bridge.Enrich(context.Background(), req)
+		if err != nil || cand != nil {
+			t.Errorf("%s answer = %+v (%v), want a clean miss", req.Type, cand, err)
+		}
+	}
+}
+
+// TestHTTPBridgeRefusesMarkupCovers pins the same door fetchImage
+// guards on remote-chosen URLs: SVG must not ride inline base64 past it
+// under any spelling of its type, and nor may bytes nothing recognizes.
+func TestHTTPBridgeRefusesMarkupCovers(t *testing.T) {
+	t.Parallel()
+	svg := base64.StdEncoding.EncodeToString([]byte("<svg xmlns='http://www.w3.org/2000/svg'/>"))
+	for _, cover := range []map[string]string{
+		{"data": svg, "mediaType": "image/svg+xml"},
+		{"data": svg, "mediaType": "image/svg+xml; charset=utf-8"},
+		{"data": svg, "mediaType": "Image/SVG+XML"},
+		{"data": svg},
+		{"data": base64.StdEncoding.EncodeToString([]byte("not a picture")), "mediaType": "image/png"},
+	} {
+		bridge := scriptedBridge(t, `{"name":"marky","capabilities":["cover"]}`, map[string]any{"cover": cover})
+		cand, err := bridge.Enrich(context.Background(), enrich.Request{Type: enrich.TargetReleaseGroup, Title: "Anything"})
+		if err != nil || cand != nil {
+			t.Errorf("cover typed %q = %+v, %v; want it refused and nothing else answered", cover["mediaType"], cand, err)
+		}
 	}
 }
 

@@ -1371,10 +1371,10 @@ abstract class AppLocalizations {
   /// **'Enrich metadata'**
   String get adminScheduleEnrich;
 
-  /// What the scheduled enrichment does, its nightly cap, and the rule that a decline is not retried until an administrator forces a run.
+  /// What the scheduled enrichment does, its nightly cap, and when something no provider could answer is asked about again.
   ///
   /// In en, this message translates to:
-  /// **'Fills missing metadata, artwork, and lyrics from the configured providers. Capped at 2000 items a night, so a large library fills in over several nights; a run started by hand is uncapped. A provider that declines something is not asked again until a forced run.'**
+  /// **'Fills missing metadata, artwork, and lyrics from the configured providers. Capped at 2000 items a night, so a large library fills in over several nights; a run started by hand is uncapped. The server\'s configuration sets how long something no provider could answer waits before it is asked about again, 30 days by default.'**
   String get adminScheduleEnrichBlurb;
 
   /// When a scheduled job last ran. {stamp} is an already-formatted date and time.

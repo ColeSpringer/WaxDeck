@@ -2,12 +2,14 @@ package waxtapsource
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -64,16 +66,18 @@ func (f *fakeTap) Enumerate(ctx context.Context, _ string, opts waxtap.Enumerate
 	if !opts.Enrich {
 		return out, nil
 	}
-	// Enrichment mirrors the real client: the leading MaxEnrich entries get a
-	// lookup, a success refreshes the entry's listing fields and attaches what
-	// it fetched, and a failure lands in Errors as an EnrichError naming the
-	// entry's own playlist position. The rotation the real one runs is not
-	// modeled - a test names the verdict it wants the caller to see.
-	total := len(out.Entries)
-	if opts.MaxEnrich > 0 && opts.MaxEnrich < total {
-		total = opts.MaxEnrich
-	}
-	for i := range total {
+	// Enrichment mirrors the real client's: the leading MaxEnrich entries that
+	// are not live get a lookup, a fetched field left empty keeps the listing's,
+	// and a failure lands in Errors under the entry's playlist position.
+	asked := 0
+	for i := range out.Entries {
+		if opts.MaxEnrich > 0 && asked == opts.MaxEnrich {
+			break
+		}
+		if s := out.Entries[i].LiveStatus; s == waxtap.LiveNow || s == waxtap.LiveUpcoming {
+			continue
+		}
+		asked++
 		v, err := f.Info(ctx, out.Entries[i].VideoID, waxtap.InfoBasic, opts.EnrichOptions...)
 		if err != nil {
 			out.Errors = append(out.Errors, &waxtap.EnrichError{
@@ -84,9 +88,9 @@ func (f *fakeTap) Enumerate(ctx context.Context, _ string, opts waxtap.Enumerate
 			continue
 		}
 		out.Entries[i].Video = v
-		out.Entries[i].Title = v.Title
-		out.Entries[i].Author = v.Author
-		out.Entries[i].Duration = v.Duration
+		out.Entries[i].Title = cmp.Or(v.Title, out.Entries[i].Title)
+		out.Entries[i].Author = cmp.Or(v.Author, out.Entries[i].Author)
+		out.Entries[i].Duration = cmp.Or(v.Duration, out.Entries[i].Duration)
 	}
 	return out, nil
 }
@@ -564,6 +568,137 @@ func TestEnumerateStillDropsAPartlyRefusedPass(t *testing.T) {
 	}
 }
 
+// episodeGUIDs lists a feed's episode ids in order.
+func episodeGUIDs(feed *model.Feed) []string {
+	var out []string
+	for _, ep := range feed.Episodes {
+		out = append(out, ep.GUID)
+	}
+	return out
+}
+
+// A live or upcoming broadcast cannot download until it ends, so it is not
+// cataloged, and the cursor stays below one at the top of the feed so the
+// entry is listed again once it has.
+func TestEnumerateDropsLiveAndUpcomingEntries(t *testing.T) {
+	f := channelFake(5)
+	f.playlist.Entries[0].LiveStatus = waxtap.LiveUpcoming // vid(5), the newest
+	f.playlist.Entries[2].LiveStatus = waxtap.LiveNow      // vid(3)
+	f.playlist.Entries[3].LiveStatus = waxtap.LiveWasLive  // vid(2), a finished stream
+	p := testProvider(t, f, nil)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if got, want := episodeGUIDs(enum.Feed), []string{vid(4), vid(2), vid(1)}; !slices.Equal(got, want) {
+		t.Errorf("episodes = %v, want %v", got, want)
+	}
+	if enum.ETag != vid(4) {
+		t.Errorf("ETag = %q, want the newest entry that is not live, %q", enum.ETag, vid(4))
+	}
+}
+
+// A long file downloads four 10 MiB chunks at once, and each has to land
+// inside the chunk deadline over a slow home link, unattended.
+func TestChunkDeadlineFitsASlowLink(t *testing.T) {
+	const chunkBits, parallel, linkBitsPerSecond = 10 << 20 * 8, 4, 600_000
+	need := time.Duration(chunkBits*parallel/linkBitsPerSecond) * time.Second
+	if tapTimeouts.ChunkRetry < need {
+		t.Errorf("ChunkRetry = %v, want at least %v for a 600 kbit/s link", tapTimeouts.ChunkRetry, need)
+	}
+}
+
+// A premiere at the top of a channel has no video to lend the feed its
+// image, so the newest entry that does lends it instead.
+func TestEnumerateTakesTheImagePastALiveEntry(t *testing.T) {
+	f := channelFake(3)
+	f.playlist.Entries[0].LiveStatus = waxtap.LiveUpcoming // vid(3)
+	p := testProvider(t, f, nil)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if want := "https://i.ytimg.com/vi/" + vid(2) + "/max.jpg"; enum.Feed.ImageURL != want {
+		t.Errorf("feed image = %q, want %q", enum.Feed.ImageURL, want)
+	}
+}
+
+// Once a newer upload lists above it, an upcoming entry no longer holds the cursor.
+func TestEnumerateCursorPassesAnUpcomingEntryBelowANewerUpload(t *testing.T) {
+	f := channelFake(3)
+	f.playlist.Entries[1].LiveStatus = waxtap.LiveUpcoming // vid(2)
+	p := testProvider(t, f, nil)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if enum.ETag != vid(3) {
+		t.Errorf("ETag = %q, want %q", enum.ETag, vid(3))
+	}
+}
+
+// Only a live entry is new, so the feed is unchanged: the answer is
+// NotModified rather than an empty feed written every poll.
+func TestEnumerateHoldsTheCursorUnderOnlyLiveEntries(t *testing.T) {
+	f := channelFake(4)
+	f.playlist.Entries[0].LiveStatus = waxtap.LiveNow // vid(4)
+	p := testProvider(t, f, nil)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u", ETag: vid(3)})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if !enum.NotModified || enum.Feed != nil {
+		t.Errorf("enumeration = %+v, want NotModified", enum)
+	}
+	if enum.ETag != vid(3) {
+		t.Errorf("ETag = %q, want the incoming cursor %q held", enum.ETag, vid(3))
+	}
+}
+
+// The wholesale rule counts what WaxTap reports it attempted, not a copy
+// of its selection rule: five refusals are the whole pass when only five
+// entries were asked about.
+func TestEnrichFailuresCountsWhatThePassAttempted(t *testing.T) {
+	pl := &waxtap.Playlist{}
+	for i := range 10 {
+		pl.Entries = append(pl.Entries, waxtap.PlaylistEntry{VideoID: vid(i), Index: i})
+	}
+	for i := range 5 {
+		pl.Errors = append(pl.Errors, &waxtap.EnrichError{VideoID: vid(i), Index: i, Err: provenUnplayableErr()})
+	}
+	p := testProvider(t, channelFake(1), nil)
+	if _, wholesale := p.enrichFailures(pl); !wholesale {
+		t.Error("five refusals out of five attempts did not read as a refused pass")
+	}
+}
+
+// A live entry is not one the budget reached, so it cannot mask a wholly
+// refused pass.
+func TestEnumerateKeepsAWhollyRefusedPassBesideALiveEntry(t *testing.T) {
+	f := channelFake(6)
+	f.playlist.Entries[0].LiveStatus = waxtap.LiveNow // vid(6)
+	f.infoErrs = map[string]error{}
+	for i := 5; i >= 1; i-- {
+		f.infoErrs[vid(i)] = provenUnplayableErr()
+	}
+	p := testProvider(t, f, nil)
+
+	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
+	if err != nil {
+		t.Fatalf("Enumerate: %v", err)
+	}
+	if len(enum.Feed.Episodes) != 5 {
+		t.Fatalf("episodes = %v, want the five refused entries kept", episodeGUIDs(enum.Feed))
+	}
+	if enum.ETag != "" {
+		t.Errorf("ETag = %q, want the cursor held", enum.ETag)
+	}
+}
+
 func TestEnumerateHardInfoErrorFails(t *testing.T) {
 	f := channelFake(2)
 	f.infoErrs = map[string]error{
@@ -824,6 +959,7 @@ func TestFetchLogsDownloadWarnings(t *testing.T) {
 		// closed list and everything else warns, so a new one describing
 		// a worse delivery lands on the right side without being named.
 		{Code: waxtap.WarnImplicitLossy, Detail: "opus re-encoded into m4a"},
+		{Code: waxtap.WarnInputNote, Detail: "ignored a data stream"},
 	}
 	var logs bytes.Buffer
 	p := testProvider(t, f, &logs)
@@ -838,9 +974,16 @@ func TestFetchLogsDownloadWarnings(t *testing.T) {
 		`level=WARN msg="youtube download degraded" url=`,
 		`code=proceed-uncut`,
 		`code=implicit-lossy`,
+		`code=input-note`,
 	} {
 		if !strings.Contains(logs.String(), want) {
 			t.Errorf("missing %q in logs:\n%s", want, logs.String())
+		}
+	}
+	// A remark about a well-formed file is not a degraded delivery.
+	for _, line := range strings.Split(logs.String(), "\n") {
+		if strings.Contains(line, "code=input-note") && !strings.Contains(line, "level=INFO") {
+			t.Errorf("input note logged as degraded: %s", line)
 		}
 	}
 }

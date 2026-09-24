@@ -596,6 +596,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/enrichment-cache": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Census the enrichment response cache
+         * @description What the catalog's cache of enrichment answers holds, by request kind, and the share a prune leaves alone. Read-only. Administrators only.
+         */
+        get: operations["getEnrichmentCache"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/enrichment-cache/prune": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Prune the enrichment response cache
+         * @description Drops cached answers to fit the policy. A pruned answer costs one request on its next re-ask, never a catalog value; the archive's group records are kept. At least one bound. Administrators only.
+         */
+        post: operations["pruneEnrichmentCache"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/migrations/exports": {
         parameters: {
             query?: never;
@@ -1149,9 +1189,7 @@ export interface paths {
         put?: never;
         /**
          * Run a whole-library enrichment pass
-         * @description Starts the catalog's enrichment pass as a background job (identity resolution first, then providers in priority order, provider-paced). `force` re-enriches entities that already enriched once. Locked and unofficial-marked content is respected. Returns the catalog job to follow. Administrators only.
-         *
-         *     Refuses with `source-unavailable` when no phase could run: neither a MusicBrainz contact nor a provider gating a phase of its own. That is what `enrichmentStatus.configured` reports, and `enrichmentStatus.phases` says which phases a run would execute - read them first rather than offering a button that errors, or one that promises identity resolution a contact-less server will not do.
+         * @description Starts the whole-library enrichment pass as a job: `force` re-asks everything, `forcePhases` the named phases alone. Refuses with `source-unavailable` when no phase could run. Administrators only.
          */
         post: operations["runEnrichment"];
         delete?: never;
@@ -5409,7 +5447,7 @@ export interface components {
         /**
          * @description A schedulable job kind. A shared named schema on purpose (the path parameter and the schedule object both use it): identical inline enums make the Dart generator emit one enum class into two files, which does not compile.
          *     `analyze` is off by default and costs a full audio decode per file; see `POST /library/analyze` for what it produces and what it costs. A firing that collides with an analyze pass already running is skipped rather than recorded as run, so it retries on the next tick instead of waiting for the next scheduled window.
-         *     `enrich` is on by default and runs the whole-library enrichment pass, capped per night so a large library's first pass is paid over several nights rather than in one long unattended run; an administrator's own run through `POST /library/enrichment/run` is uncapped. The cap is spent in phase order, so on a server with a MusicBrainz contact the identity phases drain first and the artwork and fields walks wait behind them. It is not forced, so a target some provider already declined is not asked again until a forced run. A firing that collides with a pass already running is skipped the way `analyze` is.
+         *     `enrich` is on by default: the whole-library pass, capped per night (a hand-started run is not), and not forced, so a miss is asked about again only once the retry window has passed.
          * @enum {string}
          */
         ScheduleKind: "scan" | "backup" | "prune" | "analyze" | "enrich";
@@ -5634,6 +5672,75 @@ export interface components {
         /** @description What a thumbnail-cache prune dropped. */
         ThumbnailPruneResult: {
             /** @description Cached thumbnails dropped. */
+            removed: number;
+            /**
+             * Format: int64
+             * @description What they held. Freed inside the catalog file rather than returned to the filesystem.
+             */
+            freedBytes: number;
+        };
+        /** @description What the enrichment response cache holds. */
+        EnrichmentCacheReport: {
+            /** @description Cached answers held, the exempt ones included. */
+            rows: number;
+            /**
+             * Format: int64
+             * @description What they cost.
+             */
+            bytes: number;
+            /**
+             * Format: date-time
+             * @description When the oldest cached answer was fetched. Absent when the cache is empty.
+             */
+            oldestAt?: string;
+            /**
+             * Format: date-time
+             * @description When the newest cached answer was fetched. Absent when the cache is empty.
+             */
+            newestAt?: string;
+            /** @description Per-kind breakdown, largest first. */
+            kinds: components["schemas"]["EnrichmentCacheKind"][];
+            /** @description Rows a prune leaves alone: the Cover Art Archive's group records, facts about stored covers rather than cached answers. */
+            exemptRows: number;
+            /**
+             * Format: int64
+             * @description What those cost.
+             */
+            exemptBytes: number;
+        };
+        /** @description One request kind's share of the enrichment cache. */
+        EnrichmentCacheKind: {
+            /**
+             * @description The provider and endpoint the answers came from.
+             * @example mb:artist
+             */
+            kind: string;
+            /** @description Cached answers of this kind. */
+            rows: number;
+            /**
+             * Format: int64
+             * @description What they cost.
+             */
+            bytes: number;
+            /** @description Whether a prune leaves this kind alone. */
+            exempt: boolean;
+        };
+        /** @description Which cached answers to drop. Each bound is optional but one must be given, so a request with neither is refused rather than read as "everything". Zero is a value, not an absence. */
+        EnrichmentCachePruneRequest: {
+            /**
+             * Format: int64
+             * @description Drop answers fetched at least this long ago. Absent leaves the age unbounded.
+             */
+            olderThanSeconds?: number;
+            /**
+             * Format: int64
+             * @description Evict oldest-first until the prunable rows fit this many bytes. Absent leaves the size unbounded.
+             */
+            maxBytes?: number;
+        };
+        /** @description What an enrichment-cache prune dropped. */
+        EnrichmentCachePruneResult: {
+            /** @description Cached answers dropped. */
             removed: number;
             /**
              * Format: int64
@@ -6206,14 +6313,10 @@ export interface components {
              *     False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key.
              */
             configured: boolean;
-            /**
-             * @description Whether the MusicBrainz identity phases can run. They need an identifying contact, which is boot configuration (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and not a runtime setting, because MusicBrainz requires an identifying agent before anything is sent.
-             *
-             *     It gates the lyrics phase too, whose built-in provider needs no key but is not dialled without an identifying agent. The phases that answer to registered providers (artwork, fields, book metadata, and lyrics where a provider supplies them) run without it, so a server with no contact still enriches - just not identity. A console that says "enrichment is off" on this being false would be wrong about the half that does run.
-             */
+            /** @description Whether the MusicBrainz identity phases can run, which needs the `WAXDECK_ENRICHMENT_CONTACT` boot setting. The Cover Art Archive and LRCLIB wait on it too; the provider-gated phases do not. */
             musicbrainzConfigured: boolean;
-            /** @description The phases a run started now would execute, in no particular order. Empty exactly when `configured` is false. `identity` and `releases` need the MusicBrainz contact, and so does `lyrics` unless a registered provider supplies them; the rest need a registered provider advertising the matching capability. */
-            phases: ("identity" | "releases" | "aux-art" | "artist-art" | "lyrics" | "track-fields" | "book-fields" | "album-fields")[];
+            /** @description The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider, the rest a provider. */
+            phases: components["schemas"]["EnrichmentPhase"][];
             lastRun?: components["schemas"]["EnrichmentLastRun"];
         };
         /** @description One enrichment provider. */
@@ -6223,31 +6326,47 @@ export interface components {
              * @example fanarttv
              */
             name: string;
-            /**
-             * @description What it supplies: `identity`, `genres`, `cover`, `lyrics`, `book`, `aux-art`, `artist-art`, `fields`. Strings, not a closed enum. `cover` is the front cover of a release group; `aux-art` its other slots (back, disc, booklet, background); `artist-art` an artist's own images. The three are separate because they gate separate passes - a provider that only knows front covers must not pull the whole artist catalogue into a walk it cannot answer.
-             *
-             *     `fields` is scalar metadata with no artwork in it - a track's tempo, ISRC or composer, an album's label or year - and gates the two fields walks, one per rung. `book` covers the same ground for audiobooks (publisher, narrator, the identifiers) and gates the book walk.
-             */
+            /** @description What it supplies, as open strings: `identity`, `genres`, `cover` (a front), `aux-art` (the other slots), `artist-art`, `lyrics`, `book` and `fields`, each gating its own pass. */
             capabilities: string[];
-            /** @description Whether the provider can run: a keyed one once its key is set, a built-in once the MusicBrainz contact is. Key-free is not the same as configured - the built-ins are public services that want an identifying agent, and the catalog does not register them without one. */
+            /** @description Whether the provider can run: a keyed one once its key is set, a built-in once the MusicBrainz contact is, since the catalog registers none of the key-free public services without one. */
             configured: boolean;
             /** @description True for the catalog's built-ins. */
             builtin: boolean;
         };
-        /**
-         * @description What the most recent finished whole-library pass did. Absent until one has finished.
-         *
-         *     Coverage answers how much of the library is enriched; this answers whether the last pass accomplished anything, which coverage cannot. A pass that searched two thousand albums and matched none leaves coverage exactly where it was, and so does one whose every tag write failed; both read as "nothing happened" without these counts.
-         */
+        /** @description What the most recent finished pass did, every tally it keeps; absent until one has finished. Each walk counts what it looked up and what something answered for. */
         EnrichmentLastRun: {
+            /** @description Artists the MusicBrainz identity walk looked up. */
+            artistsEnriched: number;
+            /** @description Artists it resolved. */
+            artistsMatched: number;
+            /** @description Release groups the identity walk looked up. */
+            releaseGroupsEnriched: number;
+            /** @description Release groups it resolved. */
+            releaseGroupsMatched: number;
             /** @description Albums the release match looked up: which pressing of a record the library holds, resolved from a barcode or a catalog number. */
             albumsSearched: number;
             /** @description Albums it pinned to a release. Searched without matched is a library whose albums carry no identifiers, not a broken pass. */
             albumsMatched: number;
+            /** @description Audiobooks the identity walk looked up. */
+            booksEnriched: number;
+            /** @description Audiobooks it resolved. */
+            booksMatched: number;
+            /** @description Tracks the lyrics walk looked up. */
+            lyricsEnriched: number;
+            /** @description Tracks some provider answered lyrics for. */
+            lyricsMatched: number;
+            /** @description Release groups the auxiliary-art backfill looked at: a front settled, a back, disc, booklet or background slot empty. */
+            auxArtEnriched: number;
+            /** @description Release groups some provider answered for. */
+            auxArtMatched: number;
             /** @description Artists the artwork walk looked at. It reaches every artist by name, so this counts the ones still missing a portrait rather than the ones MusicBrainz matched. */
             artistArtEnriched: number;
             /** @description Artists some provider answered a picture for. */
             artistArtMatched: number;
+            /** @description Albums the album-art backfill looked at: ones that resolve no front cover at all, asked about by their own identifiers. */
+            albumArtEnriched: number;
+            /** @description Albums some provider answered for. */
+            albumArtMatched: number;
             /** @description Tracks the fields walk looked up, filling tempo, ISRC and composer where they were empty and unlocked. */
             trackFieldsEnriched: number;
             /** @description Tracks some provider answered for. */
@@ -6260,6 +6379,14 @@ export interface components {
             albumFieldsEnriched: number;
             /** @description Albums some provider answered for. */
             albumFieldsMatched: number;
+            /** @description Targets re-asked because their earlier miss had outlived the retry window. The walks above count them too. */
+            retried: number;
+            /** @description Front covers downloaded and handed to the catalog, across every walk. The catalog still fills only empty, unlocked slots. */
+            artFetched: number;
+            /** @description Back, disc, booklet and background images, counted the same way. */
+            auxArtFetched: number;
+            /** @description Album fronts taken from the release group's picture, on a provider's word that it is that pressing's own; nothing was downloaded for them. */
+            artReused: number;
             /** @description Files the pass wrote enriched values back into. Zero unless tag write-back is on, which is what makes enrichment survive a rescan. */
             tagsWritten: number;
             /** @description Files whose write failed. The catalog kept the values either way. */
@@ -6295,7 +6422,14 @@ export interface components {
              * @default false
              */
             force: boolean;
+            /** @description Re-ask these phases alone, marked or not, while the rest walk as usual. Refused beside `force` (400), and with `source-unavailable` for a phase this server does not run. */
+            forcePhases?: components["schemas"]["EnrichmentPhase"][];
         };
+        /**
+         * @description One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name.
+         * @enum {string}
+         */
+        EnrichmentPhase: "identity" | "releases" | "aux-art" | "artist-art" | "album-art" | "lyrics" | "track-fields" | "book-fields" | "album-fields";
         /** @description The started pass. */
         EnrichmentRunResult: {
             /** @description The catalog job to follow. */
@@ -12396,6 +12530,57 @@ export interface operations {
             503: components["responses"]["CatalogMaintenance"];
         };
     };
+    getEnrichmentCache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cache census. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichmentCacheReport"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    pruneEnrichmentCache: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrichmentCachePruneRequest"];
+            };
+        };
+        responses: {
+            /** @description What the prune dropped. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichmentCachePruneResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
     stageMigrationExport: {
         parameters: {
             query?: never;
@@ -13201,6 +13386,7 @@ export interface operations {
                     "application/json": components["schemas"]["EnrichmentRunResult"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["Conflict"];

@@ -144,6 +144,7 @@ var recoveredWarnings = map[waxtap.WarningCode]bool{
 	waxtap.WarnThrottled:          true,
 	waxtap.WarnWebContextRetry:    true, // the attested context was capped; a fresh one worked
 	waxtap.WarnSessionRotated:     true, // googlevideo capped the identity; a fresh one worked
+	waxtap.WarnInputNote:          true, // a remark about a well-formed file, not damage
 }
 
 // warningEvents returns the hook that surfaces a download's non-fatal conditions.

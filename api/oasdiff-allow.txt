@@ -2,24 +2,9 @@
 # Temporary by construction: this file rides the change that makes the
 # break and is deleted once the base ref contains it.
 #
-# `LibraryMatching` gains `singlesAutoApply` as a required field in the
-# same release that introduces it. The PUT is a full replace, so a body
-# without the flag has no honest reading - silently defaulting it would
-# let a client that never learned the field wipe another admin's opt-in
-# without ever expressing an opinion. Required also keeps the three
-# generated mirrors (Go, Dart, TypeScript) agreeing that the field is
-# always present, matching the sibling `LibraryReadOnly` schema.
-# WaxDeck's own app ships with the server pre-1.0, and no external
-# client has had a release to write to this admin-only endpoint.
-PUT /libraries/{pid}/matching added the new required request property 'singlesAutoApply'
-
-# `ScheduleKind` gains `enrich` in the release that adds the nightly
-# enrichment schedule. The enum is closed on purpose (it is a path
-# parameter as well as a response field, and a shared named schema so
-# the Dart generator emits one enum class rather than two), so a new
-# kind is always this shape. A client that predates it reads the row as
-# the generator's sentinel and shows the raw kind - the schedules screen
-# already falls through to the kind string for exactly this - and never
-# writes one, since the screen builds the path from the row it read.
-GET /admin/schedules added the new 'enrich' enum value to the 'schedules/items/kind' response property for the response status '200'
-PUT /admin/schedules/{kind} added the new 'enrich' enum value to the 'kind' response property for the response status '200'
+# `EnrichmentPhase` gains `album-art` in the release that adds the
+# catalog's album-art backfill. The enum is closed on purpose (the run
+# request's `forcePhases` names phases from it), so a new phase is always
+# this shape. A client that predates it reads the value as the
+# generator's sentinel; nothing in WaxDeck's own app reads `phases`.
+GET /library/enrichment added the new 'album-art' enum value to the 'phases/items/' response property for the response status '200'

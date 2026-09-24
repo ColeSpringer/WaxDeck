@@ -19,7 +19,7 @@ func TestEveryServerEnvVarIsDocumented(t *testing.T) {
 		t.Fatalf("reading docs/configuration.md: %v", err)
 	}
 
-	read := regexp.MustCompile(`(?:envOr|envIntOr|envInt64Or|os\.Getenv)\(\s*"(WAXDECK_[A-Z0-9_]+)"`)
+	read := regexp.MustCompile(`(?:(?:envOr|os\.Getenv)\(\s*|\.(?:Bool|Int|Int64)\(\s*"[a-z0-9-]+",\s*)"(WAXDECK_[A-Z0-9_]+)"`)
 	keys := map[string][]string{}
 	root := filepath.Join("..", "..")
 	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

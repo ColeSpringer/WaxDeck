@@ -5,9 +5,11 @@ package service
 // health fix queue.
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,6 +23,7 @@ import (
 	waxlabel "github.com/colespringer/waxlabel"
 
 	"github.com/colespringer/waxdeck/server/internal/genre"
+	"github.com/colespringer/waxdeck/server/internal/providers"
 )
 
 // enrichAsk dispatches one provider lookup, naming the capability the
@@ -76,37 +79,51 @@ type EnrichmentCoverageDTO struct {
 	Lyrics        CoverageCountDTO
 }
 
-// EnrichmentLastRunDTO is what the most recent finished pass did.
-//
-// Coverage says how much of the library is enriched; this says whether the
-// last pass accomplished anything, which coverage cannot: a pass that matched
-// nothing, and one whose every tag write failed, both leave coverage put.
+// EnrichmentLastRunDTO is what the most recent finished pass did: the
+// catalog's own tallies, one for one. Each walk counts what it looked up
+// and what some source answered for.
 type EnrichmentLastRunDTO struct {
-	// The release match: which pressing the library holds, from a barcode
-	// or catalog number. Searched without matched is a library whose
-	// albums carry no identifiers, not a broken pass.
-	AlbumsSearched int
-	AlbumsMatched  int
-	// The provider-gated walks: artists the artwork walk looked at, and
-	// the three fields walks, each with what some provider answered
-	// for. Enriched without matched is a library the providers do not
-	// know, not a broken pass.
-	ArtistArtEnriched   int
-	ArtistArtMatched    int
-	TrackFieldsEnriched int
-	TrackFieldsMatched  int
-	BookFieldsEnriched  int
-	BookFieldsMatched   int
-	AlbumFieldsEnriched int
-	AlbumFieldsMatched  int
-	// Zero unless the run wrote tags. Unrepresented is not a failure: the
-	// format cannot store the key and the bytes are unchanged.
-	TagsWritten       int
-	TagsFailed        int
-	TagsUnrepresented int
-	TagsSkipped       int
+	ArtistsEnriched, ArtistsMatched             int
+	ReleaseGroupsEnriched, ReleaseGroupsMatched int
+	AlbumsSearched, AlbumsMatched               int
+	BooksEnriched, BooksMatched                 int
+	LyricsEnriched, LyricsMatched               int
+	AuxArtEnriched, AuxArtMatched               int
+	ArtistArtEnriched, ArtistArtMatched         int
+	AlbumArtEnriched, AlbumArtMatched           int
+	TrackFieldsEnriched, TrackFieldsMatched     int
+	BookFieldsEnriched, BookFieldsMatched       int
+	AlbumFieldsEnriched, AlbumFieldsMatched     int
+	// Retried counts re-asks of expired misses, which the walks count too.
+	Retried int
+	// Images handed to the catalog, and album fronts reused from the group's.
+	ArtFetched, AuxArtFetched, ArtReused int
+	// Zero unless the run wrote tags.
+	TagsWritten, TagsFailed, TagsUnrepresented, TagsSkipped int
 	// 0 means no pass has finished, so the zeros above mean "not yet".
 	FinishedAtNS int64
+}
+
+// lastRunFrom maps a finished pass's tallies onto the status surface.
+func lastRunFrom(r enrich.Result, finishedAtNS int64) *EnrichmentLastRunDTO {
+	return &EnrichmentLastRunDTO{
+		ArtistsEnriched: r.ArtistsEnriched, ArtistsMatched: r.ArtistsMatched,
+		ReleaseGroupsEnriched: r.ReleaseGroupsEnriched, ReleaseGroupsMatched: r.ReleaseGroupsMatched,
+		AlbumsSearched: r.AlbumsSearched, AlbumsMatched: r.AlbumsMatched,
+		BooksEnriched: r.BooksEnriched, BooksMatched: r.BooksMatched,
+		LyricsEnriched: r.LyricsEnriched, LyricsMatched: r.LyricsMatched,
+		AuxArtEnriched: r.AuxArtEnriched, AuxArtMatched: r.AuxArtMatched,
+		ArtistArtEnriched: r.ArtistArtEnriched, ArtistArtMatched: r.ArtistArtMatched,
+		AlbumArtEnriched: r.AlbumArtEnriched, AlbumArtMatched: r.AlbumArtMatched,
+		TrackFieldsEnriched: r.TrackFieldsEnriched, TrackFieldsMatched: r.TrackFieldsMatched,
+		BookFieldsEnriched: r.BookFieldsEnriched, BookFieldsMatched: r.BookFieldsMatched,
+		AlbumFieldsEnriched: r.AlbumFieldsEnriched, AlbumFieldsMatched: r.AlbumFieldsMatched,
+		Retried:    r.Retried,
+		ArtFetched: r.ArtFetched, AuxArtFetched: r.AuxArtFetched, ArtReused: r.ArtReused,
+		TagsWritten: r.TagsWritten, TagsFailed: r.TagsFailed,
+		TagsUnrepresented: r.TagsUnrepresented, TagsSkipped: r.TagsSkipped,
+		FinishedAtNS: finishedAtNS,
+	}
 }
 
 // EnrichmentStatusDTO is the status surface aggregate.
@@ -128,99 +145,85 @@ type EnrichmentStatusDTO struct {
 	LastRun *EnrichmentLastRunDTO
 }
 
-// Enrichment phase names, as the status surface reports them. They are
-// coarser than the catalog's own phase labels: identity covers the
-// artist, album and book identity walks, which are one gate.
-const (
-	enrichPhaseIdentity    = "identity"
-	enrichPhaseReleases    = "releases"
-	enrichPhaseAuxArt      = "aux-art"
-	enrichPhaseArtistArt   = "artist-art"
-	enrichPhaseLyrics      = "lyrics"
-	enrichPhaseTrackFields = "track-fields"
-	enrichPhaseBookFields  = "book-fields"
-	enrichPhaseAlbumFields = "album-fields"
-)
+// enrichPhaseSpec is one phase as the status surface names it: what opens
+// it (the contact when gate is zero), the catalog phases a force of it
+// names, and what it needs, in this server's knobs.
+type enrichPhaseSpec struct {
+	name    string
+	gate    enrich.Capability
+	match   bool // needs the release match too
+	catalog []model.EnrichPhase
+	needs   string
+}
+
+// enrichPhaseTable is every phase in run order. It copies the gating
+// upstream's Run applies, since the facade exports no phase list; the
+// phases test pins it phase by phase against the catalog's own check.
+var enrichPhaseTable = []enrichPhaseSpec{
+	{name: "identity", catalog: []model.EnrichPhase{model.EnrichPhaseArtist, model.EnrichPhaseReleaseGroup, model.EnrichPhaseBook},
+		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT)"},
+	{name: "releases", match: true, catalog: []model.EnrichPhase{model.EnrichPhaseAlbumRelease},
+		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) and -enrichment-match-releases (WAXDECK_ENRICHMENT_MATCH_RELEASES)"},
+	{name: "aux-art", gate: enrich.CapAuxArt, catalog: []model.EnrichPhase{model.EnrichPhaseAuxArt},
+		needs: "it needs a provider of back, disc, booklet or background art, such as fanart.tv (WAXDECK_FANARTTV_KEY)"},
+	{name: "artist-art", gate: enrich.CapArtistArt, catalog: []model.EnrichPhase{model.EnrichPhaseArtistArt},
+		needs: "artist art is off (WAXDECK_ARTIST_ART=false)"},
+	{name: "album-art", gate: enrich.CapCover | enrich.CapAuxArt, catalog: []model.EnrichPhase{model.EnrichPhaseAlbumArt},
+		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) or a provider of covers or auxiliary art"},
+	{name: "lyrics", gate: enrich.CapLyrics, catalog: []model.EnrichPhase{model.EnrichPhaseLyrics},
+		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) or a lyrics provider"},
+	{name: "track-fields", gate: enrich.CapFields, catalog: []model.EnrichPhase{model.EnrichPhaseTrackFields},
+		needs: "no registered provider supplies fields"},
+	{name: "book-fields", gate: enrich.CapBookMeta, catalog: []model.EnrichPhase{model.EnrichPhaseBookFields},
+		needs: "no registered provider supplies book metadata"},
+	{name: "album-fields", gate: enrich.CapFields, catalog: []model.EnrichPhase{model.EnrichPhaseAlbumFields},
+		needs: "no registered provider supplies fields"},
+}
+
+// catalogBuiltins are the catalog's key-free providers, registered only
+// with the contact: what each supplies, and the per-item want it fills.
+var catalogBuiltins = []struct {
+	name string
+	cap  enrich.Capability
+	want string
+}{
+	{"coverartarchive", enrich.CapCover, enrichWantCover},
+	{"listenbrainz", enrich.CapGenres, enrichWantGenres},
+	{"lrclib", enrich.CapLyrics, enrichWantLyrics},
+}
+
+// builtinFor names the built-in that fills a per-item want, if any.
+func builtinFor(want string) (string, bool) {
+	for _, b := range catalogBuiltins {
+		if b.want == want {
+			return b.name, true
+		}
+	}
+	return "", false
+}
 
 // enrichmentPhases names the phases a run started now would execute.
-//
-// This is a copy of the rule upstream's Run applies, because the facade
-// exports no phase list: identity (and, with the toggle, the release
-// match) needs the MusicBrainz contact; every other phase needs a
-// registered provider advertising the capability that gates it. A
-// change to that rule upstream has to be mirrored here, which is what
-// the integration test pinning Configured against the catalog's own
-// Doctor().EnrichmentEnabled is for.
-//
-// The catalog's key-free built-ins count too, and one of them gates a
-// phase: LRCLIB advertises lyrics. It is registered only with a
-// contact - the built-ins are public services that want an identifying
-// agent, so the catalog refuses to dial them without one - which makes
-// the lyrics phase contact-gated even though LRCLIB needs no key. The
-// Cover Art Archive answers front covers and ListenBrainz genres, and
-// neither gates a phase of its own.
 func (l *Library) enrichmentPhases() []string {
 	var caps enrich.Capability
 	for _, p := range l.enrichProviders {
 		caps |= p.Capabilities()
 	}
 	if l.musicbrainzConfigured {
-		caps |= enrich.CapLyrics // LRCLIB, registered with the contact
-	}
-	phases := []string{}
-	if l.musicbrainzConfigured {
-		phases = append(phases, enrichPhaseIdentity)
-		if l.enrichmentMatchReleases {
-			phases = append(phases, enrichPhaseReleases)
+		for _, b := range catalogBuiltins {
+			caps |= b.cap
 		}
 	}
-	for _, g := range []struct {
-		cap   enrich.Capability
-		phase string
-	}{
-		{enrich.CapAuxArt, enrichPhaseAuxArt},
-		{enrich.CapArtistArt, enrichPhaseArtistArt},
-		{enrich.CapLyrics, enrichPhaseLyrics},
-		{enrich.CapFields, enrichPhaseTrackFields},
-		{enrich.CapBookMeta, enrichPhaseBookFields},
-		{enrich.CapFields, enrichPhaseAlbumFields},
-	} {
-		if caps.Has(g.cap) {
-			phases = append(phases, g.phase)
+	phases := []string{}
+	for _, p := range enrichPhaseTable {
+		runs := caps.Has(p.gate)
+		if p.gate == 0 {
+			runs = l.musicbrainzConfigured && (!p.match || l.enrichmentMatchReleases)
+		}
+		if runs {
+			phases = append(phases, p.name)
 		}
 	}
 	return phases
-}
-
-// capabilityStrings renders a provider capability bitset as the API's
-// capability names.
-func capabilityStrings(c enrich.Capability) []string {
-	var out []string
-	if c.Has(enrich.CapIdentity) {
-		out = append(out, "identity")
-	}
-	if c.Has(enrich.CapGenres) {
-		out = append(out, "genres")
-	}
-	if c.Has(enrich.CapCover) {
-		out = append(out, "cover")
-	}
-	if c.Has(enrich.CapLyrics) {
-		out = append(out, "lyrics")
-	}
-	if c.Has(enrich.CapBookMeta) {
-		out = append(out, "book")
-	}
-	if c.Has(enrich.CapAuxArt) {
-		out = append(out, "aux-art")
-	}
-	if c.Has(enrich.CapArtistArt) {
-		out = append(out, "artist-art")
-	}
-	if c.Has(enrich.CapFields) {
-		out = append(out, "fields")
-	}
-	return out
 }
 
 // EnrichmentStatusFor reports the registered providers, the catalog's
@@ -244,7 +247,7 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	for _, p := range l.enrichProviders {
 		out.Providers = append(out.Providers, EnrichmentProviderDTO{
 			Name:         p.Name(),
-			Capabilities: capabilityStrings(p.Capabilities()),
+			Capabilities: providers.CapabilityNames(p.Capabilities()),
 			Configured:   true,
 		})
 	}
@@ -256,13 +259,9 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	// services that want an identifying agent, and the catalog does not
 	// register them at all without the contact - so that is what
 	// decides whether they can run.
-	for _, name := range []struct{ id, cap string }{
-		{"coverartarchive", "cover"},
-		{"listenbrainz", "genres"},
-		{"lrclib", "lyrics"},
-	} {
+	for _, b := range catalogBuiltins {
 		out.Providers = append(out.Providers, EnrichmentProviderDTO{
-			Name: name.id, Capabilities: []string{name.cap},
+			Name: b.name, Capabilities: providers.CapabilityNames(b.cap),
 			Configured: l.musicbrainzConfigured, Builtin: true,
 		})
 	}
@@ -316,23 +315,7 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 			if out.LastRun == nil && j.Result != "" {
 				var r enrich.Result
 				if json.Unmarshal([]byte(j.Result), &r) == nil {
-					out.LastRun = &EnrichmentLastRunDTO{
-						AlbumsSearched:      r.AlbumsSearched,
-						AlbumsMatched:       r.AlbumsMatched,
-						ArtistArtEnriched:   r.ArtistArtEnriched,
-						ArtistArtMatched:    r.ArtistArtMatched,
-						TrackFieldsEnriched: r.TrackFieldsEnriched,
-						TrackFieldsMatched:  r.TrackFieldsMatched,
-						BookFieldsEnriched:  r.BookFieldsEnriched,
-						BookFieldsMatched:   r.BookFieldsMatched,
-						AlbumFieldsEnriched: r.AlbumFieldsEnriched,
-						AlbumFieldsMatched:  r.AlbumFieldsMatched,
-						TagsWritten:         r.TagsWritten,
-						TagsFailed:          r.TagsFailed,
-						TagsUnrepresented:   r.TagsUnrepresented,
-						TagsSkipped:         r.TagsSkipped,
-						FinishedAtNS:        j.FinishedAt,
-					}
+					out.LastRun = lastRunFrom(r, j.FinishedAt)
 				}
 			}
 		}
@@ -340,25 +323,60 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	return out, nil
 }
 
-// RunEnrichment starts the catalog's whole-library enrichment pass as a
-// background job and returns the job pid. The job launches on the
-// process context, not the request's, so it survives the 202 that
-// reported it (mirroring Rescan).
-func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool) (string, error) {
+// forcedPhases checks a phase-scoped force against what this server runs
+// and names it in the catalog's phases.
+func (l *Library) forcedPhases(force bool, names []string) ([]model.EnrichPhase, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	if force {
+		return nil, errInvalid("force already re-asks every phase; send it or forcePhases, not both")
+	}
+	runs := l.enrichmentPhases()
+	var out []model.EnrichPhase
+	for _, name := range names {
+		i := slices.IndexFunc(enrichPhaseTable, func(p enrichPhaseSpec) bool { return p.name == name })
+		if i < 0 {
+			return nil, errInvalid("unknown enrichment phase " + strconv.Quote(name))
+		}
+		if !slices.Contains(runs, name) {
+			return nil, &Error{Kind: KindUnsupported,
+				Msg: "the " + name + " phase does not run on this server: " + enrichPhaseTable[i].needs}
+		}
+		out = append(out, enrichPhaseTable[i].catalog...)
+	}
+	return out, nil
+}
+
+// RunEnrichment starts the whole-library pass as a job on the process
+// context, so it outlives the 202 that reported it; forcePhases re-asks
+// those phases alone.
+func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool, forcePhases []string) (string, error) {
 	if !uc.Admin {
 		return "", &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	phases, err := l.forcedPhases(force, forcePhases)
+	if err != nil {
+		return "", err
 	}
 	// WriteTags rather than the catalog's WriteEnrichmentTags option: that
 	// one is fixed at open and the catalog ORs the two, so per-run is what
 	// lets the admin toggle work without a restart.
 	pid, err := l.lib.StartEnrich(l.procCtx, waxbin.EnrichOptions{
-		Force:     force,
-		WriteTags: l.currentToggles().enrichWriteTags,
+		Force:       force,
+		ForcePhases: phases,
+		WriteTags:   l.currentToggles().enrichWriteTags,
 	})
 	if err == nil {
 		l.watchEnrichArtwork(pid)
 	}
 	if err != nil {
+		if KindOf(classify(err)) == KindUnsupported && len(phases) > 0 {
+			// Every phase passed the mirror above, so the mirror drifted.
+			l.log.Warn("enrichment: the catalog refused a forced phase this server lists", "phases", forcePhases, "err", err)
+			return "", &Error{Kind: KindUnsupported, Err: err,
+				Msg: "the catalog does not run " + strings.Join(forcePhases, ", ") + ", though this server lists it; its phase list is out of date"}
+		}
 		// The catalog's refusal names WAXBIN_ENRICH_CONTACT, a knob a
 		// WaxDeck operator does not have.
 		if KindOf(classify(err)) == KindUnsupported {
@@ -533,30 +551,17 @@ func (l *Library) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID str
 	// They run on the proposal path too: fill-when-empty means they can
 	// never contradict what was approved, and dropping them would regress
 	// every install whose only sources are the built-ins.
-	l.enrichItemBuiltins(ctx, it, wants, &applied, &skipped)
+	l.enrichItemCatalogPass(ctx, it, wants, &applied, &skipped)
 	return applied, skipped, nil
 }
 
-// builtinProviderFor names the catalog built-in that backfills each
-// per-item want. The built-ins (Cover Art Archive, ListenBrainz, LRCLIB)
-// are not on the injected-provider port; the engine reaches them, and an
-// item-scoped synchronous Enrich runs them per item.
-var builtinProviderFor = map[string]string{
-	enrichWantCover:  "coverartarchive",
-	enrichWantLyrics: "lrclib",
-	enrichWantGenres: "listenbrainz",
-}
-
-// enrichItemBuiltins backfills the interactive fetch with the catalog's
-// key-free built-ins for the wanted artifacts the injected providers left
-// empty. Injected providers keep priority: they ran first, so a built-in
-// only claims an artifact that was still absent beforehand and is present
-// after the item-scoped Enrich. Best-effort - a built-in failure leaves
-// the injected result untouched.
-func (l *Library) enrichItemBuiltins(ctx context.Context, it *model.ItemView, wants []string, applied, skipped *[]string) {
+// enrichItemCatalogPass runs the catalog's own pass over the item for the wants a
+// built-in serves, which reaches the built-ins the injected port cannot. That pass
+// asks every provider, so who filled an artifact is read back from provenance.
+func (l *Library) enrichItemCatalogPass(ctx context.Context, it *model.ItemView, wants []string, applied, skipped *[]string) {
 	var builtinWants []string
 	for _, w := range wants {
-		if _, ok := builtinProviderFor[w]; ok {
+		if _, ok := builtinFor(w); ok {
 			builtinWants = append(builtinWants, w)
 		}
 	}
@@ -568,14 +573,13 @@ func (l *Library) enrichItemBuiltins(ctx context.Context, it *model.ItemView, wa
 		before[w] = l.artifactPresent(ctx, it, w)
 	}
 	// Item-scoped, fill-when-empty: the engine enriches this item's own
-	// entities and never overwrites, so a built-in only fills real gaps. It
+	// entities and never overwrites, so a provider only fills real gaps. It
 	// runs synchronously under the engine's shared enrich lease.
 	if _, err := l.lib.Enrich(ctx, waxbin.EnrichOptions{ItemPID: it.PID}); err != nil {
 		if KindOf(classify(err)) == KindConflict {
 			// A concurrent enrich (a whole-catalog pass, or another fetch)
-			// holds the lease. Report the still-missing built-in artifacts as
-			// deferred rather than let the caller read a false success, so the
-			// user knows to retry for those.
+			// holds the lease: the still-missing wants read as deferred, not
+			// a false success, so the user knows to retry them.
 			for _, w := range builtinWants {
 				if !before[w] {
 					*skipped = append(*skipped, w+": enrichment is busy; try again")
@@ -583,14 +587,15 @@ func (l *Library) enrichItemBuiltins(ctx context.Context, it *model.ItemView, wa
 			}
 			return
 		}
-		l.log.Warn("enrich: item built-ins", "item", it.PID, "err", err)
+		l.log.Warn("enrich: item catalog pass", "item", it.PID, "err", err)
 		return
 	}
 	for _, w := range builtinWants {
 		if before[w] || !l.artifactPresent(ctx, it, w) {
 			continue
 		}
-		*applied = append(*applied, w+": "+builtinProviderFor[w])
+		name, _ := builtinFor(w)
+		*applied = append(*applied, w+": "+cmp.Or(l.artifactProvider(ctx, it, w), name))
 		*skipped = dropEntriesWithPrefix(*skipped, w+":")
 	}
 }
@@ -616,6 +621,35 @@ func (l *Library) artifactPresent(ctx context.Context, it *model.ItemView, want 
 		return err == nil && cur.Genre != ""
 	}
 	return false
+}
+
+// artifactProvider names who filled the item's artifact, from the
+// catalog's own provenance: the pass asks every provider, not only the
+// built-in a want is named after.
+func (l *Library) artifactProvider(ctx context.Context, it *model.ItemView, want string) string {
+	switch want {
+	case enrichWantCover:
+		ref := model.EntityRef{Type: model.ArtTrack, PID: it.PID}
+		if it.Kind == model.KindEpisode {
+			ref.Type = model.ArtEpisode
+		}
+		if prov, err := l.lib.ArtProvenance(ctx, ref, model.ArtRoleFront); err == nil {
+			return prov.Provider
+		}
+	case enrichWantLyrics:
+		if ly, err := l.lib.Lyrics(ctx, it.PID); err == nil {
+			return ly.Provider
+		}
+	case enrichWantGenres:
+		if rows, err := l.lib.Provenance(ctx, it.PID); err == nil {
+			for _, r := range rows {
+				if r.Field == "genre" {
+					return r.Provider
+				}
+			}
+		}
+	}
+	return ""
 }
 
 // dropEntriesWithPrefix returns entries without those starting with

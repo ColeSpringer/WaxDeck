@@ -23,6 +23,12 @@ command-line flag (`WAXDECK_COOKIE_SECURE` is `-cookie-secure`, and so
 on; `WAXDECK_SECRET_KEY` is environment-only). `waxdeck -h` prints the
 same descriptions, and a flag beats the environment.
 
+A switch takes `true` or `false` (`1`, `0` and capitalized spellings
+work too), and a number takes whole digits. Any other value, such as
+`yes` or `30m`, stops the server at startup with a line naming the
+variable, rather than letting it run on the default, unless the flag
+is given too. The analyzer below reads its numbers the same way.
+
 Defaults shown are the server's own. The compose stack overrides a few
 of them where the topology demands it.
 
@@ -255,16 +261,22 @@ provider.
   MusicBrainz requires an identifying agent, so empty leaves the
   identity phases disabled - matching artists, release groups and books
   against MusicBrainz, and the release match below. It also gates
-  lyrics: LRCLIB needs no key, but the catalog registers it only when it
-  has an identifying agent to dial with. The phases that answer to
-  WaxDeck's own providers run without a contact: artist art, auxiliary
-  artwork, and the fields walks, plus lyrics where a provider supplies
-  them. The enrichment status surface reports both halves and names the
-  phases a run would execute.
+  the Cover Art Archive's album art and LRCLIB's lyrics: neither needs a
+  key, but the catalog registers them only when it has an identifying
+  agent to dial with. The phases that answer to WaxDeck's own providers
+  run without a contact: artist art, auxiliary artwork, and the fields
+  walks, plus album art where a provider supplies covers or auxiliary
+  art and lyrics where one supplies them. The enrichment status surface
+  reports both halves and names the phases a run would execute.
 - `WAXDECK_ENRICHMENT_MATCH_RELEASES` (default `true`): during
   enrichment, resolve which pressing of a record the library holds
   from its barcode or catalog number, deciding ties on medium and
   country. Needs the contact above to have any effect.
+- `WAXDECK_ENRICHMENT_RETRY_MISSES_DAYS` (default `30`): days a target
+  nothing answered for waits before a pass asks about it again, so a
+  source that has since learned it is reached without a forced run. `0`
+  never asks again, and a negative value is refused at startup. A match
+  is never re-asked.
 
 ## YouTube
 
@@ -295,6 +307,8 @@ root).
   checks the shared browser and relaunches a dead one. An image cached
   from before that answers a keyed daemon 401 and reports unhealthy
   until `docker compose pull waxseal`; the sidecar still serves.
+  Compose runs `waxseal:latest`; this release was run against WaxSeal
+  1.5.0.
 
 
   The daemon keeps 12 seconds between an in-page mint and establishing

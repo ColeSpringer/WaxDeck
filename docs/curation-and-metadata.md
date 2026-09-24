@@ -462,13 +462,14 @@ The pass runs in two halves, and they are configured separately. The
 MusicBrainz identity phases - matching artists, release groups and
 books, and resolving which pressing the library holds - need
 `WAXDECK_ENRICHMENT_CONTACT`, because MusicBrainz requires an
-identifying agent before anything is sent. The contact gates lyrics as
-well: LRCLIB needs no key, but the catalog will not dial a public
-service without an agent to identify itself with. The provider-gated
-phases - artist art, auxiliary artwork, and the fields walks - answer to
-their own providers and run without it, and so does lyrics where a
-provider supplies them. So a server with no contact still enriches; it
-just does not resolve identity. The status surface says which half is
+identifying agent before anything is sent. The contact gates the Cover
+Art Archive's album art and LRCLIB's lyrics as well: neither needs a
+key, but the catalog will not dial a public service without an agent to
+identify itself with. The provider-gated phases - artist art, auxiliary
+artwork, and the fields walks - answer to their own providers and run
+without it, and so do album art where a provider supplies covers or
+auxiliary art and lyrics where one supplies them. So a server with no
+contact still enriches; it just does not resolve identity. The status surface says which half is
 live: `configured` is whether a pass would do anything at all,
 `musicbrainzConfigured` is the contact, and `phases` names exactly what
 a run started now would execute.
@@ -509,6 +510,18 @@ stand-ins like Various Artists are skipped rather than given a
 stranger's face. `WAXDECK_ARTIST_ART=false` takes artist art off the
 providers entirely, so the walk never asks.
 
+Album art has a backfill of its own. An album that resolves no front
+cover at all (a picture embedded in any member counts) is asked about by
+its own identifiers, so the cover is that pressing's: Deezer answers by
+barcode, the Cover Art Archive by the album's MusicBrainz release id.
+Deezer is asked first, as every WaxDeck provider is, at two requests a
+second to the archive's one, and the archive only where Deezer holds no
+picture for the barcode. The same walk asks auxiliary-art providers for
+an album's back, disc, booklet and background slots, which only a
+custom provider answers today. iTunes has no per-pressing lookup and
+answers nothing here. The write is fill-when-empty and lock-respecting
+like every other.
+
 Two more walks fill scalar metadata with no artwork in it. The track
 walk asks about a track's tempo, ISRC and composer; the album walk about
 an album's label and year, which fans out to every track on the album
@@ -527,12 +540,16 @@ twenty-thousand-track library's first full pass is most of a day of
 Deezer time. Later passes touch only what is new. That is why the
 nightly schedule is capped and an administrator's own run is not.
 
-One thing to know about the walk's memory: an artist nothing could
-answer for is marked, and the mark has no expiry. A provider that gains
-a picture later will not be asked again on its own - it takes a forced
-run (`force` on the enrichment run, which re-asks everything), a rename,
-or a MusicBrainz id landing on the artist. The nightly schedule below
-therefore fills in what is new, not what was missing and stayed missing.
+One thing to know about the walks' memory: a target nothing could
+answer for is marked - an artist, a release group, an album's cover, a
+book, a track's lyrics or fields - and a marked miss is asked about
+again only once the retry window has passed: 30 days by default,
+`WAXDECK_ENRICHMENT_RETRY_MISSES_DAYS`, `0` for never. A match is
+durable. To ask sooner, `forcePhases` on the enrichment run re-asks the
+named phases alone, which is how a provider added after the markers
+settled is asked about them, and `force` re-asks everything. The nightly
+schedule above therefore reaches what is new and, once a window passes,
+what stayed missing.
 
 That fetch previews before it applies. The editor's Fetch button asks
 `POST /items/{pid}/enrich/preview` what the providers would change -

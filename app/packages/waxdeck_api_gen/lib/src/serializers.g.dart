@@ -94,13 +94,17 @@ Serializers _$serializers =
           ..add(EnrichItemResult.serializer)
           ..add(EnrichPreview.serializer)
           ..add(EnrichProposal.serializer)
+          ..add(EnrichmentCacheKind.serializer)
+          ..add(EnrichmentCachePruneRequest.serializer)
+          ..add(EnrichmentCachePruneResult.serializer)
+          ..add(EnrichmentCacheReport.serializer)
           ..add(EnrichmentCoverage.serializer)
           ..add(EnrichmentLastRun.serializer)
+          ..add(EnrichmentPhase.serializer)
           ..add(EnrichmentProvider.serializer)
           ..add(EnrichmentRunRequest.serializer)
           ..add(EnrichmentRunResult.serializer)
           ..add(EnrichmentStatus.serializer)
-          ..add(EnrichmentStatusPhasesEnum.serializer)
           ..add(EntityCard.serializer)
           ..add(EntityCardKindEnum.serializer)
           ..add(EntityCardList.serializer)
@@ -550,15 +554,23 @@ Serializers _$serializers =
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [
+              const FullType(EnrichmentCacheKind),
+            ]),
+            () => ListBuilder<EnrichmentCacheKind>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(EnrichmentPhase)]),
+            () => ListBuilder<EnrichmentPhase>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [
               const FullType(EnrichmentProvider),
             ]),
             () => ListBuilder<EnrichmentProvider>(),
           )
           ..addBuilderFactory(
-            const FullType(BuiltList, const [
-              const FullType(EnrichmentStatusPhasesEnum),
-            ]),
-            () => ListBuilder<EnrichmentStatusPhasesEnum>(),
+            const FullType(BuiltList, const [const FullType(EnrichmentPhase)]),
+            () => ListBuilder<EnrichmentPhase>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(EntityCard)]),

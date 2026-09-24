@@ -334,3 +334,11 @@ func readCapped(r io.Reader, limit int64) ([]byte, error) {
 	}
 	return b, nil
 }
+
+// forget drops one cached response, so an answer that turned out to be a
+// failure is asked again rather than replayed.
+func (c *core) forget(key string) {
+	c.cacheMu.Lock()
+	defer c.cacheMu.Unlock()
+	delete(c.cache, key)
+}

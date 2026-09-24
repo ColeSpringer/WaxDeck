@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -207,6 +208,37 @@ func TestEnrichStampsTheWantOnTheRequest(t *testing.T) {
 	defer p.mu.Unlock()
 	if len(p.wants) != 1 || p.wants[0] != enrich.CapGenres {
 		t.Errorf("stamped wants = %v, want one CapGenres ask", p.wants)
+	}
+}
+
+// forcedLyricsProvider answers only the catalog's own item pass, which
+// forces; the server's per-item ask does not, so the lyrics land in the pass.
+type forcedLyricsProvider struct{}
+
+func (forcedLyricsProvider) Name() string                    { return "passlyrics" }
+func (forcedLyricsProvider) Capabilities() enrich.Capability { return enrich.CapLyrics }
+func (forcedLyricsProvider) Enrich(_ context.Context, req enrich.Request) (*enrich.Candidate, error) {
+	if !req.Force || req.Type != enrich.TargetRecording {
+		return nil, nil
+	}
+	return &enrich.Candidate{Lyrics: &model.Lyrics{Unsynced: "la la la"}}, nil
+}
+
+// What the catalog's pass filled is credited to whoever filled it, which is
+// not the built-in the want is named after.
+func TestEnrichCreditsThePassToItsProvider(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = []enrich.Provider{forcedLyricsProvider{}}
+		c.EnrichmentContact = ""
+	})
+	pid := h.items(t, "?mediaType=music").Items[0].Pid
+	resp := h.postJSON(t, "/api/v1/items/"+pid+"/enrich", map[string]any{"want": []string{"lyrics"}})
+	if resp.StatusCode != 200 {
+		t.Fatalf("enrich status = %d", resp.StatusCode)
+	}
+	if res := decode[EnrichItemResult](t, resp); !slices.Contains(res.Applied, "lyrics: passlyrics") {
+		t.Errorf("applied = %v, want the lyrics credited to passlyrics", res.Applied)
 	}
 }
 

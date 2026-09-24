@@ -717,7 +717,7 @@ func (l *Library) SetItemLyrics(ctx context.Context, uc *UserCtx, apiPID, lrc, p
 	if lrc != "" {
 		lines, dropped := waxlabel.ParseLRCReportFull(lrc)
 		for _, n := range dropped {
-			warnings = append(warnings, "lrc line "+strconv.Itoa(n)+": malformed line skipped")
+			warnings = append(warnings, "lrc line "+strconv.Itoa(n)+": no timed lyric, skipped")
 		}
 		synced = make([]model.SyncedLine, 0, len(lines))
 		for _, ln := range lines {

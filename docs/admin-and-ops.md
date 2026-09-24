@@ -182,20 +182,34 @@ attached to:
   refusal the reset exists for. Restore it under the version it was
   taken with. WaxDeck's own backup archives are not affected.
 - **The rebuild runs longer on some libraries.** This baseline's scan
-  decodes HE-AAC, WavPack, Monkey's Audio, WMA, and Musepack files that
-  earlier builds either skipped or only fingerprinted, so a library
-  holding many of those spends real time on them that it did not
-  before.
+  decodes WMA Lossless, Pro and Voice; G.711 and ADPCM in WAV, AIFF-C
+  and MP4; MP3 inside WAV, AIFF-C and MP4; and PCM inside MP4 and MOV,
+  beside the HE-AAC, WavPack, Monkey's Audio, WMA and Musepack an
+  earlier baseline added. A library holding many of those spends real
+  time on them that it did not before, and every file's loudness and
+  audio hash are measured afresh.
 
 ## Scheduled jobs
 
-Four schedules, each a five-field cron expression in server-local
+Five schedules, each a five-field cron expression in server-local
 time: **scan** (a full library scan), **backup**, **prune** (event
-log, replay-guard stamps, audit history, ended playback sessions), and
-**analyze** (the audio-decoding loudness and fingerprint pass). Prune
-ships enabled at 03:30 nightly; the rest ship disabled until
-configured. Each schedule shows its last run, last error, and next
-firing time.
+log, replay-guard stamps, audit history, ended playback sessions),
+**analyze** (the audio-decoding loudness and fingerprint pass), and
+**enrich** (the metadata enrichment pass, capped at 2000 targets a
+night). Prune ships enabled at 03:30 nightly and enrich at 03:45; the
+rest ship disabled until configured. Each schedule shows its last run,
+last error, and next firing time.
+
+The catalog keeps MusicBrainz's answers, and the Cover Art Archive's
+records of which release each group's cover came from, in a cache
+inside the catalog file.
+`GET /admin/enrichment-cache` reports what it holds, by provider and
+endpoint, and `POST /admin/enrichment-cache/prune` drops entries by age
+or down to a byte budget. A pruned answer costs one request the next
+time its target is asked about, never a catalog value; the Cover Art
+Archive's group records are kept, since losing one costs a cover
+download. The space is freed inside the catalog file, and a vacuum
+returns it to the filesystem.
 
 ## The trash
 

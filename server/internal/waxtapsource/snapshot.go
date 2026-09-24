@@ -42,7 +42,7 @@ func (p *Provider) PlaylistSnapshot(ctx context.Context, url string, opts syncso
 		Author:      pl.Author,
 		Truncated:   pl.Continuation != "" || (maxEntries > 0 && len(pl.Entries) >= maxEntries),
 	}
-	failures, wholesale := p.enrichFailures(pl, budget)
+	failures, wholesale := p.enrichFailures(pl)
 	for i := range pl.Entries {
 		entry := pl.Entries[i]
 		e := syncsource.PlaylistSnapshotEntry{
@@ -53,6 +53,10 @@ func (p *Provider) PlaylistSnapshot(ctx context.Context, url string, opts syncso
 			DurationMS: entry.Duration.Milliseconds(),
 		}
 		switch ferr, failed := failures[entry.Index]; {
+		case liveEntry(entry):
+			e.AvailabilityKnown = true
+			e.Unavailable = true
+			p.log.Debug("live youtube playlist entry", "video", entry.VideoID, "live", entry.LiveStatus.String())
 		case !failed:
 			if entry.Video != nil {
 				e.AvailabilityKnown = true

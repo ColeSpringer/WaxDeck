@@ -3,6 +3,7 @@ package service
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/colespringer/waxbin/model"
@@ -221,5 +222,21 @@ func TestRedactedSourceURL(t *testing.T) {
 				t.Errorf("redactedSourceURL(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
+	}
+}
+
+// A section header and a bad timestamp are both skipped by line number,
+// in words that fit either.
+func TestSetItemLyricsReportsSkippedLines(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newAdvisoryFixture(t)
+	apiPID, _ := fixtureTrackPID(t, ctx, svc, uc, "Flagged")
+	out, err := svc.SetItemLyrics(ctx, uc, apiPID, "[Chorus]\n[9:99.99]bad\n[00:01.00]la la la\n", "", MetadataEditParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"lrc line 1: no timed lyric, skipped", "lrc line 2: no timed lyric, skipped"}
+	if !slices.Equal(out.Warnings, want) {
+		t.Fatalf("warnings = %q, want %q", out.Warnings, want)
 	}
 }

@@ -66,11 +66,34 @@ func TestDeezerArtistImageGatesOnTheName(t *testing.T) {
 	}
 }
 
-// TestDeezerArtistImageWalksPastAnUnusablePicture mirrors FrontCover's
-// rule: an artist is routinely listed more than once, so one dead
-// picture_xl must not end the walk - and when every match's picture is
-// dead, the failure surfaces as retriable rather than as a durable
-// miss.
+// Where Deezer holds no portrait it names a stand-in, a path with no image
+// hash, which would otherwise land as the artist's own picture.
+func TestDeezerArtistImageSkipsTheStandInPortrait(t *testing.T) {
+	t.Parallel()
+	data := testPNG(t)
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/search/artist":
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"data":[{"name":"The Zzyzx Road Band",
+				"picture_xl":"https://%s/images/artist//1000x1000-000000-80-0-0.jpg"}]}`, r.Host)
+		case "/images/artist//1000x1000-000000-80-0-0.jpg":
+			w.Header().Set("Content-Type", "image/png")
+			w.Write(data)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer srv.Close()
+	d := NewDeezer(DeezerConfig{BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond})
+	if res, err := d.ArtistImage(context.Background(), "The Zzyzx Road Band"); !errors.Is(err, ErrNoArtistImage) {
+		t.Errorf("stand-in = %d bytes, %v; want ErrNoArtistImage", len(res.Data), err)
+	}
+}
+
+// An artist is routinely listed more than once, so one dead picture_xl
+// must not end the walk, FrontCover's rule; when every match's picture is
+// dead, the failure surfaces as an error rather than a clean no.
 func TestDeezerArtistImageWalksPastAnUnusablePicture(t *testing.T) {
 	t.Parallel()
 	data := testPNG(t)
@@ -100,7 +123,7 @@ func TestDeezerArtistImageWalksPastAnUnusablePicture(t *testing.T) {
 	}
 
 	// Every match dead: a reachability error, never ErrNoArtistImage,
-	// so the sweep retries next pass instead of recording a 30-day miss.
+	// so the catalog logs a failure rather than reading a clean no.
 	srv2 := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/search/artist" {
 			w.Header().Set("Content-Type", "application/json")

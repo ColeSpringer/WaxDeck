@@ -40,9 +40,14 @@ func TestShapeForVirtualTracks(t *testing.T) {
 		{"flac", "flac"},
 		{"alac", "flac"},
 		{"pcm", "flac"},
+		{"wma lossless", "flac"},
+		{"ieee float", "flac"},
+		{"wav", "flac"},
+		{"tta", "flac"},
 		// Lossy non-cut sources take the opus transcode.
 		{"mp3", "opus"},
 		{"vorbis", "opus"},
+		{"wma", "opus"},
 	}
 	for _, c := range cases {
 		shape := ShapeFor(Source{Virtual: true, Codec: c.codec}, caps, false)

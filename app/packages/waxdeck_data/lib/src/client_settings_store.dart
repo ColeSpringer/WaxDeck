@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'database.dart';
 
 /// Where a preference that belongs to this device - not to the account -
@@ -23,6 +24,11 @@ import 'database.dart';
 abstract class ClientSettingsStore {
   /// The stored value for [key], or null when nothing was written.
   Future<String?> read(String key);
+
+  /// The stored value for [key] when this store can answer without
+  /// waiting, its `value` null when nothing was written; null when only
+  /// [read] can answer.
+  ({String? value})? peek(String key);
 
   /// Stores [value] under [key], replacing whatever was there.
   Future<void> write(String key, String value);
@@ -238,9 +244,48 @@ abstract final class ClientSettingKeys {
 /// implementations of this port behave alike rather than only one of
 /// them honoring the contract.
 class DriftClientSettingsStore implements ClientSettingsStore {
-  DriftClientSettingsStore(this.db);
+  DriftClientSettingsStore(this.db) {
+    unawaited(_load());
+  }
 
   final MirrorDatabase db;
+
+  /// Every stored value once loaded, which is what [peek] answers from.
+  Map<String, String>? _snapshot;
+
+  /// Changes made before the snapshot loaded, laid over it when it does.
+  final Map<String, String?> _early = {};
+
+  Future<void> _load() async {
+    try {
+      final rows = await db.select(db.clientSettings).get();
+      final snapshot = {for (final row in rows) row.key: row.value};
+      _early.forEach(
+        (key, value) =>
+            value == null ? snapshot.remove(key) : snapshot[key] = value,
+      );
+      _snapshot = snapshot;
+    } catch (_) {
+      // Unreadable: peek keeps deferring to read.
+    }
+  }
+
+  void _note(String key, String? value) {
+    final snapshot = _snapshot;
+    if (snapshot == null) {
+      _early[key] = value;
+    } else if (value == null) {
+      snapshot.remove(key);
+    } else {
+      snapshot[key] = value;
+    }
+  }
+
+  @override
+  ({String? value})? peek(String key) {
+    final snapshot = _snapshot;
+    return snapshot == null ? null : (value: snapshot[key]);
+  }
 
   @override
   Future<String?> read(String key) async {
@@ -256,6 +301,7 @@ class DriftClientSettingsStore implements ClientSettingsStore {
 
   @override
   Future<void> write(String key, String value) async {
+    _note(key, value);
     try {
       await db
           .into(db.clientSettings)
@@ -270,6 +316,7 @@ class DriftClientSettingsStore implements ClientSettingsStore {
 
   @override
   Future<void> remove(String key) async {
+    _note(key, null);
     try {
       await (db.delete(
         db.clientSettings,
@@ -291,6 +338,10 @@ class MemoryClientSettingsStore implements ClientSettingsStore {
 
   @override
   Future<String?> read(String key) async => _values[key];
+
+  /// Null: this store stands in for the ones that make a reader wait.
+  @override
+  ({String? value})? peek(String key) => null;
 
   @override
   Future<void> write(String key, String value) async => _values[key] = value;

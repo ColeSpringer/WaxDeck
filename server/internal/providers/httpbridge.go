@@ -5,10 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"mime"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/colespringer/waxbin/art"
 	"github.com/colespringer/waxbin/enrich"
 	"github.com/colespringer/waxbin/model"
 )
@@ -39,6 +42,9 @@ type HTTPBridgeConfig struct {
 	// MinInterval defaults to 500ms. Self-hosted remotes tolerate more,
 	// but the bridge cannot know what the remote itself calls out to.
 	MinInterval time.Duration
+	// Log records the images an answer carried that were refused; nil
+	// discards.
+	Log *slog.Logger
 }
 
 // HTTPBridge implements enrich.Provider over the published contract.
@@ -51,21 +57,7 @@ type HTTPBridge struct {
 	name string
 	caps enrich.Capability
 	core *core
-}
-
-// bridgeCapabilities maps the contract's capability tokens onto the
-// port's bitset. Unknown tokens are ignored rather than refused, so a
-// remote built against a newer contract still serves what this build
-// understands.
-var bridgeCapabilities = map[string]enrich.Capability{
-	"identity":   enrich.CapIdentity,
-	"genres":     enrich.CapGenres,
-	"cover":      enrich.CapCover,
-	"lyrics":     enrich.CapLyrics,
-	"book":       enrich.CapBookMeta,
-	"aux-art":    enrich.CapAuxArt,
-	"artist-art": enrich.CapArtistArt,
-	"fields":     enrich.CapFields,
+	log  *slog.Logger
 }
 
 const (
@@ -101,6 +93,10 @@ func NewHTTPBridge(ctx context.Context, cfg HTTPBridgeConfig) (*HTTPBridge, erro
 	b := &HTTPBridge{
 		base: strings.TrimRight(cfg.BaseURL, "/"),
 		core: newCore(cfg.HTTPClient, ua, interval),
+		log:  cfg.Log,
+	}
+	if b.log == nil {
+		b.log = slog.New(slog.DiscardHandler)
 	}
 	if cfg.Token != "" {
 		b.core.authorization = "Bearer " + cfg.Token
@@ -141,7 +137,7 @@ func NewHTTPBridge(ctx context.Context, cfg HTTPBridgeConfig) (*HTTPBridge, erro
 		return nil, fmt.Errorf("providers: enrich provider %q advertises no name; the name is the provenance mark its values are stored under", cfg.Label)
 	}
 	for _, c := range caps.Capabilities {
-		b.caps |= bridgeCapabilities[strings.ToLower(strings.TrimSpace(c))]
+		b.caps |= parseCapability(strings.ToLower(strings.TrimSpace(c)))
 	}
 	b.name = strings.TrimSpace(caps.Name)
 	return b, nil
@@ -156,35 +152,44 @@ func (b *HTTPBridge) Capabilities() enrich.Capability { return b.caps }
 // bridgeRequest is the contract's enrich body, the port's Request
 // spelled onto the wire.
 type bridgeRequest struct {
-	Type        string `json:"type"`
-	Force       bool   `json:"force,omitempty"`
-	Title       string `json:"title,omitempty"`
-	Artist      string `json:"artist,omitempty"`
-	Album       string `json:"album,omitempty"`
-	MBID        string `json:"mbid,omitempty"`
-	ASIN        string `json:"asin,omitempty"`
-	ISBN        string `json:"isbn,omitempty"`
-	ISRC        string `json:"isrc,omitempty"`
-	Barcode     string `json:"barcode,omitempty"`
-	DurationSec int    `json:"durationSec,omitempty"`
+	Type             string   `json:"type"`
+	Force            bool     `json:"force,omitempty"`
+	Wants            []string `json:"wants,omitempty"`
+	Title            string   `json:"title,omitempty"`
+	Artist           string   `json:"artist,omitempty"`
+	Album            string   `json:"album,omitempty"`
+	MBID             string   `json:"mbid,omitempty"`
+	ASIN             string   `json:"asin,omitempty"`
+	ISBN             string   `json:"isbn,omitempty"`
+	ISRC             string   `json:"isrc,omitempty"`
+	Barcode          string   `json:"barcode,omitempty"`
+	CatalogNumber    string   `json:"catalogNumber,omitempty"`
+	ReleaseGroupMBID string   `json:"releaseGroupMbid,omitempty"`
+	GroupFrontHash   string   `json:"groupFrontHash,omitempty"`
+	DurationSec      int      `json:"durationSec,omitempty"`
+}
+
+// bridgeImage is one picture on the wire, its bytes base64 in `data`.
+type bridgeImage struct {
+	Data      string `json:"data"`
+	MediaType string `json:"mediaType,omitempty"`
+	SourceURL string `json:"sourceUrl,omitempty"`
 }
 
 // bridgeCandidate is the contract's answer, the port's Candidate
-// spelled onto the wire. The cover's bytes ride base64 in `data`.
+// spelled onto the wire.
 type bridgeCandidate struct {
-	Confidence float64  `json:"confidence,omitempty"`
-	MBID       string   `json:"mbid,omitempty"`
-	ASIN       string   `json:"asin,omitempty"`
-	ISBN       string   `json:"isbn,omitempty"`
-	Type       string   `json:"type,omitempty"`
-	Genres     []string `json:"genres,omitempty"`
-	Cover      *struct {
-		Data      string `json:"data"`
-		MediaType string `json:"mediaType,omitempty"`
-		SourceURL string `json:"sourceUrl,omitempty"`
-	} `json:"cover,omitempty"`
-	Publisher string `json:"publisher,omitempty"`
-	Lyrics    *struct {
+	Confidence        float64                 `json:"confidence,omitempty"`
+	MBID              string                  `json:"mbid,omitempty"`
+	ASIN              string                  `json:"asin,omitempty"`
+	ISBN              string                  `json:"isbn,omitempty"`
+	Type              string                  `json:"type,omitempty"`
+	Genres            []string                `json:"genres,omitempty"`
+	Cover             *bridgeImage            `json:"cover,omitempty"`
+	Art               map[string]*bridgeImage `json:"art,omitempty"`
+	FrontIsGroupFront bool                    `json:"frontIsGroupFront,omitempty"`
+	Publisher         string                  `json:"publisher,omitempty"`
+	Lyrics            *struct {
 		Synced []struct {
 			TimeMs int64  `json:"timeMs"`
 			Text   string `json:"text"`
@@ -198,10 +203,11 @@ type bridgeCandidate struct {
 // no-match; a 200 carries the candidate.
 func (b *HTTPBridge) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
 	payload, err := json.Marshal(bridgeRequest{
-		Type: string(req.Type), Force: req.Force,
+		Type: string(req.Type), Force: req.Force, Wants: CapabilityNames(req.Want),
 		Title: req.Title, Artist: req.Artist, Album: req.Album,
 		MBID: req.MBID, ASIN: req.ASIN, ISBN: req.ISBN,
-		ISRC: req.ISRC, Barcode: req.Barcode,
+		ISRC: req.ISRC, Barcode: req.Barcode, CatalogNumber: req.CatalogNumber,
+		ReleaseGroupMBID: req.ReleaseGroupMBID, GroupFrontHash: req.GroupFrontHash,
 		DurationSec: req.DurationSec,
 	})
 	if err != nil {
@@ -232,31 +238,31 @@ func (b *HTTPBridge) Enrich(ctx context.Context, req enrich.Request) (*enrich.Ca
 		Type:       wire.Type,
 		Genres:     wire.Genres,
 		Publisher:  wire.Publisher,
+		// Only where it was asked: elsewhere it would end the walk bare.
+		FrontIsGroupFront: wire.FrontIsGroupFront && req.Type == enrich.TargetRelease && req.GroupFrontHash != "",
 	}
 	if len(wire.Fields) > 0 {
 		cand.Fields = wire.Fields
 	}
-	if wire.Cover != nil && wire.Cover.Data != "" {
-		data, err := base64.StdEncoding.DecodeString(wire.Cover.Data)
-		if err != nil {
-			return nil, fmt.Errorf("providers: decode %s cover bytes: %w", b.name, err)
+	cand.Cover = b.usableImage(wire.Cover, "cover")
+	for role, img := range wire.Art {
+		r := model.ArtRole(role)
+		if !r.Valid() {
+			continue
 		}
-		if int64(len(data)) > maxImageBytes {
-			return nil, fmt.Errorf("providers: %s cover exceeds %d bytes", b.name, maxImageBytes)
+		if pic := b.usableImage(img, role); pic != nil {
+			if cand.Art == nil {
+				cand.Art = map[model.ArtRole]*model.ArtImage{}
+			}
+			cand.Art[r] = pic
 		}
-		// The same refusals fetchImage applies to a remote-chosen image
-		// URL: a declared type that is not a picture, and SVG in
-		// particular, which a browser runs rather than paints and which
-		// would otherwise ride the declared type into the store when the
-		// bytes neither decode nor sniff.
-		mt := strings.ToLower(strings.TrimSpace(wire.Cover.MediaType))
-		if mt != "" && !strings.HasPrefix(mt, "image/") {
-			return nil, fmt.Errorf("providers: %s cover media type %q is not an image", b.name, mt)
+	}
+	// The artist-art walk reads the role map alone.
+	if req.Type == enrich.TargetArtist && cand.Cover != nil && cand.Art[model.ArtRoleFront] == nil {
+		if cand.Art == nil {
+			cand.Art = map[model.ArtRole]*model.ArtImage{}
 		}
-		if strings.HasSuffix(mt, "/svg+xml") || strings.HasSuffix(mt, "/svg") {
-			return nil, fmt.Errorf("providers: %s cover media type %q is markup", b.name, mt)
-		}
-		cand.Cover = coverImage(data, wire.Cover.MediaType, wire.Cover.SourceURL)
+		cand.Art[model.ArtRoleFront] = cand.Cover
 	}
 	if wire.Lyrics != nil {
 		lyr := &model.Lyrics{Unsynced: wire.Lyrics.Unsynced}
@@ -272,9 +278,53 @@ func (b *HTTPBridge) Enrich(ctx context.Context, req enrich.Request) (*enrich.Ca
 	// want ("nothing new to fill") that a later provider could still
 	// answer. Empty is a clean no-match.
 	if cand.MBID == "" && cand.ASIN == "" && cand.ISBN == "" && cand.Type == "" &&
-		cand.Publisher == "" && len(cand.Genres) == 0 && cand.Cover == nil &&
-		cand.Lyrics == nil && len(cand.Fields) == 0 {
+		cand.Publisher == "" && len(cand.Genres) == 0 && cand.Cover == nil && len(cand.Art) == 0 &&
+		!cand.FrontIsGroupFront && cand.Lyrics == nil && len(cand.Fields) == 0 {
 		return nil, nil
 	}
 	return cand, nil
+}
+
+// usableImage is image with a refusal logged and dropped: one bad picture
+// costs itself, not the rest of the answer.
+func (b *HTTPBridge) usableImage(img *bridgeImage, role string) *model.ArtImage {
+	pic, err := b.image(img)
+	if err != nil {
+		b.log.Warn("custom enrichment provider sent an unusable image; dropping it",
+			"provider", b.name, "role", role, "err", err)
+	}
+	return pic
+}
+
+// image decodes one picture with the refusals fetchImage applies to a
+// remote-chosen URL: too large, not an image, or SVG, which a browser runs
+// rather than paints. Nil for an empty one.
+func (b *HTTPBridge) image(img *bridgeImage) (*model.ArtImage, error) {
+	if img == nil || img.Data == "" {
+		return nil, nil
+	}
+	data, err := base64.StdEncoding.DecodeString(img.Data)
+	if err != nil {
+		return nil, fmt.Errorf("providers: decode %s image bytes: %w", b.name, err)
+	}
+	if int64(len(data)) > maxImageBytes {
+		return nil, fmt.Errorf("providers: %s image exceeds %d bytes", b.name, maxImageBytes)
+	}
+	mt := strings.TrimSpace(img.MediaType)
+	if parsed, _, err := mime.ParseMediaType(mt); err == nil {
+		mt = parsed
+	}
+	mt = strings.ToLower(mt)
+	if mt != "" && !strings.HasPrefix(mt, "image/") {
+		return nil, fmt.Errorf("providers: %s image media type %q is not an image", b.name, mt)
+	}
+	if strings.HasSuffix(mt, "/svg+xml") || strings.HasSuffix(mt, "/svg") {
+		return nil, fmt.Errorf("providers: %s image media type %q is markup", b.name, mt)
+	}
+	// The bytes decide, as the archive's own fetch does: SVG under any
+	// label is text, and nothing here would serve what it cannot read.
+	if art.Describe(data).Format == "" {
+		return nil, fmt.Errorf("providers: %s image bytes are not a recognizable picture", b.name)
+	}
+	return coverImage(data, mt, img.SourceURL), nil
 }

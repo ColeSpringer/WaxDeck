@@ -364,6 +364,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**emptyTrash**](doc/AdminApi.md#emptytrash) | **POST** /admin/trash/empty | Empty the trash
 [*AdminApi*](doc/AdminApi.md) | [**getAdminSettings**](doc/AdminApi.md#getadminsettings) | **GET** /admin/settings | Read the server&#39;s runtime settings
 [*AdminApi*](doc/AdminApi.md) | [**getBackup**](doc/AdminApi.md#getbackup) | **GET** /admin/backups/{backupId} | Inspect a backup
+[*AdminApi*](doc/AdminApi.md) | [**getEnrichmentCache**](doc/AdminApi.md#getenrichmentcache) | **GET** /admin/enrichment-cache | Census the enrichment response cache
 [*AdminApi*](doc/AdminApi.md) | [**getGenreTree**](doc/AdminApi.md#getgenretree) | **GET** /admin/genre-tree | Read the canonical genre vocabulary
 [*AdminApi*](doc/AdminApi.md) | [**getJob**](doc/AdminApi.md#getjob) | **GET** /jobs/{pid} | Get one job&#39;s state
 [*AdminApi*](doc/AdminApi.md) | [**getLibraryReadOnly**](doc/AdminApi.md#getlibraryreadonly) | **GET** /libraries/{pid}/read-only | Read a library&#39;s read-only mode
@@ -379,6 +380,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**listLibraries**](doc/AdminApi.md#listlibraries) | **GET** /libraries | List libraries
 [*AdminApi*](doc/AdminApi.md) | [**listSchedules**](doc/AdminApi.md#listschedules) | **GET** /admin/schedules | List the scheduled jobs
 [*AdminApi*](doc/AdminApi.md) | [**listTrash**](doc/AdminApi.md#listtrash) | **GET** /admin/trash | List the trash
+[*AdminApi*](doc/AdminApi.md) | [**pruneEnrichmentCache**](doc/AdminApi.md#pruneenrichmentcache) | **POST** /admin/enrichment-cache/prune | Prune the enrichment response cache
 [*AdminApi*](doc/AdminApi.md) | [**pruneThumbnailCache**](doc/AdminApi.md#prunethumbnailcache) | **POST** /admin/thumbnails/prune | Prune the generated thumbnail cache
 [*AdminApi*](doc/AdminApi.md) | [**purgeTrashEntry**](doc/AdminApi.md#purgetrashentry) | **DELETE** /admin/trash/{trashId} | Purge one trashed file
 [*AdminApi*](doc/AdminApi.md) | [**putAdminSettings**](doc/AdminApi.md#putadminsettings) | **PUT** /admin/settings | Replace the server&#39;s runtime settings
@@ -719,8 +721,13 @@ Class | Method | HTTP request | Description
  - [EnrichItemResult](doc/EnrichItemResult.md)
  - [EnrichPreview](doc/EnrichPreview.md)
  - [EnrichProposal](doc/EnrichProposal.md)
+ - [EnrichmentCacheKind](doc/EnrichmentCacheKind.md)
+ - [EnrichmentCachePruneRequest](doc/EnrichmentCachePruneRequest.md)
+ - [EnrichmentCachePruneResult](doc/EnrichmentCachePruneResult.md)
+ - [EnrichmentCacheReport](doc/EnrichmentCacheReport.md)
  - [EnrichmentCoverage](doc/EnrichmentCoverage.md)
  - [EnrichmentLastRun](doc/EnrichmentLastRun.md)
+ - [EnrichmentPhase](doc/EnrichmentPhase.md)
  - [EnrichmentProvider](doc/EnrichmentProvider.md)
  - [EnrichmentRunRequest](doc/EnrichmentRunRequest.md)
  - [EnrichmentRunResult](doc/EnrichmentRunResult.md)

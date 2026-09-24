@@ -34,6 +34,7 @@ import (
 	"github.com/colespringer/waxflow/container"
 
 	"github.com/colespringer/waxdeck/server/internal/analyzer"
+	"github.com/colespringer/waxdeck/server/internal/envflag"
 )
 
 // version is stamped by the release build (-ldflags "-X main.version=x.y.z").
@@ -61,13 +62,14 @@ func main() {
 }
 
 func run() error {
+	env := envflag.New(flag.CommandLine)
 	var (
 		baseURL = flag.String("url", envOr("WAXDECK_ANALYZER_URL", "http://localhost:4420"), "WaxDeck server base URL")
 		token   = flag.String("token", envOr("WAXDECK_ANALYZER_TOKEN", ""), "worker token (required; one of the server's WAXDECK_WORKER_TOKENS)")
 		format  = flag.String("format", envOr("WAXDECK_ANALYZER_FORMAT", "wav"), "audio pull format: wav (no worker-side decode) or flac (about half the bytes; remote workers)")
 		library = flag.String("library", envOr("WAXDECK_ANALYZER_LIBRARY", ""), "read-only library mount; when set, work items carrying a local path decode from disk instead of pulling over HTTP")
-		pollSec = flag.Int("poll-seconds", envIntOr("WAXDECK_ANALYZER_POLL_SECONDS", 60), "idle sleep between polls when the server suggests none")
-		batch   = flag.Int("batch", envIntOr("WAXDECK_ANALYZER_BATCH", 10), "work items leased and posted per cycle (1 to 50)")
+		pollSec = env.Int("poll-seconds", "WAXDECK_ANALYZER_POLL_SECONDS", 60, "idle sleep between polls when the server suggests none")
+		batch   = env.Int("batch", "WAXDECK_ANALYZER_BATCH", 10, "work items leased and posted per cycle (1 to 50)")
 		showVer = flag.Bool("version", false, "print version and exit")
 	)
 	flag.Parse()
@@ -75,6 +77,9 @@ func run() error {
 	if *showVer {
 		fmt.Println(version)
 		return nil
+	}
+	if err := env.Err(); err != nil {
+		return err
 	}
 	if *token == "" {
 		return errors.New("a worker token is required: set WAXDECK_ANALYZER_TOKEN or -token")
@@ -463,15 +468,6 @@ func sleepCtx(ctx context.Context, d time.Duration) {
 func envOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
-	}
-	return def
-}
-
-func envIntOr(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
 	}
 	return def
 }

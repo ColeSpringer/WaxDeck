@@ -1110,6 +1110,59 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /admin/enrichment-cache:
+    get:
+      operationId: getEnrichmentCache
+      summary: Census the enrichment response cache
+      description: >
+        What the catalog's cache of enrichment answers holds, by request kind,
+        and the share a prune leaves alone. Read-only. Administrators only.
+      tags: [admin]
+      responses:
+        "200":
+          description: The cache census.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichmentCacheReport"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /admin/enrichment-cache/prune:
+    post:
+      operationId: pruneEnrichmentCache
+      summary: Prune the enrichment response cache
+      description: >
+        Drops cached answers to fit the policy. A pruned answer costs one
+        request on its next re-ask, never a catalog value; the archive's group
+        records are kept. At least one bound. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrichmentCachePruneRequest"
+      responses:
+        "200":
+          description: What the prune dropped.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichmentCachePruneResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /admin/migrations/exports:
     post:
       operationId: stageMigrationExport
@@ -1646,17 +1699,9 @@ components:
         running is skipped rather than recorded as run, so it retries on
         the next tick instead of waiting for the next scheduled window.
 
-        `enrich` is on by default and runs the whole-library enrichment
-        pass, capped per night so a large library's first pass is paid
-        over several nights rather than in one long unattended run; an
-        administrator's own run through `POST
-        /library/enrichment/run` is uncapped. The cap is spent in phase
-        order, so on a server with a MusicBrainz contact the identity
-        phases drain first and the artwork and fields walks wait behind
-        them. It is not forced, so a
-        target some provider already declined is not asked again until
-        a forced run. A firing that collides with a pass already
-        running is skipped the way `analyze` is.
+        `enrich` is on by default: the whole-library pass, capped per night
+        (a hand-started run is not), and not forced, so a miss is asked
+        about again only once the retry window has passed.
 
     ScrobblingAdminConfig:
       type: object
@@ -2008,6 +2053,103 @@ components:
         removed:
           type: integer
           description: Cached thumbnails dropped.
+        freedBytes:
+          type: integer
+          format: int64
+          description: >
+            What they held. Freed inside the catalog file rather than
+            returned to the filesystem.
+
+    EnrichmentCacheReport:
+      type: object
+      description: What the enrichment response cache holds.
+      required: [rows, bytes, kinds, exemptRows, exemptBytes]
+      properties:
+        rows:
+          type: integer
+          description: Cached answers held, the exempt ones included.
+        bytes:
+          type: integer
+          format: int64
+          description: What they cost.
+        oldestAt:
+          type: string
+          format: date-time
+          description: >
+            When the oldest cached answer was fetched. Absent when the
+            cache is empty.
+        newestAt:
+          type: string
+          format: date-time
+          description: >
+            When the newest cached answer was fetched. Absent when the
+            cache is empty.
+        kinds:
+          type: array
+          description: Per-kind breakdown, largest first.
+          items:
+            $ref: "#/components/schemas/EnrichmentCacheKind"
+        exemptRows:
+          type: integer
+          description: >
+            Rows a prune leaves alone: the Cover Art Archive's group
+            records, facts about stored covers rather than cached
+            answers.
+        exemptBytes:
+          type: integer
+          format: int64
+          description: What those cost.
+
+    EnrichmentCacheKind:
+      type: object
+      description: One request kind's share of the enrichment cache.
+      required: [kind, rows, bytes, exempt]
+      properties:
+        kind:
+          type: string
+          description: The provider and endpoint the answers came from.
+          example: "mb:artist"
+        rows:
+          type: integer
+          description: Cached answers of this kind.
+        bytes:
+          type: integer
+          format: int64
+          description: What they cost.
+        exempt:
+          type: boolean
+          description: Whether a prune leaves this kind alone.
+
+    EnrichmentCachePruneRequest:
+      type: object
+      description: >
+        Which cached answers to drop. Each bound is optional but one must be
+        given, so a request with neither is refused rather than read as
+        "everything". Zero is a value, not an absence.
+      properties:
+        olderThanSeconds:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Drop answers fetched at least this long ago. Absent leaves
+            the age unbounded.
+        maxBytes:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Evict oldest-first until the prunable rows fit this many
+            bytes. Absent leaves the size unbounded.
+
+    EnrichmentCachePruneResult:
+      type: object
+      description: What an enrichment-cache prune dropped.
+      required: [removed, freedBytes]
+      properties:
+        removed:
+          type: integer
+          description: Cached answers dropped.
         freedBytes:
           type: integer
           format: int64

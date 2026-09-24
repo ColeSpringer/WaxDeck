@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"os"
@@ -42,6 +43,7 @@ import (
 	"github.com/colespringer/waxdeck/server/internal/cast/jukebox"
 	"github.com/colespringer/waxdeck/server/internal/connect"
 	"github.com/colespringer/waxdeck/server/internal/db"
+	"github.com/colespringer/waxdeck/server/internal/envflag"
 	"github.com/colespringer/waxdeck/server/internal/events"
 	"github.com/colespringer/waxdeck/server/internal/metrics"
 	"github.com/colespringer/waxdeck/server/internal/notices"
@@ -66,6 +68,7 @@ func main() {
 }
 
 func run() error {
+	env := envflag.New(flag.CommandLine)
 	var (
 		addr       = flag.String("addr", envOr("WAXDECK_ADDR", ":4420"), "listen address")
 		webDir     = flag.String("web-dir", envOr("WAXDECK_WEB_DIR", ""), "serve the web UI from this directory instead of the embedded build (dev)")
@@ -74,50 +77,50 @@ func run() error {
 		flowURL    = flag.String("flow-url", envOr("WAXDECK_FLOW_URL", ""), "WaxFlow sidecar base URL (empty disables streaming)")
 		flowAPIKey = flag.String("flow-api-key", envOr("WAXDECK_FLOW_API_KEY", ""), "API key WaxDeck presents to the WaxFlow sidecar")
 		flowConfig = flag.String("flow-config", envOr("WAXDECK_FLOW_CONFIG", ""), "the WaxFlow sidecar's JSON config file, as WaxDeck sees it; set it (and point the sidecar at the same file) so a library created at runtime streams without a sidecar restart")
-		scanStart  = flag.Bool("scan-on-start", envOr("WAXDECK_SCAN_ON_START", "true") == "true", "launch a library scan at startup")
-		resetStale = flag.Bool("reset-catalog", envOr("WAXDECK_RESET_CATALOG", "false") == "true", "when the catalog was built from a different schema baseline (which pre-1.0 is edited in place rather than migrated), move it aside and start on a fresh one instead of refusing to start. Discards play positions, ratings, stars, playlists, curation edits, podcast subscriptions and trash; media on disk is untouched and re-indexed by the startup scan. It fires only on that refusal, never on a catalog this build can open -- but it cannot tell a baseline that moved forward from one that moved back, so a rollback across a baseline edit discards rather than refuses")
-		cookieSec  = flag.Bool("cookie-secure", envOr("WAXDECK_COOKIE_SECURE", "false") == "true", "mark session cookies Secure (set whenever the origin is HTTPS)")
+		scanStart  = env.Bool("scan-on-start", "WAXDECK_SCAN_ON_START", true, "launch a library scan at startup")
+		resetStale = env.Bool("reset-catalog", "WAXDECK_RESET_CATALOG", false, "when the catalog was built from a different schema baseline (which pre-1.0 is edited in place rather than migrated), move it aside and start on a fresh one instead of refusing to start. Discards play positions, ratings, stars, playlists, curation edits, podcast subscriptions and trash; media on disk is untouched and re-indexed by the startup scan. It fires only on that refusal, never on a catalog this build can open -- but it cannot tell a baseline that moved forward from one that moved back, so a rollback across a baseline edit discards rather than refuses")
+		cookieSec  = env.Bool("cookie-secure", "WAXDECK_COOKIE_SECURE", false, "mark session cookies Secure (set whenever the origin is HTTPS)")
 		publicBase = flag.String("public-base", envOr("WAXDECK_PUBLIC_BASE", ""), "externally reachable base URL (needed for OIDC callbacks), e.g. https://wax.example.com")
 
 		podcastDir      = flag.String("podcast-dir", envOr("WAXDECK_PODCAST_DIR", ""), "episode download directory (its own library, never inside a library root; defaults to <data-dir>/podcasts, explicit empty via -podcast-dir=\"\" disables podcasts)")
 		podcastRoot     = flag.String("podcast-root-name", envOr("WAXDECK_PODCAST_ROOT_NAME", "podcasts"), "WaxFlow root name the podcast dir is mounted under")
-		feedRefreshMin  = flag.Int("feed-refresh-minutes", envIntOr("WAXDECK_FEED_REFRESH_MINUTES", 30), "minutes between scheduled feed refreshes")
-		retentionKeep   = flag.Int64("podcast-retention-default", envInt64Or("WAXDECK_PODCAST_RETENTION_DEFAULT", 0), "default keep-newest-N downloaded episodes for subscribers who leave retention unset (0 keeps all)")
-		allowPrivateNet = flag.Bool("allow-private-feed-hosts", envOr("WAXDECK_ALLOW_PRIVATE_FEED_HOSTS", "false") == "true", "allow feeds and enclosures on private addresses (LAN-hosted feeds)")
+		feedRefreshMin  = env.Int("feed-refresh-minutes", "WAXDECK_FEED_REFRESH_MINUTES", 30, "minutes between scheduled feed refreshes")
+		retentionKeep   = env.Int64("podcast-retention-default", "WAXDECK_PODCAST_RETENTION_DEFAULT", 0, "default keep-newest-N downloaded episodes for subscribers who leave retention unset (0 keeps all)")
+		allowPrivateNet = env.Bool("allow-private-feed-hosts", "WAXDECK_ALLOW_PRIVATE_FEED_HOSTS", false, "allow feeds and enclosures on private addresses (LAN-hosted feeds)")
 
-		podpingOn      = flag.Bool("podping", envOr("WAXDECK_PODPING", "false") == "true", "watch the Hive blockchain for Podping notifications, so a subscribed show whose host publishes them refreshes within seconds of a new episode instead of at the next scheduled refresh. Off by default: it is a standing outbound connection to a third-party public node. Scheduled refresh stays the floor either way")
+		podpingOn      = env.Bool("podping", "WAXDECK_PODPING", false, "watch the Hive blockchain for Podping notifications, so a subscribed show whose host publishes them refreshes within seconds of a new episode instead of at the next scheduled refresh. Off by default: it is a standing outbound connection to a third-party public node. Scheduled refresh stays the floor either way")
 		podpingNode    = flag.String("podping-node", envOr("WAXDECK_PODPING_NODE", ""), "Hive API node the Podping watcher reads (empty selects a public node)")
 		podpingWriters = flag.String("podping-writers", envOr("WAXDECK_PODPING_WRITERS", ""), "trusted Podping writer accounts, comma separated. Empty (the default) resolves the published podping.cloud writer set from the chain, which is how it is meant to be read; a list here pins it instead")
 
-		allowPrivateRadio    = flag.Bool("allow-private-radio-hosts", envOr("WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS", "false") == "true", "allow radio stream URLs on private addresses (LAN icecast)")
-		allowPrivateScrobble = flag.Bool("allow-private-scrobble-hosts", envOr("WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS", "false") == "true", "allow ListenBrainz-compatible API bases on private addresses (LAN Maloja)")
-		allowPrivateNotify   = flag.Bool("allow-private-notify-hosts", envOr("WAXDECK_ALLOW_PRIVATE_NOTIFY_HOSTS", "false") == "true", "allow user-pointed notification destinations on private addresses (LAN ntfy or Gotify)")
+		allowPrivateRadio    = env.Bool("allow-private-radio-hosts", "WAXDECK_ALLOW_PRIVATE_RADIO_HOSTS", false, "allow radio stream URLs on private addresses (LAN icecast)")
+		allowPrivateScrobble = env.Bool("allow-private-scrobble-hosts", "WAXDECK_ALLOW_PRIVATE_SCROBBLE_HOSTS", false, "allow ListenBrainz-compatible API bases on private addresses (LAN Maloja)")
+		allowPrivateNotify   = env.Bool("allow-private-notify-hosts", "WAXDECK_ALLOW_PRIVATE_NOTIFY_HOSTS", false, "allow user-pointed notification destinations on private addresses (LAN ntfy or Gotify)")
 		radioDirBase         = flag.String("radio-directory-base", envOr("WAXDECK_RADIO_DIRECTORY_BASE", ""), "radio-browser directory API base URL (empty selects the public instance)")
 		podcastDirBase       = flag.String("podcast-directory-base", envOr("WAXDECK_PODCAST_DIRECTORY_BASE", ""), "podcast name-search API base URL (empty selects the public iTunes search endpoint)")
 		lastfmKey            = flag.String("lastfm-api-key", envOr("WAXDECK_LASTFM_API_KEY", ""), "Last.fm API key for outbound scrobbling (empty leaves Last.fm unavailable)")
 		lastfmSecret         = flag.String("lastfm-secret", envOr("WAXDECK_LASTFM_SECRET", ""), "Last.fm API shared secret")
 
-		youtubeOn    = flag.Bool("youtube", envOr("WAXDECK_YOUTUBE", "true") == "true", "the YouTube acquisition bridge (download videos, playlists, and channels; subscribe to channels as podcasts). On by default; set WAXDECK_YOUTUBE=false to disable")
+		youtubeOn    = env.Bool("youtube", "WAXDECK_YOUTUBE", true, "the YouTube acquisition bridge (download videos, playlists, and channels; subscribe to channels as podcasts). On by default; set WAXDECK_YOUTUBE=false to disable")
 		sealURL      = flag.String("seal-url", envOr("WAXDECK_SEAL_URL", ""), "WaxSeal attestation sidecar base URL (optional; full-quality YouTube path)")
 		sealKey      = flag.String("seal-api-key", envOr("WAXDECK_SEAL_API_KEY", ""), "API key for the WaxSeal sidecar")
 		sponsorBlock = flag.String("youtube-sponsorblock", envOr("WAXDECK_YOUTUBE_SPONSORBLOCK", ""), "SponsorBlock categories to cut from acquired audio, comma separated (empty disables)")
-		ytThumbnail  = flag.Bool("youtube-thumbnail", envOr("WAXDECK_YOUTUBE_THUMBNAIL", "true") == "true", "embed the source thumbnail as cover art on acquired audio, cropped to its square where the source is letterboxed release art, until enrichment finds official artwork. On by default; set WAXDECK_YOUTUBE_THUMBNAIL=false to disable")
+		ytThumbnail  = env.Bool("youtube-thumbnail", "WAXDECK_YOUTUBE_THUMBNAIL", true, "embed the source thumbnail as cover art on acquired audio, cropped to its square where the source is letterboxed release art, until enrichment finds official artwork. On by default; set WAXDECK_YOUTUBE_THUMBNAIL=false to disable")
 		sourceStub   = flag.String("source-stub-url", envOr("WAXDECK_SOURCE_STUB_URL", ""), "base URL of a sourceserv fixture host to use as the acquisition source (test stacks only; never production)")
 
 		advertiseBase = flag.String("advertise-base", envOr("WAXDECK_ADVERTISE_BASE", ""), "plain-HTTP LAN base URL cast devices fetch media from (empty auto-detects the LAN address)")
-		castDiscovery = flag.Bool("cast-discovery", envOr("WAXDECK_CAST_DISCOVERY", "true") == "true", "discover Chromecast and DLNA devices on the LAN (mDNS and SSDP)")
+		castDiscovery = env.Bool("cast-discovery", "WAXDECK_CAST_DISCOVERY", true, "discover Chromecast and DLNA devices on the LAN (mDNS and SSDP)")
 		castDevices   = flag.String("cast-devices", envOr("WAXDECK_CAST_DEVICES", ""), "static cast devices as name=host:port pairs, comma separated (networks without multicast)")
 		dlnaDevices   = flag.String("dlna-devices", envOr("WAXDECK_DLNA_DEVICES", ""), "static DLNA renderer description URLs, comma separated")
-		jukeboxOn     = flag.Bool("jukebox", envOr("WAXDECK_JUKEBOX", "false") == "true", "play out the server's own audio device as a selectable endpoint (needs the streaming engine)")
+		jukeboxOn     = env.Bool("jukebox", "WAXDECK_JUKEBOX", false, "play out the server's own audio device as a selectable endpoint (needs the streaming engine)")
 		jukeboxCmd    = flag.String("jukebox-cmd", envOr("WAXDECK_JUKEBOX_CMD", ""), "player command the jukebox pipes WAV into (default aplay; PipeWire hosts use pw-cat -p -)")
 		jukeboxName   = flag.String("jukebox-name", envOr("WAXDECK_JUKEBOX_NAME", "Server audio"), "display name of the jukebox endpoint")
 
 		managedRoots = flag.String("managed-roots", envOr("WAXDECK_MANAGED_ROOTS", ""), "library root names (comma separated) the catalog may place files into: uploads import there and the organizer may move files there; unlisted roots stay strictly in place")
-		watchRoots   = flag.Bool("library-watch", envOr("WAXDECK_LIBRARY_WATCH", "true") == "true", "watch the library roots and catalog files placed there by hand without waiting for a rescan. On by default; set WAXDECK_LIBRARY_WATCH=false to disable. Network mounts (NFS, SMB, 9p) rarely deliver change events; enable the scan schedule there instead")
+		watchRoots   = env.Bool("library-watch", "WAXDECK_LIBRARY_WATCH", true, "watch the library roots and catalog files placed there by hand without waiting for a rescan. On by default; set WAXDECK_LIBRARY_WATCH=false to disable. Network mounts (NFS, SMB, 9p) rarely deliver change events; enable the scan schedule there instead")
 
 		uploadFormats = flag.String("upload-formats", envOr("WAXDECK_UPLOAD_FORMATS", ""), "file extensions uploads accept, comma separated. Replaces the default set rather than extending it; empty keeps the default (every format the catalog scans and the decode stack reads). DRM containers (aax, aaxc) are refused regardless")
 
-		matchingOn   = flag.Bool("matching", envOr("WAXDECK_MATCHING", "true") == "true", "identify new and uploaded music against MusicBrainz (paced background lookups)")
+		matchingOn   = env.Bool("matching", "WAXDECK_MATCHING", true, "identify new and uploaded music against MusicBrainz (paced background lookups)")
 		mbBase       = flag.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override (a local mirror, or a stub in tests)")
 		coverArtBase = flag.String("coverart-base", envOr("WAXDECK_COVERART_BASE", ""), "Cover Art Archive base override (a mirror, or a stub in tests); the archive rung only exists when matching is on")
 		trustedProxy = flag.String("trusted-proxies", envOr("WAXDECK_TRUSTED_PROXIES", ""), "comma-separated CIDRs or addresses of reverse proxies whose X-Forwarded-For may be believed; empty counts the socket address")
@@ -132,10 +135,11 @@ func run() error {
 		enrichURLs = flag.String("enrich-provider-urls", envOr("WAXDECK_ENRICH_PROVIDER_URLS", ""), "custom enrichment providers as name=url pairs, comma separated, each implementing the contract in docs/custom-provider-api/. Validated at startup (the capabilities document must answer and advertise a name) and registered ahead of every built-in provider")
 		enrichAuth = flag.String("enrich-provider-auth", envOr("WAXDECK_ENRICH_PROVIDER_AUTH", ""), "bearer tokens for custom enrichment providers as name=token pairs, comma separated; names must match -enrich-provider-urls")
 
-		artistArtOn = flag.Bool("artist-art", envOr("WAXDECK_ARTIST_ART", "true") == "true", "fill missing artist portraits during enrichment. The catalog's artist walk asks fanart.tv by MusicBrainz id where its key is set, and Deezer by name for every artist including the ones MusicBrainz never matched. On by default; set WAXDECK_ARTIST_ART=false and the providers stop advertising artist art, so the walk never asks either service for one")
+		artistArtOn = env.Bool("artist-art", "WAXDECK_ARTIST_ART", true, "fill missing artist portraits during enrichment. The catalog's artist walk asks fanart.tv by MusicBrainz id where its key is set, and Deezer by name for every artist including the ones MusicBrainz never matched. On by default; set WAXDECK_ARTIST_ART=false and the providers stop advertising artist art, so the walk never asks either service for one")
 
 		enrichContact = flag.String("enrichment-contact", envOr("WAXDECK_ENRICHMENT_CONTACT", ""), "MusicBrainz contact (an email or a URL) the catalog's whole-library enrichment pass identifies itself with. MusicBrainz requires an identifying agent, so empty leaves that pass disabled and /admin/enrichment/run refuses")
-		enrichMatch   = flag.Bool("enrichment-match-releases", envOr("WAXDECK_ENRICHMENT_MATCH_RELEASES", "true") == "true", "during enrichment, resolve which pressing of a record the library holds from its barcode or catalog number, deciding ties on medium and country. On by default; needs -enrichment-contact to have any effect")
+		enrichMatch   = env.Bool("enrichment-match-releases", "WAXDECK_ENRICHMENT_MATCH_RELEASES", true, "during enrichment, resolve which pressing of a record the library holds from its barcode or catalog number, deciding ties on medium and country. On by default; needs -enrichment-contact to have any effect")
+		enrichRetry   = env.Int("enrichment-retry-misses-days", "WAXDECK_ENRICHMENT_RETRY_MISSES_DAYS", 30, "days a target nothing answered for waits before an enrichment pass asks about it again, so a source that has since learned it is reached; 0 never asks again. A match is never re-asked")
 
 		oidcIssuer  = flag.String("oidc-issuer", envOr("WAXDECK_OIDC_ISSUER", ""), "OIDC issuer URL (empty disables single sign-on)")
 		oidcID      = flag.String("oidc-id", envOr("WAXDECK_OIDC_ID", "sso"), "OIDC provider id shown in start URLs")
@@ -147,9 +151,9 @@ func run() error {
 
 		metricsToken = flag.String("metrics-token", envOr("WAXDECK_METRICS_TOKEN", ""), "bearer token protecting GET /metrics (empty leaves the endpoint disabled)")
 
-		sonicAnalysis    = flag.Bool("sonic-analysis", envOr("WAXDECK_SONIC_ANALYSIS", "true") == "true", "boot default for background sonic-similarity analysis (embedded analyzer; powers instant mixes, similar tracks, and sonic paths). On by default; administrators toggle it at runtime in the server settings")
+		sonicAnalysis    = env.Bool("sonic-analysis", "WAXDECK_SONIC_ANALYSIS", true, "boot default for background sonic-similarity analysis (embedded analyzer; powers instant mixes, similar tracks, and sonic paths). On by default; administrators toggle it at runtime in the server settings")
 		workerTokens     = flag.String("worker-tokens", envOr("WAXDECK_WORKER_TOKENS", ""), "external similarity worker tokens, comma separated (optional; offloads analysis to another machine through the worker API)")
-		workerLocalPaths = flag.Bool("worker-local-paths", envOr("WAXDECK_WORKER_LOCAL_PATHS", "false") == "true", "expose library-relative source paths to similarity workers that mount the library read-only (single-root libraries)")
+		workerLocalPaths = env.Bool("worker-local-paths", "WAXDECK_WORKER_LOCAL_PATHS", false, "expose library-relative source paths to similarity workers that mount the library read-only (single-root libraries)")
 
 		showVer     = flag.Bool("version", false, "print version and exit")
 		showNotices = flag.Bool("third-party-notices", false, "print the third-party license notices bundled in this binary and exit")
@@ -167,6 +171,13 @@ func run() error {
 	if *showNotices {
 		fmt.Print(notices.Text)
 		return nil
+	}
+	if err := env.Err(); err != nil {
+		return err
+	}
+	retryDays, err := enrichRetryWindow(*enrichRetry)
+	if err != nil {
+		return err
 	}
 
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -399,7 +410,7 @@ func run() error {
 		bridged := make([]enrich.Provider, 0, len(bridgePairs))
 		for _, p := range bridgePairs {
 			bridge, err := waxproviders.NewHTTPBridge(ctx, waxproviders.HTTPBridgeConfig{
-				Label: p[0], BaseURL: p[1], Token: authFor[p[0]],
+				Label: p[0], BaseURL: p[1], Token: authFor[p[0]], Log: log,
 			})
 			if err != nil {
 				return err
@@ -453,6 +464,7 @@ func run() error {
 		EnrichmentProviders:       enrichProviders,
 		EnrichmentContact:         *enrichContact,
 		EnrichmentMatchReleases:   *enrichMatch,
+		EnrichmentRetryMissesDays: retryDays,
 		Logger:                    log,
 	}
 	// Radio's external artwork rung, Deezer first: it answers a title in a
@@ -1512,22 +1524,17 @@ func flagWasSet(name string) bool {
 	return set
 }
 
-func envIntOr(key string, def int) int {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return def
-}
+// maxRetryDays is the longest miss window a Duration holds; past it the
+// catalog's day count wraps to a short window.
+const maxRetryDays = int(math.MaxInt64 / int64(24*time.Hour))
 
-func envInt64Or(key string, def int64) int64 {
-	if v := os.Getenv(key); v != "" {
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-			return n
-		}
+// enrichRetryWindow refuses a negative miss window, which the catalog
+// would silently read as never, and one too long to hold.
+func enrichRetryWindow(days int) (*int, error) {
+	if days < 0 || days > maxRetryDays {
+		return nil, fmt.Errorf("WAXDECK_ENRICHMENT_RETRY_MISSES_DAYS is %d; want at most %d days, or 0 to never ask again", days, maxRetryDays)
 	}
-	return def
+	return &days, nil
 }
 
 // listenPort extracts the port from a listen address, defaulting to

@@ -1,21 +1,13 @@
-/// What `probeStream` found at the other end of a stream URL.
-///
-/// Its own file so both platform halves can import it without importing
-/// the library that conditionally exports them.
-///
-/// Three answers rather than two, because a server can refuse in a way
-/// that is about the file rather than about the way to it: a 415 is an
-/// endpoint saying it will not serve this as audio, and that is the same
-/// verdict Android's renderer gives from inside the player.
+/// What `probeStream` found at the other end of a stream URL. Three answers,
+/// because a server can refuse the file itself (a 415 or 422) rather than
+/// the way to it.
 enum StreamProbe {
   /// The URL answered with bytes.
   answered,
 
-  /// The server would not make audio out of the file: 415, which our
-  /// own sidecar returns for `unsupported-format` - bytes its decoder
-  /// will not take, and a shape it cannot build from them. Which of the
-  /// two it was does not change the answer here: no number of retries
-  /// makes this URL play.
+  /// The server would not make audio out of the file: our sidecar's 415
+  /// for `unsupported-format` or 422 for `malformed-input`. No number of
+  /// retries makes this URL play.
   unplayable,
 
   /// Nothing usable came back: a status that is neither, a refused

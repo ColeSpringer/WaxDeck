@@ -743,7 +743,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminScheduleEnrichBlurb =>
-      'Rellena los metadatos, las carátulas y las letras que faltan a partir de los proveedores configurados. Se limita a 2000 elementos por noche, así que una biblioteca grande se completa a lo largo de varias noches; una ejecución iniciada a mano no tiene límite. Un proveedor que rechaza algo no se vuelve a consultar hasta que se fuerza una ejecución.';
+      'Rellena los metadatos, las carátulas y las letras que faltan a partir de los proveedores configurados. Se limita a 2000 elementos por noche, así que una biblioteca grande se completa a lo largo de varias noches; una ejecución iniciada a mano no tiene límite. La configuración del servidor fija cuánto espera lo que ningún proveedor pudo responder antes de volver a consultarse, 30 días por defecto.';
 
   @override
   String adminScheduleLastRun(String stamp) {

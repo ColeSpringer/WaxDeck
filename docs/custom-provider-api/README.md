@@ -13,7 +13,9 @@ Two endpoints. `GET /capabilities` answers who the provider is (the
 `name` becomes the provenance mark on everything it supplies) and which
 kinds of enrichment it serves. `POST /enrich` answers one lookup:
 WaxDeck sends the identity hints it holds for a target (titles, names,
-MBID/ASIN/ISBN/ISRC/barcode, a track duration), and the service answers
+MBID/ASIN/ISBN/ISRC, a release's barcode and catalog number, a track
+duration) and which capabilities the answer is wanted for (`wants`), and
+the service answers
 `200` with everything it found or `204` for a clean no-match. That is the whole
 surface - it mirrors WaxDeck's in-process provider port one-to-one, so
 there is no search/match handshake to implement.
@@ -48,12 +50,23 @@ that is version skew, not misconfiguration.
   and composer, `release` for an album's label and year. Answer nothing
   for the rung you do not know. An album year fans out to every track
   on it, so WaxDeck refuses one where the members already disagree.
-- Covers are refused over 8 MiB, or when the bytes are not a
-  recognizable image.
-- A non-200/204 answer is treated as transient: logged, skipped,
-  retried on a later enrichment pass. Don't answer `404` for "no
-  match" - that also reads as a miss, but `204` says it explicitly.
-  An all-empty `200` object reads as a miss too.
+- Art is asked at the `release_group` rung for the group's picture and
+  at the `release` rung for one pressing's: `cover` for an album with no
+  front at all, `aux-art` for its other slots. Answer a `release` only
+  when you know that pressing (by barcode, catalog number or release
+  MBID); if its cover is the group's picture WaxDeck already holds, say
+  `frontIsGroupFront` instead of sending the bytes again.
+- Roles other than the front ride `art`, keyed `back`, `disc`,
+  `booklet` or `background`; the artist-art walk reads an artist's
+  picture from `art.front` (or `cover`).
+- Images are refused over 8 MiB, as SVG, or when the bytes are not a
+  recognizable image. A refused image is logged and dropped; the rest
+  of the answer still lands.
+- A non-200/204 answer is logged and read as a miss: the target is
+  asked about again once the retry window has passed (30 days by
+  default) or on a forced run. Don't answer `404` for "no match" - that
+  also reads as a miss, but `204` says it explicitly. An all-empty
+  `200` object reads as a miss too.
 - WaxDeck keeps no cache of enrich answers (a candidate can carry a
   whole cover inline), so caching is the service's to do; `force: true`
   asks it to bypass whatever cache it keeps.

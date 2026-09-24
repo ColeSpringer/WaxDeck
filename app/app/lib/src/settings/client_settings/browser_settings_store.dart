@@ -65,12 +65,16 @@ class BrowserClientSettingsStore implements ClientSettingsStore {
   }
 
   @override
-  Future<String?> read(String key) async {
-    if (_shadow.containsKey(key)) return _shadow[key];
+  Future<String?> read(String key) async => peek(key).value;
+
+  /// Always an answer: the browser's storage is at hand.
+  @override
+  ({String? value}) peek(String key) {
+    if (_shadow.containsKey(key)) return (value: _shadow[key]);
     try {
-      return _storage?.getItem(key);
+      return (value: _storage?.getItem(key));
     } catch (_) {
-      return null;
+      return (value: null);
     }
   }
 

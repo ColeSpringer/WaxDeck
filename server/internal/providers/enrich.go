@@ -157,3 +157,41 @@ func (n noArtistArt) Enrich(ctx context.Context, req enrich.Request) (*enrich.Ca
 	}
 	return n.Provider.Enrich(ctx, req)
 }
+
+// capabilityVocab names each capability as the status surface and the
+// custom-provider contract spell it, in the order the surface lists them.
+var capabilityVocab = []struct {
+	name string
+	cap  enrich.Capability
+}{
+	{"identity", enrich.CapIdentity},
+	{"genres", enrich.CapGenres},
+	{"cover", enrich.CapCover},
+	{"lyrics", enrich.CapLyrics},
+	{"book", enrich.CapBookMeta},
+	{"aux-art", enrich.CapAuxArt},
+	{"artist-art", enrich.CapArtistArt},
+	{"fields", enrich.CapFields},
+}
+
+// CapabilityNames renders a capability set in the contract's tokens.
+func CapabilityNames(c enrich.Capability) []string {
+	var out []string
+	for _, v := range capabilityVocab {
+		if c.Has(v.cap) {
+			out = append(out, v.name)
+		}
+	}
+	return out
+}
+
+// parseCapability reads one contract token, zero for one this build does
+// not know, so a remote built against a newer contract still serves.
+func parseCapability(token string) enrich.Capability {
+	for _, v := range capabilityVocab {
+		if v.name == token {
+			return v.cap
+		}
+	}
+	return 0
+}

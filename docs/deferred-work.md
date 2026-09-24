@@ -383,10 +383,10 @@ here waits on upstream.
   warming at 128 - so on such a display the warm fills a cache entry the
   row never reads. A note here once blamed a
   `web-gapless.spec.ts` failure on the web warm and switched it off; the
-  failure was a renderer defect the precacher had nothing to do with
-  (the WaxFlow entry in `docs/upstream-requests.md`), the switch is
-  gone, and the claim is withdrawn. Take it with the perf-measurement
-  entry above.
+  failure was the sidecar's FLAC init segment declaring the wrong depth,
+  since fixed upstream, which the precacher had nothing to do with. The
+  switch is gone and the claim is withdrawn. Take it with the
+  perf-measurement entry above.
 
 - `[in-repo]` **The player's dismissing surface catches a press aimed
   at a control that moved.** `PlayerScaffold` gives every pixel its
@@ -660,19 +660,35 @@ here waits on upstream.
   leaves no `.tmp` behind, and a second export of the same card
   replaces rather than duplicates.
 
+## Acquisition
+
+- `[in-repo]` **A live or upcoming YouTube entry pushed below a newer
+  upload before it ends is never cataloged.** WaxTap lists a premiere or
+  a running stream without looking it up, and a subscription drops it
+  because it cannot download yet. The cursor stays below one at the top
+  of the feed, so that one is listed again and cataloged once it is a
+  VOD; but the next poll stops at a newer upload's id, so an entry still
+  live when something else is published is passed over for good.
+  Holding the cursor below it instead would re-enrich every newer upload
+  on every poll, which a perpetual live stream makes unbounded. The fix
+  wants a bounded second look: remember the passed-over ids and probe
+  each until it resolves or ages out.
+
 ## Admin and ops
 
 - `[in-repo]` **The enrichment status surface has no client reader.**
   `GET /library/enrichment` answers `configured`,
-  `musicbrainzConfigured`, `phases` and a `lastRun` block carrying
-  fourteen counters, and the app's hand-written `EnrichmentStatus`
-  carries three fields: providers, coverage, and whether a pass is
-  running. So the spec's own instruction - read `phases` before offering
-  a button that errors, and do not say "enrichment is off" when only the
-  identity half is - is unfollowable by WaxDeck's own client, and the
-  last-run counters have nobody to show them. Not a mapping oversight:
-  there is no admin enrichment screen to put them on, and the two halves
-  land together. Take it with that screen, which also wants the operator
-  ordering and per-source enable that already have their own entry
-  above; the mapping is four lines once there is somewhere to draw
-  them.
+  `musicbrainzConfigured`, `phases` and a `lastRun` block carrying the
+  pass's thirty counters, mirrored one for one, and the app's
+  hand-written `EnrichmentStatus` carries three fields: providers,
+  coverage, and whether a pass is running. The run's `forcePhases` and
+  the enrichment-cache census and prune (`/admin/enrichment-cache`) have
+  no reader either. So the spec's own instruction - read `phases` before
+  offering a button that errors, and do not say "enrichment is off" when
+  only the identity half is - is unfollowable by WaxDeck's own client,
+  and the last-run counters have nobody to show them. Not a mapping
+  oversight: there is no admin enrichment screen to put them on, and the
+  two halves land together. Take it with that screen, which also wants
+  the operator ordering and per-source enable that already have their
+  own entry above; the mapping is mechanical once there is somewhere to
+  draw them.

@@ -60,6 +60,9 @@ class ThrowingClientSettingsStore implements ClientSettingsStore {
   Future<String?> read(String key) async => throw StateError('no reads');
 
   @override
+  ({String? value})? peek(String key) => throw StateError('no peeks');
+
+  @override
   Future<void> write(String key, String value) async =>
       throw StateError('no writes');
 
@@ -80,6 +83,9 @@ class PickyClientSettingsStore implements ClientSettingsStore {
 
   @override
   Future<String?> read(String key) => _kept.read(key);
+
+  @override
+  ({String? value})? peek(String key) => _kept.peek(key);
 
   @override
   Future<void> write(String key, String value) async {
@@ -142,6 +148,22 @@ void main() {
       await store.remove('k');
       expect(await store.read('k'), isNull);
       expect(storage.values.containsKey('k'), isFalse);
+    });
+
+    test('answers without waiting, the session\'s changes first', () async {
+      final storage = FakeBrowserStorage()..values['k'] = 'v';
+      final store = BrowserClientSettingsStore(storage);
+      expect(store.peek('k').value, 'v');
+      expect(store.peek('unset').value, isNull);
+      await store.remove('k');
+      expect(store.peek('k').value, isNull);
+    });
+
+    test('an unreadable browser answers nothing rather than throwing', () {
+      final storage = FakeBrowserStorage()..values['k'] = 'v';
+      final store = BrowserClientSettingsStore(storage);
+      storage.throwOnRead = true;
+      expect(store.peek('k').value, isNull);
     });
 
     test('the probe leaves nothing behind', () {
@@ -453,6 +475,23 @@ void main() {
         'Nightjar',
         'mogwai',
       ]);
+    });
+
+    test('a store that can answer now spares the first read its '
+        'default', () {
+      // A web reload: the switch was set before it, and the first start
+      // reads it once, before anything has watched it.
+      final storage = FakeBrowserStorage()
+        ..values[ClientSettingKeys.webGapless] = 'true';
+      final container = containerOver(BrowserClientSettingsStore(storage));
+      expect(container.read(webGaplessProvider), isTrue);
+    });
+
+    test('a decode that throws on that first read is the default', () {
+      final storage = FakeBrowserStorage()
+        ..values[ExplodingSetting.key] = 'anything';
+      final container = containerOver(BrowserClientSettingsStore(storage));
+      expect(container.read(explodingSettingProvider), 'default');
     });
 
     test('a decode that throws reads as nothing stored', () async {

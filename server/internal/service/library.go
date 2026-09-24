@@ -160,6 +160,9 @@ type Config struct {
 	// from a barcode or catalog number. On by default; open-time, because
 	// the catalog reads it when it opens.
 	EnrichmentMatchReleases bool
+	// EnrichmentRetryMissesDays is how many days a miss stands before a
+	// pass asks again; 0 never does, nil takes the catalog's default.
+	EnrichmentRetryMissesDays *int
 	// EnrichmentProviders are the server's own providers, registered
 	// ahead of the catalog's built-ins and reused for per-item
 	// enrichment.
@@ -493,15 +496,16 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 			BlockPrivateIPs: !cfg.AllowPrivateFeedHosts,
 		}
 	}
+	// The window governs the provider-gated phases too, so it is set with
+	// or without a contact.
+	opts.Enrichment.RetryMissesAfterDays = cfg.EnrichmentRetryMissesDays
 	if cfg.EnrichmentContact != "" {
 		// Only with a contact: the rest of the block without one would look
 		// configured while still refusing every run.
 		matchReleases := cfg.EnrichmentMatchReleases
-		opts.Enrichment = config.EnrichConfig{
-			Contact:         cfg.EnrichmentContact,
-			MatchReleases:   &matchReleases,
-			BlockPrivateIPs: !cfg.AllowPrivateFeedHosts,
-		}
+		opts.Enrichment.Contact = cfg.EnrichmentContact
+		opts.Enrichment.MatchReleases = &matchReleases
+		opts.Enrichment.BlockPrivateIPs = !cfg.AllowPrivateFeedHosts
 	}
 	// Set when the open below had to discard a stale-baseline catalog, so
 	// the service can say so once it has a logger on it.

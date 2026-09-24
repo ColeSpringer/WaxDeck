@@ -5,11 +5,15 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"reflect"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/enrich"
+	"github.com/colespringer/waxbin/model"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
@@ -79,6 +83,7 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 		name       string
 		contact    string
 		match      bool
+		retryDays  *int
 		providers  []enrich.Provider
 		wantPhases []string
 	}{
@@ -87,18 +92,25 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			wantPhases: []string{},
 		},
 		{
-			// LRCLIB rides along with the contact: it needs no key, but
-			// the catalog registers it only when it has an identifying
-			// agent to dial with, so lyrics is contact-gated too.
+			// The window rides the catalog's enrichment config, which
+			// must not read as configured without a contact.
+			name:       "a retry window alone",
+			retryDays:  new(7),
+			wantPhases: []string{},
+		},
+		{
+			// The archive and LRCLIB ride along with the contact: they
+			// need no key, but the catalog registers them only when it
+			// has an identifying agent to dial with.
 			name:       "contact alone",
 			contact:    "waxdeck@example.test",
-			wantPhases: []string{"identity", "lyrics"},
+			wantPhases: []string{"identity", "album-art", "lyrics"},
 		},
 		{
 			name:       "contact with the release match",
 			contact:    "waxdeck@example.test",
 			match:      true,
-			wantPhases: []string{"identity", "releases", "lyrics"},
+			wantPhases: []string{"identity", "releases", "album-art", "lyrics"},
 		},
 		{
 			// And an injected lyrics provider opens the phase without
@@ -120,11 +132,16 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			wantPhases: []string{"track-fields", "book-fields", "album-fields"},
 		},
 		{
-			// A capability that gates no phase of its own: covers and
-			// genres ride the identity walk, so they open nothing.
-			name:       "cover and genres alone open no phase",
+			// Genres ride the identity walk and open nothing; a cover
+			// opens the album-art backfill.
+			name:       "cover and genres open the album-art backfill",
 			providers:  []enrich.Provider{fakeCapProvider{name: "art", caps: enrich.CapCover | enrich.CapGenres}},
-			wantPhases: []string{},
+			wantPhases: []string{"album-art"},
+		},
+		{
+			name:       "aux art opens both art backfills",
+			providers:  []enrich.Provider{fakeCapProvider{name: "backs", caps: enrich.CapAuxArt}},
+			wantPhases: []string{"aux-art", "album-art"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -132,6 +149,7 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
 				c.EnrichmentContact = tc.contact
 				c.EnrichmentMatchReleases = tc.match
+				c.EnrichmentRetryMissesDays = tc.retryDays
 				c.EnrichmentProviders = tc.providers
 			})
 			st, err := svc.EnrichmentStatusFor(ctx, uc)
@@ -157,7 +175,37 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			if st.Configured != (len(st.Phases) > 0) {
 				t.Errorf("configured = %v with phases %v", st.Configured, st.Phases)
 			}
+			// And phase by phase: the catalog forces exactly what the mirror
+			// lists. The library is empty, so an accepted pass walks nothing.
+			for _, spec := range enrichPhaseTable {
+				pid, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{ForcePhases: spec.catalog})
+				if listed := slices.Contains(st.Phases, spec.name); (err == nil) != listed {
+					t.Errorf("%s: catalog accepted = %v (%v), mirror lists it = %v", spec.name, err == nil, err, listed)
+				}
+				if err == nil {
+					waitForJob(t, ctx, svc, pid)
+				}
+			}
 		})
+	}
+}
+
+// waitForJob waits out a catalog job, so the next start is not a conflict.
+func waitForJob(t *testing.T, ctx context.Context, svc *Library, pid model.PID) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		job, err := svc.lib.Job(ctx, pid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if job.State != model.JobRunning {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("job %s still running", pid)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
@@ -193,5 +241,110 @@ func TestScheduledEnrichmentStartsAPass(t *testing.T) {
 	}
 	if svc.DueSchedule(ctx, "enrich", base, base.Add(10*time.Minute)) {
 		t.Error("the enrich schedule fired before its window")
+	}
+}
+
+func TestRunEnrichmentForcePhases(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
+		c.EnrichmentProviders = []enrich.Provider{fakeCapProvider{name: "faces", caps: enrich.CapArtistArt}}
+	})
+	if _, err := svc.RunEnrichment(ctx, uc, true, []string{"artist-art"}); KindOf(err) != KindInvalid {
+		t.Errorf("force beside forcePhases = %v, want invalid", err)
+	}
+	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"everything"}); KindOf(err) != KindInvalid {
+		t.Errorf("an unknown phase = %v, want invalid", err)
+	}
+	// A phase this server does not run is refused in its own knobs'
+	// words, not the catalog's.
+	_, err := svc.RunEnrichment(ctx, uc, false, []string{"releases"})
+	if KindOf(err) != KindUnsupported {
+		t.Fatalf("an unrunnable phase = %v, want unsupported", err)
+	}
+	for _, want := range []string{"WAXDECK_ENRICHMENT_CONTACT", "WAXDECK_ENRICHMENT_MATCH_RELEASES"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal %q does not name %s", err, want)
+		}
+	}
+	for _, leak := range []string{"enrichment.match_releases", "--force"} {
+		if strings.Contains(err.Error(), leak) {
+			t.Errorf("refusal %q carries the catalog's %s", err, leak)
+		}
+	}
+	// Album art opens on covers or auxiliary art, and the refusal says both.
+	_, err = svc.RunEnrichment(ctx, uc, false, []string{"album-art"})
+	if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), "WAXDECK_ENRICHMENT_CONTACT") ||
+		!strings.Contains(err.Error(), "auxiliary art") {
+		t.Errorf("album-art refusal = %v", err)
+	}
+	pid, err := svc.RunEnrichment(ctx, uc, false, []string{"artist-art"})
+	if err != nil || !strings.HasPrefix(pid, PrefixJob+"-") {
+		t.Fatalf("a runnable phase = %q, %v; want a job", pid, err)
+	}
+}
+
+// The catalog's own check is the backstop for a mirror that drifted:
+// its refusal of a phase the mirror admitted is still a 501, in WaxDeck's words.
+func TestRunEnrichmentForcePhasesBackstop(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
+		c.EnrichmentContact = "waxdeck@example.test"
+	})
+	svc.enrichmentMatchReleases = true // the catalog opened without it
+	_, err := svc.RunEnrichment(ctx, uc, false, []string{"releases"})
+	if KindOf(err) != KindUnsupported {
+		t.Fatalf("a drifted phase = %v, want unsupported", err)
+	}
+	if strings.Contains(err.Error(), "enrichment.match_releases") || !strings.Contains(err.Error(), "releases") {
+		t.Errorf("refusal %q carries the catalog's sentence or names no phase", err)
+	}
+}
+
+// Every counter the pass keeps reaches the status surface under its own
+// name, including one a later WaxBin adds.
+func TestLastRunCarriesEveryCounter(t *testing.T) {
+	t.Parallel()
+	var r enrich.Result
+	rv := reflect.ValueOf(&r).Elem()
+	for i := range rv.NumField() {
+		if f := rv.Field(i); f.Kind() == reflect.Int {
+			f.SetInt(int64(i + 1))
+		}
+	}
+	got := reflect.ValueOf(*lastRunFrom(r, 0))
+	for i := range rv.NumField() {
+		name := rv.Type().Field(i).Name
+		if rv.Field(i).Kind() != reflect.Int {
+			continue
+		}
+		g := got.FieldByName(name)
+		if !g.IsValid() {
+			t.Errorf("the last run has no %s", name)
+		} else if g.Int() != rv.Field(i).Int() {
+			t.Errorf("%s = %d, want %d", name, g.Int(), rv.Field(i).Int())
+		}
+	}
+}
+
+func TestEnrichCacheFromCarriesTheCensus(t *testing.T) {
+	t.Parallel()
+	got := enrichCacheFrom(&model.EnrichmentCacheReport{
+		Rows: 3, Bytes: 700, OldestAt: 1, NewestAt: 9,
+		Kinds: []model.EnrichmentCacheKind{
+			{Kind: "mb:artist", Rows: 2, Bytes: 600},
+			{Kind: "caa:rg-front", Rows: 1, Bytes: 100, Exempt: true},
+		},
+		ExemptRows: 1, ExemptBytes: 100,
+	})
+	want := EnrichCacheDTO{
+		Rows: 3, Bytes: 700, OldestAtNS: 1, NewestAtNS: 9,
+		Kinds: []EnrichCacheKindDTO{
+			{Kind: "mb:artist", Rows: 2, Bytes: 600},
+			{Kind: "caa:rg-front", Rows: 1, Bytes: 100, Exempt: true},
+		},
+		ExemptRows: 1, ExemptBytes: 100,
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("census = %+v\nwant     %+v", got, want)
 	}
 }

@@ -81,7 +81,22 @@ mixin StoredSetting<T> on Notifier<T> {
     // under a running app - it is chosen by the platform at startup -
     // and watching it would make every preference vulnerable to the
     // rebuild this notifier has to survive rather than merely tolerate.
-    unawaited(_load(ref.read(clientSettingsStoreProvider), ++_generation));
+    final store = ref.read(clientSettingsStoreProvider);
+    // A store that can answer now spares a first read the default, which
+    // a one-off read (a play started after a reload) would otherwise act on.
+    try {
+      if (store.peek(settingKey) case (:final value)) {
+        final stored = value == null ? null : decode(value);
+        if (stored == null) return defaultValue;
+        _known = true;
+        _value = stored;
+        return stored;
+      }
+    } catch (error) {
+      _failed('reading', error);
+      return defaultValue;
+    }
+    unawaited(_load(store, ++_generation));
     return defaultValue;
   }
 

@@ -92,6 +92,18 @@ void main() {
     );
   });
 
+  test('a 422 is the server finding the file damaged', () async {
+    final server = await serve((req) {
+      req.response.statusCode = HttpStatus.unprocessableEntity;
+      req.response.write('{"code":"malformed-input"}');
+      req.response.close();
+    });
+    expect(
+      await probeStream(urlOf(server, '/damaged.flac')),
+      StreamProbe.unplayable,
+    );
+  });
+
   test('a redirect is followed to its answer', () async {
     late HttpServer server;
     server = await serve((req) {

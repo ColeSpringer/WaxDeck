@@ -2,10 +2,7 @@ package providers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"net/http"
 	"net/url"
 	"strings"
 )
@@ -50,30 +47,21 @@ func (d *Deezer) ArtistImage(ctx context.Context, name string) (TitleCoverResult
 	}
 	q := url.Values{}
 	q.Set("q", name)
-	body, status, err := d.core.get(ctx, d.base+"/search/artist?"+q.Encode(), d.ttl)
-	if err != nil {
-		return TitleCoverResult{}, err
-	}
-	if status != http.StatusOK {
-		return TitleCoverResult{}, fmt.Errorf("providers: deezer artist search: status %d", status)
-	}
 	var parsed struct {
 		Data []struct {
 			Name      string `json:"name"`
 			PictureXL string `json:"picture_xl"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return TitleCoverResult{}, fmt.Errorf("providers: decode deezer artist search: %w", err)
+	if err := d.getJSON(ctx, d.base+"/search/artist?"+q.Encode(), &parsed); err != nil {
+		return TitleCoverResult{}, err
 	}
 	// An artist is routinely listed more than once, so one unusable
-	// picture is not the end of the walk - the FrontCover rule, and the
-	// same bookkeeping: the fetch failure only surfaces when no later
-	// hit answered, so it stays a retriable failure rather than a
-	// recorded miss.
+	// picture is not the end of the walk - the FrontCover rule: the fetch
+	// failure surfaces only when no later hit answered.
 	var reachErr error
 	for _, hit := range parsed.Data {
-		if hit.PictureXL == "" || !artistNameMatch(hit.Name, name) {
+		if !deezerPicture(hit.PictureXL) || !artistNameMatch(hit.Name, name) {
 			continue
 		}
 		data, mediaType, err := fetchImage(ctx, d.core, hit.PictureXL)

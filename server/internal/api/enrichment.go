@@ -22,9 +22,9 @@ func (s *Server) GetEnrichmentStatus(ctx context.Context, _ GetEnrichmentStatusR
 		}
 		return nil, err
 	}
-	phases := make([]EnrichmentStatusPhases, 0, len(st.Phases))
+	phases := make([]EnrichmentPhase, 0, len(st.Phases))
 	for _, ph := range st.Phases {
-		phases = append(phases, EnrichmentStatusPhases(ph))
+		phases = append(phases, EnrichmentPhase(ph))
 	}
 	out := EnrichmentStatus{
 		Running:               st.Running,
@@ -39,27 +39,8 @@ func (s *Server) GetEnrichmentStatus(ctx context.Context, _ GetEnrichmentStatusR
 			Lyrics:        CoverageCount{Enriched: st.Coverage.Lyrics.Enriched, Total: st.Coverage.Lyrics.Total},
 		},
 	}
-	if r := st.LastRun; r != nil {
-		last := EnrichmentLastRun{
-			AlbumsSearched:      r.AlbumsSearched,
-			AlbumsMatched:       r.AlbumsMatched,
-			ArtistArtEnriched:   r.ArtistArtEnriched,
-			ArtistArtMatched:    r.ArtistArtMatched,
-			TrackFieldsEnriched: r.TrackFieldsEnriched,
-			TrackFieldsMatched:  r.TrackFieldsMatched,
-			BookFieldsEnriched:  r.BookFieldsEnriched,
-			BookFieldsMatched:   r.BookFieldsMatched,
-			AlbumFieldsEnriched: r.AlbumFieldsEnriched,
-			AlbumFieldsMatched:  r.AlbumFieldsMatched,
-			TagsWritten:         r.TagsWritten,
-			TagsFailed:          r.TagsFailed,
-			TagsUnrepresented:   r.TagsUnrepresented,
-			TagsSkipped:         r.TagsSkipped,
-		}
-		if r.FinishedAtNS > 0 {
-			last.FinishedAt = ptr(time.Unix(0, r.FinishedAtNS).UTC())
-		}
-		out.LastRun = &last
+	if st.LastRun != nil {
+		out.LastRun = enrichmentLastRun(st.LastRun)
 	}
 	for _, p := range st.Providers {
 		caps := p.Capabilities
@@ -76,15 +57,50 @@ func (s *Server) GetEnrichmentStatus(ctx context.Context, _ GetEnrichmentStatusR
 	return GetEnrichmentStatus200JSONResponse(out), nil
 }
 
+// enrichmentLastRun is the status surface's last-run block.
+func enrichmentLastRun(r *service.EnrichmentLastRunDTO) *EnrichmentLastRun {
+	out := &EnrichmentLastRun{
+		ArtistsEnriched: r.ArtistsEnriched, ArtistsMatched: r.ArtistsMatched,
+		ReleaseGroupsEnriched: r.ReleaseGroupsEnriched, ReleaseGroupsMatched: r.ReleaseGroupsMatched,
+		AlbumsSearched: r.AlbumsSearched, AlbumsMatched: r.AlbumsMatched,
+		BooksEnriched: r.BooksEnriched, BooksMatched: r.BooksMatched,
+		LyricsEnriched: r.LyricsEnriched, LyricsMatched: r.LyricsMatched,
+		AuxArtEnriched: r.AuxArtEnriched, AuxArtMatched: r.AuxArtMatched,
+		ArtistArtEnriched: r.ArtistArtEnriched, ArtistArtMatched: r.ArtistArtMatched,
+		AlbumArtEnriched: r.AlbumArtEnriched, AlbumArtMatched: r.AlbumArtMatched,
+		TrackFieldsEnriched: r.TrackFieldsEnriched, TrackFieldsMatched: r.TrackFieldsMatched,
+		BookFieldsEnriched: r.BookFieldsEnriched, BookFieldsMatched: r.BookFieldsMatched,
+		AlbumFieldsEnriched: r.AlbumFieldsEnriched, AlbumFieldsMatched: r.AlbumFieldsMatched,
+		Retried:    r.Retried,
+		ArtFetched: r.ArtFetched, AuxArtFetched: r.AuxArtFetched, ArtReused: r.ArtReused,
+		TagsWritten: r.TagsWritten, TagsFailed: r.TagsFailed,
+		TagsUnrepresented: r.TagsUnrepresented, TagsSkipped: r.TagsSkipped,
+	}
+	if r.FinishedAtNS > 0 {
+		out.FinishedAt = ptr(time.Unix(0, r.FinishedAtNS).UTC())
+	}
+	return out
+}
+
 func (s *Server) RunEnrichment(ctx context.Context, req RunEnrichmentRequestObject) (RunEnrichmentResponseObject, error) {
 	uc, _, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
 	force := req.Body != nil && derefBool(req.Body.Force)
-	jobPid, err := s.svc.RunEnrichment(ctx, uc, force)
+	// Unchecked here: the service answers an unknown phase after its
+	// own admin check.
+	var phases []string
+	if req.Body != nil && req.Body.ForcePhases != nil {
+		for _, p := range *req.Body.ForcePhases {
+			phases = append(phases, string(p))
+		}
+	}
+	jobPid, err := s.svc.RunEnrichment(ctx, uc, force, phases)
 	if err != nil {
 		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return RunEnrichment400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 		case service.KindForbidden:
 			return RunEnrichment403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindConflict:

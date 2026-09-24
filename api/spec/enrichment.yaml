@@ -30,21 +30,9 @@ paths:
       operationId: runEnrichment
       summary: Run a whole-library enrichment pass
       description: >
-        Starts the catalog's enrichment pass as a background job
-        (identity resolution first, then providers in priority
-        order, provider-paced). `force` re-enriches entities that
-        already enriched once. Locked and unofficial-marked content
-        is respected. Returns the catalog job to follow.
-        Administrators only.
-
-
-        Refuses with `source-unavailable` when no phase could run:
-        neither a MusicBrainz contact nor a provider gating a phase of
-        its own. That is what `enrichmentStatus.configured` reports,
-        and `enrichmentStatus.phases` says which phases a run would
-        execute - read them first rather than offering a button that
-        errors, or one that promises identity resolution a
-        contact-less server will not do.
+        Starts the whole-library enrichment pass as a job: `force` re-asks
+        everything, `forcePhases` the named phases alone. Refuses with
+        `source-unavailable` when no phase could run. Administrators only.
       tags: [enrichment]
       requestBody:
         required: false
@@ -59,6 +47,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnrichmentRunResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -105,43 +95,17 @@ components:
         musicbrainzConfigured:
           type: boolean
           description: >
-            Whether the MusicBrainz identity phases can run. They need
-            an identifying contact, which is boot configuration
-            (`-enrichment-contact` / `WAXDECK_ENRICHMENT_CONTACT`) and
-            not a runtime setting, because MusicBrainz requires an
-            identifying agent before anything is sent.
-
-
-            It gates the lyrics phase too, whose built-in provider
-            needs no key but is not dialled without an identifying
-            agent. The phases that answer to registered providers
-            (artwork, fields, book metadata, and lyrics where a provider
-            supplies them) run without it, so a server with no contact
-            still enriches - just not identity. A console that says
-            "enrichment is off" on this being false would be wrong about
-            the half that does run.
+            Whether the MusicBrainz identity phases can run, which needs the
+            `WAXDECK_ENRICHMENT_CONTACT` boot setting. The Cover Art Archive and
+            LRCLIB wait on it too; the provider-gated phases do not.
         phases:
           type: array
           description: >
-            The phases a run started now would execute, in no
-            particular order. Empty exactly when `configured` is false.
-            `identity` and `releases` need the MusicBrainz contact, and
-            so does `lyrics` unless a registered provider supplies them;
-            the rest need a registered provider advertising the matching
-            capability.
+            The phases a run started now would execute; empty exactly when
+            `configured` is false. `identity` and `releases` need the contact,
+            `album-art` and `lyrics` it or a provider, the rest a provider.
           items:
-            type: string
-            enum:
-              [
-                identity,
-                releases,
-                aux-art,
-                artist-art,
-                lyrics,
-                track-fields,
-                book-fields,
-                album-fields,
-              ]
+            $ref: "#/components/schemas/EnrichmentPhase"
         lastRun:
           $ref: "#/components/schemas/EnrichmentLastRun"
 
@@ -157,31 +121,17 @@ components:
         capabilities:
           type: array
           description: >
-            What it supplies: `identity`, `genres`, `cover`,
-            `lyrics`, `book`, `aux-art`, `artist-art`, `fields`.
-            Strings, not a closed enum. `cover` is the front cover of a
-            release group; `aux-art` its other slots (back, disc,
-            booklet, background); `artist-art` an artist's own images.
-            The three are separate because they gate separate passes -
-            a provider that only knows front covers must not pull the
-            whole artist catalogue into a walk it cannot answer.
-
-
-            `fields` is scalar metadata with no artwork in it - a
-            track's tempo, ISRC or composer, an album's label or year -
-            and gates the two fields walks, one per rung. `book` covers
-            the same ground for audiobooks (publisher, narrator, the
-            identifiers) and gates the book walk.
+            What it supplies, as open strings: `identity`, `genres`, `cover` (a
+            front), `aux-art` (the other slots), `artist-art`, `lyrics`, `book` and
+            `fields`, each gating its own pass.
           items:
             type: string
         configured:
           type: boolean
           description: >
-            Whether the provider can run: a keyed one once its key is
-            set, a built-in once the MusicBrainz contact is. Key-free is
-            not the same as configured - the built-ins are public
-            services that want an identifying agent, and the catalog
-            does not register them without one.
+            Whether the provider can run: a keyed one once its key is set, a
+            built-in once the MusicBrainz contact is, since the catalog registers
+            none of the key-free public services without one.
         builtin:
           type: boolean
           description: True for the catalog's built-ins.
@@ -189,34 +139,55 @@ components:
     EnrichmentLastRun:
       type: object
       description: >
-        What the most recent finished whole-library pass did. Absent
-        until one has finished.
-
-
-        Coverage answers how much of the library is enriched; this
-        answers whether the last pass accomplished anything, which
-        coverage cannot. A pass that searched two thousand albums and
-        matched none leaves coverage exactly where it was, and so does
-        one whose every tag write failed; both read as "nothing
-        happened" without these counts.
+        What the most recent finished pass did, every tally it keeps; absent
+        until one has finished. Each walk counts what it looked up and what
+        something answered for.
       required:
         [
+          artistsEnriched,
+          artistsMatched,
+          releaseGroupsEnriched,
+          releaseGroupsMatched,
           albumsSearched,
           albumsMatched,
+          booksEnriched,
+          booksMatched,
+          lyricsEnriched,
+          lyricsMatched,
+          auxArtEnriched,
+          auxArtMatched,
           artistArtEnriched,
           artistArtMatched,
+          albumArtEnriched,
+          albumArtMatched,
           trackFieldsEnriched,
           trackFieldsMatched,
           bookFieldsEnriched,
           bookFieldsMatched,
           albumFieldsEnriched,
           albumFieldsMatched,
+          retried,
+          artFetched,
+          auxArtFetched,
+          artReused,
           tagsWritten,
           tagsFailed,
           tagsUnrepresented,
           tagsSkipped,
         ]
       properties:
+        artistsEnriched:
+          type: integer
+          description: Artists the MusicBrainz identity walk looked up.
+        artistsMatched:
+          type: integer
+          description: Artists it resolved.
+        releaseGroupsEnriched:
+          type: integer
+          description: Release groups the identity walk looked up.
+        releaseGroupsMatched:
+          type: integer
+          description: Release groups it resolved.
         albumsSearched:
           type: integer
           description: >
@@ -229,6 +200,26 @@ components:
             Albums it pinned to a release. Searched without matched is
             a library whose albums carry no identifiers, not a broken
             pass.
+        booksEnriched:
+          type: integer
+          description: Audiobooks the identity walk looked up.
+        booksMatched:
+          type: integer
+          description: Audiobooks it resolved.
+        lyricsEnriched:
+          type: integer
+          description: Tracks the lyrics walk looked up.
+        lyricsMatched:
+          type: integer
+          description: Tracks some provider answered lyrics for.
+        auxArtEnriched:
+          type: integer
+          description: >
+            Release groups the auxiliary-art backfill looked at: a front
+            settled, a back, disc, booklet or background slot empty.
+        auxArtMatched:
+          type: integer
+          description: Release groups some provider answered for.
         artistArtEnriched:
           type: integer
           description: >
@@ -238,6 +229,14 @@ components:
         artistArtMatched:
           type: integer
           description: Artists some provider answered a picture for.
+        albumArtEnriched:
+          type: integer
+          description: >
+            Albums the album-art backfill looked at: ones that resolve
+            no front cover at all, asked about by their own identifiers.
+        albumArtMatched:
+          type: integer
+          description: Albums some provider answered for.
         trackFieldsEnriched:
           type: integer
           description: >
@@ -264,6 +263,26 @@ components:
         albumFieldsMatched:
           type: integer
           description: Albums some provider answered for.
+        retried:
+          type: integer
+          description: >
+            Targets re-asked because their earlier miss had outlived the
+            retry window. The walks above count them too.
+        artFetched:
+          type: integer
+          description: >
+            Front covers downloaded and handed to the catalog, across
+            every walk. The catalog still fills only empty, unlocked
+            slots.
+        auxArtFetched:
+          type: integer
+          description: Back, disc, booklet and background images, counted the same way.
+        artReused:
+          type: integer
+          description: >
+            Album fronts taken from the release group's picture, on a
+            provider's word that it is that pressing's own; nothing was
+            downloaded for them.
         tagsWritten:
           type: integer
           description: >
@@ -322,6 +341,33 @@ components:
           type: boolean
           default: false
           description: Re-enrich entities that already enriched once.
+        forcePhases:
+          type: array
+          description: >
+            Re-ask these phases alone, marked or not, while the rest walk as
+            usual. Refused beside `force` (400), and with `source-unavailable` for
+            a phase this server does not run.
+          items:
+            $ref: "#/components/schemas/EnrichmentPhase"
+
+    EnrichmentPhase:
+      type: string
+      description: >
+        One phase of the whole-library pass: `identity` is the MusicBrainz
+        walks (artists, release groups, audiobooks), `releases` the release
+        match, and the rest the backfills and fields walks they name.
+      enum:
+        [
+          identity,
+          releases,
+          aux-art,
+          artist-art,
+          album-art,
+          lyrics,
+          track-fields,
+          book-fields,
+          album-fields,
+        ]
 
     EnrichmentRunResult:
       type: object

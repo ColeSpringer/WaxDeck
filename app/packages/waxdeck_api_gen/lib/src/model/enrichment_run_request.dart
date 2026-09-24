@@ -3,6 +3,8 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_phase.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -12,11 +14,16 @@ part 'enrichment_run_request.g.dart';
 ///
 /// Properties:
 /// * [force] - Re-enrich entities that already enriched once.
+/// * [forcePhases] - Re-ask these phases alone, marked or not, while the rest walk as usual. Refused beside `force` (400), and with `source-unavailable` for a phase this server does not run. 
 @BuiltValue()
 abstract class EnrichmentRunRequest implements Built<EnrichmentRunRequest, EnrichmentRunRequestBuilder> {
   /// Re-enrich entities that already enriched once.
   @BuiltValueField(wireName: r'force')
   bool? get force;
+
+  /// Re-ask these phases alone, marked or not, while the rest walk as usual. Refused beside `force` (400), and with `source-unavailable` for a phase this server does not run. 
+  @BuiltValueField(wireName: r'forcePhases')
+  BuiltList<EnrichmentPhase>? get forcePhases;
 
   EnrichmentRunRequest._();
 
@@ -49,6 +56,13 @@ class _$EnrichmentRunRequestSerializer implements PrimitiveSerializer<Enrichment
         specifiedType: const FullType(bool),
       );
     }
+    if (object.forcePhases != null) {
+      yield r'forcePhases';
+      yield serializers.serialize(
+        object.forcePhases,
+        specifiedType: const FullType(BuiltList, [FullType(EnrichmentPhase)]),
+      );
+    }
   }
 
   @override
@@ -78,6 +92,13 @@ class _$EnrichmentRunRequestSerializer implements PrimitiveSerializer<Enrichment
             specifiedType: const FullType(bool),
           ) as bool;
           result.force = valueDes;
+          break;
+        case r'forcePhases':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(EnrichmentPhase)]),
+          ) as BuiltList<EnrichmentPhase>;
+          result.forcePhases.replace(valueDes);
           break;
         default:
           unhandled.add(key);

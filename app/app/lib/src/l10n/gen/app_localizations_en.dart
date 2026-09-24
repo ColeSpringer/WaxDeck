@@ -733,7 +733,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminScheduleEnrichBlurb =>
-      'Fills missing metadata, artwork, and lyrics from the configured providers. Capped at 2000 items a night, so a large library fills in over several nights; a run started by hand is uncapped. A provider that declines something is not asked again until a forced run.';
+      'Fills missing metadata, artwork, and lyrics from the configured providers. Capped at 2000 items a night, so a large library fills in over several nights; a run started by hand is uncapped. The server\'s configuration sets how long something no provider could answer waits before it is asked about again, 30 days by default.';
 
   @override
   String adminScheduleLastRun(String stamp) {

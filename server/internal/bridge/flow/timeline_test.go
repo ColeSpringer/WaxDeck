@@ -221,70 +221,25 @@ func TestTimelineForHonoursRequestedFormats(t *testing.T) {
 	}
 }
 
-// TestTimelineBitsPinsOnlyABrowsersFLAC: the depth is a workaround for a
-// browser's parser, so it is asked only where the caller named what it
-// decodes. A receiver or a native client, which leaves the formats to
-// the ladder, keeps its library's depth.
-func TestTimelineBitsPinsOnlyABrowsersFLAC(t *testing.T) {
-	if got := timelineBits("flac", true); got != 16 {
-		t.Fatalf("a browser's flac: %d, want 16", got)
-	}
-	if got := timelineBits("flac", false); got != 0 {
-		t.Fatalf("an unnamed flac: %d, want the encoder's own", got)
-	}
-	if got := timelineBits("aac", true); got != 0 {
-		t.Fatalf("a browser's aac: %d, want none", got)
-	}
-}
-
-// TestTimelineForAsksSixteenBitFLAC pins the workaround for the
-// sidecar's FLAC init segment, whose sample entry says 16 bits whatever
-// the STREAMINFO says: Chromium refuses the two disagreeing, and a queue
-// with one lossy member renders 24-bit by default. Asking for 16 makes
-// them agree until the muxer is fixed (docs/upstream-requests.md).
-func TestTimelineForAsksSixteenBitFLAC(t *testing.T) {
+// TestTimelineForLeavesFLACDepthToTheEncoder: the sidecar's FLAC init
+// segment declares the STREAMINFO depth, so a browser's FLAC asks for none.
+func TestTimelineForLeavesFLACDepthToTheEncoder(t *testing.T) {
 	b, path := newTimelineBridge(t)
 	members := []TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}
-	// The fake signer echoes the params into the signed master, which
-	// the stash keeps.
-	signedWith := func(format string) string {
-		t.Helper()
-		b.tl.mu.Lock()
-		defer b.tl.mu.Unlock()
-		for _, st := range b.tl.stash {
-			if strings.Contains(st.signedMaster, "format="+format) {
-				return st.signedMaster
-			}
-		}
-		t.Fatalf("no %s rendering stashed", format)
-		return ""
-	}
-
 	flac, err := b.TimelineFor(context.Background(), "us-alice", members,
 		TimelineOptions{Formats: []string{"flac"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if signed := signedWith("flac"); !strings.Contains(signed, "bits=16") {
-		t.Fatalf("flac render signed without a depth: %s", signed)
+	b.tl.mu.Lock()
+	for _, st := range b.tl.stash {
+		if strings.Contains(st.signedMaster, "bits=") {
+			t.Errorf("render signed with a depth: %s", st.signedMaster)
+		}
 	}
-	// The depth is an encoder setting, so it is part of the key that
-	// names the rendering on the client's URL.
-	if !strings.Contains(flac.URL, "rk=flac~off~0~16") {
-		t.Fatalf("flac render key without the depth: %s", flac.URL)
-	}
-
-	// Only FLAC carries the workaround: a lossy rendering has no
-	// STREAMINFO for a sample entry to disagree with.
-	aac, err := b.TimelineFor(context.Background(), "us-alice", members, TimelineOptions{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if signed := signedWith("aac"); strings.Contains(signed, "bits=") {
-		t.Fatalf("aac render signed with a depth: %s", signed)
-	}
-	if !strings.Contains(aac.URL, "rk=aac~off~0&") {
-		t.Fatalf("aac render key changed shape: %s", aac.URL)
+	b.tl.mu.Unlock()
+	if !strings.Contains(flac.URL, "rk=flac~off~0&") {
+		t.Fatalf("flac render key: %s", flac.URL)
 	}
 }
 
@@ -755,7 +710,7 @@ func TestTimelineForCarriesCrossfadeAndGain(t *testing.T) {
 		}
 		b.tl.mu.Lock()
 		defer b.tl.mu.Unlock()
-		st, ok := b.tl.stash[timelineKey("digest123", renderKey("aac", gain, opts.CrossfadeSeconds, 0))]
+		st, ok := b.tl.stash[timelineKey("digest123", renderKey("aac", gain, opts.CrossfadeSeconds))]
 		if !ok {
 			t.Fatalf("nothing stashed for the minted rendering (%+v)", b.tl.stash)
 		}
@@ -788,7 +743,7 @@ func TestTimelineForCarriesCrossfadeAndGain(t *testing.T) {
 		t.Fatal("unexpected job")
 	}
 	b.tl.mu.Lock()
-	st := b.tl.stash[timelineKey("digest123", renderKey("aac", "off", 0, 0))]
+	st := b.tl.stash[timelineKey("digest123", renderKey("aac", "off", 0))]
 	b.tl.mu.Unlock()
 	if !strings.Contains(st.signedMaster, "gain=off") {
 		t.Fatalf("unmeasured queue levelled anyway: %s", st.signedMaster)
@@ -1129,6 +1084,40 @@ func TestFailedMintWithNothingLiveGivesTheSlotBack(t *testing.T) {
 	}
 	if gate.held != 0 {
 		t.Fatalf("held %d after the only mint failed, want the slot back", gate.held)
+	}
+}
+
+// A damaged member is the queue's problem, not the server being unwell.
+func TestTimelineDamagedMemberIsUnrenderable(t *testing.T) {
+	inner := timelineSidecarMux(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/hls/timeline" {
+			http.Error(w, `{"error":"flac: frame header out of sync","code":"malformed-input"}`,
+				http.StatusUnprocessableEntity)
+			return
+		}
+		inner.ServeHTTP(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "one.flac")
+	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := New(context.Background(), Config{
+		BaseURL: srv.URL,
+		APIKey:  "key",
+		Roots:   []Root{{Name: "lib", Path: dir}},
+		Tokens:  auth.NewMediaTokens([]byte("test-secret"), 0),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}},
+		TimelineOptions{})
+	if !errors.Is(err, ErrTimelineUnrenderable) {
+		t.Fatalf("mint error %v, want the unrenderable refusal", err)
 	}
 }
 

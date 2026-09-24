@@ -78,59 +78,63 @@ const maxPruneAgeSeconds = int64(math.MaxInt64 / int64(time.Second))
 
 // PruneThumbnails drops cached thumbnails to fit the policy.
 // Administrators only.
-//
-// Both bounds are pointers the whole way down, because zero is a value
-// here and not an absence: an age of zero drops every entry and a
-// budget of zero empties the cache, which are meaningful requests. A
-// policy with neither bound set is the one that is refused - the
-// catalog refuses it too, and answering it as "everything" would turn a
-// client that forgot to send its fields into a cache wipe.
 func (l *Library) PruneThumbnails(ctx context.Context, uc *UserCtx, olderThanSeconds, maxBytes *int64) (ThumbPruneDTO, error) {
 	if !uc.Admin {
 		return ThumbPruneDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	if olderThanSeconds == nil && maxBytes == nil {
-		return ThumbPruneDTO{}, errInvalid("a prune needs an age or a byte budget")
+	age, budget, err := prunePolicy(olderThanSeconds, maxBytes)
+	if err != nil {
+		return ThumbPruneDTO{}, err
 	}
-	var policy waxbin.ThumbPrunePolicy
-	if olderThanSeconds != nil {
-		if *olderThanSeconds < 0 {
-			return ThumbPruneDTO{}, errInvalid("olderThanSeconds cannot be negative")
-		}
-		// A Duration is nanoseconds in an int64, so anything past about
-		// 292 years wraps - and what it wraps to is a small positive
-		// age, which is a cache wipe answering a request that meant
-		// "keep everything". Refused rather than clamped: an operator
-		// who typed a number this size meant something the field cannot
-		// express, and prune is not a verb to guess at.
-		if *olderThanSeconds > maxPruneAgeSeconds {
-			return ThumbPruneDTO{}, errInvalid("olderThanSeconds is too large")
-		}
-		age := time.Duration(*olderThanSeconds) * time.Second
-		policy.OlderThan = &age
-	}
-	if maxBytes != nil {
-		if *maxBytes < 0 {
-			return ThumbPruneDTO{}, errInvalid("maxBytes cannot be negative")
-		}
-		budget := *maxBytes
-		policy.MaxBytes = &budget
-	}
-	removed, freed, err := l.lib.PruneThumbnails(ctx, policy)
+	removed, freed, err := l.lib.PruneThumbnails(ctx, waxbin.ThumbPrunePolicy{OlderThan: age, MaxBytes: budget})
 	if err != nil {
 		return ThumbPruneDTO{}, classify(err)
 	}
-	out := ThumbPruneDTO{Removed: removed, FreedBytes: freed}
-	// The policy is audited as it was asked for, absences included: a
-	// row saying only "maxBytes 0" and one saying "age 0" are different
-	// operator decisions with the same result.
-	detail := map[string]any{"removed": out.Removed, "freedBytes": out.FreedBytes}
+	l.Audit(ctx, uc, "thumbnails.prune", AuditTarget{Kind: "thumbnails"},
+		pruneAuditDetail(removed, freed, olderThanSeconds, maxBytes))
+	return ThumbPruneDTO{Removed: removed, FreedBytes: freed}, nil
+}
+
+// prunePolicy validates a cache prune's bounds. Zero is a value on both
+// axes, so absence stays a nil pointer, and a policy with neither is
+// refused rather than read as "everything".
+func prunePolicy(olderThanSeconds, maxBytes *int64) (*time.Duration, *int64, error) {
+	if olderThanSeconds == nil && maxBytes == nil {
+		return nil, nil, errInvalid("a prune needs an age or a byte budget")
+	}
+	var age *time.Duration
+	if olderThanSeconds != nil {
+		if *olderThanSeconds < 0 {
+			return nil, nil, errInvalid("olderThanSeconds cannot be negative")
+		}
+		// Past this a Duration wraps to a small age, which would wipe a
+		// cache the operator meant to keep.
+		if *olderThanSeconds > maxPruneAgeSeconds {
+			return nil, nil, errInvalid("olderThanSeconds is too large")
+		}
+		d := time.Duration(*olderThanSeconds) * time.Second
+		age = &d
+	}
+	var budget *int64
+	if maxBytes != nil {
+		if *maxBytes < 0 {
+			return nil, nil, errInvalid("maxBytes cannot be negative")
+		}
+		b := *maxBytes
+		budget = &b
+	}
+	return age, budget, nil
+}
+
+// pruneAuditDetail records a prune's policy as it was asked for, absences
+// included: "maxBytes 0" and "age 0" are different decisions.
+func pruneAuditDetail(removed int, freed int64, olderThanSeconds, maxBytes *int64) map[string]any {
+	detail := map[string]any{"removed": removed, "freedBytes": freed}
 	if olderThanSeconds != nil {
 		detail["olderThanSeconds"] = *olderThanSeconds
 	}
 	if maxBytes != nil {
 		detail["maxBytes"] = *maxBytes
 	}
-	l.Audit(ctx, uc, "thumbnails.prune", AuditTarget{Kind: "thumbnails"}, detail)
-	return out, nil
+	return detail
 }

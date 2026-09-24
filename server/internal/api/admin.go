@@ -426,6 +426,63 @@ func (s *Server) PruneThumbnailCache(ctx context.Context, req PruneThumbnailCach
 	}), nil
 }
 
+func (s *Server) GetEnrichmentCache(ctx context.Context, _ GetEnrichmentCacheRequestObject) (GetEnrichmentCacheResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return GetEnrichmentCache403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	rep, err := s.svc.EnrichmentCacheStats(ctx, uc)
+	if err != nil {
+		return nil, err
+	}
+	return GetEnrichmentCache200JSONResponse(enrichmentCacheReport(rep)), nil
+}
+
+// enrichmentCacheReport is the census on the wire. The stamps follow the
+// rows, since a fetch stamp of zero is still a stamp.
+func enrichmentCacheReport(rep service.EnrichCacheDTO) EnrichmentCacheReport {
+	out := EnrichmentCacheReport{
+		Rows: rep.Rows, Bytes: rep.Bytes,
+		ExemptRows: rep.ExemptRows, ExemptBytes: rep.ExemptBytes,
+		Kinds: make([]EnrichmentCacheKind, 0, len(rep.Kinds)),
+	}
+	if rep.Rows > 0 {
+		out.OldestAt = ptr(time.Unix(0, rep.OldestAtNS).UTC())
+		out.NewestAt = ptr(time.Unix(0, rep.NewestAtNS).UTC())
+	}
+	for _, k := range rep.Kinds {
+		out.Kinds = append(out.Kinds, EnrichmentCacheKind{Kind: k.Kind, Rows: k.Rows, Bytes: k.Bytes, Exempt: k.Exempt})
+	}
+	return out
+}
+
+func (s *Server) PruneEnrichmentCache(ctx context.Context, req PruneEnrichmentCacheRequestObject) (PruneEnrichmentCacheResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return PruneEnrichmentCache403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if req.Body == nil {
+		return PruneEnrichmentCache400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	// Forwarded as they arrived: an absent bound and a zero one differ.
+	rep, err := s.svc.PruneEnrichmentCache(ctx, uc, req.Body.OlderThanSeconds, req.Body.MaxBytes)
+	if err != nil {
+		if service.KindOf(err) == service.KindInvalid {
+			return PruneEnrichmentCache400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return PruneEnrichmentCache200JSONResponse(EnrichmentCachePruneResult{
+		Removed: rep.Removed, FreedBytes: rep.FreedBytes,
+	}), nil
+}
+
 // --- deletion ----------------------------------------------------------------------
 
 func (s *Server) DeleteLibraryItems(ctx context.Context, req DeleteLibraryItemsRequestObject) (DeleteLibraryItemsResponseObject, error) {

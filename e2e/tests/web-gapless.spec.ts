@@ -88,12 +88,11 @@ test('a music queue plays as one stream and crosses inside it', async ({ app, pa
   // account's document never hears about it.
   await expect(app.settings.setting('web-gapless')).toBeChecked();
 
-  // One album rather than the whole tracks index: a rendering covers a
-  // run of music, and the index is everything the library holds -
-  // including sources the engine will not put in one stream, which is
-  // a refusal rather than a gapless queue.
-  await app.nav.enter('albums');
-  await app.music.openEntity(0);
+  // The codec-mixed album, by its own location rather than where it sorts.
+  // A page load, which the stored switch has to survive.
+  const { albumPid } = await app.api.get('/items/{pid}', { path: { pid } });
+  expect(albumPid, 'Alpha Song should belong to the Fixture Album').toBeTruthy();
+  await app.nav.open(`/music/albums/${encodeURIComponent(albumPid!)}`, app.music.entityPlay());
   await app.music.playEntity('play');
 
   // One mint for the whole run, carrying what this browser can actually
@@ -104,6 +103,9 @@ test('a music queue plays as one stream and crosses inside it', async ({ app, pa
     .poll(() => mints.length, { timeout: T.fetch, message: 'the queue should mint one timeline' })
     .toBeGreaterThan(0);
   expect(mints[0].formats?.[0]).not.toBe('aac');
+  // The first start read the switch, so the run begins at Alpha, the
+  // album's FLAC, ahead of its lossy members.
+  expect(mints[0].itemPids?.[0], 'the first track should be in the rendering').toBe(pid);
   const crossing = (mints[0].itemPids ?? []).slice(0, 2);
   expect(crossing.length, 'the run should hold more than one track').toBe(2);
 
@@ -113,7 +115,11 @@ test('a music queue plays as one stream and crosses inside it', async ({ app, pa
     data: { itemPids: crossing, formats: mints[0].formats },
   });
   expect(minted.status()).toBe(201);
-  expect(mints[0].formats).toContain((await minted.json()).format);
+  const rendered = (await minted.json()).format;
+  expect(mints[0].formats).toContain(rendered);
+  // Its lossy members render a 24-bit FLAC, which Chromium refuses unless
+  // the init segment declares that depth: the guard for the sidecar's fix.
+  if (mints[0].formats?.[0] === 'flac') expect(rendered).toBe('flac');
 
   // The proxied HLS tree is what actually plays: the master under the
   // media token this server minted, then the segments its playlists
@@ -124,6 +130,8 @@ test('a music queue plays as one stream and crosses inside it', async ({ app, pa
   await expect
     .poll(() => segments.length, { timeout: T.fetch, message: 'segments should be fetched' })
     .toBeGreaterThan(0);
+  // The rendering pins no depth: its key is format, gain and crossfade alone.
+  expect(new URL(master[0]).searchParams.get('rk')?.split('~')).toHaveLength(3);
 
   // The crossing, seen where a listener sees it: the deck names the
   // first member, then the second, with nothing loaded in between.

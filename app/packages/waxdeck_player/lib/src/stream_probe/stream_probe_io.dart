@@ -88,7 +88,8 @@ Future<StreamProbe> _ask(HttpClient client, Uri uri) async {
   final response = await request.close();
   return switch (response.statusCode) {
     >= 200 && < 300 => StreamProbe.answered,
-    HttpStatus.unsupportedMediaType => StreamProbe.unplayable,
+    HttpStatus.unsupportedMediaType ||
+    HttpStatus.unprocessableEntity => StreamProbe.unplayable,
     _ => StreamProbe.unreachable,
   };
 }

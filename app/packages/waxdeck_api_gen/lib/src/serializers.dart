@@ -91,8 +91,13 @@ import 'package:waxdeck_api_gen/src/model/enrich_item_request.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_item_result.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_preview.dart';
 import 'package:waxdeck_api_gen/src/model/enrich_proposal.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_cache_kind.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_cache_prune_request.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_cache_prune_result.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_cache_report.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_coverage.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_last_run.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_phase.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_provider.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_run_request.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_run_result.dart';
@@ -476,8 +481,13 @@ part 'serializers.g.dart';
   EnrichItemResult,
   EnrichPreview,
   EnrichProposal,
+  EnrichmentCacheKind,
+  EnrichmentCachePruneRequest,
+  EnrichmentCachePruneResult,
+  EnrichmentCacheReport,
   EnrichmentCoverage,
   EnrichmentLastRun,
+  EnrichmentPhase,
   EnrichmentProvider,
   EnrichmentRunRequest,
   EnrichmentRunResult,

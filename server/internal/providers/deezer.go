@@ -31,15 +31,14 @@ type DeezerConfig struct {
 	CacheTTL time.Duration
 }
 
-// Deezer supplies release-group cover art from the Deezer album search
-// and artist portraits from its artist search. Neither is keyed on an
-// identifier - Deezer knows nothing of MusicBrainz - so both are gated
-// on a name match, which is what keeps a by-name face off the wrong
-// artist.
+// Deezer supplies release-group cover art from its album search, a
+// release's own cover by barcode, and artist portraits from its artist
+// search. The by-name answers are gated on a name match.
 type Deezer struct {
-	base string
-	ttl  time.Duration
-	core *core
+	base      string
+	ttl       time.Duration
+	core      *core
+	quotaWait time.Duration
 }
 
 // NewDeezer builds a provider from cfg, applying defaults for zero
@@ -62,11 +61,15 @@ func NewDeezer(cfg DeezerConfig) *Deezer {
 		ttl = defaultEnrichTTL
 	}
 	return &Deezer{
-		base: strings.TrimRight(base, "/"),
-		ttl:  ttl,
-		core: newCore(cfg.HTTPClient, ua, interval),
+		base:      strings.TrimRight(base, "/"),
+		ttl:       ttl,
+		core:      newCore(cfg.HTTPClient, ua, interval),
+		quotaWait: deezerQuotaWindow,
 	}
 }
+
+// deezerQuotaWindow is how long Deezer's request quota counts back.
+const deezerQuotaWindow = 5 * time.Second
 
 // Name is the stable provenance id.
 func (d *Deezer) Name() string { return "deezer" }
@@ -105,17 +108,12 @@ func (d *Deezer) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candid
 		}
 		return d.enrichArtist(ctx, req)
 	case enrich.TargetRelease:
-		// Fields only. Art on this rung stays declined: the release-rung
-		// art request carries the group's MBID, title and artist and no
-		// printed identifier, so Deezer has no way to tell which
-		// pressing is being asked about and would answer with whichever
-		// one its search ranked first - a picture of the wrong edition,
-		// which is the failure this rung exists to avoid. Carrying the
-		// barcode there is an upstream ask (docs/upstream-requests.md).
-		if !req.Wants(enrich.CapFields) {
+		art := req.Wants(capabilityForArtRole(req.Type, model.ArtRoleFront))
+		fields := req.Wants(enrich.CapFields)
+		if !art && !fields {
 			return nil, nil
 		}
-		return d.enrichReleaseFields(ctx, req)
+		return d.enrichRelease(ctx, req, art, fields)
 	case enrich.TargetRecording:
 		if !req.Wants(enrich.CapFields) {
 			return nil, nil
@@ -126,26 +124,52 @@ func (d *Deezer) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candid
 	}
 }
 
-// enrichReleaseFields answers an album's label and year. Keyed on the
-// barcode when the catalog holds one, since `/album/upc:{upc}` names a
-// pressing outright and a title search only names a record; falling
-// back to the same album search the cover rung uses otherwise.
-func (d *Deezer) enrichReleaseFields(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
-	album, err := d.releaseAlbum(ctx, req)
-	if err != nil || album == nil {
+// enrichRelease answers an album's cover, from its barcode alone (a title
+// search names a record, not a pressing), and its label and year, from the
+// barcode or else the album search.
+func (d *Deezer) enrichRelease(ctx context.Context, req enrich.Request, art, fields bool) (*enrich.Candidate, error) {
+	album, err := d.upcAlbum(ctx, req.Barcode)
+	if err != nil {
 		return nil, err
 	}
-	fields := map[string]string{}
-	if label := strings.TrimSpace(album.Label); label != "" {
-		fields["label"] = label
+	cand := &enrich.Candidate{Confidence: 0.7}
+	var coverErr error
+	if art && album != nil && deezerPicture(album.CoverXL) {
+		// A picture that will not load is not the fields' problem.
+		data, mediaType, err := fetchImage(ctx, d.core, album.CoverXL)
+		if err != nil {
+			coverErr = err
+		} else {
+			cand.Cover = coverImage(data, mediaType, album.CoverXL)
+		}
 	}
-	if year := releaseYear(album.ReleaseDate); year != "" {
-		fields["year"] = year
+	if fields {
+		if album == nil {
+			if album, err = d.searchAlbum(ctx, req); err != nil {
+				return nil, err
+			}
+		}
+		if album != nil {
+			cand.Fields = map[string]string{}
+			if label := strings.TrimSpace(album.Label); label != "" {
+				cand.Fields["label"] = label
+			}
+			if year := releaseYear(album.ReleaseDate); year != "" {
+				cand.Fields["year"] = year
+			}
+		}
 	}
-	if len(fields) == 0 {
-		return nil, nil
+	if cand.Cover == nil && len(cand.Fields) == 0 {
+		return nil, coverErr
 	}
-	return &enrich.Candidate{Confidence: 0.7, Fields: fields}, nil
+	return cand, nil
+}
+
+// deezerPicture reports whether a Deezer image URL names a picture: where it
+// holds none it names a stand-in, a path with no image hash in it.
+func deezerPicture(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	return err == nil && rawURL != "" && !strings.Contains(u.Path, "//")
 }
 
 // deezerAlbum is one album as the album endpoints answer it.
@@ -153,26 +177,34 @@ type deezerAlbum struct {
 	ID          int64  `json:"id"`
 	Label       string `json:"label"`
 	ReleaseDate string `json:"release_date"`
+	CoverXL     string `json:"cover_xl"`
 }
 
-// releaseAlbum resolves the Deezer album this request names, with the
-// fields already on it.
-//
-// The UPC endpoint answers the album itself rather than a reference to
-// one, so a barcode costs a single request; only the search fallback
-// pays a second, since a search hit carries no label or release date.
-// At half a second a request shared with every other Deezer rung, that
-// difference is hours across a first pass over a large library.
-func (d *Deezer) releaseAlbum(ctx context.Context, req enrich.Request) (*deezerAlbum, error) {
-	if upc := strings.TrimSpace(req.Barcode); upc != "" {
-		var hit deezerAlbum
-		if err := d.getJSON(ctx, d.base+"/album/upc:"+url.PathEscape(upc), &hit); err != nil {
-			return nil, err
-		}
-		if hit.ID != 0 {
-			return &hit, nil
-		}
+// upcAlbum looks an album up by barcode, nil when Deezer holds none. Deezer
+// files an EAN-13 that starts with a zero as its 12-digit UPC, and a code
+// that fails its checksum can only miss, so it is not sent.
+func (d *Deezer) upcAlbum(ctx context.Context, barcode string) (*deezerAlbum, error) {
+	upc, ok := model.NormalizeBarcode(barcode)
+	if !ok || upc == "" {
+		return nil, nil
 	}
+	if len(upc) == 13 && upc[0] == '0' {
+		upc = upc[1:]
+	}
+	var hit deezerAlbum
+	if err := d.getJSON(ctx, d.base+"/album/upc:"+url.PathEscape(upc), &hit); err != nil {
+		return nil, err
+	}
+	if hit.ID == 0 {
+		return nil, nil
+	}
+	return &hit, nil
+}
+
+// searchAlbum finds the album by title and artist, then fetches it: a
+// search hit carries no label or release date, where the UPC endpoint
+// answers the album itself in one request.
+func (d *Deezer) searchAlbum(ctx context.Context, req enrich.Request) (*deezerAlbum, error) {
 	if req.Title == "" {
 		return nil, nil
 	}
@@ -305,17 +337,10 @@ func (d *Deezer) recordingTrack(ctx context.Context, req enrich.Request) (*deeze
 	return nil, nil
 }
 
-// getJSON fetches and decodes one paced Deezer read, refusing the
-// service's in-band error envelope; see deezerError.
+// getJSON fetches and decodes one paced Deezer read; see deezerRead.
 func (d *Deezer) getJSON(ctx context.Context, u string, out any) error {
-	body, status, err := d.core.get(ctx, u, d.ttl)
+	body, err := d.deezerRead(ctx, u)
 	if err != nil {
-		return err
-	}
-	if status != http.StatusOK {
-		return fmt.Errorf("providers: deezer read: status %d", status)
-	}
-	if err := deezerError(body); err != nil {
 		return err
 	}
 	if err := json.Unmarshal(body, out); err != nil {
@@ -324,25 +349,55 @@ func (d *Deezer) getJSON(ctx context.Context, u string, out any) error {
 	return nil
 }
 
-// deezerError reports the service's in-band failure, which arrives as
-// HTTP 200 carrying an error object rather than as a status code.
-//
-// It has to be a failure rather than a miss. The enrichment engine
-// marks a target it asked about and got nothing for, and that marker
-// has no expiry - so reading a quota window as "this album has no
-// label" would retire every target a throttled night touched, and
-// nothing short of a forced whole-catalog pass would ask again.
-//
-// The one exception is the identifier lookups' own not-found, which
-// Deezer also reports this way: an unknown UPC or ISRC is a real miss
-// and the caller falls back to a search. It is told apart by the empty
-// id the caller reads, so this only has to let it through.
-func deezerError(body []byte) error {
+// deezerRead refuses the failure Deezer answers with a 200. The catalog records
+// any failure as a miss for its retry window, so a quota window is waited out
+// once, and a failure is dropped from the cache rather than replayed.
+func (d *Deezer) deezerRead(ctx context.Context, u string) ([]byte, error) {
+	for waited := false; ; waited = true {
+		body, status, err := d.core.get(ctx, u, d.ttl)
+		if err != nil {
+			return nil, err
+		}
+		if status != http.StatusOK {
+			return nil, fmt.Errorf("providers: deezer read: status %d", status)
+		}
+		f := deezerError(body)
+		if f == nil {
+			return body, nil
+		}
+		d.core.forget(u)
+		if waited || f.Code != deezerQuotaCode {
+			return nil, f
+		}
+		t := time.NewTimer(d.quotaWait)
+		select {
+		case <-ctx.Done():
+			t.Stop()
+			return nil, ctx.Err()
+		case <-t.C:
+		}
+	}
+}
+
+// deezerFailure is the error object of a failed read.
+type deezerFailure struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+	Code    int    `json:"code"`
+}
+
+func (f *deezerFailure) Error() string {
+	return "providers: deezer: " + f.Type + ": " + f.Message
+}
+
+// deezerQuotaCode is the code Deezer's request quota answers with.
+const deezerQuotaCode = 4
+
+// deezerError reads an in-band failure. An unknown UPC or ISRC arrives the
+// same way and passes, the caller's empty id being the miss.
+func deezerError(body []byte) *deezerFailure {
 	var env struct {
-		Error *struct {
-			Type    string `json:"type"`
-			Message string `json:"message"`
-		} `json:"error"`
+		Error *deezerFailure `json:"error"`
 	}
 	if json.Unmarshal(body, &env) != nil || env.Error == nil {
 		return nil
@@ -352,7 +407,7 @@ func deezerError(body []byte) error {
 		// the caller's zero id says so.
 		return nil
 	}
-	return fmt.Errorf("providers: deezer: %s: %s", env.Error.Type, env.Error.Message)
+	return env.Error
 }
 
 // deezerDataException is the error type Deezer answers an unknown
@@ -371,14 +426,6 @@ func (d *Deezer) enrichReleaseGroup(ctx context.Context, req enrich.Request) (*e
 	}
 	q := url.Values{}
 	q.Set("q", query)
-	u := d.base + "/search/album?" + q.Encode()
-	body, status, err := d.core.get(ctx, u, d.ttl)
-	if err != nil {
-		return nil, err
-	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("providers: deezer search: status %d", status)
-	}
 	var parsed struct {
 		Data []struct {
 			Title   string `json:"title"`
@@ -388,11 +435,11 @@ func (d *Deezer) enrichReleaseGroup(ctx context.Context, req enrich.Request) (*e
 			} `json:"artist"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return nil, fmt.Errorf("providers: decode deezer search: %w", err)
+	if err := d.getJSON(ctx, d.base+"/search/album?"+q.Encode(), &parsed); err != nil {
+		return nil, err
 	}
 	for _, hit := range parsed.Data {
-		if hit.CoverXL == "" || !nameMatch(hit.Title, req.Title) {
+		if !deezerPicture(hit.CoverXL) || !nameMatch(hit.Title, req.Title) {
 			continue
 		}
 		if req.Artist != "" && !nameMatch(hit.Artist.Name, req.Artist) {
@@ -460,13 +507,6 @@ func (d *Deezer) FrontCover(ctx context.Context, artist, title string) (TitleCov
 	}
 	q := url.Values{}
 	q.Set("q", `artist:"`+artist+`" track:"`+title+`"`)
-	body, status, err := d.core.get(ctx, d.base+"/search?"+q.Encode(), d.ttl)
-	if err != nil {
-		return TitleCoverResult{}, err
-	}
-	if status != http.StatusOK {
-		return TitleCoverResult{}, fmt.Errorf("providers: deezer search: status %d", status)
-	}
 	var parsed struct {
 		Data []struct {
 			Title  string `json:"title"`
@@ -478,14 +518,14 @@ func (d *Deezer) FrontCover(ctx context.Context, artist, title string) (TitleCov
 			} `json:"album"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal(body, &parsed); err != nil {
-		return TitleCoverResult{}, fmt.Errorf("providers: decode deezer search: %w", err)
+	if err := d.getJSON(ctx, d.base+"/search?"+q.Encode(), &parsed); err != nil {
+		return TitleCoverResult{}, err
 	}
 	// A song is routinely listed several times over - a single, an album,
 	// a deluxe edition - so one unusable cover is not the end of the walk.
 	var reachErr error
 	for _, hit := range parsed.Data {
-		if hit.Album.CoverBig == "" ||
+		if !deezerPicture(hit.Album.CoverBig) ||
 			!coverNameMatch(hit.Artist.Name, artist) ||
 			!coverNameMatch(hit.Title, title) {
 			continue

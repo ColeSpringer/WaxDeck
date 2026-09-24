@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/source"
@@ -77,6 +78,16 @@ type Provider struct {
 
 var _ source.Provider = (*Provider)(nil)
 
+// tapTimeouts are the CLI's, but for the chunk: a long file runs four 10 MiB
+// chunks at once, unattended here, and 120s would fail it below 2.8 Mbit/s.
+var tapTimeouts = waxtap.Timeouts{
+	Extraction:   45 * time.Second,
+	Resolve:      30 * time.Second,
+	WebContext:   60 * time.Second,
+	SponsorBlock: 10 * time.Second,
+	ChunkRetry:   10 * time.Minute,
+}
+
 // New builds a Provider over a real WaxTap client.
 func New(cfg Config) (*Provider, error) {
 	if strings.TrimSpace(cfg.WorkDir) == "" {
@@ -95,8 +106,9 @@ func New(cfg Config) (*Provider, error) {
 	}
 
 	opts := waxtap.Options{
-		Logger:  log,
-		TempDir: cfg.WorkDir,
+		Logger:   log,
+		TempDir:  cfg.WorkDir,
+		Timeouts: tapTimeouts,
 	}
 	if cfg.SealBaseURL != "" {
 		pot, err := waxtap.NewSidecarPOTokenProvider(cfg.SealBaseURL, waxtap.WithSidecarAPIKey(cfg.SealAPIKey))
@@ -174,14 +186,9 @@ func (p *Provider) Resolve(ctx context.Context, req source.Request) (*source.Res
 	}, nil
 }
 
-// Enumerate lists a channel/playlist as a feed. The conditional-GET validator
-// round trip carries the incremental-sync cursor: req.ETag is the newest video
-// id seen by the previous enumeration, and the returned ETag is the newest id of
-// this one. A channel uploads feed is newest-first and append-only, so
-// enumeration stops at the first already-seen id; when nothing precedes it the
-// source is unchanged and the answer is NotModified. Only new entries are
-// enriched with per-video metadata, capped at enrichLimit lookups, so the first
-// sync of a large backlog stays cheap.
+// Enumerate lists a channel or playlist as a feed. The ETag is the sync
+// cursor, the newest id that is not a live or upcoming broadcast; listing
+// stops at it, and only new entries are enriched, at most enrichLimit.
 func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.Enumeration, error) {
 	lastSeen := req.ETag
 	opts := enrichedOptions(p.cfg.MaxItems, enrichLimit)
@@ -203,10 +210,15 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 	}
 
 	feed := &model.Feed{Title: pl.Title, Author: pl.Author}
-	failures, wholesale := p.enrichFailures(pl, enrichLimit)
+	failures, wholesale := p.enrichFailures(pl)
 	deferred := false
 	for i := range pl.Entries {
 		entry := pl.Entries[i]
+		if liveEntry(entry) {
+			// It cannot download until the broadcast ends; see the cursor below.
+			p.log.Debug("skipping live youtube entry", "video", entry.VideoID, "live", entry.LiveStatus.String())
+			continue
+		}
 		if ferr, ok := failures[entry.Index]; ok {
 			switch {
 			case wholesale || errors.Is(ferr, waxtap.ErrTemporarilyUnavailable):
@@ -239,18 +251,32 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 		}
 		if entry.Video != nil {
 			enrichEpisode(&ep, entry.Video)
-			if i == 0 && len(entry.Video.Thumbnails) > 0 {
+			// The newest entry with a video, which a live one at the top is not.
+			if feed.ImageURL == "" && len(entry.Video.Thumbnails) > 0 {
 				feed.ImageURL = entry.Video.Thumbnails[0].URL
 			}
 		}
 		feed.Episodes = append(feed.Episodes, ep)
 	}
 
-	etag := ""
-	if len(pl.Entries) > 0 {
-		// The newest listed id, even if enrichment dropped that entry: the cursor
-		// tracks what was seen, not what was cataloged.
-		etag = pl.Entries[0].VideoID
+	// The newest listed id, even if enrichment dropped that entry: the cursor
+	// tracks what was seen, not what was cataloged. A live or upcoming entry
+	// is not seen yet, so one at the top is listed again next poll.
+	etag := lastSeen
+	for _, e := range pl.Entries {
+		if !liveEntry(e) {
+			etag = e.VideoID
+			break
+		}
+	}
+	if lastSeen != "" && etag == lastSeen && len(feed.Episodes) == 0 {
+		// Nothing but live entries is new: the feed has not changed.
+		return &source.Enumeration{
+			NotModified: true,
+			ETag:        lastSeen,
+			IdentityKey: identityKey(pl.ID),
+			SourceID:    pl.ID,
+		}, nil
 	}
 	if deferred {
 		// A deferred pass is the one case where advancing the cursor would
@@ -324,12 +350,17 @@ func enrichedOptions(maxItems, budget int) waxtap.EnumerateOptions {
 // Errors that are not per-entry enrichment failures are the listing's own
 // partial-page failures, which enumeration has always tolerated; they are
 // logged and the pass carries on.
-func (p *Provider) enrichFailures(pl *waxtap.Playlist, budget int) (failures map[int]error, wholesale bool) {
+func (p *Provider) enrichFailures(pl *waxtap.Playlist) (failures map[int]error, wholesale bool) {
 	if len(pl.Errors) == 0 {
 		return nil, false
 	}
 	failures = make(map[int]error, len(pl.Errors))
-	refusals := 0
+	refusals, attempted := 0, 0
+	for _, e := range pl.Entries {
+		if e.Video != nil {
+			attempted++ // an enriched entry
+		}
+	}
 	for _, err := range pl.Errors {
 		var ee *waxtap.EnrichError
 		if !errors.As(err, &ee) {
@@ -337,13 +368,10 @@ func (p *Provider) enrichFailures(pl *waxtap.Playlist, budget int) (failures map
 			continue
 		}
 		failures[ee.Index] = err
+		attempted++
 		if isSkipClass(err) || errors.Is(err, waxtap.ErrTemporarilyUnavailable) {
 			refusals++
 		}
-	}
-	attempted := len(pl.Entries)
-	if budget > 0 && budget < attempted {
-		attempted = budget
 	}
 	if attempted >= wholesaleFloor && refusals == attempted {
 		p.log.Warn("every youtube entry the budget reached was refused; keeping the pass unenriched",
@@ -372,6 +400,12 @@ func enrichEpisode(ep *model.FeedEpisode, v *waxtap.Video) {
 	if len(v.Thumbnails) > 0 {
 		ep.ImageURL = v.Thumbnails[0].URL
 	}
+}
+
+// liveEntry reports a live or upcoming broadcast, which WaxTap lists
+// without a lookup and which cannot download until it ends.
+func liveEntry(e waxtap.PlaylistEntry) bool {
+	return e.LiveStatus == waxtap.LiveNow || e.LiveStatus == waxtap.LiveUpcoming
 }
 
 // skipClass lists the WaxTap availability sentinels that mean "this one video

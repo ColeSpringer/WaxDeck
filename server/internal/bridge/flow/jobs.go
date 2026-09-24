@@ -29,6 +29,7 @@ func PermanentJobErr(err error) bool {
 	switch waxerr.CodeOf(err) {
 	case waxerr.CodeInvalidRequest, waxerr.CodePayloadTooLarge,
 		waxerr.CodeNotFound, waxerr.CodeUnsupportedFormat,
+		waxerr.CodeMalformedInput,
 		waxerr.CodeUnsupportedSource, waxerr.CodeUnauthorized,
 		waxerr.CodeSignatureInvalid, waxerr.CodeSignatureExpired,
 		waxerr.CodeSourceChanged:
