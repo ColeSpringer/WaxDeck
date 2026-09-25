@@ -1437,18 +1437,24 @@ Color _menuInk<T>(WaxColors colors, WaxMenuItem<T> item, {required Color on}) {
   return item.destructive ? colors.error : on;
 }
 
-/// Opens [items] as a popup menu anchored under [context]'s own box,
-/// and answers what was chosen.
-///
-/// Shared with [WaxMenuButton] rather than living inside it, so a
-/// surface that answers a secondary tap can raise the same menu its
-/// overflow button raises instead of assembling a second one.
+/// Opens [items] under [context]'s box and answers what was chosen; shared so
+/// a secondary-tap surface raises the same menu as its overflow button.
+/// [onShown] runs once, when the menu has been read ([WaxMenuButton.onShown]).
 Future<T?> showWaxMenu<T>(
   BuildContext context,
   List<WaxMenuItem<T>> items, {
   String? emptyLabel,
   String? emptySemanticsId,
+  VoidCallback? onShown,
 }) async {
+  var read = false;
+  final VoidCallback? markRead = onShown == null
+      ? null
+      : () {
+          if (read) return;
+          read = true;
+          onShown();
+        };
   final colors = WaxColors.of(context);
   final trigger = context.findRenderObject()! as RenderBox;
   final overlay =
@@ -1474,15 +1480,18 @@ Future<T?> showWaxMenu<T>(
             // Addressable like every other row: "the menu is open and
             // holds nothing" is a state a driver has to be able to see,
             // and it is the only one with no row to look for.
-            child: Semantics(
-              identifier: emptySemanticsId,
-              child: Text(
-                emptyLabel,
-                style: WaxType.body.copyWith(color: colors.textTertiary),
+            child: _readBy(
+              markRead,
+              Semantics(
+                identifier: emptySemanticsId,
+                child: Text(
+                  emptyLabel,
+                  style: WaxType.body.copyWith(color: colors.textTertiary),
+                ),
               ),
             ),
           ),
-        for (final item in items)
+        for (final (index, item) in items.indexed)
           PopupMenuItem<T>(
             value: item.value,
             enabled: item.enabled,
@@ -1491,63 +1500,72 @@ Future<T?> showWaxMenu<T>(
             height: item.help == null
                 ? kMinInteractiveDimension
                 : kMinInteractiveDimension + WaxSpace.s16,
-            child: Semantics(
-              identifier: item.semanticsId,
-              selected: item.selected,
-              enabled: item.enabled,
-              // The reason reads with the name rather than as a node
-              // after it, so the text below is excluded when it is the
-              // container speaking for both.
-              label: item.help == null ? null : '${item.label}. ${item.help}',
-              child: ExcludeSemantics(
-                excluding: item.help != null,
-                child: Row(
-                  children: <Widget>[
-                    if (item.glyph != null) ...<Widget>[
-                      WaxIcon(
-                        item.glyph!,
-                        size: 16,
-                        color: _menuInk(colors, item, on: colors.textSecondary),
-                      ),
-                      const SizedBox(width: WaxSpace.s12),
-                    ],
-                    Expanded(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            item.label,
-                            style: WaxType.body.copyWith(
-                              color: _menuInk(
-                                colors,
-                                item,
-                                on: colors.textPrimary,
-                              ),
-                            ),
+            // The first row watches for the read: an entry of its own
+            // would shift every row's staggered fade.
+            child: _readBy(
+              index == 0 ? markRead : null,
+              Semantics(
+                identifier: item.semanticsId,
+                selected: item.selected,
+                enabled: item.enabled,
+                // The reason reads with the name rather than as a node
+                // after it, so the text below is excluded when it is the
+                // container speaking for both.
+                label: item.help == null ? null : '${item.label}. ${item.help}',
+                child: ExcludeSemantics(
+                  excluding: item.help != null,
+                  child: Row(
+                    children: <Widget>[
+                      if (item.glyph != null) ...<Widget>[
+                        WaxIcon(
+                          item.glyph!,
+                          size: 16,
+                          color: _menuInk(
+                            colors,
+                            item,
+                            on: colors.textSecondary,
                           ),
-                          if (item.help != null)
+                        ),
+                        const SizedBox(width: WaxSpace.s12),
+                      ],
+                      Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
                             Text(
-                              item.help!,
-                              style: WaxType.caption.copyWith(
-                                color: item.enabled
-                                    ? colors.textTertiary
-                                    : colors.textDisabled,
+                              item.label,
+                              style: WaxType.body.copyWith(
+                                color: _menuInk(
+                                  colors,
+                                  item,
+                                  on: colors.textPrimary,
+                                ),
                               ),
                             ),
-                        ],
+                            if (item.help != null)
+                              Text(
+                                item.help!,
+                                style: WaxType.caption.copyWith(
+                                  color: item.enabled
+                                      ? colors.textTertiary
+                                      : colors.textDisabled,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                    if (item.selected)
-                      WaxIcon(
-                        WaxIcons.check,
-                        size: 16,
-                        // Greyed with the rest of the row. A full-strength
-                        // accent tick on a disabled row reads as the one
-                        // live thing in it.
-                        color: _menuInk(colors, item, on: colors.accent),
-                      ),
-                  ],
+                      if (item.selected)
+                        WaxIcon(
+                          WaxIcons.check,
+                          size: 16,
+                          // Greyed with the rest of the row. A full-strength
+                          // accent tick on a disabled row reads as the one
+                          // live thing in it.
+                          color: _menuInk(colors, item, on: colors.accent),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1555,7 +1573,66 @@ Future<T?> showWaxMenu<T>(
       ],
     ),
   );
+  // A choice proves the rows were read, however soon it came.
+  if (chosen != null) markRead?.call();
   return chosen;
+}
+
+Widget _readBy(VoidCallback? onRead, Widget row) =>
+    onRead == null ? row : _MenuRead(onRead: onRead, child: row);
+
+/// How long a menu has to be up, and fully drawn, to count as read: its
+/// entrance's own length, which reduced motion cuts to a frame.
+const _menuReadAfter = Duration(milliseconds: 300);
+
+/// Reports [onRead] once its menu has finished appearing and been up for
+/// [_menuReadAfter]. Dismissing reverses the entrance, so a menu closed
+/// sooner never reports.
+class _MenuRead extends StatefulWidget {
+  const _MenuRead({required this.onRead, required this.child});
+
+  final VoidCallback onRead;
+  final Widget child;
+
+  @override
+  State<_MenuRead> createState() => _MenuReadState();
+}
+
+class _MenuReadState extends State<_MenuRead>
+    with SingleTickerProviderStateMixin {
+  // Preserved, or reduced motion would run this clock at a twentieth.
+  late final AnimationController _up = AnimationController(
+    vsync: this,
+    duration: _menuReadAfter,
+    animationBehavior: AnimationBehavior.preserve,
+  );
+  Animation<double>? _entrance;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_entrance != null) return;
+    _entrance = ModalRoute.of(context)!.animation!..addStatusListener(_check);
+    _up
+      ..addStatusListener(_check)
+      ..forward();
+  }
+
+  void _check(AnimationStatus _) {
+    if (!_up.isCompleted || !_entrance!.isCompleted) return;
+    _entrance!.removeStatusListener(_check);
+    widget.onRead();
+  }
+
+  @override
+  void dispose() {
+    _entrance?.removeStatusListener(_check);
+    _up.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// An overflow menu behind one icon button.
@@ -1573,7 +1650,7 @@ class WaxMenuButton<T> extends StatelessWidget {
     this.semanticsId,
     this.size = 20,
     this.badge,
-    this.onOpen,
+    this.onShown,
     this.emptyLabel,
     this.emptySemanticsId,
     super.key,
@@ -1593,9 +1670,10 @@ class WaxMenuButton<T> extends StatelessWidget {
   /// is how much is waiting in it.
   final String? badge;
 
-  /// Run as the menu opens. For a menu that is a list of things to be
-  /// read rather than a list of verbs: opening it is the reading.
-  final VoidCallback? onOpen;
+  /// Run once the menu has been read: up and fully drawn for as long as its
+  /// entrance takes, or chosen from. It can run after this button has left
+  /// the tree, so it must not lean on the button's context.
+  final VoidCallback? onShown;
 
   /// What an empty menu says. Without one an empty menu disables its
   /// trigger, which is right for an overflow of verbs and wrong for a
@@ -1612,8 +1690,10 @@ class WaxMenuButton<T> extends StatelessWidget {
       items,
       emptyLabel: emptyLabel,
       emptySemanticsId: emptySemanticsId,
+      onShown: onShown,
     );
-    if (chosen != null) onSelected(chosen);
+    // A button that has left the tree has nobody left to act on a choice.
+    if (chosen != null && context.mounted) onSelected(chosen);
   }
 
   @override
@@ -1628,10 +1708,7 @@ class WaxMenuButton<T> extends StatelessWidget {
       semanticsId: semanticsId,
       onPressed: items.isEmpty && emptyLabel == null
           ? null
-          : () {
-              onOpen?.call();
-              _open(context);
-            },
+          : () => _open(context),
     ),
   );
 }

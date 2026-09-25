@@ -4,7 +4,7 @@ import { expect, Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Api } from '../api';
 import { T } from '../budgets';
-import { clickThrough, openMenu, typeInto } from '../gestures';
+import { clickThrough, clickToward, openMenu, typeInto } from '../gestures';
 import { Surface } from '../context';
 
 /// Signing in and out.
@@ -213,43 +213,21 @@ export class Shell extends Surface {
     await expect(this.notificationsMenu()).toBeHidden({ timeout: T.step });
   }
 
-  /// Open the bell and wait for one particular piece of news.
-  ///
-  /// Re-opened rather than waited out: the menu holds the rows it opened
-  /// with, and the badge that brought us here was not necessarily this
-  /// test's news.
-  async openNotificationsUntil(
-    kind: string,
-    target?: string,
-    options: { within?: number } = {},
-  ): Promise<Locator> {
+  /// Open the bell until it lists one particular piece of news, re-opening
+  /// rather than waiting: the menu holds the rows it opened with.
+  async openNotificationsUntil(kind: string, target?: string): Promise<Locator> {
     const row = this.notificationRow(kind, target);
     await expect(async () => {
       if (await row.isVisible()) return;
-      // Closed first, because `openMenu` reads an open menu as done -
-      // and closed against the menu's own witness rather than the row
-      // the line above proved absent: only that tells a closed menu
-      // from a click that dismissed one.
+      // Closed first: `clickToward` reads an open menu as done.
       await this.closeNotifications();
-      // Opened against the menu's own witness, never against the row:
-      // the menu's barrier sits over the bell, so a menu that opened
-      // before the news landed cannot be re-opened by clicking again,
-      // and an `openMenu` waiting on the row would spend its whole
-      // budget clicking a trigger nothing can reach. Asking the two
-      // questions apart costs a miss one cycle instead of the budget.
-      await this.openNotificationsPanel();
-      // Named, because the menu this opened may legitimately be empty -
-      // news still in flight, or news already drawn once and read by
-      // the drawing - and a bare locator timeout reports none of that.
-      await expect(row, `the bell should be listing ${kind} news`).toBeVisible({
-        timeout: T.step,
-      });
-      // The assert tier by default, not the fetch one: a copy change
-      // should not cost a minute of nothing. A caller whose news is
-      // still in flight - because the badge it would have waited on is
-      // already lit by the account's inbox - passes `within: T.fetch`
-      // and does the waiting here.
-    }).toPass({ timeout: options.within ?? T.assert });
+      // One bounded click, not `openMenu`'s loop, so this loop is the only
+      // deadline over it (see gestures.ts).
+      await clickToward(this.notificationsBell(), { shows: this.notificationsMenu() });
+      // The witness is the menu's last row, so every row it holds is up by
+      // now, and an open menu never gains one: a miss reopens at once.
+      expect(await row.isVisible(), `the bell should be listing ${kind} news`).toBe(true);
+    }).toPass({ timeout: T.assert });
     return row;
   }
 }

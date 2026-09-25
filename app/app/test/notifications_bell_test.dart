@@ -1,3 +1,4 @@
+import 'package:flutter/semantics.dart' show debugSemanticsDisableAnimations;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -16,7 +17,11 @@ import 'routed_host.dart';
 
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
 
-Future<ProviderContainer> _pump(WidgetTester tester) async {
+/// Pass [generation] to remount the bell, as a new element, on each bump.
+Future<ProviderContainer> _pump(
+  WidgetTester tester, {
+  ValueNotifier<int>? generation,
+}) async {
   final container = ProviderContainer(
     overrides: [
       repositoryProvider.overrideWithValue(
@@ -37,7 +42,17 @@ Future<ProviderContainer> _pump(WidgetTester tester) async {
     UncontrolledProviderScope(
       container: container,
       child: routedHost(
-        const Scaffold(body: Center(child: NotificationsBell())),
+        Scaffold(
+          body: Center(
+            child: generation == null
+                ? const NotificationsBell()
+                : ValueListenableBuilder<int>(
+                    valueListenable: generation,
+                    builder: (context, value, _) =>
+                        NotificationsBell(key: ValueKey(value)),
+                  ),
+          ),
+        ),
       ),
     ),
   );
@@ -146,6 +161,101 @@ void main() {
     await tester.tap(_byId(SemanticsIds.notificationsBell));
     await tester.pumpAndSettle();
     // Dismissed, because the menu's barrier is over the trigger.
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSemantics(_byId(SemanticsIds.notificationsBell)).label,
+      'Notifications',
+    );
+    handle.dispose();
+  });
+
+  testWidgets('a menu dismissed before it finished appearing reads nothing', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    final container = await _pump(tester);
+
+    container
+        .read(localNotificationsProvider.notifier)
+        .record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9));
+    await tester.pumpAndSettle();
+
+    // Dismissed halfway through appearing: the first frame after the press
+    // only starts the entrance.
+    await tester.tap(_byId(SemanticsIds.notificationsBell));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSemantics(_byId(SemanticsIds.notificationsBell)).label,
+      'Notifications, 1 unread',
+    );
+    await tester.tap(_byId(SemanticsIds.notificationsBell));
+    await tester.pumpAndSettle();
+    expect(
+      _byId(SemanticsIds.notificationRowPlain(NotificationKind.upload.token)),
+      findsOneWidget,
+    );
+    handle.dispose();
+  });
+
+  // Reduced motion, as every e2e run but one has it, cuts the entrance to
+  // one frame; the soak's two clicks landed 25 ms apart.
+  testWidgets('with animations off, a menu is read only once it has stood '
+      'as long as its entrance would take', (tester) async {
+    final handle = tester.ensureSemantics();
+    final container = await _pump(tester);
+    String label() =>
+        tester.getSemantics(_byId(SemanticsIds.notificationsBell)).label;
+
+    container
+        .read(localNotificationsProvider.notifier)
+        .record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9));
+    await tester.pumpAndSettle();
+
+    debugSemanticsDisableAnimations = true;
+    try {
+      await tester.tap(_byId(SemanticsIds.notificationsBell));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 25));
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(label(), 'Notifications, 1 unread');
+
+      await tester.tap(_byId(SemanticsIds.notificationsBell));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 25));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(label(), 'Notifications');
+    } finally {
+      debugSemanticsDisableAnimations = null;
+    }
+    handle.dispose();
+  });
+
+  testWidgets('a bell rebuilt while its menu is up still reads it', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    final generation = ValueNotifier<int>(0);
+    addTearDown(generation.dispose);
+    final container = await _pump(tester, generation: generation);
+
+    container
+        .read(localNotificationsProvider.notifier)
+        .record(NotificationKind.upload, at: DateTime(2026, 8, 12, 9));
+    await tester.pumpAndSettle();
+
+    await tester.tap(_byId(SemanticsIds.notificationsBell));
+    await tester.pump();
+    generation.value++;
+    await tester.pumpAndSettle();
     await tester.tapAt(const Offset(5, 5));
     await tester.pumpAndSettle();
 

@@ -170,6 +170,14 @@ const RULES = [
     fix: 'migrate the file to the App driver and import { test } from ./fixtures',
   },
   {
+    name: 'nested-loop',
+    // A retry loop abandons its callback at the deadline without stopping
+    // it, so a loop that clicks, types or scrolls, run inside another, lands
+    // its input in the caller's next attempt.
+    applies: everywhere,
+    fix: 'run one attempt (clickToward, chooseOnce, typeOnce) and let the outer loop retry',
+  },
+  {
     name: 'admin-identity',
     // The bootstrap administrator is the minting authority and the
     // subject of first-run, and nothing else. A spec that logs in as it
@@ -193,6 +201,134 @@ function sourceFiles(dir, out = []) {
     else if (entry.endsWith('.ts')) out.push(full);
   }
   return out;
+}
+
+// Loops that cannot act once abandoned, so they may run inside another:
+// `rectAtRest` only reads, and `wheelIntoReach` stops at its own deadline.
+const NEST_SAFE = new Set(['rectAtRest', 'wheelIntoReach']);
+
+const isFunctionLike = (node) => ts.isArrowFunction(node) || ts.isFunctionExpression(node);
+
+// `expect(fn).toPass()` or `expect.poll(fn)`.
+const retryKind = (call) => {
+  const callee = call.expression;
+  if (!ts.isPropertyAccessExpression(callee)) return null;
+  if (callee.name.text === 'toPass') return 'toPass';
+  const poll =
+    callee.name.text === 'poll' &&
+    ts.isIdentifier(callee.expression) &&
+    callee.expression.text === 'expect';
+  return poll ? 'poll' : null;
+};
+
+// The callback a retry call re-runs, when it is written in place.
+const retriedCallback = (call) => {
+  const kind = retryKind(call);
+  const holder = kind === 'toPass' ? call.expression.expression : call;
+  if (kind === null || !ts.isCallExpression(holder)) return null;
+  const fn = holder.arguments[0];
+  return fn !== undefined && isFunctionLike(fn) ? fn : null;
+};
+
+/// The nested-loop findings, per file. Calls are resolved by the checker
+/// rather than by name, so `review.open()` and `books.open()` stay two
+/// methods, and a Playwright method is never taken for one of ours.
+function nestedLoops() {
+  const config = ts.readConfigFile(join(e2eRoot, 'tsconfig.json'), ts.sys.readFile).config;
+  const parsed = ts.parseJsonConfigFileContent(config, ts.sys, e2eRoot);
+  const program = ts.createProgram(parsed.fileNames, parsed.options);
+  const checker = program.getTypeChecker();
+  const fileOf = (sf) => relative(e2eRoot, sf.fileName).split(sep).join('/');
+  const ours = program
+    .getSourceFiles()
+    .filter((sf) => fileOf(sf).startsWith('tests/') && waived(fileOf(sf)) !== '*');
+  const each = (root, fn) => {
+    const visit = (node) => {
+      fn(node);
+      ts.forEachChild(node, visit);
+    };
+    visit(root);
+  };
+
+  const bodies = new Map();
+  for (const sf of ours) {
+    each(sf, (node) => {
+      if (ts.isFunctionLike(node) && node.body) bodies.set(node, node.body);
+    });
+  }
+  const nameOf = (decl) =>
+    decl.name && ts.isIdentifier(decl.name)
+      ? decl.name.text
+      : ts.isVariableDeclaration(decl.parent) && ts.isIdentifier(decl.parent.name)
+        ? decl.parent.name.text
+        : null;
+  const target = (call) => checker.getResolvedSignature(call)?.getDeclaration() ?? null;
+
+  const loops = new Set();
+  const runsLoop = (body) => {
+    let found = false;
+    each(body, (node) => {
+      if (ts.isCallExpression(node) && (retryKind(node) !== null || loops.has(target(node)))) {
+        found = true;
+      }
+    });
+    return found;
+  };
+  for (let grew = true; grew; ) {
+    grew = false;
+    for (const [decl, body] of bodies) {
+      if (loops.has(decl) || NEST_SAFE.has(nameOf(decl))) continue;
+      if (runsLoop(body)) {
+        loops.add(decl);
+        grew = true;
+      }
+    }
+  }
+
+  const counts = new Map();
+  for (const sf of ours) {
+    let n = 0;
+    // A nested `toPass` is a loop of its own, checked where it stands; a
+    // nested poll only reads.
+    const inside = (body) => {
+      const walk = (node) => {
+        if (ts.isCallExpression(node)) {
+          const kind = retryKind(node);
+          if (kind === 'toPass') {
+            n++;
+            return;
+          }
+          if (kind === 'poll') return;
+          if (loops.has(target(node))) n++;
+        }
+        ts.forEachChild(node, walk);
+      };
+      walk(body);
+    };
+    each(sf, (node) => {
+      if (!ts.isCallExpression(node)) return;
+      const retried = retriedCallback(node);
+      if (retried !== null) {
+        inside(retried.body);
+        return;
+      }
+      // A callback handed to a loop runs inside it: `restore`, `landed`.
+      if (!loops.has(target(node))) return;
+      for (const arg of node.arguments) {
+        if (isFunctionLike(arg)) inside(arg.body);
+        if (!ts.isObjectLiteralExpression(arg)) continue;
+        for (const prop of arg.properties) {
+          if (ts.isPropertyAssignment(prop) && isFunctionLike(prop.initializer)) {
+            inside(prop.initializer.body);
+          } else if (ts.isMethodDeclaration(prop) && prop.body) {
+            inside(prop.body);
+          }
+        }
+      }
+    });
+    if (n > 0) counts.set(fileOf(sf), n);
+  }
+  return counts;
 }
 
 /// The findings in one file, as `{ rule: count }`.
@@ -379,6 +515,8 @@ function adminShapes(text) {
 const failures = [];
 const counts = {};
 
+const nested = nestedLoops();
+
 for (const full of sourceFiles(join(e2eRoot, 'tests'))) {
   const file = relative(e2eRoot, full).split(sep).join('/');
   const text = readFileSync(full, 'utf8');
@@ -405,6 +543,7 @@ for (const full of sourceFiles(join(e2eRoot, 'tests'))) {
   if (waived(file) === '*') continue;
 
   const found = scan(file, text);
+  if (nested.has(file)) found['nested-loop'] = nested.get(file);
   for (const [rule, count] of Object.entries(found)) {
     const spec = RULES.find((r) => r.name === rule);
     if (!spec || !ruleApplies(spec, file) || isWaived(file, rule)) continue;

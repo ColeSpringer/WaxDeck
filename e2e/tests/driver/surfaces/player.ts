@@ -116,27 +116,13 @@ export class Player extends Surface {
     );
   }
 
-  /// Puts the player back when a press has taken it away, and does
-  /// nothing at all otherwise.
-  ///
-  /// `chooseFromMenu` calls this at the top of every attempt, so the
-  /// question it answers has to be the cheap and positive one: is the
-  /// deck bar on screen? The bar is drawn only while the player is down
-  /// - the player overlays the shell, and a menu's own barrier drops the
-  /// bar along with everything else behind it - so its expand
-  /// affordance is what separates "dismissed" from "merely covered".
-  /// Asking whether the trigger is gone cannot: both look identical
-  /// from outside, and answering "dismissed" to a menu that was open all
-  /// along spends [ready]'s whole budget failing to find a player that
-  /// is right there.
-  ///
-  /// Carries [ready]'s precondition with it: the expand identifier is
-  /// shared by every face of the bar, so one showing a remote session or
-  /// a restore offer expands to a different screen.
+  /// Puts the player back if a press dismissed it: only then is the deck bar
+  /// up (a menu's barrier hides it too). One bounded click, as this runs in
+  /// `chooseFromMenu`'s loop; [ready]'s precondition applies.
   private async reopen(): Promise<void> {
     const expand = this.ctx.page.locator(sem(SemanticsIds.deckExpand));
     if (!(await expand.isVisible())) return;
-    await this.ready();
+    await clickToward(expand, { shows: this.toggle() });
   }
 
   /// Open the player's overflow and choose "add to playlist".

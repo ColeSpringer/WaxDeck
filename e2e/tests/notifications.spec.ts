@@ -1,7 +1,10 @@
-import { test, expect } from './fixtures';
+import { test, expect, type SpecPage } from './fixtures';
 import { T } from './driver';
 import { SemanticsIds } from './semantics-ids';
 import { startJsonSink } from './support/json-sink';
+import type { components } from './api-types';
+
+type ServerSyncPage = components['schemas']['ServerSyncPage'];
 
 // Notification delivery against the live stack. Scoping, gating and
 // per-provider payloads are the server's integration tests; this pins
@@ -80,6 +83,26 @@ test('a server-scope webhook target delivers a test end to end', async ({ app })
 // The bell: the in-app half of the same news. Web has no sync engine, so
 // this exercises notifications_binder's puller end to end.
 
+/// The client walking its server stream past upload [id]'s marker. Armed
+/// before the POST that emits it, because the walk can outrun the POST's
+/// own answer; the id arrives with that answer.
+function walkedPast(page: SpecPage, id: Promise<string>) {
+  const walked = page.waitForResponse(
+    async (r) => {
+      if (!r.url().includes('/sync/server') || !r.url().includes('since=')) return false;
+      const body = (await r.json().catch(() => undefined)) as ServerSyncPage | undefined;
+      const pid = await id;
+      return (body?.events ?? []).some((e) => e.kind === 'upload' && e.pid === pid);
+    },
+    { timeout: T.fetch },
+  );
+  // Marked handled, so a run that has already failed is not reported
+  // twice; the caller's own awaits still throw.
+  id.catch(() => {});
+  walked.catch(() => {});
+  return walked;
+}
+
 test('the bell reports what happened while the app was open', async ({
   app,
   page,
@@ -96,23 +119,21 @@ test('the bell reports what happened while the app was open', async ({
   await minted;
 
   // The cheapest change that emits a marker: no bytes move.
-  const session = await app.api.post('/uploads', {
+  const posting = app.api.post('/uploads', {
     data: { fileName: 'bell.mp3', sizeBytes: 1024, mediaType: 'music' },
   });
+  const walked = walkedPast(page, posting.then((s) => s.id));
+  const session = await posting;
   expect(session.id).toMatch(/^up-/);
 
   let second = '';
   try {
+    // The walk, not the badge, which a sibling's backup can light first: a
+    // bell opened before the walk lacks this news, and the soak's re-opens
+    // then collided two clicks on a menu that stamped it seen as it opened.
+    await walked;
     await app.shell.notificationsBadged();
-    // Waited for by what the row is about rather than off the top of
-    // the list: the catalog is shared, so the news that badges the bell
-    // first is not necessarily this test's own. At the fetch tier for
-    // the same reason the badge is no longer the wait - this account
-    // has a durable inbox, and a sibling's backup lights the badge
-    // before this test's upload has walked in.
-    const mine = await app.shell.openNotificationsUntil('upload', undefined, {
-      within: T.fetch,
-    });
+    const mine = await app.shell.openNotificationsUntil('upload');
 
     // And the row is a link, not a label.
     await mine.click();
@@ -134,20 +155,22 @@ test('the bell reports what happened while the app was open', async ({
 
     // Reading still empties the bell, on a second piece of news this
     // test never opens.
-    second = (
-      await app.api.post('/uploads', {
-        data: { fileName: 'bell-2.mp3', sizeBytes: 1024, mediaType: 'music' },
-      })
-    ).id;
-    await app.shell.notificationsBadged();
-    await app.shell.openNotificationsUntil('upload', undefined, {
-      within: T.fetch,
+    const again = app.api.post('/uploads', {
+      data: { fileName: 'bell-2.mp3', sizeBytes: 1024, mediaType: 'music' },
     });
+    const walkedAgain = walkedPast(page, again.then((s) => s.id));
+    second = (await again).id;
+    await walkedAgain;
+    await app.shell.notificationsBadged();
+    await app.shell.openNotificationsUntil('upload');
     // The bell's last row reads everything rather than deleting it: the
     // same gesture against a durable inbox would throw away ninety days
     // of history from a dropdown. The peek empties either way.
     await app.shell.notificationsPeekRead().click();
+    // Reopened, because the click closes the menu whatever it read.
+    await app.shell.openNotificationsPanel();
     await expect(app.shell.notificationRow('upload')).toBeHidden();
+    await app.shell.closeNotifications();
   } finally {
     for (const id of [session.id, second]) {
       if (id) await app.api.delete('/uploads/{uploadId}', { path: { uploadId: id } });

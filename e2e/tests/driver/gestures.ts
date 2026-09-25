@@ -10,30 +10,37 @@
 import { expect, Locator, Page, Request } from '@playwright/test';
 import { T } from './budgets';
 
-// Type into a flutter text field and verify the app took the text.
-//
-// Flutter binds its editing session asynchronously, so keys typed in the
-// gap leave the DOM holding a string the controller never got. It
-// rewrites the element from the controller once bound, which is what the
-// second read below is asking.
+// No click, keystroke or scroll under a nested deadline: a `toPass` attempt
+// abandoned at its deadline keeps running, so its input lands in the caller's
+// next attempt. Only `rectAtRest` and `wheelIntoReach` may nest (see lint).
+
+// Type into a flutter text field and verify the app took the text, as one
+// retried unit, so never inside another `toPass`. Keys typed before flutter
+// binds its editing session never reach the controller.
 export async function typeInto(page: Page, field: Locator, text: string) {
   // Bounded, so an absent field fails here with a page snapshot.
   await field.waitFor({ timeout: T.nav });
+  // T.action, not more: two of these have to fit a spec's 120s.
   await expect(async () => {
-    // Re-located and re-clicked each attempt: the click re-establishes a
-    // lost editing session, and flutter may have rebuilt the node.
-    const inner = field.locator('input, textarea');
-    const input = (await inner.count()) > 0 ? inner.first() : field;
-    await input.click();
-    await expect(input).toBeFocused({ timeout: T.step });
-    await page.keyboard.press('ControlOrMeta+a');
-    await page.keyboard.type(text);
-    await expect(input).toHaveValue(text, { timeout: 1_000 });
-    // A value flutter never received is gone by the second read.
-    await new Promise((resolve) => setTimeout(resolve, 400));
-    expect(await input.inputValue()).toBe(text);
-    // T.action, not more: two of these have to fit a spec's 120s.
+    await typeOnce(page, field, text);
   }).toPass({ timeout: T.action });
+}
+
+// One attempt of `typeInto`, for a caller whose own loop retries it.
+export async function typeOnce(page: Page, field: Locator, text: string) {
+  // Re-located and re-clicked each attempt: the click re-establishes a
+  // lost editing session, and flutter may have rebuilt the node.
+  const inner = field.locator('input, textarea');
+  const input = (await inner.count()) > 0 ? inner.first() : field;
+  // Bounded, so a missing field fails the attempt by name.
+  await input.click({ timeout: T.step });
+  await expect(input).toBeFocused({ timeout: T.step });
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type(text);
+  await expect(input).toHaveValue(text, { timeout: 1_000 });
+  // A value flutter never received is gone by the second read.
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  expect(await input.inputValue()).toBe(text);
 }
 
 // Submit a flutter text field and wait for what Enter opens, as one
@@ -147,9 +154,9 @@ export async function clickUntilRequested(
   await clickUntil(trigger, () => seen, press);
 }
 
-// Click a canvas control and wait for what it opens, as one retried
-// unit: flutter web can swallow a click while its handlers are still
-// attaching, and a swallowed navigation click never arrives at all.
+// Click a canvas control and wait for what it opens, as one retried unit:
+// flutter web can swallow a click while its handlers are still attaching.
+// A click loop, so never inside another `toPass`.
 export async function clickThrough(trigger: Locator, appears: Locator) {
   await expect(async () => {
     await clickToward(trigger, { shows: appears });
@@ -296,6 +303,7 @@ export async function wheelIntoReach(
   // fresh read matching it means that wheel moved nothing.
   let spent: Box | null = null;
   let aimed = false;
+  const deadline = Date.now() + T.action;
   await expect(async () => {
     const seen = await target.boundingBox();
     expect(seen, 'the target reports a box to scroll toward').toBeTruthy();
@@ -325,6 +333,9 @@ export async function wheelIntoReach(
       }
       // The rest surfaced late movement; wheel again from where it is.
     }
+    // A rest outlives the deadline, and an abandoned attempt that wheels
+    // after it scrolls under the caller's retry.
+    if (Date.now() >= deadline) throw new Error('out of time to wheel');
     if (!aimed) {
       aimed = true;
       await aimWheel(page, over, width, height);
@@ -397,40 +408,17 @@ export const MENU_UNIT = 45_000;
 export interface MenuChoice {
   /// Something only the chosen row can produce.
   readonly settled?: Locator;
-  /// Puts the surface the trigger lives on back on screen. Called at
-  /// the top of every attempt, so it has to be cheap and to judge for
-  /// itself whether anything is missing.
+  /// Puts the surface the trigger lives on back on screen. Called at the top
+  /// of every attempt, so it is cheap, judges for itself whether anything is
+  /// missing, and never loops over a click.
   readonly restore?: () => Promise<void>;
   /// Which button opens the menu.
   readonly press?: Press;
 }
 
-// Open a menu and choose a row from it, as one retried unit.
-//
-// Not `clickThrough`: that re-clicks its trigger whenever the
-// destination is missing, and on a retry the click lands on the modal
-// barrier and closes the menu the last attempt opened.
-//
-// `settled` proves the choice took - a sheet the row opens, or by
-// default the menu going away. Checked first, for the choice that
-// landed and then outran its own wait, which is why it must be
-// something only the chosen row can produce.
-//
-// `restore` puts the trigger's own surface back, for the triggers a
-// missed press can carry off with it. A forced press is aimed at a rect
-// read a moment earlier, and on the player every pixel the content
-// islands do not claim is a way out: a chip that moves between the read
-// and the press takes the press to the dismissing surface, and the face
-// leaves with the trigger on it. Without a way back every later attempt
-// reaches for a control that is nowhere, and the unit spends its whole
-// budget arriving at the failure it started from.
-//
-// Run every attempt and left to judge for itself, rather than gated
-// here on the trigger having gone missing: a menu's own barrier drops
-// every node behind it, so a covered trigger and a dismissed one read
-// the same from this side. Only the surface can tell them apart, and
-// guessing wrong spends a whole restore on a menu that was open all
-// along.
+// Open a menu and choose a row from it, as one retried unit. Not
+// `clickThrough`, whose retry would land on the barrier and close the menu
+// the last attempt opened. A click loop, so never inside another `toPass`.
 export async function chooseFromMenu(
   trigger: Locator,
   item: Locator,
@@ -440,24 +428,34 @@ export async function chooseFromMenu(
   await expect(async () => {
     if (settled && (await settled.isVisible())) return;
     if (restore) await restore();
-    await clickToward(trigger, { shows: item }, press);
-    // At rest before the pick: near a screen edge the menu is
-    // repositioned as it grows, which is how choosing "Off" once stored
-    // the row beneath it.
-    await rectAtRest(item);
-    await item.click({ force: true });
-    if (settled) {
-      await settled.waitFor({ timeout: T.step });
-    } else {
-      await expect(item).toBeHidden({ timeout: T.step });
-    }
+    await chooseOnce(trigger, item, { settled, press });
   }).toPass({ timeout: MENU_UNIT });
 }
 
-// Open a menu and leave it standing, for the callers that let somebody
-// else pick from it. Behaviourally `clickThrough` today; the separate
-// name stays because "open the menu" is what the call sites mean, and a
-// menu's trigger sits behind the barrier once it opens.
+// One attempt of `chooseFromMenu`, for a caller whose own loop proves the
+// choice some other way, such as a server read.
+export async function chooseOnce(
+  trigger: Locator,
+  item: Locator,
+  options: Omit<MenuChoice, 'restore'> = {},
+) {
+  const { settled, press } = options;
+  await clickToward(trigger, { shows: item }, press);
+  // At rest before the pick: near a screen edge the menu is
+  // repositioned as it grows, which is how choosing "Off" once stored
+  // the row beneath it.
+  await rectAtRest(item);
+  await item.click({ force: true });
+  if (settled) {
+    await settled.waitFor({ timeout: T.step });
+  } else {
+    await expect(item).toBeHidden({ timeout: T.step });
+  }
+}
+
+// Open a menu and leave it standing, for callers that let somebody else
+// pick from it: `clickThrough` under the name the call sites mean, and
+// likewise never inside another `toPass`.
 export async function openMenu(
   trigger: Locator,
   shows: Locator,

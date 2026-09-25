@@ -113,14 +113,18 @@ test('casting from a playing browser silences it and the bar follows', async ({
   await a.nav.enter('tracks');
   await a.music.play(mine.pid);
   let aEndpoint = '';
+  let aSession = '';
+  // Off B's endpoint: both queues are the Tracks listing, so B's holds
+  // A's track too.
   await expect
     .poll(async () => {
       const listed = await app.api.tryGet('/player/sessions');
-      const found = (listed?.sessions ?? []).find((s) =>
-        (s.entries ?? []).some((e) => e.pid === mine.pid),
+      const found = (listed?.sessions ?? []).find(
+        (s) => s.endpointId !== bEndpoint && (s.entries ?? []).some((e) => e.pid === mine.pid),
       );
       if (found === undefined) return undefined;
       aEndpoint = found.endpointId;
+      aSession = found.id;
       return found.authority;
     })
     .toBe('mirror');
@@ -132,8 +136,8 @@ test('casting from a playing browser silences it and the bar follows', async ({
   // remote one, which drives another endpoint, does not.
   await expect(a.cast.localFace()).toBeHidden({ timeout: T.nav });
 
-  // And the server agrees about where the sound is: A's track plays on
-  // B's endpoint, and A holds nothing.
+  // And the server agrees about where the sound is: A's session, which
+  // keeps its id across a transfer, is on B's endpoint, and A holds nothing.
   await expect
     .poll(
       async () => {
@@ -143,9 +147,7 @@ test('casting from a playing browser silences it and the bar follows', async ({
         const here = sessions.find((s) => s.endpointId === aEndpoint);
         if (there === undefined) return 'nothing on B';
         if (here !== undefined) return 'A still holds a session';
-        return (there.entries ?? []).some((e) => e.pid === mine.pid)
-          ? 'handed over'
-          : "B is playing something that is not A's";
+        return there.id === aSession ? 'handed over' : "B is playing something that is not A's";
       },
       { message: 'the queue should have moved, and the source let go' },
     )

@@ -246,6 +246,143 @@ void main() {
     });
   });
 
+  group('WaxMenuButton', () {
+    Widget menu(VoidCallback onShown, {ValueChanged<String>? onSelected}) =>
+        WaxMenuButton<String>(
+          items: const <WaxMenuItem<String>>[
+            WaxMenuItem<String>(value: 'a', label: 'An option'),
+          ],
+          onSelected: onSelected ?? (_) {},
+          onShown: onShown,
+        );
+
+    testWidgets('onShown runs once the menu has finished appearing', (
+      tester,
+    ) async {
+      var shown = 0;
+      await tester.pumpWidget(_host(menu(() => shown++)));
+
+      await tester.tap(find.byType(WaxMenuButton<String>));
+      await tester.pump();
+      expect(shown, 0, reason: 'still appearing');
+      // Reported from inside a row: a row of its own would shift every
+      // row's fade.
+      expect(
+        find.byWidgetPredicate((widget) => widget is PopupMenuEntry),
+        findsOneWidget,
+      );
+      await tester.pumpAndSettle();
+      expect(shown, 1);
+
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(shown, 1);
+    });
+
+    testWidgets('choosing a row reads a menu that is still appearing', (
+      tester,
+    ) async {
+      var shown = 0;
+      String? chosen;
+      await tester.pumpWidget(
+        _host(menu(() => shown++, onSelected: (value) => chosen = value)),
+      );
+
+      await tester.tap(find.byType(WaxMenuButton<String>));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.tap(find.text('An option'));
+      await tester.pumpAndSettle();
+
+      expect(chosen, 'a');
+      expect(shown, 1);
+    });
+
+    testWidgets('a menu dismissed while still appearing was never shown', (
+      tester,
+    ) async {
+      var shown = 0;
+      await tester.pumpWidget(_host(menu(() => shown++)));
+
+      await tester.tap(find.byType(WaxMenuButton<String>));
+      await tester.pump();
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+
+      expect(find.text('An option'), findsNothing);
+      expect(shown, 0);
+    });
+
+    testWidgets('with animations off, a menu is read only once it has stood '
+        'as long as its entrance would take', (tester) async {
+      var shown = 0;
+      await tester.pumpWidget(_host(menu(() => shown++)));
+
+      debugSemanticsDisableAnimations = true;
+      try {
+        await tester.tap(find.byType(WaxMenuButton<String>));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(shown, 0, reason: 'drawn, but only for a frame');
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(shown, 1);
+      } finally {
+        debugSemanticsDisableAnimations = null;
+      }
+    });
+
+    group('whose trigger leaves the tree', () {
+      late ValueNotifier<bool> present;
+      var shown = 0;
+      String? chosen;
+
+      setUp(() {
+        present = ValueNotifier<bool>(true);
+        shown = 0;
+        chosen = null;
+      });
+      tearDown(() => present.dispose());
+
+      Future<void> open(WidgetTester tester) async {
+        await tester.pumpWidget(
+          _host(
+            ValueListenableBuilder<bool>(
+              valueListenable: present,
+              builder: (context, on, _) => on
+                  ? menu(() => shown++, onSelected: (value) => chosen = value)
+                  : const SizedBox(),
+            ),
+          ),
+        );
+        await tester.tap(find.byType(WaxMenuButton<String>));
+        await tester.pump();
+      }
+
+      testWidgets('is still told the menu was read', (tester) async {
+        await open(tester);
+        present.value = false;
+        await tester.pumpAndSettle();
+
+        expect(find.text('An option'), findsOneWidget);
+        expect(shown, 1);
+      });
+
+      testWidgets('is not handed a choice it can no longer act on', (
+        tester,
+      ) async {
+        await open(tester);
+        await tester.pumpAndSettle();
+        present.value = false;
+        await tester.pump();
+        await tester.tap(find.text('An option'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('An option'), findsNothing);
+        expect(chosen, isNull);
+      });
+    });
+  });
+
   group('WaxRadioGroup', () {
     const options = <WaxRadioOption<String>>[
       WaxRadioOption<String>(

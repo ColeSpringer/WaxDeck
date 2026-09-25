@@ -349,16 +349,9 @@ class LocalNotifications extends Notifier<List<WaxNotification>> {
     state = kept.length <= cap ? kept : kept.sublist(0, cap);
   }
 
-  /// Marks seen exactly the news the bell opened with. Run when it
-  /// opens, with the rows it is drawing.
-  ///
-  /// Stamped from the newest row drawn rather than from the clock. A
-  /// menu holds the list it was built with, so a hint landing between
-  /// that build and the press is in neither the menu nor - with a clock
-  /// stamp - the bell that comes after it: read on behalf of somebody
-  /// who was never shown it, and the bell draws what is unseen, so
-  /// nothing brings it back. Inbox rows carry their own read stamp and
-  /// have no say in this one.
+  /// Marks seen exactly the news the bell drew, once its menu has been
+  /// read. Stamped from the newest drawn row rather than the clock, so
+  /// a hint landing after the build stays unseen; inbox rows have their own.
   void markSeen(Iterable<WaxNotification> drawn) {
     var latest = _seenAt;
     for (final row in drawn) {

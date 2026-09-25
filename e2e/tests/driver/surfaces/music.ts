@@ -10,7 +10,7 @@ import {
 } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, clickThrough } from '../gestures';
+import { chooseFromMenu, chooseOnce, clickThrough } from '../gestures';
 
 /// The dimensions the hub offers, which are also the index locations.
 export type MusicDimension = 'artists' | 'albums' | 'tracks' | 'genres' | 'years';
@@ -114,24 +114,16 @@ export class Music extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.entityPin));
   }
 
-  /// Pin or unpin the entity screen that is open, which the caller names
-  /// by pid rather than this parsing it back out of the URL.
-  ///
-  /// `chooseFromMenu` rather than `clickThrough`: a retried click on an
-  /// overflow trigger lands on the modal barrier and closes the menu the
-  /// previous attempt opened.
-  ///
-  /// The row produces nothing here, so the gesture falls back to the
-  /// menu going away - which a dismissal satisfies too. The preference
-  /// document is the only honest proof, and reading it first keeps a
-  /// landed toggle from being fired back the other way.
+  /// Pin or unpin the open entity screen, named by pid, proved by the
+  /// preference document (read first, so a landed toggle is never fired back).
+  /// `chooseOnce`, so this loop is the only deadline over the press.
   async togglePin(pid: string): Promise<void> {
     const pinned = async () =>
       (((await this.ctx.api.get('/users/me/prefs')).pinned ?? []) as string[]).includes(pid);
     const want = !(await pinned());
     await expect(async () => {
       if ((await pinned()) === want) return;
-      await chooseFromMenu(this.entityOverflow(), this.entityPin());
+      await chooseOnce(this.entityOverflow(), this.entityPin());
       await expect.poll(pinned, { timeout: T.assert }).toBe(want);
     }).toPass({ timeout: T.fetch });
   }
