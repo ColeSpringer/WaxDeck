@@ -123,3 +123,4 @@ class _$CustomTagSerializer implements PrimitiveSerializer<CustomTag> {
   }
 }
 
+

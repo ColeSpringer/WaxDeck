@@ -98,22 +98,25 @@ class _$PlaylistUpdateSerializer implements PrimitiveSerializer<PlaylistUpdate> 
         case r'name':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.name = valueDes;
           break;
         case r'visibility':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.visibility = valueDes;
           break;
         case r'rule':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(SmartRule),
-          ) as SmartRule;
+            specifiedType: const FullType.nullable(SmartRule),
+          ) as SmartRule?;
+          if (valueDes == null) continue;
           result.rule.replace(valueDes);
           break;
         default:
@@ -144,4 +147,5 @@ class _$PlaylistUpdateSerializer implements PrimitiveSerializer<PlaylistUpdate> 
     return result.build();
   }
 }
+
 

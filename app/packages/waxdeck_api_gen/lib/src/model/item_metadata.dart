@@ -315,15 +315,17 @@ class _$ItemMetadataSerializer implements PrimitiveSerializer<ItemMetadata> {
         case r'lyrics':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(LyricsState),
-          ) as LyricsState;
+            specifiedType: const FullType.nullable(LyricsState),
+          ) as LyricsState?;
+          if (valueDes == null) continue;
           result.lyrics.replace(valueDes);
           break;
         case r'chapters':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(ChapterMark)]),
-          ) as BuiltList<ChapterMark>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(ChapterMark)]),
+          ) as BuiltList<ChapterMark>?;
+          if (valueDes == null) continue;
           result.chapters.replace(valueDes);
           break;
         case r'customTags':
@@ -364,22 +366,25 @@ class _$ItemMetadataSerializer implements PrimitiveSerializer<ItemMetadata> {
         case r'albumPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.albumPid = valueDes;
           break;
         case r'artistPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artistPid = valueDes;
           break;
         case r'releaseGroupPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.releaseGroupPid = valueDes;
           break;
         case r'writeBackIssues':
@@ -392,15 +397,17 @@ class _$ItemMetadataSerializer implements PrimitiveSerializer<ItemMetadata> {
         case r'mayCurate':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.mayCurate = valueDes;
           break;
         case r'acquisition':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ItemAcquisition),
-          ) as ItemAcquisition;
+            specifiedType: const FullType.nullable(ItemAcquisition),
+          ) as ItemAcquisition?;
+          if (valueDes == null) continue;
           result.acquisition.replace(valueDes);
           break;
         default:
@@ -431,4 +438,5 @@ class _$ItemMetadataSerializer implements PrimitiveSerializer<ItemMetadata> {
     return result.build();
   }
 }
+
 

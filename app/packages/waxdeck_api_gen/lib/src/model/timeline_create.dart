@@ -105,15 +105,17 @@ class _$TimelineCreateSerializer implements PrimitiveSerializer<TimelineCreate> 
         case r'crossfadeSeconds':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(double),
-          ) as double;
+            specifiedType: const FullType.nullable(double),
+          ) as double?;
+          if (valueDes == null) continue;
           result.crossfadeSeconds = valueDes;
           break;
         case r'formats':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(TimelineFormat)]),
-          ) as BuiltList<TimelineFormat>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(TimelineFormat)]),
+          ) as BuiltList<TimelineFormat>?;
+          if (valueDes == null) continue;
           result.formats.replace(valueDes);
           break;
         default:
@@ -144,4 +146,5 @@ class _$TimelineCreateSerializer implements PrimitiveSerializer<TimelineCreate> 
     return result.build();
   }
 }
+
 

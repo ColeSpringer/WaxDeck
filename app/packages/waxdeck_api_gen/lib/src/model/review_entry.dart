@@ -227,6 +227,7 @@ class _$ReviewEntrySerializer implements PrimitiveSerializer<ReviewEntry> {
   }
 }
 
+
 /// a concrete implementation of [ReviewEntry], since [ReviewEntry] is not instantiable
 @BuiltValue(instantiable: true)
 abstract class $ReviewEntry implements ReviewEntry, Built<$ReviewEntry, $ReviewEntryBuilder> {
@@ -307,15 +308,17 @@ class _$$ReviewEntrySerializer implements PrimitiveSerializer<$ReviewEntry> {
         case r'title':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.title = valueDes;
           break;
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'trackCount':
@@ -328,15 +331,17 @@ class _$$ReviewEntrySerializer implements PrimitiveSerializer<$ReviewEntry> {
         case r'libraryPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.libraryPid = valueDes;
           break;
         case r'uploadedBy':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.uploadedBy = valueDes;
           break;
         case r'identifying':
@@ -349,15 +354,17 @@ class _$$ReviewEntrySerializer implements PrimitiveSerializer<$ReviewEntry> {
         case r'best':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(CandidateSummary),
-          ) as CandidateSummary;
+            specifiedType: const FullType.nullable(CandidateSummary),
+          ) as CandidateSummary?;
+          if (valueDes == null) continue;
           result.best.replace(valueDes);
           break;
         case r'appliedMbid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.appliedMbid = valueDes;
           break;
         case r'createdAt':
@@ -370,15 +377,17 @@ class _$$ReviewEntrySerializer implements PrimitiveSerializer<$ReviewEntry> {
         case r'decidedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.decidedAt = valueDes;
           break;
         case r'decidedBy':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.decidedBy = valueDes;
           break;
         default:

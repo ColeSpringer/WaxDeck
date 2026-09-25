@@ -91,8 +91,9 @@ class _$StarUpdateSerializer implements PrimitiveSerializer<StarUpdate> {
         case r'recordedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.recordedAt = valueDes;
           break;
         default:
@@ -123,4 +124,5 @@ class _$StarUpdateSerializer implements PrimitiveSerializer<StarUpdate> {
     return result.build();
   }
 }
+
 

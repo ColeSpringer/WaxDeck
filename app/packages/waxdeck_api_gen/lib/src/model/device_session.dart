@@ -154,15 +154,17 @@ class _$DeviceSessionSerializer implements PrimitiveSerializer<DeviceSession> {
         case r'deviceName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.deviceName = valueDes;
           break;
         case r'client':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.client = valueDes;
           break;
         case r'createdAt':
@@ -175,8 +177,9 @@ class _$DeviceSessionSerializer implements PrimitiveSerializer<DeviceSession> {
         case r'lastSeenAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.lastSeenAt = valueDes;
           break;
         case r'current':
@@ -215,15 +218,14 @@ class _$DeviceSessionSerializer implements PrimitiveSerializer<DeviceSession> {
   }
 }
 
+
+/// `web` sessions authenticate with the cookie; `device` sessions with a bearer token. 
 class DeviceSessionKindEnum extends EnumClass {
 
-  /// `web` sessions authenticate with the cookie; `device` sessions with a bearer token. 
   @BuiltValueEnumConst(wireName: r'web')
   static const DeviceSessionKindEnum web = _$deviceSessionKindEnum_web;
-  /// `web` sessions authenticate with the cookie; `device` sessions with a bearer token. 
   @BuiltValueEnumConst(wireName: r'device')
   static const DeviceSessionKindEnum device = _$deviceSessionKindEnum_device;
-  /// `web` sessions authenticate with the cookie; `device` sessions with a bearer token. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const DeviceSessionKindEnum unknownDefaultOpenApi = _$deviceSessionKindEnum_unknownDefaultOpenApi;
 

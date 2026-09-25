@@ -120,15 +120,17 @@ class _$SignupRequestSerializer implements PrimitiveSerializer<SignupRequest> {
         case r'displayName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.displayName = valueDes;
           break;
         case r'inviteToken':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.inviteToken = valueDes;
           break;
         default:
@@ -159,4 +161,5 @@ class _$SignupRequestSerializer implements PrimitiveSerializer<SignupRequest> {
     return result.build();
   }
 }
+
 

@@ -144,29 +144,33 @@ class _$CatalogSyncEntrySerializer implements PrimitiveSerializer<CatalogSyncEnt
         case r'reason':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.reason = valueDes;
           break;
         case r'item':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ItemSummary),
-          ) as ItemSummary;
+            specifiedType: const FullType.nullable(ItemSummary),
+          ) as ItemSummary?;
+          if (valueDes == null) continue;
           result.item = valueDes;
           break;
         case r'episode':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(EpisodeSummary),
-          ) as EpisodeSummary;
+            specifiedType: const FullType.nullable(EpisodeSummary),
+          ) as EpisodeSummary?;
+          if (valueDes == null) continue;
           result.episode = valueDes;
           break;
         case r'show':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(PodcastShow),
-          ) as PodcastShow;
+            specifiedType: const FullType.nullable(PodcastShow),
+          ) as PodcastShow?;
+          if (valueDes == null) continue;
           result.show_.replace(valueDes);
           break;
         default:
@@ -197,4 +201,5 @@ class _$CatalogSyncEntrySerializer implements PrimitiveSerializer<CatalogSyncEnt
     return result.build();
   }
 }
+
 

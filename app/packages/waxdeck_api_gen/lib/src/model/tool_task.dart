@@ -197,29 +197,33 @@ class _$ToolTaskSerializer implements PrimitiveSerializer<ToolTask> {
         case r'itemPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.itemPid = valueDes;
           break;
         case r'progressPct':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(double),
-          ) as double;
+            specifiedType: const FullType.nullable(double),
+          ) as double?;
+          if (valueDes == null) continue;
           result.progressPct = valueDes;
           break;
         case r'error':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.error = valueDes;
           break;
         case r'resultPids':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.resultPids.replace(valueDes);
           break;
         case r'createdAt':
@@ -232,15 +236,17 @@ class _$ToolTaskSerializer implements PrimitiveSerializer<ToolTask> {
         case r'finishedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.finishedAt = valueDes;
           break;
         case r'summary':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
-          ) as BuiltMap<String, JsonObject?>;
+            specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
+          ) as BuiltMap<String, JsonObject?>?;
+          if (valueDes == null) continue;
           result.summary.replace(valueDes);
           break;
         default:
@@ -271,4 +277,5 @@ class _$ToolTaskSerializer implements PrimitiveSerializer<ToolTask> {
     return result.build();
   }
 }
+
 

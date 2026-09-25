@@ -89,15 +89,17 @@ class _$EnrichmentRunRequestSerializer implements PrimitiveSerializer<Enrichment
         case r'force':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.force = valueDes;
           break;
         case r'forcePhases':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(EnrichmentPhase)]),
-          ) as BuiltList<EnrichmentPhase>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(EnrichmentPhase)]),
+          ) as BuiltList<EnrichmentPhase>?;
+          if (valueDes == null) continue;
           result.forcePhases.replace(valueDes);
           break;
         default:
@@ -128,4 +130,5 @@ class _$EnrichmentRunRequestSerializer implements PrimitiveSerializer<Enrichment
     return result.build();
   }
 }
+
 

@@ -108,8 +108,9 @@ class _$BootstrapRequestSerializer implements PrimitiveSerializer<BootstrapReque
         case r'displayName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.displayName = valueDes;
           break;
         default:
@@ -140,4 +141,5 @@ class _$BootstrapRequestSerializer implements PrimitiveSerializer<BootstrapReque
     return result.build();
   }
 }
+
 

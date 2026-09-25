@@ -125,36 +125,41 @@ class _$LyricsEditSerializer implements PrimitiveSerializer<LyricsEdit> {
         case r'lrc':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.lrc = valueDes;
           break;
         case r'plain':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.plain = valueDes;
           break;
         case r'writeBack':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.writeBack = valueDes;
           break;
         case r'lock':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.lock = valueDes;
           break;
         case r'force':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.force = valueDes;
           break;
         default:
@@ -185,4 +190,5 @@ class _$LyricsEditSerializer implements PrimitiveSerializer<LyricsEdit> {
     return result.build();
   }
 }
+
 

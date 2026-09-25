@@ -140,15 +140,17 @@ class _$PlayedUpdateSerializer implements PrimitiveSerializer<PlayedUpdate> {
         case r'positionMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.positionMs = valueDes;
           break;
         case r'recordedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.recordedAt = valueDes;
           break;
         default:
@@ -179,4 +181,5 @@ class _$PlayedUpdateSerializer implements PrimitiveSerializer<PlayedUpdate> {
     return result.build();
   }
 }
+
 

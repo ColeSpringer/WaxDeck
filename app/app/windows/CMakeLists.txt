@@ -76,11 +76,12 @@ include(flutter/generated_plugins.cmake)
 # rejects as C4596. Those targets get permissive mode back - an option,
 # never an edit to sources nobody here owns - and option order makes
 # this win over the standard settings. window_manager is in the list on
-# source inspection: the first dispatched run died on the other two
-# before reaching it, and it carries the same idiom.
+# source inspection: the first dispatched run died on screen_retriever
+# before reaching it, and it carries the same idiom. tray_manager left
+# the list when its 0.6 replaced the plugin with cnativeapi, a target
+# of its own.
 foreach(nonconformant_plugin
   screen_retriever_windows_plugin
-  tray_manager_plugin
   window_manager_plugin)
   if(TARGET ${nonconformant_plugin})
     target_compile_options(${nonconformant_plugin} PRIVATE /permissive)

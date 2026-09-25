@@ -92,8 +92,9 @@ class _$RatingUpdateSerializer implements PrimitiveSerializer<RatingUpdate> {
         case r'recordedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.recordedAt = valueDes;
           break;
         default:
@@ -124,4 +125,5 @@ class _$RatingUpdateSerializer implements PrimitiveSerializer<RatingUpdate> {
     return result.build();
   }
 }
+
 

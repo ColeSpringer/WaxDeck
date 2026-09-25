@@ -105,15 +105,17 @@ class _$ItemPageSerializer implements PrimitiveSerializer<ItemPage> {
         case r'nextCursor':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.nextCursor = valueDes;
           break;
         case r'seed':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.seed = valueDes;
           break;
         default:
@@ -144,4 +146,5 @@ class _$ItemPageSerializer implements PrimitiveSerializer<ItemPage> {
     return result.build();
   }
 }
+
 

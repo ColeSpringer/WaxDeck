@@ -99,22 +99,25 @@ class _$WsSubscribeFrameSerializer implements PrimitiveSerializer<WsSubscribeFra
         case r'catalogSince':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.catalogSince = valueDes;
           break;
         case r'serverSince':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.serverSince = valueDes;
           break;
         case r'topics':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.topics.replace(valueDes);
           break;
         default:
@@ -145,4 +148,5 @@ class _$WsSubscribeFrameSerializer implements PrimitiveSerializer<WsSubscribeFra
     return result.build();
   }
 }
+
 

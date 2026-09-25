@@ -72,6 +72,6 @@ EOF
 cd "$ROOT/app"
 dart pub get
 cd "$OUT"
-dart run build_runner build --delete-conflicting-outputs
+dart run build_runner build
 
 echo "generate-dart: OK -> $OUT"

@@ -258,6 +258,7 @@ class _$EpisodeSummarySerializer implements PrimitiveSerializer<EpisodeSummary> 
   }
 }
 
+
 /// a concrete implementation of [EpisodeSummary], since [EpisodeSummary] is not instantiable
 @BuiltValue(instantiable: true)
 abstract class $EpisodeSummary implements EpisodeSummary, Built<$EpisodeSummary, $EpisodeSummaryBuilder> {
@@ -303,22 +304,25 @@ class _$$EpisodeSummarySerializer implements PrimitiveSerializer<$EpisodeSummary
         case r'fetchError':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.fetchError = valueDes;
           break;
         case r'fetchState':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.fetchState = valueDes;
           break;
         case r'trackNumber':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.trackNumber = valueDes;
           break;
         case r'publishedAt':
@@ -331,15 +335,17 @@ class _$$EpisodeSummarySerializer implements PrimitiveSerializer<$EpisodeSummary
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'album':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.album = valueDes;
           break;
         case r'pid':
@@ -366,8 +372,9 @@ class _$$EpisodeSummarySerializer implements PrimitiveSerializer<$EpisodeSummary
         case r'episodeNumber':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.episodeNumber = valueDes;
           break;
         case r'downloaded':
@@ -380,50 +387,57 @@ class _$$EpisodeSummarySerializer implements PrimitiveSerializer<$EpisodeSummary
         case r'albumPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.albumPid = valueDes;
           break;
         case r'hasTranscript':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.hasTranscript = valueDes;
           break;
         case r'artUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artUrl = valueDes;
           break;
         case r'explicit':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.explicit = valueDes;
           break;
         case r'episodeType':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.episodeType = valueDes;
           break;
         case r'discNumber':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.discNumber = valueDes;
           break;
         case r'hasEnclosure':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.hasEnclosure = valueDes;
           break;
         case r'showPid':
@@ -436,15 +450,17 @@ class _$$EpisodeSummarySerializer implements PrimitiveSerializer<$EpisodeSummary
         case r'season':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.season = valueDes;
           break;
         case r'artistPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artistPid = valueDes;
           break;
         case r'durationMs':

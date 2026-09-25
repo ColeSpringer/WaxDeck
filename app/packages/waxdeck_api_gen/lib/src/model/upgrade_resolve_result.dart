@@ -105,3 +105,4 @@ class _$UpgradeResolveResultSerializer implements PrimitiveSerializer<UpgradeRes
   }
 }
 
+

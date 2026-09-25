@@ -105,3 +105,4 @@ class _$ReleaseStatusEditSerializer implements PrimitiveSerializer<ReleaseStatus
   }
 }
 
+

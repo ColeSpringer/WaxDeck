@@ -151,43 +151,49 @@ class _$ServerSyncEventSerializer implements PrimitiveSerializer<ServerSyncEvent
         case r'pid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.pid = valueDes;
           break;
         case r'playState':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(PlayState),
-          ) as PlayState;
+            specifiedType: const FullType.nullable(PlayState),
+          ) as PlayState?;
+          if (valueDes == null) continue;
           result.playState.replace(valueDes);
           break;
         case r'prefs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(Prefs),
-          ) as Prefs;
+            specifiedType: const FullType.nullable(Prefs),
+          ) as Prefs?;
+          if (valueDes == null) continue;
           result.prefs.replace(valueDes);
           break;
         case r'subscription':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(Subscription),
-          ) as Subscription;
+            specifiedType: const FullType.nullable(Subscription),
+          ) as Subscription?;
+          if (valueDes == null) continue;
           result.subscription.replace(valueDes);
           break;
         case r'bookSettings':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BookSettings),
-          ) as BookSettings;
+            specifiedType: const FullType.nullable(BookSettings),
+          ) as BookSettings?;
+          if (valueDes == null) continue;
           result.bookSettings.replace(valueDes);
           break;
         case r'playlist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(Playlist),
-          ) as Playlist;
+            specifiedType: const FullType.nullable(Playlist),
+          ) as Playlist?;
+          if (valueDes == null) continue;
           result.playlist.replace(valueDes);
           break;
         default:
@@ -218,4 +224,5 @@ class _$ServerSyncEventSerializer implements PrimitiveSerializer<ServerSyncEvent
     return result.build();
   }
 }
+
 

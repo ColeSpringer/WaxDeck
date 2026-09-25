@@ -116,22 +116,25 @@ class _$ShareCreateSerializer implements PrimitiveSerializer<ShareCreate> {
         case r'expiresInHours':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.expiresInHours = valueDes;
           break;
         case r'allowDownload':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.allowDownload = valueDes;
           break;
         case r'positionMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.positionMs = valueDes;
           break;
         default:
@@ -162,4 +165,5 @@ class _$ShareCreateSerializer implements PrimitiveSerializer<ShareCreate> {
     return result.build();
   }
 }
+
 

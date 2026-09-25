@@ -220,8 +220,9 @@ class _$ShareSerializer implements PrimitiveSerializer<Share> {
         case r'positionMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.positionMs = valueDes;
           break;
         case r'createdAt':
@@ -234,8 +235,9 @@ class _$ShareSerializer implements PrimitiveSerializer<Share> {
         case r'expiresAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.expiresAt = valueDes;
           break;
         case r'plays':
@@ -248,8 +250,9 @@ class _$ShareSerializer implements PrimitiveSerializer<Share> {
         case r'owner':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.owner = valueDes;
           break;
         default:
@@ -280,4 +283,5 @@ class _$ShareSerializer implements PrimitiveSerializer<Share> {
     return result.build();
   }
 }
+
 

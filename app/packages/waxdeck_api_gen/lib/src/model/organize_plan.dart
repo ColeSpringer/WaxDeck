@@ -127,8 +127,9 @@ class _$OrganizePlanSerializer implements PrimitiveSerializer<OrganizePlan> {
         case r'tagWrite':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.tagWrite = valueDes;
           break;
         default:
@@ -159,4 +160,5 @@ class _$OrganizePlanSerializer implements PrimitiveSerializer<OrganizePlan> {
     return result.build();
   }
 }
+
 

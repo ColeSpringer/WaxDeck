@@ -124,18 +124,16 @@ class _$LibraryMatchingSerializer implements PrimitiveSerializer<LibraryMatching
   }
 }
 
+
+/// The matching mode.
 class LibraryMatchingModeEnum extends EnumClass {
 
-  /// The matching mode.
   @BuiltValueEnumConst(wireName: r'auto')
   static const LibraryMatchingModeEnum auto = _$libraryMatchingModeEnum_auto;
-  /// The matching mode.
   @BuiltValueEnumConst(wireName: r'review')
   static const LibraryMatchingModeEnum review = _$libraryMatchingModeEnum_review;
-  /// The matching mode.
   @BuiltValueEnumConst(wireName: r'off')
   static const LibraryMatchingModeEnum off = _$libraryMatchingModeEnum_off;
-  /// The matching mode.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const LibraryMatchingModeEnum unknownDefaultOpenApi = _$libraryMatchingModeEnum_unknownDefaultOpenApi;
 

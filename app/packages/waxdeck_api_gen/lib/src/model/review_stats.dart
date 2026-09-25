@@ -167,8 +167,9 @@ class _$ReviewStatsSerializer implements PrimitiveSerializer<ReviewStats> {
         case r'identifying':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.identifying = valueDes;
           break;
         case r'applied':
@@ -188,22 +189,25 @@ class _$ReviewStatsSerializer implements PrimitiveSerializer<ReviewStats> {
         case r'asIs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.asIs = valueDes;
           break;
         case r'unofficial':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.unofficial = valueDes;
           break;
         case r'skipped':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.skipped = valueDes;
           break;
         case r'reverted':
@@ -248,4 +252,5 @@ class _$ReviewStatsSerializer implements PrimitiveSerializer<ReviewStats> {
     return result.build();
   }
 }
+
 

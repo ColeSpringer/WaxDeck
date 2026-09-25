@@ -103,15 +103,17 @@ class _$OidcExchangeRequestSerializer implements PrimitiveSerializer<OidcExchang
         case r'verifier':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.verifier = valueDes;
           break;
         case r'deviceName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.deviceName = valueDes;
           break;
         default:
@@ -142,4 +144,5 @@ class _$OidcExchangeRequestSerializer implements PrimitiveSerializer<OidcExchang
     return result.build();
   }
 }
+
 

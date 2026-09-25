@@ -91,8 +91,9 @@ class _$WsTuneFrameSerializer implements PrimitiveSerializer<WsTuneFrame> {
         case r'station':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.station = valueDes;
           break;
         default:
@@ -123,4 +124,5 @@ class _$WsTuneFrameSerializer implements PrimitiveSerializer<WsTuneFrame> {
     return result.build();
   }
 }
+
 

@@ -215,15 +215,17 @@ class _$PlaylistSourceSerializer implements PrimitiveSerializer<PlaylistSource> 
         case r'url':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.url = valueDes;
           break;
         case r'title':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.title = valueDes;
           break;
         case r'live':
@@ -243,15 +245,17 @@ class _$PlaylistSourceSerializer implements PrimitiveSerializer<PlaylistSource> 
         case r'intervalHours':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.intervalHours = valueDes;
           break;
         case r'refCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.refCount = valueDes;
           break;
         case r'disabled':
@@ -271,29 +275,33 @@ class _$PlaylistSourceSerializer implements PrimitiveSerializer<PlaylistSource> 
         case r'lastError':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.lastError = valueDes;
           break;
         case r'lastAttemptAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.lastAttemptAt = valueDes;
           break;
         case r'lastSyncedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.lastSyncedAt = valueDes;
           break;
         case r'lastRun':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(PlaylistSyncCounts),
-          ) as PlaylistSyncCounts;
+            specifiedType: const FullType.nullable(PlaylistSyncCounts),
+          ) as PlaylistSyncCounts?;
+          if (valueDes == null) continue;
           result.lastRun.replace(valueDes);
           break;
         default:
@@ -324,4 +332,5 @@ class _$PlaylistSourceSerializer implements PrimitiveSerializer<PlaylistSource> 
     return result.build();
   }
 }
+
 

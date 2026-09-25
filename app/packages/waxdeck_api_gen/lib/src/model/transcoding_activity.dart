@@ -91,8 +91,9 @@ class _$TranscodingActivitySerializer implements PrimitiveSerializer<Transcoding
         case r'activeTimelines':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.activeTimelines = valueDes;
           break;
         default:
@@ -123,4 +124,5 @@ class _$TranscodingActivitySerializer implements PrimitiveSerializer<Transcoding
     return result.build();
   }
 }
+
 

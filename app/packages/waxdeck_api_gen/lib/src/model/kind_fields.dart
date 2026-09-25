@@ -142,3 +142,4 @@ class _$KindFieldsSerializer implements PrimitiveSerializer<KindFields> {
   }
 }
 
+

@@ -164,15 +164,17 @@ class _$FileDiagnosticSerializer implements PrimitiveSerializer<FileDiagnostic> 
         case r'tagKey':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.tagKey = valueDes;
           break;
         case r'detail':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.detail = valueDes;
           break;
         case r'seenAt':
@@ -210,4 +212,5 @@ class _$FileDiagnosticSerializer implements PrimitiveSerializer<FileDiagnostic> 
     return result.build();
   }
 }
+
 

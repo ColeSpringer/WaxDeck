@@ -122,15 +122,17 @@ class _$BulkEditResultSerializer implements PrimitiveSerializer<BulkEditResult> 
         case r'writeBackFailures':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(WriteBackFailure)]),
-          ) as BuiltList<WriteBackFailure>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(WriteBackFailure)]),
+          ) as BuiltList<WriteBackFailure>?;
+          if (valueDes == null) continue;
           result.writeBackFailures.replace(valueDes);
           break;
         case r'resultingAlbumPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.resultingAlbumPid = valueDes;
           break;
         default:
@@ -161,4 +163,5 @@ class _$BulkEditResultSerializer implements PrimitiveSerializer<BulkEditResult> 
     return result.build();
   }
 }
+
 

@@ -106,15 +106,17 @@ class _$MetadataCommitResultSerializer implements PrimitiveSerializer<MetadataCo
         case r'writeBackFailures':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(WriteBackFailure)]),
-          ) as BuiltList<WriteBackFailure>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(WriteBackFailure)]),
+          ) as BuiltList<WriteBackFailure>?;
+          if (valueDes == null) continue;
           result.writeBackFailures.replace(valueDes);
           break;
         case r'warnings':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.warnings.replace(valueDes);
           break;
         default:
@@ -145,4 +147,5 @@ class _$MetadataCommitResultSerializer implements PrimitiveSerializer<MetadataCo
     return result.build();
   }
 }
+
 

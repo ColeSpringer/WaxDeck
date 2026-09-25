@@ -92,8 +92,9 @@ class _$ArtRolesSerializer implements PrimitiveSerializer<ArtRoles> {
         case r'artSource':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ArtSource),
-          ) as ArtSource;
+            specifiedType: const FullType.nullable(ArtSource),
+          ) as ArtSource?;
+          if (valueDes == null) continue;
           result.artSource.replace(valueDes);
           break;
         default:
@@ -124,4 +125,5 @@ class _$ArtRolesSerializer implements PrimitiveSerializer<ArtRoles> {
     return result.build();
   }
 }
+
 

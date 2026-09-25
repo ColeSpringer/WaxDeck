@@ -92,8 +92,9 @@ class _$EntityCardListSerializer implements PrimitiveSerializer<EntityCardList> 
         case r'departed':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.departed.replace(valueDes);
           break;
         default:
@@ -124,4 +125,5 @@ class _$EntityCardListSerializer implements PrimitiveSerializer<EntityCardList> 
     return result.build();
   }
 }
+
 

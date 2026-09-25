@@ -9,15 +9,13 @@ import 'package:built_value/serializer.dart';
 
 part 'role.g.dart';
 
+/// An assignable account role. A shared named schema on purpose: identical inline enums make the Dart generator emit one enum class into two files, which does not compile. 
 class Role extends EnumClass {
 
-  /// An assignable account role. A shared named schema on purpose: identical inline enums make the Dart generator emit one enum class into two files, which does not compile. 
   @BuiltValueEnumConst(wireName: r'admin')
   static const Role admin = _$admin;
-  /// An assignable account role. A shared named schema on purpose: identical inline enums make the Dart generator emit one enum class into two files, which does not compile. 
   @BuiltValueEnumConst(wireName: r'user')
   static const Role user = _$user;
-  /// An assignable account role. A shared named schema on purpose: identical inline enums make the Dart generator emit one enum class into two files, which does not compile. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const Role unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 

@@ -105,3 +105,4 @@ class _$LastfmConnectStartSerializer implements PrimitiveSerializer<LastfmConnec
   }
 }
 
+

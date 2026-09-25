@@ -9,15 +9,13 @@ import 'package:built_value/serializer.dart';
 
 part 'notification_scope.g.dart';
 
+/// Where a notification event or target belongs: `server` is the administrator-managed operations scope, `user` a single user's personal scope. A shared named schema on purpose: identical inline enums make the Dart generator emit one enum class into two files, which does not compile. 
 class NotificationScope extends EnumClass {
 
-  /// Where a notification event or target belongs: `server` is the administrator-managed operations scope, `user` a single user's personal scope. A shared named schema on purpose: identical inline enums make the Dart generator emit one enum class into two files, which does not compile. 
   @BuiltValueEnumConst(wireName: r'server')
   static const NotificationScope server = _$server;
-  /// Where a notification event or target belongs: `server` is the administrator-managed operations scope, `user` a single user's personal scope. A shared named schema on purpose: identical inline enums make the Dart generator emit one enum class into two files, which does not compile. 
   @BuiltValueEnumConst(wireName: r'user')
   static const NotificationScope user = _$user;
-  /// Where a notification event or target belongs: `server` is the administrator-managed operations scope, `user` a single user's personal scope. A shared named schema on purpose: identical inline enums make the Dart generator emit one enum class into two files, which does not compile. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const NotificationScope unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 

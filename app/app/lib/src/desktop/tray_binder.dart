@@ -47,6 +47,10 @@ class TrayBinder {
 
   Future<void> dispose() => _tray.remove();
 
+  /// The process is ending: hand the tray back to the platform now,
+  /// while everything it needs to do so is still standing.
+  Future<void> shutdown() => _tray.dispose();
+
   /// Everything the icon, tooltip and menu are drawn from. The subtitle
   /// counts (the tooltip uses it, so two same-titled tracks by different
   /// artists would go stale); the position does not, because a tray menu
@@ -64,6 +68,11 @@ class TrayBinder {
 /// Signed in, because everything the menu offers is playback: a tray
 /// icon over a login screen would be four rows that do nothing and a
 /// Quit.
+/// How long a close waits for the tray to let go. Instant unless the
+/// menu is open on Windows; a third of the window's own budget, so a
+/// menu nobody closes never starves the finalize.
+const Duration _trayBudget = Duration(seconds: 1);
+
 final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
   final binder = TrayBinder(ref.watch(trayPortProvider));
   final window = ref.read(miniWindowPortProvider);
@@ -84,11 +93,20 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
   /// budget and ends the process, because it is the one that has to
   /// answer for a close that cannot complete; this is the finalizing
   /// half alone, and every caller reaches it through that close.
+  ///
+  /// The tray is released alongside, not ahead: an icon the process
+  /// still holds when it ends is left to the platform's own teardown,
+  /// which on Windows runs in an order nobody chose and shows a ghost
+  /// icon until the pointer crosses it - but the release waits for an
+  /// open menu to close, and that wait must not be what the stop and
+  /// the flush spend the close's budget on. Capped on its own, so a
+  /// menu left open costs the icon's clean exit and nothing else.
   Future<void> shutdown() async {
     try {
       await Future.wait(<Future<void>>[
         ref.read(nowPlayingProvider.notifier).goingAway(),
         ref.read(queuePersistenceProvider).flush(),
+        binder.shutdown().timeout(_trayBudget, onTimeout: () {}),
       ]);
     } on Object catch (failure) {
       debugPrint('shutdown did not finish cleanly: $failure');

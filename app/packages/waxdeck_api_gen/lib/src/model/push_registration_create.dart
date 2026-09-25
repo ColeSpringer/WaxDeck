@@ -91,8 +91,9 @@ class _$PushRegistrationCreateSerializer implements PrimitiveSerializer<PushRegi
         case r'label':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.label = valueDes;
           break;
         default:
@@ -123,4 +124,5 @@ class _$PushRegistrationCreateSerializer implements PrimitiveSerializer<PushRegi
     return result.build();
   }
 }
+
 

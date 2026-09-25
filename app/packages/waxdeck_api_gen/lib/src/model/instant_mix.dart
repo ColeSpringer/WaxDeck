@@ -110,8 +110,9 @@ class _$InstantMixSerializer implements PrimitiveSerializer<InstantMix> {
         case r'excluded':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.excluded = valueDes;
           break;
         default:
@@ -142,4 +143,5 @@ class _$InstantMixSerializer implements PrimitiveSerializer<InstantMix> {
     return result.build();
   }
 }
+
 

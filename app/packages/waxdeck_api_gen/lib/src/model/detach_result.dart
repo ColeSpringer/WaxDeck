@@ -134,22 +134,25 @@ class _$DetachResultSerializer implements PrimitiveSerializer<DetachResult> {
         case r'newAlbumPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.newAlbumPid = valueDes;
           break;
         case r'newReleaseGroupPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.newReleaseGroupPid = valueDes;
           break;
         case r'failures':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(WriteBackFailure)]),
-          ) as BuiltList<WriteBackFailure>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(WriteBackFailure)]),
+          ) as BuiltList<WriteBackFailure>?;
+          if (valueDes == null) continue;
           result.failures.replace(valueDes);
           break;
         default:
@@ -180,4 +183,5 @@ class _$DetachResultSerializer implements PrimitiveSerializer<DetachResult> {
     return result.build();
   }
 }
+
 

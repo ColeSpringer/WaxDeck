@@ -125,3 +125,4 @@ class _$RuleFieldsSerializer implements PrimitiveSerializer<RuleFields> {
   }
 }
 
+

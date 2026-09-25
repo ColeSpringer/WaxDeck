@@ -190,64 +190,73 @@ class _$SubscriptionSettingsSerializer implements PrimitiveSerializer<Subscripti
         case r'autoDownload':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.autoDownload = valueDes;
           break;
         case r'autoDownloadFilter':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(EpisodeFilter),
-          ) as EpisodeFilter;
+            specifiedType: const FullType.nullable(EpisodeFilter),
+          ) as EpisodeFilter?;
+          if (valueDes == null) continue;
           result.autoDownloadFilter.replace(valueDes);
           break;
         case r'folder':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.folder = valueDes;
           break;
         case r'private':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.private = valueDes;
           break;
         case r'speed':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(double),
-          ) as double;
+            specifiedType: const FullType.nullable(double),
+          ) as double?;
+          if (valueDes == null) continue;
           result.speed = valueDes;
           break;
         case r'trimSilence':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.trimSilence = valueDes;
           break;
         case r'voiceBoost':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.voiceBoost = valueDes;
           break;
         case r'skipIntroSeconds':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.skipIntroSeconds = valueDes;
           break;
         case r'skipOutroSeconds':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.skipOutroSeconds = valueDes;
           break;
         default:
@@ -278,4 +287,5 @@ class _$SubscriptionSettingsSerializer implements PrimitiveSerializer<Subscripti
     return result.build();
   }
 }
+
 

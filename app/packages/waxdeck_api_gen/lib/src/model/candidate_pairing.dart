@@ -164,8 +164,9 @@ class _$CandidatePairingSerializer implements PrimitiveSerializer<CandidatePairi
         case r'disc':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.disc = valueDes;
           break;
         case r'title':
@@ -178,22 +179,25 @@ class _$CandidatePairingSerializer implements PrimitiveSerializer<CandidatePairi
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'durationMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.durationMs = valueDes;
           break;
         case r'recordingMbid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.recordingMbid = valueDes;
           break;
         case r'distance':
@@ -231,4 +235,5 @@ class _$CandidatePairingSerializer implements PrimitiveSerializer<CandidatePairi
     return result.build();
   }
 }
+
 

@@ -140,3 +140,4 @@ class _$EmbeddingReportSerializer implements PrimitiveSerializer<EmbeddingReport
   }
 }
 
+

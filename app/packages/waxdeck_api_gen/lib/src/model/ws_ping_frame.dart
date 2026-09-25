@@ -122,3 +122,4 @@ class _$WsPingFrameSerializer implements PrimitiveSerializer<WsPingFrame> {
   }
 }
 
+

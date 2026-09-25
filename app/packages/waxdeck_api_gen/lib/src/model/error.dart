@@ -109,8 +109,9 @@ class _$ErrorSerializer implements PrimitiveSerializer<Error> {
         case r'params':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltMap, [FullType(String), FullType(String)]),
-          ) as BuiltMap<String, String>;
+            specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType(String)]),
+          ) as BuiltMap<String, String>?;
+          if (valueDes == null) continue;
           result.params.replace(valueDes);
           break;
         default:
@@ -141,4 +142,5 @@ class _$ErrorSerializer implements PrimitiveSerializer<Error> {
     return result.build();
   }
 }
+
 

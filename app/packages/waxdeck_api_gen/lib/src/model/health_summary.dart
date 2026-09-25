@@ -154,8 +154,9 @@ class _$HealthSummarySerializer implements PrimitiveSerializer<HealthSummary> {
         case r'sweptAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.sweptAt = valueDes;
           break;
         case r'rules':
@@ -193,4 +194,5 @@ class _$HealthSummarySerializer implements PrimitiveSerializer<HealthSummary> {
     return result.build();
   }
 }
+
 

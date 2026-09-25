@@ -127,29 +127,33 @@ class _$SubscribeRequestSerializer implements PrimitiveSerializer<SubscribeReque
         case r'sourceType':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.sourceType = valueDes;
           break;
         case r'username':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.username = valueDes;
           break;
         case r'password':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.password = valueDes;
           break;
         case r'folder':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.folder = valueDes;
           break;
         default:
@@ -180,4 +184,5 @@ class _$SubscribeRequestSerializer implements PrimitiveSerializer<SubscribeReque
     return result.build();
   }
 }
+
 

@@ -15,12 +15,19 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  drift: 2.34.3
+  drift: 2.35.0
   sqlite3_flutter_libs: 0.6.0+eol
   path_provider: 2.1.6
   path: 1.9.1
   web_socket_channel: 3.0.3
   web: 1.1.1
+  # Held below 9.6: from 9.6.1 a task's `requiresWiFi` means the Wi-Fi
+  # transport itself on Android 9 and later, where it meant "unmetered"
+  # before, so the download-on-wifi-only default would hold every
+  # transfer on an Ethernet device. 9.6 also asks NetworkManager about
+  # connectivity on desktop, which a Linux without one answers with
+  # D-Bus errors at every launch. Adopting it means the app owning the
+  # hold through ConnectivityPort; see docs/deferred-work.md.
   background_downloader: 9.5.7
   waxdeck_api:
     path: ../waxdeck_api
@@ -28,12 +35,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  # drift_dev trails the drift runtime above, and cannot be closed up: every
-  # version past this one wants analyzer ^13, while flutter_test from the pinned
-  # Flutter SDK holds meta and test_api at versions that cap analyzer below 13.
-  # The skew is safe (generated code is semver-compatible with a patch-level
-  # runtime, and gen-mirror leaves database.g.dart byte-identical); it closes when
-  # the SDK pin moves, not before. build_runner 2.15.3 is capped the same way.
-  drift_dev: 2.34.0
-  build_runner: 2.15.1
+  # drift_dev moves with the drift runtime above, in the same change.
+  drift_dev: 2.35.0
+  build_runner: 2.16.1
   flutter_lints: ^6.0.0

@@ -141,24 +141,20 @@ class _$MergeRequestSerializer implements PrimitiveSerializer<MergeRequest> {
   }
 }
 
+
+/// What is being merged. `series` is the one kind the duplicates listing never reports: a series is a tag rather than a curated entity, so a split spelling is found by eye on a book screen and merged from there. 
 class MergeRequestEntityTypeEnum extends EnumClass {
 
-  /// What is being merged. `series` is the one kind the duplicates listing never reports: a series is a tag rather than a curated entity, so a split spelling is found by eye on a book screen and merged from there. 
   @BuiltValueEnumConst(wireName: r'album')
   static const MergeRequestEntityTypeEnum album = _$mergeRequestEntityTypeEnum_album;
-  /// What is being merged. `series` is the one kind the duplicates listing never reports: a series is a tag rather than a curated entity, so a split spelling is found by eye on a book screen and merged from there. 
   @BuiltValueEnumConst(wireName: r'artist')
   static const MergeRequestEntityTypeEnum artist = _$mergeRequestEntityTypeEnum_artist;
-  /// What is being merged. `series` is the one kind the duplicates listing never reports: a series is a tag rather than a curated entity, so a split spelling is found by eye on a book screen and merged from there. 
   @BuiltValueEnumConst(wireName: r'release-group')
   static const MergeRequestEntityTypeEnum releaseGroup = _$mergeRequestEntityTypeEnum_releaseGroup;
-  /// What is being merged. `series` is the one kind the duplicates listing never reports: a series is a tag rather than a curated entity, so a split spelling is found by eye on a book screen and merged from there. 
   @BuiltValueEnumConst(wireName: r'genre')
   static const MergeRequestEntityTypeEnum genre = _$mergeRequestEntityTypeEnum_genre;
-  /// What is being merged. `series` is the one kind the duplicates listing never reports: a series is a tag rather than a curated entity, so a split spelling is found by eye on a book screen and merged from there. 
   @BuiltValueEnumConst(wireName: r'series')
   static const MergeRequestEntityTypeEnum series = _$mergeRequestEntityTypeEnum_series;
-  /// What is being merged. `series` is the one kind the duplicates listing never reports: a series is a tag rather than a curated entity, so a split spelling is found by eye on a book screen and merged from there. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const MergeRequestEntityTypeEnum unknownDefaultOpenApi = _$mergeRequestEntityTypeEnum_unknownDefaultOpenApi;
 

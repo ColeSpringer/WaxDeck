@@ -793,12 +793,484 @@ part 'serializers.g.dart';
 ])
 Serializers serializers = (_$serializers.toBuilder()
       ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EmbeddingUpload)]),
+        () => ListBuilder<EmbeddingUpload>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EnrichmentProvider)]),
+        () => ListBuilder<EnrichmentProvider>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EditableField)]),
+        () => ListBuilder<EditableField>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EntityCuratedField)]),
+        () => ListBuilder<EntityCuratedField>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(DownloadFile)]),
+        () => ListBuilder<DownloadFile>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(TopEntry)]),
+        () => ListBuilder<TopEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ChapterMark)]),
+        () => ListBuilder<ChapterMark>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(PlaybackSessionEntry)]),
+        () => ListBuilder<PlaybackSessionEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Role)]),
+        () => ListBuilder<Role>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EntityTypeFields)]),
+        () => ListBuilder<EntityTypeFields>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ListeningBucket)]),
+        () => ListBuilder<ListeningBucket>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(RejectedEmbedding)]),
+        () => ListBuilder<RejectedEmbedding>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(TrashEntry)]),
+        () => ListBuilder<TrashEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Invite)]),
+        () => ListBuilder<Invite>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(OpmlImportEntry)]),
+        () => ListBuilder<OpmlImportEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(MetadataCommitPart)]),
+        () => ListBuilder<MetadataCommitPart>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(PlaylistImportMiss)]),
+        () => ListBuilder<PlaylistImportMiss>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Scrobbler)]),
+        () => ListBuilder<Scrobbler>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(TranscriptCue)]),
+        () => ListBuilder<TranscriptCue>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(OrganizeFailure)]),
+        () => ListBuilder<OrganizeFailure>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(RuleSort)]),
+        () => ListBuilder<RuleSort>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EntityCard)]),
+        () => ListBuilder<EntityCard>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltMap, [FullType(String), FullType(BuiltList, [FullType(String)])]),
+        () => MapBuilder<String, BuiltList<String>>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(SearchHit)]),
+        () => ListBuilder<SearchHit>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(WriteBackIssue)]),
+        () => ListBuilder<WriteBackIssue>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(OrganizeAction)]),
+        () => ListBuilder<OrganizeAction>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(SimilarityWorkItem)]),
+        () => ListBuilder<SimilarityWorkItem>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(RejectedListen)]),
+        () => ListBuilder<RejectedListen>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ToolTask)]),
+        () => ListBuilder<ToolTask>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltMap, [FullType(String), FullType(String)]),
+        () => MapBuilder<String, String>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(FacetBucket)]),
+        () => ListBuilder<FacetBucket>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(BookSeriesEntry)]),
+        () => ListBuilder<BookSeriesEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(DeletePlanEntry)]),
+        () => ListBuilder<DeletePlanEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Job)]),
+        () => ListBuilder<Job>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Subscription)]),
+        () => ListBuilder<Subscription>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(MonthListening)]),
+        () => ListBuilder<MonthListening>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(TagRule)]),
+        () => ListBuilder<TagRule>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(AppPassword)]),
+        () => ListBuilder<AppPassword>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EnrichFieldProposal)]),
+        () => ListBuilder<EnrichFieldProposal>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(PortableRef)]),
+        () => ListBuilder<PortableRef>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(NspGap)]),
+        () => ListBuilder<NspGap>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Upload)]),
+        () => ListBuilder<Upload>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(num)]),
+        () => ListBuilder<num>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(OrganizeProfile)]),
+        () => ListBuilder<OrganizeProfile>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(PodcastDirectoryEntry)]),
+        () => ListBuilder<PodcastDirectoryEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(FileDiagnostic)]),
+        () => ListBuilder<FileDiagnostic>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Notification)]),
+        () => ListBuilder<Notification>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Share)]),
+        () => ListBuilder<Share>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(PlayState)]),
+        () => ListBuilder<PlayState>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EnrichmentCacheKind)]),
+        () => ListBuilder<EnrichmentCacheKind>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(PlaylistEntry)]),
+        () => ListBuilder<PlaylistEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ArtRoleInfo)]),
+        () => ListBuilder<ArtRoleInfo>(),
+      )
+      ..addBuilderFactory(
         const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
-        () => MapBuilder<String, JsonObject>(),
+        () => MapBuilder<String, JsonObject?>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ReviewBulkOutcome)]),
+        () => ListBuilder<ReviewBulkOutcome>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ListenLogEntry)]),
+        () => ListBuilder<ListenLogEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(String)]),
+        () => ListBuilder<String>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(UpgradeMember)]),
+        () => ListBuilder<UpgradeMember>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(RuleNode)]),
+        () => ListBuilder<RuleNode>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(FieldProvenance)]),
+        () => ListBuilder<FieldProvenance>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(HealthRuleCount)]),
+        () => ListBuilder<HealthRuleCount>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EnrichmentPhase)]),
+        () => ListBuilder<EnrichmentPhase>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(KindFields)]),
+        () => ListBuilder<KindFields>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(RuleField)]),
+        () => ListBuilder<RuleField>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(CandidateComponent)]),
+        () => ListBuilder<CandidateComponent>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(SkipSpan)]),
+        () => ListBuilder<SkipSpan>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ReviewTrack)]),
+        () => ListBuilder<ReviewTrack>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(TimelineFormat)]),
+        () => ListBuilder<TimelineFormat>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(CastPreflightBase)]),
+        () => ListBuilder<CastPreflightBase>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(DeviceSession)]),
+        () => ListBuilder<DeviceSession>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(HeatmapDay)]),
+        () => ListBuilder<HeatmapDay>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(CustomTag)]),
+        () => ListBuilder<CustomTag>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(DiagnosticCount)]),
+        () => ListBuilder<DiagnosticCount>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(CatalogSyncEntry)]),
+        () => ListBuilder<CatalogSyncEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(BookSeries)]),
+        () => ListBuilder<BookSeries>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ThumbnailRung)]),
+        () => ListBuilder<ThumbnailRung>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(SyncedLine)]),
+        () => ListBuilder<SyncedLine>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(PushRegistration)]),
+        () => ListBuilder<PushRegistration>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ReviewCandidate)]),
+        () => ListBuilder<ReviewCandidate>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(DuplicateEntity)]),
+        () => ListBuilder<DuplicateEntity>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(PlaybackSessionHistoryEntry)]),
+        () => ListBuilder<PlaybackSessionHistoryEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Bookmark)]),
+        () => ListBuilder<Bookmark>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(MediaType)]),
+        () => ListBuilder<MediaType>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(UpgradeGroup)]),
+        () => ListBuilder<UpgradeGroup>(),
       )
       ..addBuilderFactory(
         const FullType(BuiltMap, [FullType(String), FullType(JsonObject)]),
         () => MapBuilder<String, JsonObject>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(PlayerEndpoint)]),
+        () => ListBuilder<PlayerEndpoint>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(DuplicateGroup)]),
+        () => ListBuilder<DuplicateGroup>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ListenSession)]),
+        () => ListBuilder<ListenSession>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(RuleTagKey)]),
+        () => ListBuilder<RuleTagKey>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(LinkedIdentity)]),
+        () => ListBuilder<LinkedIdentity>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(CommitCredits)]),
+        () => ListBuilder<CommitCredits>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(NotificationEvent)]),
+        () => ListBuilder<NotificationEvent>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(PlaybackSession)]),
+        () => ListBuilder<PlaybackSession>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(TimelineBoundary)]),
+        () => ListBuilder<TimelineBoundary>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ItemSummary)]),
+        () => ListBuilder<ItemSummary>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Playlist)]),
+        () => ListBuilder<Playlist>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Backup)]),
+        () => ListBuilder<Backup>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(RadioSavedSong)]),
+        () => ListBuilder<RadioSavedSong>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(UserAccount)]),
+        () => ListBuilder<UserAccount>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(OidcProvider)]),
+        () => ListBuilder<OidcProvider>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(CandidatePairing)]),
+        () => ListBuilder<CandidatePairing>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(BookPart)]),
+        () => ListBuilder<BookPart>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(NotificationTarget)]),
+        () => ListBuilder<NotificationTarget>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(GenreNode)]),
+        () => ListBuilder<GenreNode>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(RadioStation)]),
+        () => ListBuilder<RadioStation>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(MediaTypeListening)]),
+        () => ListBuilder<MediaTypeListening>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(RadioDirectoryEntry)]),
+        () => ListBuilder<RadioDirectoryEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(FeedPerson)]),
+        () => ListBuilder<FeedPerson>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Soundbite)]),
+        () => ListBuilder<Soundbite>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Schedule)]),
+        () => ListBuilder<Schedule>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(HealthIssue)]),
+        () => ListBuilder<HealthIssue>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ModelLibrary)]),
+        () => ListBuilder<ModelLibrary>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(Credit)]),
+        () => ListBuilder<Credit>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(int)]),
+        () => ListBuilder<int>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ReviewEntry)]),
+        () => ListBuilder<ReviewEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(SealedCasualty)]),
+        () => ListBuilder<SealedCasualty>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(UploadTarget)]),
+        () => ListBuilder<UploadTarget>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(WriteBackFailure)]),
+        () => ListBuilder<WriteBackFailure>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(AuditEvent)]),
+        () => ListBuilder<AuditEvent>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ServerSyncEvent)]),
+        () => ListBuilder<ServerSyncEvent>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EpisodeSummary)]),
+        () => ListBuilder<EpisodeSummary>(),
       )
       ..add(AppPassword.serializer)
       ..add(EpisodeSummary.serializer)

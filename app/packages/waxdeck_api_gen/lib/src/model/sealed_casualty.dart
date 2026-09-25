@@ -122,3 +122,4 @@ class _$SealedCasualtySerializer implements PrimitiveSerializer<SealedCasualty> 
   }
 }
 
+

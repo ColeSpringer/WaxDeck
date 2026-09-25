@@ -139,3 +139,4 @@ class _$CandidateComponentSerializer implements PrimitiveSerializer<CandidateCom
   }
 }
 
+

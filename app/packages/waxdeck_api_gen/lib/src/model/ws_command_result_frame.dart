@@ -137,15 +137,17 @@ class _$WsCommandResultFrameSerializer implements PrimitiveSerializer<WsCommandR
         case r'code':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.code = valueDes;
           break;
         case r'message':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.message = valueDes;
           break;
         default:
@@ -176,4 +178,5 @@ class _$WsCommandResultFrameSerializer implements PrimitiveSerializer<WsCommandR
     return result.build();
   }
 }
+
 

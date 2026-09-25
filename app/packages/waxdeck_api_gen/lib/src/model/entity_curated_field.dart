@@ -123,8 +123,9 @@ class _$EntityCuratedFieldSerializer implements PrimitiveSerializer<EntityCurate
         case r'value':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.value = valueDes;
           break;
         case r'source':
@@ -144,8 +145,9 @@ class _$EntityCuratedFieldSerializer implements PrimitiveSerializer<EntityCurate
         case r'updatedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.updatedAt = valueDes;
           break;
         default:
@@ -176,4 +178,5 @@ class _$EntityCuratedFieldSerializer implements PrimitiveSerializer<EntityCurate
     return result.build();
   }
 }
+
 

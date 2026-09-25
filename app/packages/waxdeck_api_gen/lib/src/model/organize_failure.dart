@@ -122,3 +122,4 @@ class _$OrganizeFailureSerializer implements PrimitiveSerializer<OrganizeFailure
   }
 }
 
+

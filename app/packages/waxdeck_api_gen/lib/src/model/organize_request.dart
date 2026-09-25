@@ -92,8 +92,9 @@ class _$OrganizeRequestSerializer implements PrimitiveSerializer<OrganizeRequest
         case r'itemPids':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.itemPids.replace(valueDes);
           break;
         default:
@@ -124,4 +125,5 @@ class _$OrganizeRequestSerializer implements PrimitiveSerializer<OrganizeRequest
     return result.build();
   }
 }
+
 

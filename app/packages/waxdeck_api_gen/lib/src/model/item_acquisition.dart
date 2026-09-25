@@ -139,36 +139,41 @@ class _$ItemAcquisitionSerializer implements PrimitiveSerializer<ItemAcquisition
         case r'sourceUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.sourceUrl = valueDes;
           break;
         case r'sourceId':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.sourceId = valueDes;
           break;
         case r'provider':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.provider = valueDes;
           break;
         case r'acquiredAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.acquiredAt = valueDes;
           break;
         case r'locked':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.locked = valueDes;
           break;
         default:
@@ -199,4 +204,5 @@ class _$ItemAcquisitionSerializer implements PrimitiveSerializer<ItemAcquisition
     return result.build();
   }
 }
+
 

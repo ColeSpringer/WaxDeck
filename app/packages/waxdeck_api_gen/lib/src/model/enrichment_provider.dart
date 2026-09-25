@@ -157,3 +157,4 @@ class _$EnrichmentProviderSerializer implements PrimitiveSerializer<EnrichmentPr
   }
 }
 
+

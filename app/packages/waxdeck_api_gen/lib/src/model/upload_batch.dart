@@ -168,8 +168,9 @@ class _$UploadBatchSerializer implements PrimitiveSerializer<UploadBatch> {
         case r'libraryPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.libraryPid = valueDes;
           break;
         case r'state':
@@ -228,4 +229,5 @@ class _$UploadBatchSerializer implements PrimitiveSerializer<UploadBatch> {
     return result.build();
   }
 }
+
 

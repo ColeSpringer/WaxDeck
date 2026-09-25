@@ -306,15 +306,17 @@ class _$BookDetailSerializer implements PrimitiveSerializer<BookDetail> {
         case r'subtitle':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.subtitle = valueDes;
           break;
         case r'artSource':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ArtSource),
-          ) as ArtSource;
+            specifiedType: const FullType.nullable(ArtSource),
+          ) as ArtSource?;
+          if (valueDes == null) continue;
           result.artSource.replace(valueDes);
           break;
         case r'authors':
@@ -334,64 +336,73 @@ class _$BookDetailSerializer implements PrimitiveSerializer<BookDetail> {
         case r'series':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.series = valueDes;
           break;
         case r'seriesPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.seriesPid = valueDes;
           break;
         case r'seriesSequence':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.seriesSequence = valueDes;
           break;
         case r'publisher':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.publisher = valueDes;
           break;
         case r'asin':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.asin = valueDes;
           break;
         case r'isbn':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.isbn = valueDes;
           break;
         case r'edition':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.edition = valueDes;
           break;
         case r'abridged':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.abridged = valueDes;
           break;
         case r'descriptionHtml':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.descriptionHtml = valueDes;
           break;
         case r'durationMs':
@@ -404,8 +415,9 @@ class _$BookDetailSerializer implements PrimitiveSerializer<BookDetail> {
         case r'artUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artUrl = valueDes;
           break;
         case r'chapters':
@@ -425,8 +437,9 @@ class _$BookDetailSerializer implements PrimitiveSerializer<BookDetail> {
         case r'settings':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BookSettings),
-          ) as BookSettings;
+            specifiedType: const FullType.nullable(BookSettings),
+          ) as BookSettings?;
+          if (valueDes == null) continue;
           result.settings.replace(valueDes);
           break;
         default:
@@ -457,4 +470,5 @@ class _$BookDetailSerializer implements PrimitiveSerializer<BookDetail> {
     return result.build();
   }
 }
+
 

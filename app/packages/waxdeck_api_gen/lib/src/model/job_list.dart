@@ -107,3 +107,4 @@ class _$JobListSerializer implements PrimitiveSerializer<JobList> {
   }
 }
 
+

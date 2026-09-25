@@ -108,8 +108,9 @@ class _$DuplicateEntitySerializer implements PrimitiveSerializer<DuplicateEntity
         case r'itemCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.itemCount = valueDes;
           break;
         default:
@@ -140,4 +141,5 @@ class _$DuplicateEntitySerializer implements PrimitiveSerializer<DuplicateEntity
     return result.build();
   }
 }
+
 

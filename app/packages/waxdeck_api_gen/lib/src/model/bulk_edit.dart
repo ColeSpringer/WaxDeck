@@ -136,22 +136,25 @@ class _$BulkEditSerializer implements PrimitiveSerializer<BulkEdit> {
         case r'writeBack':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.writeBack = valueDes;
           break;
         case r'skipLocked':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.skipLocked = valueDes;
           break;
         case r'force':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.force = valueDes;
           break;
         default:
@@ -182,4 +185,5 @@ class _$BulkEditSerializer implements PrimitiveSerializer<BulkEdit> {
     return result.build();
   }
 }
+
 

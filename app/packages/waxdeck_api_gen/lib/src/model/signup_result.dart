@@ -107,15 +107,14 @@ class _$SignupResultSerializer implements PrimitiveSerializer<SignupResult> {
   }
 }
 
+
+/// `pending` awaits an administrator's approval before it can log in; `active` (invited) can log in immediately. 
 class SignupResultStateEnum extends EnumClass {
 
-  /// `pending` awaits an administrator's approval before it can log in; `active` (invited) can log in immediately. 
   @BuiltValueEnumConst(wireName: r'pending')
   static const SignupResultStateEnum pending = _$signupResultStateEnum_pending;
-  /// `pending` awaits an administrator's approval before it can log in; `active` (invited) can log in immediately. 
   @BuiltValueEnumConst(wireName: r'active')
   static const SignupResultStateEnum active = _$signupResultStateEnum_active;
-  /// `pending` awaits an administrator's approval before it can log in; `active` (invited) can log in immediately. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const SignupResultStateEnum unknownDefaultOpenApi = _$signupResultStateEnum_unknownDefaultOpenApi;
 

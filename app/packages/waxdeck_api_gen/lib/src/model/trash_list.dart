@@ -107,3 +107,4 @@ class _$TrashListSerializer implements PrimitiveSerializer<TrashList> {
   }
 }
 
+

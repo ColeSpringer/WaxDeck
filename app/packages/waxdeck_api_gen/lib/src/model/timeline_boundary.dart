@@ -139,3 +139,4 @@ class _$TimelineBoundarySerializer implements PrimitiveSerializer<TimelineBounda
   }
 }
 
+

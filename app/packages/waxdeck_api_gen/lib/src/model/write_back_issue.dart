@@ -120,15 +120,17 @@ class _$WriteBackIssueSerializer implements PrimitiveSerializer<WriteBackIssue> 
         case r'tagKey':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.tagKey = valueDes;
           break;
         case r'detail':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.detail = valueDes;
           break;
         default:
@@ -159,4 +161,5 @@ class _$WriteBackIssueSerializer implements PrimitiveSerializer<WriteBackIssue> 
     return result.build();
   }
 }
+
 

@@ -212,8 +212,9 @@ class _$PlaylistSyncPreviewSerializer implements PrimitiveSerializer<PlaylistSyn
         case r'misses':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(PlaylistImportMiss)]),
-          ) as BuiltList<PlaylistImportMiss>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(PlaylistImportMiss)]),
+          ) as BuiltList<PlaylistImportMiss>?;
+          if (valueDes == null) continue;
           result.misses.replace(valueDes);
           break;
         default:
@@ -244,4 +245,5 @@ class _$PlaylistSyncPreviewSerializer implements PrimitiveSerializer<PlaylistSyn
     return result.build();
   }
 }
+
 

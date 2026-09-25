@@ -107,3 +107,4 @@ class _$BookmarkListSerializer implements PrimitiveSerializer<BookmarkList> {
   }
 }
 
+

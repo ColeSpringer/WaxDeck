@@ -91,8 +91,9 @@ class _$WsEventFrameSerializer implements PrimitiveSerializer<WsEventFrame> {
         case r'topic':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.topic = valueDes;
           break;
         default:
@@ -123,4 +124,5 @@ class _$WsEventFrameSerializer implements PrimitiveSerializer<WsEventFrame> {
     return result.build();
   }
 }
+
 

@@ -156,3 +156,4 @@ class _$DiagnosticCountSerializer implements PrimitiveSerializer<DiagnosticCount
   }
 }
 
+

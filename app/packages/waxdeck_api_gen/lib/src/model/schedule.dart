@@ -162,29 +162,33 @@ class _$ScheduleSerializer implements PrimitiveSerializer<Schedule> {
         case r'lastRunAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.lastRunAt = valueDes;
           break;
         case r'lastStatus':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.lastStatus = valueDes;
           break;
         case r'lastError':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.lastError = valueDes;
           break;
         case r'nextRunAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.nextRunAt = valueDes;
           break;
         default:
@@ -215,4 +219,5 @@ class _$ScheduleSerializer implements PrimitiveSerializer<Schedule> {
     return result.build();
   }
 }
+
 

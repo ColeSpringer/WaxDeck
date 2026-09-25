@@ -118,8 +118,9 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
         case r'path':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.path = valueDes;
           break;
         case r'pid':
@@ -132,22 +133,25 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
         case r'media':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.media = valueDes;
           break;
         case r'streamingWarning':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.streamingWarning = valueDes;
           break;
         case r'itemCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.itemCount = valueDes;
           break;
         default:
@@ -178,4 +182,5 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
     return result.build();
   }
 }
+
 

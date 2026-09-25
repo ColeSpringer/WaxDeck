@@ -240,8 +240,9 @@ class _$UploadSerializer implements PrimitiveSerializer<Upload> {
         case r'libraryPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.libraryPid = valueDes;
           break;
         case r'state':
@@ -254,29 +255,33 @@ class _$UploadSerializer implements PrimitiveSerializer<Upload> {
         case r'reviewEntryId':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.reviewEntryId = valueDes;
           break;
         case r'batchId':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.batchId = valueDes;
           break;
         case r'duplicate':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DuplicateWarning),
-          ) as DuplicateWarning;
+            specifiedType: const FullType.nullable(DuplicateWarning),
+          ) as DuplicateWarning?;
+          if (valueDes == null) continue;
           result.duplicate.replace(valueDes);
           break;
         case r'uploadedBy':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.uploadedBy = valueDes;
           break;
         case r'createdAt':
@@ -289,8 +294,9 @@ class _$UploadSerializer implements PrimitiveSerializer<Upload> {
         case r'expiresAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.expiresAt = valueDes;
           break;
         default:
@@ -321,4 +327,5 @@ class _$UploadSerializer implements PrimitiveSerializer<Upload> {
     return result.build();
   }
 }
+
 

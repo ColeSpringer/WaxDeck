@@ -107,3 +107,4 @@ class _$ReviewBulkResultSerializer implements PrimitiveSerializer<ReviewBulkResu
   }
 }
 
+

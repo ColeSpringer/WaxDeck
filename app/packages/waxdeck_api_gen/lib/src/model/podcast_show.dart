@@ -264,29 +264,33 @@ class _$PodcastShowSerializer implements PrimitiveSerializer<PodcastShow> {
         case r'author':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.author = valueDes;
           break;
         case r'descriptionHtml':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.descriptionHtml = valueDes;
           break;
         case r'feedUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.feedUrl = valueDes;
           break;
         case r'link':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.link = valueDes;
           break;
         case r'sourceType':
@@ -299,64 +303,73 @@ class _$PodcastShowSerializer implements PrimitiveSerializer<PodcastShow> {
         case r'artUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artUrl = valueDes;
           break;
         case r'artSource':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ArtSource),
-          ) as ArtSource;
+            specifiedType: const FullType.nullable(ArtSource),
+          ) as ArtSource?;
+          if (valueDes == null) continue;
           result.artSource.replace(valueDes);
           break;
         case r'episodeCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.episodeCount = valueDes;
           break;
         case r'lastPublishedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.lastPublishedAt = valueDes;
           break;
         case r'refreshDisabled':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.refreshDisabled = valueDes;
           break;
         case r'explicit':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.explicit = valueDes;
           break;
         case r'funding':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(PodcastFunding),
-          ) as PodcastFunding;
+            specifiedType: const FullType.nullable(PodcastFunding),
+          ) as PodcastFunding?;
+          if (valueDes == null) continue;
           result.funding.replace(valueDes);
           break;
         case r'medium':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.medium = valueDes;
           break;
         case r'persons':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(FeedPerson)]),
-          ) as BuiltList<FeedPerson>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(FeedPerson)]),
+          ) as BuiltList<FeedPerson>?;
+          if (valueDes == null) continue;
           result.persons.replace(valueDes);
           break;
         default:
@@ -387,4 +400,5 @@ class _$PodcastShowSerializer implements PrimitiveSerializer<PodcastShow> {
     return result.build();
   }
 }
+
 

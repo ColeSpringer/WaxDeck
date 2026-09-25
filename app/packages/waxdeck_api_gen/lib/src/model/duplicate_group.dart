@@ -126,8 +126,9 @@ class _$DuplicateGroupSerializer implements PrimitiveSerializer<DuplicateGroup> 
         case r'detail':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.detail = valueDes;
           break;
         default:
@@ -158,4 +159,5 @@ class _$DuplicateGroupSerializer implements PrimitiveSerializer<DuplicateGroup> 
     return result.build();
   }
 }
+
 

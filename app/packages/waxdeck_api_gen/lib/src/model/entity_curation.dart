@@ -107,3 +107,4 @@ class _$EntityCurationSerializer implements PrimitiveSerializer<EntityCuration> 
   }
 }
 
+

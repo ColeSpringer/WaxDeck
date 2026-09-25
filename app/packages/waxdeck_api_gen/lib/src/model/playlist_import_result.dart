@@ -126,8 +126,9 @@ class _$PlaylistImportResultSerializer implements PrimitiveSerializer<PlaylistIm
         case r'playlistPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.playlistPid = valueDes;
           break;
         case r'name':
@@ -193,4 +194,5 @@ class _$PlaylistImportResultSerializer implements PrimitiveSerializer<PlaylistIm
     return result.build();
   }
 }
+
 

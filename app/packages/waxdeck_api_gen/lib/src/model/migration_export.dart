@@ -175,15 +175,14 @@ class _$MigrationExportSerializer implements PrimitiveSerializer<MigrationExport
   }
 }
 
+
+/// Which service's export this was recognised as. `unknown` is reserved for a server that stages an archive without naming it; this one refuses what it cannot read, so nothing it stages carries that value. 
 class MigrationExportSource_Enum extends EnumClass {
 
-  /// Which service's export this was recognised as. `unknown` is reserved for a server that stages an archive without naming it; this one refuses what it cannot read, so nothing it stages carries that value. 
   @BuiltValueEnumConst(wireName: r'spotify')
   static const MigrationExportSource_Enum spotify = _$migrationExportSourceEnum_spotify;
-  /// Which service's export this was recognised as. `unknown` is reserved for a server that stages an archive without naming it; this one refuses what it cannot read, so nothing it stages carries that value. 
   @BuiltValueEnumConst(wireName: r'unknown')
   static const MigrationExportSource_Enum unknown = _$migrationExportSourceEnum_unknown;
-  /// Which service's export this was recognised as. `unknown` is reserved for a server that stages an archive without naming it; this one refuses what it cannot read, so nothing it stages carries that value. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const MigrationExportSource_Enum unknownDefaultOpenApi = _$migrationExportSourceEnum_unknownDefaultOpenApi;
 

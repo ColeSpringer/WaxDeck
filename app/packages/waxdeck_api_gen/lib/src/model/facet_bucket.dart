@@ -149,22 +149,25 @@ class _$FacetBucketSerializer implements PrimitiveSerializer<FacetBucket> {
         case r'entityPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.entityPid = valueDes;
           break;
         case r'unknown':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.unknown = valueDes;
           break;
         case r'letter':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.letter = valueDes;
           break;
         default:
@@ -195,4 +198,5 @@ class _$FacetBucketSerializer implements PrimitiveSerializer<FacetBucket> {
     return result.build();
   }
 }
+
 

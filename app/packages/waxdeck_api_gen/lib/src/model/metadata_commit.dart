@@ -200,78 +200,89 @@ class _$MetadataCommitSerializer implements PrimitiveSerializer<MetadataCommit> 
         case r'fields':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltMap, [FullType(String), FullType(String)]),
-          ) as BuiltMap<String, String>;
+            specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType(String)]),
+          ) as BuiltMap<String, String>?;
+          if (valueDes == null) continue;
           result.fields.replace(valueDes);
           break;
         case r'credits':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(CommitCredits)]),
-          ) as BuiltList<CommitCredits>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(CommitCredits)]),
+          ) as BuiltList<CommitCredits>?;
+          if (valueDes == null) continue;
           result.credits.replace(valueDes);
           break;
         case r'lyrics':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(CommitLyrics),
-          ) as CommitLyrics;
+            specifiedType: const FullType.nullable(CommitLyrics),
+          ) as CommitLyrics?;
+          if (valueDes == null) continue;
           result.lyrics.replace(valueDes);
           break;
         case r'clearLyrics':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.clearLyrics = valueDes;
           break;
         case r'chapters':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(ChapterMark)]),
-          ) as BuiltList<ChapterMark>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(ChapterMark)]),
+          ) as BuiltList<ChapterMark>?;
+          if (valueDes == null) continue;
           result.chapters.replace(valueDes);
           break;
         case r'tagSets':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltMap, [FullType(String), FullType(BuiltList, [FullType(String)])]),
-          ) as BuiltMap<String, BuiltList<String>>;
+            specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType(BuiltList, [FullType(String)])]),
+          ) as BuiltMap<String, BuiltList<String>>?;
+          if (valueDes == null) continue;
           result.tagSets.replace(valueDes);
           break;
         case r'tagRemoves':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.tagRemoves.replace(valueDes);
           break;
         case r'unofficial':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.unofficial = valueDes;
           break;
         case r'writeBack':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.writeBack = valueDes;
           break;
         case r'lock':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.lock = valueDes;
           break;
         case r'force':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.force = valueDes;
           break;
         default:
@@ -302,4 +313,5 @@ class _$MetadataCommitSerializer implements PrimitiveSerializer<MetadataCommit> 
     return result.build();
   }
 }
+
 

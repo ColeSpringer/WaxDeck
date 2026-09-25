@@ -199,15 +199,17 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
         case r'managePodcasts':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.managePodcasts = valueDes;
           break;
         case r'displayName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.displayName = valueDes;
           break;
         case r'pending':
@@ -234,15 +236,17 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
         case r'hasPassword':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.hasPassword = valueDes;
           break;
         case r'delete':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.delete = valueDes;
           break;
         case r'createdAt':
@@ -255,8 +259,9 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
         case r'identities':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(LinkedIdentity)]),
-          ) as BuiltList<LinkedIdentity>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(LinkedIdentity)]),
+          ) as BuiltList<LinkedIdentity>?;
+          if (valueDes == null) continue;
           result.identities.replace(valueDes);
           break;
         case r'permissions':
@@ -290,8 +295,9 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
         case r'uploadQuotaBytes':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.uploadQuotaBytes = valueDes;
           break;
         case r'username':
@@ -329,4 +335,5 @@ class _$UserAccountSerializer implements PrimitiveSerializer<UserAccount> {
     return result.build();
   }
 }
+
 

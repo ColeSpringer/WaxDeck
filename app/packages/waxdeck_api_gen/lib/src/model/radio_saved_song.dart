@@ -174,22 +174,25 @@ class _$RadioSavedSongSerializer implements PrimitiveSerializer<RadioSavedSong> 
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'title':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.title = valueDes;
           break;
         case r'stationPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.stationPid = valueDes;
           break;
         case r'stationName':
@@ -209,8 +212,9 @@ class _$RadioSavedSongSerializer implements PrimitiveSerializer<RadioSavedSong> 
         case r'inLibraryPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.inLibraryPid = valueDes;
           break;
         case r'hasArt':
@@ -248,4 +252,5 @@ class _$RadioSavedSongSerializer implements PrimitiveSerializer<RadioSavedSong> 
     return result.build();
   }
 }
+
 

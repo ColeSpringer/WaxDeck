@@ -140,3 +140,4 @@ class _$NotificationEventSerializer implements PrimitiveSerializer<NotificationE
   }
 }
 
+

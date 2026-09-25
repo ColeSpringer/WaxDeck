@@ -140,3 +140,4 @@ class _$HeatmapDaySerializer implements PrimitiveSerializer<HeatmapDay> {
   }
 }
 
+

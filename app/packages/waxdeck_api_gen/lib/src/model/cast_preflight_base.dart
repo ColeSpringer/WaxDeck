@@ -144,8 +144,9 @@ class _$CastPreflightBaseSerializer implements PrimitiveSerializer<CastPreflight
         case r'device':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(CastDeviceVerdict),
-          ) as CastDeviceVerdict;
+            specifiedType: const FullType.nullable(CastDeviceVerdict),
+          ) as CastDeviceVerdict?;
+          if (valueDes == null) continue;
           result.device.replace(valueDes);
           break;
         default:
@@ -176,4 +177,5 @@ class _$CastPreflightBaseSerializer implements PrimitiveSerializer<CastPreflight
     return result.build();
   }
 }
+
 

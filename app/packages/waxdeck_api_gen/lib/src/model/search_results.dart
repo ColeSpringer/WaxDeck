@@ -173,8 +173,9 @@ class _$SearchResultsSerializer implements PrimitiveSerializer<SearchResults> {
         case r'truncated':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.truncated = valueDes;
           break;
         default:
@@ -205,4 +206,5 @@ class _$SearchResultsSerializer implements PrimitiveSerializer<SearchResults> {
     return result.build();
   }
 }
+
 

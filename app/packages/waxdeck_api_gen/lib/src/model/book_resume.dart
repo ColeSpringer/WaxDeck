@@ -103,15 +103,17 @@ class _$BookResumeSerializer implements PrimitiveSerializer<BookResume> {
         case r'chapter':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ChapterMark),
-          ) as ChapterMark;
+            specifiedType: const FullType.nullable(ChapterMark),
+          ) as ChapterMark?;
+          if (valueDes == null) continue;
           result.chapter.replace(valueDes);
           break;
         case r'updatedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.updatedAt = valueDes;
           break;
         default:
@@ -142,4 +144,5 @@ class _$BookResumeSerializer implements PrimitiveSerializer<BookResume> {
     return result.build();
   }
 }
+
 

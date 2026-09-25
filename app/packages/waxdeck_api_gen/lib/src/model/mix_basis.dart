@@ -9,15 +9,13 @@ import 'package:built_value/serializer.dart';
 
 part 'mix_basis.g.dart';
 
+/// Which engine answered a discovery request: `sonic` used stored audio embeddings, `metadata` used genre and artist heuristics (the zero-setup fallback). 
 class MixBasis extends EnumClass {
 
-  /// Which engine answered a discovery request: `sonic` used stored audio embeddings, `metadata` used genre and artist heuristics (the zero-setup fallback). 
   @BuiltValueEnumConst(wireName: r'sonic')
   static const MixBasis sonic = _$sonic;
-  /// Which engine answered a discovery request: `sonic` used stored audio embeddings, `metadata` used genre and artist heuristics (the zero-setup fallback). 
   @BuiltValueEnumConst(wireName: r'metadata')
   static const MixBasis metadata = _$metadata;
-  /// Which engine answered a discovery request: `sonic` used stored audio embeddings, `metadata` used genre and artist heuristics (the zero-setup fallback). 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const MixBasis unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 

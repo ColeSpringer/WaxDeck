@@ -92,6 +92,7 @@ class _$AppPasswordSerializer implements PrimitiveSerializer<AppPassword> {
   }
 }
 
+
 /// a concrete implementation of [AppPassword], since [AppPassword] is not instantiable
 @BuiltValue(instantiable: true)
 abstract class $AppPassword implements AppPassword, Built<$AppPassword, $AppPasswordBuilder> {
@@ -158,8 +159,9 @@ class _$$AppPasswordSerializer implements PrimitiveSerializer<$AppPassword> {
         case r'lastUsedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.lastUsedAt = valueDes;
           break;
         default:

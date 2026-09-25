@@ -105,3 +105,4 @@ class _$HealthFixResultSerializer implements PrimitiveSerializer<HealthFixResult
   }
 }
 
+

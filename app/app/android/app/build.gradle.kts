@@ -46,6 +46,16 @@ android {
         versionName = flutter.versionName
     }
 
+    // cnativeapi, the desktop tray's native core, is an FFI plugin that
+    // compiles for Android as well, and nothing here ever opens it: the
+    // tray port is desktop-only. Left in, it is megabytes of dead code
+    // per ABI in every APK.
+    packaging {
+        jniLibs {
+            excludes.add("**/libcnativeapi.so")
+        }
+    }
+
     signingConfigs {
         if (hasReleaseKeystore) {
             create("release") {

@@ -155,8 +155,9 @@ class _$DownloadFileSerializer implements PrimitiveSerializer<DownloadFile> {
         case r'durationMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.durationMs = valueDes;
           break;
         case r'fileName':
@@ -208,4 +209,5 @@ class _$DownloadFileSerializer implements PrimitiveSerializer<DownloadFile> {
     return result.build();
   }
 }
+
 

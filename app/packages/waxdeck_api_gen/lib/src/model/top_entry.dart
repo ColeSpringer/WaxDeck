@@ -123,15 +123,17 @@ class _$TopEntrySerializer implements PrimitiveSerializer<TopEntry> {
         case r'pid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.pid = valueDes;
           break;
         case r'artUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artUrl = valueDes;
           break;
         case r'plays':
@@ -176,4 +178,5 @@ class _$TopEntrySerializer implements PrimitiveSerializer<TopEntry> {
     return result.build();
   }
 }
+
 

@@ -124,3 +124,4 @@ class _$TranscriptSerializer implements PrimitiveSerializer<Transcript> {
   }
 }
 
+

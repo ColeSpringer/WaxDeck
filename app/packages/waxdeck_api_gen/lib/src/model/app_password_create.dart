@@ -105,3 +105,4 @@ class _$AppPasswordCreateSerializer implements PrimitiveSerializer<AppPasswordCr
   }
 }
 
+

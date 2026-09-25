@@ -183,15 +183,17 @@ class _$ThumbnailCacheReportSerializer implements PrimitiveSerializer<ThumbnailC
         case r'oldestAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.oldestAt = valueDes;
           break;
         case r'newestAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.newestAt = valueDes;
           break;
         case r'rungs':
@@ -229,4 +231,5 @@ class _$ThumbnailCacheReportSerializer implements PrimitiveSerializer<ThumbnailC
     return result.build();
   }
 }
+
 

@@ -9,30 +9,23 @@ import 'package:built_value/serializer.dart';
 
 part 'notification_target_kind.g.dart';
 
+/// A notification delivery provider. A shared named schema on purpose, like NotificationScope. 
 class NotificationTargetKind extends EnumClass {
 
-  /// A notification delivery provider. A shared named schema on purpose, like NotificationScope. 
   @BuiltValueEnumConst(wireName: r'pushover')
   static const NotificationTargetKind pushover = _$pushover;
-  /// A notification delivery provider. A shared named schema on purpose, like NotificationScope. 
   @BuiltValueEnumConst(wireName: r'ntfy')
   static const NotificationTargetKind ntfy = _$ntfy;
-  /// A notification delivery provider. A shared named schema on purpose, like NotificationScope. 
   @BuiltValueEnumConst(wireName: r'gotify')
   static const NotificationTargetKind gotify = _$gotify;
-  /// A notification delivery provider. A shared named schema on purpose, like NotificationScope. 
   @BuiltValueEnumConst(wireName: r'discord')
   static const NotificationTargetKind discord = _$discord;
-  /// A notification delivery provider. A shared named schema on purpose, like NotificationScope. 
   @BuiltValueEnumConst(wireName: r'webhook')
   static const NotificationTargetKind webhook = _$webhook;
-  /// A notification delivery provider. A shared named schema on purpose, like NotificationScope. 
   @BuiltValueEnumConst(wireName: r'apprise')
   static const NotificationTargetKind apprise = _$apprise;
-  /// A notification delivery provider. A shared named schema on purpose, like NotificationScope. 
   @BuiltValueEnumConst(wireName: r'unifiedpush')
   static const NotificationTargetKind unifiedpush = _$unifiedpush;
-  /// A notification delivery provider. A shared named schema on purpose, like NotificationScope. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const NotificationTargetKind unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 

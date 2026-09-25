@@ -122,3 +122,4 @@ class _$SyncedLineSerializer implements PrimitiveSerializer<SyncedLine> {
   }
 }
 
+

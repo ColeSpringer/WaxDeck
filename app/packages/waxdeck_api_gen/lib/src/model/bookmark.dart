@@ -118,8 +118,9 @@ class _$BookmarkSerializer implements PrimitiveSerializer<Bookmark> {
         case r'note':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.note = valueDes;
           break;
         case r'createdAt':
@@ -157,4 +158,5 @@ class _$BookmarkSerializer implements PrimitiveSerializer<Bookmark> {
     return result.build();
   }
 }
+
 

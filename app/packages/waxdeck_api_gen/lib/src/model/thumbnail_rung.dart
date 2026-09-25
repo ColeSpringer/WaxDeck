@@ -139,3 +139,4 @@ class _$ThumbnailRungSerializer implements PrimitiveSerializer<ThumbnailRung> {
   }
 }
 
+

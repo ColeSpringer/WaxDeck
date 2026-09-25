@@ -84,8 +84,9 @@ class _$PasswordChangeSerializer implements PrimitiveSerializer<PasswordChange> 
         case r'currentPassword':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.currentPassword = valueDes;
           break;
         case r'newPassword':
@@ -123,4 +124,5 @@ class _$PasswordChangeSerializer implements PrimitiveSerializer<PasswordChange> 
     return result.build();
   }
 }
+
 

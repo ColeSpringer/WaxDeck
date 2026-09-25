@@ -175,3 +175,4 @@ class _$ListeningHeatmapSerializer implements PrimitiveSerializer<ListeningHeatm
   }
 }
 
+

@@ -176,22 +176,25 @@ class _$AdminSettingsSerializer implements PrimitiveSerializer<AdminSettings> {
         case r'sonicAnalysis':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.sonicAnalysis = valueDes;
           break;
         case r'enrichmentWriteTags':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.enrichmentWriteTags = valueDes;
           break;
         case r'radioExternalArt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.radioExternalArt = valueDes;
           break;
         case r'backupKeepCount':
@@ -211,15 +214,17 @@ class _$AdminSettingsSerializer implements PrimitiveSerializer<AdminSettings> {
         case r'trashRetentionDays':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.trashRetentionDays = valueDes;
           break;
         case r'taskRetentionDays':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.taskRetentionDays = valueDes;
           break;
         default:
@@ -250,4 +255,5 @@ class _$AdminSettingsSerializer implements PrimitiveSerializer<AdminSettings> {
     return result.build();
   }
 }
+
 

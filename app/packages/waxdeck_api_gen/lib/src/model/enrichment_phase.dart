@@ -9,36 +9,27 @@ import 'package:built_value/serializer.dart';
 
 part 'enrichment_phase.g.dart';
 
+/// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
 class EnrichmentPhase extends EnumClass {
 
-  /// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
   @BuiltValueEnumConst(wireName: r'identity')
   static const EnrichmentPhase identity = _$identity;
-  /// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
   @BuiltValueEnumConst(wireName: r'releases')
   static const EnrichmentPhase releases = _$releases;
-  /// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
   @BuiltValueEnumConst(wireName: r'aux-art')
   static const EnrichmentPhase auxArt = _$auxArt;
-  /// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
   @BuiltValueEnumConst(wireName: r'artist-art')
   static const EnrichmentPhase artistArt = _$artistArt;
-  /// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
   @BuiltValueEnumConst(wireName: r'album-art')
   static const EnrichmentPhase albumArt = _$albumArt;
-  /// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
   @BuiltValueEnumConst(wireName: r'lyrics')
   static const EnrichmentPhase lyrics = _$lyrics;
-  /// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
   @BuiltValueEnumConst(wireName: r'track-fields')
   static const EnrichmentPhase trackFields = _$trackFields;
-  /// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
   @BuiltValueEnumConst(wireName: r'book-fields')
   static const EnrichmentPhase bookFields = _$bookFields;
-  /// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
   @BuiltValueEnumConst(wireName: r'album-fields')
   static const EnrichmentPhase albumFields = _$albumFields;
-  /// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const EnrichmentPhase unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 

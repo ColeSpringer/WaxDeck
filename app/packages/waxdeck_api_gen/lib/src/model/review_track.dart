@@ -140,8 +140,9 @@ class _$ReviewTrackSerializer implements PrimitiveSerializer<ReviewTrack> {
         case r'pid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.pid = valueDes;
           break;
         case r'path':
@@ -161,22 +162,25 @@ class _$ReviewTrackSerializer implements PrimitiveSerializer<ReviewTrack> {
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'trackNo':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.trackNo = valueDes;
           break;
         case r'discNo':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.discNo = valueDes;
           break;
         case r'durationMs':
@@ -214,4 +218,5 @@ class _$ReviewTrackSerializer implements PrimitiveSerializer<ReviewTrack> {
     return result.build();
   }
 }
+
 

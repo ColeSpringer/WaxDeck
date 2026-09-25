@@ -41,7 +41,7 @@ abstract class LibraryCreate implements Built<LibraryCreate, LibraryCreateBuilde
 
   @BuiltValueHook(initializeBuilder: true)
   static void _defaults(LibraryCreateBuilder b) => b
-      ..media = const LibraryCreateMediaEnum._('mixed')
+      ..media = LibraryCreateMediaEnum.valueOf('mixed')
       ..managed = false;
 
   @BuiltValueSerializer(custom: true)
@@ -124,15 +124,17 @@ class _$LibraryCreateSerializer implements PrimitiveSerializer<LibraryCreate> {
         case r'media':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(LibraryCreateMediaEnum),
-          ) as LibraryCreateMediaEnum;
+            specifiedType: const FullType.nullable(LibraryCreateMediaEnum),
+          ) as LibraryCreateMediaEnum?;
+          if (valueDes == null) continue;
           result.media = valueDes;
           break;
         case r'managed':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.managed = valueDes;
           break;
         default:
@@ -164,18 +166,16 @@ class _$LibraryCreateSerializer implements PrimitiveSerializer<LibraryCreate> {
   }
 }
 
+
+/// Content class the root holds. `mixed` (the default) admits both tracks and books. 
 class LibraryCreateMediaEnum extends EnumClass {
 
-  /// Content class the root holds. `mixed` (the default) admits both tracks and books. 
   @BuiltValueEnumConst(wireName: r'music')
   static const LibraryCreateMediaEnum music = _$libraryCreateMediaEnum_music;
-  /// Content class the root holds. `mixed` (the default) admits both tracks and books. 
   @BuiltValueEnumConst(wireName: r'audiobook')
   static const LibraryCreateMediaEnum audiobook = _$libraryCreateMediaEnum_audiobook;
-  /// Content class the root holds. `mixed` (the default) admits both tracks and books. 
   @BuiltValueEnumConst(wireName: r'mixed')
   static const LibraryCreateMediaEnum mixed = _$libraryCreateMediaEnum_mixed;
-  /// Content class the root holds. `mixed` (the default) admits both tracks and books. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const LibraryCreateMediaEnum unknownDefaultOpenApi = _$libraryCreateMediaEnum_unknownDefaultOpenApi;
 

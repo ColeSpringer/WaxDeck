@@ -132,22 +132,25 @@ class _$WsRegisterEndpointFrameSerializer implements PrimitiveSerializer<WsRegis
         case r'name':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.name = valueDes;
           break;
         case r'volumeControl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.volumeControl = valueDes;
           break;
         case r'rateControl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.rateControl = valueDes;
           break;
         default:
@@ -178,4 +181,5 @@ class _$WsRegisterEndpointFrameSerializer implements PrimitiveSerializer<WsRegis
     return result.build();
   }
 }
+
 

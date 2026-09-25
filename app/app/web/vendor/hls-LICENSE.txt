@@ -29,10 +29,10 @@ THE SOFTWARE.
 
 --------------------------------------------------------------------------------
 
-hls.js 1.7.2, vendored from the npm registry as dist/hls.min.js and served
+hls.js 1.7.3, vendored from the npm registry as dist/hls.min.js and served
 from this origin. It is loaded only when a listener switches gapless
 playback on, so an ordinary web session never fetches it.
 
 Regenerating: tools/fetch-hlsjs.sh [version], or by hand - fetch
-https://registry.npmjs.org/hls.js/-/hls.js-1.7.2.tgz, take package/dist/hls.min.js
+https://registry.npmjs.org/hls.js/-/hls.js-1.7.3.tgz, take package/dist/hls.min.js
 and package/LICENSE, and re-add this note.

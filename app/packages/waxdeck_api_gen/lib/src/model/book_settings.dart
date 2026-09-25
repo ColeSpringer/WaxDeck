@@ -98,22 +98,25 @@ class _$BookSettingsSerializer implements PrimitiveSerializer<BookSettings> {
         case r'speed':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(double),
-          ) as double;
+            specifiedType: const FullType.nullable(double),
+          ) as double?;
+          if (valueDes == null) continue;
           result.speed = valueDes;
           break;
         case r'voiceBoost':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.voiceBoost = valueDes;
           break;
         case r'trimSilence':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.trimSilence = valueDes;
           break;
         default:
@@ -144,4 +147,5 @@ class _$BookSettingsSerializer implements PrimitiveSerializer<BookSettings> {
     return result.build();
   }
 }
+
 

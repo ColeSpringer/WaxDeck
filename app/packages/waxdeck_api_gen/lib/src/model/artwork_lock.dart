@@ -91,8 +91,9 @@ class _$ArtworkLockSerializer implements PrimitiveSerializer<ArtworkLock> {
         case r'roleLocked':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.roleLocked = valueDes;
           break;
         default:
@@ -123,4 +124,5 @@ class _$ArtworkLockSerializer implements PrimitiveSerializer<ArtworkLock> {
     return result.build();
   }
 }
+
 

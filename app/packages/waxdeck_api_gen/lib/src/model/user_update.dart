@@ -148,50 +148,57 @@ class _$UserUpdateSerializer implements PrimitiveSerializer<UserUpdate> {
         case r'displayName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.displayName = valueDes;
           break;
         case r'roles':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(Role)]),
-          ) as BuiltList<Role>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(Role)]),
+          ) as BuiltList<Role>?;
+          if (valueDes == null) continue;
           result.roles.replace(valueDes);
           break;
         case r'disabled':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.disabled = valueDes;
           break;
         case r'libraryAccess':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(LibraryAccess),
-          ) as LibraryAccess;
+            specifiedType: const FullType.nullable(LibraryAccess),
+          ) as LibraryAccess?;
+          if (valueDes == null) continue;
           result.libraryAccess.replace(valueDes);
           break;
         case r'uploadEnabled':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.uploadEnabled = valueDes;
           break;
         case r'uploadQuotaBytes':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.uploadQuotaBytes = valueDes;
           break;
         case r'permissions':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(Permissions),
-          ) as Permissions;
+            specifiedType: const FullType.nullable(Permissions),
+          ) as Permissions?;
+          if (valueDes == null) continue;
           result.permissions.replace(valueDes);
           break;
         default:
@@ -222,4 +229,5 @@ class _$UserUpdateSerializer implements PrimitiveSerializer<UserUpdate> {
     return result.build();
   }
 }
+
 

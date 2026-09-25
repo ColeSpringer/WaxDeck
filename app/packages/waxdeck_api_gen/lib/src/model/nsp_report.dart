@@ -106,15 +106,17 @@ class _$NspReportSerializer implements PrimitiveSerializer<NspReport> {
         case r'gaps':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(NspGap)]),
-          ) as BuiltList<NspGap>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(NspGap)]),
+          ) as BuiltList<NspGap>?;
+          if (valueDes == null) continue;
           result.gaps.replace(valueDes);
           break;
         case r'notes':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(NspGap)]),
-          ) as BuiltList<NspGap>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(NspGap)]),
+          ) as BuiltList<NspGap>?;
+          if (valueDes == null) continue;
           result.notes.replace(valueDes);
           break;
         default:
@@ -146,15 +148,14 @@ class _$NspReportSerializer implements PrimitiveSerializer<NspReport> {
   }
 }
 
+
+/// Which way the mapping ran, and so whose vocabulary the gaps' `field` and `op` are written in. 
 class NspReportDirectionEnum extends EnumClass {
 
-  /// Which way the mapping ran, and so whose vocabulary the gaps' `field` and `op` are written in. 
   @BuiltValueEnumConst(wireName: r'export')
   static const NspReportDirectionEnum export_ = _$nspReportDirectionEnum_export_;
-  /// Which way the mapping ran, and so whose vocabulary the gaps' `field` and `op` are written in. 
   @BuiltValueEnumConst(wireName: r'import')
   static const NspReportDirectionEnum import_ = _$nspReportDirectionEnum_import_;
-  /// Which way the mapping ran, and so whose vocabulary the gaps' `field` and `op` are written in. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const NspReportDirectionEnum unknownDefaultOpenApi = _$nspReportDirectionEnum_unknownDefaultOpenApi;
 

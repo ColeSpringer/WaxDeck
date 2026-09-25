@@ -86,15 +86,17 @@ class _$EnrichmentCachePruneRequestSerializer implements PrimitiveSerializer<Enr
         case r'olderThanSeconds':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.olderThanSeconds = valueDes;
           break;
         case r'maxBytes':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.maxBytes = valueDes;
           break;
         default:
@@ -125,4 +127,5 @@ class _$EnrichmentCachePruneRequestSerializer implements PrimitiveSerializer<Enr
     return result.build();
   }
 }
+
 

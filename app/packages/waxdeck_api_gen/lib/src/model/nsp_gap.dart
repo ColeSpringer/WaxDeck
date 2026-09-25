@@ -138,15 +138,17 @@ class _$NspGapSerializer implements PrimitiveSerializer<NspGap> {
         case r'field':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.field = valueDes;
           break;
         case r'op':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.op = valueDes;
           break;
         case r'value':
@@ -200,33 +202,26 @@ class _$NspGapSerializer implements PrimitiveSerializer<NspGap> {
   }
 }
 
+
+/// Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
 class NspGapKindEnum extends EnumClass {
 
-  /// Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
   @BuiltValueEnumConst(wireName: r'field')
   static const NspGapKindEnum field = _$nspGapKindEnum_field;
-  /// Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
   @BuiltValueEnumConst(wireName: r'operator')
   static const NspGapKindEnum operator_ = _$nspGapKindEnum_operator_;
-  /// Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
   @BuiltValueEnumConst(wireName: r'value')
   static const NspGapKindEnum value = _$nspGapKindEnum_value;
-  /// Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
   @BuiltValueEnumConst(wireName: r'shape')
   static const NspGapKindEnum shape = _$nspGapKindEnum_shape;
-  /// Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
   @BuiltValueEnumConst(wireName: r'sort')
   static const NspGapKindEnum sort = _$nspGapKindEnum_sort;
-  /// Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
   @BuiltValueEnumConst(wireName: r'limit')
   static const NspGapKindEnum limit = _$nspGapKindEnum_limit;
-  /// Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
   @BuiltValueEnumConst(wireName: r'entity')
   static const NspGapKindEnum entity = _$nspGapKindEnum_entity;
-  /// Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
   @BuiltValueEnumConst(wireName: r'malformed')
   static const NspGapKindEnum malformed = _$nspGapKindEnum_malformed;
-  /// Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const NspGapKindEnum unknownDefaultOpenApi = _$nspGapKindEnum_unknownDefaultOpenApi;
 

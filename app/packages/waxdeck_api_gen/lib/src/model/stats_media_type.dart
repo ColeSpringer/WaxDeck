@@ -9,21 +9,17 @@ import 'package:built_value/serializer.dart';
 
 part 'stats_media_type.g.dart';
 
+/// What a recorded listen was. The three first-class item kinds plus `radio`, which is measured in the stream proxy rather than reported by a client and belongs to no item. Deliberately not the shared `MediaType`: that enum is the item kinds browse, items, and uploads answer with, and none of them will ever answer `radio`. Named to stay clear of `MediaTypeListening`, the per-media total object one word-order away. 
 class StatsMediaType extends EnumClass {
 
-  /// What a recorded listen was. The three first-class item kinds plus `radio`, which is measured in the stream proxy rather than reported by a client and belongs to no item. Deliberately not the shared `MediaType`: that enum is the item kinds browse, items, and uploads answer with, and none of them will ever answer `radio`. Named to stay clear of `MediaTypeListening`, the per-media total object one word-order away. 
   @BuiltValueEnumConst(wireName: r'music')
   static const StatsMediaType music = _$music;
-  /// What a recorded listen was. The three first-class item kinds plus `radio`, which is measured in the stream proxy rather than reported by a client and belongs to no item. Deliberately not the shared `MediaType`: that enum is the item kinds browse, items, and uploads answer with, and none of them will ever answer `radio`. Named to stay clear of `MediaTypeListening`, the per-media total object one word-order away. 
   @BuiltValueEnumConst(wireName: r'podcast')
   static const StatsMediaType podcast = _$podcast;
-  /// What a recorded listen was. The three first-class item kinds plus `radio`, which is measured in the stream proxy rather than reported by a client and belongs to no item. Deliberately not the shared `MediaType`: that enum is the item kinds browse, items, and uploads answer with, and none of them will ever answer `radio`. Named to stay clear of `MediaTypeListening`, the per-media total object one word-order away. 
   @BuiltValueEnumConst(wireName: r'audiobook')
   static const StatsMediaType audiobook = _$audiobook;
-  /// What a recorded listen was. The three first-class item kinds plus `radio`, which is measured in the stream proxy rather than reported by a client and belongs to no item. Deliberately not the shared `MediaType`: that enum is the item kinds browse, items, and uploads answer with, and none of them will ever answer `radio`. Named to stay clear of `MediaTypeListening`, the per-media total object one word-order away. 
   @BuiltValueEnumConst(wireName: r'radio')
   static const StatsMediaType radio = _$radio;
-  /// What a recorded listen was. The three first-class item kinds plus `radio`, which is measured in the stream proxy rather than reported by a client and belongs to no item. Deliberately not the shared `MediaType`: that enum is the item kinds browse, items, and uploads answer with, and none of them will ever answer `radio`. Named to stay clear of `MediaTypeListening`, the per-media total object one word-order away. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const StatsMediaType unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 

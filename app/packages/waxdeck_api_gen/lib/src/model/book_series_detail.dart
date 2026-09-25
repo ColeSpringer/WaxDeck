@@ -132,15 +132,17 @@ class _$BookSeriesDetailSerializer implements PrimitiveSerializer<BookSeriesDeta
         case r'bookCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.bookCount = valueDes;
           break;
         case r'totalDurationMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.totalDurationMs = valueDes;
           break;
         case r'books':
@@ -178,4 +180,5 @@ class _$BookSeriesDetailSerializer implements PrimitiveSerializer<BookSeriesDeta
     return result.build();
   }
 }
+
 

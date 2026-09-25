@@ -108,8 +108,9 @@ class _$PodcastDetailSerializer implements PrimitiveSerializer<PodcastDetail> {
         case r'settings':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(SubscriptionSettings),
-          ) as SubscriptionSettings;
+            specifiedType: const FullType.nullable(SubscriptionSettings),
+          ) as SubscriptionSettings?;
+          if (valueDes == null) continue;
           result.settings.replace(valueDes);
           break;
         default:
@@ -140,4 +141,5 @@ class _$PodcastDetailSerializer implements PrimitiveSerializer<PodcastDetail> {
     return result.build();
   }
 }
+
 

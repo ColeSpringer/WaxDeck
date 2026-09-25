@@ -120,15 +120,17 @@ class _$LyricsStateSerializer implements PrimitiveSerializer<LyricsState> {
         case r'provider':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.provider = valueDes;
           break;
         case r'lrc':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.lrc = valueDes;
           break;
         default:
@@ -159,4 +161,5 @@ class _$LyricsStateSerializer implements PrimitiveSerializer<LyricsState> {
     return result.build();
   }
 }
+
 

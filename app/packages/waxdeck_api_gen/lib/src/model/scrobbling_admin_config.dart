@@ -118,8 +118,9 @@ class _$ScrobblingAdminConfigSerializer implements PrimitiveSerializer<Scrobblin
         case r'lastfmApiKey':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.lastfmApiKey = valueDes;
           break;
         case r'lastfmSecretSet':
@@ -157,4 +158,5 @@ class _$ScrobblingAdminConfigSerializer implements PrimitiveSerializer<Scrobblin
     return result.build();
   }
 }
+
 

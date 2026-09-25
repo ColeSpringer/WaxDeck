@@ -132,8 +132,9 @@ class _$EntityPlayStateSerializer implements PrimitiveSerializer<EntityPlayState
         case r'starredAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.starredAt = valueDes;
           break;
         case r'rating':
@@ -147,8 +148,9 @@ class _$EntityPlayStateSerializer implements PrimitiveSerializer<EntityPlayState
         case r'updatedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.updatedAt = valueDes;
           break;
         default:
@@ -179,4 +181,5 @@ class _$EntityPlayStateSerializer implements PrimitiveSerializer<EntityPlayState
     return result.build();
   }
 }
+
 

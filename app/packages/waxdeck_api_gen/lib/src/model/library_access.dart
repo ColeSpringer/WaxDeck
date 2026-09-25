@@ -93,8 +93,9 @@ class _$LibraryAccessSerializer implements PrimitiveSerializer<LibraryAccess> {
         case r'libraryPids':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.libraryPids.replace(valueDes);
           break;
         default:
@@ -126,15 +127,14 @@ class _$LibraryAccessSerializer implements PrimitiveSerializer<LibraryAccess> {
   }
 }
 
+
+/// Access mode.
 class LibraryAccessModeEnum extends EnumClass {
 
-  /// Access mode.
   @BuiltValueEnumConst(wireName: r'all')
   static const LibraryAccessModeEnum all = _$libraryAccessModeEnum_all;
-  /// Access mode.
   @BuiltValueEnumConst(wireName: r'granted')
   static const LibraryAccessModeEnum granted = _$libraryAccessModeEnum_granted;
-  /// Access mode.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const LibraryAccessModeEnum unknownDefaultOpenApi = _$libraryAccessModeEnum_unknownDefaultOpenApi;
 

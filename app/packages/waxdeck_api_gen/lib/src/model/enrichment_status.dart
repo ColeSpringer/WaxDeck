@@ -179,8 +179,9 @@ class _$EnrichmentStatusSerializer implements PrimitiveSerializer<EnrichmentStat
         case r'lastRun':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(EnrichmentLastRun),
-          ) as EnrichmentLastRun;
+            specifiedType: const FullType.nullable(EnrichmentLastRun),
+          ) as EnrichmentLastRun?;
+          if (valueDes == null) continue;
           result.lastRun.replace(valueDes);
           break;
         default:
@@ -211,4 +212,5 @@ class _$EnrichmentStatusSerializer implements PrimitiveSerializer<EnrichmentStat
     return result.build();
   }
 }
+
 

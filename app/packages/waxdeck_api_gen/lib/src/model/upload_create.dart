@@ -174,36 +174,41 @@ class _$UploadCreateSerializer implements PrimitiveSerializer<UploadCreate> {
         case r'libraryPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.libraryPid = valueDes;
           break;
         case r'sha256':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.sha256 = valueDes;
           break;
         case r'batchId':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.batchId = valueDes;
           break;
         case r'batchPath':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.batchPath = valueDes;
           break;
         case r'identify':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.identify = valueDes;
           break;
         default:
@@ -234,4 +239,5 @@ class _$UploadCreateSerializer implements PrimitiveSerializer<UploadCreate> {
     return result.build();
   }
 }
+
 

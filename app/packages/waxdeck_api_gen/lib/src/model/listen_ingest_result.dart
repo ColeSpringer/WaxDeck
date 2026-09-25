@@ -110,8 +110,9 @@ class _$ListenIngestResultSerializer implements PrimitiveSerializer<ListenIngest
         case r'rejected':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(RejectedListen)]),
-          ) as BuiltList<RejectedListen>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(RejectedListen)]),
+          ) as BuiltList<RejectedListen>?;
+          if (valueDes == null) continue;
           result.rejected.replace(valueDes);
           break;
         default:
@@ -142,4 +143,5 @@ class _$ListenIngestResultSerializer implements PrimitiveSerializer<ListenIngest
     return result.build();
   }
 }
+
 

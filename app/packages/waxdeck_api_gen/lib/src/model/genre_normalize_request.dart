@@ -75,8 +75,9 @@ class _$GenreNormalizeRequestSerializer implements PrimitiveSerializer<GenreNorm
         case r'dryRun':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.dryRun = valueDes;
           break;
         default:
@@ -107,4 +108,5 @@ class _$GenreNormalizeRequestSerializer implements PrimitiveSerializer<GenreNorm
     return result.build();
   }
 }
+
 

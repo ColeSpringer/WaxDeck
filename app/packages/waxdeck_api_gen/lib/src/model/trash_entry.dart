@@ -143,8 +143,9 @@ class _$TrashEntrySerializer implements PrimitiveSerializer<TrashEntry> {
         case r'itemPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.itemPid = valueDes;
           break;
         case r'name':
@@ -178,8 +179,9 @@ class _$TrashEntrySerializer implements PrimitiveSerializer<TrashEntry> {
         case r'restoredAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.restoredAt = valueDes;
           break;
         default:
@@ -210,4 +212,5 @@ class _$TrashEntrySerializer implements PrimitiveSerializer<TrashEntry> {
     return result.build();
   }
 }
+
 

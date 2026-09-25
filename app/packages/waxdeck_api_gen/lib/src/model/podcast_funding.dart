@@ -91,8 +91,9 @@ class _$PodcastFundingSerializer implements PrimitiveSerializer<PodcastFunding> 
         case r'message':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.message = valueDes;
           break;
         default:
@@ -123,4 +124,5 @@ class _$PodcastFundingSerializer implements PrimitiveSerializer<PodcastFunding> 
     return result.build();
   }
 }
+
 

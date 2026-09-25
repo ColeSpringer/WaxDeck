@@ -107,3 +107,4 @@ class _$NotificationTargetListSerializer implements PrimitiveSerializer<Notifica
   }
 }
 
+

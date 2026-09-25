@@ -143,24 +143,20 @@ class _$TopListSerializer implements PrimitiveSerializer<TopList> {
   }
 }
 
+
+/// Which top list this is.
 class TopListKindEnum extends EnumClass {
 
-  /// Which top list this is.
   @BuiltValueEnumConst(wireName: r'artists')
   static const TopListKindEnum artists = _$topListKindEnum_artists;
-  /// Which top list this is.
   @BuiltValueEnumConst(wireName: r'albums')
   static const TopListKindEnum albums = _$topListKindEnum_albums;
-  /// Which top list this is.
   @BuiltValueEnumConst(wireName: r'genres')
   static const TopListKindEnum genres = _$topListKindEnum_genres;
-  /// Which top list this is.
   @BuiltValueEnumConst(wireName: r'shows')
   static const TopListKindEnum shows = _$topListKindEnum_shows;
-  /// Which top list this is.
   @BuiltValueEnumConst(wireName: r'stations')
   static const TopListKindEnum stations = _$topListKindEnum_stations;
-  /// Which top list this is.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const TopListKindEnum unknownDefaultOpenApi = _$topListKindEnum_unknownDefaultOpenApi;
 
@@ -172,24 +168,19 @@ class TopListKindEnum extends EnumClass {
   static TopListKindEnum valueOf(String name) => _$topListKindEnumValueOf(name);
 }
 
+/// The range that was aggregated.
 class TopListRangeEnum extends EnumClass {
 
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'7d')
   static const TopListRangeEnum n7d = _$topListRangeEnum_n7d;
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'30d')
   static const TopListRangeEnum n30d = _$topListRangeEnum_n30d;
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'90d')
   static const TopListRangeEnum n90d = _$topListRangeEnum_n90d;
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'365d')
   static const TopListRangeEnum n365d = _$topListRangeEnum_n365d;
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'all')
   static const TopListRangeEnum all = _$topListRangeEnum_all;
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const TopListRangeEnum unknownDefaultOpenApi = _$topListRangeEnum_unknownDefaultOpenApi;
 

@@ -130,8 +130,9 @@ class _$HealthIssueSerializer implements PrimitiveSerializer<HealthIssue> {
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'mediaType':
@@ -176,4 +177,5 @@ class _$HealthIssueSerializer implements PrimitiveSerializer<HealthIssue> {
     return result.build();
   }
 }
+
 

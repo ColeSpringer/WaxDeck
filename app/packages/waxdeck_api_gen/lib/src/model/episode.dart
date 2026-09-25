@@ -290,22 +290,25 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
         case r'chapters':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(ChapterMark)]),
-          ) as BuiltList<ChapterMark>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(ChapterMark)]),
+          ) as BuiltList<ChapterMark>?;
+          if (valueDes == null) continue;
           result.chapters.replace(valueDes);
           break;
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'link':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.link = valueDes;
           break;
         case r'pid':
@@ -325,78 +328,89 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
         case r'albumPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.albumPid = valueDes;
           break;
         case r'episodeNumber':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.episodeNumber = valueDes;
           break;
         case r'artUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artUrl = valueDes;
           break;
         case r'hasTranscript':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.hasTranscript = valueDes;
           break;
         case r'discNumber':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.discNumber = valueDes;
           break;
         case r'episodeType':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.episodeType = valueDes;
           break;
         case r'hasEnclosure':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.hasEnclosure = valueDes;
           break;
         case r'season':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.season = valueDes;
           break;
         case r'fetchError':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.fetchError = valueDes;
           break;
         case r'trackNumber':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.trackNumber = valueDes;
           break;
         case r'fetchState':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.fetchState = valueDes;
           break;
         case r'publishedAt':
@@ -409,8 +423,9 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
         case r'album':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.album = valueDes;
           break;
         case r'mediaType':
@@ -430,22 +445,25 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
         case r'soundbites':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(Soundbite)]),
-          ) as BuiltList<Soundbite>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(Soundbite)]),
+          ) as BuiltList<Soundbite>?;
+          if (valueDes == null) continue;
           result.soundbites.replace(valueDes);
           break;
         case r'explicit':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.explicit = valueDes;
           break;
         case r'persons':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(FeedPerson)]),
-          ) as BuiltList<FeedPerson>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(FeedPerson)]),
+          ) as BuiltList<FeedPerson>?;
+          if (valueDes == null) continue;
           result.persons.replace(valueDes);
           break;
         case r'showPid':
@@ -458,15 +476,17 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
         case r'descriptionHtml':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.descriptionHtml = valueDes;
           break;
         case r'artistPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artistPid = valueDes;
           break;
         case r'durationMs':
@@ -504,4 +524,5 @@ class _$EpisodeSerializer implements PrimitiveSerializer<Episode> {
     return result.build();
   }
 }
+
 

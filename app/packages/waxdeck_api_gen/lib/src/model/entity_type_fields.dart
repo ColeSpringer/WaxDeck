@@ -124,3 +124,4 @@ class _$EntityTypeFieldsSerializer implements PrimitiveSerializer<EntityTypeFiel
   }
 }
 
+

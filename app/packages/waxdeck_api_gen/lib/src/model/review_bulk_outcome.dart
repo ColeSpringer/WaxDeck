@@ -108,8 +108,9 @@ class _$ReviewBulkOutcomeSerializer implements PrimitiveSerializer<ReviewBulkOut
         case r'error':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.error = valueDes;
           break;
         default:
@@ -140,4 +141,5 @@ class _$ReviewBulkOutcomeSerializer implements PrimitiveSerializer<ReviewBulkOut
     return result.build();
   }
 }
+
 

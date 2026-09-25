@@ -107,3 +107,4 @@ class _$PushRegistrationListSerializer implements PrimitiveSerializer<PushRegist
   }
 }
 
+

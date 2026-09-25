@@ -123,3 +123,4 @@ class _$CommitCreditsSerializer implements PrimitiveSerializer<CommitCredits> {
   }
 }
 
+

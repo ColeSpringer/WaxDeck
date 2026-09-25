@@ -143,16 +143,21 @@ class TrayActions {
 /// The system tray, where the session has one.
 abstract interface class TrayPort {
   /// Puts the icon in the tray. False where there is no tray to put it
-  /// in, which is a session without a StatusNotifier host as much as it
-  /// is a phone - and which is a feature that is absent rather than
-  /// broken.
+  /// in - a phone, or a desktop that refused the icon - which is a
+  /// feature that is absent rather than broken. A Linux session with
+  /// no StatusNotifier host takes the icon and shows nothing, and does
+  /// not say so; that comes back true.
   Future<bool> install(TrayActions actions);
 
   /// Redraws the icon and its menu for [face].
   Future<void> update(TrayFace face);
 
-  /// Takes the icon away.
+  /// Takes the icon away for now; a later [install] puts it back.
   Future<void> remove();
+
+  /// Lets go of the platform's tray for good, ahead of the process
+  /// ending. Nothing installs after it.
+  Future<void> dispose();
 }
 
 /// The ports where there is no desktop shell: web, and both mobiles.
@@ -195,4 +200,7 @@ class NoTray implements TrayPort {
 
   @override
   Future<void> remove() async {}
+
+  @override
+  Future<void> dispose() async {}
 }

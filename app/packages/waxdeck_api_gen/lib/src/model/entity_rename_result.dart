@@ -155,15 +155,17 @@ class _$EntityRenameResultSerializer implements PrimitiveSerializer<EntityRename
         case r'mergedInto':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.mergedInto = valueDes;
           break;
         case r'movedAlbums':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.movedAlbums.replace(valueDes);
           break;
         case r'members':
@@ -183,8 +185,9 @@ class _$EntityRenameResultSerializer implements PrimitiveSerializer<EntityRename
         case r'failures':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(WriteBackFailure)]),
-          ) as BuiltList<WriteBackFailure>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(WriteBackFailure)]),
+          ) as BuiltList<WriteBackFailure>?;
+          if (valueDes == null) continue;
           result.failures.replace(valueDes);
           break;
         default:
@@ -216,18 +219,16 @@ class _$EntityRenameResultSerializer implements PrimitiveSerializer<EntityRename
   }
 }
 
+
+/// What the rename did to the entity's identity key.
 class EntityRenameResultOutcomeEnum extends EnumClass {
 
-  /// What the rename did to the entity's identity key.
   @BuiltValueEnumConst(wireName: r'renamed')
   static const EntityRenameResultOutcomeEnum renamed = _$entityRenameResultOutcomeEnum_renamed;
-  /// What the rename did to the entity's identity key.
   @BuiltValueEnumConst(wireName: r'merged')
   static const EntityRenameResultOutcomeEnum merged = _$entityRenameResultOutcomeEnum_merged;
-  /// What the rename did to the entity's identity key.
   @BuiltValueEnumConst(wireName: r'refreshed')
   static const EntityRenameResultOutcomeEnum refreshed = _$entityRenameResultOutcomeEnum_refreshed;
-  /// What the rename did to the entity's identity key.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const EntityRenameResultOutcomeEnum unknownDefaultOpenApi = _$entityRenameResultOutcomeEnum_unknownDefaultOpenApi;
 

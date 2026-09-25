@@ -174,8 +174,9 @@ class _$UpgradeMemberSerializer implements PrimitiveSerializer<UpgradeMember> {
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'codec':
@@ -188,22 +189,25 @@ class _$UpgradeMemberSerializer implements PrimitiveSerializer<UpgradeMember> {
         case r'bitrate':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.bitrate = valueDes;
           break;
         case r'sampleRate':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.sampleRate = valueDes;
           break;
         case r'bitDepth':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.bitDepth = valueDes;
           break;
         case r'lossless':
@@ -248,4 +252,5 @@ class _$UpgradeMemberSerializer implements PrimitiveSerializer<UpgradeMember> {
     return result.build();
   }
 }
+
 

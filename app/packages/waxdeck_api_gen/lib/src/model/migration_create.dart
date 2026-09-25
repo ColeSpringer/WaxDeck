@@ -176,57 +176,65 @@ class _$MigrationCreateSerializer implements PrimitiveSerializer<MigrationCreate
         case r'serverUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.serverUrl = valueDes;
           break;
         case r'accountId':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.accountId = valueDes;
           break;
         case r'username':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.username = valueDes;
           break;
         case r'password':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.password = valueDes;
           break;
         case r'token':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.token = valueDes;
           break;
         case r'exportId':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.exportId = valueDes;
           break;
         case r'options':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(MigrationOptions),
-          ) as MigrationOptions;
+            specifiedType: const FullType.nullable(MigrationOptions),
+          ) as MigrationOptions?;
+          if (valueDes == null) continue;
           result.options.replace(valueDes);
           break;
         case r'dryRun':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.dryRun = valueDes;
           break;
         default:
@@ -257,4 +265,5 @@ class _$MigrationCreateSerializer implements PrimitiveSerializer<MigrationCreate
     return result.build();
   }
 }
+
 

@@ -101,8 +101,9 @@ class _$M3uImportSerializer implements PrimitiveSerializer<M3uImport> {
         case r'visibility':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.visibility = valueDes;
           break;
         case r'content':
@@ -140,4 +141,5 @@ class _$M3uImportSerializer implements PrimitiveSerializer<M3uImport> {
     return result.build();
   }
 }
+
 

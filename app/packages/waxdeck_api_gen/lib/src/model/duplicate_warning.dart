@@ -120,15 +120,17 @@ class _$DuplicateWarningSerializer implements PrimitiveSerializer<DuplicateWarni
         case r'title':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.title = valueDes;
           break;
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         default:
@@ -159,4 +161,5 @@ class _$DuplicateWarningSerializer implements PrimitiveSerializer<DuplicateWarni
     return result.build();
   }
 }
+
 

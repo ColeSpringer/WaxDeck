@@ -84,8 +84,9 @@ class _$PlaylistEntrySerializer implements PrimitiveSerializer<PlaylistEntry> {
         case r'position':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.position = valueDes;
           break;
         case r'item':
@@ -123,4 +124,5 @@ class _$PlaylistEntrySerializer implements PrimitiveSerializer<PlaylistEntry> {
     return result.build();
   }
 }
+
 

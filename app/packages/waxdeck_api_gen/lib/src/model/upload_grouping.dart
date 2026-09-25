@@ -9,18 +9,15 @@ import 'package:built_value/serializer.dart';
 
 part 'upload_grouping.g.dart';
 
+/// How a batch's staged files reach the review queue: `album` opens one multi-file entry over all of them, `tracks` one entry per file, and `auto` clusters them into album units by their tags and relative paths (disc subfolders fold into their parent). 
 class UploadGrouping extends EnumClass {
 
-  /// How a batch's staged files reach the review queue: `album` opens one multi-file entry over all of them, `tracks` one entry per file, and `auto` clusters them into album units by their tags and relative paths (disc subfolders fold into their parent). 
   @BuiltValueEnumConst(wireName: r'auto')
   static const UploadGrouping auto = _$auto;
-  /// How a batch's staged files reach the review queue: `album` opens one multi-file entry over all of them, `tracks` one entry per file, and `auto` clusters them into album units by their tags and relative paths (disc subfolders fold into their parent). 
   @BuiltValueEnumConst(wireName: r'album')
   static const UploadGrouping album = _$album;
-  /// How a batch's staged files reach the review queue: `album` opens one multi-file entry over all of them, `tracks` one entry per file, and `auto` clusters them into album units by their tags and relative paths (disc subfolders fold into their parent). 
   @BuiltValueEnumConst(wireName: r'tracks')
   static const UploadGrouping tracks = _$tracks;
-  /// How a batch's staged files reach the review queue: `album` opens one multi-file entry over all of them, `tracks` one entry per file, and `auto` clusters them into album units by their tags and relative paths (disc subfolders fold into their parent). 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const UploadGrouping unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 

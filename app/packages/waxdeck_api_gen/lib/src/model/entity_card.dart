@@ -151,22 +151,25 @@ class _$EntityCardSerializer implements PrimitiveSerializer<EntityCard> {
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'year':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.year = valueDes;
           break;
         case r'itemCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.itemCount = valueDes;
           break;
         default:
@@ -198,27 +201,22 @@ class _$EntityCardSerializer implements PrimitiveSerializer<EntityCard> {
   }
 }
 
+
+/// What the card is about, which is what a tap opens.
 class EntityCardKindEnum extends EnumClass {
 
-  /// What the card is about, which is what a tap opens.
   @BuiltValueEnumConst(wireName: r'album')
   static const EntityCardKindEnum album = _$entityCardKindEnum_album;
-  /// What the card is about, which is what a tap opens.
   @BuiltValueEnumConst(wireName: r'artist')
   static const EntityCardKindEnum artist = _$entityCardKindEnum_artist;
-  /// What the card is about, which is what a tap opens.
   @BuiltValueEnumConst(wireName: r'release-group')
   static const EntityCardKindEnum releaseGroup = _$entityCardKindEnum_releaseGroup;
-  /// What the card is about, which is what a tap opens.
   @BuiltValueEnumConst(wireName: r'playlist')
   static const EntityCardKindEnum playlist = _$entityCardKindEnum_playlist;
-  /// What the card is about, which is what a tap opens.
   @BuiltValueEnumConst(wireName: r'podcast')
   static const EntityCardKindEnum podcast = _$entityCardKindEnum_podcast;
-  /// What the card is about, which is what a tap opens.
   @BuiltValueEnumConst(wireName: r'book')
   static const EntityCardKindEnum book = _$entityCardKindEnum_book;
-  /// What the card is about, which is what a tap opens.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const EntityCardKindEnum unknownDefaultOpenApi = _$entityCardKindEnum_unknownDefaultOpenApi;
 

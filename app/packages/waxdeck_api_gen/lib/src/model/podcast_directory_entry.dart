@@ -144,29 +144,33 @@ class _$PodcastDirectoryEntrySerializer implements PrimitiveSerializer<PodcastDi
         case r'author':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.author = valueDes;
           break;
         case r'artworkUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artworkUrl = valueDes;
           break;
         case r'genre':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.genre = valueDes;
           break;
         case r'episodeCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.episodeCount = valueDes;
           break;
         default:
@@ -197,4 +201,5 @@ class _$PodcastDirectoryEntrySerializer implements PrimitiveSerializer<PodcastDi
     return result.build();
   }
 }
+
 

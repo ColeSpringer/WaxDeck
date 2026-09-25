@@ -106,3 +106,4 @@ class _$PlayerEndpointListSerializer implements PrimitiveSerializer<PlayerEndpoi
   }
 }
 
+

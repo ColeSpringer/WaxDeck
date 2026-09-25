@@ -107,3 +107,4 @@ class _$InviteListSerializer implements PrimitiveSerializer<InviteList> {
   }
 }
 
+

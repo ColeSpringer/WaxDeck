@@ -127,8 +127,9 @@ class _$AppPasswordCreatedSerializer implements PrimitiveSerializer<AppPasswordC
         case r'lastUsedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.lastUsedAt = valueDes;
           break;
         default:
@@ -159,4 +160,5 @@ class _$AppPasswordCreatedSerializer implements PrimitiveSerializer<AppPasswordC
     return result.build();
   }
 }
+
 

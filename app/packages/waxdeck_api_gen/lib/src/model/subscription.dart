@@ -125,8 +125,9 @@ class _$SubscriptionSerializer implements PrimitiveSerializer<Subscription> {
         case r'unplayedCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.unplayedCount = valueDes;
           break;
         default:
@@ -157,4 +158,5 @@ class _$SubscriptionSerializer implements PrimitiveSerializer<Subscription> {
     return result.build();
   }
 }
+
 

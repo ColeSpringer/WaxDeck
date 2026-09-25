@@ -122,3 +122,4 @@ class _$RuleTagKeySerializer implements PrimitiveSerializer<RuleTagKey> {
   }
 }
 
+

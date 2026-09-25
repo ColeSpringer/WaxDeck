@@ -132,15 +132,17 @@ class _$DownloadInfoSerializer implements PrimitiveSerializer<DownloadInfo> {
         case r'spanStartMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.spanStartMs = valueDes;
           break;
         case r'spanEndMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.spanEndMs = valueDes;
           break;
         case r'expiresAt':
@@ -178,4 +180,5 @@ class _$DownloadInfoSerializer implements PrimitiveSerializer<DownloadInfo> {
     return result.build();
   }
 }
+
 

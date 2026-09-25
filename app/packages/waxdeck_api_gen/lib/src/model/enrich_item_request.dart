@@ -93,8 +93,9 @@ class _$EnrichItemRequestSerializer implements PrimitiveSerializer<EnrichItemReq
         case r'proposal':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(EnrichProposal),
-          ) as EnrichProposal;
+            specifiedType: const FullType.nullable(EnrichProposal),
+          ) as EnrichProposal?;
+          if (valueDes == null) continue;
           result.proposal.replace(valueDes);
           break;
         default:
@@ -125,6 +126,7 @@ class _$EnrichItemRequestSerializer implements PrimitiveSerializer<EnrichItemReq
     return result.build();
   }
 }
+
 
 class EnrichItemRequestWantEnum extends EnumClass {
 

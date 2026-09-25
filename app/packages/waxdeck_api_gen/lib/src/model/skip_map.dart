@@ -165,50 +165,57 @@ class _$SkipMapSerializer implements PrimitiveSerializer<SkipMap> {
         case r'essenceHash':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.essenceHash = valueDes;
           break;
         case r'partIndex':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.partIndex = valueDes;
           break;
         case r'version':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.version = valueDes;
           break;
         case r'thresholdDb':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(double),
-          ) as double;
+            specifiedType: const FullType.nullable(double),
+          ) as double?;
+          if (valueDes == null) continue;
           result.thresholdDb = valueDes;
           break;
         case r'minSeconds':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(double),
-          ) as double;
+            specifiedType: const FullType.nullable(double),
+          ) as double?;
+          if (valueDes == null) continue;
           result.minSeconds = valueDes;
           break;
         case r'spans':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(SkipSpan)]),
-          ) as BuiltList<SkipSpan>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(SkipSpan)]),
+          ) as BuiltList<SkipSpan>?;
+          if (valueDes == null) continue;
           result.spans.replace(valueDes);
           break;
         case r'updatedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.updatedAt = valueDes;
           break;
         default:
@@ -239,4 +246,5 @@ class _$SkipMapSerializer implements PrimitiveSerializer<SkipMap> {
     return result.build();
   }
 }
+
 

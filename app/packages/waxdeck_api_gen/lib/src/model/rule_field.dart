@@ -160,8 +160,9 @@ class _$RuleFieldSerializer implements PrimitiveSerializer<RuleField> {
         case r'description':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.description = valueDes;
           break;
         default:
@@ -192,4 +193,5 @@ class _$RuleFieldSerializer implements PrimitiveSerializer<RuleField> {
     return result.build();
   }
 }
+
 

@@ -92,8 +92,9 @@ class _$PlaylistItemsUpdateSerializer implements PrimitiveSerializer<PlaylistIte
         case r'baseUpdatedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.baseUpdatedAt = valueDes;
           break;
         default:
@@ -124,4 +125,5 @@ class _$PlaylistItemsUpdateSerializer implements PrimitiveSerializer<PlaylistIte
     return result.build();
   }
 }
+
 

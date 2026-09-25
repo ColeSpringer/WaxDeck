@@ -93,8 +93,9 @@ class _$ReviewDecisionSerializer implements PrimitiveSerializer<ReviewDecision> 
         case r'candidateMbid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.candidateMbid = valueDes;
           break;
         default:
@@ -126,24 +127,20 @@ class _$ReviewDecisionSerializer implements PrimitiveSerializer<ReviewDecision> 
   }
 }
 
+
+/// The decision to apply.
 class ReviewDecisionActionEnum extends EnumClass {
 
-  /// The decision to apply.
   @BuiltValueEnumConst(wireName: r'approve')
   static const ReviewDecisionActionEnum approve = _$reviewDecisionActionEnum_approve;
-  /// The decision to apply.
   @BuiltValueEnumConst(wireName: r'as-is')
   static const ReviewDecisionActionEnum asIs = _$reviewDecisionActionEnum_asIs;
-  /// The decision to apply.
   @BuiltValueEnumConst(wireName: r'unofficial')
   static const ReviewDecisionActionEnum unofficial = _$reviewDecisionActionEnum_unofficial;
-  /// The decision to apply.
   @BuiltValueEnumConst(wireName: r'skip')
   static const ReviewDecisionActionEnum skip = _$reviewDecisionActionEnum_skip;
-  /// The decision to apply.
   @BuiltValueEnumConst(wireName: r'discard')
   static const ReviewDecisionActionEnum discard = _$reviewDecisionActionEnum_discard;
-  /// The decision to apply.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const ReviewDecisionActionEnum unknownDefaultOpenApi = _$reviewDecisionActionEnum_unknownDefaultOpenApi;
 

@@ -208,15 +208,17 @@ class _$PlayStateSerializer implements PrimitiveSerializer<PlayState> {
         case r'lastPlayedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.lastPlayedAt = valueDes;
           break;
         case r'updatedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.updatedAt = valueDes;
           break;
         default:
@@ -247,4 +249,5 @@ class _$PlayStateSerializer implements PrimitiveSerializer<PlayState> {
     return result.build();
   }
 }
+
 

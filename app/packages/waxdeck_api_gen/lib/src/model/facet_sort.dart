@@ -9,15 +9,13 @@ import 'package:built_value/serializer.dart';
 
 part 'facet_sort.g.dart';
 
+/// How a browse dimension's buckets are ordered. `count` leads with the biggest buckets, which is what a hub wants; `label` is the A-to-Z order an index with an alphabet rail scrolls through. 
 class FacetSort extends EnumClass {
 
-  /// How a browse dimension's buckets are ordered. `count` leads with the biggest buckets, which is what a hub wants; `label` is the A-to-Z order an index with an alphabet rail scrolls through. 
   @BuiltValueEnumConst(wireName: r'count')
   static const FacetSort count = _$count;
-  /// How a browse dimension's buckets are ordered. `count` leads with the biggest buckets, which is what a hub wants; `label` is the A-to-Z order an index with an alphabet rail scrolls through. 
   @BuiltValueEnumConst(wireName: r'label')
   static const FacetSort label = _$label;
-  /// How a browse dimension's buckets are ordered. `count` leads with the biggest buckets, which is what a hub wants; `label` is the A-to-Z order an index with an alphabet rail scrolls through. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const FacetSort unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 

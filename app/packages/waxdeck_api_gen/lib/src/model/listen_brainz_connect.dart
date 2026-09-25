@@ -91,8 +91,9 @@ class _$ListenBrainzConnectSerializer implements PrimitiveSerializer<ListenBrain
         case r'apiUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.apiUrl = valueDes;
           break;
         default:
@@ -123,4 +124,5 @@ class _$ListenBrainzConnectSerializer implements PrimitiveSerializer<ListenBrain
     return result.build();
   }
 }
+
 

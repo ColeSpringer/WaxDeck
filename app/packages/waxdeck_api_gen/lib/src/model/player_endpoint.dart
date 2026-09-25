@@ -210,8 +210,9 @@ class _$PlayerEndpointSerializer implements PrimitiveSerializer<PlayerEndpoint> 
         case r'activeSessionId':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.activeSessionId = valueDes;
           break;
         default:
@@ -242,4 +243,5 @@ class _$PlayerEndpointSerializer implements PrimitiveSerializer<PlayerEndpoint> 
     return result.build();
   }
 }
+
 

@@ -92,8 +92,9 @@ class _$ReviewDecideResultSerializer implements PrimitiveSerializer<ReviewDecide
         case r'warnings':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.warnings.replace(valueDes);
           break;
         default:
@@ -124,4 +125,5 @@ class _$ReviewDecideResultSerializer implements PrimitiveSerializer<ReviewDecide
     return result.build();
   }
 }
+
 

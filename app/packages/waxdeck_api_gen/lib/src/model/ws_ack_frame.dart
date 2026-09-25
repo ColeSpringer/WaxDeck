@@ -120,15 +120,17 @@ class _$WsAckFrameSerializer implements PrimitiveSerializer<WsAckFrame> {
         case r'endpointId':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.endpointId = valueDes;
           break;
         case r'session':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(PlaybackSession),
-          ) as PlaybackSession;
+            specifiedType: const FullType.nullable(PlaybackSession),
+          ) as PlaybackSession?;
+          if (valueDes == null) continue;
           result.session.replace(valueDes);
           break;
         default:
@@ -159,4 +161,5 @@ class _$WsAckFrameSerializer implements PrimitiveSerializer<WsAckFrame> {
     return result.build();
   }
 }
+
 

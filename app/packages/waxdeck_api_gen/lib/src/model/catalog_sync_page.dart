@@ -115,8 +115,9 @@ class _$CatalogSyncPageSerializer implements PrimitiveSerializer<CatalogSyncPage
         case r'nextCursor':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.nextCursor = valueDes;
           break;
         case r'nextSince':
@@ -129,8 +130,9 @@ class _$CatalogSyncPageSerializer implements PrimitiveSerializer<CatalogSyncPage
         case r'more':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.more = valueDes;
           break;
         default:
@@ -161,4 +163,5 @@ class _$CatalogSyncPageSerializer implements PrimitiveSerializer<CatalogSyncPage
     return result.build();
   }
 }
+
 

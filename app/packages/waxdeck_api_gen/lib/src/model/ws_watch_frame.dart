@@ -103,15 +103,17 @@ class _$WsWatchFrameSerializer implements PrimitiveSerializer<WsWatchFrame> {
         case r'id':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.id = valueDes;
           break;
         case r'sessionId':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.sessionId = valueDes;
           break;
         default:
@@ -142,4 +144,5 @@ class _$WsWatchFrameSerializer implements PrimitiveSerializer<WsWatchFrame> {
     return result.build();
   }
 }
+
 

@@ -114,29 +114,33 @@ class _$MigrationOptionsSerializer implements PrimitiveSerializer<MigrationOptio
         case r'stars':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.stars = valueDes;
           break;
         case r'ratings':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.ratings = valueDes;
           break;
         case r'history':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.history = valueDes;
           break;
         case r'progress':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.progress = valueDes;
           break;
         default:
@@ -167,4 +171,5 @@ class _$MigrationOptionsSerializer implements PrimitiveSerializer<MigrationOptio
     return result.build();
   }
 }
+
 

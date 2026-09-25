@@ -166,8 +166,9 @@ class _$InviteCreatedSerializer implements PrimitiveSerializer<InviteCreated> {
         case r'note':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.note = valueDes;
           break;
         case r'roles':
@@ -180,8 +181,9 @@ class _$InviteCreatedSerializer implements PrimitiveSerializer<InviteCreated> {
         case r'libraryAccess':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(LibraryAccess),
-          ) as LibraryAccess;
+            specifiedType: const FullType.nullable(LibraryAccess),
+          ) as LibraryAccess?;
+          if (valueDes == null) continue;
           result.libraryAccess.replace(valueDes);
           break;
         case r'revoked':
@@ -194,8 +196,9 @@ class _$InviteCreatedSerializer implements PrimitiveSerializer<InviteCreated> {
         case r'expiresAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.expiresAt = valueDes;
           break;
         case r'token':
@@ -215,15 +218,17 @@ class _$InviteCreatedSerializer implements PrimitiveSerializer<InviteCreated> {
         case r'createdBy':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.createdBy = valueDes;
           break;
         case r'permissions':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(Permissions),
-          ) as Permissions;
+            specifiedType: const FullType.nullable(Permissions),
+          ) as Permissions?;
+          if (valueDes == null) continue;
           result.permissions.replace(valueDes);
           break;
         case r'uploadEnabled':
@@ -275,4 +280,5 @@ class _$InviteCreatedSerializer implements PrimitiveSerializer<InviteCreated> {
     return result.build();
   }
 }
+
 

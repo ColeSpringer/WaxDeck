@@ -244,8 +244,9 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'kind':
@@ -265,8 +266,9 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
         case r'identifyOverride':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ReviewIdentifyRequest),
-          ) as ReviewIdentifyRequest;
+            specifiedType: const FullType.nullable(ReviewIdentifyRequest),
+          ) as ReviewIdentifyRequest?;
+          if (valueDes == null) continue;
           result.identifyOverride.replace(valueDes);
           break;
         case r'mediaType':
@@ -279,36 +281,41 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
         case r'best':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(CandidateSummary),
-          ) as CandidateSummary;
+            specifiedType: const FullType.nullable(CandidateSummary),
+          ) as CandidateSummary?;
+          if (valueDes == null) continue;
           result.best.replace(valueDes);
           break;
         case r'appliedMbid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.appliedMbid = valueDes;
           break;
         case r'decidedBy':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.decidedBy = valueDes;
           break;
         case r'title':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.title = valueDes;
           break;
         case r'identifyDeclined':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.identifyDeclined = valueDes;
           break;
         case r'tracks':
@@ -335,8 +342,9 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
         case r'suggested':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ReviewIdentifyRequest),
-          ) as ReviewIdentifyRequest;
+            specifiedType: const FullType.nullable(ReviewIdentifyRequest),
+          ) as ReviewIdentifyRequest?;
+          if (valueDes == null) continue;
           result.suggested.replace(valueDes);
           break;
         case r'trackCount':
@@ -349,8 +357,9 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
         case r'decidedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.decidedAt = valueDes;
           break;
         case r'id':
@@ -363,15 +372,17 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
         case r'libraryPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.libraryPid = valueDes;
           break;
         case r'uploadedBy':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.uploadedBy = valueDes;
           break;
         case r'status':
@@ -409,4 +420,5 @@ class _$ReviewEntryDetailSerializer implements PrimitiveSerializer<ReviewEntryDe
     return result.build();
   }
 }
+
 

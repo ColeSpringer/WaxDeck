@@ -211,57 +211,65 @@ class _$PortableRefSerializer implements PrimitiveSerializer<PortableRef> {
         case r'essence':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.essence = valueDes;
           break;
         case r'fingerprint':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.fingerprint = valueDes;
           break;
         case r'fingerprintAlgo':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.fingerprintAlgo = valueDes;
           break;
         case r'mbid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.mbid = valueDes;
           break;
         case r'asin':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.asin = valueDes;
           break;
         case r'isbn':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.isbn = valueDes;
           break;
         case r'isrc':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.isrc = valueDes;
           break;
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'title':
@@ -274,15 +282,17 @@ class _$PortableRefSerializer implements PrimitiveSerializer<PortableRef> {
         case r'album':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.album = valueDes;
           break;
         case r'durationMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.durationMs = valueDes;
           break;
         default:
@@ -314,18 +324,16 @@ class _$PortableRefSerializer implements PrimitiveSerializer<PortableRef> {
   }
 }
 
+
+/// What the ref describes.
 class PortableRefKindEnum extends EnumClass {
 
-  /// What the ref describes.
   @BuiltValueEnumConst(wireName: r'track')
   static const PortableRefKindEnum track = _$portableRefKindEnum_track;
-  /// What the ref describes.
   @BuiltValueEnumConst(wireName: r'book')
   static const PortableRefKindEnum book = _$portableRefKindEnum_book;
-  /// What the ref describes.
   @BuiltValueEnumConst(wireName: r'episode')
   static const PortableRefKindEnum episode = _$portableRefKindEnum_episode;
-  /// What the ref describes.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const PortableRefKindEnum unknownDefaultOpenApi = _$portableRefKindEnum_unknownDefaultOpenApi;
 

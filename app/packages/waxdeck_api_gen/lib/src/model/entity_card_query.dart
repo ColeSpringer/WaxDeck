@@ -106,3 +106,4 @@ class _$EntityCardQuerySerializer implements PrimitiveSerializer<EntityCardQuery
   }
 }
 
+

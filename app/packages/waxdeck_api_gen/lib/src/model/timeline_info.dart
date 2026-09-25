@@ -160,8 +160,9 @@ class _$TimelineInfoSerializer implements PrimitiveSerializer<TimelineInfo> {
         case r'pid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.pid = valueDes;
           break;
         case r'url':
@@ -202,15 +203,17 @@ class _$TimelineInfoSerializer implements PrimitiveSerializer<TimelineInfo> {
         case r'crossfadeSeconds':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(double),
-          ) as double;
+            specifiedType: const FullType.nullable(double),
+          ) as double?;
+          if (valueDes == null) continue;
           result.crossfadeSeconds = valueDes;
           break;
         case r'format':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.format = valueDes;
           break;
         case r'boundaries':
@@ -248,4 +251,5 @@ class _$TimelineInfoSerializer implements PrimitiveSerializer<TimelineInfo> {
     return result.build();
   }
 }
+
 

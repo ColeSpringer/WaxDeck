@@ -122,3 +122,4 @@ class _$SkipSpanSerializer implements PrimitiveSerializer<SkipSpan> {
   }
 }
 
+

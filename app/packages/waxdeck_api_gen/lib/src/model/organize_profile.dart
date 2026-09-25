@@ -127,29 +127,33 @@ class _$OrganizeProfileSerializer implements PrimitiveSerializer<OrganizeProfile
         case r'musicTemplate':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.musicTemplate = valueDes;
           break;
         case r'audiobookTemplate':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.audiobookTemplate = valueDes;
           break;
         case r'podcastTemplate':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.podcastTemplate = valueDes;
           break;
         case r'tagWrite':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.tagWrite = valueDes;
           break;
         default:
@@ -180,4 +184,5 @@ class _$OrganizeProfileSerializer implements PrimitiveSerializer<OrganizeProfile
     return result.build();
   }
 }
+
 

@@ -91,8 +91,9 @@ class _$RuleSortSerializer implements PrimitiveSerializer<RuleSort> {
         case r'desc':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.desc = valueDes;
           break;
         default:
@@ -123,4 +124,5 @@ class _$RuleSortSerializer implements PrimitiveSerializer<RuleSort> {
     return result.build();
   }
 }
+
 

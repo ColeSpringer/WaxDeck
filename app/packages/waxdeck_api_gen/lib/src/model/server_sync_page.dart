@@ -110,8 +110,9 @@ class _$ServerSyncPageSerializer implements PrimitiveSerializer<ServerSyncPage> 
         case r'more':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.more = valueDes;
           break;
         default:
@@ -142,4 +143,5 @@ class _$ServerSyncPageSerializer implements PrimitiveSerializer<ServerSyncPage> 
     return result.build();
   }
 }
+
 

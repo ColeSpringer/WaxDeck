@@ -106,15 +106,17 @@ class _$RejectedEmbeddingSerializer implements PrimitiveSerializer<RejectedEmbed
         case r'pid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.pid = valueDes;
           break;
         case r'essence':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.essence = valueDes;
           break;
         case r'code':
@@ -159,4 +161,5 @@ class _$RejectedEmbeddingSerializer implements PrimitiveSerializer<RejectedEmbed
     return result.build();
   }
 }
+
 

@@ -61,7 +61,7 @@ abstract class ListenSession implements Built<ListenSession, ListenSessionBuilde
 
   @BuiltValueHook(initializeBuilder: true)
   static void _defaults(ListenSessionBuilder b) => b
-      ..source_ = const ListenSessionSource_Enum._('live');
+      ..source_ = ListenSessionSource_Enum.valueOf('live');
 
   @BuiltValueSerializer(custom: true)
   static Serializer<ListenSession> get serializer => _$ListenSessionSerializer();
@@ -181,29 +181,33 @@ class _$ListenSessionSerializer implements PrimitiveSerializer<ListenSession> {
         case r'skippedMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.skippedMs = valueDes;
           break;
         case r'finished':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.finished = valueDes;
           break;
         case r'client':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.client = valueDes;
           break;
         case r'source':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ListenSessionSource_Enum),
-          ) as ListenSessionSource_Enum;
+            specifiedType: const FullType.nullable(ListenSessionSource_Enum),
+          ) as ListenSessionSource_Enum?;
+          if (valueDes == null) continue;
           result.source_ = valueDes;
           break;
         default:
@@ -235,15 +239,14 @@ class _$ListenSessionSerializer implements PrimitiveSerializer<ListenSession> {
   }
 }
 
+
+/// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. An `import` session counts towards play state exactly as a live one does and is never forwarded to connected scrobblers - a history moving in has usually been scrobbled once already, and re-sending it would be a second copy on somebody else's service. 
 class ListenSessionSource_Enum extends EnumClass {
 
-  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. An `import` session counts towards play state exactly as a live one does and is never forwarded to connected scrobblers - a history moving in has usually been scrobbled once already, and re-sending it would be a second copy on somebody else's service. 
   @BuiltValueEnumConst(wireName: r'live')
   static const ListenSessionSource_Enum live = _$listenSessionSourceEnum_live;
-  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. An `import` session counts towards play state exactly as a live one does and is never forwarded to connected scrobblers - a history moving in has usually been scrobbled once already, and re-sending it would be a second copy on somebody else's service. 
   @BuiltValueEnumConst(wireName: r'import')
   static const ListenSessionSource_Enum import_ = _$listenSessionSourceEnum_import_;
-  /// Where the session originates. `live` is a WaxDeck client reporting its own playback; `import` is a backdated session from another service's history. An `import` session counts towards play state exactly as a live one does and is never forwarded to connected scrobblers - a history moving in has usually been scrobbled once already, and re-sending it would be a second copy on somebody else's service. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const ListenSessionSource_Enum unknownDefaultOpenApi = _$listenSessionSourceEnum_unknownDefaultOpenApi;
 

@@ -91,6 +91,9 @@ class _RecordingQueueStore implements QueueStore {
 class _FakeTray implements TrayPort {
   TrayActions? actions;
 
+  /// Held by a test that wants a tray that will not let go.
+  Completer<void>? letGo;
+
   @override
   Future<bool> install(TrayActions actions) async {
     this.actions = actions;
@@ -102,6 +105,9 @@ class _FakeTray implements TrayPort {
 
   @override
   Future<void> remove() async {}
+
+  @override
+  Future<void> dispose() => letGo?.future ?? Future<void>.value();
 }
 
 class _Harness {
@@ -216,6 +222,25 @@ void main() {
       expect(h.container.read(nowPlayingProvider).session, isNotNull);
     },
   );
+
+  test('a tray that will not let go does not hold the shutdown', () async {
+    // On Windows the tray's release waits for an open menu to close, and
+    // a close that arrives while it is open still has to stop playback
+    // and write the queue inside the window's budget.
+    final h = _Harness();
+    await h.start();
+    h.store.saves = 0;
+    h.tray.letGo = Completer<void>();
+
+    await h.window.onClose!().timeout(const Duration(seconds: 5));
+
+    expect(h.container.read(nowPlayingProvider).session, isNull);
+    expect(
+      h.store.saves,
+      greaterThan(0),
+      reason: 'the queue the next launch offers was never written',
+    );
+  });
 
   test('signing out lets go of the close it bound', () async {
     // The binder is scoped to the signed-in session and the handler it

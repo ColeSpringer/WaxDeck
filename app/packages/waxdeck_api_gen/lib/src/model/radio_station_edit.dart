@@ -120,15 +120,17 @@ class _$RadioStationEditSerializer implements PrimitiveSerializer<RadioStationEd
         case r'homepageUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.homepageUrl = valueDes;
           break;
         case r'logoUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.logoUrl = valueDes;
           break;
         default:
@@ -159,4 +161,5 @@ class _$RadioStationEditSerializer implements PrimitiveSerializer<RadioStationEd
     return result.build();
   }
 }
+
 

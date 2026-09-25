@@ -106,3 +106,4 @@ class _$AppPasswordListSerializer implements PrimitiveSerializer<AppPasswordList
   }
 }
 
+

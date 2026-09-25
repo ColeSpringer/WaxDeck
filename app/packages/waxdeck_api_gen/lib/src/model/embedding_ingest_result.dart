@@ -110,8 +110,9 @@ class _$EmbeddingIngestResultSerializer implements PrimitiveSerializer<Embedding
         case r'rejected':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(RejectedEmbedding)]),
-          ) as BuiltList<RejectedEmbedding>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(RejectedEmbedding)]),
+          ) as BuiltList<RejectedEmbedding>?;
+          if (valueDes == null) continue;
           result.rejected.replace(valueDes);
           break;
         default:
@@ -142,4 +143,5 @@ class _$EmbeddingIngestResultSerializer implements PrimitiveSerializer<Embedding
     return result.build();
   }
 }
+
 

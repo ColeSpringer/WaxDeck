@@ -123,3 +123,4 @@ class _$EnrichItemResultSerializer implements PrimitiveSerializer<EnrichItemResu
   }
 }
 
+

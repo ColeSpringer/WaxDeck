@@ -88,15 +88,17 @@ class _$EnrichProposalSerializer implements PrimitiveSerializer<EnrichProposal> 
         case r'fields':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(EnrichFieldProposal)]),
-          ) as BuiltList<EnrichFieldProposal>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(EnrichFieldProposal)]),
+          ) as BuiltList<EnrichFieldProposal>?;
+          if (valueDes == null) continue;
           result.fields.replace(valueDes);
           break;
         case r'cover':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(EnrichCoverProposal),
-          ) as EnrichCoverProposal;
+            specifiedType: const FullType.nullable(EnrichCoverProposal),
+          ) as EnrichCoverProposal?;
+          if (valueDes == null) continue;
           result.cover.replace(valueDes);
           break;
         default:
@@ -127,4 +129,5 @@ class _$EnrichProposalSerializer implements PrimitiveSerializer<EnrichProposal> 
     return result.build();
   }
 }
+
 

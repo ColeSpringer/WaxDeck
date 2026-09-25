@@ -116,8 +116,9 @@ class _$MetadataCommitPartSerializer implements PrimitiveSerializer<MetadataComm
         case r'detail':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.detail = valueDes;
           break;
         case r'status':
@@ -130,8 +131,9 @@ class _$MetadataCommitPartSerializer implements PrimitiveSerializer<MetadataComm
         case r'refusal':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(Error),
-          ) as Error;
+            specifiedType: const FullType.nullable(Error),
+          ) as Error?;
+          if (valueDes == null) continue;
           result.refusal.replace(valueDes);
           break;
         default:
@@ -163,30 +165,24 @@ class _$MetadataCommitPartSerializer implements PrimitiveSerializer<MetadataComm
   }
 }
 
+
+/// Which staged part this entry is about. `lyrics` covers both replacing them and clearing them. 
 class MetadataCommitPartPart_Enum extends EnumClass {
 
-  /// Which staged part this entry is about. `lyrics` covers both replacing them and clearing them. 
   @BuiltValueEnumConst(wireName: r'fields')
   static const MetadataCommitPartPart_Enum fields = _$metadataCommitPartPartEnum_fields;
-  /// Which staged part this entry is about. `lyrics` covers both replacing them and clearing them. 
   @BuiltValueEnumConst(wireName: r'credit')
   static const MetadataCommitPartPart_Enum credit = _$metadataCommitPartPartEnum_credit;
-  /// Which staged part this entry is about. `lyrics` covers both replacing them and clearing them. 
   @BuiltValueEnumConst(wireName: r'lyrics')
   static const MetadataCommitPartPart_Enum lyrics = _$metadataCommitPartPartEnum_lyrics;
-  /// Which staged part this entry is about. `lyrics` covers both replacing them and clearing them. 
   @BuiltValueEnumConst(wireName: r'chapters')
   static const MetadataCommitPartPart_Enum chapters = _$metadataCommitPartPartEnum_chapters;
-  /// Which staged part this entry is about. `lyrics` covers both replacing them and clearing them. 
   @BuiltValueEnumConst(wireName: r'tagSet')
   static const MetadataCommitPartPart_Enum tagSet = _$metadataCommitPartPartEnum_tagSet;
-  /// Which staged part this entry is about. `lyrics` covers both replacing them and clearing them. 
   @BuiltValueEnumConst(wireName: r'tagRemove')
   static const MetadataCommitPartPart_Enum tagRemove = _$metadataCommitPartPartEnum_tagRemove;
-  /// Which staged part this entry is about. `lyrics` covers both replacing them and clearing them. 
   @BuiltValueEnumConst(wireName: r'releaseStatus')
   static const MetadataCommitPartPart_Enum releaseStatus = _$metadataCommitPartPartEnum_releaseStatus;
-  /// Which staged part this entry is about. `lyrics` covers both replacing them and clearing them. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const MetadataCommitPartPart_Enum unknownDefaultOpenApi = _$metadataCommitPartPartEnum_unknownDefaultOpenApi;
 
@@ -198,18 +194,15 @@ class MetadataCommitPartPart_Enum extends EnumClass {
   static MetadataCommitPartPart_Enum valueOf(String name) => _$metadataCommitPartPartEnumValueOf(name);
 }
 
+/// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one. 
 class MetadataCommitPartStatusEnum extends EnumClass {
 
-  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one. 
   @BuiltValueEnumConst(wireName: r'committed')
   static const MetadataCommitPartStatusEnum committed = _$metadataCommitPartStatusEnum_committed;
-  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one. 
   @BuiltValueEnumConst(wireName: r'refused')
   static const MetadataCommitPartStatusEnum refused = _$metadataCommitPartStatusEnum_refused;
-  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one. 
   @BuiltValueEnumConst(wireName: r'skipped')
   static const MetadataCommitPartStatusEnum skipped = _$metadataCommitPartStatusEnum_skipped;
-  /// `committed` means the catalog write landed (write-back trouble rides `writeBackFailures`, never this). `refused` is the one part that stopped the commit, with its `refusal`. `skipped` is a part after that one, which was never attempted, or a `credit` role that shared an atomic batch with the refused one. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const MetadataCommitPartStatusEnum unknownDefaultOpenApi = _$metadataCommitPartStatusEnum_unknownDefaultOpenApi;
 

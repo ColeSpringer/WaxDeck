@@ -584,8 +584,9 @@ class _$EnrichmentLastRunSerializer implements PrimitiveSerializer<EnrichmentLas
         case r'finishedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.finishedAt = valueDes;
           break;
         default:
@@ -616,4 +617,5 @@ class _$EnrichmentLastRunSerializer implements PrimitiveSerializer<EnrichmentLas
     return result.build();
   }
 }
+
 

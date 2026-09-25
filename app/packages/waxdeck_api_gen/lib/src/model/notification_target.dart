@@ -219,8 +219,9 @@ class _$NotificationTargetSerializer implements PrimitiveSerializer<Notification
         case r'label':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.label = valueDes;
           break;
         case r'config':
@@ -240,36 +241,41 @@ class _$NotificationTargetSerializer implements PrimitiveSerializer<Notification
         case r'lastSuccessAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.lastSuccessAt = valueDes;
           break;
         case r'lastError':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.lastError = valueDes;
           break;
         case r'lastErrorAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.lastErrorAt = valueDes;
           break;
         case r'muted':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.muted = valueDes;
           break;
         case r'minIntervalSeconds':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.minIntervalSeconds = valueDes;
           break;
         case r'createdAt':
@@ -307,4 +313,5 @@ class _$NotificationTargetSerializer implements PrimitiveSerializer<Notification
     return result.build();
   }
 }
+
 

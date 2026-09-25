@@ -75,8 +75,9 @@ class _$NotificationReadRequestSerializer implements PrimitiveSerializer<Notific
         case r'ids':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.ids.replace(valueDes);
           break;
         default:
@@ -107,4 +108,5 @@ class _$NotificationReadRequestSerializer implements PrimitiveSerializer<Notific
     return result.build();
   }
 }
+
 

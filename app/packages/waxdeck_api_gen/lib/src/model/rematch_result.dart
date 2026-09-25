@@ -105,3 +105,4 @@ class _$RematchResultSerializer implements PrimitiveSerializer<RematchResult> {
   }
 }
 
+

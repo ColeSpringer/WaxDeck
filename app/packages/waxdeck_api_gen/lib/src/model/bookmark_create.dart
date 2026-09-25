@@ -91,8 +91,9 @@ class _$BookmarkCreateSerializer implements PrimitiveSerializer<BookmarkCreate> 
         case r'note':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.note = valueDes;
           break;
         default:
@@ -123,4 +124,5 @@ class _$BookmarkCreateSerializer implements PrimitiveSerializer<BookmarkCreate> 
     return result.build();
   }
 }
+
 

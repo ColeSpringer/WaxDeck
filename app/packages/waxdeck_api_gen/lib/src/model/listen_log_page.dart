@@ -92,8 +92,9 @@ class _$ListenLogPageSerializer implements PrimitiveSerializer<ListenLogPage> {
         case r'nextCursor':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.nextCursor = valueDes;
           break;
         default:
@@ -124,4 +125,5 @@ class _$ListenLogPageSerializer implements PrimitiveSerializer<ListenLogPage> {
     return result.build();
   }
 }
+
 

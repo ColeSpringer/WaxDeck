@@ -118,22 +118,25 @@ class _$PlaylistImportRequestSerializer implements PrimitiveSerializer<PlaylistI
         case r'name':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.name = valueDes;
           break;
         case r'payload':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.payload = valueDes;
           break;
         case r'refs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(PortableRef)]),
-          ) as BuiltList<PortableRef>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(PortableRef)]),
+          ) as BuiltList<PortableRef>?;
+          if (valueDes == null) continue;
           result.refs.replace(valueDes);
           break;
         default:
@@ -165,27 +168,22 @@ class _$PlaylistImportRequestSerializer implements PrimitiveSerializer<PlaylistI
   }
 }
 
+
+/// The export format: `spotify` (Exportify CSV), `applemusic` (tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), or `portable` (another WaxDeck's portable export). 
 class PlaylistImportRequestSource_Enum extends EnumClass {
 
-  /// The export format: `spotify` (Exportify CSV), `applemusic` (tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), or `portable` (another WaxDeck's portable export). 
   @BuiltValueEnumConst(wireName: r'spotify')
   static const PlaylistImportRequestSource_Enum spotify = _$playlistImportRequestSourceEnum_spotify;
-  /// The export format: `spotify` (Exportify CSV), `applemusic` (tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), or `portable` (another WaxDeck's portable export). 
   @BuiltValueEnumConst(wireName: r'applemusic')
   static const PlaylistImportRequestSource_Enum applemusic = _$playlistImportRequestSourceEnum_applemusic;
-  /// The export format: `spotify` (Exportify CSV), `applemusic` (tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), or `portable` (another WaxDeck's portable export). 
   @BuiltValueEnumConst(wireName: r'ytmusic')
   static const PlaylistImportRequestSource_Enum ytmusic = _$playlistImportRequestSourceEnum_ytmusic;
-  /// The export format: `spotify` (Exportify CSV), `applemusic` (tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), or `portable` (another WaxDeck's portable export). 
   @BuiltValueEnumConst(wireName: r'csv')
   static const PlaylistImportRequestSource_Enum csv = _$playlistImportRequestSourceEnum_csv;
-  /// The export format: `spotify` (Exportify CSV), `applemusic` (tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), or `portable` (another WaxDeck's portable export). 
   @BuiltValueEnumConst(wireName: r'text')
   static const PlaylistImportRequestSource_Enum text = _$playlistImportRequestSourceEnum_text;
-  /// The export format: `spotify` (Exportify CSV), `applemusic` (tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), or `portable` (another WaxDeck's portable export). 
   @BuiltValueEnumConst(wireName: r'portable')
   static const PlaylistImportRequestSource_Enum portable = _$playlistImportRequestSourceEnum_portable;
-  /// The export format: `spotify` (Exportify CSV), `applemusic` (tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), or `portable` (another WaxDeck's portable export). 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const PlaylistImportRequestSource_Enum unknownDefaultOpenApi = _$playlistImportRequestSourceEnum_unknownDefaultOpenApi;
 

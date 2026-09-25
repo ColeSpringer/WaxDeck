@@ -107,3 +107,4 @@ class _$ScrobblerListSerializer implements PrimitiveSerializer<ScrobblerList> {
   }
 }
 
+

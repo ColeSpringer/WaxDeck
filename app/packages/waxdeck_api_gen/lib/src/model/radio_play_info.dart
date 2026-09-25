@@ -151,43 +151,49 @@ class _$RadioPlayInfoSerializer implements PrimitiveSerializer<RadioPlayInfo> {
         case r'nowPlaying':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.nowPlaying = valueDes;
           break;
         case r'nowPlayingItemPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.nowPlayingItemPid = valueDes;
           break;
         case r'nowPlayingArtKey':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.nowPlayingArtKey = valueDes;
           break;
         case r'nowPlayingArtSource':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(ArtSource),
-          ) as ArtSource;
+            specifiedType: const FullType.nullable(ArtSource),
+          ) as ArtSource?;
+          if (valueDes == null) continue;
           result.nowPlayingArtSource.replace(valueDes);
           break;
         case r'nowPlayingSaved':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.nowPlayingSaved = valueDes;
           break;
         case r'nowPlayingSavedPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.nowPlayingSavedPid = valueDes;
           break;
         default:
@@ -218,4 +224,5 @@ class _$RadioPlayInfoSerializer implements PrimitiveSerializer<RadioPlayInfo> {
     return result.build();
   }
 }
+
 

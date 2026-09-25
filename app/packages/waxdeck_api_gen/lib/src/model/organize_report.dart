@@ -127,8 +127,9 @@ class _$OrganizeReportSerializer implements PrimitiveSerializer<OrganizeReport> 
         case r'failures':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(OrganizeFailure)]),
-          ) as BuiltList<OrganizeFailure>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(OrganizeFailure)]),
+          ) as BuiltList<OrganizeFailure>?;
+          if (valueDes == null) continue;
           result.failures.replace(valueDes);
           break;
         default:
@@ -159,4 +160,5 @@ class _$OrganizeReportSerializer implements PrimitiveSerializer<OrganizeReport> 
     return result.build();
   }
 }
+
 

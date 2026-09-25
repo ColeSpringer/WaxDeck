@@ -234,99 +234,113 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
         case r'timezone':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.timezone = valueDes;
           break;
         case r'locale':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.locale = valueDes;
           break;
         case r'theme':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(PrefsThemeEnum),
-          ) as PrefsThemeEnum;
+            specifiedType: const FullType.nullable(PrefsThemeEnum),
+          ) as PrefsThemeEnum?;
+          if (valueDes == null) continue;
           result.theme = valueDes;
           break;
         case r'sharedStatsOptOut':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.sharedStatsOptOut = valueDes;
           break;
         case r'radioFavorites':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.radioFavorites.replace(valueDes);
           break;
         case r'radioScrobbleMutedStations':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.radioScrobbleMutedStations.replace(valueDes);
           break;
         case r'pinned':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.pinned.replace(valueDes);
           break;
         case r'crossfadeSeconds':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(double),
-          ) as double;
+            specifiedType: const FullType.nullable(double),
+          ) as double?;
+          if (valueDes == null) continue;
           result.crossfadeSeconds = valueDes;
           break;
         case r'replayGain':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.replayGain = valueDes;
           break;
         case r'browseShowUnknown':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.browseShowUnknown = valueDes;
           break;
         case r'browseSorts':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltMap, [FullType(String), FullType(PrefsBrowseSortsEnum)]),
-          ) as BuiltMap<String, PrefsBrowseSortsEnum>;
+            specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType(PrefsBrowseSortsEnum)]),
+          ) as BuiltMap<String, PrefsBrowseSortsEnum>?;
+          if (valueDes == null) continue;
           result.browseSorts.replace(valueDes);
           break;
         case r'autoplay':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.autoplay = valueDes;
           break;
         case r'radioScrobbleOptOut':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.radioScrobbleOptOut = valueDes;
           break;
         case r'identifyOptOut':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.identifyOptOut = valueDes;
           break;
         default:
@@ -358,21 +372,18 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
   }
 }
 
+
+/// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
 class PrefsThemeEnum extends EnumClass {
 
-  /// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
   @BuiltValueEnumConst(wireName: r'system')
   static const PrefsThemeEnum system = _$prefsThemeEnum_system;
-  /// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
   @BuiltValueEnumConst(wireName: r'dark')
   static const PrefsThemeEnum dark = _$prefsThemeEnum_dark;
-  /// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
   @BuiltValueEnumConst(wireName: r'light')
   static const PrefsThemeEnum light = _$prefsThemeEnum_light;
-  /// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
   @BuiltValueEnumConst(wireName: r'oled')
   static const PrefsThemeEnum oled = _$prefsThemeEnum_oled;
-  /// Preferred app theme. Deprecated: a display theme describes the screen in front of the listener rather than the account, so the first-party clients store it per device and no longer write this. They read it once, on a device that has none of its own, so that a choice made before the move is not silently reset. Kept on the wire for that read and for third-party clients. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const PrefsThemeEnum unknownDefaultOpenApi = _$prefsThemeEnum_unknownDefaultOpenApi;
 

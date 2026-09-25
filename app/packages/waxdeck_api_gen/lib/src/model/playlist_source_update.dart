@@ -136,29 +136,33 @@ class _$PlaylistSourceUpdateSerializer implements PrimitiveSerializer<PlaylistSo
         case r'url':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.url = valueDes;
           break;
         case r'source':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(PlaylistSourceUpdateSource_Enum),
-          ) as PlaylistSourceUpdateSource_Enum;
+            specifiedType: const FullType.nullable(PlaylistSourceUpdateSource_Enum),
+          ) as PlaylistSourceUpdateSource_Enum?;
+          if (valueDes == null) continue;
           result.source_ = valueDes;
           break;
         case r'payload':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.payload = valueDes;
           break;
         case r'refs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(PortableRef)]),
-          ) as BuiltList<PortableRef>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(PortableRef)]),
+          ) as BuiltList<PortableRef>?;
+          if (valueDes == null) continue;
           result.refs.replace(valueDes);
           break;
         case r'mode':
@@ -171,8 +175,9 @@ class _$PlaylistSourceUpdateSerializer implements PrimitiveSerializer<PlaylistSo
         case r'intervalHours':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.intervalHours = valueDes;
           break;
         default:
@@ -204,27 +209,22 @@ class _$PlaylistSourceUpdateSerializer implements PrimitiveSerializer<PlaylistSo
   }
 }
 
+
+/// A matched source's export format, as on the playlist import endpoint: `spotify`, `applemusic`, `ytmusic`, `csv`, `text`, or `portable`. 
 class PlaylistSourceUpdateSource_Enum extends EnumClass {
 
-  /// A matched source's export format, as on the playlist import endpoint: `spotify`, `applemusic`, `ytmusic`, `csv`, `text`, or `portable`. 
   @BuiltValueEnumConst(wireName: r'spotify')
   static const PlaylistSourceUpdateSource_Enum spotify = _$playlistSourceUpdateSourceEnum_spotify;
-  /// A matched source's export format, as on the playlist import endpoint: `spotify`, `applemusic`, `ytmusic`, `csv`, `text`, or `portable`. 
   @BuiltValueEnumConst(wireName: r'applemusic')
   static const PlaylistSourceUpdateSource_Enum applemusic = _$playlistSourceUpdateSourceEnum_applemusic;
-  /// A matched source's export format, as on the playlist import endpoint: `spotify`, `applemusic`, `ytmusic`, `csv`, `text`, or `portable`. 
   @BuiltValueEnumConst(wireName: r'ytmusic')
   static const PlaylistSourceUpdateSource_Enum ytmusic = _$playlistSourceUpdateSourceEnum_ytmusic;
-  /// A matched source's export format, as on the playlist import endpoint: `spotify`, `applemusic`, `ytmusic`, `csv`, `text`, or `portable`. 
   @BuiltValueEnumConst(wireName: r'csv')
   static const PlaylistSourceUpdateSource_Enum csv = _$playlistSourceUpdateSourceEnum_csv;
-  /// A matched source's export format, as on the playlist import endpoint: `spotify`, `applemusic`, `ytmusic`, `csv`, `text`, or `portable`. 
   @BuiltValueEnumConst(wireName: r'text')
   static const PlaylistSourceUpdateSource_Enum text = _$playlistSourceUpdateSourceEnum_text;
-  /// A matched source's export format, as on the playlist import endpoint: `spotify`, `applemusic`, `ytmusic`, `csv`, `text`, or `portable`. 
   @BuiltValueEnumConst(wireName: r'portable')
   static const PlaylistSourceUpdateSource_Enum portable = _$playlistSourceUpdateSourceEnum_portable;
-  /// A matched source's export format, as on the playlist import endpoint: `spotify`, `applemusic`, `ytmusic`, `csv`, `text`, or `portable`. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const PlaylistSourceUpdateSource_Enum unknownDefaultOpenApi = _$playlistSourceUpdateSourceEnum_unknownDefaultOpenApi;
 
@@ -236,18 +236,15 @@ class PlaylistSourceUpdateSource_Enum extends EnumClass {
   static PlaylistSourceUpdateSource_Enum valueOf(String name) => _$playlistSourceUpdateSourceEnumValueOf(name);
 }
 
+/// How a sync reconciles: `append`, `mirror`, or `mirror-trash`. Selecting `mirror-trash` needs the delete right (administrators implicitly), and a matched source takes `append` or `mirror` only. 
 class PlaylistSourceUpdateModeEnum extends EnumClass {
 
-  /// How a sync reconciles: `append`, `mirror`, or `mirror-trash`. Selecting `mirror-trash` needs the delete right (administrators implicitly), and a matched source takes `append` or `mirror` only. 
   @BuiltValueEnumConst(wireName: r'append')
   static const PlaylistSourceUpdateModeEnum append = _$playlistSourceUpdateModeEnum_append;
-  /// How a sync reconciles: `append`, `mirror`, or `mirror-trash`. Selecting `mirror-trash` needs the delete right (administrators implicitly), and a matched source takes `append` or `mirror` only. 
   @BuiltValueEnumConst(wireName: r'mirror')
   static const PlaylistSourceUpdateModeEnum mirror = _$playlistSourceUpdateModeEnum_mirror;
-  /// How a sync reconciles: `append`, `mirror`, or `mirror-trash`. Selecting `mirror-trash` needs the delete right (administrators implicitly), and a matched source takes `append` or `mirror` only. 
   @BuiltValueEnumConst(wireName: r'mirror-trash')
   static const PlaylistSourceUpdateModeEnum mirrorTrash = _$playlistSourceUpdateModeEnum_mirrorTrash;
-  /// How a sync reconciles: `append`, `mirror`, or `mirror-trash`. Selecting `mirror-trash` needs the delete right (administrators implicitly), and a matched source takes `append` or `mirror` only. 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const PlaylistSourceUpdateModeEnum unknownDefaultOpenApi = _$playlistSourceUpdateModeEnum_unknownDefaultOpenApi;
 

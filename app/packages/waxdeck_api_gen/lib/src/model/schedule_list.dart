@@ -107,3 +107,4 @@ class _$ScheduleListSerializer implements PrimitiveSerializer<ScheduleList> {
   }
 }
 
+

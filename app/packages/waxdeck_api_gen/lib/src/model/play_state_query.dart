@@ -106,3 +106,4 @@ class _$PlayStateQuerySerializer implements PrimitiveSerializer<PlayStateQuery> 
   }
 }
 
+

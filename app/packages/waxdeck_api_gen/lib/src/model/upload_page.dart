@@ -105,15 +105,17 @@ class _$UploadPageSerializer implements PrimitiveSerializer<UploadPage> {
         case r'nextCursor':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.nextCursor = valueDes;
           break;
         case r'quota':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(UploadQuota),
-          ) as UploadQuota;
+            specifiedType: const FullType.nullable(UploadQuota),
+          ) as UploadQuota?;
+          if (valueDes == null) continue;
           result.quota.replace(valueDes);
           break;
         default:
@@ -144,4 +146,5 @@ class _$UploadPageSerializer implements PrimitiveSerializer<UploadPage> {
     return result.build();
   }
 }
+
 

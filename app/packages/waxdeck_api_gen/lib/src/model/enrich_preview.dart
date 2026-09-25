@@ -103,8 +103,9 @@ class _$EnrichPreviewSerializer implements PrimitiveSerializer<EnrichPreview> {
         case r'cover':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(EnrichCoverProposal),
-          ) as EnrichCoverProposal;
+            specifiedType: const FullType.nullable(EnrichCoverProposal),
+          ) as EnrichCoverProposal?;
+          if (valueDes == null) continue;
           result.cover.replace(valueDes);
           break;
         case r'skipped':
@@ -142,4 +143,5 @@ class _$EnrichPreviewSerializer implements PrimitiveSerializer<EnrichPreview> {
     return result.build();
   }
 }
+
 

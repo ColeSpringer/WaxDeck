@@ -120,15 +120,17 @@ class _$EnrichCoverProposalSerializer implements PrimitiveSerializer<EnrichCover
         case r'format':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.format = valueDes;
           break;
         case r'sourceUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.sourceUrl = valueDes;
           break;
         default:
@@ -159,4 +161,5 @@ class _$EnrichCoverProposalSerializer implements PrimitiveSerializer<EnrichCover
     return result.build();
   }
 }
+
 

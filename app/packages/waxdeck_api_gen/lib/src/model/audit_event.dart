@@ -173,15 +173,17 @@ class _$AuditEventSerializer implements PrimitiveSerializer<AuditEvent> {
         case r'actorId':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.actorId = valueDes;
           break;
         case r'actorName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.actorName = valueDes;
           break;
         case r'action':
@@ -194,29 +196,33 @@ class _$AuditEventSerializer implements PrimitiveSerializer<AuditEvent> {
         case r'targetKind':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.targetKind = valueDes;
           break;
         case r'targetPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.targetPid = valueDes;
           break;
         case r'targetName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.targetName = valueDes;
           break;
         case r'detail':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
-          ) as BuiltMap<String, JsonObject?>;
+            specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
+          ) as BuiltMap<String, JsonObject?>?;
+          if (valueDes == null) continue;
           result.detail.replace(valueDes);
           break;
         case r'createdAt':
@@ -254,4 +260,5 @@ class _$AuditEventSerializer implements PrimitiveSerializer<AuditEvent> {
     return result.build();
   }
 }
+
 

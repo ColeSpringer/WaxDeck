@@ -127,6 +127,7 @@ class _$UserSerializer implements PrimitiveSerializer<User> {
   }
 }
 
+
 /// a concrete implementation of [User], since [User] is not instantiable
 @BuiltValue(instantiable: true)
 abstract class $User implements User, Built<$User, $UserBuilder> {
@@ -186,8 +187,9 @@ class _$$UserSerializer implements PrimitiveSerializer<$User> {
         case r'displayName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.displayName = valueDes;
           break;
         case r'roles':
@@ -207,15 +209,17 @@ class _$$UserSerializer implements PrimitiveSerializer<$User> {
         case r'managePodcasts':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.managePodcasts = valueDes;
           break;
         case r'delete':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.delete = valueDes;
           break;
         default:

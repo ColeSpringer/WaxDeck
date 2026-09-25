@@ -105,3 +105,4 @@ class _$RefreshResultSerializer implements PrimitiveSerializer<RefreshResult> {
   }
 }
 
+

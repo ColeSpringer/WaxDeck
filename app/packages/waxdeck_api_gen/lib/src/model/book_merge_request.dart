@@ -88,15 +88,17 @@ class _$BookMergeRequestSerializer implements PrimitiveSerializer<BookMergeReque
         case r'titles':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.titles.replace(valueDes);
           break;
         case r'keepOriginals':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.keepOriginals = valueDes;
           break;
         default:
@@ -127,4 +129,5 @@ class _$BookMergeRequestSerializer implements PrimitiveSerializer<BookMergeReque
     return result.build();
   }
 }
+
 

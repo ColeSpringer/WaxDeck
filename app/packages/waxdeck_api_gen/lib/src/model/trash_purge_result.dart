@@ -105,3 +105,4 @@ class _$TrashPurgeResultSerializer implements PrimitiveSerializer<TrashPurgeResu
   }
 }
 
+

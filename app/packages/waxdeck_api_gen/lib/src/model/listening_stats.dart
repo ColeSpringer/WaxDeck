@@ -229,24 +229,20 @@ class _$ListeningStatsSerializer implements PrimitiveSerializer<ListeningStats> 
   }
 }
 
+
+/// The range that was aggregated.
 class ListeningStatsRangeEnum extends EnumClass {
 
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'7d')
   static const ListeningStatsRangeEnum n7d = _$listeningStatsRangeEnum_n7d;
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'30d')
   static const ListeningStatsRangeEnum n30d = _$listeningStatsRangeEnum_n30d;
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'90d')
   static const ListeningStatsRangeEnum n90d = _$listeningStatsRangeEnum_n90d;
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'365d')
   static const ListeningStatsRangeEnum n365d = _$listeningStatsRangeEnum_n365d;
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'all')
   static const ListeningStatsRangeEnum all = _$listeningStatsRangeEnum_all;
-  /// The range that was aggregated.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const ListeningStatsRangeEnum unknownDefaultOpenApi = _$listeningStatsRangeEnum_unknownDefaultOpenApi;
 
@@ -258,18 +254,15 @@ class ListeningStatsRangeEnum extends EnumClass {
   static ListeningStatsRangeEnum valueOf(String name) => _$listeningStatsRangeEnumValueOf(name);
 }
 
+/// The bucket size used.
 class ListeningStatsBucketEnum extends EnumClass {
 
-  /// The bucket size used.
   @BuiltValueEnumConst(wireName: r'day')
   static const ListeningStatsBucketEnum day = _$listeningStatsBucketEnum_day;
-  /// The bucket size used.
   @BuiltValueEnumConst(wireName: r'week')
   static const ListeningStatsBucketEnum week = _$listeningStatsBucketEnum_week;
-  /// The bucket size used.
   @BuiltValueEnumConst(wireName: r'month')
   static const ListeningStatsBucketEnum month = _$listeningStatsBucketEnum_month;
-  /// The bucket size used.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const ListeningStatsBucketEnum unknownDefaultOpenApi = _$listeningStatsBucketEnum_unknownDefaultOpenApi;
 

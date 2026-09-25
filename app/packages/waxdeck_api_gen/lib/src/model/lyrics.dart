@@ -134,22 +134,25 @@ class _$LyricsSerializer implements PrimitiveSerializer<Lyrics> {
         case r'provider':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.provider = valueDes;
           break;
         case r'synced':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(SyncedLine)]),
-          ) as BuiltList<SyncedLine>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(SyncedLine)]),
+          ) as BuiltList<SyncedLine>?;
+          if (valueDes == null) continue;
           result.synced.replace(valueDes);
           break;
         case r'unsynced':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.unsynced = valueDes;
           break;
         default:
@@ -180,4 +183,5 @@ class _$LyricsSerializer implements PrimitiveSerializer<Lyrics> {
     return result.build();
   }
 }
+
 

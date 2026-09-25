@@ -128,29 +128,33 @@ class _$WaveformSerializer implements PrimitiveSerializer<Waveform> {
         case r'partIndex':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.partIndex = valueDes;
           break;
         case r'peaks':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(int)]),
-          ) as BuiltList<int>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(int)]),
+          ) as BuiltList<int>?;
+          if (valueDes == null) continue;
           result.peaks.replace(valueDes);
           break;
         case r'resolution':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.resolution = valueDes;
           break;
         case r'essenceHash':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.essenceHash = valueDes;
           break;
         default:
@@ -181,4 +185,5 @@ class _$WaveformSerializer implements PrimitiveSerializer<Waveform> {
     return result.build();
   }
 }
+
 

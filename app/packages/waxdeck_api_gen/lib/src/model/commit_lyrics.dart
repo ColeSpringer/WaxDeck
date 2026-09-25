@@ -86,15 +86,17 @@ class _$CommitLyricsSerializer implements PrimitiveSerializer<CommitLyrics> {
         case r'lrc':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.lrc = valueDes;
           break;
         case r'plain':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.plain = valueDes;
           break;
         default:
@@ -125,4 +127,5 @@ class _$CommitLyricsSerializer implements PrimitiveSerializer<CommitLyrics> {
     return result.build();
   }
 }
+
 

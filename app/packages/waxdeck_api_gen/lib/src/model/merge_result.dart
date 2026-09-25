@@ -122,3 +122,4 @@ class _$MergeResultSerializer implements PrimitiveSerializer<MergeResult> {
   }
 }
 
+

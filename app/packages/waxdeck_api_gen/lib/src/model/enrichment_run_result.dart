@@ -105,3 +105,4 @@ class _$EnrichmentRunResultSerializer implements PrimitiveSerializer<EnrichmentR
   }
 }
 
+

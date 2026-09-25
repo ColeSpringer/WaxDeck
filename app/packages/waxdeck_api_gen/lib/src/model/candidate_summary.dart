@@ -135,8 +135,9 @@ class _$CandidateSummarySerializer implements PrimitiveSerializer<CandidateSumma
         case r'year':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.year = valueDes;
           break;
         case r'similarityPct':
@@ -174,4 +175,5 @@ class _$CandidateSummarySerializer implements PrimitiveSerializer<CandidateSumma
     return result.build();
   }
 }
+
 

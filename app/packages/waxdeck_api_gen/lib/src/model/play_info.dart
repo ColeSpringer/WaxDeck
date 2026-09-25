@@ -248,50 +248,57 @@ class _$PlayInfoSerializer implements PrimitiveSerializer<PlayInfo> {
         case r'partIndex':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.partIndex = valueDes;
           break;
         case r'partCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.partCount = valueDes;
           break;
         case r'partStartMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.partStartMs = valueDes;
           break;
         case r'voiceBoost':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.voiceBoost = valueDes;
           break;
         case r'appliedBitrateKbps':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.appliedBitrateKbps = valueDes;
           break;
         case r'spanStartMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.spanStartMs = valueDes;
           break;
         case r'spanEndMs':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.spanEndMs = valueDes;
           break;
         default:
@@ -322,4 +329,5 @@ class _$PlayInfoSerializer implements PrimitiveSerializer<PlayInfo> {
     return result.build();
   }
 }
+
 

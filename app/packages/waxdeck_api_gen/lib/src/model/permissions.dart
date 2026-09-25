@@ -185,22 +185,25 @@ class _$PermissionsSerializer implements PrimitiveSerializer<Permissions> {
         case r'maxTranscodeKbps':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.maxTranscodeKbps = valueDes;
           break;
         case r'tagAllow':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(TagRule)]),
-          ) as BuiltList<TagRule>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(TagRule)]),
+          ) as BuiltList<TagRule>?;
+          if (valueDes == null) continue;
           result.tagAllow.replace(valueDes);
           break;
         case r'tagDeny':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(TagRule)]),
-          ) as BuiltList<TagRule>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(TagRule)]),
+          ) as BuiltList<TagRule>?;
+          if (valueDes == null) continue;
           result.tagDeny.replace(valueDes);
           break;
         default:
@@ -231,4 +234,5 @@ class _$PermissionsSerializer implements PrimitiveSerializer<Permissions> {
     return result.build();
   }
 }
+
 

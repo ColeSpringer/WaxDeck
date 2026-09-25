@@ -153,3 +153,4 @@ class _$EnrichmentCoverageSerializer implements PrimitiveSerializer<EnrichmentCo
   }
 }
 
+

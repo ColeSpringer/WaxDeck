@@ -36,7 +36,7 @@ abstract class DeleteItemsRequest implements Built<DeleteItemsRequest, DeleteIte
 
   @BuiltValueHook(initializeBuilder: true)
   static void _defaults(DeleteItemsRequestBuilder b) => b
-      ..mode = const DeleteItemsRequestModeEnum._('trash')
+      ..mode = DeleteItemsRequestModeEnum.valueOf('trash')
       ..dryRun = false;
 
   @BuiltValueSerializer(custom: true)
@@ -107,15 +107,17 @@ class _$DeleteItemsRequestSerializer implements PrimitiveSerializer<DeleteItemsR
         case r'mode':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DeleteItemsRequestModeEnum),
-          ) as DeleteItemsRequestModeEnum;
+            specifiedType: const FullType.nullable(DeleteItemsRequestModeEnum),
+          ) as DeleteItemsRequestModeEnum?;
+          if (valueDes == null) continue;
           result.mode = valueDes;
           break;
         case r'dryRun':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.dryRun = valueDes;
           break;
         default:
@@ -147,15 +149,14 @@ class _$DeleteItemsRequestSerializer implements PrimitiveSerializer<DeleteItemsR
   }
 }
 
+
+/// `trash` is reversible from the trash surface; `permanent` bypasses it (administrators only). 
 class DeleteItemsRequestModeEnum extends EnumClass {
 
-  /// `trash` is reversible from the trash surface; `permanent` bypasses it (administrators only). 
   @BuiltValueEnumConst(wireName: r'trash')
   static const DeleteItemsRequestModeEnum trash = _$deleteItemsRequestModeEnum_trash;
-  /// `trash` is reversible from the trash surface; `permanent` bypasses it (administrators only). 
   @BuiltValueEnumConst(wireName: r'permanent')
   static const DeleteItemsRequestModeEnum permanent = _$deleteItemsRequestModeEnum_permanent;
-  /// `trash` is reversible from the trash surface; `permanent` bypasses it (administrators only). 
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const DeleteItemsRequestModeEnum unknownDefaultOpenApi = _$deleteItemsRequestModeEnum_unknownDefaultOpenApi;
 

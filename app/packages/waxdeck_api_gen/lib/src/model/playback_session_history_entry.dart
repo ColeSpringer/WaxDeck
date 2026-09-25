@@ -194,8 +194,9 @@ class _$PlaybackSessionHistoryEntrySerializer implements PrimitiveSerializer<Pla
         case r'endpointName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.endpointName = valueDes;
           break;
         case r'authority':
@@ -236,15 +237,17 @@ class _$PlaybackSessionHistoryEntrySerializer implements PrimitiveSerializer<Pla
         case r'repeat':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.repeat = valueDes;
           break;
         case r'shuffle':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.shuffle = valueDes;
           break;
         case r'entries':
@@ -282,4 +285,5 @@ class _$PlaybackSessionHistoryEntrySerializer implements PrimitiveSerializer<Pla
     return result.build();
   }
 }
+
 

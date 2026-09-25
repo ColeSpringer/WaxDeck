@@ -176,15 +176,17 @@ class _$BackupSerializer implements PrimitiveSerializer<Backup> {
         case r'sizeBytes':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.sizeBytes = valueDes;
           break;
         case r'error':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.error = valueDes;
           break;
         case r'createdAt':
@@ -197,8 +199,9 @@ class _$BackupSerializer implements PrimitiveSerializer<Backup> {
         case r'finishedAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.finishedAt = valueDes;
           break;
         default:
@@ -229,4 +232,5 @@ class _$BackupSerializer implements PrimitiveSerializer<Backup> {
     return result.build();
   }
 }
+
 

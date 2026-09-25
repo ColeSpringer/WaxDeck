@@ -133,22 +133,25 @@ class _$PlaylistCreateSerializer implements PrimitiveSerializer<PlaylistCreate> 
         case r'visibility':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.visibility = valueDes;
           break;
         case r'rule':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(SmartRule),
-          ) as SmartRule;
+            specifiedType: const FullType.nullable(SmartRule),
+          ) as SmartRule?;
+          if (valueDes == null) continue;
           result.rule.replace(valueDes);
           break;
         case r'itemPids':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.itemPids.replace(valueDes);
           break;
         default:
@@ -179,4 +182,5 @@ class _$PlaylistCreateSerializer implements PrimitiveSerializer<PlaylistCreate> 
     return result.build();
   }
 }
+
 

@@ -4905,7 +4905,16 @@ class $$MirrorItemsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$MirrorItemsTable, MirrorItem>(table),
+                  BaseReferences<
+                    _$MirrorDatabase,
+                    $MirrorItemsTable,
+                    MirrorItem
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -5191,7 +5200,16 @@ class $$MirrorPlayStatesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$MirrorPlayStatesTable, MirrorPlayState>(table),
+                  BaseReferences<
+                    _$MirrorDatabase,
+                    $MirrorPlayStatesTable,
+                    MirrorPlayState
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -5355,7 +5373,16 @@ class $$SyncCursorsTableTableManager
                 serverSince: serverSince,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$SyncCursorsTable, SyncCursor>(table),
+                  BaseReferences<
+                    _$MirrorDatabase,
+                    $SyncCursorsTable,
+                    SyncCursor
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -5597,7 +5624,16 @@ class $$OutboxMutationsTableTableManager
                 recordedAt: recordedAt,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$OutboxMutationsTable, OutboxMutation>(table),
+                  BaseReferences<
+                    _$MirrorDatabase,
+                    $OutboxMutationsTable,
+                    OutboxMutation
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -5837,7 +5873,16 @@ class $$OutboxListensTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$OutboxListensTable, OutboxListen>(table),
+                  BaseReferences<
+                    _$MirrorDatabase,
+                    $OutboxListensTable,
+                    OutboxListen
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6163,7 +6208,16 @@ class $$DownloadRecordsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$DownloadRecordsTable, DownloadRecord>(table),
+                  BaseReferences<
+                    _$MirrorDatabase,
+                    $DownloadRecordsTable,
+                    DownloadRecord
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6346,7 +6400,16 @@ class $$QueueEntriesTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$QueueEntriesTable, QueueEntry>(table),
+                  BaseReferences<
+                    _$MirrorDatabase,
+                    $QueueEntriesTable,
+                    QueueEntry
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6666,7 +6729,16 @@ class $$QueueMetaTableTableManager
                 sourceCursor: sourceCursor,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$QueueMetaTable, QueueMetaData>(table),
+                  BaseReferences<
+                    _$MirrorDatabase,
+                    $QueueMetaTable,
+                    QueueMetaData
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -6904,7 +6976,16 @@ class $$ArtworkPinsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$ArtworkPinsTable, ArtworkPin>(table),
+                  BaseReferences<
+                    _$MirrorDatabase,
+                    $ArtworkPinsTable,
+                    ArtworkPin
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),
@@ -7050,7 +7131,16 @@ class $$ClientSettingsTableTableManager
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
-              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .map(
+                (e) => (
+                  e.readTable<$ClientSettingsTable, ClientSetting>(table),
+                  BaseReferences<
+                    _$MirrorDatabase,
+                    $ClientSettingsTable,
+                    ClientSetting
+                  >(db, table, e),
+                ),
+              )
               .toList(),
           prefetchHooksCallback: null,
         ),

@@ -22,6 +22,8 @@ Every entry carries a gate tag saying what actually blocks it:
 - `[roadmap]` deliberately rides a named later slice; listed here
   only because the cut happened mid-slice and would otherwise read
   as forgotten.
+- `[third-party]` needs a fix in a dependency outside the Wax repos;
+  the entry names the package and what WaxDeck does meanwhile.
 
 Most of this list is `[in-repo]` by design: the working rule is that
 a slice ships when its acceptance holds, and polish residuals get
@@ -30,6 +32,25 @@ here waits on upstream.
 
 ## Playback and apps
 
+
+- `[third-party]` **The Linux tray icon does not come back when the
+  panel restarts.** cnativeapi (under tray_manager 0.6+) registers the
+  StatusNotifierItem with the watcher once, at creation, and never
+  watches the watcher's name; restart waybar, xfce4-panel or kded, or
+  start a bar after the app, and the icon is gone until the app
+  restarts. The appindicator library behind tray_manager 0.5 re-registered
+  on `NameOwnerChanged`. Wanted from cnativeapi: watch the two watcher
+  names and re-register when one appears. Meanwhile: none; the app is
+  reachable from its window and the tray is a convenience.
+
+- `[third-party]` **Installing the Linux tray icon can stall the UI for
+  up to two seconds per watcher name.** cnativeapi registers with
+  `g_dbus_connection_call_sync` and a 2000 ms timeout, tried for the
+  KDE and then the Canonical watcher name, on the thread Flutter's UI
+  runs on. A watcher that is present but slow to answer freezes the app
+  right after sign-in. Wanted from cnativeapi: the asynchronous call, or
+  registration off the UI thread. Meanwhile: none; a missing watcher
+  answers at once and a slow one is rare.
 
 - `[in-repo]` **The engine's load deadline covers `load` and nothing
   else.** `JustAudioEngine.load` now abandons a load mpv never finishes
@@ -462,6 +483,26 @@ here waits on upstream.
   another language; until then it is a table nobody consults.
 
 ## Infrastructure
+
+- `[in-repo]` **background_downloader stays on 9.5 until the wifi-only
+  hold is the app's.** From 9.6.1 a task's `requiresWiFi` means the
+  Wi-Fi transport itself on Android 9 and later, where 9.5 meant
+  "unmetered", so with the download-on-wifi-only default an Ethernet
+  device would never download; 9.6 also asks NetworkManager about
+  connectivity on desktop, which a Linux without one answers with
+  D-Bus errors at every launch. Adopting 9.6 means passing
+  `requiresWiFi: false` and holding transfers from `ConnectivityPort`,
+  which already reports the transport the setting asks about, plus a
+  desktop path that tolerates a missing NetworkManager.
+
+- `[in-repo]` **go_router stays on 17 until the app builds
+  material_ui's MaterialApp.** From 18.0.0 go_router decides a route's
+  page type by looking for material_ui's `MaterialApp` above it; the
+  app still builds the SDK's through `waxdeck_ui`'s Material export, so
+  under 18 every `builder:` route became a `NoTransitionPage` and the
+  transitions vanished. The pin lifts with the material_ui switch: the
+  export line in `waxdeck_ui`, plus the screens that still import
+  Material directly.
 
 - `[in-repo]` **`_ClampedBox` is a design-system primitive living
   private to a podcast screen.** It is a `SingleChildRenderObjectWidget`

@@ -84,8 +84,9 @@ class _$BookSeriesEntrySerializer implements PrimitiveSerializer<BookSeriesEntry
         case r'sequence':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.sequence = valueDes;
           break;
         case r'book':
@@ -123,4 +124,5 @@ class _$BookSeriesEntrySerializer implements PrimitiveSerializer<BookSeriesEntry
     return result.build();
   }
 }
+
 

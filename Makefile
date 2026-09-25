@@ -204,13 +204,18 @@ drift-check: generate
 		server/internal/notices/third_party_notices.txt app/app/LICENSE
 
 # Breaking-change gate against the base ref. The allow file lists accepted
-# breaks (one oasdiff line each) and is deleted once the base has them.
+# breaks, one per line as `METHOD /path` followed by the change text the
+# way this recipe prints it, backticks included: the match is on that
+# text, so a paraphrase or a requoting allows nothing. --color never is
+# part of that: coloured output quotes values with ' instead, and a line
+# copied from it would allow nothing. The file is deleted once the base
+# has the breaks.
 # --flatten-allof: both generators flatten, so allOf moves are wire no-ops.
 BASE ?= origin/main
 OASDIFF_ALLOW := api/oasdiff-allow.txt
 oasdiff:
 	git show "$(BASE):$(SPEC)" > .oasdiff-base.yaml
-	go run github.com/oasdiff/oasdiff@v1.11.7 breaking .oasdiff-base.yaml $(SPEC) --fail-on WARN --flatten-allof \
+	go run github.com/oasdiff/oasdiff@v1.32.1 breaking .oasdiff-base.yaml $(SPEC) --fail-on WARN --flatten-allof --color never \
 		$(if $(wildcard $(OASDIFF_ALLOW)),--err-ignore $(OASDIFF_ALLOW) --warn-ignore $(OASDIFF_ALLOW)); \
 	status=$$?; rm -f .oasdiff-base.yaml; exit $$status
 

@@ -182,6 +182,7 @@ class _$InviteSerializer implements PrimitiveSerializer<Invite> {
   }
 }
 
+
 /// a concrete implementation of [Invite], since [Invite] is not instantiable
 @BuiltValue(instantiable: true)
 abstract class $Invite implements Invite, Built<$Invite, $InviteBuilder> {
@@ -234,8 +235,9 @@ class _$$InviteSerializer implements PrimitiveSerializer<$Invite> {
         case r'note':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.note = valueDes;
           break;
         case r'roles':
@@ -248,15 +250,17 @@ class _$$InviteSerializer implements PrimitiveSerializer<$Invite> {
         case r'libraryAccess':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(LibraryAccess),
-          ) as LibraryAccess;
+            specifiedType: const FullType.nullable(LibraryAccess),
+          ) as LibraryAccess?;
+          if (valueDes == null) continue;
           result.libraryAccess.replace(valueDes);
           break;
         case r'permissions':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(Permissions),
-          ) as Permissions;
+            specifiedType: const FullType.nullable(Permissions),
+          ) as Permissions?;
+          if (valueDes == null) continue;
           result.permissions.replace(valueDes);
           break;
         case r'uploadEnabled':
@@ -290,8 +294,9 @@ class _$$InviteSerializer implements PrimitiveSerializer<$Invite> {
         case r'expiresAt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(DateTime),
-          ) as DateTime;
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
           result.expiresAt = valueDes;
           break;
         case r'createdAt':
@@ -304,8 +309,9 @@ class _$$InviteSerializer implements PrimitiveSerializer<$Invite> {
         case r'createdBy':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.createdBy = valueDes;
           break;
         default:

@@ -125,36 +125,41 @@ class _$InstantMixRequestSerializer implements PrimitiveSerializer<InstantMixReq
         case r'seedPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.seedPid = valueDes;
           break;
         case r'genre':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.genre = valueDes;
           break;
         case r'adventurousness':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(num),
-          ) as num;
+            specifiedType: const FullType.nullable(num),
+          ) as num?;
+          if (valueDes == null) continue;
           result.adventurousness = valueDes;
           break;
         case r'size':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.size = valueDes;
           break;
         case r'excludePids':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.excludePids.replace(valueDes);
           break;
         default:
@@ -185,4 +190,5 @@ class _$InstantMixRequestSerializer implements PrimitiveSerializer<InstantMixReq
     return result.build();
   }
 }
+
 

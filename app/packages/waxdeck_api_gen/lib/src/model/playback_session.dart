@@ -272,8 +272,9 @@ class _$PlaybackSessionSerializer implements PrimitiveSerializer<PlaybackSession
         case r'endpointName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.endpointName = valueDes;
           break;
         case r'mine':
@@ -286,8 +287,9 @@ class _$PlaybackSessionSerializer implements PrimitiveSerializer<PlaybackSession
         case r'ownerName':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.ownerName = valueDes;
           break;
         case r'authority':
@@ -335,22 +337,25 @@ class _$PlaybackSessionSerializer implements PrimitiveSerializer<PlaybackSession
         case r'volume':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(double),
-          ) as double;
+            specifiedType: const FullType.nullable(double),
+          ) as double?;
+          if (valueDes == null) continue;
           result.volume = valueDes;
           break;
         case r'repeat':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.repeat = valueDes;
           break;
         case r'shuffle':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.shuffle = valueDes;
           break;
         case r'queueVersion':
@@ -363,15 +368,17 @@ class _$PlaybackSessionSerializer implements PrimitiveSerializer<PlaybackSession
         case r'entries':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(PlaybackSessionEntry)]),
-          ) as BuiltList<PlaybackSessionEntry>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(PlaybackSessionEntry)]),
+          ) as BuiltList<PlaybackSessionEntry>?;
+          if (valueDes == null) continue;
           result.entries.replace(valueDes);
           break;
         case r'ended':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.ended = valueDes;
           break;
         case r'updatedAt':
@@ -409,4 +416,5 @@ class _$PlaybackSessionSerializer implements PrimitiveSerializer<PlaybackSession
     return result.build();
   }
 }
+
 

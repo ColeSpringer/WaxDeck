@@ -175,6 +175,7 @@ class _$ItemSummarySerializer implements PrimitiveSerializer<ItemSummary> {
   }
 }
 
+
 /// a concrete implementation of [ItemSummary], since [ItemSummary] is not instantiable
 @BuiltValue(instantiable: true)
 abstract class $ItemSummary implements ItemSummary, Built<$ItemSummary, $ItemSummaryBuilder> {
@@ -241,43 +242,49 @@ class _$$ItemSummarySerializer implements PrimitiveSerializer<$ItemSummary> {
         case r'artist':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artist = valueDes;
           break;
         case r'album':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.album = valueDes;
           break;
         case r'artistPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artistPid = valueDes;
           break;
         case r'albumPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.albumPid = valueDes;
           break;
         case r'trackNumber':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.trackNumber = valueDes;
           break;
         case r'discNumber':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.discNumber = valueDes;
           break;
         case r'durationMs':
@@ -290,8 +297,9 @@ class _$$ItemSummarySerializer implements PrimitiveSerializer<$ItemSummary> {
         case r'artUrl':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.artUrl = valueDes;
           break;
         default:

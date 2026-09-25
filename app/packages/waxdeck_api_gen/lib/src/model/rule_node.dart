@@ -151,43 +151,49 @@ class _$RuleNodeSerializer implements PrimitiveSerializer<RuleNode> {
         case r'nodes':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(RuleNode)]),
-          ) as BuiltList<RuleNode>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(RuleNode)]),
+          ) as BuiltList<RuleNode>?;
+          if (valueDes == null) continue;
           result.nodes.replace(valueDes);
           break;
         case r'node':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(RuleNode),
-          ) as RuleNode;
+            specifiedType: const FullType.nullable(RuleNode),
+          ) as RuleNode?;
+          if (valueDes == null) continue;
           result.node.replace(valueDes);
           break;
         case r'field':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.field = valueDes;
           break;
         case r'op':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.op = valueDes;
           break;
         case r'value':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.value = valueDes;
           break;
         case r'values':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.values.replace(valueDes);
           break;
         default:
@@ -218,4 +224,5 @@ class _$RuleNodeSerializer implements PrimitiveSerializer<RuleNode> {
     return result.build();
   }
 }
+
 

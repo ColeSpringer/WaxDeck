@@ -19,7 +19,7 @@ OUT="$ROOT/app/app/web/vendor"
 
 # The pinned version. Passed as an argument to move it; edited here to
 # keep it moved.
-VERSION="${1:-1.7.2}"
+VERSION="${1:-1.7.3}"
 TARBALL="https://registry.npmjs.org/hls.js/-/hls.js-$VERSION.tgz"
 
 WORK="$(mktemp -d)"

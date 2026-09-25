@@ -9,18 +9,15 @@ import 'package:built_value/serializer.dart';
 
 part 'media_type.g.dart';
 
+/// The three first-class media types.
 class MediaType extends EnumClass {
 
-  /// The three first-class media types.
   @BuiltValueEnumConst(wireName: r'music')
   static const MediaType music = _$music;
-  /// The three first-class media types.
   @BuiltValueEnumConst(wireName: r'podcast')
   static const MediaType podcast = _$podcast;
-  /// The three first-class media types.
   @BuiltValueEnumConst(wireName: r'audiobook')
   static const MediaType audiobook = _$audiobook;
-  /// The three first-class media types.
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const MediaType unknownDefaultOpenApi = _$unknownDefaultOpenApi;
 

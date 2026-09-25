@@ -254,8 +254,9 @@ class _$ReviewCandidateSerializer implements PrimitiveSerializer<ReviewCandidate
         case r'releaseGroupMbid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.releaseGroupMbid = valueDes;
           break;
         case r'title':
@@ -275,50 +276,57 @@ class _$ReviewCandidateSerializer implements PrimitiveSerializer<ReviewCandidate
         case r'year':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.year = valueDes;
           break;
         case r'mediaCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.mediaCount = valueDes;
           break;
         case r'trackCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.trackCount = valueDes;
           break;
         case r'country':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.country = valueDes;
           break;
         case r'label':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.label = valueDes;
           break;
         case r'catalogNumber':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.catalogNumber = valueDes;
           break;
         case r'compilation':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.compilation = valueDes;
           break;
         case r'similarityPct':
@@ -331,8 +339,9 @@ class _$ReviewCandidateSerializer implements PrimitiveSerializer<ReviewCandidate
         case r'components':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(CandidateComponent)]),
-          ) as BuiltList<CandidateComponent>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(CandidateComponent)]),
+          ) as BuiltList<CandidateComponent>?;
+          if (valueDes == null) continue;
           result.components.replace(valueDes);
           break;
         case r'pairings':
@@ -345,15 +354,17 @@ class _$ReviewCandidateSerializer implements PrimitiveSerializer<ReviewCandidate
         case r'missingTitles':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.missingTitles.replace(valueDes);
           break;
         case r'extraTrackIndexes':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(int)]),
-          ) as BuiltList<int>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(int)]),
+          ) as BuiltList<int>?;
+          if (valueDes == null) continue;
           result.extraTrackIndexes.replace(valueDes);
           break;
         default:
@@ -384,4 +395,5 @@ class _$ReviewCandidateSerializer implements PrimitiveSerializer<ReviewCandidate
     return result.build();
   }
 }
+
 

@@ -139,3 +139,4 @@ class _$TrashEmptyResultSerializer implements PrimitiveSerializer<TrashEmptyResu
   }
 }
 
+

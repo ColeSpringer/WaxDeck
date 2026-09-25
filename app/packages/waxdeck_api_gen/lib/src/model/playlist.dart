@@ -198,8 +198,9 @@ class _$PlaylistSerializer implements PrimitiveSerializer<Playlist> {
         case r'previousPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.previousPid = valueDes;
           break;
         case r'name':
@@ -240,22 +241,25 @@ class _$PlaylistSerializer implements PrimitiveSerializer<Playlist> {
         case r'hasArt':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(bool),
-          ) as bool;
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
           result.hasArt = valueDes;
           break;
         case r'itemCount':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(int),
-          ) as int;
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
           result.itemCount = valueDes;
           break;
         case r'rule':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(SmartRule),
-          ) as SmartRule;
+            specifiedType: const FullType.nullable(SmartRule),
+          ) as SmartRule?;
+          if (valueDes == null) continue;
           result.rule.replace(valueDes);
           break;
         case r'createdAt':
@@ -300,4 +304,5 @@ class _$PlaylistSerializer implements PrimitiveSerializer<Playlist> {
     return result.build();
   }
 }
+
 

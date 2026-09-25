@@ -107,3 +107,4 @@ class _$NotificationEventListSerializer implements PrimitiveSerializer<Notificat
   }
 }
 
+

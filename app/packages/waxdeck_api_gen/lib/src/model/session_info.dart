@@ -103,15 +103,17 @@ class _$SessionInfoSerializer implements PrimitiveSerializer<SessionInfo> {
         case r'user':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(User),
-          ) as User;
+            specifiedType: const FullType.nullable(User),
+          ) as User?;
+          if (valueDes == null) continue;
           result.user = valueDes;
           break;
         case r'csrfToken':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.csrfToken = valueDes;
           break;
         default:
@@ -142,4 +144,5 @@ class _$SessionInfoSerializer implements PrimitiveSerializer<SessionInfo> {
     return result.build();
   }
 }
+
 

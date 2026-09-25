@@ -146,8 +146,9 @@ class _$SimilarityWorkItemSerializer implements PrimitiveSerializer<SimilarityWo
         case r'localPath':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.localPath = valueDes;
           break;
         case r'durationMs':
@@ -192,4 +193,5 @@ class _$SimilarityWorkItemSerializer implements PrimitiveSerializer<SimilarityWo
     return result.build();
   }
 }
+
 

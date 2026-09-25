@@ -107,3 +107,4 @@ class _$DiagnosticSummarySerializer implements PrimitiveSerializer<DiagnosticSum
   }
 }
 
+

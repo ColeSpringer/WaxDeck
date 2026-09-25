@@ -330,3 +330,4 @@ class _$YearInReviewSerializer implements PrimitiveSerializer<YearInReview> {
   }
 }
 
+
