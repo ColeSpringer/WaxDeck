@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
+import '../downloads/download_notices.dart';
+import '../downloads/wifi_only_gate.dart';
+import '../l10n/off_tree.dart';
 import '../providers.dart';
-import '../settings/client_prefs.dart';
 import 'test_env/test_env.dart';
 
 /// The local mirror database. Native only: the web SPA stays
@@ -38,16 +42,16 @@ final downloadManagerProvider = Provider<DownloadManagerPort?>((ref) {
   if (db == null) return null;
   final manager = BackgroundDownloadManager(
     db: db,
-    // Both read per call rather than watched: this provider builds the
-    // engine that owns every in-flight transfer, and rebuilding it
-    // because the address or a switch moved would orphan them all -
-    // completions with no ledger to land in. The callbacks are what
-    // make the current server and setting reach the next download
-    // without that.
+    // Read rather than watched: this provider builds the engine that owns
+    // every in-flight transfer, and rebuilding it because the address or
+    // the setting moved would orphan them all.
     repository: () => ref.read(repositoryProvider),
-    wifiOnly: () => ref.read(downloadsOnWifiOnlyProvider),
+    gate: ref.read(transferGateProvider),
+    copy: () => downloadCopy(ref.read(offTreeL10nProvider)),
   );
   ref.onDispose(manager.dispose);
+  // What a previous run left, before anything new starts.
+  unawaited(manager.recover());
   return manager;
 });
 

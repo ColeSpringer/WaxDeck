@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/desktop/desktop_ports.dart';
 import 'package:waxdeck/src/desktop/mini_window.dart';
 import 'package:waxdeck/src/desktop/tray_binder.dart';
+import 'package:waxdeck/src/l10n/off_tree.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
@@ -86,22 +88,23 @@ class _RecordingQueueStore implements QueueStore {
   Future<void> clear() async => saved = null;
 }
 
-/// A tray that installs and remembers nothing, so the binder under test
-/// is the close wiring rather than the icon.
+/// A tray that installs and records what it was drawn as.
 class _FakeTray implements TrayPort {
   TrayActions? actions;
+  final List<TrayFace> faces = <TrayFace>[];
 
   /// Held by a test that wants a tray that will not let go.
   Completer<void>? letGo;
 
   @override
-  Future<bool> install(TrayActions actions) async {
+  Future<bool> install(TrayActions actions, TrayFace face) async {
     this.actions = actions;
+    faces.add(face);
     return true;
   }
 
   @override
-  Future<void> update(TrayFace face) async {}
+  Future<void> update(TrayFace face) async => faces.add(face);
 
   @override
   Future<void> remove() async {}
@@ -255,5 +258,23 @@ void main() {
     await pumpEventQueue();
 
     expect(h.window.calls, contains('unbindClose'));
+  });
+  test('the tray menu follows the app language', () async {
+    final h = _Harness();
+    h.container.read(systemLocalesProvider.notifier).locales = const [
+      Locale('en'),
+    ];
+    await h.start();
+    expect(h.tray.faces.last.labels.quit, 'Quit');
+
+    h.container.read(systemLocalesProvider.notifier).locales = const [
+      Locale('es'),
+    ];
+    await pumpEventQueue();
+
+    final labels = h.tray.faces.last.labels;
+    expect(labels.quit, 'Salir');
+    expect(labels.show, 'Mostrar WaxDeck');
+    expect(labels.pause, 'Pausar');
   });
 }

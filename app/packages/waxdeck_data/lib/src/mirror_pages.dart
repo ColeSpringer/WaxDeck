@@ -53,22 +53,22 @@ Future<ItemPage> mirrorItemsPage(
   );
 }
 
-/// Pids with a completed download, newest first. Feeds the Auto browse
-/// tree's Downloads folder; join back through the mirror for titles.
+/// Pids of items with every file on disk, newest first. Feeds the Auto
+/// browse tree's Downloads folder; join back through the mirror for
+/// titles.
 Future<List<String>> mirrorDownloadedPids(
   MirrorDatabase db, {
   int limit = 200,
 }) async {
-  final rows =
-      await (db.select(db.downloadRecords)
-            ..where((t) => t.state.equals('complete'))
-            ..limit(limit))
-          .get();
-  final seen = <String>{};
-  return [
-    for (final r in rows)
-      if (seen.add(r.pid)) r.pid,
-  ];
+  final t = db.downloadRecords;
+  final whole =
+      t.state.min().equals('complete') & t.state.max().equals('complete');
+  final query = db.selectOnly(t)
+    ..addColumns([t.pid])
+    ..groupBy([t.pid], having: whole)
+    ..orderBy([OrderingTerm.desc(t.rowId.max())])
+    ..limit(limit);
+  return [for (final row in await query.get()) row.read(t.pid)!];
 }
 
 /// Pids with listening progress (a position past the start, not yet

@@ -1,15 +1,19 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/off_tree.dart';
 import 'package:waxdeck/src/player/output_volume.dart';
 import 'package:waxdeck/src/player/sleep_timer.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
+import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'player_host.dart';
 
 const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
@@ -579,6 +583,124 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerCancel));
     await tester.pumpAndSettle();
     expect(session.extra, isNull);
+    await harness.endPlayback(tester);
+  });
+  test('the extend button follows the app language', () async {
+    final container = ProviderContainer(
+      overrides: [localeOverrideProvider.overrideWithValue(null)],
+    );
+    addTearDown(container.dispose);
+    container.read(systemLocalesProvider.notifier).locales = const [
+      Locale('en'),
+    ];
+    final session = _FakeMediaSession();
+    container.read(mediaSessionProvider).bind(session);
+    final timer = container.read(sleepTimerProvider.notifier)..startMinutes(5);
+    addTearDown(timer.cancel);
+    expect(session.extra?.label, 'Extend 10 min');
+
+    container.read(systemLocalesProvider.notifier).locales = const [
+      Locale('es'),
+    ];
+    await pumpEventQueue();
+
+    expect(session.extra?.label, 'Ampliar 10 min');
+  });
+
+  testWidgets('a running timer says what is left in words', (tester) async {
+    const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
+    final repo = FakeRepository(items: [testItem(pid)]);
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+      container: _container(repo, engine, _FakeClock()),
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimer(5)));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsLabel('Sleep timer, 5 min left'), findsOneWidget);
+    expect(find.text('5m'), findsOneWidget);
+    harness.container.read(sleepTimerProvider.notifier).cancel();
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a timer waiting on the chapter says so', (tester) async {
+    final repo = FakeRepository()
+      ..books[bookPid] = testBook(
+        bookPid,
+        durationMs: 3600000,
+        chapters: const [
+          ChapterMark(index: 0, title: 'One', startMs: 0),
+          ChapterMark(index: 1, title: 'Two', startMs: 60000),
+        ],
+      );
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+      item: const ItemSummary(
+        pid: bookPid,
+        mediaType: MediaType.audiobook,
+        title: 'There And Back Again',
+        durationMs: 3600000,
+      ),
+      positionMs: 0,
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsLabel('Sleep timer, until the chapter ends'),
+      findsOneWidget,
+    );
+    expect(find.text('ch'), findsOneWidget);
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+    await tester.pumpAndSettle();
+    expect(find.text('Stops when the chapter ends'), findsOneWidget);
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerCancel));
+    await tester.pumpAndSettle();
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('the badge speaks the reader\'s language', (tester) async {
+    const pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE';
+    final repo = FakeRepository(items: [testItem(pid)]);
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+      container: _container(repo, engine, _FakeClock()),
+      host: (player) => localizedHost(player, locale: const Locale('es')),
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimer(5)));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsLabel('Temporizador de apagado, queda 5 min'),
+      findsOneWidget,
+    );
+    expect(find.text("5'"), findsOneWidget);
+    harness.container.read(sleepTimerProvider.notifier).cancel();
     await harness.endPlayback(tester);
   });
 }

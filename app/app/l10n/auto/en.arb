@@ -1,0 +1,60 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "autoControlBack": "Back 10 seconds",
+  "@autoControlBack": {
+    "description": "Accessible name of the button on the lock screen and the playback notification that jumps back ten seconds."
+  },
+  "autoControlForward": "Forward 30 seconds",
+  "@autoControlForward": {
+    "description": "Accessible name of the button on the lock screen and the playback notification that jumps forward thirty seconds."
+  },
+  "autoControlNext": "Next",
+  "@autoControlNext": {
+    "description": "Accessible name of the lock screen and playback notification button that skips to the next item."
+  },
+  "autoControlPause": "Pause",
+  "@autoControlPause": {
+    "description": "Accessible name of the lock screen and playback notification button that pauses."
+  },
+  "autoControlPlay": "Play",
+  "@autoControlPlay": {
+    "description": "Accessible name of the lock screen and playback notification button that plays."
+  },
+  "autoControlPrevious": "Previous",
+  "@autoControlPrevious": {
+    "description": "Accessible name of the lock screen and playback notification button that goes back to the previous item."
+  },
+  "autoControlStop": "Stop",
+  "@autoControlStop": {
+    "description": "Accessible name of the lock screen and playback notification button that stops playback."
+  },
+  "autoFolderAudiobooks": "Audiobooks",
+  "@autoFolderAudiobooks": {
+    "description": "Folder of audiobooks in the media browser a car or watch shows."
+  },
+  "autoFolderContinue": "Continue",
+  "@autoFolderContinue": {
+    "description": "Folder of what is part way through, in the media browser a car or watch shows."
+  },
+  "autoFolderDownloads": "Downloads",
+  "@autoFolderDownloads": {
+    "description": "Folder of what is on this device, in the media browser a car or watch shows."
+  },
+  "autoFolderMusic": "Music",
+  "@autoFolderMusic": {
+    "description": "Folder of music in the media browser a car or watch shows."
+  },
+  "autoFolderPodcasts": "Podcasts",
+  "@autoFolderPodcasts": {
+    "description": "Folder of podcast episodes in the media browser a car or watch shows."
+  },
+  "autoPlaybackChannel": "WaxDeck playback",
+  "@autoPlaybackChannel": {
+    "description": "Name of the playback notification's channel in the system's notification settings. Set when the app starts."
+  },
+  "autoQueuedItem": "Queued item",
+  "@autoQueuedItem": {
+    "description": "Stands in for the title of a queued item that has not loaded yet, in the up-next list a lock screen or car shows."
+  }
+}

@@ -191,6 +191,29 @@ void main() {
       expect(found('obscureText: true,'), isEmpty);
     });
 
+    test('reads every argument of a positional notification', () {
+      expect(
+        found("TaskNotification('{displayName}', 'Downloading {progress}')"),
+        hasLength(1),
+      );
+      expect(
+        found("const TaskNotification('Downloaded', 'Download failed'),"),
+        hasLength(2),
+      );
+    });
+
+    test('a placeholder the plugin fills is not copy', () {
+      expect(found("title: '{displayName}',"), isEmpty);
+      expect(found("title: '{numFinished} of {numTotal}',"), hasLength(1));
+    });
+
+    test('a channel name is copy', () {
+      expect(
+        found("androidNotificationChannelName: 'WaxDeck playback',"),
+        hasLength(1),
+      );
+    });
+
     test('a debug label is not copy', () {
       expect(found("FocusNode(debugLabel: 'wax-field')"), isEmpty);
       // Only that name. A field labelled for a reader still counts.
@@ -496,10 +519,12 @@ class _CopyRule extends _Rule {
           r'\b(?:Selectable)?Text\(\s*|'
           // The shell messenger takes its sentence positionally.
           r'\.show\(\s*|'
+          // So does a download notification, both its title and its body.
+          r'\bTaskNotification\(\s*|'
           // `debugLabel` names a diagnostic-tree node no reader sees.
           r'\b(?!debugLabel\b)\w*(?:[Ll]abel|[Tt]itle|[Oo]verline|[Cc]aption|[Hh]elp'
           r'|[Hh]int|[Tt]ooltip|[Mm]essage|[Bb]lurb|[Dd]etail'
-          r'|[Tt]agline|[Ss]ubject|[Tt]ext)\s*:\s*|'
+          r'|[Tt]agline|[Ss]ubject|[Tt]ext|[Cc]hannelName)\s*:\s*|'
           r'\b(?:confirmWord|semanticLabel)\s*:\s*',
         ),
         fix:
@@ -513,6 +538,12 @@ class _CopyRule extends _Rule {
   /// Escapes go with them: the `n` in `'\n'` is a newline, not a word,
   /// and a separator counted as copy is a floor on a finished file.
   static final _escape = RegExp(r'\\.');
+
+  /// And the `{displayName}` a plugin fills in, which is no word either.
+  static final _placeholder = RegExp(r'\{\w+\}');
+
+  /// Calls whose every argument is copy, not only the first.
+  static final _positional = RegExp(r'^TaskNotification\(');
   static final _letter = RegExp(r'[A-Za-z]');
 
   /// The design system is in - its components own eighty strings a
@@ -540,7 +571,11 @@ class _CopyRule extends _Rule {
   Iterable<_Hit> find(String code) sync* {
     final seen = <int>{};
     for (final match in pattern.allMatches(code)) {
-      final end = _valueEnd(code, match.end);
+      final end = _valueEnd(
+        code,
+        match.end,
+        acrossArguments: _positional.hasMatch(match[0]!),
+      );
       var i = match.end;
       while (i < end) {
         final read = _readLiteral(code, i);
@@ -555,7 +590,8 @@ class _CopyRule extends _Rule {
         if (matched) continue;
         final words = read.body
             .replaceAll(_interpolation, '')
-            .replaceAll(_escape, '');
+            .replaceAll(_escape, '')
+            .replaceAll(_placeholder, '');
         if (!_letter.hasMatch(words)) continue;
         yield _Hit(read.start, _preview(words));
       }
@@ -565,7 +601,7 @@ class _CopyRule extends _Rule {
   /// Where the value ends: the comma or closing bracket at the depth it
   /// started on. Strings are stepped over whole, so a bracket inside one
   /// cannot close it.
-  static int _valueEnd(String code, int start) {
+  static int _valueEnd(String code, int start, {bool acrossArguments = false}) {
     var depth = 0;
     var i = start;
     while (i < code.length) {
@@ -580,7 +616,7 @@ class _CopyRule extends _Rule {
         if (depth == 0) return i;
         depth--;
       }
-      if (depth == 0 && (c == ',' || c == ';')) return i;
+      if (depth == 0 && !acrossArguments && (c == ',' || c == ';')) return i;
       i++;
     }
     return code.length;

@@ -84,6 +84,12 @@ class ServerAddressController extends Notifier<String?> {
     await store.writeServerAddress(address);
     state = address;
   }
+
+  /// Drops the address, which leaves the connect screen empty.
+  Future<void> forget() async {
+    await ref.read(credentialStoreProvider).clearServerAddress();
+    state = null;
+  }
 }
 
 /// The base URL every transport derives from. Empty on web, where the

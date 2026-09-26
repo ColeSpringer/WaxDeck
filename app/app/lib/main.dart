@@ -8,6 +8,7 @@ import 'src/artwork/artwork_providers.dart';
 import 'src/auth/credential_store.dart';
 import 'src/auth/server_address.dart';
 import 'src/auto/media_session_init.dart';
+import 'src/connectivity/connectivity_linux.dart';
 import 'src/diagnostics/defect_log.dart';
 import 'src/desktop/desktop_ports_io.dart'
     if (dart.library.js_interop) 'src/desktop/desktop_ports_stub.dart';
@@ -30,6 +31,8 @@ Future<void> main() async {
   SemanticsBinding.instance.ensureSemantics();
   // Points just_audio at mpv on desktop; no-op on web and mobile.
   ensureAudioEngineInitialized();
+  // Before the downloader subscribes to connectivity; Linux only.
+  installTolerantConnectivity();
   // Tells the window plugin the window exists, before anything asks it
   // to shrink; no-op off the desktops.
   ensureDesktopWindowInitialized();

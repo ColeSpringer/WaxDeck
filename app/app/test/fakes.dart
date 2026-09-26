@@ -6378,7 +6378,7 @@ class FakeDownloads implements DownloadManagerPort {
   final resumed = <String>[];
   final downloaded = <String>[];
 
-  /// What [pause] answers; false is a transfer the plugin would not pause.
+  /// What [pause] answers; false is an item with nothing left to fetch.
   bool pausable = true;
 
   final _progress = StreamController<DownloadProgress>.broadcast();
@@ -6408,8 +6408,15 @@ class FakeDownloads implements DownloadManagerPort {
   int inFlightRemovals = 0;
   int peakConcurrentRemovals = 0;
 
+  /// Held open, [remove] waits on it; set, [remove] throws it.
+  Completer<void>? removeGate;
+  Object? removeError;
+
   @override
   Future<void> remove(String pid) async {
+    // Only when set: awaiting a null adds a turn other tests' timing sees.
+    if (removeGate case final gate?) await gate.future;
+    if (removeError case final error?) throw error;
     inFlightRemovals++;
     peakConcurrentRemovals = math.max(peakConcurrentRemovals, inFlightRemovals);
     // A suspension point, so an unserialized caller genuinely overlaps
@@ -6445,7 +6452,22 @@ class FakeDownloads implements DownloadManagerPort {
   @override
   Stream<DownloadProgress> get progress => _progress.stream;
 
-  void dispose() => _progress.close();
+  final _rationale = StreamController<void>.broadcast();
+  var notificationRequests = 0;
+
+  /// What the real manager does once a run when Android allows a reason.
+  void explainNotifications() => _rationale.add(null);
+
+  @override
+  Stream<void> get notificationRationale => _rationale.stream;
+
+  @override
+  Future<void> requestNotificationPermission() async => notificationRequests++;
+
+  void dispose() {
+    _progress.close();
+    _rationale.close();
+  }
 }
 
 /// One downloaded file "on disk", for [FakeDownloads].
@@ -6530,8 +6552,10 @@ class FakeArtworkStore extends ArtworkStore {
   @override
   Future<void> evict(String artUrl) async => evicted.add(artUrl);
 
+  var forgotten = 0;
+
   @override
-  Future<void> forgetEverything() async {}
+  Future<void> forgetEverything() async => forgotten++;
 
   @override
   void dispose() {}

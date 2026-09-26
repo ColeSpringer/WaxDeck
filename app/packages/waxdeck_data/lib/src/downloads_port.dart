@@ -101,6 +101,7 @@ class DownloadedItem {
     required this.sizeBytes,
     required this.files,
     required this.complete,
+    this.paused = false,
   });
 
   final String pid;
@@ -114,6 +115,9 @@ class DownloadedItem {
 
   /// Every file is on disk.
   final bool complete;
+
+  /// Held by [DownloadManagerPort.pause], which outlives a restart.
+  final bool paused;
 }
 
 /// The WaxDeck-owned downloads interface (the community plugin stays
@@ -141,17 +145,22 @@ abstract interface class DownloadManagerPort {
   /// a volume has left. Recorded in deferred work.
   Future<List<DownloadedItem>> stored();
 
-  /// Stops an item's transfers, leaving what is on disk alone. The
-  /// records go with them, so a canceled item reads as not downloaded
-  /// rather than as a transfer nothing is driving.
+  /// Stops an item's transfers and drops what of it landed, records
+  /// included: a half-downloaded item is not a downloaded item.
   Future<void> cancel(String pid);
 
-  /// Pauses an item's running transfers, keeping the bytes already
-  /// fetched so [resume] can range past them. Answers whether anything
-  /// was actually paused: a transfer the plugin cannot pause (a server
-  /// with no range support) stays running rather than being canceled
-  /// behind the caller's back.
+  /// Holds an item until [resume]: its running file pauses, keeping the
+  /// bytes fetched so far, and nothing more of it starts. Answers false
+  /// for an item with nothing left to fetch.
   Future<bool> pause(String pid);
 
+  /// Lifts [pause], this run's or an earlier one's.
   Future<void> resume(String pid);
+
+  /// Fires, at most once a run, when the platform lets the app say why it
+  /// wants notifications before it asks a second time.
+  Stream<void> get notificationRationale;
+
+  /// Asks the platform for notifications, once the app has said why.
+  Future<void> requestNotificationPermission();
 }

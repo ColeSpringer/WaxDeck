@@ -4,6 +4,8 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../connect/queue_gateway.dart';
+import '../l10n/l10n.dart';
+import '../l10n/off_tree.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../queue/queue_persistence.dart';
@@ -40,7 +42,12 @@ Future<void> initMediaSession(ProviderContainer container) async {
       // Only where there is a mirror to serve it from, which is what
       // makes the tree work offline. The web build has neither a mirror
       // nor a drawer to appear in.
-      browse: db == null ? null : MirrorBrowseSource(db),
+      browse: db == null
+          ? null
+          : MirrorBrowseSource(
+              db,
+              l10n: () => container.read(offTreeL10nProvider),
+            ),
       onPlay: queue.play,
       // The engine cannot let go of a tuned station. Pause stays its
       // own, being a gap rather than an end.
@@ -59,6 +66,12 @@ Future<void> initMediaSession(ProviderContainer container) async {
       onSkipNext: queue.next,
       onSkipPrevious: queue.previous,
       onPlayFromMediaId: queue.playItem,
+      // The device's language rather than the app's: the channel is
+      // listed in the system's own settings.
+      channelName: l10nFor(
+        container.read(systemLocalesProvider),
+      ).autoPlaybackChannel,
+      controlLabels: mediaControlLabels(container.read(offTreeL10nProvider)),
       onSkipToQueueItem: queue.jumpTo,
       // Passed from here because this is the side of the boundary that
       // can see the design system: waxdeck_player has no waxdeck_ui to
@@ -70,6 +83,10 @@ Future<void> initMediaSession(ProviderContainer container) async {
     // The sleep timer's extension button, the now-playing metadata, and
     // the queue a head unit renders all reach the session through this.
     container.read(mediaSessionProvider).bind(handler);
+    container.listen(
+      offTreeL10nProvider,
+      (_, copy) => handler.controlLabels = mediaControlLabels(copy),
+    );
   } on Object catch (failure) {
     // A media session is an amenity, not a dependency: a Linux session
     // with no D-Bus to talk to, or a platform that refuses the
@@ -80,6 +97,18 @@ Future<void> initMediaSession(ProviderContainer container) async {
     container.read(mediaSessionProvider).unavailable();
   }
 }
+
+/// The transport buttons' words, from the app's copy.
+MediaControlLabels mediaControlLabels(AppLocalizations l10n) =>
+    MediaControlLabels(
+      play: l10n.autoControlPlay,
+      pause: l10n.autoControlPause,
+      stop: l10n.autoControlStop,
+      previous: l10n.autoControlPrevious,
+      next: l10n.autoControlNext,
+      back: l10n.autoControlBack,
+      forward: l10n.autoControlForward,
+    );
 
 /// How long registration may take before the app goes on without it.
 ///

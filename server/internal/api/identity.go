@@ -531,10 +531,7 @@ func (s *Server) PutPrefs(ctx context.Context, req PutPrefsRequestObject) (PutPr
 		in.Pinned = *req.Body.Pinned
 	}
 	if req.Body.BrowseSorts != nil {
-		in.BrowseSorts = make(map[string]string, len(*req.Body.BrowseSorts))
-		for dim, sort := range *req.Body.BrowseSorts {
-			in.BrowseSorts[dim] = string(sort)
-		}
+		in.BrowseSorts = *req.Body.BrowseSorts
 	}
 	stored, err := s.svc.PutPrefs(ctx, uc, in)
 	if err != nil {
@@ -585,11 +582,7 @@ func prefsJSON(p service.Prefs) Prefs {
 	out.BrowseShowUnknown = p.BrowseShowUnknown
 	out.Autoplay = p.Autoplay
 	if len(p.BrowseSorts) > 0 {
-		sorts := make(map[string]PrefsBrowseSorts, len(p.BrowseSorts))
-		for dim, sort := range p.BrowseSorts {
-			sorts[dim] = PrefsBrowseSorts(sort)
-		}
-		out.BrowseSorts = &sorts
+		out.BrowseSorts = &p.BrowseSorts
 	}
 	return out
 }

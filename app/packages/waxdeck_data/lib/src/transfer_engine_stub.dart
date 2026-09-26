@@ -11,6 +11,24 @@ class BackgroundTransferEngine implements TransferEnginePort {
   Stream<TransferEvent> get events => const Stream<TransferEvent>.empty();
 
   @override
+  Future<List<TrackedTransfer>> trackedTransfers() =>
+      throw UnsupportedError('web');
+
+  @override
+  Future<void> recover() => throw UnsupportedError('web');
+
+  @override
+  Future<void> describe(TransferGroup group) => throw UnsupportedError('web');
+
+  @override
+  Future<NotificationPermission> notificationPermission() =>
+      throw UnsupportedError('web');
+
+  @override
+  Future<NotificationPermission> requestNotificationPermission() =>
+      throw UnsupportedError('web');
+
+  @override
   Future<String> start(TransferRequest request) =>
       throw UnsupportedError('web');
 
@@ -18,7 +36,8 @@ class BackgroundTransferEngine implements TransferEnginePort {
   Future<bool> pause(String taskId) => throw UnsupportedError('web');
 
   @override
-  Future<void> resume(String taskId) => throw UnsupportedError('web');
+  Future<void> resume(String taskId, {String? url, DateTime? staleAt}) =>
+      throw UnsupportedError('web');
 
   @override
   Future<void> cancel(List<String> taskIds) => throw UnsupportedError('web');

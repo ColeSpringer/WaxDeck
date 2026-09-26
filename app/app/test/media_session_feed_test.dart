@@ -1,10 +1,19 @@
+import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auto/media_session_feed.dart';
+import 'package:waxdeck/src/l10n/off_tree.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
+import 'package:waxdeck/src/settings/prefs_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
+import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+
+import 'fakes.dart';
 
 /// A session that records everything published to it, which is the whole
 /// of what the OS surfaces would show.
@@ -86,6 +95,7 @@ void main() {
         return artUrl == null ? null : Uri.parse('file:///covers/cover');
       },
       stationLogoUrl: (pid) => '/api/v1/radio/stations/$pid/logo',
+      standInTitle: l10nFor(const [Locale('en')]).autoQueuedItem,
     );
   });
 
@@ -280,5 +290,64 @@ void main() {
 
     expect(session.last!.id, 'tr-2');
     expect(session.last!.artUri, isNull);
+  });
+  test('a new stand-in resends the rows it named', () {
+    final one = _item('tr-1', title: 'One');
+    void play() => update(
+      now: NowPlaying(
+        entry: const QueueEntry(queueId: '0', pid: 'tr-1'),
+        item: one,
+      ),
+      queue: _queue(const <String>['tr-1', 'tr-2']),
+      known: <String, ItemSummary>{'tr-1': one},
+    );
+    play();
+
+    feed.standInTitle = 'Elemento en cola';
+    play();
+
+    expect(session.queues, hasLength(2));
+    expect(session.queues.last.$1.map((r) => r.title), <String>[
+      'One',
+      'Elemento en cola',
+    ]);
+  });
+
+  test('the rows follow the app language', () async {
+    const known = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
+    const unknown = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKB';
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(
+          FakeRepository(items: [testItem(known)]),
+        ),
+        audioEngineProvider.overrideWithValue(FakeEngine()),
+        localeOverrideProvider.overrideWithValue(null),
+      ],
+    );
+    addTearDown(container.dispose);
+    container.read(systemLocalesProvider.notifier).locales = const [
+      Locale('en'),
+    ];
+    final recorded = _RecordingSession();
+    container.read(mediaSessionProvider).bind(recorded);
+    final subscription = container.listen(mediaSessionFeedProvider, (_, _) {});
+    addTearDown(subscription.close);
+    container.read(nowPlayingProvider.notifier);
+    container.read(queueControllerProvider.notifier).playNow([
+      known,
+      unknown,
+    ], source: const QueueSource(kind: QueueSourceKind.album, label: 'Album'));
+    await pumpEventQueue();
+    expect(recorded.queues.last.$1.last.title, 'Queued item');
+
+    container.read(systemLocalesProvider.notifier).locales = const [
+      Locale('es'),
+    ];
+    await pumpEventQueue();
+
+    expect(recorded.queues.last.$1.last.title, 'Elemento en cola');
+    container.read(queueControllerProvider.notifier).clear();
+    await pumpEventQueue();
   });
 }

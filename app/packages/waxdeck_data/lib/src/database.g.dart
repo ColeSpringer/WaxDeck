@@ -2587,8 +2587,8 @@ class DownloadRecord extends DataClass implements Insertable<DownloadRecord> {
   final String localPath;
   final int sizeBytes;
 
-  /// `pending` while the transfer runs, `complete` when the bytes are
-  /// on disk.
+  /// `pending` while the file waits or moves, `paused` while the
+  /// listener holds its item, `complete` when the bytes are on disk.
   final String state;
   final int? spanStartMs;
   final int? spanEndMs;

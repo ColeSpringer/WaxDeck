@@ -11,10 +11,6 @@
       }
     }
   },
-  "downloadsCannotPause": "This transfer cannot be paused; cancel it instead",
-  "@downloadsCannotPause": {
-    "description": "Snackbar when the server behind a transfer does not support resuming it."
-  },
   "downloadsChecking": "Checking downloads against the server",
   "@downloadsChecking": {
     "description": "Snackbar while the re-download sweep runs."
@@ -114,6 +110,58 @@
   "downloadsNoneFinished": "No finished episodes to remove",
   "@downloadsNoneFinished": {
     "description": "Snackbar when the remove-finished sweep found nothing."
+  },
+  "downloadsNoticeAskAllow": "Allow",
+  "@downloadsNoticeAskAllow": {
+    "description": "Button in the dialog about download notifications that goes on to the system's own permission prompt."
+  },
+  "downloadsNoticeAskBody": "A download reports its progress in a notification, and Android asks before an app may post one.",
+  "@downloadsNoticeAskBody": {
+    "description": "Body of the dialog shown before the system asks a second time whether downloads may post notifications."
+  },
+  "downloadsNoticeAskLater": "Not now",
+  "@downloadsNoticeAskLater": {
+    "description": "Button that closes the dialog about download notifications without asking the system."
+  },
+  "downloadsNoticeAskTitle": "Show download progress?",
+  "@downloadsNoticeAskTitle": {
+    "description": "Title of the dialog shown before the system asks a second time whether downloads may post notifications."
+  },
+  "downloadsNoticeDone": "Downloaded",
+  "@downloadsNoticeDone": {
+    "description": "Body of a download's system notification once the item is on this device."
+  },
+  "downloadsNoticeFailed": "Download failed",
+  "@downloadsNoticeFailed": {
+    "description": "Body of a download's system notification when it could not finish."
+  },
+  "downloadsNoticePart": "{title} ({number} of {total})",
+  "@downloadsNoticePart": {
+    "description": "Title of the system notification for one file of an item of several, such as one part of an audiobook.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "The Hobbit"
+      },
+      "number": {
+        "type": "int",
+        "example": "3"
+      },
+      "total": {
+        "type": "int",
+        "example": "20"
+      }
+    }
+  },
+  "downloadsNoticeRunning": "Downloading {progress}",
+  "@downloadsNoticeRunning": {
+    "description": "Body of a download's system notification while it runs. The system fills in {progress} with the percentage done.",
+    "placeholders": {
+      "progress": {
+        "type": "String",
+        "example": "40%"
+      }
+    }
   },
   "downloadsOverflow": "More",
   "@downloadsOverflow": {

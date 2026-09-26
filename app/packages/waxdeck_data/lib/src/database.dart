@@ -111,8 +111,8 @@ class DownloadRecords extends Table {
   TextColumn get localPath => text()();
   IntColumn get sizeBytes => integer()();
 
-  /// `pending` while the transfer runs, `complete` when the bytes are
-  /// on disk.
+  /// `pending` while the file waits or moves, `paused` while the
+  /// listener holds its item, `complete` when the bytes are on disk.
   TextColumn get state => text()();
   IntColumn get spanStartMs => integer().nullable()();
   IntColumn get spanEndMs => integer().nullable()();
@@ -270,6 +270,25 @@ class MirrorDatabase extends _$MirrorDatabase {
     _closed = true;
     return super.close();
   }
+
+  /// Forgets everything this device holds for its server, in one
+  /// transaction. [ClientSettings] stay: they describe the device, which
+  /// sign-out keeps too. Downloaded files are the caller's to unlink first.
+  Future<void> wipe() => transaction(() async {
+    for (final table in <TableInfo<Table, Object?>>[
+      mirrorItems,
+      mirrorPlayStates,
+      syncCursors,
+      outboxMutations,
+      outboxListens,
+      downloadRecords,
+      queueEntries,
+      queueMeta,
+      artworkPins,
+    ]) {
+      await delete(table).go();
+    }
+  });
 
   @override
   int get schemaVersion => 5;

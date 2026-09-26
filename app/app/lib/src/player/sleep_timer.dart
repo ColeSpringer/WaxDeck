@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
 import '../connect/queue_gateway.dart';
+import '../l10n/off_tree.dart';
 import '../providers.dart';
 import 'output_volume.dart';
 
@@ -20,15 +21,10 @@ class SleepTimerState {
 
   bool get active => remaining != null || endOfChapterEndMs != null;
 
-  /// Short label for the player button badge, empty when inactive.
-  String get label {
+  /// Whole minutes left on a countdown, rounded up; null when none runs.
+  int? get minutesLeft {
     final remaining = this.remaining;
-    if (remaining != null) {
-      final minutes = (remaining.inSeconds / 60).ceil();
-      return '${minutes}m';
-    }
-    if (endOfChapterEndMs != null) return 'ch';
-    return '';
+    return remaining == null ? null : (remaining.inSeconds / 60).ceil();
   }
 }
 
@@ -74,6 +70,12 @@ class SleepTimerController extends Notifier<SleepTimerState> {
   @override
   SleepTimerState build() {
     _media = ref.read(mediaSessionProvider);
+    // On the container: nothing watches the timer while the player is
+    // closed, and a provider nobody watches has its own listeners paused.
+    final relabel = ref.container.listen(offTreeL10nProvider, (_, _) {
+      if (state.active) _showExtend(true);
+    });
+    ref.onDispose(relabel.close);
     ref.onDispose(() {
       _tick?.cancel();
       _generation++;
@@ -134,23 +136,15 @@ class SleepTimerController extends Notifier<SleepTimerState> {
     });
   }
 
-  /// Raises or drops the notification's extend button.
-  ///
-  /// Up for the whole time a timer runs rather than only during the
-  /// fade 5.6 names: a listener who wants another ten minutes usually
-  /// knows before the sound starts going, and a control that appears
-  /// only in the last ten seconds is one most of them never see. It
-  /// costs one button on a notification that is already there.
-  /// The label is English until the media session learns a locale: this
-  /// runs in a notifier with no element to read one from, and the button
-  /// it draws is the operating system's rather than the app's. It is
-  /// deferred with the notification-channel names it sits beside.
+  /// Raises or drops the notification's extend button, for the whole
+  /// time a timer runs: a listener who wants more usually knows before
+  /// the fade starts.
   void _showExtend(bool show) {
     _media.showExtra(
       show
           ? MediaSessionExtra(
               action: extendAction,
-              label: 'Extend 10 min',
+              label: ref.read(offTreeL10nProvider).playerExtendTimerShort,
               onPressed: extend,
             )
           : null,

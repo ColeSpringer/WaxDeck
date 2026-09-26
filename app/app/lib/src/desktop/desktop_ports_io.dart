@@ -260,18 +260,17 @@ class PluginMiniWindow with WindowListener implements MiniWindowPort {
 /// [remove] and [dispose], both of which wait for the menu to close.
 class PluginTray implements TrayPort {
   TrayActions? _actions;
-  TrayFace _face = const TrayFace(playing: false);
   _TrayIcon? _live;
   bool _disposed = false;
 
   @override
-  Future<bool> install(TrayActions actions) async {
+  Future<bool> install(TrayActions actions, TrayFace face) async {
     if (!_isDesktop || _disposed) return false;
     _actions = actions;
     try {
       final live = _live ?? _TrayIcon.create(actions: () => _actions);
       _live = live;
-      live.draw(_face);
+      live.draw(face);
       live.show();
       return true;
     } on Object catch (failure) {
@@ -289,7 +288,6 @@ class PluginTray implements TrayPort {
 
   @override
   Future<void> update(TrayFace face) async {
-    _face = face;
     final live = _live;
     if (live == null) return;
     try {
@@ -424,11 +422,6 @@ class _TrayIcon {
 /// The native menu and its rows, all of them built once and edited in
 /// place; see [PluginTray] for why none is ever added or removed.
 ///
-/// English until this port learns a locale: a tray menu is drawn by the
-/// operating system from outside the element tree, so there is no
-/// `BuildContext` to read one through. Deferred with the media-session
-/// strings it belongs beside.
-///
 /// The one thing that waits is [dispose]: never on the turn that asked,
 /// since a row's click runs inside that row's own native callback, and
 /// not while the menu is open, since on Windows that is a modal loop
@@ -450,11 +443,11 @@ class _TrayMenu {
     _title = _row(enabled: false);
     menu.addSeparator();
     _playPause = _row(onClick: () => actions()?.onPlayPause());
-    _previous = _row(label: 'Previous', onClick: () => actions()?.onPrevious());
-    _next = _row(label: 'Next', onClick: () => actions()?.onNext());
+    _previous = _row(onClick: () => actions()?.onPrevious());
+    _next = _row(onClick: () => actions()?.onNext());
     menu.addSeparator();
-    _row(label: 'Show WaxDeck', onClick: () => actions()?.onShow());
-    _row(label: 'Quit', onClick: () => actions()?.onQuit());
+    _show = _row(onClick: () => actions()?.onShow());
+    _quit = _row(onClick: () => actions()?.onQuit());
   }
 
   final TrayActions? Function() actions;
@@ -468,6 +461,8 @@ class _TrayMenu {
   late final MenuItem _playPause;
   late final MenuItem _previous;
   late final MenuItem _next;
+  late final MenuItem _show;
+  late final MenuItem _quit;
   final List<(MenuItem, ListenerId?)> _rows = <(MenuItem, ListenerId?)>[];
 
   TrayFace? _shown;
@@ -482,8 +477,16 @@ class _TrayMenu {
       _relabel(_title, label: face.title ?? _appName);
       edited = true;
     }
-    if (was == null || was.playing != face.playing) {
-      _relabel(_playPause, label: face.playing ? 'Pause' : 'Play');
+    final labels = face.labels;
+    if (was == null || was.labels != labels) {
+      _relabel(_previous, label: labels.previous);
+      _relabel(_next, label: labels.next);
+      _relabel(_show, label: labels.show);
+      _relabel(_quit, label: labels.quit);
+      edited = true;
+    }
+    if (was == null || was.playing != face.playing || was.labels != labels) {
+      _relabel(_playPause, label: face.playing ? labels.pause : labels.play);
       edited = true;
     }
     if (was == null || was.canStep != face.canStep) {
@@ -502,15 +505,9 @@ class _TrayMenu {
     return done.future;
   }
 
-  MenuItem _row({
-    String? label,
-    bool enabled = true,
-    void Function()? onClick,
-  }) {
-    final item = MenuItem.createWithLabelAndType(
-      _escapeLabel(label ?? ''),
-      MenuItemType.normal,
-    );
+  /// A row with no label yet; [show] gives every row its words.
+  MenuItem _row({bool enabled = true, void Function()? onClick}) {
+    final item = MenuItem.createWithLabelAndType('', MenuItemType.normal);
     if (item == null) throw StateError('the platform gave no menu row');
     item.isEnabled = enabled;
     final listener = onClick == null

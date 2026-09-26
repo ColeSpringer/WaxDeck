@@ -115,6 +115,32 @@
   "@authServerConnectTagline": {
     "description": "Under the wordmark on the pre-login server-address screen."
   },
+  "authServerForget": "Forget this server...",
+  "@authServerForget": {
+    "description": "Action on the server-address screen that removes everything this device holds for the stored server. The trailing dots say a confirmation follows."
+  },
+  "authServerForgetBody": "This device drops everything it holds for it: downloaded audio and covers, the offline copy of the library, and the sign-in.",
+  "@authServerForgetBody": {
+    "description": "Body of the dialog confirming that the stored server is to be forgotten, listing what goes."
+  },
+  "authServerForgetConfirm": "Forget",
+  "@authServerForgetConfirm": {
+    "description": "Button that forgets the stored server and everything this device holds for it."
+  },
+  "authServerForgetKeep": "Keep",
+  "@authServerForgetKeep": {
+    "description": "Button that closes the forget-server dialog and keeps everything."
+  },
+  "authServerForgetTitle": "Forget {address}?",
+  "@authServerForgetTitle": {
+    "description": "Title of the dialog confirming that the stored server is to be forgotten.",
+    "placeholders": {
+      "address": {
+        "type": "String",
+        "example": "https://wax.example.com"
+      }
+    }
+  },
   "authServerInvalid": "That does not look like a server address",
   "@authServerInvalid": {
     "description": "Under the connect form when the typed text cannot be an address at all (spaces, credentials, a non-web scheme)."

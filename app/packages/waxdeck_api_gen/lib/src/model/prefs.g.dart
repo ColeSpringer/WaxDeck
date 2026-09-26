@@ -39,37 +39,8 @@ final BuiltSet<PrefsThemeEnum> _$prefsThemeEnumValues =
       _$prefsThemeEnum_unknownDefaultOpenApi,
     ]);
 
-const PrefsBrowseSortsEnum _$prefsBrowseSortsEnum_count =
-    const PrefsBrowseSortsEnum._('count');
-const PrefsBrowseSortsEnum _$prefsBrowseSortsEnum_label =
-    const PrefsBrowseSortsEnum._('label');
-const PrefsBrowseSortsEnum _$prefsBrowseSortsEnum_unknownDefaultOpenApi =
-    const PrefsBrowseSortsEnum._('unknownDefaultOpenApi');
-
-PrefsBrowseSortsEnum _$prefsBrowseSortsEnumValueOf(String name) {
-  switch (name) {
-    case 'count':
-      return _$prefsBrowseSortsEnum_count;
-    case 'label':
-      return _$prefsBrowseSortsEnum_label;
-    case 'unknownDefaultOpenApi':
-      return _$prefsBrowseSortsEnum_unknownDefaultOpenApi;
-    default:
-      return _$prefsBrowseSortsEnum_unknownDefaultOpenApi;
-  }
-}
-
-final BuiltSet<PrefsBrowseSortsEnum> _$prefsBrowseSortsEnumValues =
-    BuiltSet<PrefsBrowseSortsEnum>(const <PrefsBrowseSortsEnum>[
-      _$prefsBrowseSortsEnum_count,
-      _$prefsBrowseSortsEnum_label,
-      _$prefsBrowseSortsEnum_unknownDefaultOpenApi,
-    ]);
-
 Serializer<PrefsThemeEnum> _$prefsThemeEnumSerializer =
     _$PrefsThemeEnumSerializer();
-Serializer<PrefsBrowseSortsEnum> _$prefsBrowseSortsEnumSerializer =
-    _$PrefsBrowseSortsEnumSerializer();
 
 class _$PrefsThemeEnumSerializer
     implements PrimitiveSerializer<PrefsThemeEnum> {
@@ -110,41 +81,6 @@ class _$PrefsThemeEnumSerializer
   );
 }
 
-class _$PrefsBrowseSortsEnumSerializer
-    implements PrimitiveSerializer<PrefsBrowseSortsEnum> {
-  static const Map<String, Object> _toWire = const <String, Object>{
-    'count': 'count',
-    'label': 'label',
-    'unknownDefaultOpenApi': 'unknown_default_open_api',
-  };
-  static const Map<Object, String> _fromWire = const <Object, String>{
-    'count': 'count',
-    'label': 'label',
-    'unknown_default_open_api': 'unknownDefaultOpenApi',
-  };
-
-  @override
-  final Iterable<Type> types = const <Type>[PrefsBrowseSortsEnum];
-  @override
-  final String wireName = 'PrefsBrowseSortsEnum';
-
-  @override
-  Object serialize(
-    Serializers serializers,
-    PrefsBrowseSortsEnum object, {
-    FullType specifiedType = FullType.unspecified,
-  }) => _toWire[object.name] ?? object.name;
-
-  @override
-  PrefsBrowseSortsEnum deserialize(
-    Serializers serializers,
-    Object serialized, {
-    FullType specifiedType = FullType.unspecified,
-  }) => PrefsBrowseSortsEnum.valueOf(
-    _fromWire[serialized] ?? (serialized is String ? serialized : ''),
-  );
-}
-
 class _$Prefs extends Prefs {
   @override
   final String? timezone;
@@ -167,7 +103,7 @@ class _$Prefs extends Prefs {
   @override
   final bool? browseShowUnknown;
   @override
-  final BuiltMap<String, PrefsBrowseSortsEnum>? browseSorts;
+  final BuiltMap<String, String>? browseSorts;
   @override
   final bool? autoplay;
   @override
@@ -314,10 +250,10 @@ class PrefsBuilder implements Builder<Prefs, PrefsBuilder> {
   set browseShowUnknown(bool? browseShowUnknown) =>
       _$this._browseShowUnknown = browseShowUnknown;
 
-  MapBuilder<String, PrefsBrowseSortsEnum>? _browseSorts;
-  MapBuilder<String, PrefsBrowseSortsEnum> get browseSorts =>
-      _$this._browseSorts ??= MapBuilder<String, PrefsBrowseSortsEnum>();
-  set browseSorts(MapBuilder<String, PrefsBrowseSortsEnum>? browseSorts) =>
+  MapBuilder<String, String>? _browseSorts;
+  MapBuilder<String, String> get browseSorts =>
+      _$this._browseSorts ??= MapBuilder<String, String>();
+  set browseSorts(MapBuilder<String, String>? browseSorts) =>
       _$this._browseSorts = browseSorts;
 
   bool? _autoplay;

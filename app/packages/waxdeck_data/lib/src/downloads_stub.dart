@@ -13,7 +13,11 @@ class BackgroundDownloadManager implements DownloadManagerPort {
     required MirrorDatabase db,
     required WaxDeckRepository Function() repository,
     TransferEnginePort? engine,
-    bool Function()? wifiOnly,
+    required DownloadCopy Function() copy,
+    TransferGate gate = const OpenGate(),
+    DateTime Function() clock = DateTime.now,
+    int maxRunning = 3,
+    Timer Function(Duration, void Function()) timer = Timer.new,
   }) {
     throw UnsupportedError('downloads are not supported on the web build');
   }
@@ -46,4 +50,12 @@ class BackgroundDownloadManager implements DownloadManagerPort {
 
   @override
   Stream<DownloadProgress> get progress => const Stream.empty();
+
+  @override
+  Stream<void> get notificationRationale => const Stream<void>.empty();
+
+  @override
+  Future<void> requestNotificationPermission() => throw UnsupportedError('web');
+
+  Future<void> recover() => throw UnsupportedError('web');
 }

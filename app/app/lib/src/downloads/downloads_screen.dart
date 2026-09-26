@@ -283,12 +283,9 @@ class _Transfers extends ConsumerWidget {
   }
 }
 
-/// Pause, and resume once paused.
-///
-/// Its own state because the port answers whether a pause took: a
-/// transfer the plugin will not pause (a server with no range support)
-/// stays running rather than being canceled behind the listener's back,
-/// and the control has to say so rather than flipping to Resume.
+/// Pause, and resume once paused. Its own state so the control turns at
+/// the tap, not at the next reload; it starts from the pause the records
+/// keep across a restart.
 class _PauseButton extends ConsumerStatefulWidget {
   const _PauseButton({required this.entry, super.key});
 
@@ -299,7 +296,14 @@ class _PauseButton extends ConsumerStatefulWidget {
 }
 
 class _PauseButtonState extends ConsumerState<_PauseButton> {
-  var _paused = false;
+  late var _paused = widget.entry.record.paused;
+
+  @override
+  void didUpdateWidget(_PauseButton old) {
+    super.didUpdateWidget(old);
+    final paused = widget.entry.record.paused;
+    if (paused != old.entry.record.paused) _paused = paused;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -320,22 +324,14 @@ class _PauseButtonState extends ConsumerState<_PauseButton> {
 
   Future<void> _toggle(String pid) async {
     final notifier = ref.read(downloadsProvider.notifier);
-    final messenger = ScaffoldMessenger.of(context);
-    final cannotPause = context.l10n.downloadsCannotPause;
     if (_paused) {
       await notifier.resume(pid);
       if (mounted) setState(() => _paused = false);
       return;
     }
-    final paused = await notifier.pause(pid);
-    if (!mounted) return;
-    if (paused) {
-      setState(() => _paused = true);
-    } else {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(cannotPause)));
-    }
+    // False when nothing was left to fetch: the row is about to read as
+    // downloaded.
+    if (await notifier.pause(pid) && mounted) setState(() => _paused = true);
   }
 }
 

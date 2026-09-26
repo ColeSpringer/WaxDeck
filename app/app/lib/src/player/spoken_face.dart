@@ -722,13 +722,14 @@ class _SpokenBottomRegionState extends ConsumerState<SpokenBottomRegion> {
   }
 
   List<_Region> _regions() {
+    final l10n = context.l10n;
     if (_isBook) {
       final book = widget.session.book;
       if (book == null || book.chapters.isEmpty) return const <_Region>[];
       return <_Region>[
         _Region(
           'chapters',
-          'Chapters',
+          l10n.playerRegionChapters,
           (context) => _ChapterList(
             session: widget.session,
             position: widget.position,
@@ -745,7 +746,7 @@ class _SpokenBottomRegionState extends ConsumerState<SpokenBottomRegion> {
       if (episode.chapters.isNotEmpty)
         _Region(
           'chapters',
-          'Chapters',
+          l10n.playerRegionChapters,
           (context) => _ChapterList(
             session: widget.session,
             position: widget.position,
@@ -757,7 +758,7 @@ class _SpokenBottomRegionState extends ConsumerState<SpokenBottomRegion> {
       if (episode.descriptionHtml?.isNotEmpty ?? false)
         _Region(
           'notes',
-          'Notes',
+          l10n.playerRegionNotes,
           (context) => SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(
               WaxSpace.s16,
@@ -774,7 +775,7 @@ class _SpokenBottomRegionState extends ConsumerState<SpokenBottomRegion> {
       if (episode.hasTranscript)
         _Region(
           'transcript',
-          'Transcript',
+          l10n.playerRegionTranscript,
           (context) => _TranscriptRegion(
             session: widget.session,
             position: widget.position,

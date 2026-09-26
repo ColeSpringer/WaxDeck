@@ -138,6 +138,8 @@ export const SemanticsIds = {
   // auth: Sign-in, first-run setup, signup, and the pre-login server-address screen. The names here are frozen vocabulary for the accessibility audit.
   connectServerAddress: 'connect-server-address',
   connectServerError: 'connect-server-error',
+  connectServerForget: 'connect-server-forget',
+  connectServerForgetConfirm: 'connect-server-forget-confirm',
   connectServerOpen: 'connect-server-open',
   connectServerSubmit: 'connect-server-submit',
   loginError: 'login-error',

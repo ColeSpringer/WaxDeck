@@ -31,6 +31,9 @@ sorted, and run `make generate`.
   BuildContext never crosses into a provider - a controller answers a
   code or a token and the widget words it, which is also why a stored
   value is never a translation.
+- What is drawn outside the element tree (the tray menu, Android Auto,
+  the media session, download notifications) reads
+  `offTreeL10nProvider`, which resolves the locale as the tree does.
 - Errors go through `explainError` (the code picks the sentence, an
   unknown code falls back to the server's). A refusal of something the
   user just typed keeps the server's words via `explainRefusal`: it
@@ -41,9 +44,8 @@ sorted, and run `make generate`.
   otherwise), machine-drafted until a native reader removes
   `@@x-machine-translated`.
 - The `hardcoded-copy` ratchet in `test/ui_conventions_test.dart` only
-  goes down. It cannot see copy outside the element tree or in
-  positional arguments, so zero is a claim to check by reading; what it
-  cannot reach is in `docs/deferred-work.md`, and a floor above zero
+  goes down. It reads copy by argument name and a few positional shapes,
+  so zero is a claim to check by reading, and a floor above zero
   carries its reason at the site.
 - e2e and the goldens read English by construction (pinned browser
   locale, blocked-out text), so a translation cannot red them and they

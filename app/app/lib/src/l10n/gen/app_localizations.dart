@@ -3261,6 +3261,36 @@ abstract class AppLocalizations {
   /// **'Connect to your server'**
   String get authServerConnectTagline;
 
+  /// Action on the server-address screen that removes everything this device holds for the stored server. The trailing dots say a confirmation follows.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget this server...'**
+  String get authServerForget;
+
+  /// Body of the dialog confirming that the stored server is to be forgotten, listing what goes.
+  ///
+  /// In en, this message translates to:
+  /// **'This device drops everything it holds for it: downloaded audio and covers, the offline copy of the library, and the sign-in.'**
+  String get authServerForgetBody;
+
+  /// Button that forgets the stored server and everything this device holds for it.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget'**
+  String get authServerForgetConfirm;
+
+  /// Button that closes the forget-server dialog and keeps everything.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep'**
+  String get authServerForgetKeep;
+
+  /// Title of the dialog confirming that the stored server is to be forgotten.
+  ///
+  /// In en, this message translates to:
+  /// **'Forget {address}?'**
+  String authServerForgetTitle(String address);
+
   /// Under the connect form when the typed text cannot be an address at all (spaces, credentials, a non-web scheme).
   ///
   /// In en, this message translates to:
@@ -3302,6 +3332,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Username'**
   String get authUsername;
+
+  /// Accessible name of the button on the lock screen and the playback notification that jumps back ten seconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Back 10 seconds'**
+  String get autoControlBack;
+
+  /// Accessible name of the button on the lock screen and the playback notification that jumps forward thirty seconds.
+  ///
+  /// In en, this message translates to:
+  /// **'Forward 30 seconds'**
+  String get autoControlForward;
+
+  /// Accessible name of the lock screen and playback notification button that skips to the next item.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get autoControlNext;
+
+  /// Accessible name of the lock screen and playback notification button that pauses.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get autoControlPause;
+
+  /// Accessible name of the lock screen and playback notification button that plays.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get autoControlPlay;
+
+  /// Accessible name of the lock screen and playback notification button that goes back to the previous item.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous'**
+  String get autoControlPrevious;
+
+  /// Accessible name of the lock screen and playback notification button that stops playback.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get autoControlStop;
+
+  /// Folder of audiobooks in the media browser a car or watch shows.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobooks'**
+  String get autoFolderAudiobooks;
+
+  /// Folder of what is part way through, in the media browser a car or watch shows.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get autoFolderContinue;
+
+  /// Folder of what is on this device, in the media browser a car or watch shows.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get autoFolderDownloads;
+
+  /// Folder of music in the media browser a car or watch shows.
+  ///
+  /// In en, this message translates to:
+  /// **'Music'**
+  String get autoFolderMusic;
+
+  /// Folder of podcast episodes in the media browser a car or watch shows.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcasts'**
+  String get autoFolderPodcasts;
+
+  /// Name of the playback notification's channel in the system's notification settings. Set when the app starts.
+  ///
+  /// In en, this message translates to:
+  /// **'WaxDeck playback'**
+  String get autoPlaybackChannel;
+
+  /// Stands in for the title of a queued item that has not loaded yet, in the up-next list a lock screen or car shows.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued item'**
+  String get autoQueuedItem;
 
   /// Line under the activity heading on the notifications screen, saying plainly that the list is this session's.
   ///
@@ -4137,6 +4251,42 @@ abstract class AppLocalizations {
   /// **'Defect log'**
   String get defectsTitle;
 
+  /// Tray menu row that skips to the next item.
+  ///
+  /// In en, this message translates to:
+  /// **'Next'**
+  String get desktopTrayNext;
+
+  /// Tray menu row that pauses playback.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get desktopTrayPause;
+
+  /// Tray menu row that resumes playback.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get desktopTrayPlay;
+
+  /// Tray menu row that goes back to the previous item.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous'**
+  String get desktopTrayPrevious;
+
+  /// Tray menu row that closes WaxDeck.
+  ///
+  /// In en, this message translates to:
+  /// **'Quit'**
+  String get desktopTrayQuit;
+
+  /// Tray menu row that brings the WaxDeck window forward.
+  ///
+  /// In en, this message translates to:
+  /// **'Show WaxDeck'**
+  String get desktopTrayShow;
+
   /// Says a cast address was set by the server's operator rather than found.
   ///
   /// In en, this message translates to:
@@ -4515,12 +4665,6 @@ abstract class AppLocalizations {
   /// **'Cancel {title}'**
   String downloadsCancel(String title);
 
-  /// Snackbar when the server behind a transfer does not support resuming it.
-  ///
-  /// In en, this message translates to:
-  /// **'This transfer cannot be paused; cancel it instead'**
-  String get downloadsCannotPause;
-
   /// Snackbar while the re-download sweep runs.
   ///
   /// In en, this message translates to:
@@ -4628,6 +4772,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No finished episodes to remove'**
   String get downloadsNoneFinished;
+
+  /// Button in the dialog about download notifications that goes on to the system's own permission prompt.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get downloadsNoticeAskAllow;
+
+  /// Body of the dialog shown before the system asks a second time whether downloads may post notifications.
+  ///
+  /// In en, this message translates to:
+  /// **'A download reports its progress in a notification, and Android asks before an app may post one.'**
+  String get downloadsNoticeAskBody;
+
+  /// Button that closes the dialog about download notifications without asking the system.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get downloadsNoticeAskLater;
+
+  /// Title of the dialog shown before the system asks a second time whether downloads may post notifications.
+  ///
+  /// In en, this message translates to:
+  /// **'Show download progress?'**
+  String get downloadsNoticeAskTitle;
+
+  /// Body of a download's system notification once the item is on this device.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded'**
+  String get downloadsNoticeDone;
+
+  /// Body of a download's system notification when it could not finish.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed'**
+  String get downloadsNoticeFailed;
+
+  /// Title of the system notification for one file of an item of several, such as one part of an audiobook.
+  ///
+  /// In en, this message translates to:
+  /// **'{title} ({number} of {total})'**
+  String downloadsNoticePart(String title, int number, int total);
+
+  /// Body of a download's system notification while it runs. The system fills in {progress} with the percentage done.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading {progress}'**
+  String downloadsNoticeRunning(String progress);
 
   /// Tooltip of the menu holding the sweeps that act on every download.
   ///
@@ -8067,7 +8259,7 @@ abstract class AppLocalizations {
   /// **'Extend 10 minutes'**
   String get playerExtendTimer;
 
-  /// The same as the sleep timer's extend action, worded short for a message that is already a sentence long. min is the abbreviation for minutes.
+  /// The sleep timer's extend button on the media notification and the lock screen, where the system draws it small. min is the abbreviation for minutes.
   ///
   /// In en, this message translates to:
   /// **'Extend 10 min'**
@@ -8271,6 +8463,24 @@ abstract class AppLocalizations {
   /// **'Could not save that change'**
   String get playerRatingFailed;
 
+  /// Chip showing the chapter list in the panel under a book or episode player.
+  ///
+  /// In en, this message translates to:
+  /// **'Chapters'**
+  String get playerRegionChapters;
+
+  /// Chip showing the episode's show notes in the panel under the player.
+  ///
+  /// In en, this message translates to:
+  /// **'Notes'**
+  String get playerRegionNotes;
+
+  /// Chip showing the episode's transcript in the panel under the player.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcript'**
+  String get playerRegionTranscript;
+
   /// Accessible name of the control that keeps the song a radio station is playing.
   ///
   /// In en, this message translates to:
@@ -8318,6 +8528,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sleep timer'**
   String get playerSleepTimer;
+
+  /// Accessible name of the sleep timer control while it waits for the current chapter to end.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep timer, until the chapter ends'**
+  String get playerSleepTimerChapter;
 
   /// Accessible name of the sleep timer control while one is running. {time} is an already-worded duration.
   ///
@@ -8432,6 +8648,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Support the show'**
   String get playerSupportShow;
+
+  /// Under the extend row in the sleep timer sheet, when the timer is waiting for the chapter to end.
+  ///
+  /// In en, this message translates to:
+  /// **'Stops when the chapter ends'**
+  String get playerTimerAtChapterEnd;
+
+  /// The sleep timer's badge while it waits for the chapter to end. Two or three letters; ch abbreviates chapter.
+  ///
+  /// In en, this message translates to:
+  /// **'ch'**
+  String get playerTimerBadgeChapter;
+
+  /// The sleep timer's minutes left, on the small badge over its button. A few characters at most; m abbreviates minutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes}m'**
+  String playerTimerBadgeMinutes(int minutes);
 
   /// Sleep timer option that stops when the current chapter ends.
   ///

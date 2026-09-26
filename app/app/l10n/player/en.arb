@@ -143,7 +143,7 @@
   },
   "playerExtendTimerShort": "Extend 10 min",
   "@playerExtendTimerShort": {
-    "description": "The same as the sleep timer's extend action, worded short for a message that is already a sentence long. min is the abbreviation for minutes."
+    "description": "The sleep timer's extend button on the media notification and the lock screen, where the system draws it small. min is the abbreviation for minutes."
   },
   "playerFaster": "Faster",
   "@playerFaster": {
@@ -307,6 +307,18 @@
   "@playerRatingFailed": {
     "description": "Message when a star rating did not reach the server. The control has already moved back, so this is what says why."
   },
+  "playerRegionChapters": "Chapters",
+  "@playerRegionChapters": {
+    "description": "Chip showing the chapter list in the panel under a book or episode player."
+  },
+  "playerRegionNotes": "Notes",
+  "@playerRegionNotes": {
+    "description": "Chip showing the episode's show notes in the panel under the player."
+  },
+  "playerRegionTranscript": "Transcript",
+  "@playerRegionTranscript": {
+    "description": "Chip showing the episode's transcript in the panel under the player."
+  },
   "playerSaveSong": "Save this song",
   "@playerSaveSong": {
     "description": "Accessible name of the control that keeps the song a radio station is playing."
@@ -356,6 +368,10 @@
   "playerSleepTimer": "Sleep timer",
   "@playerSleepTimer": {
     "description": "Accessible name of the sleep timer control while no timer is running."
+  },
+  "playerSleepTimerChapter": "Sleep timer, until the chapter ends",
+  "@playerSleepTimerChapter": {
+    "description": "Accessible name of the sleep timer control while it waits for the current chapter to end."
   },
   "playerSleepTimerLeft": "Sleep timer, {time} left",
   "@playerSleepTimerLeft": {
@@ -472,6 +488,24 @@
   "playerSupportShow": "Support the show",
   "@playerSupportShow": {
     "description": "Menu item opening a podcast's own funding page. Only drawn where the feed names one, and the feed's own wording wins when it gives one."
+  },
+  "playerTimerAtChapterEnd": "Stops when the chapter ends",
+  "@playerTimerAtChapterEnd": {
+    "description": "Under the extend row in the sleep timer sheet, when the timer is waiting for the chapter to end."
+  },
+  "playerTimerBadgeChapter": "ch",
+  "@playerTimerBadgeChapter": {
+    "description": "The sleep timer's badge while it waits for the chapter to end. Two or three letters; ch abbreviates chapter."
+  },
+  "playerTimerBadgeMinutes": "{minutes}m",
+  "@playerTimerBadgeMinutes": {
+    "description": "The sleep timer's minutes left, on the small badge over its button. A few characters at most; m abbreviates minutes.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "12"
+      }
+    }
   },
   "playerTimerChapterEnd": "End of chapter",
   "@playerTimerChapterEnd": {

@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/l10n/off_tree.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -52,5 +53,21 @@ void main() {
     // at once, and counting titles would be counting shelves.
     expect(find.bySemanticsIdentifier(SemanticsIds.homeScreen), findsOneWidget);
     expect(find.text('Prancing Pony Blues'), findsWidgets);
+  });
+
+  testWidgets('copy drawn off the tree follows the device language', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_app(FakeRepository()));
+    await tester.pumpAndSettle();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(WaxDeckApp)),
+    );
+
+    tester.platformDispatcher.localesTestValue = const [Locale('es')];
+    addTearDown(tester.platformDispatcher.clearLocalesTestValue);
+    await tester.pumpAndSettle();
+
+    expect(container.read(offTreeL10nProvider).localeName, 'es');
   });
 }

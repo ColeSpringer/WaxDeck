@@ -228,6 +228,10 @@ class DownloadsController extends AsyncNotifier<DownloadsState> {
   Future<bool> pause(String pid) async => await _port?.pause(pid) ?? false;
 
   Future<void> resume(String pid) async => _port?.resume(pid);
+
+  /// Asks the OS for notifications again, after the app has said why.
+  Future<void> askForNotifications() async =>
+      _port?.requestNotificationPermission();
 }
 
 /// No ladder at all: this reads the local download store, so a failure

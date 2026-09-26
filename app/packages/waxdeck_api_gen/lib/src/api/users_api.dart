@@ -1043,7 +1043,7 @@ class UsersApi {
   }
 
   /// Replace the caller&#39;s preferences
-  /// Replaces the calling user&#39;s preferences with the given object: absent fields are cleared back to unset. Returns the stored result; comparing it against what was sent reveals anything the server did not store. Field values are validated (unknown timezone, malformed locale, or unknown theme is rejected). 
+  /// Replaces the calling user&#39;s preferences with the given object: absent fields are cleared back to unset. Returns the stored result; comparing it against what was sent reveals anything the server did not store. Field values are validated (an unknown timezone, theme, or browse sort, or a malformed locale, is rejected). 
   ///
   /// Parameters:
   /// * [prefs] 

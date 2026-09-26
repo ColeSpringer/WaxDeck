@@ -1,0 +1,11 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "desktopTrayNext": "Siguiente",
+  "desktopTrayPause": "Pausar",
+  "desktopTrayPlay": "Reproducir",
+  "desktopTrayPrevious": "Anterior",
+  "desktopTrayQuit": "Salir",
+  "desktopTrayShow": "Mostrar WaxDeck"
+}

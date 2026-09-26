@@ -76,6 +76,22 @@ void main() {
     },
   );
 
+  test('an order only a newer server knows survives another write', () async {
+    const sorts = <String, String>{'album': 'hologram-order', 'genre': 'count'};
+    final repo = FakeRepository()
+      ..sessionState = const SessionState(authenticated: true, user: _user)
+      ..prefs = const Prefs(browseSorts: sorts);
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+
+    await container.read(prefsControllerProvider.notifier).setAutoplay(false);
+
+    expect(repo.prefs.autoplay, isFalse);
+    expect(repo.prefs.browseSorts, sorts);
+  });
+
   // The clears are the one kind of write that rebuilds the document by
   // hand, because copyWith cannot null a field. Every preference added
   // to Prefs has to reach that literal too, or clearing anything

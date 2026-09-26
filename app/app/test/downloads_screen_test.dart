@@ -386,7 +386,7 @@ void main() {
       expect(find.text('Transferring'), findsNothing);
     });
 
-    testWidgets('a transfer that cannot pause says so and keeps running', (
+    testWidgets('a pause that finds nothing left to fetch flips nothing', (
       tester,
     ) async {
       downloads.pausable = false;
@@ -405,13 +405,30 @@ void main() {
       await _tap(tester, SemanticsIds.downloadPause(_book));
 
       expect(downloads.paused, [_book]);
-      expect(
-        find.text('This transfer cannot be paused; cancel it instead'),
-        findsOneWidget,
-      );
-      // The control did not flip: nothing was paused.
+      // It landed under the tap, and the row is about to say so.
       expect(_byId(SemanticsIds.downloadPause(_book)), findsOneWidget);
       expect(_byId(SemanticsIds.downloadResume(_book)), findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('a pause from an earlier run offers resume', (tester) async {
+      await pump(
+        tester,
+        stored: <DownloadedItem>[
+          const DownloadedItem(
+            pid: _book,
+            sizeBytes: 4194304,
+            files: 3,
+            complete: false,
+            paused: true,
+          ),
+        ],
+      );
+
+      await _tap(tester, SemanticsIds.downloadResume(_book));
+
+      expect(downloads.resumed, [_book]);
+      expect(_byId(SemanticsIds.downloadPause(_book)), findsOneWidget);
     });
 
     testWidgets('a paused flag stays with its own row', (tester) async {

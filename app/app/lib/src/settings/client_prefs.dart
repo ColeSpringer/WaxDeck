@@ -422,13 +422,9 @@ final keepPlayingSimilarProvider = NotifierProvider<KeepPlayingSimilar, bool>(
   KeepPlayingSimilar.new,
 );
 
-/// Whether downloads wait for an unmetered connection.
-///
-/// On by default, unlike the preload switch, and for the reason that
-/// makes them different: a preload is one track and a download is a
-/// nine-hour book. The platform holds the transfer rather than failing
-/// it, so the cost of the default being wrong is a download that starts
-/// at home.
+/// Whether downloads wait for an unmetered connection. On by default,
+/// unlike the preload switch: a download can be a nine-hour book, and the
+/// download manager holds it rather than failing it.
 class DownloadsOnWifiOnly extends BoolSetting {
   @override
   String get settingKey => ClientSettingKeys.downloadsOnWifiOnly;

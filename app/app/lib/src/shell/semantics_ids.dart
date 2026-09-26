@@ -140,6 +140,9 @@ abstract final class SemanticsIds {
   // auth: Sign-in, first-run setup, signup, and the pre-login server-address screen. The names here are frozen vocabulary for the accessibility audit.
   static const String connectServerAddress = 'connect-server-address';
   static const String connectServerError = 'connect-server-error';
+  static const String connectServerForget = 'connect-server-forget';
+  static const String connectServerForgetConfirm =
+      'connect-server-forget-confirm';
   static const String connectServerOpen = 'connect-server-open';
   static const String connectServerSubmit = 'connect-server-submit';
   static const String loginError = 'login-error';

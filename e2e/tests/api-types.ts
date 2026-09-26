@@ -5081,7 +5081,7 @@ export interface paths {
         get: operations["getPrefs"];
         /**
          * Replace the caller's preferences
-         * @description Replaces the calling user's preferences with the given object: absent fields are cleared back to unset. Returns the stored result; comparing it against what was sent reveals anything the server did not store. Field values are validated (unknown timezone, malformed locale, or unknown theme is rejected).
+         * @description Replaces the calling user's preferences with the given object: absent fields are cleared back to unset. Returns the stored result; comparing it against what was sent reveals anything the server did not store. Field values are validated (an unknown timezone, theme, or browse sort, or a malformed locale, is rejected).
          */
         put: operations["putPrefs"];
         post?: never;
@@ -11215,7 +11215,7 @@ export interface components {
              *     }
              */
             browseSorts?: {
-                [key: string]: "count" | "label";
+                [key: string]: string;
             };
             /** @description Whether playback may start with no gesture behind it - a queue another device hands over through Connect. Absent means allowed. Off means the client loads what it was asked for and waits to be tapped, which is what a browser enforces on the web build anyway. It does not gate a gesture made somewhere other than the screen: a browse-tree tap on a head unit still plays. */
             autoplay?: boolean;

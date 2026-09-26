@@ -6,6 +6,7 @@ import 'auth/auth_controller.dart';
 import 'desktop/mini_window.dart';
 import 'l10n/l10n.dart';
 import 'l10n/locale_warmup.dart';
+import 'l10n/off_tree.dart';
 import 'settings/client_prefs.dart';
 import 'settings/prefs_controller.dart';
 import 'shell/router.dart';
@@ -19,47 +20,41 @@ class WaxDeckApp extends ConsumerWidget {
     // otherwise; OLED is the dark build in true black rather than a
     // third theme. Art-driven accent stays scoped to player subtrees.
     final spec = ref.watch(waxThemeSpecProvider);
-    return MaterialApp.router(
-      // brand, not copy
-      title: 'WaxDeck',
-      // Null follows the platform; a stored preference overrides it.
-      locale: ref.watch(localeOverrideProvider),
-      localizationsDelegates: appLocalizationsDelegates,
-      supportedLocales: appSupportedLocales,
-      theme: buildWaxTheme(
-        variant: WaxThemeVariant.light,
-        density: spec.density,
-        artworkGlow: spec.artworkGlow,
-        captions: spec.captions,
-      ),
-      darkTheme: buildWaxTheme(
-        variant: spec.dark,
-        density: spec.density,
-        artworkGlow: spec.artworkGlow,
-        captions: spec.captions,
-      ),
-      themeMode: spec.mode,
-      routerConfig: ref.watch(routerProvider),
-      // The session probes decide which locations exist at all, so the
-      // router does not get to run until they answer. Withholding the
-      // child leaves the Router unmounted rather than routing on a
-      // guess and correcting a frame later.
-      //
-      // The mini window wraps all of it, above the router: what it hides
-      // is the whole app, and it keeps that app mounted while it does.
-      //
-      // The warmup sits in the builder because Localizations wraps the
-      // builder's subtree: this is the highest place the resolved locale
-      // can be read from.
-      //
-      // The text style is what a Text outside any Material inherits;
-      // without it that is the yellow double-underlined error style.
-      builder: (context, child) => DefaultTextStyle(
-        style: WaxType.body.copyWith(color: WaxColors.of(context).textPrimary),
-        child: MiniWindowGate(
-          child: _ReducedMotion(
-            child: LocaleFontWarmup(
-              child: _SystemBars(child: _BootGate(child: child!)),
+    // Above the app, so the copy drawn outside it hears the device too.
+    return SystemLocalesObserver(
+      child: MaterialApp.router(
+        // brand, not copy
+        title: 'WaxDeck',
+        // Null follows the platform; a stored preference overrides it.
+        locale: ref.watch(localeOverrideProvider),
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: appSupportedLocales,
+        theme: buildWaxTheme(
+          variant: WaxThemeVariant.light,
+          density: spec.density,
+          artworkGlow: spec.artworkGlow,
+          captions: spec.captions,
+        ),
+        darkTheme: buildWaxTheme(
+          variant: spec.dark,
+          density: spec.density,
+          artworkGlow: spec.artworkGlow,
+          captions: spec.captions,
+        ),
+        themeMode: spec.mode,
+        routerConfig: ref.watch(routerProvider),
+        // The boot gate withholds the router until the session probes
+        // answer; the warmup sits here, the highest place the resolved
+        // locale can be read; the style is what a bare Text inherits.
+        builder: (context, child) => DefaultTextStyle(
+          style: WaxType.body.copyWith(
+            color: WaxColors.of(context).textPrimary,
+          ),
+          child: MiniWindowGate(
+            child: _ReducedMotion(
+              child: LocaleFontWarmup(
+                child: _SystemBars(child: _BootGate(child: child!)),
+              ),
             ),
           ),
         ),

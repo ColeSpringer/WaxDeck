@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/spoken_face.dart';
@@ -10,6 +10,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'player_host.dart';
 
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
@@ -56,6 +57,40 @@ void main() {
         tester.getSemantics(overline).label,
         contains('The Prancing Pony Hour'),
       );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('names its regions in the reader\'s language', (tester) async {
+      final repo = FakeRepository()
+        ..addSubscription(testShow(_showPid))
+        ..episodesByShow[_showPid] = [
+          testEpisode(_episodePid, hasTranscript: true),
+        ]
+        ..episodeDetails[_episodePid] = EpisodeDetail(
+          pid: _episodePid,
+          mediaType: MediaType.podcast,
+          title: 'Pipeweed Economics',
+          durationMs: 214000,
+          showPid: _showPid,
+          publishedAt: DateTime.utc(2026, 7, 1),
+          downloaded: true,
+          hasTranscript: true,
+          descriptionHtml: '<p>What the pipeweed trade was worth.</p>',
+          chapters: const <ChapterMark>[
+            ChapterMark(index: 0, title: 'Cold open', startMs: 0),
+          ],
+        );
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(minutes: 4)),
+        item: testEpisode(_episodePid, hasTranscript: true),
+        host: (player) => localizedHost(player, locale: const Locale('es')),
+      );
+
+      for (final label in const ['Capítulos', 'Notas', 'Transcripción']) {
+        expect(find.text(label), findsOneWidget, reason: label);
+      }
       await harness.endPlayback(tester);
     });
 

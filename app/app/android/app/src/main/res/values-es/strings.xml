@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Spanish for the strings background_downloader draws in its own
+     notifications, which the app's copy table cannot reach. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="ExtraTranslation">
+    <string name="bg_downloader_cancel">Cancelar</string>
+    <string name="bg_downloader_pause">Pausar</string>
+    <string name="bg_downloader_resume">Reanudar</string>
+    <string name="bg_downloader_notification_channel_name">Descargas</string>
+    <string name="bg_downloader_notification_channel_description">Progreso de las descargas en curso</string>
+</resources>

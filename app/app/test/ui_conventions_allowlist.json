@@ -5,12 +5,6 @@
   "lib/src/app.dart": {
     "hardcoded-copy": 1
   },
-  "lib/src/auto/auto_browse.dart": {
-    "hardcoded-copy": 5
-  },
-  "lib/src/auto/media_session_feed.dart": {
-    "hardcoded-copy": 1
-  },
   "lib/src/connect/connect_bus.dart": {
     "hardcoded-copy": 5
   },
@@ -20,14 +14,8 @@
   "lib/src/connect/remote_session.dart": {
     "hardcoded-copy": 1
   },
-  "lib/src/desktop/desktop_ports_io.dart": {
-    "hardcoded-copy": 6
-  },
   "lib/src/diagnostics/defect_log_screen.dart": {
     "hardcoded-copy": 3
-  },
-  "lib/src/player/sleep_timer.dart": {
-    "hardcoded-copy": 1
   },
   "lib/src/settings/account_sections.dart": {
     "hardcoded-copy": 1

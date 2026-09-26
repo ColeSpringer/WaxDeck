@@ -37,6 +37,7 @@ import '../books/series_screen.dart';
 import '../connect/remote_screen.dart';
 import '../connect/remote_session.dart';
 import '../discovery/track_list_screen.dart';
+import '../downloads/download_notices.dart';
 import '../downloads/downloads_controller.dart';
 import '../downloads/downloads_screen.dart';
 import '../health/diagnostics_screen.dart';
@@ -935,9 +936,10 @@ class _SignedInScope extends ConsumerWidget {
     // and a global keyboard handler, all to read three providers and
     // return. The platform does not change under a running app; the
     // setting does, and that one is checked when the timer fires.
+    final gated = ShareIntakeGate(child: DownloadNoticeRationale(child: child));
     final watched = ref.watch(desktopProvider)
-        ? IdleVisualizer(child: ShareIntakeGate(child: child))
-        : ShareIntakeGate(child: child);
+        ? IdleVisualizer(child: gated)
+        : gated;
     // Here rather than in the shell: the overlays are pushed onto this
     // navigator, so a map inside the shell would be their sibling and
     // dead on the player, the queue, and car mode.

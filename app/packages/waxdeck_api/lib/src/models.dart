@@ -400,16 +400,8 @@ class Prefs {
   final bool? browseShowUnknown;
 
   /// The order each browse index opens in, by dimension name, in wire
-  /// form; read through [browseSortFor]. Strings rather than [FacetSort]
-  /// so a value [FacetSort] does not name survives the round trip
-  /// instead of being erased by the next write to another dimension.
-  ///
-  /// A value the *generated* client predates does not survive, and not
-  /// only locally: it drops on the way in as the generator's sentinel,
-  /// and since the PUT replaces the document, the next write of any
-  /// preference takes that dimension's order off the server too.
-  /// Dropping still beats keeping it, whose wire value fails every save;
-  /// the real fix is the contract, and docs/deferred-work.md holds it.
+  /// form; read through [browseSortFor]. Strings, as on the wire, so an
+  /// order this build does not know survives the next write.
   final Map<String, String>? browseSorts;
 
   /// The stored order for one dimension, or null when there is none and

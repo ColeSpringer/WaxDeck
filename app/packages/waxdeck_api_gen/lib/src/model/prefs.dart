@@ -72,8 +72,7 @@ abstract class Prefs implements Built<Prefs, PrefsBuilder> {
 
   /// The order each browse index opens in, keyed by the dimension name `GET /library/browse` spells (`genre`, `artist`, `credit-artist`, `album-artist`, `album`, `release-group`, `year`, `kind`, or a `tag.<KEY>` dimension); values are that endpoint's `sort` values. Sparse: a dimension with no entry opens in the client's own default, so a write must merge rather than replace. Capped at 32 entries. 
   @BuiltValueField(wireName: r'browseSorts')
-  BuiltMap<String, PrefsBrowseSortsEnum>? get browseSorts;
-  // enum browseSortsEnum {  count,  label,  };
+  BuiltMap<String, String>? get browseSorts;
 
   /// Whether playback may start with no gesture behind it - a queue another device hands over through Connect. Absent means allowed. Off means the client loads what it was asked for and waits to be tapped, which is what a browser enforces on the web build anyway. It does not gate a gesture made somewhere other than the screen: a browse-tree tap on a head unit still plays. 
   @BuiltValueField(wireName: r'autoplay')
@@ -184,7 +183,7 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
       yield r'browseSorts';
       yield serializers.serialize(
         object.browseSorts,
-        specifiedType: const FullType(BuiltMap, [FullType(String), FullType(PrefsBrowseSortsEnum)]),
+        specifiedType: const FullType(BuiltMap, [FullType(String), FullType(String)]),
       );
     }
     if (object.autoplay != null) {
@@ -314,8 +313,8 @@ class _$PrefsSerializer implements PrimitiveSerializer<Prefs> {
         case r'browseSorts':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType(PrefsBrowseSortsEnum)]),
-          ) as BuiltMap<String, PrefsBrowseSortsEnum>?;
+            specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType(String)]),
+          ) as BuiltMap<String, String>?;
           if (valueDes == null) continue;
           result.browseSorts.replace(valueDes);
           break;
@@ -393,22 +392,5 @@ class PrefsThemeEnum extends EnumClass {
 
   static BuiltSet<PrefsThemeEnum> get values => _$prefsThemeEnumValues;
   static PrefsThemeEnum valueOf(String name) => _$prefsThemeEnumValueOf(name);
-}
-
-class PrefsBrowseSortsEnum extends EnumClass {
-
-  @BuiltValueEnumConst(wireName: r'count')
-  static const PrefsBrowseSortsEnum count = _$prefsBrowseSortsEnum_count;
-  @BuiltValueEnumConst(wireName: r'label')
-  static const PrefsBrowseSortsEnum label = _$prefsBrowseSortsEnum_label;
-  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
-  static const PrefsBrowseSortsEnum unknownDefaultOpenApi = _$prefsBrowseSortsEnum_unknownDefaultOpenApi;
-
-  static Serializer<PrefsBrowseSortsEnum> get serializer => _$prefsBrowseSortsEnumSerializer;
-
-  const PrefsBrowseSortsEnum._(String name): super(name);
-
-  static BuiltSet<PrefsBrowseSortsEnum> get values => _$prefsBrowseSortsEnumValues;
-  static PrefsBrowseSortsEnum valueOf(String name) => _$prefsBrowseSortsEnumValueOf(name);
 }
 

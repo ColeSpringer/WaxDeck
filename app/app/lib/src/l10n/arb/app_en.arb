@@ -2611,6 +2611,32 @@
   "@authServerConnectTagline": {
     "description": "Under the wordmark on the pre-login server-address screen."
   },
+  "authServerForget": "Forget this server...",
+  "@authServerForget": {
+    "description": "Action on the server-address screen that removes everything this device holds for the stored server. The trailing dots say a confirmation follows."
+  },
+  "authServerForgetBody": "This device drops everything it holds for it: downloaded audio and covers, the offline copy of the library, and the sign-in.",
+  "@authServerForgetBody": {
+    "description": "Body of the dialog confirming that the stored server is to be forgotten, listing what goes."
+  },
+  "authServerForgetConfirm": "Forget",
+  "@authServerForgetConfirm": {
+    "description": "Button that forgets the stored server and everything this device holds for it."
+  },
+  "authServerForgetKeep": "Keep",
+  "@authServerForgetKeep": {
+    "description": "Button that closes the forget-server dialog and keeps everything."
+  },
+  "authServerForgetTitle": "Forget {address}?",
+  "@authServerForgetTitle": {
+    "description": "Title of the dialog confirming that the stored server is to be forgotten.",
+    "placeholders": {
+      "address": {
+        "type": "String",
+        "example": "https://wax.example.com"
+      }
+    }
+  },
   "authServerInvalid": "That does not look like a server address",
   "@authServerInvalid": {
     "description": "Under the connect form when the typed text cannot be an address at all (spaces, credentials, a non-web scheme)."
@@ -2638,6 +2664,62 @@
   "authUsername": "Username",
   "@authUsername": {
     "description": "The account-name field on the sign-in, sign-up and first-run screens."
+  },
+  "autoControlBack": "Back 10 seconds",
+  "@autoControlBack": {
+    "description": "Accessible name of the button on the lock screen and the playback notification that jumps back ten seconds."
+  },
+  "autoControlForward": "Forward 30 seconds",
+  "@autoControlForward": {
+    "description": "Accessible name of the button on the lock screen and the playback notification that jumps forward thirty seconds."
+  },
+  "autoControlNext": "Next",
+  "@autoControlNext": {
+    "description": "Accessible name of the lock screen and playback notification button that skips to the next item."
+  },
+  "autoControlPause": "Pause",
+  "@autoControlPause": {
+    "description": "Accessible name of the lock screen and playback notification button that pauses."
+  },
+  "autoControlPlay": "Play",
+  "@autoControlPlay": {
+    "description": "Accessible name of the lock screen and playback notification button that plays."
+  },
+  "autoControlPrevious": "Previous",
+  "@autoControlPrevious": {
+    "description": "Accessible name of the lock screen and playback notification button that goes back to the previous item."
+  },
+  "autoControlStop": "Stop",
+  "@autoControlStop": {
+    "description": "Accessible name of the lock screen and playback notification button that stops playback."
+  },
+  "autoFolderAudiobooks": "Audiobooks",
+  "@autoFolderAudiobooks": {
+    "description": "Folder of audiobooks in the media browser a car or watch shows."
+  },
+  "autoFolderContinue": "Continue",
+  "@autoFolderContinue": {
+    "description": "Folder of what is part way through, in the media browser a car or watch shows."
+  },
+  "autoFolderDownloads": "Downloads",
+  "@autoFolderDownloads": {
+    "description": "Folder of what is on this device, in the media browser a car or watch shows."
+  },
+  "autoFolderMusic": "Music",
+  "@autoFolderMusic": {
+    "description": "Folder of music in the media browser a car or watch shows."
+  },
+  "autoFolderPodcasts": "Podcasts",
+  "@autoFolderPodcasts": {
+    "description": "Folder of podcast episodes in the media browser a car or watch shows."
+  },
+  "autoPlaybackChannel": "WaxDeck playback",
+  "@autoPlaybackChannel": {
+    "description": "Name of the playback notification's channel in the system's notification settings. Set when the app starts."
+  },
+  "autoQueuedItem": "Queued item",
+  "@autoQueuedItem": {
+    "description": "Stands in for the title of a queued item that has not loaded yet, in the up-next list a lock screen or car shows."
   },
   "bellActivityBlurb": "What happened to this account, newest first. This device's own transfers are listed only while the app is open.",
   "@bellActivityBlurb": {
@@ -3367,6 +3449,30 @@
   "@defectsTitle": {
     "description": "The list of errors the app caught: its own title, and the row on the About page that opens it."
   },
+  "desktopTrayNext": "Next",
+  "@desktopTrayNext": {
+    "description": "Tray menu row that skips to the next item."
+  },
+  "desktopTrayPause": "Pause",
+  "@desktopTrayPause": {
+    "description": "Tray menu row that pauses playback."
+  },
+  "desktopTrayPlay": "Play",
+  "@desktopTrayPlay": {
+    "description": "Tray menu row that resumes playback."
+  },
+  "desktopTrayPrevious": "Previous",
+  "@desktopTrayPrevious": {
+    "description": "Tray menu row that goes back to the previous item."
+  },
+  "desktopTrayQuit": "Quit",
+  "@desktopTrayQuit": {
+    "description": "Tray menu row that closes WaxDeck."
+  },
+  "desktopTrayShow": "Show WaxDeck",
+  "@desktopTrayShow": {
+    "description": "Tray menu row that brings the WaxDeck window forward."
+  },
   "devicesBaseConfigured": "Configured address",
   "@devicesBaseConfigured": {
     "description": "Says a cast address was set by the server's operator rather than found."
@@ -3689,10 +3795,6 @@
       }
     }
   },
-  "downloadsCannotPause": "This transfer cannot be paused; cancel it instead",
-  "@downloadsCannotPause": {
-    "description": "Snackbar when the server behind a transfer does not support resuming it."
-  },
   "downloadsChecking": "Checking downloads against the server",
   "@downloadsChecking": {
     "description": "Snackbar while the re-download sweep runs."
@@ -3792,6 +3894,58 @@
   "downloadsNoneFinished": "No finished episodes to remove",
   "@downloadsNoneFinished": {
     "description": "Snackbar when the remove-finished sweep found nothing."
+  },
+  "downloadsNoticeAskAllow": "Allow",
+  "@downloadsNoticeAskAllow": {
+    "description": "Button in the dialog about download notifications that goes on to the system's own permission prompt."
+  },
+  "downloadsNoticeAskBody": "A download reports its progress in a notification, and Android asks before an app may post one.",
+  "@downloadsNoticeAskBody": {
+    "description": "Body of the dialog shown before the system asks a second time whether downloads may post notifications."
+  },
+  "downloadsNoticeAskLater": "Not now",
+  "@downloadsNoticeAskLater": {
+    "description": "Button that closes the dialog about download notifications without asking the system."
+  },
+  "downloadsNoticeAskTitle": "Show download progress?",
+  "@downloadsNoticeAskTitle": {
+    "description": "Title of the dialog shown before the system asks a second time whether downloads may post notifications."
+  },
+  "downloadsNoticeDone": "Downloaded",
+  "@downloadsNoticeDone": {
+    "description": "Body of a download's system notification once the item is on this device."
+  },
+  "downloadsNoticeFailed": "Download failed",
+  "@downloadsNoticeFailed": {
+    "description": "Body of a download's system notification when it could not finish."
+  },
+  "downloadsNoticePart": "{title} ({number} of {total})",
+  "@downloadsNoticePart": {
+    "description": "Title of the system notification for one file of an item of several, such as one part of an audiobook.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "The Hobbit"
+      },
+      "number": {
+        "type": "int",
+        "example": "3"
+      },
+      "total": {
+        "type": "int",
+        "example": "20"
+      }
+    }
+  },
+  "downloadsNoticeRunning": "Downloading {progress}",
+  "@downloadsNoticeRunning": {
+    "description": "Body of a download's system notification while it runs. The system fills in {progress} with the percentage done.",
+    "placeholders": {
+      "progress": {
+        "type": "String",
+        "example": "40%"
+      }
+    }
   },
   "downloadsOverflow": "More",
   "@downloadsOverflow": {
@@ -6681,7 +6835,7 @@
   },
   "playerExtendTimerShort": "Extend 10 min",
   "@playerExtendTimerShort": {
-    "description": "The same as the sleep timer's extend action, worded short for a message that is already a sentence long. min is the abbreviation for minutes."
+    "description": "The sleep timer's extend button on the media notification and the lock screen, where the system draws it small. min is the abbreviation for minutes."
   },
   "playerFaster": "Faster",
   "@playerFaster": {
@@ -6845,6 +6999,18 @@
   "@playerRatingFailed": {
     "description": "Message when a star rating did not reach the server. The control has already moved back, so this is what says why."
   },
+  "playerRegionChapters": "Chapters",
+  "@playerRegionChapters": {
+    "description": "Chip showing the chapter list in the panel under a book or episode player."
+  },
+  "playerRegionNotes": "Notes",
+  "@playerRegionNotes": {
+    "description": "Chip showing the episode's show notes in the panel under the player."
+  },
+  "playerRegionTranscript": "Transcript",
+  "@playerRegionTranscript": {
+    "description": "Chip showing the episode's transcript in the panel under the player."
+  },
   "playerSaveSong": "Save this song",
   "@playerSaveSong": {
     "description": "Accessible name of the control that keeps the song a radio station is playing."
@@ -6894,6 +7060,10 @@
   "playerSleepTimer": "Sleep timer",
   "@playerSleepTimer": {
     "description": "Accessible name of the sleep timer control while no timer is running."
+  },
+  "playerSleepTimerChapter": "Sleep timer, until the chapter ends",
+  "@playerSleepTimerChapter": {
+    "description": "Accessible name of the sleep timer control while it waits for the current chapter to end."
   },
   "playerSleepTimerLeft": "Sleep timer, {time} left",
   "@playerSleepTimerLeft": {
@@ -7010,6 +7180,24 @@
   "playerSupportShow": "Support the show",
   "@playerSupportShow": {
     "description": "Menu item opening a podcast's own funding page. Only drawn where the feed names one, and the feed's own wording wins when it gives one."
+  },
+  "playerTimerAtChapterEnd": "Stops when the chapter ends",
+  "@playerTimerAtChapterEnd": {
+    "description": "Under the extend row in the sleep timer sheet, when the timer is waiting for the chapter to end."
+  },
+  "playerTimerBadgeChapter": "ch",
+  "@playerTimerBadgeChapter": {
+    "description": "The sleep timer's badge while it waits for the chapter to end. Two or three letters; ch abbreviates chapter."
+  },
+  "playerTimerBadgeMinutes": "{minutes}m",
+  "@playerTimerBadgeMinutes": {
+    "description": "The sleep timer's minutes left, on the small badge over its button. A few characters at most; m abbreviates minutes.",
+    "placeholders": {
+      "minutes": {
+        "type": "int",
+        "example": "12"
+      }
+    }
   },
   "playerTimerChapterEnd": "End of chapter",
   "@playerTimerChapterEnd": {

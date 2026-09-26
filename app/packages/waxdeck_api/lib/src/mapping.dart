@@ -156,18 +156,7 @@ Prefs prefsFromGen(gen.Prefs prefs) {
     radioScrobbleOptOut: prefs.radioScrobbleOptOut,
     identifyOptOut: prefs.identifyOptOut,
     browseShowUnknown: prefs.browseShowUnknown,
-    // Carried in wire form: see Prefs.browseSorts.
-    browseSorts: sorts == null
-        ? null
-        : <String, String>{
-            for (final entry in sorts.entries)
-              // A sort this build does not know arrives as the
-              // generator's sentinel, whose name would go back out as a
-              // wire value the server rejects, failing the whole save.
-              // Dropped instead; that facet opens in the default.
-              if (entry.value != gen.PrefsBrowseSortsEnum.unknownDefaultOpenApi)
-                entry.key: entry.value.name,
-          },
+    browseSorts: sorts?.toMap(),
     autoplay: prefs.autoplay,
   );
 }
@@ -200,14 +189,7 @@ gen.Prefs prefsToGen(Prefs prefs) {
       ..radioScrobbleOptOut = prefs.radioScrobbleOptOut
       ..identifyOptOut = prefs.identifyOptOut
       ..browseShowUnknown = prefs.browseShowUnknown
-      ..browseSorts = sorts == null
-          ? null
-          : MapBuilder<String, gen.PrefsBrowseSortsEnum>(
-              <String, gen.PrefsBrowseSortsEnum>{
-                for (final entry in sorts.entries)
-                  entry.key: gen.PrefsBrowseSortsEnum.valueOf(entry.value),
-              },
-            )
+      ..browseSorts = sorts == null ? null : MapBuilder<String, String>(sorts)
       ..autoplay = prefs.autoplay,
   );
 }

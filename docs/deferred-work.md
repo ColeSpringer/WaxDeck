@@ -182,25 +182,6 @@ here waits on upstream.
   content and it shares a per-IP budget with the radio path if both
   ever ask it.
 
-- `[in-repo]` **Download-notification polish.** The
-  minimum is wired: a running/complete/error notification named by the original
-  file, a progress bar, and a once-per-process permission request at the
-  first download. Three things the plugin offers were left out. A denied
-  permission is taken at face value, where `shouldShowRationale` is what
-  would let the app explain itself before asking a second time. And
-  `trackTasks()` plus `rescheduleKilledTasks()` are what make a download
-  survive the OS killing the app - without them a transfer interrupted
-  that way is neither resumed nor reported, and the manager finds out
-  only when the record it is holding never completes. That last pair is
-  the substantial one; it wants a decision about who owns the plugin's
-  own task database next to WaxDeck's `downloadRecords`, which is why it
-  is not a follow-up line in the same file. The third is grouping: the
-  notification is per file, so a twenty-part book posts twenty of them.
-  `groupNotificationId` collapses a batch into one row, but it also
-  replaces the file name with a count, and one file is what most
-  downloads are - so the answer is a group per item rather than a global
-  one, which means carrying a group on `TransferRequest` and configuring
-  the notification per group as items start.
 - `[hardware]` **Android UnifiedPush distributor integration.** The server, API,
   and settings surface shipped; the client still needs the
   distributor plugin wrapped behind a WaxDeck-owned interface and a
@@ -211,20 +192,6 @@ here waits on upstream.
   half of that gap, but no provider supplies prose and no catalog field
   holds it, so this stays sequenced behind that rather than behind a
   query.
-- `[in-repo]` **A browse sort this client predates is erased by the
-  next preference write.** `Prefs.browseSorts` values are a closed enum
-  in the spec, so an order only a newer server knows deserializes to
-  the generated sentinel. `prefsFromGen` drops that entry rather than
-  let the sentinel's wire value fail every save, and because the PUT
-  replaces the whole document, the next write of any preference -
-  locale, autoplay, crossfade - takes that dimension's stored order off
-  the server too. No client-side fix reaches it: the original string is
-  gone before the mapping layer sees it. The fix is the contract, and
-  it is small - make the values free strings, the way `Error.code` and
-  `Share.targetKind` already are for the same reason, which removes the
-  sentinel from this field and makes the round-trip preservation
-  `Prefs.browseSorts` documents actually true. Worth taking with the
-  next change to the sort vocabulary rather than on its own.
 - `[in-repo]` **A place cannot be marked offline.** Audiobook bookmarks
   are a live read against the server: the sheet fetches on
   open and marking one needs a round trip. Everything else a listener
@@ -323,18 +290,6 @@ here waits on upstream.
   only, which is the honest half - "listening to" is a claim about this
   machine's ears - and a remote session is what the deck bar names.
 
-- `[in-repo]` **Switching servers leaves the old server's downloads
-  behind.** Adopting a new address on the connect screen drops the
-  bearer token and lets the mirror heal itself - sync cursors are
-  generation-bound, so a genuinely different server answers
-  `sync-reset` and the mirror rebuilds - but downloaded files and their
-  records still name pids the new server never minted, and nothing
-  offers to reclaim them. Tolerable for what the feature ships for
-  (the same server reached a new way: a tailscale name, a reverse
-  proxy); a real cross-server move wants a "forget this server" wipe
-  that clears the mirror, the download store, and the artwork cache in
-  one deliberate action.
-
 - `[in-repo]` **How far ahead the artwork precacher warms is a guess.**
   The music listing and the music indexes call it when a scroll stops,
   naming the two viewports past the one on screen. Two viewports and "when the scroll stops" are
@@ -392,43 +347,7 @@ here waits on upstream.
   size of the feature. Waits for someone to ask; recorded so the asker
   is not told it is a client gap.
 
-- `[in-repo]` **The surfaces drawn from outside the element tree stay
-  English.** Five of them, and they are one problem: the Android Auto
-  browse tree's folder names (`auto/auto_browse.dart`), the stand-in
-  title a media-session row falls back to when the catalog has not
-  answered for a queued pid yet (`auto/media_session_feed.dart`), the
-  desktop tray menu (`desktop/desktop_ports_io.dart`), the sleep
-  timer's media-session extend button (`player/sleep_timer.dart`), the
-  notification-channel names and media-session action labels
-  configured at engine init in `waxdeck_player`, and the download
-  notifications `waxdeck_data` posts (`transfer_engine_io.dart` :20-26,
-  positional `TaskNotification` arguments). Every one is built where there is
-  no `BuildContext` to read a locale through - a port fed a database, a
-  notifier, an operating-system menu - so `context.l10n` cannot reach
-  them and the sweep left them as they are, with a comment at each site
-  saying so. The copy ratchet cannot see any of it either: it reads
-  named arguments whose names end in its suffix list, so a
-  `...Name:` argument (`androidNotificationChannelName`,
-  `audio_service_handler.dart` :291) and a positional constructor
-  argument both sit at a floor of zero while holding English. The fix is one mechanism rather than four: resolve
-  `AppLocalizations` for the current locale into a provider (the
-  delegate can `load` a locale off the tree), hand it to each port at
-  construction, and re-hand it when the picker changes the locale.
-  Worth doing with the first of them that somebody actually reads in
-  another language; until then it is a table nobody consults.
-
 ## Infrastructure
-
-- `[in-repo]` **background_downloader stays on 9.5 until the wifi-only
-  hold is the app's.** From 9.6.1 a task's `requiresWiFi` means the
-  Wi-Fi transport itself on Android 9 and later, where 9.5 meant
-  "unmetered", so with the download-on-wifi-only default an Ethernet
-  device would never download; 9.6 also asks NetworkManager about
-  connectivity on desktop, which a Linux without one answers with
-  D-Bus errors at every launch. Adopting 9.6 means passing
-  `requiresWiFi: false` and holding transfers from `ConnectivityPort`,
-  which already reports the transport the setting asks about, plus a
-  desktop path that tolerates a missing NetworkManager.
 
 - `[in-repo]` **The Android build turns Kotlin's incremental compiler
   off on Windows, and should stop having to.** Kotlin 2.3.20 opens a

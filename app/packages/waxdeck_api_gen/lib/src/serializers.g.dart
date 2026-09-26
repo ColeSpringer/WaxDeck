@@ -279,7 +279,6 @@ Serializers _$serializers =
           ..add(PortableRef.serializer)
           ..add(PortableRefKindEnum.serializer)
           ..add(Prefs.serializer)
-          ..add(PrefsBrowseSortsEnum.serializer)
           ..add(PrefsThemeEnum.serializer)
           ..add(PushRegistration.serializer)
           ..add(PushRegistrationCreate.serializer)
@@ -1215,9 +1214,9 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltMap, const [
               const FullType(String),
-              const FullType(PrefsBrowseSortsEnum),
+              const FullType(String),
             ]),
-            () => MapBuilder<String, PrefsBrowseSortsEnum>(),
+            () => MapBuilder<String, String>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(String)]),

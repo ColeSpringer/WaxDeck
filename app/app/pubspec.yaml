@@ -35,6 +35,8 @@ dependencies:
   # ConnectivityPort. It reports the transport rather than the platform's
   # own metered flag, which is what the wifi-only settings ask about.
   connectivity_plus: 7.3.1
+  # Only so a Linux session with no NetworkManager can answer in its place.
+  connectivity_plus_platform_interface: 2.1.0
   crypto: 3.0.7
   # File pickers behind FilePickerPort; drag-and-drop behind AudioDropArea.
   desktop_drop: 0.8.4

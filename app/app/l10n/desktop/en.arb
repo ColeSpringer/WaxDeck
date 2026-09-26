@@ -1,0 +1,28 @@
+{
+  "@@locale": "en",
+  "@@x-template": "en.arb",
+  "desktopTrayNext": "Next",
+  "@desktopTrayNext": {
+    "description": "Tray menu row that skips to the next item."
+  },
+  "desktopTrayPause": "Pause",
+  "@desktopTrayPause": {
+    "description": "Tray menu row that pauses playback."
+  },
+  "desktopTrayPlay": "Play",
+  "@desktopTrayPlay": {
+    "description": "Tray menu row that resumes playback."
+  },
+  "desktopTrayPrevious": "Previous",
+  "@desktopTrayPrevious": {
+    "description": "Tray menu row that goes back to the previous item."
+  },
+  "desktopTrayQuit": "Quit",
+  "@desktopTrayQuit": {
+    "description": "Tray menu row that closes WaxDeck."
+  },
+  "desktopTrayShow": "Show WaxDeck",
+  "@desktopTrayShow": {
+    "description": "Tray menu row that brings the WaxDeck window forward."
+  }
+}

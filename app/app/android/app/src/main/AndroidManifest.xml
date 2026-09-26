@@ -5,6 +5,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Downloads run as a data-sync foreground service: a background
+         worker stops every nine minutes and re-requests its file, which
+         fails once the file's media URL has expired. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- The media session's own notification is exempt on 13+; a download's
          progress notification is not, and it is the one the listener asked
          for. Requested at the first download rather than at launch. -->
@@ -85,6 +89,10 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- WorkManager's foreground service, typed for the downloads. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync" />
         <!-- The audio_service media session: the browse service Android
              Auto binds to, and the media-button receiver. -->
         <service

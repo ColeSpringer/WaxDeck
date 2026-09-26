@@ -6,6 +6,7 @@ import 'package:waxdeck_player/waxdeck_player.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../connect/remote_session.dart';
+import '../l10n/off_tree.dart';
 import '../player/now_playing_controller.dart';
 import '../player/playback_session.dart';
 import '../providers.dart';
@@ -35,6 +36,7 @@ class MediaSessionFeed {
   MediaSessionFeed({
     required this.session,
     required this.artwork,
+    required this._standInTitle,
     this.stationLogoUrl,
   });
 
@@ -49,6 +51,17 @@ class MediaSessionFeed {
   /// fetch: a station's own host is a stranger's, and on the desktop
   /// surfaces most of them would not answer at all.
   final String Function(String pid)? stationLogoUrl;
+
+  /// What an up-next row says until its item has a title, in the app's
+  /// language. A new one resends the rows already published.
+  String get standInTitle => _standInTitle;
+  set standInTitle(String value) {
+    if (value == _standInTitle) return;
+    _standInTitle = value;
+    _queuePids = null;
+  }
+
+  String _standInTitle;
 
   /// The item last published, so a rebuild that changed nothing the OS
   /// can see does not republish. Not an optimization: MPRIS and the
@@ -220,7 +233,7 @@ class MediaSessionFeed {
   /// one.
   MediaSessionItem _row(String pid, ItemSummary? item) => MediaSessionItem(
     id: pid,
-    title: item?.title ?? 'Queued item',
+    title: item?.title ?? _standInTitle,
     artist: item?.artist,
     album: item?.album,
     duration: item == null || item.durationMs <= 0
@@ -254,6 +267,7 @@ final mediaSessionFeedProvider = Provider.autoDispose<MediaSessionFeed>((ref) {
     session: ref.watch(mediaSessionProvider),
     artwork: (artUrl) => mediaSessionArtUri(store, artUrl),
     stationLogoUrl: ref.watch(repositoryProvider).radioLogoUrlFor,
+    standInTitle: ref.read(offTreeL10nProvider).autoQueuedItem,
   );
 
   void publish() => feed.update(
@@ -271,6 +285,10 @@ final mediaSessionFeedProvider = Provider.autoDispose<MediaSessionFeed>((ref) {
   ref.listen(nowPlayingProvider, (_, _) => publish());
   ref.listen(remoteSessionProvider, (_, _) => publish());
   ref.listen(queueControllerProvider, (_, _) => publish());
+  ref.listen(offTreeL10nProvider, (_, copy) {
+    feed.standInTitle = copy.autoQueuedItem;
+    publish();
+  });
   // Once at the start as well: this is scoped to the session while
   // playback outlives it, so a queue already playing when the binder
   // mounts - a restored one accepted before this built - would go unnamed

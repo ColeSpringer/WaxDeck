@@ -406,8 +406,9 @@ paths:
         Replaces the calling user's preferences with the given object:
         absent fields are cleared back to unset. Returns the stored
         result; comparing it against what was sent reveals anything the
-        server did not store. Field values are validated (unknown
-        timezone, malformed locale, or unknown theme is rejected).
+        server did not store. Field values are validated (an unknown
+        timezone, theme, or browse sort, or a malformed locale, is
+        rejected).
       tags: [users]
       requestBody:
         required: true
@@ -1000,7 +1001,9 @@ components:
             replace. Capped at 32 entries.
           additionalProperties:
             type: string
-            enum: [count, label]
+            description: >
+              A `sort` value (`count`, `label`, ...). A string, not a closed
+              enum, so a client keeps an order it does not know.
           maxProperties: 32
           example: { genre: label, year: count }
         autoplay:

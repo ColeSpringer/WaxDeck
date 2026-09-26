@@ -20,7 +20,8 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
     this.onSkipNext,
     this.onSkipPrevious,
     this.onSkipToQueueItem,
-  }) {
+    required MediaControlLabels controlLabels,
+  }) : _labels = controlLabels {
     engine.playingStream.listen(_publishState);
     engine.processingStateStream.listen((_) => _publishState(engine.playing));
     engine.speedStream.listen((_) => _publishState(engine.playing));
@@ -89,6 +90,14 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   /// The one extra control the app has raised, when it has.
   MediaSessionExtra? _extra;
 
+  MediaControlLabels _labels;
+
+  /// Relabels the transport buttons, for a change of language.
+  set controlLabels(MediaControlLabels labels) {
+    _labels = labels;
+    _publishState(engine.playing);
+  }
+
   /// Whether what is playing is a live stream, which decides what the
   /// transport may honestly offer.
   bool _live = false;
@@ -123,7 +132,10 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
 
   @override
   void showExtra(MediaSessionExtra? extra) {
-    if (_extra?.action == extra?.action) return;
+    // The label too: the same control relabelled for a new language.
+    if (_extra?.action == extra?.action && _extra?.label == extra?.label) {
+      return;
+    }
     _extra = extra;
     // Republished immediately: the control is raised for a window that
     // is measured in seconds, and waiting for the next state change
@@ -162,12 +174,18 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
     playbackState.add(
       PlaybackState(
         controls: [
-          if (stepping && onSkipPrevious != null) MediaControl.skipToPrevious,
-          if (stepping) MediaControl.rewind,
-          if (playing) MediaControl.pause else MediaControl.play,
-          if (stepping) MediaControl.fastForward,
-          if (stepping && onSkipNext != null) MediaControl.skipToNext,
-          MediaControl.stop,
+          if (stepping && onSkipPrevious != null)
+            MediaControl.skipToPrevious.copyWith(label: _labels.previous),
+          if (stepping) MediaControl.rewind.copyWith(label: _labels.back),
+          if (playing)
+            MediaControl.pause.copyWith(label: _labels.pause)
+          else
+            MediaControl.play.copyWith(label: _labels.play),
+          if (stepping)
+            MediaControl.fastForward.copyWith(label: _labels.forward),
+          if (stepping && onSkipNext != null)
+            MediaControl.skipToNext.copyWith(label: _labels.next),
+          MediaControl.stop.copyWith(label: _labels.stop),
           if (extra != null)
             MediaControl.custom(
               // A bundled drawable: audio_service resolves the icon in
@@ -317,9 +335,13 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
 /// package cannot see: waxdeck_ui is the app's dependency, not the
 /// player's, so the app passes its accent down instead of
 /// this file keeping a second copy of the amber that would drift.
+/// [channelName] is the app's copy for the same reason; Android takes it
+/// at each launch, so a new language shows from the next one.
 Future<WaxDeckAudioHandler> initWaxDeckAudioService({
   required AudioEnginePort engine,
   required Future<void> Function(String pid) onPlayFromMediaId,
+  required String channelName,
+  required MediaControlLabels controlLabels,
   BrowseSourcePort? browse,
   Future<void> Function()? onPlay,
   Future<void> Function()? onStop,
@@ -340,10 +362,11 @@ Future<WaxDeckAudioHandler> initWaxDeckAudioService({
       onSkipNext: onSkipNext,
       onSkipPrevious: onSkipPrevious,
       onSkipToQueueItem: onSkipToQueueItem,
+      controlLabels: controlLabels,
     ),
     config: AudioServiceConfig(
       androidNotificationChannelId: 'com.colespringer.waxdeck.playback',
-      androidNotificationChannelName: 'WaxDeck playback',
+      androidNotificationChannelName: channelName,
       // Keep the foreground service alive while paused so the OS does
       // not reap mid-listen state (the documented hardening posture).
       androidStopForegroundOnPause: false,

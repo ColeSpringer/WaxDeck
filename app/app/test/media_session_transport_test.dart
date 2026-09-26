@@ -1,4 +1,7 @@
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auto/media_session_init.dart';
+import 'package:waxdeck/src/l10n/off_tree.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
@@ -26,6 +29,7 @@ void main() {
     onPlayFromMediaId: (_) async {},
     onPlay: onPlay,
     onStop: onStop,
+    controlLabels: _english,
   );
 
   test('a play from an OS surface goes to the app, not the engine', () async {
@@ -103,4 +107,60 @@ void main() {
 
     expect(engine.playing, isFalse);
   });
+  test('a control relabelled in another language is redrawn', () async {
+    final engine = FakeEngine(mediaDuration: const Duration(seconds: 10));
+    addTearDown(engine.dispose);
+    final handler = await handlerFor(engine);
+    MediaSessionExtra extend(String label) =>
+        MediaSessionExtra(action: 'extend', label: label, onPressed: () {});
+
+    handler
+      ..showExtra(extend('Extend 10 min'))
+      ..showExtra(extend('Ampliar 10 min'));
+
+    expect(handler.playbackState.value.controls.last.label, 'Ampliar 10 min');
+  });
+  test('the transport buttons speak the app language', () async {
+    final engine = FakeEngine(mediaDuration: const Duration(seconds: 10));
+    addTearDown(engine.dispose);
+    final handler = await handlerFor(engine);
+    List<String> labels() => [
+      for (final control in handler.playbackState.value.controls) control.label,
+    ];
+    handler.publish(const MediaSessionItem(id: 'tr-1', title: 'One'));
+    expect(labels(), ['Back 10 seconds', 'Play', 'Forward 30 seconds', 'Stop']);
+
+    handler.controlLabels = const MediaControlLabels(
+      play: 'Reproducir',
+      pause: 'Pausar',
+      stop: 'Detener',
+      previous: 'Anterior',
+      next: 'Siguiente',
+      back: 'Atrás 10 segundos',
+      forward: 'Adelante 30 segundos',
+    );
+
+    expect(labels(), [
+      'Atrás 10 segundos',
+      'Reproducir',
+      'Adelante 30 segundos',
+      'Detener',
+    ]);
+  });
+  test('the app words the buttons from its own copy', () {
+    final labels = mediaControlLabels(l10nFor(const [Locale('es')]));
+
+    expect(labels.pause, 'Pausar');
+    expect(labels.back, 'Atrás 10 segundos');
+  });
 }
+
+const _english = MediaControlLabels(
+  play: 'Play',
+  pause: 'Pause',
+  stop: 'Stop',
+  previous: 'Previous',
+  next: 'Next',
+  back: 'Back 10 seconds',
+  forward: 'Forward 30 seconds',
+);

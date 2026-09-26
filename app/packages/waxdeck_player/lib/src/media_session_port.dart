@@ -89,6 +89,29 @@ class MediaSessionExtra {
   final void Function() onPressed;
 }
 
+/// What the transport buttons tell a screen reader, in the app's language.
+class MediaControlLabels {
+  const MediaControlLabels({
+    required this.play,
+    required this.pause,
+    required this.stop,
+    required this.previous,
+    required this.next,
+    required this.back,
+    required this.forward,
+  });
+
+  final String play;
+  final String pause;
+  final String stop;
+  final String previous;
+  final String next;
+
+  /// The short jump back and the longer one forward.
+  final String back;
+  final String forward;
+}
+
 /// The app's handle on the OS media session: what it says is playing,
 /// what it offers to skip to, and its one extra control.
 abstract interface class MediaSessionPort {

@@ -1,0 +1,19 @@
+{
+  "@@locale": "es",
+  "@@x-machine-translated": "drafted alongside extraction; needs native review before Weblate onboarding",
+  "@@x-template": "en.arb",
+  "autoControlBack": "Atrás 10 segundos",
+  "autoControlForward": "Adelante 30 segundos",
+  "autoControlNext": "Siguiente",
+  "autoControlPause": "Pausar",
+  "autoControlPlay": "Reproducir",
+  "autoControlPrevious": "Anterior",
+  "autoControlStop": "Detener",
+  "autoFolderAudiobooks": "Audiolibros",
+  "autoFolderContinue": "Continuar",
+  "autoFolderDownloads": "Descargas",
+  "autoFolderMusic": "Música",
+  "autoFolderPodcasts": "Pódcast",
+  "autoPlaybackChannel": "Reproducción de WaxDeck",
+  "autoQueuedItem": "Elemento en cola"
+}

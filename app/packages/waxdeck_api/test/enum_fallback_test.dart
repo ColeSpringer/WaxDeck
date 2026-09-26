@@ -19,20 +19,25 @@ void main() {
       expect(entityCardFromGen(card), isNull);
     });
 
-    test('a browse sort this build predates drops its entry', () {
-      final prefs = gen.standardSerializers.deserializeWith(
-        gen.Prefs.serializer,
-        <String, Object?>{
-          'browseSorts': <String, Object?>{
-            'album': 'hologram-order',
-            'genre': 'count',
-          },
+    test('a browse sort this build predates survives the round trip', () {
+      const wire = <String, Object?>{
+        'browseSorts': <String, Object?>{
+          'album': 'hologram-order',
+          'genre': 'count',
         },
-      )!;
+      };
+      final prefs = prefsFromGen(
+        gen.standardSerializers.deserializeWith(gen.Prefs.serializer, wire)!,
+      );
 
-      // Kept as a string map so the next save cannot carry the sentinel
-      // back out as a wire value the server rejects.
-      expect(prefsFromGen(prefs).browseSorts, {'genre': 'count'});
+      expect(prefs.browseSorts, {'album': 'hologram-order', 'genre': 'count'});
+      final out =
+          gen.standardSerializers.serializeWith(
+                gen.Prefs.serializer,
+                prefsToGen(prefs),
+              )!
+              as Map<Object?, Object?>;
+      expect(out['browseSorts'], wire['browseSorts']);
     });
 
     // The sentinel flag rewrote `valueOf` too, which is the half that

@@ -1231,14 +1231,22 @@ class SleepTimerButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
     final timer = ref.watch(sleepTimerProvider);
+    final minutes = timer.minutesLeft;
     return WaxIconButton(
       glyph: WaxIcons.sleepTimer,
-      label: timer.active
-          ? context.l10n.playerSleepTimerLeft(timer.label)
-          : context.l10n.playerSleepTimer,
+      label: !timer.active
+          ? l10n.playerSleepTimer
+          : minutes == null
+          ? l10n.playerSleepTimerChapter
+          : l10n.playerSleepTimerLeft(_span(context, minutes)),
       active: timer.active,
-      badge: timer.active ? timer.label : null,
+      badge: !timer.active
+          ? null
+          : minutes == null
+          ? l10n.playerTimerBadgeChapter
+          : l10n.playerTimerBadgeMinutes(minutes),
       semanticsId: SemanticsIds.sleepTimerOpen,
       onPressed: () => unawaited(
         showModalBottomSheet<void>(
@@ -1249,6 +1257,10 @@ class SleepTimerButton extends ConsumerWidget {
     );
   }
 }
+
+/// Minutes left as a span in words, the unit the badge counts in.
+String _span(BuildContext context, int minutes) =>
+    context.waxL10n.formatSpan(Duration(minutes: minutes));
 
 class _SleepTimerSheet extends ConsumerStatefulWidget {
   const _SleepTimerSheet({required this.session});
@@ -1307,7 +1319,12 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 semanticsId: SemanticsIds.sleepTimerExtend,
                 glyph: WaxIcons.add,
                 title: l10n.playerExtendTimer,
-                subtitle: l10n.playerTimerLeft(timer.label),
+                subtitle: switch (timer.minutesLeft) {
+                  final minutes? => l10n.playerTimerLeft(
+                    _span(context, minutes),
+                  ),
+                  null => l10n.playerTimerAtChapterEnd,
+                },
                 onTap: () {
                   ref.read(sleepTimerProvider.notifier).extend();
                   Navigator.of(context).pop();

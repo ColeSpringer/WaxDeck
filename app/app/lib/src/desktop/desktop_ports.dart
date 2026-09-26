@@ -101,10 +101,43 @@ abstract interface class MiniWindowPort {
   Future<void> unbindClose();
 }
 
+/// What the tray menu's rows say, in the app's language.
+class TrayLabels {
+  const TrayLabels({
+    required this.play,
+    required this.pause,
+    required this.previous,
+    required this.next,
+    required this.show,
+    required this.quit,
+  });
+
+  final String play;
+  final String pause;
+  final String previous;
+  final String next;
+  final String show;
+  final String quit;
+
+  @override
+  bool operator ==(Object other) =>
+      other is TrayLabels &&
+      other.play == play &&
+      other.pause == pause &&
+      other.previous == previous &&
+      other.next == next &&
+      other.show == show &&
+      other.quit == quit;
+
+  @override
+  int get hashCode => Object.hash(play, pause, previous, next, show, quit);
+}
+
 /// What the tray icon says and what its menu offers.
 class TrayFace {
   const TrayFace({
     required this.playing,
+    required this.labels,
     this.title,
     this.subtitle,
     this.canStep = false,
@@ -121,6 +154,8 @@ class TrayFace {
   /// Whether next and previous mean anything. A station has nothing to
   /// step to, and an empty queue has nowhere to go.
   final bool canStep;
+
+  final TrayLabels labels;
 }
 
 /// What the tray menu's rows do.
@@ -142,12 +177,10 @@ class TrayActions {
 
 /// The system tray, where the session has one.
 abstract interface class TrayPort {
-  /// Puts the icon in the tray. False where there is no tray to put it
-  /// in - a phone, or a desktop that refused the icon - which is a
-  /// feature that is absent rather than broken. A Linux session with
-  /// no StatusNotifier host takes the icon and shows nothing, and does
-  /// not say so; that comes back true.
-  Future<bool> install(TrayActions actions);
+  /// Puts the icon in the tray, drawn as [face]. False where there is no
+  /// tray (a phone, a desktop that refused the icon); a Linux session with
+  /// no StatusNotifier host takes the icon silently and answers true.
+  Future<bool> install(TrayActions actions, TrayFace face);
 
   /// Redraws the icon and its menu for [face].
   Future<void> update(TrayFace face);
@@ -193,7 +226,7 @@ class NoTray implements TrayPort {
   const NoTray();
 
   @override
-  Future<bool> install(TrayActions actions) async => false;
+  Future<bool> install(TrayActions actions, TrayFace face) async => false;
 
   @override
   Future<void> update(TrayFace face) async {}

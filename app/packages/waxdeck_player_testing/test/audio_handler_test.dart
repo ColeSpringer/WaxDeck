@@ -32,6 +32,7 @@ void main() {
       onSkipNext: () async {},
       onSkipPrevious: () async {},
       onSkipToQueueItem: (index) async => jumped.add(index),
+      controlLabels: _labels,
     );
   });
 
@@ -96,9 +97,9 @@ void main() {
     final state = handler.playbackState.value;
     expect(state.controls.map((c) => c.label), <String>[
       'Previous',
-      'Rewind',
+      'Back 10 seconds',
       'Play',
-      'Fast Forward',
+      'Forward 30 seconds',
       'Next',
       'Stop',
     ]);
@@ -157,6 +158,7 @@ void main() {
       onPlayFromMediaId: (_) async {},
       onStop: () async => stopped++,
       onGoingAway: () async => finalized++,
+      controlLabels: _labels,
     );
     // Loaded first, so the engine's state is one it could have left
     // rather than the one it was born in.
@@ -181,3 +183,13 @@ void main() {
     expect(engine.processingState, EngineProcessingState.idle);
   });
 }
+
+const _labels = MediaControlLabels(
+  play: 'Play',
+  pause: 'Pause',
+  stop: 'Stop',
+  previous: 'Previous',
+  next: 'Next',
+  back: 'Back 10 seconds',
+  forward: 'Forward 30 seconds',
+);

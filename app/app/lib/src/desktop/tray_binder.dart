@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/off_tree.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../queue/queue_controller.dart';
@@ -31,12 +32,15 @@ class TrayBinder {
   bool _installed = false;
   TrayFace? _drawn;
 
-  Future<void> install(TrayActions actions) async {
-    _installed = await _tray.install(actions);
-    final face = _drawn;
+  Future<void> install(TrayActions actions, TrayFace face) async {
+    _drawn = face;
+    _installed = await _tray.install(actions, face);
+    final latest = _drawn;
     // Anything published while the platform was still answering is
     // applied now rather than lost.
-    if (_installed && face != null) await _tray.update(face);
+    if (_installed && latest != null && !_same(latest, face)) {
+      await _tray.update(latest);
+    }
   }
 
   void show(TrayFace face) {
@@ -60,19 +64,17 @@ class TrayBinder {
       a.playing == b.playing &&
       a.title == b.title &&
       a.subtitle == b.subtitle &&
-      a.canStep == b.canStep;
+      a.canStep == b.canStep &&
+      a.labels == b.labels;
 }
 
-/// Binds the tray to the signed-in session.
-///
-/// Signed in, because everything the menu offers is playback: a tray
-/// icon over a login screen would be four rows that do nothing and a
-/// Quit.
 /// How long a close waits for the tray to let go. Instant unless the
 /// menu is open on Windows; a third of the window's own budget, so a
 /// menu nobody closes never starves the finalize.
 const Duration _trayBudget = Duration(seconds: 1);
 
+/// Binds the tray to the signed-in session: everything the menu offers
+/// is playback, so over a login screen it would be rows that do nothing.
 final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
   final binder = TrayBinder(ref.watch(trayPortProvider));
   final window = ref.read(miniWindowPortProvider);
@@ -113,6 +115,28 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
     }
   }
 
+  TrayFace face() {
+    final station = ref.read(radioPlaybackProvider).station;
+    final now = ref.read(nowPlayingProvider);
+    final copy = ref.read(offTreeL10nProvider);
+    return TrayFace(
+      playing: ref.read(audioEngineProvider).playing,
+      title: station?.name ?? now.item?.title,
+      subtitle: station == null ? now.item?.artist : null,
+      // Radio never queues, so there is nothing to step to; an item
+      // needs a queue with somewhere to go.
+      canStep: station == null && ref.read(queueControllerProvider).length > 1,
+      labels: TrayLabels(
+        play: copy.desktopTrayPlay,
+        pause: copy.desktopTrayPause,
+        previous: copy.desktopTrayPrevious,
+        next: copy.desktopTrayNext,
+        show: copy.desktopTrayShow,
+        quit: copy.desktopTrayQuit,
+      ),
+    );
+  }
+
   unawaited(
     binder.install(
       TrayActions(
@@ -131,6 +155,7 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
         // once. Two ways of saying the same thing, one path.
         onQuit: () => unawaited(window.quit()),
       ),
+      face(),
     ),
   );
 
@@ -147,26 +172,12 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
   // close would finalize a session that no longer exists.
   ref.onDispose(() => unawaited(window.unbindClose()));
 
-  void publish() {
-    final station = ref.read(radioPlaybackProvider).station;
-    final now = ref.read(nowPlayingProvider);
-    final engine = ref.read(audioEngineProvider);
-    binder.show(
-      TrayFace(
-        playing: engine.playing,
-        title: station?.name ?? now.item?.title,
-        subtitle: station == null ? now.item?.artist : null,
-        // Radio never queues, so there is nothing to step to; an item
-        // needs a queue with somewhere to go.
-        canStep:
-            station == null && ref.read(queueControllerProvider).length > 1,
-      ),
-    );
-  }
+  void publish() => binder.show(face());
 
   ref.listen(radioPlaybackProvider, (_, _) => publish());
   ref.listen(nowPlayingProvider, (_, _) => publish());
   ref.listen(queueControllerProvider, (_, _) => publish());
+  ref.listen(offTreeL10nProvider, (_, _) => publish());
   // The engine is not a provider, so its transport is followed directly:
   // a pause has to change the glyph, and nothing above emits for one.
   final playing = ref

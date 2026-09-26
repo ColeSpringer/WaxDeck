@@ -21,14 +21,10 @@ dependencies:
   path: 1.9.1
   web_socket_channel: 3.0.3
   web: 1.1.1
-  # Held below 9.6: from 9.6.1 a task's `requiresWiFi` means the Wi-Fi
-  # transport itself on Android 9 and later, where it meant "unmetered"
-  # before, so the download-on-wifi-only default would hold every
-  # transfer on an Ethernet device. 9.6 also asks NetworkManager about
-  # connectivity on desktop, which a Linux without one answers with
-  # D-Bus errors at every launch. Adopting it means the app owning the
-  # hold through ConnectivityPort; see docs/deferred-work.md.
-  background_downloader: 9.5.7
+  # Not below 9.6.2, which stopped task tracking from silencing the updates
+  # stream. Its `requiresWiFi` means the Wi-Fi transport, so the wifi-only
+  # hold is the manager's gate instead.
+  background_downloader: 9.6.3
   waxdeck_api:
     path: ../waxdeck_api
 

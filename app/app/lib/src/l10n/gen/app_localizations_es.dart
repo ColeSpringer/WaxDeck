@@ -1914,6 +1914,24 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authServerConnectTagline => 'Conéctate a tu servidor';
 
   @override
+  String get authServerForget => 'Olvidar este servidor...';
+
+  @override
+  String get authServerForgetBody =>
+      'Este dispositivo elimina todo lo que guarda de él: el audio y las portadas descargados, la copia sin conexión de la biblioteca y la sesión iniciada.';
+
+  @override
+  String get authServerForgetConfirm => 'Olvidar';
+
+  @override
+  String get authServerForgetKeep => 'Conservar';
+
+  @override
+  String authServerForgetTitle(String address) {
+    return '¿Olvidar $address?';
+  }
+
+  @override
   String get authServerInvalid => 'Eso no parece una dirección de servidor';
 
   @override
@@ -1936,6 +1954,48 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get authUsername => 'Nombre de usuario';
+
+  @override
+  String get autoControlBack => 'Atrás 10 segundos';
+
+  @override
+  String get autoControlForward => 'Adelante 30 segundos';
+
+  @override
+  String get autoControlNext => 'Siguiente';
+
+  @override
+  String get autoControlPause => 'Pausar';
+
+  @override
+  String get autoControlPlay => 'Reproducir';
+
+  @override
+  String get autoControlPrevious => 'Anterior';
+
+  @override
+  String get autoControlStop => 'Detener';
+
+  @override
+  String get autoFolderAudiobooks => 'Audiolibros';
+
+  @override
+  String get autoFolderContinue => 'Continuar';
+
+  @override
+  String get autoFolderDownloads => 'Descargas';
+
+  @override
+  String get autoFolderMusic => 'Música';
+
+  @override
+  String get autoFolderPodcasts => 'Pódcast';
+
+  @override
+  String get autoPlaybackChannel => 'Reproducción de WaxDeck';
+
+  @override
+  String get autoQueuedItem => 'Elemento en cola';
 
   @override
   String get bellActivityBlurb =>
@@ -2493,6 +2553,24 @@ class AppLocalizationsEs extends AppLocalizations {
   String get defectsTitle => 'Registro de fallos';
 
   @override
+  String get desktopTrayNext => 'Siguiente';
+
+  @override
+  String get desktopTrayPause => 'Pausar';
+
+  @override
+  String get desktopTrayPlay => 'Reproducir';
+
+  @override
+  String get desktopTrayPrevious => 'Anterior';
+
+  @override
+  String get desktopTrayQuit => 'Salir';
+
+  @override
+  String get desktopTrayShow => 'Mostrar WaxDeck';
+
+  @override
   String get devicesBaseConfigured => 'Dirección configurada';
 
   @override
@@ -2717,10 +2795,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get downloadsCannotPause =>
-      'Esta transferencia no se puede pausar; cancélala en su lugar';
-
-  @override
   String get downloadsChecking => 'Comprobando las descargas con el servidor';
 
   @override
@@ -2794,6 +2868,36 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get downloadsNoneFinished => 'No hay episodios terminados que quitar';
+
+  @override
+  String get downloadsNoticeAskAllow => 'Permitir';
+
+  @override
+  String get downloadsNoticeAskBody =>
+      'Una descarga muestra su progreso en una notificación, y Android pregunta antes de que una aplicación pueda publicarla.';
+
+  @override
+  String get downloadsNoticeAskLater => 'Ahora no';
+
+  @override
+  String get downloadsNoticeAskTitle =>
+      '¿Mostrar el progreso de las descargas?';
+
+  @override
+  String get downloadsNoticeDone => 'Descargado';
+
+  @override
+  String get downloadsNoticeFailed => 'Error en la descarga';
+
+  @override
+  String downloadsNoticePart(String title, int number, int total) {
+    return '$title ($number de $total)';
+  }
+
+  @override
+  String downloadsNoticeRunning(String progress) {
+    return 'Descargando $progress';
+  }
 
   @override
   String get downloadsOverflow => 'Más';
@@ -5307,6 +5411,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerRatingFailed => 'No se ha podido guardar ese cambio';
 
   @override
+  String get playerRegionChapters => 'Capítulos';
+
+  @override
+  String get playerRegionNotes => 'Notas';
+
+  @override
+  String get playerRegionTranscript => 'Transcripción';
+
+  @override
   String get playerSaveSong => 'Guardar esta canción';
 
   @override
@@ -5335,6 +5448,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playerSleepTimer => 'Temporizador de apagado';
+
+  @override
+  String get playerSleepTimerChapter =>
+      'Temporizador de apagado, hasta el final del capítulo';
 
   @override
   String playerSleepTimerLeft(String time) {
@@ -5404,6 +5521,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playerSupportShow => 'Apoyar el programa';
+
+  @override
+  String get playerTimerAtChapterEnd => 'Se detiene al terminar el capítulo';
+
+  @override
+  String get playerTimerBadgeChapter => 'cap';
+
+  @override
+  String playerTimerBadgeMinutes(int minutes) {
+    return '$minutes\'';
+  }
 
   @override
   String get playerTimerChapterEnd => 'Final del capítulo';

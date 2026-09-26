@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import 'forget_server.dart';
 import 'server_address.dart';
 
 /// The pre-login server-address screen, native only: the web build is
@@ -23,6 +24,7 @@ class ConnectServerScreen extends ConsumerStatefulWidget {
 class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
   final _address = TextEditingController();
   bool _probing = false;
+  bool _forgetting = false;
   String? _error;
 
   @override
@@ -41,7 +43,7 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
     // The button disables itself, but the text field's submit does not:
     // a second ladder racing the first would adopt whichever candidate
     // answered last.
-    if (_probing) return;
+    if (_probing || _forgetting) return;
     final l10n = context.l10n;
     final candidates = serverAddressCandidates(_address.text);
     if (candidates.isEmpty) {
@@ -82,10 +84,50 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
     }
   }
 
+  Future<void> _forget(String address) async {
+    final l10n = context.l10n;
+    final forget = ref.read(forgetServerProvider);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.authServerForgetTitle(address)),
+        content: Text(l10n.authServerForgetBody),
+        actions: <Widget>[
+          WaxButton(
+            label: l10n.authServerForgetKeep,
+            kind: WaxButtonKind.text,
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
+          WaxButton(
+            key: const Key(SemanticsIds.connectServerForgetConfirm),
+            semanticsId: SemanticsIds.connectServerForgetConfirm,
+            label: l10n.authServerForgetConfirm,
+            kind: WaxButtonKind.destructive,
+            onPressed: () => Navigator.of(context).pop(true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() {
+      _forgetting = true;
+      _error = null;
+    });
+    try {
+      await forget();
+      if (mounted) _address.clear();
+    } on Object catch (error) {
+      if (mounted) setState(() => _error = context.explain(error));
+    } finally {
+      if (mounted) setState(() => _forgetting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
+    final stored = ref.watch(serverAddressProvider);
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
@@ -131,7 +173,7 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
                   identifier: SemanticsIds.connectServerSubmit,
                   child: FilledButton(
                     key: const Key(SemanticsIds.connectServerSubmit),
-                    onPressed: _probing ? null : _connect,
+                    onPressed: _probing || _forgetting ? null : _connect,
                     child: _probing
                         ? const SizedBox(
                             width: 20,
@@ -141,6 +183,18 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
                         : Text(l10n.authServerConnect),
                   ),
                 ),
+                if (stored != null) ...[
+                  const SizedBox(height: WaxSpace.s8),
+                  WaxButton(
+                    key: const Key(SemanticsIds.connectServerForget),
+                    semanticsId: SemanticsIds.connectServerForget,
+                    label: l10n.authServerForget,
+                    kind: WaxButtonKind.destructive,
+                    onPressed: _probing || _forgetting
+                        ? null
+                        : () => _forget(stored),
+                  ),
+                ],
               ],
             ),
           ),

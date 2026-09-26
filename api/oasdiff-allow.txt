@@ -1,0 +1,8 @@
+# Deliberately accepted breaking changes, matched by `make oasdiff`.
+# Temporary by construction: this file rides the change that makes the
+# break and is deleted once the base ref contains it.
+#
+# Browse sort values become free strings so a client keeps an order it
+# does not know. No sort was withdrawn: the server still validates them.
+PUT /users/me/prefs removed the enum value `count` of the request property `browseSorts/additionalProperties/`
+PUT /users/me/prefs removed the enum value `label` of the request property `browseSorts/additionalProperties/`
