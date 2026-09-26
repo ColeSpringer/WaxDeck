@@ -1,15 +1,12 @@
 /// WaxDeck's design system: tokens, themes, and the components every
 /// client screen composes.
 ///
-/// This library re-exports `package:flutter/material.dart`, and the house
-/// rule for all new client code is to import
-/// `package:waxdeck_ui/waxdeck_ui.dart` only. Material's canonical home
-/// is moving to the `material_ui` package; routing every screen's import
-/// through this one line makes that migration a dependency swap here
-/// rather than a sweep across hundreds of files.
+/// This library re-exports `package:material_ui/material_ui.dart`, and
+/// client code and tests import `package:waxdeck_ui/waxdeck_ui.dart`
+/// only: an SDK Material widget finds no Theme or Material of its type.
 library;
 
-export 'package:flutter/material.dart';
+export 'package:material_ui/material_ui.dart';
 
 export 'src/color/contrast.dart';
 export 'src/components/artwork.dart';

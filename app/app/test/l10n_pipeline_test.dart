@@ -9,6 +9,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 
 const _user = WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']);
 
@@ -38,9 +39,9 @@ void main() {
 
   group('supported locales', () {
     test('English is first, so the fallback is not alphabetical luck', () {
-      expect(waxSupportedLocales.first, const Locale('en'));
+      expect(appSupportedLocales.first, const Locale('en'));
       expect(
-        waxSupportedLocales.toSet(),
+        appSupportedLocales.toSet(),
         AppLocalizations.supportedLocales.toSet(),
       );
     });
@@ -66,7 +67,7 @@ void main() {
       // The list the app actually passes, run through the resolver
       // MaterialApp uses when no localeResolutionCallback is set.
       Locale resolve(List<Locale> preferred) =>
-          basicLocaleListResolution(preferred, waxSupportedLocales);
+          basicLocaleListResolution(preferred, appSupportedLocales);
 
       expect(resolve(const [Locale('es', 'MX')]), const Locale('es'));
       expect(resolve(const [Locale('es')]), const Locale('es'));
@@ -123,7 +124,7 @@ void main() {
       // ARBs present at generation, falling through to a throw. A bundle
       // that failed to regenerate raises here rather than at the first
       // widget that reads a string.
-      for (final locale in waxSupportedLocales) {
+      for (final locale in appSupportedLocales) {
         // Against the generated spelling, not the BCP 47 tag: the
         // getter is `Intl.canonicalizedLocale(locale.toString())`, so
         // the first region-qualified ARB answers `en_GB` where the tag
@@ -149,7 +150,7 @@ void main() {
       // the downloads setting. Two Weblate components, one unit - and
       // nothing but this stops a locale shipping "6 h" on one screen
       // and "6 horas" on the next.
-      for (final locale in waxSupportedLocales) {
+      for (final locale in appSupportedLocales) {
         final app = await AppLocalizations.delegate.load(locale);
         final wax = lookupWaxLocalizations(locale);
         for (final hours in <int>[1, 6]) {
@@ -163,6 +164,24 @@ void main() {
     });
   });
 
+  group("Material's table", () {
+    testWidgets('follows the locale', (tester) async {
+      late MaterialLocalizations material;
+      await tester.pumpWidget(
+        localizedHost(
+          Builder(
+            builder: (context) {
+              material = MaterialLocalizations.of(context);
+              return const SizedBox.shrink();
+            },
+          ),
+          locale: const Locale('es'),
+        ),
+      );
+      expect(material.backButtonTooltip, 'Atrás');
+    });
+  });
+
   group('LocaleFontWarmup', () {
     testWidgets('warms once per resolved locale, with that locale\'s sample', (
       tester,
@@ -170,8 +189,8 @@ void main() {
       final warmed = <String>[];
       Widget host(Locale locale) => MaterialApp(
         locale: locale,
-        localizationsDelegates: waxLocalizationsDelegates,
-        supportedLocales: waxSupportedLocales,
+        localizationsDelegates: appLocalizationsDelegates,
+        supportedLocales: appSupportedLocales,
         home: LocaleFontWarmup(
           warm: (sample) async => warmed.add(sample),
           child: const SizedBox.shrink(),
@@ -200,8 +219,8 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           locale: const Locale('es'),
-          localizationsDelegates: waxLocalizationsDelegates,
-          supportedLocales: waxSupportedLocales,
+          localizationsDelegates: appLocalizationsDelegates,
+          supportedLocales: appSupportedLocales,
           builder: (context, child) => LocaleFontWarmup(
             warm: (sample) async => warmed.add(sample),
             child: child!,

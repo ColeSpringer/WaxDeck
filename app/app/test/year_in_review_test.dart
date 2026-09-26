@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
@@ -12,6 +11,7 @@ import 'package:waxdeck/src/stats/share_card_export.dart';
 import 'package:waxdeck/src/stats/share_cards.dart';
 import 'package:waxdeck/src/stats/year_in_review_screen.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';

@@ -1,6 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:intl/locale.dart' as intl;
-import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxLocalizations;
+import 'package:waxdeck_ui/waxdeck_ui.dart' show waxLocalizationsDelegates;
 
 import 'explain_error.dart';
 import 'gen/app_localizations.dart';
@@ -23,17 +23,12 @@ extension L10nX on BuildContext {
 }
 
 /// Every delegate a WaxDeck host installs, in one list so the app and
-/// the test hosts cannot drift apart.
-///
-/// The design system's table rides here too. Without it the components
-/// still draw - `context.waxL10n` answers English when no delegate is
-/// installed, which is what keeps the package's own tests plain - so its
-/// absence in a host would show only as a Spanish screen with English
-/// buttons on it.
-const List<LocalizationsDelegate<dynamic>> waxLocalizationsDelegates =
+/// the test hosts cannot drift apart: the app's table, then the design
+/// system's list, which carries Material's.
+const List<LocalizationsDelegate<dynamic>> appLocalizationsDelegates =
     <LocalizationsDelegate<dynamic>>[
-      ...AppLocalizations.localizationsDelegates,
-      WaxLocalizations.delegate,
+      AppLocalizations.delegate,
+      ...waxLocalizationsDelegates,
     ];
 
 /// The locales the app offers, English first by construction.
@@ -46,7 +41,7 @@ const List<LocalizationsDelegate<dynamic>> waxLocalizationsDelegates =
 /// Only plain `en` is hoisted: an `en_GB` ARB is a locale of its own,
 /// and dropping it would resolve a British device to the template it
 /// was written to differ from.
-final List<Locale> waxSupportedLocales = List<Locale>.unmodifiable([
+final List<Locale> appSupportedLocales = List<Locale>.unmodifiable([
   const Locale('en'),
   ...AppLocalizations.supportedLocales.where((l) => l != const Locale('en')),
 ]);
@@ -58,7 +53,7 @@ final List<Locale> waxSupportedLocales = List<Locale>.unmodifiable([
 /// screen, and a Spanish reader looking for Spanish on an English
 /// interface is looking for "Español". A locale missing from here falls
 /// back to its own tag, which `settings_screen_test.dart` asserts never
-/// happens for a locale [waxSupportedLocales] offers.
+/// happens for a locale [appSupportedLocales] offers.
 const Map<String, String> languageEndonyms = <String, String>{
   'en': 'English',
   'es': 'Español',
@@ -125,7 +120,7 @@ Locale? supportedLocaleFor(String tag) {
   if (parsed == null) return null;
   final resolved = basicLocaleListResolution(<Locale>[
     parsed,
-  ], waxSupportedLocales);
+  ], appSupportedLocales);
   // Resolution always answers something - the first supported locale is
   // its fallback - so what says a tag was understood is that the answer
   // is in the language that was asked for.

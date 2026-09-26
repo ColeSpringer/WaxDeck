@@ -2,12 +2,12 @@ import 'localized_host.dart';
 
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_box.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 const _art = 'https://deck.local/api/v1/items/tr-1/art';
 

@@ -15,11 +15,12 @@ import 'package:alchemist/alchemist.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'support/material_host.dart';
+
 Widget _themed(WaxThemeVariant variant, Widget child) {
-  final theme = buildWaxTheme(variant: variant);
-  return Theme(
-    data: theme,
-    child: ColoredBox(
+  return materialHost(
+    buildWaxTheme(variant: variant),
+    ColoredBox(
       color: variant.colors.canvas,
       child: Padding(padding: const EdgeInsets.all(12), child: child),
     ),

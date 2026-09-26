@@ -24,8 +24,8 @@ class WaxDeckApp extends ConsumerWidget {
       title: 'WaxDeck',
       // Null follows the platform; a stored preference overrides it.
       locale: ref.watch(localeOverrideProvider),
-      localizationsDelegates: waxLocalizationsDelegates,
-      supportedLocales: waxSupportedLocales,
+      localizationsDelegates: appLocalizationsDelegates,
+      supportedLocales: appSupportedLocales,
       theme: buildWaxTheme(
         variant: WaxThemeVariant.light,
         density: spec.density,

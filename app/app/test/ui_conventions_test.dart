@@ -31,11 +31,10 @@ void main() {
       final findings = <String, List<_Finding>>{};
 
       for (final file in _sources()) {
-        final path = file.path.split(Platform.pathSeparator).join('/');
+        final path = _pathOf(file);
         if (_isGenerated(path)) continue;
-        final source = file.readAsStringSync();
+        final (:source, :code) = _scan(path);
         final lines = source.split('\n');
-        final code = _code(source);
         for (final rule in _rules) {
           if (!rule.appliesTo(path)) continue;
           for (final hit in rule.find(code)) {
@@ -112,6 +111,55 @@ void main() {
             'adding a rule.\n\n${failures.join('\n\n')}',
       );
     });
+
+    test('Material comes from material_ui, through the design system', () {
+      // An SDK Material widget compiles beside material_ui's, then finds
+      // no Theme, Material or localizations of its type above it.
+      final offenders = <String>[
+        ..._sourcesMatching(const <String>[_designSystem], _sdkMaterial),
+        ..._sourcesMatching(_clientRoots, _anyMaterial),
+      ];
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            'import package:waxdeck_ui/waxdeck_ui.dart (inside waxdeck_ui, '
+            'package:material_ui) instead:\n${offenders.join('\n')}',
+      );
+    });
+
+    test('no host installs a generated delegate list', () {
+      // gen-l10n's lists name the SDK's Material tables, which material_ui
+      // never reads: under es there is no Material table of its type at all.
+      final offenders = _sourcesMatching(const <String>[
+        ..._clientRoots,
+        _designSystem,
+      ], _generatedDelegates);
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            'install appLocalizationsDelegates or waxLocalizationsDelegates:\n'
+            '${offenders.join('\n')}',
+      );
+    });
+
+    test('no app host installs the design system list', () {
+      // It compiles wherever the barrel reaches but carries no
+      // AppLocalizations, so context.l10n fails a null check far from the
+      // cause. The app's list spreads it; this file names it.
+      final offenders = <String>[
+        for (final path in _sourcesMatching(_appRoots, _designSystemList))
+          if (path != 'lib/src/l10n/l10n.dart' &&
+              path != 'test/ui_conventions_test.dart')
+            path,
+      ];
+      expect(
+        offenders,
+        isEmpty,
+        reason: 'install appLocalizationsDelegates:\n${offenders.join('\n')}',
+      );
+    });
   });
 
   // What the copy rule reads, pinned directly. Its counts are a sweep's
@@ -179,6 +227,7 @@ const _generated = <String>[
   'lib/src/shell/semantics_ids.dart',
   'lib/src/shell/app_version.dart',
   'lib/src/l10n/gen',
+  '../packages/waxdeck_ui/lib/src/l10n/gen',
 ];
 
 bool _isGenerated(String path) =>
@@ -209,8 +258,60 @@ const _roots = <String>[
 /// has nothing to say about.
 const _designSystem = '../packages/waxdeck_ui/lib';
 
-List<File> _sources() => <File>[
-  for (final root in _roots)
+/// The app package's own sources.
+const _appRoots = <String>['lib', 'test', 'integration_test', 'tool'];
+
+/// Every client source but the design system's library, which alone
+/// imports material_ui and cupertino_ui. The pure-Dart packages cannot.
+const _clientRoots = <String>[
+  ..._appRoots,
+  '../packages/waxdeck_data/lib',
+  '../packages/waxdeck_data/test',
+  '../packages/waxdeck_player/lib',
+  '../packages/waxdeck_player_testing/lib',
+  '../packages/waxdeck_player_testing/test',
+  '../packages/waxdeck_ui/test',
+  '../packages/waxdeck_ui/example/lib',
+  '../packages/waxdeck_ui/example/test',
+];
+
+/// The SDK's Material and Cupertino, and the localizations typed to them.
+const _sdkMaterialUris =
+    r'flutter/(?:material|cupertino)\.dart|flutter_localizations/';
+
+final _sdkMaterial = _importOf(_sdkMaterialUris);
+final _anyMaterial = _importOf('$_sdkMaterialUris|material_ui/|cupertino_ui/');
+
+RegExp _importOf(String uris) =>
+    RegExp('^(?:import|export) [\'"]package:(?:$uris)', multiLine: true);
+
+final _generatedDelegates = RegExp(
+  r'\b(?:App|Wax)Localizations\.localizationsDelegates\b',
+);
+
+final _designSystemList = RegExp(r'\bwaxLocalizationsDelegates\b');
+
+List<String> _sourcesMatching(List<String> roots, RegExp pattern) => <String>[
+  for (final file in _sources(roots))
+    if (_pathOf(file) case final path
+        when !_isGenerated(path) && pattern.hasMatch(_scan(path).code))
+      path,
+];
+
+/// A source's path with forward slashes, as the allowlist spells it.
+String _pathOf(File file) => file.path.split(Platform.pathSeparator).join('/');
+
+/// Each source read and blanked once, however many tests walk it.
+final _scans = <String, ({String source, String code})>{};
+
+({String source, String code}) _scan(String path) =>
+    _scans.putIfAbsent(path, () {
+      final source = File(path).readAsStringSync();
+      return (source: source, code: _code(source));
+    });
+
+List<File> _sources([List<String> roots = _roots]) => <File>[
+  for (final root in roots)
     if (Directory(root).existsSync())
       ...Directory(root)
           .listSync(recursive: true)

@@ -12,14 +12,21 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 ```
 
 That one import covers Material too: the library re-exports
-`package:flutter/material.dart`, which is what makes the eventual move to
-the `material_ui` package a change here instead of a sweep across every
-screen.
+`package:material_ui/material_ui.dart`, pinned here and nowhere else.
+Never import the SDK's `package:flutter/material.dart` beside it: its
+widgets are other types, and find no theme or Material above them.
 
 ```dart
 MaterialApp(
   theme: buildWaxTheme(variant: WaxThemeVariant.light),
   darkTheme: buildWaxTheme(variant: WaxThemeVariant.dark),   // or .oled
+  localizationsDelegates: waxLocalizationsDelegates,
+  // English first: resolution falls back to the first entry, and
+  // gen-l10n's list is alphabetical.
+  supportedLocales: [
+    const Locale('en'),
+    ...WaxLocalizations.supportedLocales.where((l) => l != const Locale('en')),
+  ],
 );
 
 final colors = WaxColors.of(context);   // surfaces, text, accent, domain hues

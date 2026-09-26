@@ -16,8 +16,8 @@ Widget localizedHost(
   return MaterialApp(
     locale: locale,
     theme: theme,
-    localizationsDelegates: waxLocalizationsDelegates,
-    supportedLocales: waxSupportedLocales,
+    localizationsDelegates: appLocalizationsDelegates,
+    supportedLocales: appSupportedLocales,
     home: child,
   );
 }

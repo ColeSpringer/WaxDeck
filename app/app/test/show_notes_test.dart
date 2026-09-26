@@ -1,8 +1,8 @@
 import 'localized_host.dart';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/podcasts/show_notes.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 Widget _host(String html, {void Function(String url)? onOpenLink}) =>
     localizedHost(

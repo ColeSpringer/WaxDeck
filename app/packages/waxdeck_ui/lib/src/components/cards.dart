@@ -4,9 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart'
     show ValueListenable, defaultTargetPlatform, precisionErrorTolerance;
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RendererBinding;
 import 'package:flutter/scheduler.dart' show SchedulerBinding;
+import 'package:material_ui/material_ui.dart';
 
 import '../icons/wax_icon.dart';
 import '../l10n/wax_l10n.dart';

@@ -103,8 +103,8 @@ Widget _keyboardHost(Widget screen) {
   addTearDown(router.dispose);
   return MaterialApp.router(
     routerConfig: router,
-    localizationsDelegates: waxLocalizationsDelegates,
-    supportedLocales: waxSupportedLocales,
+    localizationsDelegates: appLocalizationsDelegates,
+    supportedLocales: appSupportedLocales,
   );
 }
 

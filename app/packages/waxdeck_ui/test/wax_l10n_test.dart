@@ -20,31 +20,34 @@ void main() {
       expect(resolved.commonPlay, 'Play');
     });
 
-    testWidgets('a host that installed the delegate gets its locale', (
+    testWidgets('a host that installed the delegates gets its locale', (
       tester,
     ) async {
       late WaxLocalizations resolved;
+      late MaterialLocalizations material;
       await tester.pumpWidget(
         MaterialApp(
           locale: const Locale('es'),
-          localizationsDelegates: WaxLocalizations.localizationsDelegates,
+          localizationsDelegates: waxLocalizationsDelegates,
           supportedLocales: WaxLocalizations.supportedLocales,
           home: Builder(
             builder: (context) {
               resolved = context.waxL10n;
+              material = MaterialLocalizations.of(context);
               return const SizedBox.shrink();
             },
           ),
         ),
       );
       expect(resolved.commonPlay, 'Reproducir');
+      expect(material.backButtonTooltip, 'Atrás');
     });
 
     testWidgets('a component draws the host locale', (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           locale: const Locale('es'),
-          localizationsDelegates: WaxLocalizations.localizationsDelegates,
+          localizationsDelegates: waxLocalizationsDelegates,
           supportedLocales: WaxLocalizations.supportedLocales,
           home: Scaffold(
             body: ErrorState(message: 'No hay red.', onRetry: () {}),

@@ -1,8 +1,7 @@
-import 'package:flutter/material.dart';
-import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxIcons;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'player_host.dart';

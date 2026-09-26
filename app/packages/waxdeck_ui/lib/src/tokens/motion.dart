@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Duration and curve tokens, with reduced motion handled once here
 /// rather than by per-callsite discipline.

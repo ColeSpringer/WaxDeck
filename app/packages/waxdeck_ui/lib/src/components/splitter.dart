@@ -1,5 +1,5 @@
-import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
+import 'package:material_ui/material_ui.dart';
 
 import '../l10n/wax_l10n.dart';
 import '../tokens/colors.dart';

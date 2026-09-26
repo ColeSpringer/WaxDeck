@@ -1,8 +1,18 @@
 import 'package:flutter/widgets.dart';
+import 'package:material_ui/material_ui.dart' show GlobalMaterialLocalizations;
 
 import 'gen/wax_localizations.dart';
 
 export 'gen/wax_localizations.dart';
+
+/// The design system's table plus material_ui's Material, Cupertino and
+/// widgets tables. gen-l10n's own list names the SDK's Material tables,
+/// which material_ui never reads, so a host installs this one instead.
+const List<LocalizationsDelegate<dynamic>> waxLocalizationsDelegates =
+    <LocalizationsDelegate<dynamic>>[
+      WaxLocalizations.delegate,
+      ...GlobalMaterialLocalizations.delegates,
+    ];
 
 /// The English table, resolved once and held: it is the fallback below,
 /// so it is asked for on most frames of most tests.
@@ -17,7 +27,7 @@ final WaxLocalizations _english = lookupWaxLocalizations(const Locale('en'));
 /// parameters up through every component API.
 ///
 /// Resolves through `Localizations` when the host installed
-/// [WaxLocalizations.delegate], and answers English when it did not, so a
+/// [waxLocalizationsDelegates], and answers English when it did not, so a
 /// bare `MaterialApp(home:)` pump renders exactly what it always has.
 /// That fallback is what keeps the goldens and the widget tests of this
 /// package free of localization setup.

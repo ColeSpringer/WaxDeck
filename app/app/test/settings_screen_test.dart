@@ -1,7 +1,4 @@
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
-import 'package:flutter/material.dart';
-import 'package:waxdeck_ui/waxdeck_ui.dart'
-    show WaxButton, WaxCaptionMode, WaxChoice, WaxTextField;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
@@ -15,6 +12,7 @@ import 'package:waxdeck/src/settings/settings_screen.dart';
 import 'package:waxdeck/src/settings/settings_section_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
@@ -668,7 +666,7 @@ void main() {
       // The picker falls back to the raw tag for a language it has no
       // endonym for, which is a row reading "es". This is what keeps
       // that fallback unreachable.
-      for (final locale in waxSupportedLocales) {
+      for (final locale in appSupportedLocales) {
         expect(
           languageEndonyms[locale.toLanguageTag()],
           isNotNull,

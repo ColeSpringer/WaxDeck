@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 // Family names of the vendored subsets, as top-level constants so the
 // glyph constructor stays const-evaluable.

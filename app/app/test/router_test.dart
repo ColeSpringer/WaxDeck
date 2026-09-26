@@ -94,7 +94,7 @@ void main() {
       _location(container),
       '${WaxRoute.login}?${WaxRoute.fromParam}=%2Fsettings',
     );
-    expect(find.byKey(const Key('login-username')), findsOneWidget);
+    expect(find.byKey(const Key(SemanticsIds.loginUsername)), findsOneWidget);
 
     await container
         .read(authControllerProvider.notifier)
@@ -145,7 +145,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_location(container), WaxRoute.login);
-    expect(find.byKey(const Key('login-username')), findsOneWidget);
+    expect(find.byKey(const Key(SemanticsIds.loginUsername)), findsOneWidget);
   });
 
   testWidgets('the player route stands on its own with nothing playing', (
@@ -196,18 +196,42 @@ void main() {
     container.read(routerProvider).go(WaxRoute.signup);
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byKey(const Key('signup-username')), 'pippin');
     await tester.enterText(
-      find.byKey(const Key('signup-password')),
+      find.byKey(const Key(SemanticsIds.signupUsername)),
+      'pippin',
+    );
+    await tester.enterText(
+      find.byKey(const Key(SemanticsIds.signupPassword)),
       'second-breakfast',
     );
-    await tester.tap(find.byKey(const Key('signup-submit')));
+    await tester.tap(find.byKey(const Key(SemanticsIds.signupSubmit)));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Back to sign-in'));
     await tester.pumpAndSettle();
 
     expect(_location(container), WaxRoute.login);
+  });
+
+  testWidgets('a location change animates rather than cuts', (tester) async {
+    // go_router picks each page by the MaterialApp above it, and one
+    // from the other Material library turns every page into a cut.
+    final container = _container(FakeRepository());
+    addTearDown(container.dispose);
+    await tester.pumpWidget(_app(container));
+    await tester.pumpAndSettle();
+
+    container.read(routerProvider).go(WaxRoute.signup);
+    // The location is parsed asynchronously: the page lands a frame on.
+    await tester.pump();
+    await tester.pump();
+
+    final entering = ModalRoute.of(
+      tester.element(find.byKey(const Key(SemanticsIds.signupUsername))),
+    )!;
+    expect(entering.animation!.status, AnimationStatus.forward);
+    await tester.pumpAndSettle();
+    expect(entering.animation!.status, AnimationStatus.completed);
   });
 
   testWidgets('a screen that needs a payload stays out of the address bar', (

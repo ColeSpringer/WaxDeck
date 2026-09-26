@@ -1,9 +1,8 @@
-import 'package:flutter/material.dart';
-import 'package:waxdeck_ui/waxdeck_ui.dart' show WaxIcons;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/entity_star_rating_row.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';

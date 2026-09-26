@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
@@ -13,7 +12,7 @@ import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
-import 'package:waxdeck_ui/waxdeck_ui.dart' show ArtworkCaption, ArtworkImage;
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'player_host.dart';
@@ -56,8 +55,8 @@ Widget _keyboardHost(Widget player) {
   addTearDown(router.dispose);
   return MaterialApp.router(
     routerConfig: router,
-    localizationsDelegates: waxLocalizationsDelegates,
-    supportedLocales: waxSupportedLocales,
+    localizationsDelegates: appLocalizationsDelegates,
+    supportedLocales: appSupportedLocales,
   );
 }
 

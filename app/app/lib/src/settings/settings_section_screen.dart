@@ -963,7 +963,7 @@ class _AppearanceBody extends ConsumerWidget {
     // adding a language takes, beside its endonym.
     final languageTags = <String>[
       _systemLocaleTag,
-      for (final locale in waxSupportedLocales) locale.toLanguageTag(),
+      for (final locale in appSupportedLocales) locale.toLanguageTag(),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

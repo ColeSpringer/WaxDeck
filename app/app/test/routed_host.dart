@@ -59,7 +59,7 @@ Widget routedHost(
   return MaterialApp.router(
     routerConfig: router,
     locale: locale,
-    localizationsDelegates: waxLocalizationsDelegates,
-    supportedLocales: waxSupportedLocales,
+    localizationsDelegates: appLocalizationsDelegates,
+    supportedLocales: appSupportedLocales,
   );
 }

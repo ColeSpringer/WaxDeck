@@ -495,15 +495,6 @@ here waits on upstream.
   which already reports the transport the setting asks about, plus a
   desktop path that tolerates a missing NetworkManager.
 
-- `[in-repo]` **go_router stays on 17 until the app builds
-  material_ui's MaterialApp.** From 18.0.0 go_router decides a route's
-  page type by looking for material_ui's `MaterialApp` above it; the
-  app still builds the SDK's through `waxdeck_ui`'s Material export, so
-  under 18 every `builder:` route became a `NoTransitionPage` and the
-  transitions vanished. The pin lifts with the material_ui switch: the
-  export line in `waxdeck_ui`, plus the screens that still import
-  Material directly.
-
 - `[in-repo]` **`_ClampedBox` is a design-system primitive living
   private to a podcast screen.** It is a `SingleChildRenderObjectWidget`
   and a `RenderProxyBox` that lay a child out unbounded, take a pixel

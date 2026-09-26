@@ -6,6 +6,9 @@ import 'package:waxdeck_ui_catalog/composites/home_composite.dart';
 import 'package:waxdeck_ui_catalog/composites/player_composite.dart';
 import 'package:waxdeck_ui_catalog/sample_library.dart';
 
+// Reached by path, as flutter_test_config.dart reaches the comparator.
+import '../../test/support/material_host.dart';
+
 /// The composites are the taste checkpoint, so they are also the goldens
 /// that would catch a regression in it: a spacing change that reads fine
 /// in isolation but wrecks the shelf rhythm shows up here first.
@@ -43,9 +46,9 @@ Widget _screen(
   double height = 880,
 }) => MediaQuery(
   data: MediaQueryData(size: Size(width, height)),
-  child: Theme(
-    data: buildWaxTheme(variant: variant),
-    child: SizedBox(
+  child: materialHost(
+    buildWaxTheme(variant: variant),
+    SizedBox(
       width: width,
       height: height,
       child: Navigator(

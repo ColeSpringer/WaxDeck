@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart' show precisionErrorTolerance;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Scroll physics that settle on item boundaries.
 ///

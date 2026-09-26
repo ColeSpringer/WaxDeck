@@ -4,6 +4,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import 'support/material_host.dart';
+
 /// Renders one scenario under a theme variant, which is what makes a
 /// golden a statement about the design system rather than about Material.
 Widget _themed(WaxThemeVariant variant, Widget child, {WaxDensity? density}) {
@@ -11,9 +13,9 @@ Widget _themed(WaxThemeVariant variant, Widget child, {WaxDensity? density}) {
     variant: variant,
     density: density ?? WaxDensity.comfortable,
   );
-  return Theme(
-    data: theme,
-    child: ColoredBox(
+  return materialHost(
+    theme,
+    ColoredBox(
       color: variant.colors.canvas,
       child: Padding(padding: const EdgeInsets.all(12), child: child),
     ),

@@ -9,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 // package's `test/` and test code is deliberately not on its release
 // surface. The fonts a few lines down are read the same way and for the
 // same reason.
-// ignore: avoid_relative_lib_imports
 import '../../test/support/tolerant_goldens.dart';
 
 /// Golden harness for the composites.

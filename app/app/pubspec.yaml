@@ -53,14 +53,10 @@ dependencies:
   # Direct dependency for the font-warmup interceptor on the API
   # transport (waxdeck_api already rides this exact version).
   dio: 5.11.1
-  # Routing. Published by flutter.dev and pure Dart, but pinned exact like
-  # every other dependency: the route table is the app's navigation
-  # contract and a minor bump has moved redirect semantics before.
-  # Held below 18: from 18.0.0 go_router picks a route's page type by
-  # looking for material_ui's MaterialApp, and this app still builds the
-  # SDK's, so every route became a cut with no transition. It moves with
-  # the material_ui switch, not before.
-  go_router: 17.5.0
+  # Pinned exact: the route table is the navigation contract, and a minor
+  # bump has moved redirect semantics before. It finds each page's type
+  # from material_ui's MaterialApp, so it moves with waxdeck_ui's pin.
+  go_router: 18.0.1
   url_launcher: 6.3.2
   # The desktop mini player, behind MiniWindowPort. Frameless,
   # always-on-top, and positioned - three things a compositor is allowed
