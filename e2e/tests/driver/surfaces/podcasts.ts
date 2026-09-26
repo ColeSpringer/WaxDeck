@@ -4,7 +4,7 @@ import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, clickInView, clickThrough, typeInto } from '../gestures';
+import { chooseFromMenu, clickInView, clickThrough, openMenu, typeInto } from '../gestures';
 
 export class Podcasts extends Surface {
   add(): Locator {
@@ -35,6 +35,18 @@ export class Podcasts extends Surface {
 
   episodeInfo(pid: string): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.episodeInfo(pid)));
+  }
+
+  episodeMore(pid: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.episodeMore(pid)));
+  }
+
+  /// Raise an episode row's item menu from its kebab and leave it
+  /// standing; answers the sheet, which is named for the episode.
+  async openEpisodeMenu(pid: string): Promise<Locator> {
+    const sheet = this.control(SemanticsIds.itemMenuSheet(pid));
+    await openMenu(this.episodeMore(pid), sheet);
+    return sheet;
   }
 
   /// Subscribe through the real add dialog, by feed URL.

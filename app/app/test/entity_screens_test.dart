@@ -21,6 +21,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'secondary_click.dart';
 
 ItemSummary _track(
   String title, {
@@ -742,6 +743,91 @@ void main() {
         reason: 'an own release outside the loaded window is still own',
       );
       expect(find.text('[Non-Album]'), findsNothing);
+    });
+
+    testWidgets('a release card opens the release sheet, a loose one none', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[
+          _track('One', track: 1),
+          const ItemSummary(
+            pid: 'tr-loose',
+            mediaType: MediaType.music,
+            title: 'Loose',
+            artist: 'Nightjar',
+            album: 'Tape Box',
+            artistPid: 'ar-1',
+            durationMs: 200000,
+          ),
+        ];
+      await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
+
+      await rightClick(tester, _byId(SemanticsIds.entityAlbum('al-1')));
+      expect(_byId(SemanticsIds.itemMenuSheet('al-1')), findsOneWidget);
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+
+      final loose = find.widgetWithText(MediaCard, 'Tape Box');
+      expect(tester.widget<MediaCard>(loose).onPlay, isNull);
+      await rightClick(tester, loose);
+      expect(find.byType(WaxOptionRow), findsNothing);
+    });
+
+    testWidgets('an Appears on card opens the release sheet', (tester) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('Own', track: 1)]
+        ..facets['album|credit-artist|1'] = const <FacetBucket>[
+          FacetBucket(
+            key: 'guest',
+            label: 'Big Compilation',
+            count: 4,
+            entityPid: 'al-guest',
+          ),
+        ];
+      await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
+
+      await rightClick(tester, _byId(SemanticsIds.entityAlbum('al-guest')));
+      expect(_byId(SemanticsIds.itemMenuSheet('al-guest')), findsOneWidget);
+    });
+
+    testWidgets('a release card plays the release from its cover', (
+      tester,
+    ) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('Two', track: 2)]
+        ..facetItems['album 1'] = <ItemSummary>[
+          _track('Two', track: 2),
+          _track('One', track: 1),
+        ];
+      final container = await _pump(
+        tester,
+        const ArtistScreen(pid: 'ar-1'),
+        repository,
+      );
+
+      await hoverPlay(
+        tester,
+        find.byType(MediaCard).first,
+        label: 'Play Gullwing',
+      );
+      final queue = container.read(queueControllerProvider);
+      expect(queue.source.kind, QueueSourceKind.album);
+      expect(queue.source.pid, 'al-1');
+      expect(
+        <String>[for (final e in queue.entries) e.pid],
+        <String>['tr-One', 'tr-Two'],
+      );
+      await _stop(tester, container);
+    });
+
+    testWidgets('a top track opens the item menu', (tester) async {
+      final repository = FakeRepository()
+        ..facetItems['artist 1'] = <ItemSummary>[_track('One', track: 1)];
+      await _pump(tester, const ArtistScreen(pid: 'ar-1'), repository);
+
+      await rightClick(tester, _byId(SemanticsIds.indexItem(0)));
+      expect(_byId(SemanticsIds.itemMenuSheet('tr-One')), findsOneWidget);
     });
 
     testWidgets('a top track queues the same window the header does', (

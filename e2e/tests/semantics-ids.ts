@@ -325,6 +325,7 @@ export const SemanticsIds = {
   homeEpisodeInfo: 'home-episode-info',
   homeEpisodePlay: 'home-episode-play',
   homeMix: (index: string | number) => `home-mix-${index}`,
+  homeMixMore: (index: string | number) => `home-mix-more-${index}`,
   homeReviewPending: 'home-review-pending',
   homeReviewPendingOpen: 'home-review-pending-open',
   homeScreen: 'home-screen',
@@ -601,6 +602,7 @@ export const SemanticsIds = {
   playlistImportReport: 'playlist-import-report',
   playlistImportRun: 'playlist-import-run',
   playlistImportSource: (source: string | number) => `playlist-import-source-${source}`,
+  playlistMore: (pid: string | number) => `playlist-more-${pid}`,
   playlistNameField: 'playlist-name-field',
   playlistOverflow: 'playlist-overflow',
   playlistPin: 'playlist-pin',
@@ -653,6 +655,7 @@ export const SemanticsIds = {
   episodeFetch: (pid: string | number) => `episode-fetch-${pid}`,
   episodeInfo: (pid: string | number) => `episode-info-${pid}`,
   episodeMarkPlayed: 'episode-mark-played',
+  episodeMore: (pid: string | number) => `episode-more-${pid}`,
   episodePlay: 'episode-play',
   episodeQueue: 'episode-queue',
   episodeRemove: (pid: string | number) => `episode-remove-${pid}`,
@@ -689,6 +692,7 @@ export const SemanticsIds = {
   selectionQueue: 'selection-queue',
   showEpisodeFilter: (name: string | number) => `show-episode-filter-${name}`,
   showEpisodeSearch: 'show-episode-search',
+  showMore: (pid: string | number) => `show-more-${pid}`,
   showOverflow: 'show-overflow',
   showPin: 'show-pin',
   showSetCover: 'show-set-cover',
@@ -995,6 +999,7 @@ export const SemanticsIdPrefixes = {
 
   // home: Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.
   homeMix: 'home-mix-',
+  homeMixMore: 'home-mix-more-',
   notificationDelete: 'notification-delete-',
   notificationRow: 'notification-row-',
   notificationRowPlain: 'notification-row-',
@@ -1068,6 +1073,7 @@ export const SemanticsIdPrefixes = {
   playlistEntryRemove: 'playlist-entry-remove-',
   playlistExportNspLossRow: 'playlist-export-nsp-loss-',
   playlistImportSource: 'playlist-import-source-',
+  playlistMore: 'playlist-more-',
   playlistSyncArmOption: 'playlist-sync-arm-',
   playlistSyncIntervalOption: 'playlist-sync-interval-',
   playlistSyncModeOption: 'playlist-sync-mode-',
@@ -1088,6 +1094,7 @@ export const SemanticsIdPrefixes = {
   episodeContinue: 'episode-continue-',
   episodeFetch: 'episode-fetch-',
   episodeInfo: 'episode-info-',
+  episodeMore: 'episode-more-',
   episodeRemove: 'episode-remove-',
   episodeSection: 'episode-section-',
   episodeSelect: 'episode-select-',
@@ -1098,6 +1105,7 @@ export const SemanticsIdPrefixes = {
   podcastSearchSubscribe: 'podcast-search-subscribe-',
   podcastSort: 'podcast-sort-',
   showEpisodeFilter: 'show-episode-filter-',
+  showMore: 'show-more-',
   transcriptCue: 'transcript-cue-',
 
   // radio: The radio hub: the favorites dial, the station grid, and the add-station flow.

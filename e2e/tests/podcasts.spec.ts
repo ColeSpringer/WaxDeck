@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { J, T, retryCatalogBusy } from './driver';
+import { SemanticsIds } from './semantics-ids';
 
 // The podcast domain over the real stack. The feed host (feedserv)
 // serves a generated three-episode feed whose audio carries lead
@@ -231,6 +232,18 @@ test("an episode's location carries its show", async ({ app }) => {
     new RegExp(`/podcasts/${showPid}/episodes/${episode.pid}$`),
   );
   await app.podcasts.back(app.podcasts.unsubscribe());
+});
+
+test("an episode row's kebab opens its item menu", async ({ app }) => {
+  test.setTimeout(J.long);
+  const showPid = await app.seed.subscribePodcast(FEED_URL);
+  const [episode] = await app.seed.episodes(showPid);
+
+  await app.nav.enter('podcasts');
+  await app.podcasts.openShow(showPid);
+
+  await app.podcasts.openEpisodeMenu(episode.pid);
+  await expect(app.podcasts.control(SemanticsIds.itemMenuShareItem)).toBeVisible();
 });
 
 test('an unfetched episode still streams by enclosure passthrough', async (

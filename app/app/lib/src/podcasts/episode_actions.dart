@@ -56,18 +56,28 @@ class EpisodeActions {
       await fetchAndWait(context, episode);
       return;
     }
-    ref
-        .read(nowPlayingProvider.notifier)
-        .play(
-          <ItemSummary>[episode],
-          source: QueueSource(
-            kind: QueueSourceKind.single,
-            label: episode.title,
-            pid: episode.pid,
-          ),
-          positionMs: positionMs > 0 ? positionMs : null,
-        );
+    playOn(
+      ref.read(nowPlayingProvider.notifier),
+      episode,
+      positionMs: positionMs > 0 ? positionMs : null,
+    );
   }
+
+  /// [play]'s queue write, for a caller holding the controller rather
+  /// than a live ref. A null [positionMs] resumes the checkpoint.
+  static void playOn(
+    NowPlayingController playback,
+    EpisodeSummary episode, {
+    int? positionMs,
+  }) => playback.play(
+    <ItemSummary>[episode],
+    source: QueueSource(
+      kind: QueueSourceKind.single,
+      label: episode.title,
+      pid: episode.pid,
+    ),
+    positionMs: positionMs,
+  );
 
   /// Appends the episode to whatever is playing.
   void enqueue(BuildContext context, EpisodeSummary episode) {

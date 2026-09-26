@@ -920,6 +920,95 @@ void main() {
       expect(collapsed, 1);
     });
 
+    group('an island that moves under a press', () {
+      // The bottom region grows on demand, the way an episode's notes
+      // landing lifts the whole column.
+      final tall = ValueNotifier<bool>(false);
+      setUp(() => tall.value = false);
+
+      Future<int Function()> pumpGrowing(WidgetTester tester) async {
+        var collapsed = 0;
+        await _pumpAt(
+          tester,
+          SizedBox(
+            width: 900,
+            height: 880,
+            child: PlayerScaffold(
+              now: _music,
+              onCollapse: () => collapsed++,
+              transport: TransportCluster(playing: true, onPlayPause: () {}),
+              seek: SeekCluster(now: _music, onSeek: (_) {}),
+              bottomRegion: ValueListenableBuilder<bool>(
+                valueListenable: tall,
+                builder: (_, value, _) =>
+                    SizedBox(width: 300, height: value ? 160 : 40),
+              ),
+            ),
+          ),
+          size: const Size(900, 880),
+        );
+        return () => collapsed;
+      }
+
+      testWidgets('a press that began before it grew is not a dismissal', (
+        tester,
+      ) async {
+        final collapsed = await pumpGrowing(tester);
+        final gesture = await tester.startGesture(const Offset(40, 440));
+        tall.value = true;
+        await tester.pump();
+        // Past the settle window, so only the press's own start decides.
+        await tester.pump(const Duration(milliseconds: 400));
+        await gesture.up();
+        await tester.pump();
+        expect(collapsed(), 0);
+      });
+
+      testWidgets('a second finger does not reset the first one\'s press', (
+        tester,
+      ) async {
+        final collapsed = await pumpGrowing(tester);
+        final first = await tester.startGesture(
+          const Offset(40, 440),
+          pointer: 1,
+        );
+        tall.value = true;
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        final second = await tester.startGesture(
+          const Offset(40, 300),
+          pointer: 2,
+        );
+        await second.up();
+        await first.up();
+        await tester.pump();
+        expect(collapsed(), 0);
+      });
+
+      testWidgets('a click landing as it grows is not a dismissal', (
+        tester,
+      ) async {
+        final collapsed = await pumpGrowing(tester);
+        tall.value = true;
+        await tester.pump();
+        await tester.tapAt(const Offset(40, 440));
+        await tester.pump();
+        expect(collapsed(), 0);
+      });
+
+      testWidgets('once it has settled, a click off the content dismisses', (
+        tester,
+      ) async {
+        final collapsed = await pumpGrowing(tester);
+        tall.value = true;
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.tapAt(const Offset(40, 440));
+        await tester.pump();
+        expect(collapsed(), 1);
+      });
+    });
+
     testWidgets('a click on the content is not a dismissal', (tester) async {
       var collapsed = 0;
       await _pumpAt(

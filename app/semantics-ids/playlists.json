@@ -32,6 +32,7 @@
     "playlistImportReport": "playlist-import-report",
     "playlistImportRun": "playlist-import-run",
     "playlistImportSource": "playlist-import-source-{source}",
+    "playlistMore": "playlist-more-{pid}",
     "playlistNameField": "playlist-name-field",
     "playlistOverflow": "playlist-overflow",
     "playlistPin": "playlist-pin",

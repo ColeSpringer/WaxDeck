@@ -167,6 +167,61 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a year with more than one medium draws its split', (
+    tester,
+  ) async {
+    final year = DateTime.now().year;
+    final repo = FakeRepository()
+      ..yearInReview = _recap(year).withMedia(const <MediaTypeListening>[
+        MediaTypeListening(
+          mediaType: StatsMediaType.music,
+          ms: 5400000,
+          sessions: 8,
+        ),
+        MediaTypeListening(
+          mediaType: StatsMediaType.podcast,
+          ms: 1800000,
+          sessions: 2,
+        ),
+      ]);
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    final split = find.byKey(const Key('yir-media-split'));
+    expect(split, findsOneWidget);
+    // Under the figures and over the months, as on the stats screen.
+    expect(
+      tester.getTopLeft(split).dy,
+      lessThan(tester.getTopLeft(find.byKey(const Key('yir-month-chart'))).dy),
+    );
+    expect(
+      tester.getTopLeft(split).dy,
+      greaterThan(tester.getTopLeft(find.byKey(const Key('yir-total'))).dy),
+    );
+  });
+
+  testWidgets('a year in one medium draws no split', (tester) async {
+    final year = DateTime.now().year;
+    final repo = FakeRepository()
+      ..yearInReview = _recap(year).withMedia(const <MediaTypeListening>[
+        MediaTypeListening(
+          mediaType: StatsMediaType.music,
+          ms: 7200000,
+          sessions: 10,
+        ),
+        // A listen recorded with no time on it is no share.
+        MediaTypeListening(
+          mediaType: StatsMediaType.podcast,
+          ms: 0,
+          sessions: 1,
+        ),
+      ]);
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('yir-media-split')), findsNothing);
+  });
+
   testWidgets('the chevrons step the year and refetch', (tester) async {
     final thisYear = DateTime.now().year;
     final repo = FakeRepository()..yearInReview = _recap(thisYear);
@@ -414,4 +469,23 @@ void main() {
 
     expect(find.textContaining('preview only'), findsOneWidget);
   });
+}
+
+extension on YearInReview {
+  YearInReview withMedia(List<MediaTypeListening> byMediaType) => YearInReview(
+    year: year,
+    timezone: timezone,
+    totalMs: totalMs,
+    sessions: sessions,
+    distinctItems: distinctItems,
+    newInLibrary: newInLibrary,
+    timeSavedMs: timeSavedMs,
+    longestStreakDays: longestStreakDays,
+    byMonth: byMonth,
+    byMediaType: byMediaType,
+    topArtists: topArtists,
+    topTracks: topTracks,
+    topGenres: topGenres,
+    topShows: topShows,
+  );
 }

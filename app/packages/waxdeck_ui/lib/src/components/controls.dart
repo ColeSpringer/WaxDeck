@@ -416,6 +416,7 @@ class WaxPill extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.text,
+    this.reserve,
     this.selected = false,
     this.mono = false,
     this.surface,
@@ -430,6 +431,10 @@ class WaxPill extends StatelessWidget {
   /// What is drawn, when it is shorter than the name. Defaults to
   /// [label].
   final String? text;
+
+  /// The widest text a changing readout can show: the pill keeps room
+  /// for it, so its width does not follow the value.
+  final String? reserve;
 
   /// Null disables it, which is what a control with a round trip in
   /// flight is.
@@ -456,6 +461,9 @@ class WaxPill extends StatelessWidget {
     final foreground = selected
         ? colors.onAccentContainer
         : (enabled ? colors.textSecondary : colors.textDisabled);
+    final style = (mono ? WaxType.monoData : WaxType.caption).copyWith(
+      color: foreground,
+    );
     return WaxTappable(
       semanticsId: semanticsId,
       label: label,
@@ -478,11 +486,19 @@ class WaxPill extends StatelessWidget {
               horizontal: WaxSpace.s12,
               vertical: WaxSpace.s8,
             ),
-            child: Text(
-              drawn,
-              style: (mono ? WaxType.monoData : WaxType.caption).copyWith(
-                color: foreground,
-              ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: <Widget>[
+                if (reserve case final room?)
+                  Visibility(
+                    visible: false,
+                    maintainSize: true,
+                    maintainAnimation: true,
+                    maintainState: true,
+                    child: Text(room, style: style),
+                  ),
+                Text(drawn, style: style),
+              ],
             ),
           ),
         ),

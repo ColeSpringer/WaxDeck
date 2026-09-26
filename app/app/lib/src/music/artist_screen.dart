@@ -9,6 +9,7 @@ import '../artwork/art_source_label.dart';
 import '../artwork/artwork_providers.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
 import '../player/entity_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
@@ -19,6 +20,7 @@ import '../settings/settings_registry.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import 'album_play.dart';
 import 'music_controllers.dart';
 
 /// What the queue an artist screen builds is a window over. One builder
@@ -278,6 +280,25 @@ class _AppearsOn extends ConsumerWidget {
               ),
             );
           },
+          onPlayItem: (tile) {
+            final at = tiles.indexOf(tile);
+            if (at < 0) return;
+            unawaited(
+              playAlbumPid(ref, albums[at].entityPid!, label: albums[at].label),
+            );
+          },
+          onMoreItem: (tile) {
+            final at = tiles.indexOf(tile);
+            if (at < 0) return;
+            unawaited(
+              showAlbumMenuSheet(
+                context,
+                ref,
+                pid: albums[at].entityPid!,
+                title: albums[at].label,
+              ),
+            );
+          },
         ),
       ],
     );
@@ -356,6 +377,32 @@ class _Body extends ConsumerWidget {
                 );
               }
             },
+            // A loose folder has no entity to play or to hold a menu.
+            itemHasActions: (tile) {
+              final at = tiles.indexOf(tile);
+              return at >= 0 && albums[at].pid != null;
+            },
+            onPlayItem: (tile) {
+              final at = tiles.indexOf(tile);
+              if (at < 0) return;
+              if (albums[at].pid case final pid?) {
+                unawaited(playAlbumPid(ref, pid, label: albums[at].title));
+              }
+            },
+            onMoreItem: (tile) {
+              final at = tiles.indexOf(tile);
+              if (at < 0) return;
+              if (albums[at].pid case final pid?) {
+                unawaited(
+                  showAlbumMenuSheet(
+                    context,
+                    ref,
+                    pid: pid,
+                    title: albums[at].title,
+                  ),
+                );
+              }
+            },
           ),
         ],
         _AppearsOn(pid: pid),
@@ -408,6 +455,8 @@ class _Body extends ConsumerWidget {
                   semanticsId: SemanticsIds.indexItem(i),
                 ),
                 onTap: () => unawaited(_play(context, ref, i)),
+                onMore: () =>
+                    unawaited(showItemMenuForSummary(context, ref, top[i])),
               ),
             ),
           ),

@@ -1,6 +1,9 @@
 package service
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestNormalizeRadioField(t *testing.T) {
 	t.Parallel()
@@ -156,4 +159,70 @@ func TestRadioSearchFieldKeepsApostrophes(t *testing.T) {
 			t.Errorf("normalizeRadioField(%q) = %q, want %q", tc.raw, got, tc.match)
 		}
 	}
+}
+
+// The face draws the matched item's own cover, so a match with none is
+// no answer: the field would crop the station's logo square.
+func TestRadioNowPlayingItemAnswersOnlyATrackWithACover(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	covered := itemPIDByTitle(t, ctx, svc, uc, "Amber Waves")
+	giveCovers(t, ctx, svc, uc, []string{covered}, coverPNG(t, 60))
+
+	cases := []struct{ line, want string }{
+		{"Test Ensemble - Amber Waves", covered},
+		{"Brass Nine - Delta Groove", ""},
+		{"Nobody At All - Nothing Here", ""},
+	}
+	for _, tc := range cases {
+		if got := svc.RadioNowPlayingItem(ctx, uc, "rs-01TEST", "Deck FM", tc.line); got != tc.want {
+			t.Errorf("RadioNowPlayingItem(%q) = %q, want %q", tc.line, got, tc.want)
+		}
+	}
+}
+
+// A read that failed is not an answer, so the memo must not keep it
+// for the rest of the title.
+func TestRadioNowPlayingItemDoesNotKeepAFailedRead(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	covered := itemPIDByTitle(t, ctx, svc, uc, "Amber Waves")
+	giveCovers(t, ctx, svc, uc, []string{covered}, coverPNG(t, 60))
+	const line = "Test Ensemble - Amber Waves"
+
+	gone, cancel := context.WithCancel(ctx)
+	cancel()
+	if got := svc.RadioNowPlayingItem(gone, uc, "rs-01TEST", "Deck FM", line); got != "" {
+		t.Fatalf("a cancelled read answered %q", got)
+	}
+	if got := svc.RadioNowPlayingItem(ctx, uc, "rs-01TEST", "Deck FM", line); got != covered {
+		t.Fatalf("after a failed read the title answered %q, want %q", got, covered)
+	}
+}
+
+// A pid the art check cannot find has no cover; it is not a failed read,
+// which the memo would never keep and every poll would search again.
+func TestHasFrontArtReadsNotFoundAsNoCover(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixture(t)
+	for _, pid := range []string{"zz-not-a-pid", "tr-01M3DWQMGG0MMBGARZ8K6RMV4Z"} {
+		if has, err := svc.hasFrontArt(ctx, pid); err != nil || has {
+			t.Errorf("hasFrontArt(%q) = %v, %v; want false, nil", pid, has, err)
+		}
+	}
+}
+
+func itemPIDByTitle(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, title string) string {
+	t.Helper()
+	page, err := svc.Items(ctx, uc, ItemFilter{}, "", 50)
+	if err != nil {
+		t.Fatalf("listing items: %v", err)
+	}
+	for _, it := range page.Items {
+		if it.Title == title {
+			return it.PID
+		}
+	}
+	t.Fatalf("no fixture item titled %q", title)
+	return ""
 }

@@ -49,14 +49,7 @@ class QueueDrop {
     required String facetKey,
   }) => QueueDrop(
     label: label,
-    resolve: () async {
-      final page = await repository.listItems(
-        facet: facet,
-        facetKey: facetKey,
-        limit: kQueueDropCap,
-      );
-      return page.items;
-    },
+    resolve: () => bucketItems(repository, facet: facet, facetKey: facetKey),
   );
 
   /// What the drag is of, for the feedback and for what is said after.
@@ -70,6 +63,21 @@ class QueueDrop {
 /// window anything longer; asking for more than it can hold would be a
 /// page fetched to be thrown away.
 const int kQueueDropCap = 500;
+
+/// One bucket's items, as many as the queue can hold: what a drop
+/// resolves and what an album card plays.
+Future<List<ItemSummary>> bucketItems(
+  WaxDeckRepository repository, {
+  required String facet,
+  required String facetKey,
+}) async {
+  final page = await repository.listItems(
+    facet: facet,
+    facetKey: facetKey,
+    limit: kQueueDropCap,
+  );
+  return page.items;
+}
 
 /// A row that can be picked up with a mouse and dropped on the queue.
 ///

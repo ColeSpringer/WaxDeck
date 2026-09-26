@@ -70,34 +70,15 @@ here waits on upstream.
   engine reports for those is a design question `load` did not have to
   answer.
 
-- `[in-repo]` **Some content rows and tiles still have no menu to
-  answer a secondary tap with.** Most item rows got theirs: album and
-  playlist track rows, queue rows, search track and episode hits, the
-  music listing rows, and home's item shelves open the shared item menu
-  (`library/item_menu.dart`); home's episode cards open their own sheet
-  (play, info, edit); search's album hits and the album index buckets
-  open the release sheet, and artist and book hits and artist buckets
-  keep the pin sheet. The door is a kebab or hover chip, a right click,
-  or - where the surface has not spent it on multi-select - a long
-  press (`MediaListRow` gives a wired `onLongPress` precedence over
-  `onMore`, which is what lets the queue keep hold-to-select beside the
-  menu). Still menu-less: book, podcast, and playlist tiles, home's mix
-  shelf, the artist screen's top-track rows, the computed track lists
-  (an instant mix's, similar-tracks'), and a show's episode rows, which
-  spend their long press on multi-select and would need the kebab
-  route. A right click on any of those hands back the browser's menu;
-  what each menu should hold is a design question per surface rather
-  than a wiring change.
-
-  A second gap in the same policy, narrower: `WaxSecondaryTapRegion` is
-  pointer-driven, and Flutter's mouse tracker raises enter and exit for
-  mouse and stylus only, so a touch never holds the browser menu off.
-  The window that matters is covered from the other side -
-  `waxWithoutBrowserMenu` holds it across the menu route, whatever
-  opened it - which leaves only the long press itself, before the menu
-  appears. On a canvas-drawn card no browser has much to offer there, so
-  this is recorded rather than fixed: closing it properly means raising
-  the hold on a touch pointer-down and releasing it on up, and a
+- `[in-repo]` **A touch never holds the browser menu off before a
+  sheet appears.** `WaxSecondaryTapRegion` is pointer-driven, and
+  Flutter's mouse tracker raises enter and exit for mouse and stylus
+  only. The window that matters is covered from the other side -
+  `waxWithoutBrowserMenu` holds it across every menu route and option
+  sheet, whatever opened it - which leaves only the long press itself,
+  before the menu appears. On a canvas-drawn card no browser has much to
+  offer there, so this is recorded rather than fixed: closing it means
+  raising the hold on a touch pointer-down and releasing it on up, and a
   `Listener` per row on every platform is a poor trade for a menu that
   may never render.
 
@@ -179,18 +160,6 @@ here waits on upstream.
   to one entity's state, while this is one whole-document singleton
   whose "intent" is a function over the document rather than a value.
 
-- `[in-repo]` **The hover play affordance is on the item shelves only.**
-  `ArtworkImage` takes an `onPlay` and draws a scrim and a glyph under a
-  pointer for whoever passes one, and the home shelves do: their cards
-  are catalog items, so "play this" is one queue write with a source of
-  `single` (or `book`). Every other grid is entity tiles - an album, a
-  show, a station, a playlist - where the verb is a different one over a
-  different read: playing an album means fetching its running order
-  first, and a podcast tile has no single thing to play at all. Those
-  call sites opt in when each verb is decided; the affordance costs
-  nothing on touch either way, because a `MouseRegion` reports no hover
-  to a finger.
-
 - `[in-repo]` **The enrichment source set has an order but no operator
   control.** The per-field precedence is now stated and enforced
   (`docs/curation-and-metadata.md`): MusicBrainz matching is
@@ -213,24 +182,6 @@ here waits on upstream.
   content and it shares a per-IP budget with the radio path if both
   ever ask it.
 
-- `[in-repo]` **The radio face's artwork shape follows a URL, not a
-  picture.** The face draws a square with no platter ring when the
-  server matched the announced title to a library item, and a circle
-  with the ring otherwise (`radio_face.dart`, `onTheRecord`). It decides
-  from `radioNowPlayingArtProvider` being non-null, which only says the
-  server found a match - `integrations.go` sets `NowPlayingItemPid`
-  without checking that the item has cover art. So a matched track with
-  no art draws the station wordmark cropped square with no ring, losing
-  the one ambient cue that the stream is live. The shape is chosen when
-  the widget builds and whether the image exists is known a round trip
-  later, so neither half is a local fix. Two ways out: gate
-  `NowPlayingItemPid` server-side on the item having art, which matches
-  what the field's own description says it is for and is a spec change;
-  or make artwork absence observable, since `ArtworkStore.knownAbsent`
-  already holds the answer but the store is not listenable, so a face
-  reading it flips shape whenever the next title poll happens to rebuild
-  rather than when the 404 lands. The second rung (`nowPlayingArtKey`)
-  is unaffected - the server only sends a key when it has the bytes.
 - `[in-repo]` **Download-notification polish.** The
   minimum is wired: a running/complete/error notification named by the original
   file, a progress bar, and a once-per-process permission request at the
@@ -409,22 +360,6 @@ here waits on upstream.
   switch is gone and the claim is withdrawn. Take it with the
   perf-measurement entry above.
 
-- `[in-repo]` **The player's dismissing surface catches a press aimed
-  at a control that moved.** `PlayerScaffold` gives every pixel its
-  content islands do not claim to the tap that collapses the player,
-  which is what a listener wants for the space around the artwork. The
-  face is also still assembling itself for a beat after it opens: the
-  session resolves and the action chips appear, then an episode's notes
-  land and the bottom region lifts the whole column. A press that
-  starts before one of those and arrives after it lands in the gap
-  beside an island and shuts the player, having been aimed squarely at
-  a chip. A soak caught this driving the rate chip - the e2e gesture
-  now puts the player back and tries again, which is a fix for the
-  suite and not for the thumb. The product answer is for the scaffold
-  to hold the dismissal back while the face is still resolving, or for
-  the islands to reserve their slots so the row cannot move under a
-  finger; neither is written.
-
 ## Connect and casting
 
 
@@ -494,24 +429,6 @@ here waits on upstream.
   `requiresWiFi: false` and holding transfers from `ConnectivityPort`,
   which already reports the transport the setting asks about, plus a
   desktop path that tolerates a missing NetworkManager.
-
-- `[in-repo]` **`_ClampedBox` is a design-system primitive living
-  private to a podcast screen.** It is a `SingleChildRenderObjectWidget`
-  and a `RenderProxyBox` that lay a child out unbounded, take a pixel
-  budget, clip what does not fit and report whether anything did
-  (`show_screen.dart` around 850-975) - no podcast in it anywhere.
-  CLAUDE.md rule 3 puts components in `waxdeck_ui`, and the package
-  already hosts this exact shape next to `ReadingColumn`
-  (`_SkipLinkBox`/`_RenderSkipLinkBox`, `components/navigation.dart`).
-  Private to a screen it gets no catalogue entry and no golden, so the
-  next surface that wants "clamp this and offer Show more" - an artist
-  bio, an album description, a review note - either copies the render
-  object or falls back to the `ConstrainedBox` + `ClipRect` +
-  unconditional button this replaced, which is the arrangement that
-  offered to unfold a one-line description. Move it with a catalogue
-  entry and both golden passes, and take the tidying in the same change:
-  the intrinsics paths no call site exercises, and two getters nothing
-  reads.
 
 - `[in-repo]` **The Android build turns Kotlin's incremental compiler
   off on Windows, and should stop having to.** Kotlin 2.3.20 opens a
@@ -600,14 +517,6 @@ here waits on upstream.
   Playwright suite under `e2e/`.
 
 ## Discovery and stats
-
-- `[in-repo]` **The year in review draws no per-media-type split.** The
-  stats screen now renders `ListeningStats.byMediaType` as a stacked bar
-  under its headline (`MediaSplitBar`), which is what the field was
-  always for; `YearInReview.byMediaType` still reaches no surface. A
-  conscious cut rather than an oversight: the recap is a sequence of
-  single-claim panels and a four-way split is not one claim, so where it
-  would go is a design question the stats screen did not have to answer.
 
 - `[in-repo]` **The web build has no downloads of its own to announce.**
   The bell now reports what this device finished transferring

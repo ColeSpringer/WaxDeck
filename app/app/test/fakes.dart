@@ -58,6 +58,9 @@ class FakeRepository implements WaxDeckRepository {
   /// Pids whose saved play state reports the item finished.
   final Set<String> finishedPids = {};
 
+  /// Past the played threshold without reaching the end.
+  final Set<String> playedPids = {};
+
   /// Star and rating state by pid.
   final Map<String, bool> starredByPid = {};
   final Map<String, int?> ratingByPid = {};
@@ -121,6 +124,15 @@ class FakeRepository implements WaxDeckRepository {
   /// Held open, an episode listing waits on it: a reload in flight is
   /// what a screen's refresh test is about.
   Completer<void>? listEpisodesGate;
+
+  /// Every show whose episode list was read, in order.
+  final List<String> listEpisodesCalls = [];
+
+  /// Held open, an episode's detail read waits on it.
+  Completer<void>? getEpisodeGate;
+
+  /// Held open, a book's detail read waits on it.
+  Completer<void>? getBookGate;
 
   /// When set, position checkpoints fail with it.
   WaxDeckApiException? putPlayStateError;
@@ -929,7 +941,7 @@ class FakeRepository implements WaxDeckRepository {
   PlayState _playStateOf(String pid) => PlayState(
     pid: pid,
     positionMs: playPositions[pid] ?? 0,
-    played: finishedPids.contains(pid),
+    played: finishedPids.contains(pid) || playedPids.contains(pid),
     finished: finishedPids.contains(pid),
     playCount: finishedPids.contains(pid) ? 1 : 0,
     starred: starredByPid[pid] ?? false,
@@ -1412,6 +1424,7 @@ class FakeRepository implements WaxDeckRepository {
     String? cursor,
     int? limit,
   }) async {
+    listEpisodesCalls.add(pid);
     final error = listError;
     if (error != null) throw error;
     await listEpisodesGate?.future;
@@ -1427,6 +1440,7 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<EpisodeDetail> getEpisode(String pid) async {
+    await getEpisodeGate?.future;
     final canned = episodeDetails[pid];
     if (canned != null) return canned;
     final summary = _findEpisode(pid);
@@ -1562,6 +1576,7 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<BookDetail> getBook(String pid) async {
+    await getBookGate?.future;
     final book = books[pid];
     if (book == null) {
       throw const WaxDeckApiException(
@@ -1825,9 +1840,17 @@ class FakeRepository implements WaxDeckRepository {
   /// screen's refresh test.
   Completer<void>? getPlaylistGate;
 
+  /// When set, a playlist's own read fails with it.
+  WaxDeckApiException? getPlaylistError;
+
+  /// When set, a playlist delete fails with it.
+  WaxDeckApiException? deletePlaylistError;
+
   @override
   Future<Playlist> getPlaylist(String pid) async {
     await getPlaylistGate?.future;
+    final error = getPlaylistError;
+    if (error != null) throw error;
     final pl = playlistsByPid[pid];
     if (pl == null) {
       throw const WaxDeckApiException(
@@ -1867,6 +1890,8 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<void> deletePlaylist(String pid) async {
+    final error = deletePlaylistError;
+    if (error != null) throw error;
     playlistsByPid.remove(pid);
     playlistMembers.remove(pid);
   }
@@ -1891,11 +1916,16 @@ class FakeRepository implements WaxDeckRepository {
       );
     }
     final members = playlistMembers[pid] ?? const [];
+    final start = cursor == null ? 0 : int.parse(cursor);
+    final end = limit == null
+        ? members.length
+        : (start + limit).clamp(0, members.length);
     return PlaylistItemsPage(
       entries: [
-        for (var i = 0; i < members.length; i++)
+        for (var i = start; i < end; i++)
           PlaylistEntry(position: i, item: _itemByPid(members[i])),
       ],
+      nextCursor: end < members.length ? '$end' : null,
     );
   }
 

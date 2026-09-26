@@ -13,8 +13,10 @@ import '../settings/client_prefs.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import 'playlist_actions.dart';
 import 'playlist_create.dart';
 import 'playlist_import.dart';
+import 'playlist_play.dart';
 import 'playlists_controller.dart';
 
 /// The caller's playlists and every shared one, as covers. The section
@@ -155,6 +157,10 @@ class _PlaylistGrid extends ConsumerWidget {
               width: grid.width,
               // Gone to: a playlist is a link, declared under here.
               onTap: () => context.go(WaxRoute.playlist(playlist.pid)),
+              onPlay: () => unawaited(playPlaylistPid(ref, playlist.pid)),
+              onMore: () =>
+                  unawaited(showPlaylistMenuSheet(context, ref, playlist)),
+              moreSemanticsId: SemanticsIds.playlistMore(playlist.pid),
             );
           },
         );

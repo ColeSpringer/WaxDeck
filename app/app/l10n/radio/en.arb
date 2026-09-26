@@ -329,6 +329,16 @@
   "@radioTitle": {
     "description": "The radio dial, named on its own title."
   },
+  "radioTuneIn": "Tune in {name}",
+  "@radioTuneIn": {
+    "description": "Name of the play button over a station's logo. {name} is the station's name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Harbour FM"
+      }
+    }
+  },
   "radioTuningIn": "Tuning in",
   "@radioTuningIn": {
     "description": "Under a station's name while its stream is opening."

@@ -5469,11 +5469,29 @@ abstract class AppLocalizations {
   /// **'No mix available for {title}'**
   String homeMixEmpty(String title);
 
+  /// Row in a genre mix card's menu that opens the genre's listing. The genre's name is drawn under it.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to genre'**
+  String get homeMixGoToGenre;
+
   /// Card for a mix seeded by one artist. {artist} is that artist's own name.
   ///
   /// In en, this message translates to:
   /// **'More like {artist}'**
   String homeMixMoreLike(String artist);
+
+  /// Row in a mix card's menu: mints the mix and plays it.
+  ///
+  /// In en, this message translates to:
+  /// **'Play mix'**
+  String get homeMixPlay;
+
+  /// Row in a mix card's menu: mints the mix and plays it shuffled.
+  ///
+  /// In en, this message translates to:
+  /// **'Shuffle mix'**
+  String get homeMixShuffle;
 
   /// Shelf of mixes built from what this listener plays.
   ///
@@ -5511,16 +5529,16 @@ abstract class AppLocalizations {
   /// **'That pin was not saved.'**
   String get homePinNotSaved;
 
-  /// Row in the pin sheet, which can offer more than one target at once, so each says what it is about. {what} is the kind of thing: album, artist or book.
+  /// Row in the pin sheet, which can offer more than one target at once, so each says what it is about. {what} is the kind of thing: album, artist, book, podcast or playlist.
   ///
   /// In en, this message translates to:
-  /// **'{what, select, album{Pin album to Home} artist{Pin artist to Home} book{Pin book to Home} other{Pin to Home}}'**
+  /// **'{what, select, album{Pin album to Home} artist{Pin artist to Home} book{Pin book to Home} podcast{Pin podcast to Home} playlist{Pin playlist to Home} other{Pin to Home}}'**
   String homePinSheetPin(String what);
 
-  /// Row in the pin sheet for a target that is already pinned. {what} is the kind of thing: album, artist or book.
+  /// Row in the pin sheet for a target that is already pinned. {what} is the kind of thing: album, artist, book, podcast or playlist.
   ///
   /// In en, this message translates to:
-  /// **'{what, select, album{Unpin album from Home} artist{Unpin artist from Home} book{Unpin book from Home} other{Unpin from Home}}'**
+  /// **'{what, select, album{Unpin album from Home} artist{Unpin artist from Home} book{Unpin book from Home} podcast{Unpin podcast from Home} playlist{Unpin playlist from Home} other{Unpin from Home}}'**
   String homePinSheetUnpin(String what);
 
   /// Said when a pin was refused because the shelf is at its cap.
@@ -10718,6 +10736,12 @@ abstract class AppLocalizations {
   /// **'Play'**
   String get podcastPlay;
 
+  /// Name of the play button over a show's cover: plays the newest episode not yet played, or the newest from its start when all are. {show} is the show's title.
+  ///
+  /// In en, this message translates to:
+  /// **'Play latest from {show}'**
+  String podcastPlayLatest(String show);
+
   /// The mark-played button on an episode already finished, which is a statement rather than an action.
   ///
   /// In en, this message translates to:
@@ -11677,6 +11701,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Radio'**
   String get radioTitle;
+
+  /// Name of the play button over a station's logo. {name} is the station's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Tune in {name}'**
+  String radioTuneIn(String name);
 
   /// Under a station's name while its stream is opening.
   ///

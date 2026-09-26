@@ -43,6 +43,10 @@
       }
     }
   },
+  "homeMixGoToGenre": "Go to genre",
+  "@homeMixGoToGenre": {
+    "description": "Row in a genre mix card's menu that opens the genre's listing. The genre's name is drawn under it."
+  },
   "homeMixMoreLike": "More like {artist}",
   "@homeMixMoreLike": {
     "description": "Card for a mix seeded by one artist. {artist} is that artist's own name.",
@@ -52,6 +56,14 @@
         "example": "Beach House"
       }
     }
+  },
+  "homeMixPlay": "Play mix",
+  "@homeMixPlay": {
+    "description": "Row in a mix card's menu: mints the mix and plays it."
+  },
+  "homeMixShuffle": "Shuffle mix",
+  "@homeMixShuffle": {
+    "description": "Row in a mix card's menu: mints the mix and plays it shuffled."
   },
   "homeMixesTitle": "Made for you",
   "@homeMixesTitle": {
@@ -77,9 +89,9 @@
   "@homePinNotSaved": {
     "description": "Said when a pin failed for a reason the error table has no sentence for."
   },
-  "homePinSheetPin": "{what, select, album{Pin album to Home} artist{Pin artist to Home} book{Pin book to Home} other{Pin to Home}}",
+  "homePinSheetPin": "{what, select, album{Pin album to Home} artist{Pin artist to Home} book{Pin book to Home} podcast{Pin podcast to Home} playlist{Pin playlist to Home} other{Pin to Home}}",
   "@homePinSheetPin": {
-    "description": "Row in the pin sheet, which can offer more than one target at once, so each says what it is about. {what} is the kind of thing: album, artist or book.",
+    "description": "Row in the pin sheet, which can offer more than one target at once, so each says what it is about. {what} is the kind of thing: album, artist, book, podcast or playlist.",
     "placeholders": {
       "what": {
         "type": "String",
@@ -87,9 +99,9 @@
       }
     }
   },
-  "homePinSheetUnpin": "{what, select, album{Unpin album from Home} artist{Unpin artist from Home} book{Unpin book from Home} other{Unpin from Home}}",
+  "homePinSheetUnpin": "{what, select, album{Unpin album from Home} artist{Unpin artist from Home} book{Unpin book from Home} podcast{Unpin podcast from Home} playlist{Unpin playlist from Home} other{Unpin from Home}}",
   "@homePinSheetUnpin": {
-    "description": "Row in the pin sheet for a target that is already pinned. {what} is the kind of thing: album, artist or book.",
+    "description": "Row in the pin sheet for a target that is already pinned. {what} is the kind of thing: album, artist, book, podcast or playlist.",
     "placeholders": {
       "what": {
         "type": "String",

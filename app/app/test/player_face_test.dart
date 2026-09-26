@@ -433,6 +433,75 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    // Narrow enough that the chips wrap: their landing is what moved a
+    // press aimed at the rate chip.
+    Future<void> holdsStill(WidgetTester tester, {double? rate}) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      // Large type, where a wider rate is what decides the wrap.
+      tester.platformDispatcher.textScaleFactorTestValue = 1.4;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      final first = testEpisode('tr-01JZX5N8QW3F4V9T2B7KDEP0001');
+      final second = testEpisode('tr-01JZX5N8QW3F4V9T2B7KDEP0002');
+      final repo = FakeRepository()
+        ..addSubscription(
+          testShow(first.showPid),
+          settings: SubscriptionSettings(speed: rate),
+        )
+        ..episodesByShow[first.showPid] = [first, second];
+      for (final episode in [first, second]) {
+        repo.episodeDetails[episode.pid] = EpisodeDetail(
+          pid: episode.pid,
+          mediaType: MediaType.podcast,
+          title: episode.title,
+          durationMs: 1800000,
+          showPid: first.showPid,
+          publishedAt: DateTime.utc(2026, 7, 1),
+          downloaded: true,
+          descriptionHtml: '<p>Notes.</p>',
+        );
+      }
+      final engine = FakeEngine(mediaDuration: const Duration(minutes: 30));
+      final harness = PlayerHarness(
+        playbackContainer(repo: repo, engine: engine),
+      );
+      harness.play([first, second]);
+      await pumpPlayerInto(tester, harness);
+      final transport = find.byType(TransportCluster);
+      final row = find
+          .ancestor(
+            of: find.byType(SleepTimerButton),
+            matching: find.byType(Wrap),
+          )
+          .first;
+      final settledTop = tester.getTopLeft(transport).dy;
+      final settledRow = tester.getSize(row).height;
+
+      final gate = Completer<void>();
+      engine.loadGate = gate;
+      final advancing = harness.playback.next();
+      await tester.pump();
+      expect(tester.getTopLeft(transport).dy, settledTop);
+      expect(tester.getSize(row).height, settledRow);
+
+      gate.complete();
+      await advancing;
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(transport).dy, settledTop);
+      await harness.endPlayback(tester);
+    }
+
+    testWidgets('holds its rows still while the session resolves', (
+      tester,
+    ) async {
+      await holdsStill(tester);
+    });
+
+    testWidgets('a stored rate keeps the chip row still too', (tester) async {
+      await holdsStill(tester, rate: 1.5);
+    });
+
     testWidgets('swaps the transport for interval seeks', (tester) async {
       final repo = FakeRepository()..addSubscription(testShow('pc-1'));
       final episode = testItem(

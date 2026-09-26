@@ -59,6 +59,12 @@ const _book = NowPlayingData(
   speed: 1.4,
 );
 
+const _notes =
+    'A weekly hour of field recordings from harbours, markets and '
+    'train yards, stitched into one long walk. This week the tide '
+    'comes in over the mud flats at dawn, a ferry horn answers from '
+    'across the estuary, and the fish market opens its shutters.';
+
 class _Job {
   const _Job(this.name, this.state, this.items);
 
@@ -602,6 +608,48 @@ void main() {
                           progress: 0.4,
                           trailingText: '3 hr left',
                         ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'a clamped paragraph cuts at its budget and unfolds whole',
+      fileName: 'clamped_box',
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final clamped in <bool>[true, false])
+            GoldenTestScenario(
+              name: clamped ? 'clamped' : 'unfolded',
+              child: _themed(
+                WaxThemeVariant.dark,
+                SizedBox(
+                  width: 280,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      ClampedBox(
+                        budget: 64,
+                        clamped: clamped,
+                        onOverflow: (_) {},
+                        child: Text(
+                          _notes,
+                          style: WaxType.body.copyWith(
+                            color: WaxThemeVariant.dark.colors.textSecondary,
+                          ),
+                        ),
+                      ),
+                      WaxButton(
+                        label: clamped ? 'Show more' : 'Show less',
+                        kind: WaxButtonKind.inline,
+                        onPressed: () {},
                       ),
                     ],
                   ),

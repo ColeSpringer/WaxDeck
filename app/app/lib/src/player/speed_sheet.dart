@@ -25,6 +25,10 @@ const speedMax = 3.5;
 /// presses.
 const speedStep = 0.05;
 
+/// A rate with as many decimals as [speedStep] allows, so its label is
+/// as wide as the rate chip's ever gets.
+const speedWidest = 1.35;
+
 /// The stable handle a preset carries, so a spec names the speed rather
 /// than its position in the row.
 int speedPercent(double speed) => (speed * 100).round();

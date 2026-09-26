@@ -27,6 +27,7 @@ Future<void> showItemFactsSheet(
   required MediaType mediaType,
 }) => showWaxOptionSheet(
   context,
+  scrolls: false,
   // Its own ref, as the item menu's sheet takes: the sheet outlives
   // the row that opened it, and a detail that arrives late redraws
   // through this rather than through a ref that may be gone.

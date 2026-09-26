@@ -151,7 +151,9 @@ class MediaCard extends StatefulWidget {
     required this.data,
     this.onTap,
     this.onPlay,
+    this.playLabel,
     this.onMore,
+    this.moreSemanticsId,
     this.action,
     this.width,
     this.captions,
@@ -162,7 +164,15 @@ class MediaCard extends StatefulWidget {
   final MediaTileData data;
   final VoidCallback? onTap;
   final VoidCallback? onPlay;
+
+  /// The play affordance's name, where the verb is not "Play" plus the
+  /// title. Null takes the design system's wording.
+  final String? playLabel;
+
   final VoidCallback? onMore;
+
+  /// The overflow chip's own identifier, as on [MediaListRow].
+  final String? moreSemanticsId;
 
   /// A control beside the overflow, for a card that carries state worth
   /// a corner of its own.
@@ -261,7 +271,7 @@ class _MediaCardState extends State<MediaCard> {
           progress: data.progress,
           dimmed: data.unavailableOffline,
           onPlay: widget.onPlay,
-          playLabel: l10n.cardsPlayItem(data.title),
+          playLabel: widget.playLabel ?? l10n.cardsPlayItem(data.title),
         ),
         if (widget.playing)
           Positioned(
@@ -374,6 +384,7 @@ class _MediaCardState extends State<MediaCard> {
                         glyph: WaxIcons.more,
                         label: l10n.cardsMoreForItem(data.title),
                         size: 16,
+                        semanticsId: widget.moreSemanticsId,
                         onPressed: widget.onMore,
                       ),
                     ),
@@ -904,29 +915,33 @@ class MediaListRow extends StatelessWidget {
   }
 }
 
-/// The bottom sheet every row menu shares: the drag handle, the raised
-/// surface, and the safe-area padding, with the caller filling it with
-/// [WaxOptionRow]s. One frame rather than a copy per menu, so the pin
-/// sheet, the item menus, and whatever comes next cannot drift apart on
-/// their chrome.
-Future<void> showWaxOptionSheet(
+/// The one bottom sheet every row menu shares, holding the browser's menu
+/// off as [showWaxMenu] does. Rows scroll unless [scrolls] is false (a sheet
+/// scrolling its own under a pinned header); answers what it closed with.
+Future<T?> showWaxOptionSheet<T>(
   BuildContext context, {
   required WidgetBuilder builder,
+  bool scrolls = true,
 }) {
   final colors = WaxColors.of(context);
-  return showModalBottomSheet<void>(
-    context: context,
-    backgroundColor: colors.surface2,
-    showDragHandle: true,
-    builder: (sheetContext) => SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          WaxSpace.s16,
-          0,
-          WaxSpace.s16,
-          WaxSpace.s24,
-        ),
-        child: builder(sheetContext),
+  const padding = EdgeInsets.fromLTRB(
+    WaxSpace.s16,
+    0,
+    WaxSpace.s16,
+    WaxSpace.s24,
+  );
+  return waxWithoutBrowserMenu(
+    () => showModalBottomSheet<T>(
+      context: context,
+      backgroundColor: colors.surface2,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: scrolls
+            ? SingleChildScrollView(
+                padding: padding,
+                child: builder(sheetContext),
+              )
+            : Padding(padding: padding, child: builder(sheetContext)),
       ),
     ),
   );
@@ -1158,6 +1173,8 @@ class ShelfRow extends StatefulWidget {
     this.onTapItem,
     this.onPlayItem,
     this.onMoreItem,
+    this.itemHasActions,
+    this.moreSemanticsIdAt,
     this.backSemanticsId,
     this.forwardSemanticsId,
     this.cardWidth,
@@ -1181,6 +1198,13 @@ class ShelfRow extends StatefulWidget {
   /// whole affordance on touch, so a shelf that spends the long press on
   /// something else cannot also take this.
   final void Function(MediaTileData item)? onMoreItem;
+
+  /// Which cards [onPlayItem] and [onMoreItem] reach, for a shelf whose
+  /// cards differ. Null reaches every card.
+  final bool Function(MediaTileData item)? itemHasActions;
+
+  /// Each card's overflow chip identifier, by position.
+  final String Function(int index)? moreSemanticsIdAt;
 
   /// Chevron handles, as plain strings: the package takes no registry
   /// dependency.
@@ -1355,8 +1379,10 @@ class _ShelfRowState extends State<ShelfRow> {
                           itemBuilder: (context, index) {
                             final item = items[index];
                             final onTap = widget.onTapItem;
-                            final onPlay = widget.onPlayItem;
-                            final onMore = widget.onMoreItem;
+                            final acts =
+                                widget.itemHasActions?.call(item) ?? true;
+                            final onPlay = acts ? widget.onPlayItem : null;
+                            final onMore = acts ? widget.onMoreItem : null;
                             return MediaCard(
                               data: item,
                               width: width,
@@ -1367,6 +1393,9 @@ class _ShelfRowState extends State<ShelfRow> {
                               onMore: onMore == null
                                   ? null
                                   : () => onMore(item),
+                              moreSemanticsId: widget.moreSemanticsIdAt?.call(
+                                index,
+                              ),
                             );
                           },
                         ),

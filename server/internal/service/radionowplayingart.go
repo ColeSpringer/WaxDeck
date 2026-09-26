@@ -14,7 +14,7 @@ import (
 )
 
 // The second rung of radio artwork: a cover for a song this library does
-// not hold.
+// not hold, or holds without one.
 //
 // The first rung is RadioNowPlayingItem, which matches the announced
 // title against the catalog and costs no network at all. That one runs

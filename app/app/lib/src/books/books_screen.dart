@@ -1,10 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
+import '../home/item_shelf.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
 import '../player/play_progress.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
@@ -329,6 +333,19 @@ class _ContinueShelf extends ConsumerWidget {
           // back lands here and the address bar follows.
           context.go(WaxRoute.book(reading[at].pid));
         },
+        onPlayItem: (tile) {
+          final at = tiles.indexOf(tile);
+          if (at < 0) return;
+          final book = reading[at];
+          playHomeItem(ref, book, states[book.pid] ?? PlayProgress.none);
+        },
+        onMoreItem: (tile) {
+          final at = tiles.indexOf(tile);
+          if (at < 0) return;
+          unawaited(
+            showItemMenuForSummary(context, ref, reading[at], withPin: true),
+          );
+        },
       ),
     );
   }
@@ -460,6 +477,10 @@ class _BookGrid extends ConsumerWidget {
                 ),
                 width: grid.width,
                 onTap: () => context.go(WaxRoute.book(book.pid)),
+                onPlay: () => playHomeItem(ref, book, state),
+                onMore: () => unawaited(
+                  showItemMenuForSummary(context, ref, book, withPin: true),
+                ),
               );
             },
           );

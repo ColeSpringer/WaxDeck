@@ -5,6 +5,7 @@
     "homeEpisodeInfo": "home-episode-info",
     "homeEpisodePlay": "home-episode-play",
     "homeMix": "home-mix-{index}",
+    "homeMixMore": "home-mix-more-{index}",
     "homeReviewPending": "home-review-pending",
     "homeReviewPendingOpen": "home-review-pending-open",
     "homeScreen": "home-screen",

@@ -13,6 +13,7 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'secondary_click.dart';
 
 /// A channel that never reaches a server: connecting fails immediately,
 /// which is exactly what airplane mode looks like to the engine.
@@ -195,6 +196,83 @@ void main() {
       (pid: 'tr-AAA', positionMs: 90000),
       reason: 'a downloaded track resumed at zero instead of where it stopped',
     );
+    await engine.stop();
+  });
+  testWidgets('offline: an episode played from its cover keeps its place', (
+    tester,
+  ) async {
+    final db = inMemoryMirrorDatabase();
+    addTearDown(db.close);
+    await db
+        .into(db.mirrorItems)
+        .insert(
+          MirrorItemsCompanion.insert(
+            pid: 'tr-EP1',
+            ulid: 'EP1',
+            mediaType: 'podcast',
+            title: 'Cached Episode',
+            durationMs: 3600000,
+            sortKey: 'cached episode',
+          ),
+        );
+    // Ahead of anything the server heard, which is the point of the
+    // mirror's copy: this shelf is played with no network.
+    await db
+        .into(db.mirrorPlayStates)
+        .insert(
+          MirrorPlayStatesCompanion.insert(
+            pid: 'tr-EP1',
+            positionMs: const Value(2400000),
+          ),
+        );
+    final downloads = FakeDownloads();
+    addTearDown(downloads.dispose);
+    downloads.setStored(<DownloadedItem>[
+      const DownloadedItem(
+        pid: 'tr-EP1',
+        sizeBytes: 1024,
+        files: 1,
+        complete: true,
+      ),
+    ]);
+    final repo = FakeRepository();
+    repo.listError = const WaxDeckApiException(
+      code: 'transport',
+      message: 'network unreachable',
+    );
+    final engine = SyncEngine(
+      db: db,
+      repository: repo,
+      channelFactory: deadChannelFactory(),
+    );
+    addTearDown(engine.dispose);
+    await engine.start();
+
+    final queue = <({String pid, int? positionMs})>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          mirrorDatabaseProvider.overrideWithValue(db),
+          downloadManagerProvider.overrideWithValue(downloads),
+          artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
+          syncEngineProvider.overrideWithValue(engine),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+          nowPlayingProvider.overrideWith(() => _RecordingNowPlaying(queue)),
+        ],
+        child: routedHost(const HomeScreen()),
+      ),
+    );
+    for (var i = 0; i < 4; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    await hoverPlay(
+      tester,
+      _byId(SemanticsIds.shelfCard('downloaded', 'tr-EP1')),
+      label: 'Play Cached Episode',
+    );
+    expect(queue.single, (pid: 'tr-EP1', positionMs: 2400000));
     await engine.stop();
   });
 }

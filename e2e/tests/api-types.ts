@@ -3842,7 +3842,7 @@ export interface paths {
         };
         /**
          * Get cover art for a station's announced track
-         * @description The cover this server holds for whatever the station last announced, for the case the announced track is not in this library. Draw it on the full-screen player face; the deck bar keeps the station logo on purpose, because a bar whose picture changed every few minutes would read as the station changing.
+         * @description The cover this server holds for whatever the station last announced, for the case the announced track is not in this library or has no cover there. Draw it on the full-screen player face; the deck bar keeps the station logo on purpose, because a bar whose picture changed every few minutes would read as the station changing.
          *
          *     Three rungs sit behind radio artwork and this endpoint serves the middle two. The first is `nowPlayingItemPid` above: a match against this library, which costs no network and is the common answer for a listener playing a station whose music they own.
          *
@@ -9737,7 +9737,7 @@ export interface components {
              */
             nowPlaying?: string;
             /**
-             * @description A library track this server matched `nowPlaying` to, when it recognised one. Present so a full-screen player can draw the song's own cover art instead of the station logo; absent is the common case and is not a failure, so a client that cannot match must fall back to the station's artwork rather than showing a gap. The match is a best-effort text lookup against the catalog and is never authoritative: it does not mean this server is playing that file, and it is deliberately not used for scrobbling, which reports what the station announced.
+             * @description A library track this server matched `nowPlaying` to, present only when that track has cover art, so a full-screen player can draw the song's own cover instead of the station logo. Absent is the common case and is not a failure, so a client must fall back to the station's artwork rather than showing a gap. The match is a best-effort text lookup against the catalog and is never authoritative: it does not mean this server is playing that file, and it is deliberately not used for scrobbling, which reports what the station announced.
              * @example tr-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             nowPlayingItemPid?: string;

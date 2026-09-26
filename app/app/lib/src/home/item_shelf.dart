@@ -286,7 +286,12 @@ void playHomeItem(WidgetRef ref, ItemSummary item, PlayProgress progress) {
           label: item.title,
           pid: item.pid,
         ),
-        positionMs: progress.positionMs,
+        // The caller's own where it holds one (the Downloaded shelf's
+        // comes off the mirror), none where it holds none so the session
+        // reads its checkpoint, and the head of a finished item.
+        positionMs: progress.finished
+            ? 0
+            : (progress.positionMs > 0 ? progress.positionMs : null),
       );
 }
 

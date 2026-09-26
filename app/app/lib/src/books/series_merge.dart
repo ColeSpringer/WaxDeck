@@ -78,6 +78,7 @@ Future<void> showSeriesMergeSheet(
   final container = ProviderScope.containerOf(context, listen: false);
   await showWaxOptionSheet(
     context,
+    scrolls: false,
     builder: (sheetContext) => Consumer(
       builder: (_, ref, _) {
         final series = ref.watch(bookSeriesProvider);

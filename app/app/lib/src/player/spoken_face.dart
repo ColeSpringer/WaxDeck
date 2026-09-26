@@ -408,6 +408,53 @@ List<Widget> spokenActionChips(PlaybackSession session) => <Widget>[
     BookmarkButton(session: session),
 ];
 
+/// [spokenActionChips] at rest and unseen, for the frames before a
+/// session resolves: the row keeps its room, so nothing moves under a
+/// press when the chips land.
+List<Widget> spokenChipStandIns(BuildContext context, {required bool book}) {
+  final l10n = context.l10n;
+  Widget unseen(Widget child) => Visibility(
+    visible: false,
+    maintainSize: true,
+    maintainAnimation: true,
+    maintainState: true,
+    child: child,
+  );
+  return <Widget>[
+    unseen(
+      WaxPill(
+        label: l10n.formatSpeed(1),
+        text: l10n.formatSpeed(1),
+        reserve: l10n.formatSpeed(speedWidest),
+        mono: true,
+        onPressed: null,
+      ),
+    ),
+    unseen(
+      WaxPill(
+        label: l10n.playerTrimSilence,
+        text: l10n.playerTrimSilence,
+        onPressed: null,
+      ),
+    ),
+    unseen(
+      WaxPill(
+        label: l10n.playerVoiceBoost,
+        text: l10n.playerVoiceBoost,
+        onPressed: null,
+      ),
+    ),
+    if (book)
+      unseen(
+        WaxIconButton(
+          glyph: WaxIcons.bookmark,
+          label: l10n.playerBookmarks,
+          onPressed: null,
+        ),
+      ),
+  ];
+}
+
 /// The rate, as the door to the speed sheet.
 class SpeedChip extends StatelessWidget {
   const SpeedChip({required this.session, super.key});
@@ -426,6 +473,7 @@ class SpeedChip extends StatelessWidget {
           semanticsId: SemanticsIds.playerSpeed,
           label: l10n.playerSpeedAt(l10n.formatSpeed(speed)),
           text: l10n.formatSpeed(speed),
+          reserve: l10n.formatSpeed(speedWidest),
           mono: true,
           onPressed: () => unawaited(showSpeedSheet(context, session)),
         );
@@ -572,13 +620,28 @@ class _VoiceBoostChipState extends ConsumerState<VoiceBoostChip> {
   }
 }
 
+/// How tall the spoken-word panel is on this window: a fifth of it,
+/// capped so the transport keeps its room. Null where it does not fit at
+/// all, the same rule the hero follows.
+double? spokenRegionExtent(BuildContext context) {
+  final extent = math.min(200.0, MediaQuery.sizeOf(context).height * 0.22);
+  return extent < 100 ? null : extent;
+}
+
+/// The panel's room, held while the session resolves.
+class SpokenRegionReserve extends StatelessWidget {
+  const SpokenRegionReserve({super.key});
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    width: double.infinity,
+    height: spokenRegionExtent(context) ?? 0,
+  );
+}
+
 /// The bottom region of a spoken-word player: what the episode or book
-/// says about itself, under the transport.
-///
-/// Bounded rather than free: the region shares a window with the hero
-/// and the clusters, so it takes a share of the height and scrolls
-/// inside it. On a window with nothing to spare it draws nothing at all,
-/// the same rule the hero follows.
+/// says about itself, under the transport, in [spokenRegionExtent]
+/// whatever it holds, so nothing above moves as it loads.
 class SpokenBottomRegion extends ConsumerStatefulWidget {
   const SpokenBottomRegion({
     required this.session,
@@ -602,15 +665,16 @@ class _SpokenBottomRegionState extends ConsumerState<SpokenBottomRegion> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final height = MediaQuery.sizeOf(context).height;
-    // A fifth of the window, capped: three or four rows, and small
-    // enough that the clusters above keep their room. The region is
-    // what the item says about itself and the transport is what the
-    // screen is for, so this is the half that gives - a taller panel
-    // scrolls the play button off a phone, which is how it was first
-    // built and what the sleep-timer tests caught.
-    final extent = math.min(200.0, height * 0.22);
-    if (extent < 100) return const SizedBox.shrink();
+    final extent = spokenRegionExtent(context);
+    if (extent == null) return const SizedBox.shrink();
+    // Held through the first read, so the column above does not jump
+    // under a press when the episode lands.
+    if (!_isBook) {
+      final detail = ref.watch(episodeDetailProvider(_item.pid));
+      if (!detail.hasValue && !detail.hasError) {
+        return SizedBox(width: double.infinity, height: extent);
+      }
+    }
 
     final regions = _regions();
     if (regions.isEmpty) return const SizedBox.shrink();
@@ -624,31 +688,35 @@ class _SpokenBottomRegionState extends ConsumerState<SpokenBottomRegion> {
         borderRadius: WaxRadius.sheetTop,
         border: Border(top: BorderSide(color: colors.hairline)),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: <Widget>[
-          if (regions.length > 1)
-            Padding(
-              padding: const EdgeInsets.only(top: WaxSpace.s8),
-              child: FilterChipRow(
-                padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
-                chips: <WaxFilterChip>[
-                  for (final region in regions)
-                    WaxFilterChip(
-                      name: region.name,
-                      label: region.label,
-                      semanticsId: SemanticsIds.playerRegion(region.name),
-                    ),
-                ],
-                selected: selected,
-                onSelect: (name) => setState(() => _region = name),
+      child: SizedBox(
+        width: double.infinity,
+        height: extent,
+        child: Column(
+          children: <Widget>[
+            if (regions.length > 1)
+              Padding(
+                padding: const EdgeInsets.only(top: WaxSpace.s8),
+                child: FilterChipRow(
+                  padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+                  chips: <WaxFilterChip>[
+                    for (final region in regions)
+                      WaxFilterChip(
+                        name: region.name,
+                        label: region.label,
+                        semanticsId: SemanticsIds.playerRegion(region.name),
+                      ),
+                  ],
+                  selected: selected,
+                  onSelect: (name) => setState(() => _region = name),
+                ),
               ),
+            Expanded(
+              child: regions
+                  .firstWhere((r) => r.name == selected)
+                  .build(context),
             ),
-          SizedBox(
-            height: extent,
-            child: regions.firstWhere((r) => r.name == selected).build(context),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

@@ -26,6 +26,7 @@ import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'album_detail.dart';
+import 'album_play.dart';
 import 'entity_facts.dart';
 import 'music_controllers.dart';
 
@@ -93,12 +94,12 @@ class AlbumScreen extends ConsumerWidget {
     playAlbum(
       ref,
       pid: pid,
-      facts: AlbumFacts.of(
+      title: AlbumFacts.of(
         context.l10n,
         context.waxL10n,
         tracks,
         fallbackTitle: label,
-      ),
+      ).title,
       tracks: tracks,
       shuffle: shuffle,
     );
@@ -231,29 +232,6 @@ class _AlbumIdentity extends ConsumerWidget {
   }
 }
 
-/// Plays this album into the dock. The header's buttons and the
-/// palette's rows both run this.
-void playAlbum(
-  WidgetRef ref, {
-  required String pid,
-  required AlbumFacts facts,
-  required List<ItemSummary> tracks,
-  bool shuffle = false,
-}) {
-  if (tracks.isEmpty) return;
-  ref
-      .read(nowPlayingProvider.notifier)
-      .play(
-        tracks,
-        shuffle: shuffle,
-        source: QueueSource(
-          kind: QueueSourceKind.album,
-          label: facts.title,
-          pid: pid,
-        ),
-      );
-}
-
 class _Header extends ConsumerWidget {
   const _Header({required this.pid, required this.facts, required this.tracks});
 
@@ -274,7 +252,7 @@ class _Header extends ConsumerWidget {
     void play({bool shuffle = false}) => playAlbum(
       ref,
       pid: pid,
-      facts: facts,
+      title: facts.title,
       tracks: tracks,
       shuffle: shuffle,
     );

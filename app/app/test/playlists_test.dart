@@ -16,16 +16,21 @@ import 'package:waxdeck/src/playlists/playlists_screen.dart';
 import 'package:waxdeck/src/playlists/rule_editor_screen.dart';
 import 'package:waxdeck/src/playlists/rule_vocabulary.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/playlists/playlists_controller.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 import 'routed_host.dart';
+import 'secondary_click.dart';
 
 const _track = ItemSummary(
   pid: 'tr-01JZX5N8QW3F4V9T2B7KD3M9R6',
@@ -199,6 +204,138 @@ void main() {
       find.textContaining('Manual playlist · 1 item · 3 min'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a playlist card opens its menu, owner rows for the owner', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    final mine = await repo.createPlaylist(
+      name: 'Road Trip',
+      kind: 'static',
+      itemPids: [_track.pid],
+    );
+    repo.playlistsByPid['pl-THEIRS'] = _theirs();
+    repo.playlistMembers['pl-THEIRS'] = [_track.pid];
+    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+    await tester.pumpAndSettle();
+
+    await rightClick(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.playlist(mine.pid)),
+    );
+    for (final row in const <String>[
+      'Play',
+      'Shuffle',
+      'Pin playlist to Home',
+      'Share link',
+      'Rename',
+      'Delete',
+    ]) {
+      expect(find.text(row), findsOneWidget, reason: row);
+    }
+    await tester.tapAt(const Offset(5, 5));
+    await tester.pumpAndSettle();
+
+    await rightClick(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.playlist('pl-THEIRS')),
+    );
+    expect(find.text('Pin playlist to Home'), findsOneWidget);
+    expect(find.text('Rename'), findsNothing);
+    expect(find.text('Delete'), findsNothing);
+  });
+
+  testWidgets('a card renames its playlist from the menu', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    final mine = await repo.createPlaylist(
+      name: 'Road Trip',
+      kind: 'static',
+      itemPids: [_track.pid],
+    );
+    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+    await tester.pumpAndSettle();
+
+    await rightClick(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.playlist(mine.pid)),
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistRename));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.playlistNameField),
+      'Long Drive',
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistCreateConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.playlistsByPid[mine.pid]!.name, 'Long Drive');
+    expect(find.text('Long Drive'), findsOneWidget);
+  });
+
+  testWidgets('a delete the server refuses says so and keeps the card', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track]);
+    final mine = await repo.createPlaylist(
+      name: 'Road Trip',
+      kind: 'static',
+      itemPids: [_track.pid],
+    );
+    repo.deletePlaylistError = const WaxDeckApiException(
+      code: 'forbidden',
+      message: 'not yours',
+      statusCode: 403,
+    );
+    await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+    await tester.pumpAndSettle();
+
+    await rightClick(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.playlist(mine.pid)),
+    );
+    final delete = find.bySemanticsIdentifier(SemanticsIds.playlistDelete);
+    await tester.ensureVisible(delete);
+    await tester.pumpAndSettle();
+    await tester.tap(delete);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistDeleteConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.text('Road Trip'), findsOneWidget);
+  });
+
+  testWidgets('a playlist card plays from its cover', (tester) async {
+    final repo = FakeRepository(items: const [_track, _second]);
+    final mine = await repo.createPlaylist(
+      name: 'Road Trip',
+      kind: 'static',
+      itemPids: [_track.pid, _second.pid],
+    );
+    final container = playbackContainer(repo: repo, engine: FakeEngine());
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const PlaylistsScreen(), pushed: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await hoverPlay(tester, find.byType(MediaCard), label: 'Play Road Trip');
+    final queue = container.read(queueControllerProvider);
+    expect(queue.source.kind, QueueSourceKind.playlist);
+    expect(queue.source.pid, mine.pid);
+    expect(
+      <String>[for (final e in queue.entries) e.pid],
+      <String>[_track.pid, _second.pid],
+    );
+    await PlayerHarness(container).endPlayback(tester);
   });
 
   testWidgets('the empty state invites the first playlist', (tester) async {

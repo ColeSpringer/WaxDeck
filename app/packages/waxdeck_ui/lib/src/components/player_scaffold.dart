@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/physics.dart';
@@ -382,6 +383,18 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
   /// height, for a slow release to dismiss it.
   static const double _dismissFraction = 0.28;
 
+  /// How long after an island changes size a press beside it is still
+  /// taken as aimed at where the island was.
+  static const Duration _settleWindow = Duration(milliseconds: 350);
+
+  // Hit testing happens at pointer down, so a press that begins on an
+  // island stays with it; these guard the gap beside one.
+  int _islandChanges = 0;
+  int _islandChangesAtDown = 0;
+  Timer? _settling;
+  bool _downWhileSettling = false;
+  final Set<int> _pointers = <int>{};
+
   @override
   void initState() {
     super.initState();
@@ -391,8 +404,36 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
 
   @override
   void dispose() {
+    _settling?.cancel();
     _settle.dispose();
     super.dispose();
+  }
+
+  bool _islandChanged(SizeChangedLayoutNotification _) {
+    _islandChanges++;
+    _settling?.cancel();
+    _settling = Timer(_settleWindow, () => _settling = null);
+    return false;
+  }
+
+  // At the physical press: a tap recognizer reports its own down up to a
+  // press timeout later. The first finger's only, which is the one a tap
+  // comes from, so a second cannot overwrite it.
+  void _pointerDown(PointerDownEvent event) {
+    if (_pointers.isEmpty) {
+      _islandChangesAtDown = _islandChanges;
+      _downWhileSettling = _settling != null;
+    }
+    _pointers.add(event.pointer);
+  }
+
+  void _pointerGone(PointerEvent event) => _pointers.remove(event.pointer);
+
+  void _tap() {
+    // A finger already down when an island moved protects a person; a
+    // click landing inside the window catches one aimed by a stale rect.
+    if (_islandChanges != _islandChangesAtDown || _downWhileSettling) return;
+    widget.onCollapse?.call();
   }
 
   void _dragStart(DragStartDetails details) => _settle.stop();
@@ -505,41 +546,35 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
             cursor: widget.onCollapse == null
                 ? MouseCursor.defer
                 : SystemMouseCursors.click,
-            child: GestureDetector(
-              // Opaque, so the gesture is the whole surface's and not only
-              // its widgets': the space around the artwork is most of a
-              // player, and a dismissal that only worked where something
-              // was drawn would read as broken. Children are hit-tested
-              // first, so the controls keep their taps, and the seek bar's
-              // horizontal drag and this vertical one are told apart by
-              // direction rather than by who got there first.
-              behavior: HitTestBehavior.opaque,
-              // A pointer gesture and nothing else. Left in the semantics
-              // tree, a vertical drag publishes scrollUp and scrollDown on
-              // this node, and a screen-reader scroll then synthesises a
-              // drag long enough to cross the dismiss threshold: swiping
-              // to read the player would close it. The same exclusion is
-              // what keeps the tap below from publishing an action, which
-              // matters more on web: a tappable node is drawn as a rect
-              // with pointer-events over the whole surface, and a screen
-              // reader would find a nameless control the size of the
-              // window. The way out for a screen reader is the collapse
-              // button, which says what it does.
-              excludeFromSemantics: true,
-              // Pointers have no pull-down. Tapping off the content is
-              // how a modal surface is dismissed with a mouse, and the
-              // gesture rides the detector that already owns the drag so
-              // the two cannot disagree about where the surface ends:
-              // one policy, and a null onCollapse turns off both.
-              onTap: widget.onCollapse,
-              onVerticalDragStart: widget.onCollapse == null
-                  ? null
-                  : _dragStart,
-              onVerticalDragUpdate: widget.onCollapse == null
-                  ? null
-                  : _dragUpdate,
-              onVerticalDragEnd: widget.onCollapse == null ? null : _dragEnd,
-              child: surface,
+            child: Listener(
+              onPointerDown: widget.onCollapse == null ? null : _pointerDown,
+              onPointerUp: widget.onCollapse == null ? null : _pointerGone,
+              onPointerCancel: widget.onCollapse == null ? null : _pointerGone,
+              child: GestureDetector(
+                // Opaque, so the space around the artwork dismisses too.
+                // Children hit-test first and keep their taps; the seek
+                // bar's drag is told apart from this one by direction.
+                behavior: HitTestBehavior.opaque,
+                // Pointer only: in the semantics tree a reader's scroll
+                // would synthesise a dismissing drag, and the tap would be a
+                // nameless window-sized control. Readers use the collapse.
+                excludeFromSemantics: true,
+                // A mouse's way out, on the detector that owns the drag
+                // so the two agree on where the surface ends; a null
+                // onCollapse turns off both.
+                onTap: widget.onCollapse == null ? null : _tap,
+                onVerticalDragStart: widget.onCollapse == null
+                    ? null
+                    : _dragStart,
+                onVerticalDragUpdate: widget.onCollapse == null
+                    ? null
+                    : _dragUpdate,
+                onVerticalDragEnd: widget.onCollapse == null ? null : _dragEnd,
+                child: NotificationListener<SizeChangedLayoutNotification>(
+                  onNotification: _islandChanged,
+                  child: surface,
+                ),
+              ),
             ),
           ),
         ),
@@ -995,7 +1030,7 @@ class _ContentIsland extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: () {},
       excludeFromSemantics: true,
-      child: child,
+      child: SizeChangedLayoutNotifier(child: child),
     ),
   );
 }

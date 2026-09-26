@@ -7,6 +7,8 @@ import 'package:waxdeck/src/books/books_controller.dart';
 import 'package:waxdeck/src/books/books_screen.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -14,7 +16,9 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 import 'routed_host.dart';
+import 'secondary_click.dart';
 
 /// Pids sort by ULID, which is what "recently added" reads off, so these
 /// are ordered oldest to newest deliberately.
@@ -327,6 +331,83 @@ void main() {
     });
   });
 
+  testWidgets('a book cover opens the item menu, which pins the book', (
+    tester,
+  ) async {
+    final repo = _repo();
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await rightClick(tester, _byId(SemanticsIds.book(_hobbit)).first);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemMenuSheet(_hobbit)),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Pin book to Home'));
+    await tester.pumpAndSettle();
+    expect(repo.prefs.pinned, <String>[_hobbit]);
+  });
+
+  testWidgets('a book cover plays the book where it was left', (tester) async {
+    final repo = _repo()..playPositions[_hobbit] = 900000;
+    final container = playbackContainer(
+      repo: repo,
+      engine: FakeEngine(),
+      extra: [
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const BooksScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await hoverPlay(
+      tester,
+      _byId(SemanticsIds.book(_hobbit)).first,
+      label: 'Play There And Back Again',
+    );
+    final queue = container.read(queueControllerProvider);
+    expect(<String>[for (final e in queue.entries) e.pid], <String>[_hobbit]);
+    expect(queue.source.kind, QueueSourceKind.book);
+    await PlayerHarness(container).endPlayback(tester);
+  });
+
+  testWidgets('a finished book plays from its start, not its end', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..playPositions[_hobbit] = 3600000
+      ..finishedPids.add(_hobbit);
+    final engine = FakeEngine();
+    final container = playbackContainer(
+      repo: repo,
+      engine: engine,
+      extra: [
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const BooksScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await hoverPlay(
+      tester,
+      _byId(SemanticsIds.book(_hobbit)).first,
+      label: 'Play There And Back Again',
+    );
+    expect(engine.loadedUrl, isNotNull);
+    expect(engine.position, Duration.zero);
+    await PlayerHarness(container).endPlayback(tester);
+  });
+
   group('continue listening', () {
     testWidgets('holds what is part way through, most recent first', (
       tester,
@@ -372,6 +453,15 @@ void main() {
             .first,
       );
       expect(card.data.trailingSpoken, '45 minutes left');
+    });
+
+    testWidgets('a card on it opens the item menu', (tester) async {
+      final repo = _repo()..playPositions[_hobbit] = 900000;
+      await tester.pumpWidget(_host(repo));
+      await tester.pumpAndSettle();
+
+      await rightClick(tester, _byId(SemanticsIds.bookContinue(_hobbit)).first);
+      expect(find.text('Pin book to Home'), findsOneWidget);
     });
 
     testWidgets('is absent until something has been started', (tester) async {

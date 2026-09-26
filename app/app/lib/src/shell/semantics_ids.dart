@@ -333,6 +333,7 @@ abstract final class SemanticsIds {
   static const String homeEpisodeInfo = 'home-episode-info';
   static const String homeEpisodePlay = 'home-episode-play';
   static String homeMix(Object index) => 'home-mix-$index';
+  static String homeMixMore(Object index) => 'home-mix-more-$index';
   static const String homeReviewPending = 'home-review-pending';
   static const String homeReviewPendingOpen = 'home-review-pending-open';
   static const String homeScreen = 'home-screen';
@@ -623,6 +624,7 @@ abstract final class SemanticsIds {
   static const String playlistImportRun = 'playlist-import-run';
   static String playlistImportSource(Object source) =>
       'playlist-import-source-$source';
+  static String playlistMore(Object pid) => 'playlist-more-$pid';
   static const String playlistNameField = 'playlist-name-field';
   static const String playlistOverflow = 'playlist-overflow';
   static const String playlistPin = 'playlist-pin';
@@ -680,6 +682,7 @@ abstract final class SemanticsIds {
   static String episodeFetch(Object pid) => 'episode-fetch-$pid';
   static String episodeInfo(Object pid) => 'episode-info-$pid';
   static const String episodeMarkPlayed = 'episode-mark-played';
+  static String episodeMore(Object pid) => 'episode-more-$pid';
   static const String episodePlay = 'episode-play';
   static const String episodeQueue = 'episode-queue';
   static String episodeRemove(Object pid) => 'episode-remove-$pid';
@@ -717,6 +720,7 @@ abstract final class SemanticsIds {
   static const String selectionQueue = 'selection-queue';
   static String showEpisodeFilter(Object name) => 'show-episode-filter-$name';
   static const String showEpisodeSearch = 'show-episode-search';
+  static String showMore(Object pid) => 'show-more-$pid';
   static const String showOverflow = 'show-overflow';
   static const String showPin = 'show-pin';
   static const String showSetCover = 'show-set-cover';

@@ -9,6 +9,7 @@ import '../artwork/artwork_providers.dart';
 import '../discovery/discovery_actions.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
+import '../music/music_controllers.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
@@ -75,6 +76,12 @@ class MixShelf extends ConsumerWidget {
               if (at < 0) return;
               unawaited(playMixCard(context, ref, cards[at]));
             },
+            onMoreItem: (tile) {
+              final at = tiles.indexOf(tile);
+              if (at < 0) return;
+              unawaited(showMixMenuSheet(context, ref, cards[at]));
+            },
+            moreSemanticsIdAt: SemanticsIds.homeMixMore,
           ),
         ),
       ),
@@ -92,8 +99,9 @@ class MixShelf extends ConsumerWidget {
 Future<void> playMixCard(
   BuildContext context,
   WidgetRef ref,
-  MixCard card,
-) async {
+  MixCard card, {
+  bool shuffle = false,
+}) async {
   final router = GoRouter.of(context);
   final messenger = ScaffoldMessenger.of(context);
   final l10n = context.l10n;
@@ -122,6 +130,7 @@ Future<void> playMixCard(
     // visitor walked to meanwhile.
     playback.play(
       mix.items,
+      shuffle: shuffle,
       // A stored name or none at all, never the card's sentence: the
       // label is stored with the queue and outlives the language it was
       // built in, and a seeded mix has no name to store.
@@ -138,6 +147,106 @@ Future<void> playMixCard(
           items: mix.items,
           idPrefix: 'mix',
         ),
+      ),
+    );
+  } on WaxDeckApiException catch (e) {
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+  }
+}
+
+enum _MixChoice { play, shuffle, basis }
+
+/// A mix card's sheet: play or shuffle the mix, or open what it is drawn
+/// from.
+Future<void> showMixMenuSheet(
+  BuildContext context,
+  WidgetRef ref,
+  MixCard card,
+) async {
+  final l10n = context.l10n;
+  final artist = card.seedPid != null;
+  final choice = await showWaxOptionSheet<_MixChoice>(
+    context,
+    builder: (sheetContext) {
+      void choose(_MixChoice choice) => Navigator.of(sheetContext).pop(choice);
+
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          WaxOptionRow(
+            title: l10n.homeMixPlay,
+            glyph: WaxIcons.play,
+            onTap: () => choose(_MixChoice.play),
+          ),
+          WaxOptionRow(
+            title: l10n.homeMixShuffle,
+            glyph: WaxIcons.shuffle,
+            onTap: () => choose(_MixChoice.shuffle),
+          ),
+          WaxOptionRow(
+            title: artist ? l10n.libraryMenuGoToArtist : l10n.homeMixGoToGenre,
+            subtitle: card.name,
+            glyph: artist ? WaxIcons.artists : WaxIcons.filter,
+            onTap: () => choose(_MixChoice.basis),
+          ),
+        ],
+      );
+    },
+  );
+  if (choice == null || !context.mounted) return;
+  switch (choice) {
+    case _MixChoice.play:
+      await playMixCard(context, ref, card);
+    case _MixChoice.shuffle:
+      await playMixCard(context, ref, card, shuffle: true);
+    case _MixChoice.basis:
+      await _openBasis(context, ref, card);
+  }
+}
+
+/// Pushed, as home's pinned cards are: a bucket is declared under the
+/// music hub, so `go` would throw home away.
+Future<void> _openBasis(
+  BuildContext context,
+  WidgetRef ref,
+  MixCard card,
+) async {
+  final router = GoRouter.of(context);
+  if (card.seedPid case final seed?) {
+    unawaited(router.push(WaxRoute.musicBucket(MusicDimension.artists, seed)));
+    return;
+  }
+  final messenger = ScaffoldMessenger.of(context);
+  final l10n = context.l10n;
+  final genre = card.genre ?? card.name;
+  try {
+    // A top genre carries no pid, so its bucket is found by its label.
+    final page = await ref
+        .read(repositoryProvider)
+        .listFacets(
+          MusicDimension.genres.wireName,
+          sort: FacetSort.label,
+          startsAt: genre,
+          limit: 5,
+        );
+    final bucket = page.buckets
+        .where((b) => b.label.toLowerCase() == genre.toLowerCase())
+        .firstOrNull;
+    // The router outlives the card: a visitor who walked on meanwhile
+    // gets no bucket slammed over where they went.
+    if (!context.mounted) return;
+    unawaited(
+      router.push(
+        bucket == null
+            ? WaxRoute.musicIndex(MusicDimension.genres)
+            : WaxRoute.musicBucket(
+                MusicDimension.genres,
+                musicBucketSegment(MusicDimension.genres, bucket),
+              ),
+        extra: bucket?.label,
       ),
     );
   } on WaxDeckApiException catch (e) {

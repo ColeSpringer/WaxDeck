@@ -59,8 +59,9 @@ Future<void> showItemMenuForSummary(
 /// What it holds follows the item, and it always holds something: the
 /// editor door for the sessions that can use it, then per medium - a
 /// track's entity navigation, pin rows where the caller had a pin
-/// affordance to keep, the instant mix, and the album share; a share
-/// link for an episode or a book, whose only handles are themselves.
+/// affordance to keep (a book's pins itself), the instant mix, and the
+/// album share; a share link for an episode or a book, whose only
+/// handles are themselves.
 /// The music-only gating on the navigation rows is load-bearing: an
 /// audiobook carries its author as `artistPid`, and routing that into
 /// the Music hub's artist bucket would be a wrong answer dressed as a
@@ -179,12 +180,15 @@ Future<void> showItemMenuSheet(
                     WaxRoute.musicBucket(MusicDimension.artists, artistPid),
                   ),
                 ),
-              if (music && withPin)
+              if (withPin)
                 for (final target in <PinTarget>[
-                  if (albumPid != null)
+                  if (music && albumPid != null)
                     (pid: albumPid, what: 'album', name: album ?? title),
-                  if (artistPid != null)
+                  if (music && artistPid != null)
                     (pid: artistPid, what: 'artist', name: artist ?? ''),
+                  // A book pins itself, as the server's pinnable kinds do.
+                  if (pid.startsWith('bk-'))
+                    (pid: pid, what: 'book', name: title),
                 ])
                   pinSheetRow(
                     sheetContext,

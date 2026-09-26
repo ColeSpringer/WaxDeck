@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"strings"
+
+	"github.com/colespringer/waxbin/model"
 )
 
 // Resolving a station's announced title to a track this library holds,
@@ -113,28 +115,63 @@ func (l *Library) RadioNowPlayingItem(ctx context.Context, uc *UserCtx, apiStati
 	if pid, ok := l.cachedNowPlayingItem(uc.ID, apiStationPID, raw); ok {
 		return pid
 	}
-	pid := l.resolveNowPlayingItem(ctx, uc, stationName, raw)
+	pid, err := l.resolveNowPlayingItem(ctx, uc, stationName, raw)
+	if err != nil {
+		// Not an answer: the next poll asks again.
+		return ""
+	}
 	l.memoNowPlayingItem(uc.ID, apiStationPID, raw, pid)
 	return pid
 }
 
-func (l *Library) resolveNowPlayingItem(ctx context.Context, uc *UserCtx, stationName, raw string) string {
+// resolveNowPlayingItem answers only a match with a cover, since the
+// face draws the pid's own. The memo keeps that answer per title, so
+// art added later shows from the station's next announcement.
+func (l *Library) resolveNowPlayingItem(ctx context.Context, uc *UserCtx, stationName, raw string) (string, error) {
 	artist, title, ok := parseRadioTitle(raw, stationName)
 	if !ok {
-		return ""
+		return "", nil
 	}
-	return l.matchLibraryTrack(ctx, uc, artist, title)
+	pid, err := l.matchLibraryTrack(ctx, uc, artist, title)
+	if err != nil || pid == "" {
+		return "", err
+	}
+	has, err := l.hasFrontArt(ctx, pid)
+	if err != nil || !has {
+		return "", err
+	}
+	return pid, nil
+}
+
+// hasFrontArt walks the chain a front-cover read walks, off the row
+// alone, for a search hit the search already checked for visibility. An
+// error is a failed read, not the absence of a cover.
+func (l *Library) hasFrontArt(ctx context.Context, apiPID string) (bool, error) {
+	_, pid, ok := parseAPIPID(apiPID)
+	if !ok {
+		return false, nil
+	}
+	_, err := l.lib.ArtProvenance(ctx, model.EntityRef{Type: model.ArtTrack, PID: pid}, model.ArtRoleFront)
+	switch {
+	case err == nil:
+		return true, nil
+	case KindOf(err) == KindNotFound:
+		return false, nil
+	default:
+		return false, err
+	}
 }
 
 // matchLibraryTrack looks an announced artist and title up in this
-// caller's library, answering a track pid or nothing.
+// caller's library, answering a track pid or nothing, and an error when
+// the search itself failed.
 //
 // Split out from the resolution above because the saved-songs list runs
 // exactly this search against rows that were parsed once, months ago:
 // what marks a saved song "in your library now" has to be the same
 // judgement that drew its cover on the face, or the two surfaces would
 // disagree about whether the same announcement matches.
-func (l *Library) matchLibraryTrack(ctx context.Context, uc *UserCtx, rawArtist, rawTitle string) string {
+func (l *Library) matchLibraryTrack(ctx context.Context, uc *UserCtx, rawArtist, rawTitle string) (string, error) {
 	artist, title := normalizeRadioField(rawArtist), normalizeRadioField(rawTitle)
 	// Both halves have to survive normalization. A title alone matches
 	// every cover version there is, and the artist is what makes the
@@ -144,14 +181,14 @@ func (l *Library) matchLibraryTrack(ctx context.Context, uc *UserCtx, rawArtist,
 	// through as a title-only match is the case the artist check below
 	// exists to refuse.
 	if title == "" || artist == "" {
-		return ""
+		return "", nil
 	}
 	// Both halves, because a title alone matches every cover version and
 	// the artist is what makes the answer this recording. A small limit:
 	// the top hits are the only ones a confident match could be in.
 	hits, err := l.Search(ctx, uc, artist+" "+title, 5)
 	if err != nil {
-		return ""
+		return "", err
 	}
 	for _, hit := range hits.Tracks {
 		// The title has to actually be the title. FTS ranks by relevance
@@ -175,9 +212,9 @@ func (l *Library) matchLibraryTrack(ctx context.Context, uc *UserCtx, rawArtist,
 			tokensOf(normalizeRadioField(hit.Subtitle)), tokensOf(artist)) {
 			continue
 		}
-		return hit.PID
+		return hit.PID, nil
 	}
-	return ""
+	return "", nil
 }
 
 // radioFieldsMatch compares two normalized fields, allowing one to carry

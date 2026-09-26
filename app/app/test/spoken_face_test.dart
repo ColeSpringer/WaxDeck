@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/player/spoken_face.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -14,6 +15,17 @@ import 'player_host.dart';
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const _episodePid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
 const _bookPid = 'bk-01JZX5N8QW3F4V9T2B7KD3M9R6';
+
+EpisodeDetail _detail({String? notes}) => EpisodeDetail(
+  pid: _episodePid,
+  mediaType: MediaType.podcast,
+  title: 'Pipeweed Economics',
+  durationMs: 214000,
+  showPid: _showPid,
+  publishedAt: DateTime.utc(2026, 7, 1),
+  downloaded: true,
+  descriptionHtml: notes,
+);
 
 ItemSummary _book() => testItem(
   _bookPid,
@@ -119,6 +131,95 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(engine.position, const Duration(milliseconds: 12000));
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('the bottom slot holds its height while the episode loads', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository()
+        ..addSubscription(testShow(_showPid))
+        ..episodesByShow[_showPid] = [testEpisode(_episodePid)]
+        ..episodeDetails[_episodePid] = _detail(notes: '<p>Pipeweed.</p>')
+        ..getEpisodeGate = gate;
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+        item: testEpisode(_episodePid),
+      );
+      final region = find.byType(SpokenBottomRegion);
+      final loading = tester.getSize(region);
+      expect(loading.height, greaterThan(0));
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      // Width too: a slot that widens when the panel lands is a resize,
+      // which the player reads as the column moving.
+      expect(tester.getSize(region), loading);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('several regions keep the slot the load held', (tester) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository()
+        ..addSubscription(testShow(_showPid))
+        ..episodesByShow[_showPid] = [testEpisode(_episodePid)]
+        ..episodeDetails[_episodePid] = EpisodeDetail(
+          pid: _episodePid,
+          mediaType: MediaType.podcast,
+          title: 'Pipeweed Economics',
+          durationMs: 214000,
+          showPid: _showPid,
+          publishedAt: DateTime.utc(2026, 7, 1),
+          downloaded: true,
+          descriptionHtml: '<p>Pipeweed.</p>',
+          chapters: const <ChapterMark>[
+            ChapterMark(index: 0, title: 'Cold open', startMs: 0),
+          ],
+        )
+        ..getEpisodeGate = gate;
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+        item: testEpisode(_episodePid),
+      );
+      final region = find.byType(SpokenBottomRegion);
+      final loading = tester.getSize(region).height;
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.playerRegion('notes')),
+        findsOneWidget,
+      );
+      expect(tester.getSize(region).height, loading);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('an episode with nothing to show gives the slot up', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository()
+        ..addSubscription(testShow(_showPid))
+        ..episodesByShow[_showPid] = [testEpisode(_episodePid)]
+        ..episodeDetails[_episodePid] = _detail()
+        ..getEpisodeGate = gate;
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(milliseconds: 214000)),
+        item: testEpisode(_episodePid),
+      );
+      final region = find.byType(SpokenBottomRegion);
+      expect(tester.getSize(region).height, greaterThan(0));
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(tester.getSize(region).height, 0);
       await harness.endPlayback(tester);
     });
 
@@ -368,6 +469,57 @@ void main() {
       // the bar has to hold the position inside the span it draws.
       expect(find.text('0:55'), findsNothing);
       expect(find.text('0:00'), findsWidgets);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a chaptered book keeps the slot held while it loads', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository()
+        ..books[_bookPid] = testBook(
+          _bookPid,
+          durationMs: 3600000,
+          chapters: const [
+            ChapterMark(index: 0, title: 'An Unexpected Party', startMs: 0),
+          ],
+        )
+        ..getBookGate = gate;
+      final harness = PlayerHarness(
+        playbackContainer(
+          repo: repo,
+          engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        ),
+      );
+      harness.play([_book()]);
+      await pumpPlayerInto(tester, harness);
+      // The session starts only once the book is read, so the face holds
+      // the room itself until then.
+      final held = tester.getSize(find.byType(SpokenRegionReserve));
+      expect(held.height, greaterThan(0));
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.playerChapter(0)),
+        findsOneWidget,
+      );
+      expect(tester.getSize(find.byType(SpokenBottomRegion)), held);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a start at its end begins the book again', (tester) async {
+      final repo = FakeRepository()
+        ..books[_bookPid] = testBook(_bookPid, durationMs: 3600000);
+      final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: _book(),
+        positionMs: 3600000,
+      );
+      expect(engine.position, Duration.zero);
       await harness.endPlayback(tester);
     });
 

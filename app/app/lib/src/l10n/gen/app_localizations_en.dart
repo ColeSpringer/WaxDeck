@@ -3319,9 +3319,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get homeMixGoToGenre => 'Go to genre';
+
+  @override
   String homeMixMoreLike(String artist) {
     return 'More like $artist';
   }
+
+  @override
+  String get homeMixPlay => 'Play mix';
+
+  @override
+  String get homeMixShuffle => 'Shuffle mix';
 
   @override
   String get homeMixesTitle => 'Made for you';
@@ -3348,6 +3357,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'album': 'Pin album to Home',
       'artist': 'Pin artist to Home',
       'book': 'Pin book to Home',
+      'podcast': 'Pin podcast to Home',
+      'playlist': 'Pin playlist to Home',
       'other': 'Pin to Home',
     });
     return '$_temp0';
@@ -3359,6 +3370,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'album': 'Unpin album from Home',
       'artist': 'Unpin artist from Home',
       'book': 'Unpin book from Home',
+      'podcast': 'Unpin podcast from Home',
+      'playlist': 'Unpin playlist from Home',
       'other': 'Unpin from Home',
     });
     return '$_temp0';
@@ -6851,6 +6864,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get podcastPlay => 'Play';
 
   @override
+  String podcastPlayLatest(String show) {
+    return 'Play latest from $show';
+  }
+
+  @override
   String get podcastPlayed => 'Played';
 
   @override
@@ -7465,6 +7483,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get radioTitle => 'Radio';
+
+  @override
+  String radioTuneIn(String name) {
+    return 'Tune in $name';
+  }
 
   @override
   String get radioTuningIn => 'Tuning in';

@@ -97,13 +97,9 @@ export class Player extends Surface {
   /// screen edge lands one row off - the difference between 1.5x and
   /// whatever sits beside it.
   ///
-  /// Restored per attempt because on this face a press that lands one
-  /// row off can land on nothing at all: the scaffold dismisses on every
-  /// pixel its content islands do not claim, and the chips move while
-  /// the face is still resolving - an episode's notes arriving is enough
-  /// to lift the row out from under the pointer. A press that misses
-  /// that way collapses the player and takes the chip with it, which
-  /// leaves the retry reaching for a control that is nowhere.
+  /// Restored per attempt as belt and braces: the scaffold holds a
+  /// dismissal back while its islands move, but a press that still
+  /// misses collapses the player and takes the chip with it.
   ///
   /// Inherits [reopen]'s precondition, and through it [ready]'s: this
   /// drives the player of local playback, not a bar holding somebody

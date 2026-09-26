@@ -476,6 +476,16 @@
   "@podcastPlay": {
     "description": "Play button on an episode that has not been started."
   },
+  "podcastPlayLatest": "Play latest from {show}",
+  "@podcastPlayLatest": {
+    "description": "Name of the play button over a show's cover: plays the newest episode not yet played, or the newest from its start when all are. {show} is the show's title.",
+    "placeholders": {
+      "show": {
+        "type": "String",
+        "example": "The Prancing Pony Hour"
+      }
+    }
+  },
   "podcastPlayed": "Played",
   "@podcastPlayed": {
     "description": "The mark-played button on an episode already finished, which is a statement rather than an action."

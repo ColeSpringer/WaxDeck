@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import 'media_split.dart';
 import 'share_cards.dart';
 import 'stats_charts.dart';
 import 'stats_controller.dart';
@@ -186,6 +187,15 @@ class _PersonalRecap extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  if (mediaSplitBar(
+                        l10n,
+                        value.byMediaType,
+                        key: const Key('yir-media-split'),
+                      )
+                      case final split?) ...[
+                    const SizedBox(height: WaxSpace.s20),
+                    split,
+                  ],
                   SizedBox(height: WaxLayout.of(context).sectionGap),
                   SectionHeader(title: l10n.statsYearMonthByMonth),
                   ListeningBarChart(

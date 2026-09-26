@@ -85,6 +85,7 @@
   "podcastOpmlPickerLabel": "OPML",
   "podcastOtherShows": "Otros programas",
   "podcastPlay": "Reproducir",
+  "podcastPlayLatest": "Reproducir lo último de {show}",
   "podcastPlayed": "Reproducido",
   "podcastQueuedCount": "{count, plural, =1{1 añadido a la cola} other{{count} añadidos a la cola}}",
   "podcastQueuedForDownload": "En cola para descargar",

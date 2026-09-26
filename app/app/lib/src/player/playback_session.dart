@@ -400,7 +400,7 @@ class PlaybackSession {
         }
       }
       if (_isBook) {
-        await _loadPartFor(resumeMs, autoplay: false);
+        await _loadPartFor(_bookStart(resumeMs), autoplay: false);
       } else {
         // A timeline member needs nothing resolved: the URL is minted,
         // the duration is the member's own, and the stream is
@@ -477,7 +477,7 @@ class PlaybackSession {
       // file this always loaded.
       if (_isBook && local.sequenced) {
         _localParts = local;
-        await _loadPartFor(resumeMs, autoplay: false);
+        await _loadPartFor(_bookStart(resumeMs), autoplay: false);
       } else {
         if (!_isBook) resumeMs = _applyIntroSkip(resumeMs);
         final resumeAt = resumeMs > 0 ? Duration(milliseconds: resumeMs) : null;
@@ -734,6 +734,14 @@ class PlaybackSession {
   ///
   /// Rethrows for parts that cannot be placed on a timeline, which is
   /// [start]'s own offline branch to answer: it has the mirror position.
+  /// Where a book starts: a position at or past its end is not a place
+  /// to start, the guard the single-file path keeps. Here and not in
+  /// [_loadPartFor], whose rollover past the last part lands on the end.
+  int _bookStart(int ms) {
+    final length = _book?.durationMs ?? item.durationMs;
+    return length > 0 && ms >= length ? 0 : ms;
+  }
+
   Future<void> _loadPartFor(int bookMs, {required bool autoplay}) async {
     final held = _localParts;
     if (held != null) {

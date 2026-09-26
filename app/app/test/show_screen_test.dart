@@ -6,6 +6,7 @@ import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/metadata/artwork_manager.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
+import 'package:waxdeck/src/podcasts/show_actions.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
@@ -18,6 +19,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'secondary_click.dart';
 
 const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
 const downloadedPid = 'tr-01JZX5N8QW3F4V9T2B7KDEP0001';
@@ -331,6 +333,59 @@ void main() {
     expect(repo.putPlayStateCalls.single.pid, remotePid);
     expect(repo.putPlayStateCalls.single.positionMs, 214000);
     expect(find.text('1 marked played'), findsOneWidget);
+  });
+
+  testWidgets('an episode row opens the item menu from its kebab', (
+    tester,
+  ) async {
+    await _pump(tester, _repo());
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.episodeMore(remotePid)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemMenuSheet(remotePid)),
+      findsOneWidget,
+    );
+    expect(find.text('Share link'), findsOneWidget);
+  });
+
+  testWidgets('a right click on an episode row opens the same menu', (
+    tester,
+  ) async {
+    await _pump(tester, _repo());
+
+    await rightClick(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.episode(remotePid)),
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemMenuSheet(remotePid)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a long press selects, in a selection too, and opens no menu', (
+    tester,
+  ) async {
+    await _pump(tester, _repo());
+
+    await tester.longPress(
+      find.bySemanticsIdentifier(SemanticsIds.episode(remotePid)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('1 selected'), findsOneWidget);
+
+    await tester.longPress(
+      find.bySemanticsIdentifier(SemanticsIds.episode(downloadedPid)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('2 selected'), findsOneWidget);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemMenuSheet(downloadedPid)),
+      findsNothing,
+    );
   });
 
   testWidgets('add to queue appends and does not touch what is playing', (

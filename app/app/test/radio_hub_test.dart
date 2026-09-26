@@ -24,6 +24,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'secondary_click.dart';
 
 RadioStation _station(
   String pid, {
@@ -586,6 +587,33 @@ void main() {
     // Not just resolved away: a pid left in storage would hold a slot of
     // the dial's cap for a station nobody can tune.
     expect(container.read(radioFavoritesProvider), ['rs-2']);
+  });
+
+  testWidgets('a station tile tunes in from its logo', (tester) async {
+    final container = _container(_repoWithFavorites(<String>['rs-1']));
+    await _pumpHub(tester, container);
+
+    await hoverPlay(
+      tester,
+      _byId(SemanticsIds.radio('rs-1')),
+      label: 'Tune in Coastal FM',
+    );
+    expect(container.read(radioPlaybackProvider).station?.pid, 'rs-1');
+    // Its tap stops it now, so a play glyph over it would too.
+    expect(
+      tester
+          .widget<MediaCard>(
+            find.ancestor(
+              of: _byId(SemanticsIds.radio('rs-1')),
+              matching: find.byType(MediaCard),
+            ),
+          )
+          .onPlay,
+      isNull,
+    );
+
+    await container.read(radioPlaybackProvider.notifier).stop();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('a right-click on the tile raises the same menu', (tester) async {

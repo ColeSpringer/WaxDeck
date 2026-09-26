@@ -449,6 +449,11 @@ class _StationTile extends ConsumerWidget {
       width: width,
       playing: playing,
       onTap: () => unawaited(_tune(context, ref, station, playback)),
+      // Off the air only: on it the tap stops it, and so would this.
+      onPlay: playing
+          ? null
+          : () => unawaited(_tune(context, ref, station, playback)),
+      playLabel: l10n.radioTuneIn(station.name),
       action: MediaCardAction(
         glyph: WaxIcons.star,
         label: pinned

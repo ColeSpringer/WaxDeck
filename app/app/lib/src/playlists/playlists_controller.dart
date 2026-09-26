@@ -140,38 +140,34 @@ class PlaylistView {
   bool get isEditable => playlist.isOwner && !playlist.isSmart;
 }
 
+/// One playlist and its whole member list, paged to completion.
+Future<PlaylistView> fetchPlaylistView(
+  WaxDeckRepository repository,
+  String pid,
+) async {
+  final playlist = await repository.getPlaylist(pid);
+  final entries = <PlaylistEntry>[];
+  String? cursor;
+  do {
+    final page = await repository.listPlaylistItems(
+      pid,
+      cursor: cursor,
+      limit: 500,
+    );
+    entries.addAll(page.entries);
+    cursor = page.nextCursor;
+  } while (cursor != null);
+  return PlaylistView(playlist: playlist, entries: entries);
+}
+
 class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
   PlaylistDetailController(this.pid);
 
   final String pid;
 
   @override
-  Future<PlaylistView> build() async {
-    final repository = ref.watch(repositoryProvider);
-    final playlist = await repository.getPlaylist(pid);
-    final entries = <PlaylistEntry>[];
-    String? cursor;
-    do {
-      final page = await repository.listPlaylistItems(
-        pid,
-        cursor: cursor,
-        limit: 500,
-      );
-      entries.addAll(page.entries);
-      cursor = page.nextCursor;
-    } while (cursor != null);
-    return PlaylistView(playlist: playlist, entries: entries);
-  }
-
-  /// Renames or re-shares the playlist in place. Named [edit] because
-  /// AsyncNotifier already claims `update`.
-  Future<void> edit({String? name, String? visibility}) async {
-    await ref
-        .read(repositoryProvider)
-        .updatePlaylist(pid, name: name, visibility: visibility);
-    ref.invalidateSelf();
-    ref.invalidate(playlistsProvider);
-  }
+  Future<PlaylistView> build() =>
+      fetchPlaylistView(ref.watch(repositoryProvider), pid);
 
   /// Replaces a smart playlist's rule in place; the pid is stable, so
   /// the caller keeps this detail view. Returns the updated playlist.
@@ -182,11 +178,6 @@ class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
     ref.invalidateSelf();
     ref.invalidate(playlistsProvider);
     return next;
-  }
-
-  Future<void> delete() async {
-    await ref.read(repositoryProvider).deletePlaylist(pid);
-    ref.invalidate(playlistsProvider);
   }
 
   /// Replaces the full member order; this is the reorder primitive. The

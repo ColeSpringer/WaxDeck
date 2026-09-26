@@ -827,6 +827,30 @@ void main() {
       );
     });
 
+    testWidgets('a reserved width holds whatever the readout says', (
+      tester,
+    ) async {
+      Future<double> widthOf(String text) async {
+        await tester.pumpWidget(
+          _host(
+            Center(
+              child: WaxPill(
+                label: 'Playback speed $text',
+                text: text,
+                reserve: '1.35x',
+                mono: true,
+                onPressed: () {},
+              ),
+            ),
+            height: 80,
+          ),
+        );
+        return tester.getSize(find.byType(WaxPill)).width;
+      }
+
+      expect(await widthOf('1x'), await widthOf('1.35x'));
+    });
+
     testWidgets('reports on and off rather than leaving it to colour', (
       tester,
     ) async {

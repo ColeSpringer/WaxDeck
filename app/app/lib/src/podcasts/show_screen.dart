@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -9,9 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../artwork/art_source_label.dart';
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
-import '../home/pin_action.dart';
-import '../home/pinned_controller.dart';
-import '../metadata/artwork_manager.dart';
+import '../library/item_menu.dart';
 import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
@@ -21,9 +18,9 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import 'credits.dart';
 import 'episode_actions.dart';
-import 'mark_older_played_dialog.dart';
 import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
+import 'show_actions.dart';
 import 'show_notes.dart';
 import 'subscription_settings_sheet.dart';
 
@@ -536,111 +533,27 @@ class _ShowOverflow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final detail = ref.watch(podcastDetailProvider(pid)).value;
-    final subscribed = detail?.subscribed ?? false;
-    final l10n = context.l10n;
-    return WaxMenuButton<String>(
+    return WaxMenuButton<ShowAction>(
       glyph: WaxIcons.more,
-      label: l10n.podcastShowMore,
+      label: context.l10n.podcastShowMore,
       semanticsId: SemanticsIds.showOverflow,
-      items: <WaxMenuItem<String>>[
-        // Offered to a subscriber, because the resolver answers pinned
-        // shows through the caller's subscriptions: pinning a show this
-        // account does not follow would put a card on home that nothing
-        // can draw. Offered to a non-subscriber who has it pinned
-        // anyway, because unsubscribing is routine and reversible, and
-        // hiding the row there would strand the pid in the document
-        // holding a slot of the cap with nowhere left to remove it.
-        if (subscribed || ref.watch(pinnedEntitiesProvider).contains(pid))
-          pinMenuItem<String>(
-            context,
-            ref,
-            pid,
-            value: 'pin',
-            semanticsId: SemanticsIds.showPin,
-          ),
-        WaxMenuItem<String>(
-          value: 'refresh',
-          label: l10n.podcastCheckForNew,
-          glyph: WaxIcons.refresh,
+      items: showMenuItems(
+        context,
+        ref,
+        pid,
+        subscribed: detail?.subscribed ?? false,
+      ),
+      onSelected: (action) => unawaited(
+        runShowAction(
+          context,
+          ref,
+          action,
+          pid: pid,
+          title: detail?.show.title,
+          hasArtwork: detail?.show.artSource != null,
         ),
-        if (subscribed)
-          WaxMenuItem<String>(
-            value: 'mark-older',
-            label: l10n.podcastMarkOlderPlayed,
-            glyph: WaxIcons.check,
-            semanticsId: SemanticsIds.markOlderPlayed,
-          ),
-        // The session's managePodcasts is the server's effective answer
-        // (administrators included), so it is the whole gate.
-        if (ref.watch(canManagePodcastsProvider))
-          WaxMenuItem<String>(
-            value: 'set-cover',
-            label: l10n.podcastSetCover,
-            glyph: WaxIcons.edit,
-            semanticsId: SemanticsIds.showSetCover,
-          ),
-      ],
-      onSelected: (choice) {
-        switch (choice) {
-          case 'pin':
-            // Null rather than a stand-in word: the confirmation is
-            // still English, so a translated fragment would read as
-            // half a sentence.
-            unawaited(togglePin(context, ref, pid, label: detail?.show.title));
-          case 'refresh':
-            unawaited(_refresh(context, ref));
-          case 'mark-older':
-            unawaited(
-              showDialog<void>(
-                context: context,
-                builder: (_) => MarkOlderPlayedDialog(pid: pid),
-              ),
-            );
-          case 'set-cover':
-            unawaited(
-              showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                builder: (_) => ShowCoverSheet(
-                  pid: pid,
-                  title: detail?.show.title ?? pid,
-                  initialHasArtwork: detail?.show.artSource != null,
-                ),
-              ),
-            );
-        }
-      },
+      ),
     );
-  }
-
-  Future<void> _refresh(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final l10n = context.l10n;
-    try {
-      final result = await ref.read(repositoryProvider).refreshPodcast(pid);
-      ref.invalidate(episodesProvider(pid));
-      ref.invalidate(podcastDetailProvider(pid));
-      // New episodes change what the hub's tile and shelves say, and
-      // the count a tile draws lives on the subscription row.
-      ref.invalidate(subscriptionsProvider);
-      ref.invalidate(upNextEpisodesProvider);
-      ref.invalidate(latestEpisodesProvider);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              result.newEpisodes == 0
-                  ? l10n.podcastNoNewEpisodes
-                  : l10n.podcastNewEpisodes(result.newEpisodes),
-            ),
-          ),
-        );
-    } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
-    }
   }
 }
 
@@ -825,7 +738,7 @@ class _CollapsibleNotesState extends ConsumerState<CollapsibleNotes> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        _ClampedBox(
+        ClampedBox(
           budget: widget.collapsedTo,
           clamped: !_open,
           onOverflow: (value) {
@@ -850,176 +763,6 @@ class _CollapsibleNotesState extends ConsumerState<CollapsibleNotes> {
             onPressed: () => setState(() => _open = !_open),
           ),
       ],
-    );
-  }
-}
-
-/// Clamps its child to a pixel budget and reports whether there was more.
-///
-/// A budget cannot be answered from the widget layer: the notes are
-/// arbitrary blocks, so the only thing that knows they ran past it is the
-/// layout that clipped them. This lays the child out with the height it
-/// asks for, keeps the answer, and takes only as much of it as the budget
-/// allows - which is what lets the control above appear when there is
-/// something behind it and stay away when there is not.
-///
-/// The report is against [budget] whether or not [clamped] is set, so an
-/// opened block still knows it has something to fold back.
-class _ClampedBox extends SingleChildRenderObjectWidget {
-  const _ClampedBox({
-    required this.budget,
-    required this.clamped,
-    required this.onOverflow,
-    required Widget super.child,
-  });
-
-  final double budget;
-  final bool clamped;
-  final ValueChanged<bool> onOverflow;
-
-  @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderClampedBox(budget, clamped, onOverflow);
-
-  @override
-  void updateRenderObject(
-    BuildContext context,
-    _RenderClampedBox renderObject,
-  ) {
-    renderObject
-      ..budget = budget
-      ..clamped = clamped
-      ..onOverflow = onOverflow;
-  }
-}
-
-class _RenderClampedBox extends RenderProxyBox {
-  _RenderClampedBox(this._budget, this._clamped, this.onOverflow);
-
-  /// Half a pixel: a block whose height lands on the budget by rounding
-  /// is not something to offer a reader more of, and reporting it would
-  /// flip the control on and off as the window resized.
-  static const double _epsilon = 0.5;
-
-  double _budget;
-  double get budget => _budget;
-  set budget(double value) {
-    if (value == _budget) return;
-    _budget = value;
-    markNeedsLayout();
-  }
-
-  bool _clamped;
-  bool get clamped => _clamped;
-  set clamped(bool value) {
-    if (value == _clamped) return;
-    _clamped = value;
-    markNeedsLayout();
-  }
-
-  ValueChanged<bool> onOverflow;
-
-  bool? _reported;
-
-  @override
-  void performLayout() {
-    final child = this.child;
-    if (child == null) {
-      size = constraints.smallest;
-      return;
-    }
-    child.layout(
-      BoxConstraints(
-        minWidth: constraints.minWidth,
-        maxWidth: constraints.maxWidth,
-      ),
-      parentUsesSize: true,
-    );
-    final natural = child.size.height;
-    final overflows = natural - _budget > _epsilon;
-    // The same test decides the clip and the control. Told apart - a
-    // bare `>` here against the epsilon below - notes laid out a third
-    // of a pixel over their budget are cut off while the control that
-    // opens them is withheld, which is the failure this box exists to
-    // end.
-    size = constraints.constrain(
-      Size(child.size.width, _clamped && overflows ? _budget : natural),
-    );
-    if (overflows == _reported) return;
-    _reported = overflows;
-    // After the frame rather than during it: the caller answers by
-    // rebuilding, and a setState inside layout is a build reentering
-    // itself.
-    WidgetsBinding.instance.addPostFrameCallback((_) => onOverflow(overflows));
-  }
-
-  @override
-  double computeMinIntrinsicHeight(double width) =>
-      _clamp(super.computeMinIntrinsicHeight(width));
-
-  @override
-  double computeMaxIntrinsicHeight(double width) =>
-      _clamp(super.computeMaxIntrinsicHeight(width));
-
-  double _clamp(double height) =>
-      _clamped && height > _budget ? _budget : height;
-
-  @override
-  Size computeDryLayout(BoxConstraints constraints) {
-    final child = this.child;
-    if (child == null) return constraints.smallest;
-    final natural = child.getDryLayout(
-      BoxConstraints(
-        minWidth: constraints.minWidth,
-        maxWidth: constraints.maxWidth,
-      ),
-    );
-    return constraints.constrain(Size(natural.width, _clamp(natural.height)));
-  }
-
-  /// Whether anything of the child falls outside what this box took.
-  ///
-  /// Geometry rather than [_clamped]: `performLayout` hands the child
-  /// unbounded height and then constrains itself, so under a height-
-  /// bounding ancestor an unclamped box is still smaller than what it
-  /// holds - and painting that unclipped runs the notes over whatever
-  /// is drawn below them.
-  bool get _clips => child != null && child!.size.height > size.height;
-
-  /// Kept so the engine reuses one retained layer instead of taking a
-  /// new one every paint, the way [RenderClipRect] does.
-  final LayerHandle<ClipRectLayer> _clipLayer = LayerHandle<ClipRectLayer>();
-
-  @override
-  void dispose() {
-    _clipLayer.layer = null;
-    super.dispose();
-  }
-
-  /// What a reader can actually see, so the semantics tree stops where
-  /// the paint does. Without it the clipped-away notes stay in the tree:
-  /// a screen reader reads a whole page of description beside a control
-  /// that says "Show more", and on the web their nodes keep emitting at
-  /// un-clamped offsets over the rows below.
-  @override
-  Rect? describeApproximatePaintClip(RenderObject child) =>
-      _clips ? Offset.zero & size : null;
-
-  @override
-  void paint(PaintingContext context, Offset offset) {
-    final child = this.child;
-    if (child == null) return;
-    if (!_clips) {
-      _clipLayer.layer = null;
-      context.paintChild(child, offset);
-      return;
-    }
-    _clipLayer.layer = context.pushClipRect(
-      needsCompositing,
-      offset,
-      Offset.zero & size,
-      (context, offset) => context.paintChild(child, offset),
-      oldLayer: _clipLayer.layer,
     );
   }
 }
@@ -1116,66 +859,24 @@ class _EpisodeRow extends ConsumerWidget {
               context.go(WaxRoute.showEpisode(showPid, episode.pid)),
         ),
       ],
-      // Long-press starts a selection, which is how a batch begins on
-      // touch. Not `onMore`, which would draw an overflow button
-      // announcing itself as "More for [title]" whose only action is to
-      // start selecting, and which would then vanish once one was
-      // running. `MediaListRow` takes the gesture without the control.
-      onLongPress: selecting ? null : () => onSelect(true),
+      // A long press selects, in a selection too, so the menu the kebab
+      // and a right click open never takes it.
+      onLongPress: () => onSelect(selecting ? !selected : true),
+      onMore: () => unawaited(
+        showItemMenuSheet(
+          context,
+          ref,
+          pid: episode.pid,
+          title: episode.title,
+          mediaType: MediaType.podcast,
+        ),
+      ),
+      moreSemanticsId: SemanticsIds.episodeMore(episode.pid),
       onTap: () => selecting
           ? onSelect(!selected)
           : unawaited(
               actions.play(context, episode, positionMs: progress.positionMs),
             ),
-    );
-  }
-}
-
-/// The show's cover, managed as the podcast entity: set, clear, and pin
-/// through the entity artwork endpoints, for the accounts that curate
-/// shows. A sheet rather than a route: the cover has no address of its
-/// own, it is one curation act on this screen's show.
-class ShowCoverSheet extends ConsumerWidget {
-  const ShowCoverSheet({
-    super.key,
-    required this.pid,
-    required this.title,
-    required this.initialHasArtwork,
-  });
-
-  final String pid;
-  final String title;
-
-  /// What the show detail already knew when the sheet opened, so the
-  /// first frame does not read "no cover" while the art-roles read
-  /// (which the manager watches anyway, and which takes over here the
-  /// moment it lands) is still in flight.
-  final bool initialHasArtwork;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // The art-roles read answers show pids too, so the manager knows
-    // whether a cover stands before any write.
-    final roles = ref.watch(itemArtRolesProvider(pid));
-    final hasArtwork = roles.hasValue
-        ? roles.value?.artSource != null
-        : initialHasArtwork;
-    return Padding(
-      padding: EdgeInsets.only(
-        left: WaxSpace.s16,
-        right: WaxSpace.s16,
-        top: WaxSpace.s16,
-        bottom: WaxSpace.s16 + MediaQuery.of(context).viewInsets.bottom,
-      ),
-      child: SingleChildScrollView(
-        child: ArtworkManager(
-          pid: pid,
-          title: title,
-          hasArtwork: hasArtwork,
-          entityType: 'podcast',
-          onChanged: () => ref.invalidate(podcastDetailProvider(pid)),
-        ),
-      ),
     );
   }
 }

@@ -291,7 +291,8 @@ func (l *Library) ListRadioSaved(ctx context.Context, uc *UserCtx, cursor string
 			dto.StationPID = ""
 		}
 		if r.Artist != "" && r.Title != "" {
-			dto.InLibraryPID = l.matchLibraryTrack(ctx, uc, r.Artist, r.Title)
+			// A failed search marks nothing; the next read asks again.
+			dto.InLibraryPID, _ = l.matchLibraryTrack(ctx, uc, r.Artist, r.Title)
 		}
 		page.Songs = append(page.Songs, dto)
 	}

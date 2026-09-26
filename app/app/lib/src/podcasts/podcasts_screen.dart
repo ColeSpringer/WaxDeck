@@ -9,6 +9,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
 import '../providers.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
@@ -21,6 +22,7 @@ import 'add_podcast.dart';
 import 'episode_actions.dart';
 import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
+import 'show_actions.dart';
 
 /// The podcast domain's front door: what is half-listened-to, what is
 /// new, and every show being followed.
@@ -254,6 +256,11 @@ class _UpNextShelf extends ConsumerWidget {
           final at = tiles.indexOf(tile);
           if (at < 0) return;
           _resume(context, ref, rows[at]);
+        },
+        onMoreItem: (tile) {
+          final at = tiles.indexOf(tile);
+          if (at < 0) return;
+          unawaited(showItemMenuForSummary(context, ref, rows[at].episode));
         },
       ),
     );
@@ -494,6 +501,11 @@ class _ShowTile extends ConsumerWidget {
       // A show is declared under this hub, so it is where it says it is
       // and the address bar follows.
       onTap: () => context.go(WaxRoute.show(show.pid)),
+      onPlay: () => unawaited(playShowLatest(context, ref, show.pid)),
+      playLabel: context.l10n.podcastPlayLatest(show.title),
+      onMore: () =>
+          unawaited(showShowMenuSheet(context, ref, show, subscribed: true)),
+      moreSemanticsId: SemanticsIds.showMore(show.pid),
     );
   }
 }

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
 import '../l10n/l10n.dart';
+import '../library/item_menu.dart';
 import '../media_view.dart';
 import '../player/now_playing_controller.dart';
 import '../queue/queue_state.dart';
@@ -118,6 +121,8 @@ class TrackListScreen extends ConsumerWidget {
                         startIndex: index,
                       );
                 },
+                onMore: () =>
+                    unawaited(showItemMenuForSummary(context, ref, item)),
               );
             },
           ),

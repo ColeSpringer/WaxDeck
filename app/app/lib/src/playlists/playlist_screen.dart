@@ -1,50 +1,27 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/semantics.dart' show CustomSemanticsAction;
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
-import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
 import '../library/item_menu.dart';
 import '../media_view.dart';
-import '../metadata/artwork_manager.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
-import '../sharing/share_dialog.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-import '../uploads/file_picker_port.dart';
-import 'playlist_create.dart';
+import 'playlist_actions.dart';
+import 'playlist_play.dart';
 import 'playlist_sync_controller.dart';
-import 'playlist_sync_sheet.dart';
 import 'playlists_controller.dart';
 import 'rule_vocabulary.dart';
-
-/// What the playlist overflow can do. The synced-playlist feature adds
-/// its settings sheet here, beside the cover verbs.
-enum _PlaylistAction {
-  pin,
-  rename,
-  visibility,
-  shareLink,
-  setCover,
-  resetCover,
-  syncSettings,
-  exportM3u,
-  exportNsp,
-  exportPortable,
-  delete,
-}
 
 /// One playlist: what it is, what is in it, and what its owner may do
 /// to it. Manual lists reorder and remove; smart lists show their rules
@@ -156,20 +133,8 @@ class _Header extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final playlist = view.playlist;
     final entries = view.entries;
-    void play({bool shuffle = false}) {
-      if (entries.isEmpty) return;
-      ref
-          .read(nowPlayingProvider.notifier)
-          .play(
-            <ItemSummary>[for (final entry in entries) entry.item],
-            shuffle: shuffle,
-            source: QueueSource(
-              kind: QueueSourceKind.playlist,
-              label: playlist.name,
-              pid: playlist.pid,
-            ),
-          );
-    }
+    void play({bool shuffle = false}) =>
+        playPlaylist(ref, view, shuffle: shuffle);
 
     final l10n = context.l10n;
     return EntityHeader(
@@ -791,7 +756,7 @@ void _openEntry(
       );
 }
 
-/// Rename, visibility, covers, exports, and delete.
+/// Every playlist action but play and shuffle, which are the header's.
 class _Overflow extends ConsumerWidget {
   const _Overflow({required this.view});
 
@@ -799,516 +764,21 @@ class _Overflow extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final playlist = view.playlist;
-    final isOwner = playlist.isOwner;
-    final hasPicker = ref.watch(filePickerProvider) != null;
-    final l10n = context.l10n;
-    return WaxMenuButton<_PlaylistAction>(
+    final router = GoRouter.of(context);
+    return WaxMenuButton<PlaylistAction>(
       glyph: WaxIcons.more,
-      label: l10n.playlistMore,
+      label: context.l10n.playlistMore,
       semanticsId: SemanticsIds.playlistOverflow,
-      items: <WaxMenuItem<_PlaylistAction>>[
-        pinMenuItem<_PlaylistAction>(
+      items: playlistMenuItems(context, ref, view.playlist),
+      onSelected: (action) => unawaited(
+        runPlaylistAction(
           context,
           ref,
-          playlist.pid,
-          value: _PlaylistAction.pin,
-          semanticsId: SemanticsIds.playlistPin,
+          view.playlist,
+          action,
+          onDeleted: () => router.leave(fallback: WaxRoute.playlists),
         ),
-        if (isOwner) ...<WaxMenuItem<_PlaylistAction>>[
-          WaxMenuItem<_PlaylistAction>(
-            value: _PlaylistAction.rename,
-            label: l10n.playlistRename,
-            glyph: WaxIcons.edit,
-            semanticsId: SemanticsIds.playlistRename,
-          ),
-          WaxMenuItem<_PlaylistAction>(
-            value: _PlaylistAction.visibility,
-            label: playlist.isShared
-                ? l10n.playlistMakePrivate
-                : l10n.playlistShareWithEveryone,
-            glyph: WaxIcons.share,
-            semanticsId: SemanticsIds.playlistVisibility,
-          ),
-        ],
-        WaxMenuItem<_PlaylistAction>(
-          value: _PlaylistAction.shareLink,
-          label: l10n.playlistShareLink,
-          glyph: WaxIcons.share,
-          semanticsId: SemanticsIds.playlistShareLink,
-        ),
-        // Hidden where the platform has no picker, which is the port
-        // answering null.
-        if (isOwner && hasPicker)
-          WaxMenuItem<_PlaylistAction>(
-            value: _PlaylistAction.setCover,
-            label: l10n.playlistSetCover,
-            glyph: WaxIcons.albums,
-            semanticsId: SemanticsIds.playlistSetCover,
-          ),
-        // Offered whenever a cover shows: the wire does not say whether
-        // it was uploaded, and resetting a generated one rebuilds it.
-        if (isOwner && playlist.artUrl != null)
-          WaxMenuItem<_PlaylistAction>(
-            value: _PlaylistAction.resetCover,
-            label: l10n.playlistResetCover,
-            glyph: WaxIcons.refresh,
-            semanticsId: SemanticsIds.playlistResetCover,
-          ),
-        // Manual lists only: a smart playlist's membership is its rule,
-        // so there is nothing for a source to reconcile.
-        if (isOwner && !playlist.isSmart)
-          WaxMenuItem<_PlaylistAction>(
-            value: _PlaylistAction.syncSettings,
-            label: l10n.playlistSyncSettings,
-            glyph: WaxIcons.refresh,
-            semanticsId: SemanticsIds.playlistSyncSettings,
-          ),
-        WaxMenuItem<_PlaylistAction>(
-          value: _PlaylistAction.exportM3u,
-          label: l10n.playlistExportM3u,
-          glyph: WaxIcons.downloads,
-          semanticsId: SemanticsIds.playlistExportM3u,
-        ),
-        // Smart only - there is no rule to write for a manual list -
-        // but not owner only, because neither export beside it is and
-        // the server gates none of the three.
-        if (playlist.isSmart)
-          WaxMenuItem<_PlaylistAction>(
-            value: _PlaylistAction.exportNsp,
-            label: l10n.playlistExportNsp,
-            glyph: WaxIcons.downloads,
-            semanticsId: SemanticsIds.playlistExportNsp,
-          ),
-        WaxMenuItem<_PlaylistAction>(
-          value: _PlaylistAction.exportPortable,
-          label: l10n.playlistExportPortable,
-          glyph: WaxIcons.share,
-          semanticsId: SemanticsIds.playlistExportPortable,
-        ),
-        if (isOwner)
-          WaxMenuItem<_PlaylistAction>(
-            value: _PlaylistAction.delete,
-            label: l10n.playlistDelete,
-            glyph: WaxIcons.delete,
-            destructive: true,
-            semanticsId: SemanticsIds.playlistDelete,
-          ),
-      ],
-      onSelected: (action) => unawaited(_run(context, ref, action)),
-    );
-  }
-
-  Future<void> _run(
-    BuildContext context,
-    WidgetRef ref,
-    _PlaylistAction action,
-  ) async {
-    final pid = view.playlist.pid;
-    switch (action) {
-      case _PlaylistAction.pin:
-        await togglePin(context, ref, pid, label: view.playlist.name);
-      case _PlaylistAction.rename:
-        await _rename(context, ref);
-      case _PlaylistAction.visibility:
-        await _setVisibility(context, ref);
-      case _PlaylistAction.shareLink:
-        await showShareLinkDialog(context, pid: pid);
-      case _PlaylistAction.setCover:
-        await _setCover(context, ref);
-      case _PlaylistAction.resetCover:
-        await _resetCover(context, ref);
-      case _PlaylistAction.syncSettings:
-        await showPlaylistSyncSheet(context, pid);
-      case _PlaylistAction.exportM3u:
-        await _exportM3u(context, ref);
-      case _PlaylistAction.exportNsp:
-        await _exportNsp(context, ref);
-      case _PlaylistAction.exportPortable:
-        await _exportPortable(context, ref);
-      case _PlaylistAction.delete:
-        await _delete(context, ref);
-    }
-  }
-
-  Future<void> _rename(BuildContext context, WidgetRef ref) async {
-    // Captured before the prompt: reading one off this context after it
-    // is a use across the gap.
-    final messenger = ScaffoldMessenger.of(context);
-    final l10n = context.l10n;
-    final name = await promptPlaylistName(
-      context,
-      title: l10n.playlistRenameTitle,
-      confirmLabel: l10n.playlistRename,
-      initial: view.playlist.name,
-    );
-    if (name == null || name.isEmpty || name == view.playlist.name) return;
-    await _guard(
-      messenger,
-      l10n,
-      () => ref
-          .read(playlistDetailProvider(view.playlist.pid).notifier)
-          .edit(name: name),
-      // A name somebody just typed: the server's refusal names what was
-      // wrong with it, and the table's sentence would not.
-      refusal: true,
-    );
-  }
-
-  Future<void> _setVisibility(BuildContext context, WidgetRef ref) => _guard(
-    ScaffoldMessenger.of(context),
-    context.l10n,
-    () => ref
-        .read(playlistDetailProvider(view.playlist.pid).notifier)
-        .edit(visibility: view.playlist.isShared ? 'private' : 'shared'),
-  );
-
-  /// Offers the playlist as M3U for copying: the web build has no
-  /// file-save surface and the clipboard reaches every M3U player.
-  Future<void> _exportM3u(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final l10n = context.l10n;
-    final String content;
-    try {
-      content = await ref
-          .read(repositoryProvider)
-          .exportPlaylistM3u(view.playlist.pid);
-    } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
-      return;
-    }
-    if (!context.mounted) return;
-    await _showDocument(
-      context,
-      messenger: messenger,
-      title: l10n.playlistExportM3u,
-      document: content,
-      copied: l10n.playlistCopiedM3u,
-    );
-  }
-
-  /// Offers a smart playlist's rule as a Navidrome document, asking
-  /// first when the conversion would lose something.
-  ///
-  /// Two calls rather than one, because the loss has to be answerable
-  /// before it happens: the report says what would go, and only a
-  /// person who has seen that list asks for the export that drops it.
-  /// A lossless rule never sees a dialog at all.
-  Future<void> _exportNsp(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final l10n = context.l10n;
-    final repository = ref.read(repositoryProvider);
-    final pid = view.playlist.pid;
-    final NspReport report;
-    try {
-      report = await repository.reportPlaylistNspExport(pid);
-    } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
-      return;
-    }
-    var partial = false;
-    if (!report.isLossless) {
-      if (!context.mounted) return;
-      // Gaps and notes together: the difference between a loss that
-      // refuses and one that does not is the converter's business, and
-      // somebody deciding whether to accept the loss wants the list.
-      final proceed = await _confirmNspLoss(context, report.all);
-      if (proceed != true) return;
-      // Only the gaps need it. A report of notes alone describes a loss
-      // the strict export makes anyway, and asking for the lossy path
-      // to get the same document would say the wrong thing.
-      partial = report.gaps.isNotEmpty;
-    }
-    final Map<String, Object?> document;
-    try {
-      document = await repository.exportPlaylistNsp(pid, partial: partial);
-    } on WaxDeckApiException catch (e) {
-      // `explainRefusal`, not `explainError`: this endpoint's 501 is a
-      // sentence about the rule, and the reachable one after the dialog
-      // above is "nothing in this rule has an .nsp form" - which the
-      // umbrella's general wording would flatten into a claim about the
-      // server that is not true.
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
-      return;
-    }
-    if (!context.mounted) return;
-    await _showDocument(
-      context,
-      messenger: messenger,
-      title: l10n.playlistExportNsp,
-      // Indented, because this one is read before it is pasted: the
-      // dialog above said what the document loses, and a single line
-      // would make checking what it kept impossible.
-      document: const JsonEncoder.withIndent('  ').convert(document),
-      copied: l10n.playlistCopiedNsp,
-    );
-  }
-
-  /// Lists what the export would drop, and offers to do it anyway.
-  ///
-  /// Each row is the converter's own sentence about the rule this
-  /// person built - which field, which operator, which sort term - so
-  /// it is rendered rather than mapped to a phrase of ours.
-  ///
-  /// Over it, where the gap names a field, that field's own name from
-  /// the rule editor's vocabulary. The converter writes its sentences
-  /// against the query engine's spelling, so a rule holding "Media type
-  /// is Music" is refused for `kind`; the heading is what connects the
-  /// sentence back to the row the person actually built.
-  Future<bool?> _confirmNspLoss(BuildContext context, List<NspGap> gaps) {
-    final l10n = context.l10n;
-    return showDialog<bool>(
-      context: context,
-      builder: (context) {
-        // The dialog's own context: it is a route of its own, so the
-        // theme it draws under is the one below it rather than the
-        // screen's.
-        final colors = WaxColors.of(context);
-        return AlertDialog(
-          title: Text(l10n.playlistExportNspLossTitle),
-          content: SizedBox(
-            width: 480,
-            child: SingleChildScrollView(
-              child: Semantics(
-                identifier: SemanticsIds.playlistExportNspLoss,
-                container: true,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      l10n.playlistExportNspLossCount(gaps.length),
-                      style: WaxType.body.copyWith(color: colors.textSecondary),
-                    ),
-                    const SizedBox(height: WaxSpace.s12),
-                    for (final (index, gap) in gaps.indexed)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: WaxSpace.s12),
-                        child: Semantics(
-                          identifier: SemanticsIds.playlistExportNspLossRow(
-                            index,
-                          ),
-                          container: true,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              if (gap.field != null && gap.field!.isNotEmpty)
-                                Text(
-                                  ruleFieldLabel(l10n, gap.field!),
-                                  style: WaxType.label.copyWith(
-                                    color: colors.textPrimary,
-                                  ),
-                                ),
-                              Text(
-                                gap.reason,
-                                style: WaxType.body.copyWith(
-                                  color: colors.textSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          actions: <Widget>[
-            WaxButton(
-              label: l10n.commonCancel,
-              kind: WaxButtonKind.text,
-              onPressed: () => Navigator.of(context).pop(false),
-            ),
-            WaxButton(
-              label: l10n.playlistExportNspProceed,
-              semanticsId: SemanticsIds.playlistExportNspProceed,
-              onPressed: () => Navigator.of(context).pop(true),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  /// Both text exports land in the design system's one document dialog.
-  Future<void> _showDocument(
-    BuildContext context, {
-    required ScaffoldMessengerState messenger,
-    required String title,
-    required String document,
-    required String copied,
-  }) => showDocumentDialog(
-    context,
-    title: title,
-    document: document,
-    closeLabel: context.l10n.commonClose,
-    copyLabel: context.l10n.playlistExportCopy,
-    copySemanticsId: SemanticsIds.playlistExportCopy,
-    onCopied: () => messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(copied))),
-  );
-
-  /// Copies the portable refs, for importing on another server.
-  Future<void> _exportPortable(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final l10n = context.l10n;
-    final PortablePlaylist portable;
-    try {
-      portable = await ref
-          .read(repositoryProvider)
-          .exportPlaylistPortable(view.playlist.pid);
-    } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
-      return;
-    }
-    await Clipboard.setData(ClipboardData(text: portableJson(portable)));
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(l10n.playlistCopiedPortable)));
-  }
-
-  /// What the picker offers; the server decides what it accepts.
-  static const _coverExtensions = kArtworkExtensions;
-
-  /// Uploads a picked image as the cover. Read whole rather than
-  /// streamed: covers are small and the server caps the body.
-  Future<void> _setCover(BuildContext context, WidgetRef ref) async {
-    final picker = ref.read(filePickerProvider);
-    if (picker == null) return;
-    final pid = view.playlist.pid;
-    final messenger = ScaffoldMessenger.of(context);
-    final l10n = context.l10n;
-    // Picking and reading are inside the guard: a permission error or a
-    // file that vanished throws from the platform, not from the API.
-    try {
-      final file = await picker.pickFile(
-        extensions: _coverExtensions,
-        label: l10n.playlistCoverImage,
-        anyLabel: l10n.uploadsFileTypeAny,
-      );
-      final openRead = file?.openRead;
-      if (file == null || openRead == null) return;
-      final bytes = BytesBuilder(copy: false);
-      await for (final chunk in openRead()) {
-        bytes.add(chunk);
-      }
-      await ref
-          .read(playlistDetailProvider(pid).notifier)
-          .setCover(bytes.takeBytes());
-    } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
-    } on Exception catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text(l10n.playlistCoverUnreadable('$e'))),
-        );
-    }
-  }
-
-  /// Drops an uploaded cover. The playlist does not go bare: the server
-  /// rebuilds the one it makes from the member covers.
-  Future<void> _resetCover(BuildContext context, WidgetRef ref) async {
-    final pid = view.playlist.pid;
-    final messenger = ScaffoldMessenger.of(context);
-    final l10n = context.l10n;
-    try {
-      await ref.read(playlistDetailProvider(pid).notifier).resetCover();
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.playlistCoverReset)));
-    } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
-    }
-  }
-
-  Future<void> _delete(BuildContext context, WidgetRef ref) async {
-    final router = GoRouter.of(context);
-    final l10n = context.l10n;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.playlistDeleteTitle),
-        content: Text(l10n.playlistDeleteBody),
-        actions: <Widget>[
-          WaxButton(
-            label: l10n.commonCancel,
-            kind: WaxButtonKind.text,
-            onPressed: () => Navigator.of(context).pop(false),
-          ),
-          WaxButton(
-            label: l10n.playlistDelete,
-            semanticsId: SemanticsIds.playlistDeleteConfirm,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
-        ],
       ),
     );
-    if (!(confirmed ?? false)) return;
-    await ref.read(playlistDetailProvider(view.playlist.pid).notifier).delete();
-    // Left only from the screen that asked; a back gesture during the
-    // delete would otherwise take the one it landed on.
-    if (context.mounted) router.leave(fallback: WaxRoute.playlists);
-  }
-
-  /// Runs an edit and says why it failed. [refusal] for a write
-  /// carrying something just typed, where the server's own sentence
-  /// names the value it would not take.
-  static Future<void> _guard(
-    ScaffoldMessengerState messenger,
-    AppLocalizations l10n,
-    Future<void> Function() edit, {
-    bool refusal = false,
-  }) async {
-    try {
-      await edit();
-    } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              refusal ? explainRefusal(l10n, e) : explainError(l10n, e),
-            ),
-          ),
-        );
-    }
   }
 }
-
-/// The portable export, as the JSON the importer on another server reads.
-String portableJson(PortablePlaylist portable) => jsonEncode(<String, Object?>{
-  'name': portable.name,
-  'refs': <Object?>[
-    for (final ref in portable.refs)
-      <String, Object?>{
-        'kind': ref.kind,
-        if (ref.essence != null) 'essence': ref.essence,
-        if (ref.fingerprint != null) 'fingerprint': ref.fingerprint,
-        if (ref.fingerprintAlgo != null) 'fingerprintAlgo': ref.fingerprintAlgo,
-        if (ref.mbid != null) 'mbid': ref.mbid,
-        if (ref.asin != null) 'asin': ref.asin,
-        if (ref.isbn != null) 'isbn': ref.isbn,
-        if (ref.isrc != null) 'isrc': ref.isrc,
-        if (ref.artist != null) 'artist': ref.artist,
-        'title': ref.title,
-        if (ref.album != null) 'album': ref.album,
-        if (ref.durationMs != null) 'durationMs': ref.durationMs,
-      },
-  ],
-});

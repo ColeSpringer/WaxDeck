@@ -637,8 +637,10 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           ),
           volume: const _VolumeRow(),
           actionRow: _actionRow(context, carMode: carMode),
-          bottomRegion: _music || _session == null
+          bottomRegion: _music
               ? const _UpNextPeek()
+              : _session == null
+              ? const SpokenRegionReserve()
               : SpokenBottomRegion(session: _session!, position: _position),
         );
       },
@@ -909,13 +911,11 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             }),
           ),
         ] else if (_session != null)
-          // Gated like the seek cluster and the bottom region above:
-          // every chip here drives a live session (its rate, its
-          // trim, its bookmarks), so the resolve window has nothing
-          // for them to act on. Absent for those frames rather than
-          // inert, which is what the rest of the spoken-word face
-          // does.
-          ...spokenActionChips(_session!),
+          // Every chip drives a live session, so the resolve window
+          // draws unseen stand-ins that keep the row's room instead.
+          ...spokenActionChips(_session!)
+        else
+          ...spokenChipStandIns(context, book: _book),
         // Every face, not only the spoken-word ones 5.3 lists it under:
         // falling asleep to a record is what the control is for, and it
         // is about the device rather than the medium.

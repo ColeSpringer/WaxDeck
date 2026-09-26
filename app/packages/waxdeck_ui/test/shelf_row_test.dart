@@ -26,6 +26,8 @@ Future<void> _pump(
   int cards = 12,
   bool reducedMotion = false,
   TextDirection textDirection = TextDirection.ltr,
+  bool Function(MediaTileData item)? itemHasActions,
+  String Function(int index)? moreSemanticsIdAt,
 }) async {
   await tester.pumpWidget(
     MaterialApp(
@@ -53,6 +55,8 @@ Future<void> _pump(
                   onTapItem: (tile) => _taps.add(tile.title),
                   onPlayItem: (tile) => _plays.add(tile.title),
                   onMoreItem: (tile) => _menus.add(tile.title),
+                  itemHasActions: itemHasActions,
+                  moreSemanticsIdAt: moreSemanticsIdAt,
                   backSemanticsId: 'shelf-test-back',
                   forwardSemanticsId: 'shelf-test-forward',
                 ),
@@ -235,6 +239,51 @@ void main() {
     await tester.pumpAndSettle();
     expect(_offset(tester), greaterThan(0));
     expect(_taps, isEmpty);
+  });
+
+  testWidgets('a card without actions offers neither play nor a menu', (
+    tester,
+  ) async {
+    await _pump(tester, itemHasActions: (tile) => tile.title != 'Card 0');
+    final card = find.widgetWithText(MediaCard, 'Card 0');
+    await tester.tapAt(
+      tester.getCenter(card),
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
+    expect(_menus, isEmpty);
+    expect(tester.widget<MediaCard>(card).onPlay, isNull);
+
+    await tester.tapAt(
+      tester.getCenter(find.widgetWithText(MediaCard, 'Card 1')),
+      kind: PointerDeviceKind.mouse,
+      buttons: kSecondaryMouseButton,
+    );
+    await tester.pumpAndSettle();
+    expect(_menus, <String>['Card 1']);
+  });
+
+  testWidgets('the overflow chip carries the handle the shelf names', (
+    tester,
+  ) async {
+    // A card reveals its chip under a mouse, which the default touch
+    // highlight mode of a test never reports.
+    FocusManager.instance.highlightStrategy =
+        FocusHighlightStrategy.alwaysTraditional;
+    addTearDown(
+      () => FocusManager.instance.highlightStrategy =
+          FocusHighlightStrategy.automatic,
+    );
+    await _pump(tester, moreSemanticsIdAt: (index) => 'shelf-test-more-$index');
+    final gesture = await _hover(tester);
+    await gesture.moveTo(
+      tester.getCenter(find.widgetWithText(MediaCard, 'Card 1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier('shelf-test-more-1'));
+    await tester.pumpAndSettle();
+    expect(_menus, <String>['Card 1']);
   });
 
   testWidgets('a secondary tap in the halo reaches the card menu', (

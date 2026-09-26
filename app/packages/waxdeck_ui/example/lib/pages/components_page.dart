@@ -24,6 +24,8 @@ class _ComponentsPageState extends State<ComponentsPage> {
   String _filter = 'all';
   String _letter = 'A';
   WaxVisualizerMode _visualizer = WaxVisualizerMode.waveform;
+  bool _notesOpen = false;
+  bool _notesOverflow = false;
 
   /// Where the split-pane seam below sits. The component holds no width
   /// of its own, so somewhere has to; in the app that is a stored
@@ -468,6 +470,41 @@ class _ComponentsPageState extends State<ComponentsPage> {
                 'Salt Harbour',
                 style: WaxType.titleItem.copyWith(color: colors.textPrimary),
               ),
+            ],
+          ),
+        ),
+        const SizedBox(height: WaxSpace.s24),
+
+        const SectionHeader(overline: 'Content', title: 'Clamped text'),
+        // The control follows the box's report, so a short note gets none.
+        SizedBox(
+          width: 320,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              ClampedBox(
+                budget: 64,
+                clamped: !_notesOpen,
+                onOverflow: (value) {
+                  if (mounted && value != _notesOverflow) {
+                    setState(() => _notesOverflow = value);
+                  }
+                },
+                child: Text(
+                  'A weekly hour of field recordings from harbours, markets '
+                  'and train yards, stitched into one long walk. This week '
+                  'the tide comes in over the mud flats at dawn, a ferry '
+                  'horn answers from across the estuary, and the fish '
+                  'market opens its shutters.',
+                  style: WaxType.body.copyWith(color: colors.textSecondary),
+                ),
+              ),
+              if (_notesOverflow)
+                WaxButton(
+                  label: _notesOpen ? 'Show less' : 'Show more',
+                  kind: WaxButtonKind.inline,
+                  onPressed: () => setState(() => _notesOpen = !_notesOpen),
+                ),
             ],
           ),
         ),

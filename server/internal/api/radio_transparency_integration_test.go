@@ -473,3 +473,43 @@ func coverPNG(t *testing.T) []byte {
 	}
 	return buf.Bytes()
 }
+
+// The pid is there to draw the matched track's own cover, so a match
+// with none is left out and the station's announced cover answers.
+func TestRadioNowPlayingItemPidNeedsACover(t *testing.T) {
+	t.Parallel()
+	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(pngPixel)
+	}))
+	t.Cleanup(host.Close)
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.AllowPrivateRadioHosts = true
+	})
+	st := savedSongStation(t, h, "Deck FM")
+	pids := map[string]string{}
+	for _, it := range h.items(t, "").Items {
+		pids[it.Title] = it.Pid
+	}
+	playInfo := func() RadioPlayInfo {
+		return decode[RadioPlayInfo](t, get(t, h.ts, "/api/v1/radio/stations/"+st.Pid+"/play-info", h.token))
+	}
+
+	h.svc.NoteRadioMeta(st.Pid, "Fixture Artist - Alpha Song", host.URL+"/cover.png")
+	waitForSavedSnapshotArt(t, h, st.Pid)
+	if info := playInfo(); info.NowPlayingItemPid != nil {
+		t.Fatalf("nowPlayingItemPid = %q for a track with no cover, want absent", *info.NowPlayingItemPid)
+	}
+
+	bravo := pids["Bravo Song"]
+	wantStatus(t, metadataPutBytes(t, h.ts, "/api/v1/items/"+bravo+"/artwork", h.token, tinyPNG(t)),
+		200, "set front")
+	h.svc.NoteRadioMeta(st.Pid, "Fixture Artist - Bravo Song", "")
+	info := playInfo()
+	if info.NowPlayingItemPid == nil || *info.NowPlayingItemPid != bravo {
+		t.Fatalf("nowPlayingItemPid = %v, want %q", info.NowPlayingItemPid, bravo)
+	}
+	if info.NowPlayingArtKey != nil {
+		t.Fatalf("nowPlayingArtKey = %q beside a matched cover, want absent", *info.NowPlayingArtKey)
+	}
+}

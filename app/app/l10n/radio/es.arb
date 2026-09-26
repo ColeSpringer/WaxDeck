@@ -61,6 +61,7 @@
   "radioStreamUrl": "URL del stream",
   "radioStreamUrlHint": "https://example.com/stream",
   "radioTitle": "Radio",
+  "radioTuneIn": "Sintonizar {name}",
   "radioTuningIn": "Sintonizando",
   "radioUnpin": "Quitar {name} del dial",
   "radioVolume": "Volumen",

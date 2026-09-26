@@ -1,15 +1,20 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
+import 'package:waxdeck/src/player/play_progress.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
+import 'package:waxdeck/src/podcasts/show_actions.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'player_host.dart';
 import 'routed_host.dart';
+import 'secondary_click.dart';
 
 Future<void> _pump(
   WidgetTester tester,
@@ -164,6 +169,177 @@ void main() {
     // its own rather than the two sharing one.
     expect(byId(SemanticsIds.episodeContinue('tr-half')), findsOneWidget);
     expect(byId(SemanticsIds.episode('tr-half')), findsOneWidget);
+  });
+
+  testWidgets('a show card opens the show header\'s own actions', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow('pc-A', title: 'Alpha Show'));
+    await _pump(tester, repo);
+
+    await rightClick(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.podcast('pc-A')),
+    );
+    expect(find.text('Pin podcast to Home'), findsOneWidget);
+    expect(find.text('Mark older episodes as played'), findsOneWidget);
+    // Curating a cover takes the right this session lacks.
+    expect(find.text('Set cover'), findsNothing);
+
+    await tester.tap(find.text('Check for new episodes'));
+    await tester.pumpAndSettle();
+    expect(repo.refreshPodcastCalls, <String>['pc-A']);
+  });
+
+  testWidgets('an Up next card opens the item menu', (tester) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow('pc-A', title: 'Alpha Show'))
+      ..episodesByShow['pc-A'] = <EpisodeSummary>[
+        testEpisode('tr-half', showPid: 'pc-A', title: 'Half Heard'),
+      ]
+      ..playPositions['tr-half'] = 60000;
+    await _pump(tester, repo);
+
+    await rightClick(
+      tester,
+      find.bySemanticsIdentifier(SemanticsIds.episodeContinue('tr-half')),
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemMenuSheet('tr-half')),
+      findsOneWidget,
+    );
+    expect(find.text('Details'), findsOneWidget);
+  });
+
+  testWidgets('a show card plays its newest unfinished episode', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow('pc-A', title: 'Alpha Show'))
+      ..episodesByShow['pc-A'] = <EpisodeSummary>[
+        testEpisode('tr-new', showPid: 'pc-A', title: 'Newest'),
+        testEpisode('tr-mid', showPid: 'pc-A', title: 'Middle'),
+        testEpisode('tr-old', showPid: 'pc-A', title: 'Oldest'),
+      ]
+      ..finishedPids.add('tr-new')
+      ..playPositions['tr-new'] = 214000
+      ..playPositions['tr-mid'] = 60000;
+    final container = playbackContainer(repo: repo, engine: FakeEngine());
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const PodcastsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await hoverPlay(
+      tester,
+      find.byWidgetPredicate(
+        (widget) => widget is MediaCard && widget.data.title == 'Alpha Show',
+      ),
+      label: 'Play latest from Alpha Show',
+    );
+    final queue = container.read(queueControllerProvider);
+    expect(<String>[for (final e in queue.entries) e.pid], <String>['tr-mid']);
+    await PlayerHarness(container).endPlayback(tester);
+  });
+
+  testWidgets('a show heard through starts its newest over', (tester) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow('pc-A', title: 'Alpha Show'))
+      ..episodesByShow['pc-A'] = <EpisodeSummary>[
+        testEpisode('tr-new', showPid: 'pc-A', title: 'Newest'),
+        testEpisode('tr-old', showPid: 'pc-A', title: 'Oldest'),
+      ]
+      ..playedPids.add('tr-new')
+      ..playPositions['tr-new'] = 200000
+      ..finishedPids.add('tr-old')
+      ..playPositions['tr-old'] = 214000;
+    final engine = FakeEngine(
+      mediaDuration: const Duration(milliseconds: 214000),
+    );
+    final container = playbackContainer(repo: repo, engine: engine);
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const PodcastsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await hoverPlay(
+      tester,
+      find.byWidgetPredicate(
+        (widget) => widget is MediaCard && widget.data.title == 'Alpha Show',
+      ),
+      label: 'Play latest from Alpha Show',
+    );
+    expect(engine.loadedUrl, contains('tr-new'));
+    expect(engine.position, Duration.zero);
+    await PlayerHarness(container).endPlayback(tester);
+  });
+
+  testWidgets('a show whose next episode needs fetching reads its list once', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow('pc-A', title: 'Alpha Show'))
+      ..episodesByShow['pc-A'] = <EpisodeSummary>[
+        testEpisode(
+          'tr-bare',
+          showPid: 'pc-A',
+          title: 'No Audio',
+          downloaded: false,
+          hasEnclosure: false,
+        ),
+      ];
+    final container = playbackContainer(repo: repo, engine: FakeEngine());
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const PodcastsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    repo.listEpisodesCalls.clear();
+
+    await hoverPlay(
+      tester,
+      find.byWidgetPredicate(
+        (widget) => widget is MediaCard && widget.data.title == 'Alpha Show',
+      ),
+      label: 'Play latest from Alpha Show',
+    );
+    expect(repo.fetchEpisodeCalls, <String>['tr-bare']);
+    // The hub draws no list of this show's, so none is built for it.
+    expect(repo.listEpisodesCalls, <String>['pc-A']);
+  });
+
+  test('with every episode heard, a show plays its newest', () {
+    final episodes = <EpisodeSummary>[
+      testEpisode('tr-new', showPid: 'pc-A'),
+      testEpisode('tr-old', showPid: 'pc-A'),
+    ];
+    final heard = PlayProgressView(<String, PlayProgress>{
+      for (final episode in episodes)
+        episode.pid: const PlayProgress(
+          positionMs: 214000,
+          played: true,
+          finished: true,
+        ),
+    });
+    expect(nextEpisodeOf(episodes, heard).pid, 'tr-new');
   });
 
   testWidgets('empty state invites a first show', (tester) async {

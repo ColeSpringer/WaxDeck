@@ -2,12 +2,17 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
+import 'package:waxdeck/src/music/artist_screen.dart';
+import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -15,6 +20,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'secondary_click.dart';
 
 const _uploader = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDUPLOAD',
@@ -364,6 +370,99 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.instantMixCalls.single.genre, 'Shoegaze');
     expect(repo.instantMixCalls.single.seedPid, isNull);
+  });
+
+  group('a mix card\'s menu', () {
+    FakeRepository mixRepo() {
+      final repo = _repo();
+      repo.topLists['genres'] = const TopList(
+        kind: 'genres',
+        range: '30d',
+        entries: <TopEntry>[TopEntry(name: 'Shoegaze', plays: 12, ms: 600000)],
+      );
+      repo.topLists['artists'] = const TopList(
+        kind: 'artists',
+        range: '30d',
+        entries: <TopEntry>[
+          TopEntry(name: 'The Bree Trio', pid: 'ar-1', plays: 9, ms: 500000),
+        ],
+      );
+      repo.instantMixResult = InstantMix(
+        basis: MixBasis.metadata,
+        items: <ItemSummary>[_track(_sealed, 'Still Sealed')],
+      );
+      return repo;
+    }
+
+    testWidgets('shuffles the mix it mints', (tester) async {
+      final repo = mixRepo();
+      await _pumpHome(tester, repo);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(HomeScreen)),
+      );
+
+      await rightClick(tester, _byId(SemanticsIds.homeMix(0)).first);
+      expect(find.text('Play mix'), findsOneWidget);
+      await tester.tap(find.text('Shuffle mix'));
+      await tester.pumpAndSettle();
+
+      expect(repo.instantMixCalls.single.genre, 'Shoegaze');
+      expect(container.read(queueControllerProvider).shuffled, isTrue);
+      container.read(queueControllerProvider.notifier).clear();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('opens the genre a genre card is drawn from', (tester) async {
+      final repo = mixRepo()
+        ..facets['genre'] = const <FacetBucket>[
+          FacetBucket(key: 'gn-ambient', label: 'Ambient', count: 4),
+          FacetBucket(key: 'gn-shoegaze', label: 'Shoegaze', count: 3),
+        ];
+      await _pumpHome(tester, repo);
+
+      await rightClick(tester, _byId(SemanticsIds.homeMix(0)).first);
+      await tester.tap(find.text('Go to genre'));
+      await tester.pumpAndSettle();
+
+      expect(repo.facetStartsAt.last, 'Shoegaze');
+      expect(find.byType(MusicListingScreen), findsOneWidget);
+      expect(repo.facetDrills.last, ('genre', 'gn-shoegaze'));
+    });
+
+    testWidgets('opens nothing once home is left while it looks', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = mixRepo()
+        ..facets['genre'] = const <FacetBucket>[
+          FacetBucket(key: 'gn-shoegaze', label: 'Shoegaze', count: 3),
+        ]
+        ..facetGate = gate;
+      await _pumpHome(tester, repo);
+      final router = GoRouter.of(tester.element(find.byType(HomeScreen)));
+
+      await rightClick(tester, _byId(SemanticsIds.homeMix(0)).first);
+      await tester.tap(find.text('Go to genre'));
+      await tester.pump();
+      router.go(WaxRoute.playlists);
+      await tester.pumpAndSettle();
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(find.byType(MusicListingScreen), findsNothing);
+    });
+
+    testWidgets('opens the artist an artist card is drawn from', (
+      tester,
+    ) async {
+      await _pumpHome(tester, mixRepo());
+
+      await rightClick(tester, _byId(SemanticsIds.homeMix(1)).first);
+      await tester.tap(find.text('Go to artist'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(ArtistScreen), findsOneWidget);
+    });
   });
 
   testWidgets('a listener with no history is offered no mixes', (tester) async {

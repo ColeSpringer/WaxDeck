@@ -237,6 +237,33 @@ void main() {
       _expectMenu(0, suppressed: false);
     });
 
+    testWidgets('an option sheet holds the browser menu off', (tester) async {
+      await tester.pumpWidget(
+        _host(
+          Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showWaxOptionSheet(
+                context,
+                builder: (sheetContext) => WaxOptionRow(
+                  title: 'An option',
+                  onTap: () => Navigator.of(sheetContext).pop(),
+                ),
+              ),
+              child: const Text('Open'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+      expect(find.text('An option'), findsOneWidget);
+      _expectMenu(1, suppressed: true);
+
+      await tester.tap(find.text('An option'));
+      await tester.pumpAndSettle();
+      _expectMenu(0, suppressed: false);
+    });
+
     testWidgets('the hold is released even when the body throws', (
       tester,
     ) async {
