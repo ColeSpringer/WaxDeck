@@ -1,11 +1,15 @@
-// Surfaces the tests that only passed on a retry.
+// Surfaces the tests that failed and the tests that only passed on a
+// retry.
 //
 // A retry turns a flake into a green run, which is the point and also
 // the problem: the suite reports success and the test that needed two
 // goes leaves no trace anybody reads. This walks Playwright's JSON
-// report after the run and says so out loud - a warning annotation on
-// the test's own line, and a table in the job summary - so a test that
-// starts needing retries is visible before it starts failing outright.
+// report after the run and says so out loud - an error annotation on
+// each failed test's own line, a warning annotation on each flaky
+// one's, and a table in the job summary - so a test that starts
+// needing retries is visible before it starts failing outright. It is
+// the one annotator on purpose: Playwright's own `github` reporter
+// marks a flaky test as an error too, and a green run would show red.
 //
 // Never fails the job: the run's own exit code already decided that.
 // Writes `flaky` and `count` to $GITHUB_OUTPUT for the steps that
@@ -80,6 +84,13 @@ console.log(
     `${flaky.length} flaky, ${stats.skipped ?? 0} skipped`,
 );
 
+for (const t of failed) {
+  const where = `${t.file}:${t.line}`;
+  console.log(
+    `::error file=${t.file},line=${t.line},title=Failed test::` +
+      `[${t.project}] ${t.title} failed (${t.attempts} attempts) - ${where}`,
+  );
+}
 for (const t of flaky) {
   const where = `${t.file}:${t.line}`;
   console.log(

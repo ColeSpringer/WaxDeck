@@ -4,6 +4,20 @@ on:
   push:
     branches: [main]
   pull_request:
+  # On demand too, for a flake that wants three runs without three
+  # pushes to make them.
+  workflow_dispatch:
+
+# A pull request pushed to again wants the newer run, not a queue of
+# them, so its runs share a group and the newer cancels the older. A
+# push to main or a dispatch gets a group of its own, keyed by run id:
+# GitHub holds at most one pending run per group and cancels the earlier
+# pending one, so a group shared across pushes would report the middle
+# of three quick pushes as cancelled and make every push wait for the
+# run before it. Every commit on main keeps its own verdict instead.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -13,17 +27,29 @@ env:
   FLUTTER_VERSION: "3.47.1"
   NODE_VERSION: "24"
 
+# Every job carries a timeout-minutes of about three times its green
+# duration. The cap is a backstop, not a diagnostic: a job that reaches
+# it is reported as cancelled, not failed, so `if: failure()` steps skip
+# and whatever the job was doing is lost - which is how one hang cost an
+# hour and left nothing. The suites that can hang therefore run under
+# their own budgets (tools/ci/run-suite.sh), fail with their evidence
+# kept, and reach the cap only when that has failed too.
 jobs:
   # OpenAPI lint; on PRs also the breaking-change gate against the base ref.
   spec:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # oasdiff reads the spec from the base ref
+      # spectral comes from e2e's lockfile (see the Makefile), hence the
+      # npm cache keyed on it.
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
       - run: make spec-lint
       - uses: actions/setup-go@v7
         if: github.event_name == 'pull_request'
@@ -41,9 +67,52 @@ jobs:
             echo "::notice::base ref has no api/openapi.yaml yet; skipping oasdiff"
           fi
 
+  # The workflows themselves, and the shell that runs in them and beside
+  # them. actionlint checks the YAML, the expressions, and every `run:`
+  # block (through shellcheck); shellcheck checks the repository's own
+  # scripts at warning severity. Both pinned - shellcheck fetched by
+  # version and checksum rather than taken from the runner image, whose
+  # copy moves with the image and would red a run for a change that
+  # touched nothing here.
+  workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ACTIONLINT_VERSION: "1.7.12"
+      SHELLCHECK_VERSION: "0.11.0"
+      SHELLCHECK_SHA256: "8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: false # actionlint is a one-shot `go run`; no go.sum at repo root
+      - name: Fetch shellcheck
+        run: |
+          set -euo pipefail
+          archive="$RUNNER_TEMP/shellcheck.tar.xz"
+          curl -sSfL -o "$archive" \
+            "https://github.com/koalaman/shellcheck/releases/download/v${SHELLCHECK_VERSION}/shellcheck-v${SHELLCHECK_VERSION}.linux.x86_64.tar.xz"
+          echo "${SHELLCHECK_SHA256}  $archive" | sha256sum -c -
+          tar -xJf "$archive" -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/shellcheck-v${SHELLCHECK_VERSION}" >> "$GITHUB_PATH"
+      # Each linter's matcher turns its findings into annotations on the
+      # line. actionlint's would also claim shellcheck's gcc-format lines,
+      # and as errors, so it is removed before shellcheck's own is added.
+      - name: actionlint
+        run: |
+          echo "::add-matcher::.github/matchers/actionlint.json"
+          go run "github.com/rhysd/actionlint/cmd/actionlint@v${ACTIONLINT_VERSION}"
+      - name: shellcheck
+        run: |
+          echo "::remove-matcher owner=actionlint::"
+          echo "::add-matcher::.github/matchers/shellcheck.json"
+          shellcheck -f gcc -S warning e2e/*.sh e2e/tools/*.sh tools/*.sh tools/ci/*.sh
+
   # Regenerate Go + Dart clients from the spec and fail if committed code drifts.
   drift:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -66,6 +135,7 @@ jobs:
 
   server:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -89,11 +159,26 @@ jobs:
       # now - test-weakened argon2, memoized fixture encodes, parallel
       # tests - and the explicit cap stays as headroom rather than a
       # requirement.
+      #
+      # Through tools/ci/go-test.sh, which mirrors the output to a file
+      # and on failure names what failed where a reader looks first: an
+      # annotation per failed test, and for a run that hit the timeout,
+      # the tests still running when it did. The full log, goroutine
+      # dump included, is the artifact below; the last such dump ran to
+      # eight thousand lines with the one line that mattered inside it.
       - name: Test (race)
-        run: cd server && go test -race -timeout 20m ./...
+        run: cd server && bash ../tools/ci/go-test.sh "$RUNNER_TEMP/go-test.log" -race -timeout 20m ./...
+      - uses: actions/upload-artifact@v7
+        if: failure() || cancelled()
+        with:
+          name: server-test-log
+          path: ${{ runner.temp }}/go-test.log
+          retention-days: 14
+          if-no-files-found: ignore
 
   fixtures:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -105,6 +190,7 @@ jobs:
 
   flutter:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -175,6 +261,7 @@ jobs:
   # part of what is being tested.
   android:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -202,7 +289,7 @@ jobs:
       - name: Locate Android build tools
         run: |
           set -euo pipefail
-          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           for bin in aapt2 zipalign; do
             test -x "$tools/$bin" || { echo "::error::$bin missing from $tools"; exit 1; }
           done
@@ -258,6 +345,7 @@ jobs:
   # run does and a copy here would drift from them.
   docker:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       # The analyzer is behind a profile, and a stack that never starts it
       # never proves the worker token both halves share. CORS is
@@ -318,7 +406,7 @@ jobs:
           set -euo pipefail
           cd fixtures
           go run ./cmd/fixturegen -out "$RUNNER_TEMP/library" -preset all >/dev/null
-          ls "$RUNNER_TEMP/library" | head
+          find "$RUNNER_TEMP/library" -mindepth 1 -maxdepth 1 -printf '%f\n' | head
       # Overrides ride deploy/.env (compose hands it to the container
       # verbatim). Matching off, or every push runs paced live
       # MusicBrainz lookups per fixture; run-stack.sh does the same.
@@ -451,23 +539,40 @@ jobs:
           FEISHIN_BASE_URL: http://localhost:19180
         run: cd e2e && npx playwright test --project=feishin
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: failure() || cancelled()
         with:
           name: feishin-report
           path: |
             e2e/playwright-report
             e2e/test-results
-          retention-days: 7
+          retention-days: 14
           if-no-files-found: ignore
       # Best-effort lines: the step shell is bash -e, so a failing first
       # compose call (deploy/.env missing interpolates to an error)
       # would otherwise skip the Feishin logs - the one diagnostic for a
-      # feishin-project failure - or leak its container and port.
-      - name: Stack logs
-        if: failure()
+      # feishin-project failure - or leak its container and port. On the
+      # cap's cancellation as well, which `failure()` alone skips. The
+      # state comes before the logs: which container is unhealthy, and
+      # what its healthcheck last said, is the line to read first.
+      - name: Stack state and logs
+        if: failure() || cancelled()
         run: |
-          docker compose -f deploy/compose.yaml logs --no-color || true
-          docker compose -f e2e/clients/compose.yaml logs --no-color || true
+          mkdir -p "$RUNNER_TEMP/stack-logs"
+          docker compose -f deploy/compose.yaml ps -a || true
+          for c in $(docker compose -f deploy/compose.yaml ps -aq 2>/dev/null); do
+            docker inspect --format '{{.Name}}: {{.State.Status}}{{if .State.Health}}, health {{.State.Health.Status}}{{range .State.Health.Log}}{{"\n"}}  {{.Start}} exit {{.ExitCode}}: {{.Output}}{{end}}{{end}}' "$c" || true
+          done
+          docker compose -f deploy/compose.yaml logs --no-color --timestamps 2>&1 |
+            tee "$RUNNER_TEMP/stack-logs/deploy.log" || true
+          docker compose -f e2e/clients/compose.yaml logs --no-color --timestamps 2>&1 |
+            tee "$RUNNER_TEMP/stack-logs/feishin.log" || true
+      - uses: actions/upload-artifact@v7
+        if: failure() || cancelled()
+        with:
+          name: docker-stack-logs
+          path: ${{ runner.temp }}/stack-logs
+          retention-days: 14
+          if-no-files-found: ignore
       - name: Tear down
         if: always()
         run: |
@@ -476,6 +581,7 @@ jobs:
 
   e2e:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs: [flutter]
     steps:
       - uses: actions/checkout@v7
@@ -540,15 +646,17 @@ jobs:
       # test-results/ carries the traces, screenshots and hang evidence
       # that explain a failure; playwright-report/ is the readable shell
       # around them. Kept for a flaky run too - that is the run whose
-      # evidence is otherwise thrown away.
+      # evidence is otherwise thrown away - and for a cancelled one: the
+      # cap fires exactly when a run stalled, and the traces of the
+      # tests that were live are what say where.
       - uses: actions/upload-artifact@v7
-        if: failure() || steps.flaky.outputs.flaky == 'true'
+        if: failure() || cancelled() || steps.flaky.outputs.flaky == 'true'
         with:
           name: playwright-report
           path: |
             e2e/playwright-report
             e2e/test-results
-          retention-days: 7
+          retention-days: 14
       # The same sign-on journey against a real dex rather than the
       # bare-binary test IdP. Last in the job on purpose: it is a second
       # playwright run, and a second run rewrites test-results/report.json
@@ -557,9 +665,9 @@ jobs:
       - name: Single sign-on against dex
         run: bash e2e/run-sso-dex.sh
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: failure() || cancelled()
         with:
           name: sso-dex-report
           path: e2e/test-results
-          retention-days: 7
+          retention-days: 14
           if-no-files-found: ignore

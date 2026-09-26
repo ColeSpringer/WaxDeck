@@ -148,9 +148,15 @@ lint: spec-lint
 	cd app && flutter analyze --no-pub
 	cd e2e && { test -d node_modules || npm ci --no-audit --no-fund; } && npm run --silent conform
 
-# Lints the committed bundle as-is; freshness is drift-check's job.
+# Lints the committed bundle as-is; freshness is drift-check's job. The
+# linter comes from e2e's lockfile rather than a bare npx: the CLI's own
+# pin leaves its rulesets at >=1, and a rule added upstream would red CI
+# on a change that never touched the spec. npm ci is guarded the way
+# gen-api-types guards it, and spectral runs from here so it finds the
+# repo's .spectral.yaml.
 spec-lint:
-	npx --yes @stoplight/spectral-cli lint --fail-severity=warn $(SPEC)
+	cd e2e && { test -d node_modules || npm ci --no-audit --no-fund; }
+	e2e/node_modules/.bin/spectral lint --fail-severity=warn $(SPEC)
 
 test: test-server test-fixtures test-app
 

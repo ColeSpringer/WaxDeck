@@ -59,7 +59,10 @@ driver=$!
 
 cd "$APP"
 status=0
-flutter test integration_test/saf_channel_test.dart -d "$SERIAL" || status=$?
+# The reporter flags the CI runner asks for (the verbose trace, the
+# JSON report), split on purpose; a local run leaves them unset.
+# shellcheck disable=SC2086
+flutter test ${WAX_FLUTTER_TEST_FLAGS:-} integration_test/saf_channel_test.dart -d "$SERIAL" || status=$?
 
 # The driver's own fate, which is otherwise invisible: `set -e` says
 # nothing about a background job, so one that died on the first adb

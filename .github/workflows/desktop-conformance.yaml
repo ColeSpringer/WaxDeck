@@ -15,6 +15,13 @@
 # It also covers the full app journey - it boots the same cold stack
 # the playwright suite uses - so a desktop regression in sign-in or
 # playback surfaces here too.
+#
+# Each suite runs under its own budget inside run-desktop.sh, with the
+# tool's verbose trace kept and a hung suite probed before teardown
+# (native thread stacks of the app and the tool, the VM service's
+# isolates, the display). The whole set is uploaded whatever happened,
+# because a run that hits the job's cap is cancelled rather than
+# failed, and a cancelled job skips its `if: failure()` steps.
 name: Desktop engine conformance
 
 on:
@@ -32,7 +39,9 @@ env:
 jobs:
   linux:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # The backstop; a green run takes eight minutes, and the budgets
+    # inside run-desktop.sh are what end a hang.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       # libmpv-dev is the engine itself, not a nicety: media_kit_libs_linux
@@ -42,13 +51,17 @@ jobs:
       # places" - with the whole suite unable to start. The -dev package
       # is what pulls libmpv2 and lays down the unversioned symlink the
       # loader ladder ends on.
+      #
+      # gdb and x11-apps are for the hang probe (tools/ci/probe-linux.sh):
+      # native thread stacks are the only view into mpv's threads, and
+      # xwd is the screenshot of the virtual display.
       - name: Linux desktop toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             clang cmake ninja-build pkg-config libgtk-3-dev \
             libsecret-1-dev libx11-dev libxi-dev \
-            xvfb pulseaudio libmpv-dev
+            xvfb pulseaudio libmpv-dev gdb x11-apps
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
@@ -81,14 +94,24 @@ jobs:
           pactl set-default-sink waxnull
           echo "PULSE_SINK=waxnull" >> "$GITHUB_ENV"
       # pipefail, or `tee` reports the status and a failing suite is a
-      # green step.
+      # green step. WAX_DIAG_DIR is where run-desktop.sh keeps each
+      # suite's verbose tool trace, its JSON report, and the probe of a
+      # hung one; the console log, the server's output included, goes
+      # beside them.
       - name: App journey and conformance suite
+        env:
+          WAX_DIAG_DIR: ${{ runner.temp }}/desktop-diagnostics
         run: |
           set -o pipefail
-          xvfb-run -a bash e2e/run-desktop.sh 2>&1 | tee "$RUNNER_TEMP/desktop-linux.log"
+          mkdir -p "$WAX_DIAG_DIR"
+          xvfb-run -a bash e2e/run-desktop.sh 2>&1 | tee "$WAX_DIAG_DIR/desktop-linux.log"
+      # Whatever happened: `always()` still runs after the cap's
+      # cancellation, which `failure()` does not, and that is the run
+      # with the most to say.
       - uses: actions/upload-artifact@v7
-        if: failure()
+        if: always()
         with:
-          name: desktop-linux-log
-          path: ${{ runner.temp }}/desktop-linux.log
+          name: desktop-conformance-diagnostics
+          path: ${{ runner.temp }}/desktop-diagnostics
+          retention-days: 14
           if-no-files-found: ignore

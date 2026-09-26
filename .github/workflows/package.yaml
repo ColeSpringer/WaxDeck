@@ -43,6 +43,7 @@ env:
 jobs:
   windows:
     runs-on: windows-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7
       - uses: subosito/flutter-action@v2
@@ -55,8 +56,11 @@ jobs:
         run: cd app; flutter pub get
       - name: Build windows release
         run: cd app/app; flutter build windows --release
+      # Pinned: an unpinned tool install floats to the newest release,
+      # and a packaging change upstream would land on a merge that never
+      # touched the installer.
       - name: Install Velopack CLI
-        run: dotnet tool install -g vpk
+        run: dotnet tool install -g vpk --version 1.2.158
       - name: Velopack pack
         shell: pwsh
         run: |
@@ -91,6 +95,7 @@ jobs:
 
   linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - name: Install linux desktop build deps
@@ -144,6 +149,7 @@ jobs:
   # thing people install.
   android:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       # Full history, for the tags alone: the release check below reads
       # the previous tag's pubspec, and the default shallow clone has no
@@ -169,7 +175,7 @@ jobs:
       - name: Locate Android build tools
         run: |
           set -euo pipefail
-          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           test -x "$tools/zipalign" || { echo "::error::zipalign missing from $tools"; exit 1; }
           echo "BUILD_TOOLS=$tools" >> "$GITHUB_ENV"
       - name: Pub get (workspace root)

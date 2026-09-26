@@ -12,6 +12,17 @@
 # suite itself has not failed, so the harness gets a second attempt
 # below before the run reports red; a real regression fails both.
 #
+# The other harness failure is a hang: about one launch in thirty
+# installs the APK and then nothing - no VM service connection, no
+# test - until the job's cap cancels it. Twice that cancellation was
+# the whole record, because a cancelled job skips its `if: failure()`
+# steps and the retry alike. So the suites run through
+# tools/ci/android-conformance.sh: each under its own budget, logcat
+# collected throughout, and a hung suite probed on the spot (device
+# state, the app's VM service, a bugreport) before the run moves on
+# and the retry gets its fresh emulator. What every attempt leaves is
+# uploaded whatever happened.
+#
 # Why it exists at all: the port contract says a play after completion
 # restarts the item; the FakeEngine implemented that and just_audio did
 # not, and because nothing held the real engine to the shared suite,
@@ -56,6 +67,8 @@ on:
       - "app/app/lib/src/uploads/saf_folder_picker.dart"
       - "e2e/tools/drive-saf-picker.sh"
       - "e2e/tools/run-saf-probe.sh"
+      # The runner, the budgets, and the probes the job itself is made of.
+      - "tools/ci/**"
       - ".github/workflows/android-conformance.yaml"
   schedule:
     - cron: "43 5 * * 2" # Tuesdays, 05:43 UTC
@@ -81,7 +94,9 @@ env:
 jobs:
   conformance:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # The backstop, sized for a hung first attempt plus a full second:
+    # the budgets inside the script are what end a hang.
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
       # The runner image ships /dev/kvm without the permissions to open
@@ -143,6 +158,13 @@ jobs:
           cd fixtures
           go run ./cmd/fixturegen -out "$RUNNER_TEMP/wax-saf" -preset saf-probe
           find "$RUNNER_TEMP/wax-saf" -type f
+      # The debug build the suites install, made before the emulator is
+      # up: the cold Gradle build is five minutes that would otherwise
+      # sit inside the first suite's budget on the emulator's clock, and
+      # the daemon it leaves behind makes the suites' own builds
+      # incremental.
+      - name: Warm the Android build
+        run: cd app/app && flutter build apk --debug --target integration_test/real_engine_conformance_test.dart
       # google_apis rather than the smaller AOSP or ATD images: nothing
       # here wants Play services, but google_apis is the one variant
       # published at every API level, and a weekly job that dies in
@@ -166,21 +188,16 @@ jobs:
           # what a silenced conformance run wants.
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
           script: >-
-            rm -rf "$RUNNER_TEMP/wax-saf-artifacts" &&
-            cd app/app &&
-            flutter test integration_test/real_engine_conformance_test.dart
-            -d emulator-5554
-            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac &&
-            flutter test integration_test/load_fault_test.dart
-            -d emulator-5554
-            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac &&
-            "$GITHUB_WORKSPACE/e2e/tools/run-saf-probe.sh"
+            bash "$GITHUB_WORKSPACE/tools/ci/android-conformance.sh"
+            "$RUNNER_TEMP/android-diagnostics/attempt-1"
+            http://10.0.2.2:8000/conformance-tone.flac
             "$RUNNER_TEMP/wax-saf/WaxProbe" emulator-5554
-      # The identical run again, only when the first failed: the one
-      # observed failure mode is the harness dying before any test
-      # starts, and a retry is cheaper than the promotion question
-      # reopening on every flake. A real regression fails both attempts,
-      # and both show in the log.
+      # The identical run again, only when the first failed: the two
+      # observed failure modes are the harness dying before any test
+      # starts and the harness hanging after the install, and a retry
+      # is cheaper than the promotion question reopening on every flake.
+      # A real regression fails both attempts, and both show in the log
+      # and in the diagnostics, one directory each.
       - name: Conformance suite, second attempt
         if: steps.first.outcome == 'failure'
         uses: reactivecircus/android-emulator-runner@v2
@@ -193,26 +210,25 @@ jobs:
           # different question.
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
           script: >-
-            rm -rf "$RUNNER_TEMP/wax-saf-artifacts" &&
-            cd app/app &&
-            flutter test integration_test/real_engine_conformance_test.dart
-            -d emulator-5554
-            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac &&
-            flutter test integration_test/load_fault_test.dart
-            -d emulator-5554
-            --dart-define=WAXDECK_CONFORMANCE_MEDIA=http://10.0.2.2:8000/conformance-tone.flac &&
-            "$GITHUB_WORKSPACE/e2e/tools/run-saf-probe.sh"
+            bash "$GITHUB_WORKSPACE/tools/ci/android-conformance.sh"
+            "$RUNNER_TEMP/android-diagnostics/attempt-2"
+            http://10.0.2.2:8000/conformance-tone.flac
             "$RUNNER_TEMP/wax-saf/WaxProbe" emulator-5554
-      # What the device looked like when the picker driver lost its
-      # way: run-saf-probe.sh captures a screenshot and a final view
-      # hierarchy, and DocumentsUI drifting is unreadable without them.
-      # Nothing is captured when the SAF half never ran, hence ignore -
-      # and each attempt empties the directory first, so what uploads
-      # is never the earlier attempt's device.
-      - name: Device capture on failure
-        if: failure()
+      # Whatever happened, the cap included: `always()` is the condition
+      # that still runs after a cancellation, and a run killed at the
+      # cap is the run whose evidence matters most. One directory per
+      # attempt: logcat from before the first install, each suite's
+      # verbose tool trace and JSON report, the probe of a hung suite
+      # (device state, screenshot, VM service isolates, bugreport), and
+      # the SAF picker's capture - a screenshot and a final view
+      # hierarchy, without which DocumentsUI drifting is unreadable. A
+      # green run's set is kept as well: the comparison a
+      # one-in-thirty hang needs is against a launch that worked.
+      - name: Diagnostics
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: saf-picker-capture
-          path: ${{ runner.temp }}/wax-saf-artifacts
+          name: android-conformance-diagnostics
+          path: ${{ runner.temp }}/android-diagnostics
+          retention-days: 14
           if-no-files-found: ignore

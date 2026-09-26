@@ -26,7 +26,10 @@ env:
 jobs:
   soak:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    # Three passes of about five minutes each, and the config caps a
+    # pass at twenty (globalTimeout), so a stalled pass ends with its
+    # report written and the next one still runs; this is the backstop.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7

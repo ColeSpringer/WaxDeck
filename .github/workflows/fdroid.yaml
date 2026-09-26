@@ -127,7 +127,7 @@ jobs:
         if: steps.rel.outputs.tag != ''
         run: |
           set -euo pipefail
-          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
           for apk in fdroid/repo/*.apk; do
             got="$("$tools/apksigner" verify --print-certs "$apk" |
               awk -F': ' '/SHA-256 digest/ { print $2; exit }')"
@@ -230,6 +230,7 @@ jobs:
     needs: [index]
     if: needs.index.outputs.publish == 'true' && needs.index.outputs.tag != ''
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

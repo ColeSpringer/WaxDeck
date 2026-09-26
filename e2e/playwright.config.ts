@@ -66,6 +66,10 @@ export default defineConfig({
   grepInvert: process.env.E2E_QUARANTINE === 'include' ? undefined : /@quarantine/,
   // The JSON report is what CI walks to annotate flaky tests; under
   // test-results/ so the artifact upload carries it beside the traces.
+  // No `github` reporter: it annotates a test that passed on retry as
+  // an error, so a green run would show red. tools/flaky-summary.mjs
+  // reads the JSON report instead and annotates failures as errors and
+  // retries as warnings.
   reporter: process.env.CI
     ? [
         ['list'],
@@ -73,6 +77,10 @@ export default defineConfig({
         ['json', { outputFile: 'test-results/report.json' }],
       ]
     : 'list',
+  // A run that stalls ends here with its reports written - the JSON one
+  // names the tests that were live - rather than at the job's cap with
+  // nothing. Four times a green run.
+  globalTimeout: process.env.CI ? 20 * 60_000 : 0,
   use: {
     baseURL,
     // The suite reads English: role-and-name lookups, copy assertions,
