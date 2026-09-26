@@ -2,7 +2,7 @@
 
 List of current bugs or correctness issues. Also an area for me to keep my rambling where what I want to add is not clear.
 
-- [9-26-26] When editing metadata, the empty image artwork slots have an ugly "2(" as the image (that might just be for the track 2morrow as I did not check other tracks). We might want to standardize these black images to something less ugly.
+- [9-26-26] When editing metadata, the empty image artwork slots have an ugly "2(" as the image (that might just be for the track 2morrow as I did not check other tracks). We might want to standardize these empty images to something less ugly.
 
 - [9-26-26] When editing metadata, the text for "Pin this cover" is too wordy.
 
