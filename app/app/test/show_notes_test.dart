@@ -68,6 +68,36 @@ void main() {
     expect(opened, ['https://pony.example/']);
   });
 
+  testWidgets('code is set in the mono face the app ships', (tester) async {
+    // The web build bundles its faces and cannot fetch any other, so a
+    // run set in a face it does not ship draws nothing there at all.
+    await tester.pumpWidget(_host('<p>Run <code>make test</code> first</p>'));
+    final rich = tester.widget<RichText>(
+      find.text('Run make test first', findRichText: true),
+    );
+    TextStyle? code;
+    rich.text.visitChildren((span) {
+      if (span is TextSpan && span.text == 'make test') code = span.style;
+      return true;
+    });
+    expect(code?.fontFamily, WaxType.monoData.fontFamily);
+  });
+
+  testWidgets('the notes are one selectable block', (tester) async {
+    await tester.pumpWidget(_host('<p>First paragraph</p><p>Second</p>'));
+    for (final text in <String>['First paragraph', 'Second']) {
+      expect(
+        find.ancestor(
+          of: find.text(text, findRichText: true),
+          matching: find.byType(WaxProse),
+        ),
+        findsOneWidget,
+        reason: text,
+      );
+    }
+    expect(find.byType(WaxProse), findsOneWidget);
+  });
+
   testWidgets('script content is dropped, never rendered as markup', (
     tester,
   ) async {

@@ -322,7 +322,7 @@ Future<void> _delete(
     context: context,
     builder: (context) => AlertDialog(
       title: Text(l10n.playlistDeleteTitle),
-      content: Text(l10n.playlistDeleteBody),
+      content: WaxProse(l10n.playlistDeleteBody),
       actions: <Widget>[
         WaxButton(
           label: l10n.commonCancel,
@@ -454,48 +454,52 @@ Future<bool?> _confirmNspLoss(BuildContext context, List<NspGap> gaps) {
         content: SizedBox(
           width: 480,
           child: SingleChildScrollView(
-            child: Semantics(
-              identifier: SemanticsIds.playlistExportNspLoss,
-              container: true,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  Text(
-                    l10n.playlistExportNspLossCount(gaps.length),
-                    style: WaxType.body.copyWith(color: colors.textSecondary),
-                  ),
-                  const SizedBox(height: WaxSpace.s12),
-                  for (final (index, gap) in gaps.indexed)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: WaxSpace.s12),
-                      child: Semantics(
-                        identifier: SemanticsIds.playlistExportNspLossRow(
-                          index,
-                        ),
-                        container: true,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: <Widget>[
-                            if (gap.field != null && gap.field!.isNotEmpty)
+            // Outside the container, so the rows a spec counts under it
+            // stay the only children it has.
+            child: WaxProse.block(
+              child: Semantics(
+                identifier: SemanticsIds.playlistExportNspLoss,
+                container: true,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      l10n.playlistExportNspLossCount(gaps.length),
+                      style: WaxType.body.copyWith(color: colors.textSecondary),
+                    ),
+                    const SizedBox(height: WaxSpace.s12),
+                    for (final (index, gap) in gaps.indexed)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: WaxSpace.s12),
+                        child: Semantics(
+                          identifier: SemanticsIds.playlistExportNspLossRow(
+                            index,
+                          ),
+                          container: true,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: <Widget>[
+                              if (gap.field != null && gap.field!.isNotEmpty)
+                                Text(
+                                  ruleFieldLabel(l10n, gap.field!),
+                                  style: WaxType.label.copyWith(
+                                    color: colors.textPrimary,
+                                  ),
+                                ),
                               Text(
-                                ruleFieldLabel(l10n, gap.field!),
-                                style: WaxType.label.copyWith(
-                                  color: colors.textPrimary,
+                                gap.reason,
+                                style: WaxType.body.copyWith(
+                                  color: colors.textSecondary,
                                 ),
                               ),
-                            Text(
-                              gap.reason,
-                              style: WaxType.body.copyWith(
-                                color: colors.textSecondary,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

@@ -124,6 +124,10 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
   final ValueNotifier<Duration> _position = ValueNotifier(Duration.zero);
   StreamSubscription<Duration>? _feed;
 
+  /// The last session's speed, which the chip keeps while the next
+  /// spoken-word entry loads.
+  double? _lastSpeed;
+
   @override
   void initState() {
     super.initState();
@@ -181,7 +185,9 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
               false
         : false;
 
-    final spokenWord = item != null && item.mediaType != MediaType.music;
+    final kind = now.kind!;
+    final spokenWord = kind != MediaType.music;
+    if (spokenWord && session != null) _lastSpeed = session.speed;
     // Read whatever the bar is showing, so the two controls do not
     // appear at one distance and jump another after a settings change.
     final skips = ref.watch(skipIntervalsProvider);
@@ -195,8 +201,8 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
           title: item?.title ?? context.l10n.commonLoadingTitle,
           subtitle: item?.artist,
           artwork: waxArtwork(ref.watch(artworkStoreProvider), item?.artUrl),
-          domain: waxDomainOf(item?.mediaType ?? MediaType.music),
-          shape: waxShapeOf(item?.mediaType ?? MediaType.music),
+          domain: waxDomainOf(kind),
+          shape: waxShapeOf(kind),
           // The seed the ticking leaf starts from; the live value
           // arrives through positionTicker.
           position: _position.value,
@@ -211,7 +217,9 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
             QueueRepeat.all => WaxRepeat.all,
             QueueRepeat.one => WaxRepeat.one,
           },
-          speed: spokenWord ? session?.speed : null,
+          speed: spokenWord
+              ? session?.speed ?? (now.loading ? _lastSpeed : null)
+              : null,
           volume: volume,
         ),
         ids: _ids,
@@ -253,11 +261,8 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
               ? null
               : () => unawaited(_showActions(context, ref, item, session)),
           onQueue: () => openQueue(context, ref),
-          // Music only, and only where the bar has a right cluster to
-          // put it in: a track has words and a station, an episode, and
-          // a chapter do not, and 5.2's lyrics toggle is one of the
-          // controls the compact bar drops.
-          onLyrics: wide && session != null && item != null && !spokenWord
+          // The command's own gate, and a cluster only the wide bar has.
+          onLyrics: wide && lyricsAvailable(now)
               ? () => openLyrics(context, ref)
               : null,
           onVolume: localVolume
@@ -280,6 +285,8 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
                     positionMs: session?.displayPosition.inMilliseconds ?? 0,
                   ),
                 ),
+          // An entry named by pid alone resolves a moment after it starts.
+          pending: item == null && now.loading,
         ),
       ),
     );
@@ -550,7 +557,7 @@ Future<void> _showActions(
   final rootContext = Navigator.of(context, rootNavigator: true).context;
   final router = GoRouter.of(context);
   final l10n = context.l10n;
-  return showModalBottomSheet<void>(
+  return showWaxSheet<void>(
     context: context,
     builder: (sheetContext) => SafeArea(
       child: Column(

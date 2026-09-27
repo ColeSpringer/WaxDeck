@@ -79,6 +79,55 @@ const _jobs = <_Job>[
   _Job('Rebuild covers', 'failed', 4),
 ];
 
+/// The radio face as the app composes it: the live pill leading the
+/// song line, no seek slot, and the song's two verbs in the action row
+/// with the sleep timer.
+Widget _radioFace(BuildContext context) => PlayerScaffold(
+  now: const NowPlayingData(
+    title: 'Coastal FM',
+    subtitle: 'Ora Lune - Bell Tower',
+    domain: WaxDomain.radio,
+    shape: ArtworkShape.circle,
+    position: Duration.zero,
+    duration: Duration.zero,
+    live: true,
+    playing: true,
+  ),
+  onCollapse: () {},
+  artworkCaptionReserved: true,
+  trailingHeaderActions: <Widget>[
+    WaxIconButton(
+      glyph: WaxIcons.star,
+      label: 'Pin this station',
+      onPressed: () {},
+    ),
+    WaxIconButton(glyph: WaxIcons.more, label: 'Station', onPressed: () {}),
+  ],
+  subtitleOverride: const LiveLine('Ora Lune - Bell Tower'),
+  transport: TransportCluster(playing: true, live: true, onPlayPause: () {}),
+  actionRow: Wrap(
+    alignment: WrapAlignment.center,
+    spacing: WaxSpace.s8,
+    children: <Widget>[
+      WaxIconButton(
+        glyph: WaxIcons.heart,
+        label: 'Save this song',
+        onPressed: () {},
+      ),
+      WaxIconButton(
+        glyph: WaxIcons.search,
+        label: 'Find in library',
+        onPressed: () {},
+      ),
+      WaxIconButton(
+        glyph: WaxIcons.sleepTimer,
+        label: 'Sleep timer',
+        onPressed: () {},
+      ),
+    ],
+  ),
+);
+
 void main() {
   group('later components', () {
     goldenTest(
@@ -741,6 +790,34 @@ void main() {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'the radio face is live, with nothing to seek',
+      fileName: 'player_radio',
+      pumpBeforeTest: _pumpAnimated,
+      builder: () => GoldenTestGroup(
+        columns: 2,
+        children: <Widget>[
+          for (final variant in _lightAndDark)
+            for (final size in const <Size>[Size(400, 720), Size(720, 400)])
+              GoldenTestScenario(
+                name:
+                    '${variant.name} '
+                    '${size.width > size.height ? 'landscape' : 'portrait'}',
+                child: MediaQuery(
+                  data: MediaQueryData(size: size),
+                  child: _themed(
+                    variant,
+                    SizedBox.fromSize(
+                      size: size,
+                      child: Builder(builder: _radioFace),
+                    ),
+                  ),
+                ),
+              ),
         ],
       ),
     );

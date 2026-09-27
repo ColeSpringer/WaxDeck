@@ -40,7 +40,7 @@ Future<void> showDevicePicker(
     rootContext: Navigator.of(context, rootNavigator: true).context,
     messenger: ScaffoldMessenger.of(context),
   );
-  return showModalBottomSheet<void>(
+  return showWaxSheet<void>(
     context: context,
     // The list sizes the sheet. Left to the default the sheet stops at
     // nine sixteenths of the window with no sign it has more to show, and
@@ -482,7 +482,7 @@ class _DevicePickerSheet extends ConsumerWidget {
       context: handles.rootContext,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.devicesPlayingOn(name)),
-        content: Text(l10n.devicesTakeOverBody),
+        content: WaxProse(l10n.devicesTakeOverBody),
         actions: <Widget>[
           TextButton(
             key: const Key(SemanticsIds.remoteLeave),

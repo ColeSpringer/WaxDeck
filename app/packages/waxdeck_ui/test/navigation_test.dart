@@ -692,21 +692,21 @@ void main() {
     testWidgets('draws a whole grapheme, and only a usable one', (
       tester,
     ) async {
-      // Three rules in one place. The initial is a grapheme cluster, not
-      // a code unit, so a combining mark survives; it is drawn only when
-      // it is a letter or a digit, the rule `ArtworkImage` already uses,
-      // so punctuation does not end up on the disc; and an emoji is not
-      // a letter, which matters twice over here because the app bundles
-      // no emoji face and would draw tofu.
+      // Three rules in one place, all `monogramInitials`. The initial is
+      // a grapheme cluster, not a code unit, so a combining mark
+      // survives; punctuation and emoji are skipped to the first letter
+      // or digit rather than drawn, because the app bundles no emoji
+      // face and would draw tofu; and a name with no letter or digit
+      // anywhere gets the glyph.
       for (final entry in <String, String?>{
         'sam': 'S',
         // Decomposed and spelled out: the cluster is the letter plus
         // its combining acute, and a code unit would drop the accent.
         'e\u0301lan': 'E\u0301',
-        '_sam': null,
+        '_sam': 'S',
         '...': null,
         '': null,
-        '\u{1F3B5} nightjar': null,
+        '\u{1F3B5} nightjar': 'N',
       }.entries) {
         await _pumpButton(tester, account: WaxAccount(name: entry.key));
 

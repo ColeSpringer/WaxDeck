@@ -14,7 +14,7 @@ Future<bool> showEnrichPreviewSheet(
   BuildContext context, {
   required EnrichPreview preview,
 }) async {
-  final applied = await showModalBottomSheet<bool>(
+  final applied = await showWaxSheet<bool>(
     context: context,
     isScrollControlled: true,
     builder: (_) => _EnrichPreviewSheet(preview: preview),
@@ -68,7 +68,7 @@ class _EnrichPreviewSheet extends StatelessWidget {
                       ],
                       if (preview.skipped.isNotEmpty) ...<Widget>[
                         const SizedBox(height: WaxSpace.s12),
-                        Text(
+                        WaxProse(
                           l10n.metadataEnrichSkipped(
                             preview.skipped.join(', '),
                           ),
@@ -78,7 +78,7 @@ class _EnrichPreviewSheet extends StatelessWidget {
                         ),
                       ],
                       const SizedBox(height: WaxSpace.s12),
-                      Text(
+                      WaxProse(
                         l10n.metadataPreviewBuiltinsNote,
                         style: WaxType.caption.copyWith(
                           color: colors.textSecondary,
@@ -181,7 +181,7 @@ class _CoverRow extends StatelessWidget {
                     l10n.artSlotFront,
                     style: WaxType.label.copyWith(color: colors.textPrimary),
                   ),
-                  Text(
+                  WaxProse(
                     l10n.metadataPreviewProvider(cover.provider),
                     style: WaxType.caption.copyWith(
                       color: colors.textSecondary,
@@ -231,7 +231,7 @@ class _FieldRow extends StatelessWidget {
                     label,
                     style: WaxType.label.copyWith(color: colors.textPrimary),
                   ),
-                  Text(
+                  WaxProse(
                     l10n.metadataPreviewProvider(field.provider),
                     style: WaxType.caption.copyWith(
                       color: colors.textSecondary,

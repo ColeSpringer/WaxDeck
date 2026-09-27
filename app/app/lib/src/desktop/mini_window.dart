@@ -241,7 +241,11 @@ class _MiniWindowSurfaceState extends ConsumerState<_MiniWindowSurface> {
                   playing: playing || station.starting,
                 )
               : NowPlayingData(
-                  title: item?.title ?? context.l10n.playerNothingPlaying,
+                  title:
+                      item?.title ??
+                      (now.loading
+                          ? context.l10n.commonLoadingTitle
+                          : context.l10n.playerNothingPlaying),
                   subtitle: item?.artist,
                   artwork: waxArtwork(
                     ref.watch(artworkStoreProvider),

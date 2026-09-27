@@ -166,7 +166,7 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n.metadataDiscardTitle),
-        content: Text(l10n.metadataDiscardBody),
+        content: WaxProse(l10n.metadataDiscardBody),
         actions: <Widget>[
           WaxButton(
             label: l10n.commonCancel,
@@ -318,7 +318,7 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
       ..invalidate(albumDetailProvider(widget.pid));
   }
 
-  Future<void> _albumSheet() => showModalBottomSheet<void>(
+  Future<void> _albumSheet() => showWaxSheet<void>(
     context: context,
     isScrollControlled: true,
     builder: (sheetContext) => FractionallySizedBox(
@@ -340,7 +340,7 @@ class _ReleaseWorkbenchState extends ConsumerState<ReleaseWorkbench> {
     // Checks can outlive their rows - a regroup moves tracks off the
     // release - and a form over nothing has nothing to fetch.
     if (ordered.isEmpty) return;
-    await showModalBottomSheet<void>(
+    await showWaxSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (sheetContext) => FractionallySizedBox(

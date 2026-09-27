@@ -395,7 +395,7 @@ class _TaskRow extends ConsumerWidget {
       return;
     }
     if (!context.mounted) return;
-    await showModalBottomSheet<void>(
+    await showWaxSheet<void>(
       context: context,
       builder: (sheetContext) {
         final colors = WaxColors.of(sheetContext);
@@ -440,7 +440,7 @@ class _TaskRow extends ConsumerWidget {
           key: const Key('task-summary-dialog'),
           title: Text(_typeLabel(l10n, task.type)),
           content: SingleChildScrollView(
-            child: Text(
+            child: WaxProse(
               const JsonEncoder.withIndent('  ').convert(summary),
               style: WaxType.monoData.copyWith(color: colors.textSecondary),
             ),

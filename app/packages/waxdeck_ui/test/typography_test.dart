@@ -235,6 +235,7 @@ void main() {
       'overline': WaxType.overline,
       'monoTime': WaxType.monoTime,
       'monoData': WaxType.monoData,
+      'monoRun': WaxType.monoRun,
     };
 
     test('every token sets its decoration explicitly', () {

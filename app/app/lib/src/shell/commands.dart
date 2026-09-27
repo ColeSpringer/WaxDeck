@@ -287,14 +287,7 @@ final List<WaxCommand> waxStandingCommands = <WaxCommand>[
     activators: const <ShortcutActivator>[
       SingleActivator(LogicalKeyboardKey.keyL),
     ],
-    // The deck bar's gate: words belong to a track that is playing.
-    enabled: (ref) {
-      final now = ref.read(nowPlayingProvider);
-      final item = now.item;
-      return now.session != null &&
-          item != null &&
-          item.mediaType == MediaType.music;
-    },
+    enabled: (ref) => lyricsAvailable(ref.read(nowPlayingProvider)),
     run: (context, ref) => openLyrics(context, ref),
   ),
   WaxCommand(

@@ -83,7 +83,7 @@ class MetadataChaptersSection extends ConsumerWidget {
               ),
             ],
           ),
-          Text(
+          WaxProse(
             l10n.bookChapterEditorHelp,
             style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
           ),

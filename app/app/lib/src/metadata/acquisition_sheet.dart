@@ -51,7 +51,7 @@ class AcquisitionEditRequest {
 Future<AcquisitionEditRequest?> showAcquisitionSheet(
   BuildContext context, {
   required ItemAcquisition? acquisition,
-}) => showModalBottomSheet<AcquisitionEditRequest>(
+}) => showWaxSheet<AcquisitionEditRequest>(
   context: context,
   isScrollControlled: true,
   builder: (_) => _AcquisitionSheet(acquisition: acquisition),
@@ -157,7 +157,7 @@ class _AcquisitionSheetState extends State<_AcquisitionSheet> {
                   style: WaxType.headline.copyWith(color: colors.textPrimary),
                 ),
                 const SizedBox(height: WaxSpace.s4),
-                Text(
+                WaxProse(
                   l10n.metadataOriginEditHelp,
                   style: WaxType.caption.copyWith(color: colors.textSecondary),
                 ),

@@ -17,6 +17,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/colespringer/waxdeck/server/internal/providers"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -895,5 +896,54 @@ func TestRadioArtworkWakesAListeningSocket(t *testing.T) {
 	}
 	if frame.Type != "invalidate" || frame.Topic != "radio" {
 		t.Fatalf("frame = %+v, want an invalidate on the radio topic", frame)
+	}
+}
+
+// titleCoverFake answers one cover for every title, as the external
+// rung's resolver would for a song it found.
+type titleCoverFake struct{ data []byte }
+
+func (f titleCoverFake) FrontCover(context.Context, string, string) (providers.TitleCoverResult, error) {
+	return providers.TitleCoverResult{Data: f.data, MIME: "image/png", Provider: "deezer"}, nil
+}
+
+// A station naming its logo on every song drew no cover for the first
+// one: there the picture cannot be told from the mark, so the lookup
+// runs beside it and play-info ends up answering the lookup's cover.
+func TestRadioFirstTitleEndsWithTheLookupsCoverWhenTheStationImageRepeats(t *testing.T) {
+	t.Parallel()
+	png := append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{0}, 64)...)
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		cfg.AllowPrivateRadioHosts = true
+		cfg.RadioArtResolver = titleCoverFake{data: png}
+	})
+	logo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write(png)
+	}))
+	t.Cleanup(logo.Close)
+
+	resp := h.postJSON(t, "/api/v1/radio/stations", map[string]any{
+		"name": "Loopback FM", "streamUrl": "http://198.51.100.20/stream",
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	st := decode[RadioStation](t, resp)
+	h.svc.NoteRadioMeta(st.Pid, "Charlie Parker - Ornithology", logo.URL+"/station.png")
+
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		resp := get(t, h.ts, "/api/v1/radio/stations/"+st.Pid+"/play-info", h.token)
+		pi := decode[RadioPlayInfo](t, resp)
+		if pi.NowPlayingArtKey != nil && pi.NowPlayingArtSource != nil &&
+			pi.NowPlayingArtSource.Source == "enrichment" {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("play-info never answered the lookup's cover: key %v source %+v",
+				pi.NowPlayingArtKey, pi.NowPlayingArtSource)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

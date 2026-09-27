@@ -128,6 +128,80 @@ void main() {
       );
     });
 
+    test('type comes from the design system, never a named face', () {
+      // The web build cannot fetch a face it does not bundle
+      // (web/index.html), so a family named here draws nothing there.
+      final offenders = _sourcesMatching(const <String>['lib'], _namedFace);
+      expect(
+        offenders,
+        isEmpty,
+        reason:
+            'set it in a WaxType token (WaxType.monoData, or '
+            'WaxType.monoRun inside other text):\n${offenders.join('\n')}',
+      );
+    });
+
+    test('selectable text is WaxProse', () {
+      // On the web SelectableText selects in a hidden field set in another
+      // face, so a drag highlights one span and copies another.
+      final offenders = _sourcesMatching(const <String>[
+        'lib',
+        _designSystem,
+      ], _selectableText);
+      expect(
+        offenders,
+        isEmpty,
+        reason: 'use WaxProse:\n${offenders.join('\n')}',
+      );
+    });
+
+    test('a dialog says its message in prose a reader can copy', () {
+      // Every dialog body was swept onto WaxProse; a bare Text there is
+      // the unselectable help this rule exists to keep out.
+      final offenders = <String>[
+        for (final file in _sources(const <String>['lib', _designSystem]))
+          if (_pathOf(file) case final path
+              when !_isGenerated(path) && _dialogWithBareText(_scan(path).code))
+            path,
+      ];
+      expect(
+        offenders,
+        isEmpty,
+        reason: 'wrap the message in WaxProse:\n${offenders.join('\n')}',
+      );
+    });
+
+    test('the dialog rule reads the dialog, not what is inside it', () {
+      expect(_dialogWithBareText('AlertDialog(content: Text(a))'), isTrue);
+      expect(
+        _dialogWithBareText('AlertDialog(content: const Text(a))'),
+        isTrue,
+      );
+      expect(_dialogWithBareText('AlertDialog(content: WaxProse(a))'), isFalse);
+      expect(
+        _dialogWithBareText(
+          "AlertDialog(content: WaxProse(')'), actions: [SnackBar(content: Text(b))])",
+        ),
+        isFalse,
+      );
+    });
+
+    test('bottom sheets open through showWaxSheet', () {
+      // Whose body a mouse drags to select, not to move the sheet.
+      final offenders = <String>[
+        for (final path in _sourcesMatching(const <String>[
+          'lib',
+          _designSystem,
+        ], _rawSheet))
+          if (!path.endsWith('/components/sheet.dart')) path,
+      ];
+      expect(
+        offenders,
+        isEmpty,
+        reason: 'use showWaxSheet:\n${offenders.join('\n')}',
+      );
+    });
+
     test('no host installs a generated delegate list', () {
       // gen-l10n's lists name the SDK's Material tables, which material_ui
       // never reads: under es there is no Material table of its type at all.
@@ -241,6 +315,13 @@ void main() {
     test('a name and the widget under it count once', () {
       expect(found("title: Text('Backups'),"), hasLength(1));
     });
+
+    test('selectable prose is text like any other', () {
+      expect(found("SelectableText('Invite link'),"), hasLength(1));
+      expect(found("WaxProse('Holds every slot'),"), hasLength(1));
+      // The block takes a child, whose own Text is what gets counted.
+      expect(found("WaxProse.block(child: Text('Empty')),"), hasLength(1));
+    });
   });
 }
 
@@ -313,6 +394,54 @@ final _generatedDelegates = RegExp(
 );
 
 final _designSystemList = RegExp(r'\bwaxLocalizationsDelegates\b');
+
+final _selectableText = RegExp(r'\bSelectableText(?:\.rich)?\(');
+
+final _rawSheet = RegExp(r'\bshowModalBottomSheet\b');
+
+/// Whether an `AlertDialog(` in [code] takes a bare `Text` as its content.
+bool _dialogWithBareText(String code) {
+  for (final match in RegExp(r'\bAlertDialog\(').allMatches(code)) {
+    final args = _topLevel(code, match.end - 1);
+    if (RegExp(r'\bcontent\s*:\s*(?:const\s+)?Text\b').hasMatch(args)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/// The arguments of the call whose `(` is at [open], with everything
+/// nested deeper, strings included, blanked to spaces.
+String _topLevel(String code, int open) {
+  final out = StringBuffer();
+  var depth = 0;
+  String? quote;
+  for (var i = open; i < code.length; i++) {
+    final char = code[i];
+    if (quote != null) {
+      if (char == r'\') {
+        i++;
+      } else if (char == quote) {
+        quote = null;
+      }
+      out.write(' ');
+      continue;
+    }
+    if (char == "'" || char == '"') {
+      quote = char;
+      out.write(' ');
+      continue;
+    }
+    if ('([{'.contains(char)) depth++;
+    if (')]}'.contains(char)) depth--;
+    if (depth == 0) break;
+    out.write(depth == 1 ? char : ' ');
+  }
+  return out.toString();
+}
+
+/// A font family spelled out as a string rather than taken from a token.
+final _namedFace = RegExp(r'''\bfontFamily\s*:[^,;)]*['"]''');
 
 List<String> _sourcesMatching(List<String> roots, RegExp pattern) => <String>[
   for (final file in _sources(roots))
@@ -516,7 +645,7 @@ class _CopyRule extends _Rule {
         // add one beside. `Text` is a suffix like the rest: it catches
         // the field parameters a form's copy arrives through.
         pattern: RegExp(
-          r'\b(?:Selectable)?Text\(\s*|'
+          r'\b(?:(?:Selectable)?Text|WaxProse)\(\s*|'
           // The shell messenger takes its sentence positionally.
           r'\.show\(\s*|'
           // So does a download notification, both its title and its body.

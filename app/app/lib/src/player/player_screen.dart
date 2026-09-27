@@ -1249,7 +1249,7 @@ class SleepTimerButton extends ConsumerWidget {
           : l10n.playerTimerBadgeMinutes(minutes),
       semanticsId: SemanticsIds.sleepTimerOpen,
       onPressed: () => unawaited(
-        showModalBottomSheet<void>(
+        showWaxSheet<void>(
           context: context,
           builder: (_) => _SleepTimerSheet(session: session),
         ),

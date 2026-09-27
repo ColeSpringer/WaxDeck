@@ -248,6 +248,32 @@ void main() {
     expect(session.queues.last.$1, isEmpty);
   });
 
+  test('an entry still resolving keeps the queue standing', () {
+    final first = _item('tr-1', title: 'One');
+    final known = <String, ItemSummary>{'tr-1': first};
+    update(
+      now: NowPlaying(
+        entry: const QueueEntry(queueId: '0', pid: 'tr-1'),
+        item: first,
+      ),
+      queue: _queue(const <String>['tr-1', 'tr-2']),
+      known: known,
+    );
+    update(
+      now: const NowPlaying(
+        entry: QueueEntry(queueId: '1', pid: 'tr-2'),
+        loading: true,
+      ),
+      queue: _queue(const <String>['tr-1', 'tr-2'], index: 1),
+      known: known,
+    );
+
+    // Emptied and sent again, a head unit's list blanked and refilled.
+    expect(session.queues, hasLength(1));
+    expect(session.indexMoves, <int>[1]);
+    expect(session.last!.title, 'Queued item');
+  });
+
   test('an unchanged item is not republished', () {
     final item = _item('tr-1');
     final now = NowPlaying(

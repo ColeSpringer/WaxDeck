@@ -69,6 +69,42 @@ Future<void> _pumpToFarEnd(WidgetTester tester) async {
   return (start: fade.start, end: fade.end);
 }
 
+/// [child] under an ambient letter spacing its own style says nothing
+/// about: the deck bar's case, under a Material's theme default.
+Future<void> _pumpSpaced(
+  WidgetTester tester,
+  Widget child, {
+  double width = 200,
+}) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: buildWaxTheme(),
+      home: Scaffold(
+        body: Center(
+          child: SizedBox(
+            width: width,
+            child: DefaultTextStyle.merge(
+              style: const TextStyle(letterSpacing: 1.5),
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+double _widthOf(String text, TextStyle style) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    maxLines: 1,
+    textDirection: TextDirection.ltr,
+  )..layout();
+  final width = painter.width;
+  painter.dispose();
+  return width;
+}
+
 void main() {
   testWidgets('a title that fits does not move, and holds no ticker', (
     tester,
@@ -276,6 +312,153 @@ void main() {
       findsNothing,
     );
     expect(tester.binding.hasScheduledFrame, isFalse);
+  });
+
+  testWidgets('the far end shows the last glyph under a spaced default', (
+    tester,
+  ) async {
+    // Measured without the ambient spacing it is drawn with, the run
+    // stopped short and left the last characters under the fade.
+    final own = WaxType.titleItem;
+    await _pumpSpaced(
+      tester,
+      WaxMarqueeText(
+        _long,
+        style: own,
+        velocity: 100,
+        pause: const Duration(milliseconds: 200),
+      ),
+    );
+    await tester.pump();
+    final ambient = DefaultTextStyle.of(
+      tester.element(find.byType(WaxMarqueeText)),
+    ).style;
+    final drawn = _widthOf(_long, ambient.merge(own));
+
+    await _pumpToFarEnd(tester);
+    expect(_offsetOf(tester), moreOrLessEquals(-(drawn - 200), epsilon: 0.5));
+
+    await _pump(tester, const SizedBox.shrink());
+  });
+
+  testWidgets('a line past its slot only by the spacing still moves', (
+    tester,
+  ) async {
+    final own = WaxType.titleItem;
+    // One pixel wider than the line measured without the ambient
+    // spacing, so only the spacing makes it overflow.
+    final bare = _widthOf(_short, own);
+    await _pumpSpaced(
+      tester,
+      WaxMarqueeText(_short, style: own),
+      width: bare + 1,
+    );
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byType(WaxMarqueeText),
+        matching: find.byType(Transform),
+      ),
+      findsOneWidget,
+    );
+
+    await _pump(tester, const SizedBox.shrink());
+  });
+
+  testWidgets('the far end shows the last glyph under a spacing override', (
+    tester,
+  ) async {
+    // A reader's text-spacing stylesheet reaches the drawn line through
+    // MediaQuery; a measurement without it stopped short of the end.
+    final own = WaxType.titleItem;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildWaxTheme(),
+        home: Builder(
+          builder: (context) => MediaQuery(
+            // copyWith does not carry the spacing overrides.
+            data: MediaQueryData(
+              size: MediaQuery.sizeOf(context),
+              letterSpacingOverride: 2,
+            ),
+            child: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: 200,
+                  child: WaxMarqueeText(
+                    _long,
+                    style: own,
+                    velocity: 100,
+                    pause: const Duration(milliseconds: 200),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    final drawn = _widthOf(
+      _long,
+      DefaultTextStyle.of(
+        tester.element(find.byType(WaxMarqueeText)),
+      ).style.merge(own).copyWith(letterSpacing: 2),
+    );
+
+    await _pumpToFarEnd(tester);
+    expect(_offsetOf(tester), moreOrLessEquals(-(drawn - 200), epsilon: 0.5));
+
+    await _pump(tester, const SizedBox.shrink());
+  });
+
+  testWidgets('a line past its slot only by a word-spacing override moves', (
+    tester,
+  ) async {
+    final own = WaxType.titleItem;
+    Future<void> pumpAt(double width) => tester.pumpWidget(
+      MaterialApp(
+        theme: buildWaxTheme(),
+        home: Builder(
+          builder: (context) => MediaQuery(
+            // copyWith does not carry the spacing overrides.
+            data: MediaQueryData(
+              size: MediaQuery.sizeOf(context),
+              wordSpacingOverride: 8,
+            ),
+            child: Scaffold(
+              body: Center(
+                child: SizedBox(
+                  width: width,
+                  child: WaxMarqueeText(_short, style: own),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await pumpAt(400);
+    // One pixel wider than the line drawn without the override.
+    final bare = _widthOf(
+      _short,
+      DefaultTextStyle.of(
+        tester.element(find.byType(WaxMarqueeText)),
+      ).style.merge(own),
+    );
+    await pumpAt(bare + 1);
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: find.byType(WaxMarqueeText),
+        matching: find.byType(Transform),
+      ),
+      findsOneWidget,
+    );
+
+    await _pump(tester, const SizedBox.shrink());
   });
 
   testWidgets('a title that only overflows when scaled up still moves', (

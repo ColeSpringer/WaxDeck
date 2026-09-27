@@ -212,7 +212,7 @@ class _EntityRenameSectionState extends ConsumerState<EntityRenameSection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(title: widget.copy.title, overline: widget.copy.overline),
-        Text(
+        WaxProse(
           widget.copy.help,
           style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
         ),
@@ -280,7 +280,7 @@ class _EntityRenameSectionState extends ConsumerState<EntityRenameSection> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(widget.copy.confirmTitle),
-        content: Text(widget.copy.confirmBody),
+        content: WaxProse(widget.copy.confirmBody),
         actions: <Widget>[
           WaxButton(
             label: l10n.commonCancel,

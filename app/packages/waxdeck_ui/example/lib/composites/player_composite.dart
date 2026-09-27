@@ -6,8 +6,9 @@ import '../sample_library.dart';
 ///
 /// One scaffold, four configurations: music gets a waveform and a
 /// queue peek, podcasts get interval seeks and a speed chip, books put
-/// the chapter first, radio drops the seek bar entirely because there is
-/// nothing to seek on a live stream.
+/// the chapter first, radio drops the seek slot entirely because there
+/// is nothing to seek on a live stream, and leads its song line with the
+/// live pill instead.
 class PlayerComposite extends StatelessWidget {
   const PlayerComposite({
     required this.art,
@@ -42,14 +43,17 @@ class PlayerComposite extends StatelessWidget {
       titleTrailing: face == WaxDomain.radio
           ? null
           : StarButton(starred: now.starred, onChanged: (_) {}),
-      seek: SeekCluster(
-        now: now,
-        onSeek: (_) {},
-        peaks: face == WaxDomain.music ? SampleLibrary.peaks() : null,
-        remainingLabel: face == WaxDomain.audiobooks
-            ? '42 percent · 6 hr 12 min left'
-            : null,
-      ),
+      subtitleOverride: face == WaxDomain.radio ? LiveLine(now.subtitle) : null,
+      seek: face == WaxDomain.radio
+          ? null
+          : SeekCluster(
+              now: now,
+              onSeek: (_) {},
+              peaks: face == WaxDomain.music ? SampleLibrary.peaks() : null,
+              remainingLabel: face == WaxDomain.audiobooks
+                  ? '42 percent · 6 hr 12 min left'
+                  : null,
+            ),
       transport: TransportCluster(
         playing: now.playing,
         live: now.live,
@@ -111,13 +115,18 @@ class PlayerComposite extends StatelessWidget {
       ],
       if (face == WaxDomain.radio) ...<Widget>[
         WaxIconButton(
+          glyph: WaxIcons.heart,
+          label: 'Save this song',
+          onPressed: () {},
+        ),
+        WaxIconButton(
           glyph: WaxIcons.search,
           label: 'Find this song in your library',
           onPressed: () {},
         ),
         WaxIconButton(
-          glyph: WaxIcons.info,
-          label: 'Station info',
+          glyph: WaxIcons.sleepTimer,
+          label: 'Sleep timer',
           onPressed: () {},
         ),
       ],

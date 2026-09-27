@@ -41,7 +41,7 @@ typedef MixSeed = ({String pid, String title});
 /// Opens the instant-mix sheet for a seed. Confirming builds the mix
 /// and starts playing it.
 Future<void> showInstantMixSheet(BuildContext context, MixSeed seed) =>
-    showModalBottomSheet<void>(
+    showWaxSheet<void>(
       context: context,
       builder: (_) => InstantMixSheet(seed: seed),
     );

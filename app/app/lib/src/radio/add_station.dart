@@ -385,7 +385,7 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
     if (_error != null)
       Padding(
         padding: const EdgeInsets.only(top: WaxSpace.s8),
-        child: Text(
+        child: WaxProse(
           _error!,
           style: WaxType.caption.copyWith(color: colors.error),
         ),
@@ -396,7 +396,7 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
         child: _results!.isEmpty
             ? Padding(
                 padding: const EdgeInsets.all(WaxSpace.s12),
-                child: Text(l10n.radioNoMatches),
+                child: WaxProse(l10n.radioNoMatches),
               )
             : ListView.builder(
                 shrinkWrap: true,
@@ -476,7 +476,7 @@ class _StationDialogState extends ConsumerState<_StationDialog> {
     if (_error != null)
       Padding(
         padding: const EdgeInsets.only(top: WaxSpace.s8),
-        child: Text(
+        child: WaxProse(
           _error!,
           style: WaxType.caption.copyWith(color: colors.error),
         ),

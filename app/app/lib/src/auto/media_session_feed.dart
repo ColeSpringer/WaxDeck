@@ -123,8 +123,16 @@ class MediaSessionFeed {
       return;
     }
     final item = now.item;
-    if (remote || item == null) {
+    final entry = now.entry;
+    if (remote || entry == null || (item == null && !now.loading)) {
       _clear();
+      return;
+    }
+    if (item == null) {
+      // Still resolving: its row's stand-in, and the queue left standing
+      // rather than emptied and sent again.
+      _publish(id: entry.pid, title: _standInTitle);
+      _publishQueue(queue.entries, queue.currentIndex, summaryFor);
       return;
     }
     _publish(

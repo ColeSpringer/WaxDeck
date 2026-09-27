@@ -1,3 +1,6 @@
+import 'dart:ui' show Tristate;
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -74,8 +77,165 @@ void main() {
           size: Size(width, 600),
         );
         expect(tester.takeException(), isNull);
+        // The title zone's widening comes out of the centre, and the
+        // seek track is what gives: at the sidebar breakpoint, with the
+        // fullest right cluster, it still has room to aim at.
+        if (width >= 840) {
+          expect(
+            tester.getSize(find.byType(WaxSeekBar)).width,
+            greaterThanOrEqualTo(180),
+          );
+        }
       });
     }
+
+    testWidgets('a pending control keeps its slot, disabled', (tester) async {
+      Future<Rect> seekWith(DeckBarActions actions) async {
+        await _pumpAt(
+          tester,
+          DeckBar(now: _music, actions: actions),
+          size: const Size(1280, 600),
+        );
+        return tester.getRect(find.byType(WaxSeekBar));
+      }
+
+      final wired = await seekWith(
+        DeckBarActions(onCast: () {}, onMore: () {}, onStar: (_) {}),
+      );
+      final pending = await seekWith(const DeckBarActions(pending: true));
+      expect(pending, wired);
+      for (final glyph in <WaxGlyph>[WaxIcons.cast, WaxIcons.more]) {
+        final button = tester.widget<WaxIconButton>(
+          find.byWidgetPredicate((w) => w is WaxIconButton && w.glyph == glyph),
+        );
+        expect(button.onPressed, isNull, reason: button.label);
+        expect(button.label, isNotEmpty);
+      }
+      expect(
+        tester.widget<StarButton>(find.byType(StarButton)).onChanged,
+        isNull,
+      );
+
+      // Neither wired nor pending is still absent: a control that will
+      // never work reads as broken.
+      final bare = await seekWith(const DeckBarActions());
+      expect(bare.width, greaterThan(wired.width));
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is WaxIconButton && w.glyph == WaxIcons.more,
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('the timecodes keep one width under an hour', (tester) async {
+      Future<Rect> seekFor(Duration length) async {
+        await _pumpAt(
+          tester,
+          DeckBar(
+            now: NowPlayingData(
+              title: 'Salt Harbour',
+              position: Duration.zero,
+              duration: length,
+              playing: true,
+            ),
+          ),
+          size: const Size(1280, 600),
+        );
+        return tester.getRect(find.byType(WaxSeekBar));
+      }
+
+      final short = await seekFor(const Duration(minutes: 4, seconds: 5));
+      expect(await seekFor(const Duration(minutes: 12, seconds: 30)), short);
+      expect(await seekFor(Duration.zero), short);
+      // An hour is the one step: the label gains a place.
+      expect(
+        (await seekFor(const Duration(hours: 1, minutes: 2))).width,
+        lessThan(short.width),
+      );
+    });
+
+    testWidgets('an unknown length keeps the box it had', (tester) async {
+      // A skip's next entry has no length until it loads, and a box that
+      // fell back to minutes for that moment moved the track twice.
+      Future<Rect> seekFor(Duration length) async {
+        await _pumpAt(
+          tester,
+          DeckBar(
+            now: NowPlayingData(
+              title: 'Salt Harbour',
+              position: Duration.zero,
+              duration: length,
+              playing: true,
+            ),
+          ),
+          size: const Size(1280, 600),
+        );
+        return tester.getRect(find.byType(WaxSeekBar));
+      }
+
+      final hour = await seekFor(const Duration(hours: 1, minutes: 12));
+      expect(await seekFor(Duration.zero), hour);
+      expect(await seekFor(const Duration(hours: 1, minutes: 30)), hour);
+    });
+
+    testWidgets('a tick redraws the playhead alone', (tester) async {
+      final ticker = ValueNotifier<Duration>(Duration.zero);
+      addTearDown(ticker.dispose);
+      await _pumpAt(
+        tester,
+        DeckBar(
+          now: _music,
+          positionTicker: ticker,
+          actions: DeckBarActions(onSeek: (_) {}),
+        ),
+        size: const Size(1280, 600),
+      );
+      final length = find.text(formatTimecode(_music.duration));
+      final before = tester.widget(length);
+
+      ticker.value = const Duration(seconds: 42);
+      await tester.pump();
+
+      expect(find.text('0:42'), findsOneWidget);
+      expect(tester.widget(length), same(before));
+    });
+
+    testWidgets('the title zone takes two parts to the centre three', (
+      tester,
+    ) async {
+      // It had one part to two, which left a long name a sliver of the
+      // bar that is there to show it.
+      await _pumpAt(
+        tester,
+        DeckBar(
+          now: _music,
+          actions: DeckBarActions(onPlayPause: () {}, onSeek: (_) {}),
+        ),
+        size: const Size(1280, 600),
+      );
+      final left = tester
+          .getSize(
+            find
+                .ancestor(
+                  of: find.text('Salt Harbour'),
+                  matching: find.byType(Expanded),
+                )
+                .first,
+          )
+          .width;
+      final centre = tester
+          .getSize(
+            find
+                .ancestor(
+                  of: find.byType(WaxSeekBar),
+                  matching: find.byType(Stack),
+                )
+                .first,
+          )
+          .width;
+      expect(left / (left + centre), moreOrLessEquals(0.4, epsilon: 0.01));
+    });
 
     testWidgets('a station line too long for the strip scrolls, and keeps '
         'coming back to it', (tester) async {
@@ -194,6 +354,37 @@ void main() {
   });
 
   group('player scaffold', () {
+    // A live face has nothing to seek, and the slot drawn empty was a
+    // gap in the middle of the face. Null takes it out with its own gap,
+    // leaving the title block's gap to the transport.
+    for (final (name, size, gap) in <(String, Size, double)>[
+      ('portrait', const Size(420, 800), WaxSpace.s20),
+      ('landscape', const Size(800, 400), WaxSpace.s16),
+    ]) {
+      testWidgets('no seek draws no slot and no gap for one, $name', (
+        tester,
+      ) async {
+        await _pumpAt(
+          tester,
+          SizedBox(
+            width: size.width,
+            height: size.height,
+            child: PlayerScaffold(
+              now: _music,
+              transport: TransportCluster(playing: true, onPlayPause: () {}),
+              seek: null,
+            ),
+          ),
+          size: size,
+        );
+        expect(tester.takeException(), isNull);
+        expect(find.byType(WaxSeekBar), findsNothing);
+        final subtitle = tester.getRect(find.text('Nightjar'));
+        final transport = tester.getRect(find.byType(TransportCluster));
+        expect(transport.top - subtitle.bottom, moreOrLessEquals(gap));
+      });
+    }
+
     testWidgets('fits a short, wide window', (tester) async {
       // 900x600 is not compact, so it takes the portrait arrangement:
       // artwork sized off width alone did not fit the height left over
@@ -824,6 +1015,110 @@ void main() {
       expect(collapsed, 1);
     });
 
+    testWidgets('a mouse drag over the caption selects rather than dismisses', (
+      tester,
+    ) async {
+      // The pull-down is a finger's; a mouse's drag is a selection of
+      // the caption, which the surface took for a dismissal.
+      var collapsed = 0;
+      await _pumpAt(
+        tester,
+        SizedBox(
+          width: 420,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onCollapse: () => collapsed++,
+            artworkCaption: 'From the Cover Art Archive',
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        ),
+        size: const Size(420, 880),
+      );
+
+      final caption = tester.getRect(find.text('From the Cover Art Archive'));
+      final gesture = await tester.startGesture(
+        caption.centerLeft + const Offset(2, 0),
+        kind: PointerDeviceKind.mouse,
+      );
+      await tester.pump();
+      // In the small steps a real mouse reports: the surface's drag wins
+      // a race it would lose to one long move.
+      for (var step = 1; step <= 60; step++) {
+        await gesture.moveBy(const Offset(0, 1.5));
+        await tester.pump();
+      }
+      await gesture.moveTo(caption.centerRight + const Offset(-2, 300));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(collapsed, 0);
+    });
+
+    testWidgets(
+      'a two-finger pull averages its fingers where the platform does',
+      variant: TargetPlatformVariant.only(TargetPlatform.iOS),
+      (tester) async {
+        // iOS follows both fingers; the recognizer once followed only the
+        // latest, so a pull whose first finger moved went nowhere.
+        var collapsed = 0;
+        await _pumpAt(
+          tester,
+          SizedBox(
+            width: 420,
+            height: 880,
+            child: PlayerScaffold(
+              now: _music,
+              onCollapse: () => collapsed++,
+              transport: TransportCluster(playing: true, onPlayPause: () {}),
+              seek: SeekCluster(now: _music, onSeek: (_) {}),
+            ),
+          ),
+          size: const Size(420, 880),
+        );
+        final at = tester.getCenter(find.text('Nightjar'));
+        final first = await tester.startGesture(at, pointer: 1);
+        final second = await tester.startGesture(
+          at + const Offset(60, 0),
+          pointer: 2,
+        );
+        for (var step = 0; step < 40; step++) {
+          await first.moveBy(const Offset(0, 12));
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        await first.up();
+        await second.up();
+        await tester.pumpAndSettle();
+        expect(collapsed, 1);
+      },
+    );
+
+    testWidgets('a caption that comes and goes keeps its selection area', (
+      tester,
+    ) async {
+      Widget face(String? caption) => SizedBox(
+        width: 420,
+        height: 880,
+        child: PlayerScaffold(
+          now: _music,
+          artworkCaption: caption,
+          artworkCaptionReserved: true,
+          transport: TransportCluster(playing: true, onPlayPause: () {}),
+        ),
+      );
+      await _pumpAt(tester, face(null), size: const Size(420, 880));
+      final area = tester.state(find.byType(SelectableRegion));
+
+      await _pumpAt(
+        tester,
+        face('From the Cover Art Archive'),
+        size: const Size(420, 880),
+      );
+      expect(find.text('From the Cover Art Archive'), findsOneWidget);
+      expect(tester.state(find.byType(SelectableRegion)), same(area));
+    });
+
     testWidgets('the space around the artwork drags too', (tester) async {
       // Most of a player is backdrop, and a dismissal that only worked
       // where a widget happened to be drawn would read as broken.
@@ -1210,11 +1505,16 @@ void main() {
         size: const Size(400, 200),
       );
 
+      // Still a slider, one that says it cannot be used: the web build
+      // swaps a node's element when it gains or loses its steps, and the
+      // swap drops the element's identifier and a reader's place on it.
       final node = tester.getSemantics(find.bySemanticsIdentifier('seek'));
-      expect(
-        node.getSemanticsData().hasAction(SemanticsAction.increase),
-        isFalse,
-      );
+      final data = node.getSemanticsData();
+      expect(data.hasAction(SemanticsAction.increase), isTrue);
+      expect(data.flagsCollection.isEnabled, Tristate.isFalse);
+      node.owner!.performAction(node.id, SemanticsAction.increase);
+      await tester.pump();
+      expect(sought, isNull, reason: 'a step at no length seeks nothing');
       await tester.tapAt(
         tester.getTopLeft(find.byType(WaxSeekBar)) + const Offset(200, 12),
       );

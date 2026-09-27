@@ -46,7 +46,7 @@ double clampSpeed(double speed) {
 /// cycle a fixed ladder, so reaching 1.1x from 1.5x meant walking
 /// through everything in between and past the top.
 Future<void> showSpeedSheet(BuildContext context, PlaybackSession session) {
-  return showModalBottomSheet<void>(
+  return showWaxSheet<void>(
     context: context,
     builder: (_) => _SpeedSheet(session: session),
   );

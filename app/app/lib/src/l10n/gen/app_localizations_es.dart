@@ -1729,7 +1729,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get artworkLockHelp =>
-      'Mantiene esta portada a través de los escaneos y los enriquecimientos, y también retiene los demás huecos frente a los rellenos automáticos. Fijada con el hueco vacío significa \"déjalo sin ninguna\" en lugar de \"no se ha encontrado ninguna\", que es el estado que si no rechaza cualquier portada sin explicación.';
+      'Mantiene cada hueco tal como está, incluidos los vacíos, durante los escaneos y los enriquecimientos';
 
   @override
   String get artworkLockPinned => 'Portada fijada';

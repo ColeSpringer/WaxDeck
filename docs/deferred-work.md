@@ -314,6 +314,57 @@ here waits on upstream.
   since fixed upstream, which the precacher had nothing to do with. The
   switch is gone and the claim is withdrawn. Take it with the
   perf-measurement entry above.
+- `[in-repo]` **The web build skips tracks the browser cannot decode.**
+  Monkey's Audio, WavPack, WMA and Musepack stream as the file is, and a
+  browser refuses them (media error 4), so the queue skips each one as a
+  failed start. Play-info's `maxBitrateKbps` is not enough: it re-encodes
+  only a lossless source (APE, WavPack, WMA Lossless) or a lossy one above
+  the cap, so a 128 kbps WMA or a Musepack file would still stream as-is.
+  The fix is for the client to say which formats it can decode (from
+  `canPlayType`) and the server to encode the rest, counted against the
+  caller's transcode limits.
+- `[third-party]` **On Android a swipe that starts on selectable text
+  selects it rather than changing tab.** Flutter's `SelectionArea` takes
+  a horizontal touch drag as its own on Android (it waits for other
+  gestures only on iOS) and exposes no way to change that, so on the
+  admin users screen, the one swipeable `TabBarView`, a swipe begun on
+  an empty state's words stays put. The tab bar still switches, and so
+  does a swipe begun off the text. Fixing it means forwarding the drag
+  to the enclosing scrollable from inside `WaxProse`, or a framework
+  option to make the area wait.
+- `[third-party]` **Every selectable area on desktop web mounts a
+  context-menu view nothing uses.** Flutter's `SelectableRegion` puts a
+  platform view over its text for the browser's own menu whenever that
+  menu is on, and in this app the semantics tree sits over it, so it
+  never gets a right-click; `WaxProse` raises its own menu instead. Each
+  help line on a page is one more DOM element, layer and focus node (the
+  focus node is kept out of Tab order). On Android each area likewise
+  asks the platform for its text actions once as it mounts. Wanted from
+  Flutter: a way to build an area without either.
+- `[third-party]` **The web engine drops a node's e2e handle when the
+  node changes role.** Flutter's web semantics builds a new element
+  when a node's role changes - a control gaining or losing its adjust
+  or tap actions - and re-applies only the fields that changed in that
+  update, so the new element has no `flt-semantics-identifier` and a
+  screen reader loses its place. The deck seek bar did it on every
+  track load; `WaxSeekBar` now keeps its steps while it has no length,
+  disabled and inert, so it never changes role. Any other identified
+  control whose actions come and go loses its handle the same way.
+  Wanted from Flutter: re-apply every field when a role is swapped.
+- `[in-repo]` **Help under a Material `TextField` cannot be selected.**
+  `WaxProse` makes the design system's help selectable, the
+  `WaxTextField` helper line included, but a field built on Material's
+  `TextField` draws `InputDecoration.helperText` inside the field's own
+  gesture detector, where it stays inert. Sixteen fields: in
+  `settings/integrations_sections.dart` the ListenBrainz token and API
+  URL, the Last.fm key and secret, the Discord application id, the app
+  password label, and the two notification fields; the timezone field in
+  `settings/listening_sections.dart`; the invite note and expiry days in
+  `admin/users_screen.dart`; the source server URL in
+  `admin/migrate_screen.dart`; sign-up's invite code; and the include,
+  exclude and retention fields in
+  `podcasts/subscription_settings_sheet.dart`. Moving each onto
+  `WaxTextField` is the fix.
 
 ## Connect and casting
 

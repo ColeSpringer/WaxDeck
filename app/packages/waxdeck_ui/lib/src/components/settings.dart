@@ -8,6 +8,7 @@ import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
+import 'prose.dart';
 
 /// A settings row: what the setting is, one line saying what it does, and
 /// the control that changes it.
@@ -64,7 +65,7 @@ class WaxSettingRow extends StatelessWidget {
                   style: WaxType.body.copyWith(color: colors.textPrimary),
                 ),
                 const SizedBox(height: WaxSpace.s4),
-                Text(
+                WaxProse(
                   help,
                   style: WaxType.bodySmall.copyWith(color: colors.textTertiary),
                 ),
@@ -250,13 +251,16 @@ class _WaxRadioRowState<T> extends State<_WaxRadioRow<T>> {
                             ),
                           ),
                           if (option.help != null)
-                            Text(
+                            WaxProse(
                               option.help!,
                               style: WaxType.bodySmall.copyWith(
                                 color: enabled
                                     ? colors.textTertiary
                                     : colors.textDisabled,
                               ),
+                              // A tap still chooses; the area would
+                              // otherwise take it from the row.
+                              onTap: widget.onSelect,
                             ),
                         ],
                       ),

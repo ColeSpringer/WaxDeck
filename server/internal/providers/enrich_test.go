@@ -15,6 +15,23 @@ import (
 	"github.com/colespringer/waxbin/enrich"
 )
 
+func TestStripBracketed(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ in, want string }{
+		{"Ornithology (Take 1)", "Ornithology"},
+		{"Ornithology [Live]", "Ornithology"},
+		{"A (B (C)) D", "A  D"},
+		// An unbalanced closer is content, not a bracket: station
+		// metadata is not reliably well formed.
+		{"Smiley )", "Smiley )"},
+		{"No brackets", "No brackets"},
+	} {
+		if got := StripBracketed(tc.in); got != tc.want {
+			t.Errorf("strip(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestNameMatch(t *testing.T) {
 	cases := []struct {
 		a, b string
@@ -39,6 +56,11 @@ func TestDeezerEnrich(t *testing.T) {
 		case "/search/album":
 			gotQ.Store(r.URL.Query().Get("q"))
 			w.Header().Set("Content-Type", "application/json")
+			// Deezer answers nothing to its own artist: filter.
+			if strings.Contains(r.URL.Query().Get("q"), "artist:") {
+				fmt.Fprint(w, `{"data": []}`)
+				return
+			}
 			fmt.Fprintf(w, `{"data": [
 				{"title": "Discovery (Live)", "artist": {"name": "Daft Punk"}, "cover_xl": "https://%s/cover.jpg"},
 				{"title": "Discovery", "artist": {"name": "Daft Punk"}, "cover_xl": "https://%s/cover.jpg"}
@@ -63,7 +85,7 @@ func TestDeezerEnrich(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q, _ := gotQ.Load().(string); q != `artist:"Daft Punk" album:"Discovery"` {
+	if q, _ := gotQ.Load().(string); q != `Daft Punk Discovery` {
 		t.Fatalf("q = %q", q)
 	}
 	if cand == nil || cand.Cover == nil {
@@ -353,6 +375,10 @@ func deezerFieldsServer(t *testing.T, seen *[]string) *httptest.Server {
 			// error object rather than a status code.
 			fmt.Fprint(w, `{"error": {"type": "DataException", "message": "no data"}}`)
 		case "/search/album":
+			if strings.Contains(r.URL.Query().Get("q"), "artist:") {
+				fmt.Fprint(w, `{"data": []}`)
+				return
+			}
 			fmt.Fprint(w, `{"data": [
 				{"id": 111, "title": "Discovery (Live)", "artist": {"name": "Daft Punk"}},
 				{"id": 302127, "title": "Discovery", "artist": {"name": "Daft Punk"}}
@@ -363,6 +389,10 @@ func deezerFieldsServer(t *testing.T, seen *[]string) *httptest.Server {
 		case "/track/isrc:GBDUW0000059":
 			fmt.Fprint(w, `{"id": 3135556, "bpm": 123.4, "isrc": "GBDUW0000059"}`)
 		case "/search/track":
+			if strings.Contains(r.URL.Query().Get("q"), "artist:") {
+				fmt.Fprint(w, `{"data": []}`)
+				return
+			}
 			fmt.Fprint(w, `{"data": [
 				{"id": 999, "title": "One More Time", "duration": 400, "artist": {"name": "Daft Punk"}},
 				{"id": 3135556, "title": "One More Time", "duration": 320, "artist": {"name": "Daft Punk"}}

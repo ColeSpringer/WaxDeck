@@ -23,15 +23,19 @@ class ShowNotesView extends StatelessWidget {
     final blocks = parseShowNotes(html);
     if (blocks.isEmpty) return const SizedBox.shrink();
     var linkIndex = 0;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final block in blocks)
-          Padding(
-            padding: const EdgeInsets.only(bottom: WaxSpace.s8),
-            child: _blockWidget(context, block, () => linkIndex++),
-          ),
-      ],
+    // One block, so a selection runs across paragraphs; a link's own tap
+    // sits deeper and still opens it.
+    return WaxProse.block(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final block in blocks)
+            Padding(
+              padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+              child: _blockWidget(context, block, () => linkIndex++),
+            ),
+        ],
+      ),
     );
   }
 
@@ -134,10 +138,9 @@ class ShowNotesView extends StatelessWidget {
       if (run.underline || run.href != null) TextDecoration.underline,
       if (run.strike) TextDecoration.lineThrough,
     ];
-    final style = TextStyle(
+    final style = (run.code ? WaxType.monoRun : const TextStyle()).copyWith(
       fontWeight: run.bold ? FontWeight.bold : null,
       fontStyle: run.italic ? FontStyle.italic : null,
-      fontFamily: run.code ? 'monospace' : null,
       decoration: decorations.isEmpty
           ? null
           : TextDecoration.combine(decorations),

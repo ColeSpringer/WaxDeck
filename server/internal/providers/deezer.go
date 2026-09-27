@@ -208,12 +208,8 @@ func (d *Deezer) searchAlbum(ctx context.Context, req enrich.Request) (*deezerAl
 	if req.Title == "" {
 		return nil, nil
 	}
-	query := `album:"` + req.Title + `"`
-	if req.Artist != "" {
-		query = `artist:"` + req.Artist + `" ` + query
-	}
 	q := url.Values{}
-	q.Set("q", query)
+	q.Set("q", deezerAlbumQuery(req.Artist, req.Title))
 	var parsed struct {
 		Data []struct {
 			ID     int64  `json:"id"`
@@ -305,7 +301,7 @@ func (d *Deezer) recordingTrack(ctx context.Context, req enrich.Request) (*deeze
 		return nil, nil
 	}
 	q := url.Values{}
-	q.Set("q", `artist:"`+req.Artist+`" track:"`+req.Title+`"`)
+	q.Set("q", deezerTrackQuery(req.Artist, req.Title))
 	var parsed struct {
 		Data []struct {
 			ID       int64  `json:"id"`
@@ -335,6 +331,22 @@ func (d *Deezer) recordingTrack(ctx context.Context, req enrich.Request) (*deeze
 		return &track, nil
 	}
 	return nil, nil
+}
+
+// deezerTrackQuery and deezerAlbumQuery send the artist as a plain term:
+// the search answers nothing to its own artist: filter, so the callers'
+// name gates are what hold a hit to the artist.
+func deezerTrackQuery(artist, title string) string {
+	return artist + ` track:"` + title + `"`
+}
+
+// deezerAlbumQuery keeps the album: filter only without an artist: beside
+// plain terms it drowns them out.
+func deezerAlbumQuery(artist, title string) string {
+	if artist == "" {
+		return `album:"` + title + `"`
+	}
+	return artist + " " + title
 }
 
 // getJSON fetches and decodes one paced Deezer read; see deezerRead.
@@ -420,12 +432,8 @@ func (d *Deezer) enrichReleaseGroup(ctx context.Context, req enrich.Request) (*e
 	if req.Title == "" {
 		return nil, nil
 	}
-	query := `album:"` + req.Title + `"`
-	if req.Artist != "" {
-		query = `artist:"` + req.Artist + `" ` + query
-	}
 	q := url.Values{}
-	q.Set("q", query)
+	q.Set("q", deezerAlbumQuery(req.Artist, req.Title))
 	var parsed struct {
 		Data []struct {
 			Title   string `json:"title"`
@@ -498,6 +506,9 @@ func (d *Deezer) enrichArtist(ctx context.Context, req enrich.Request) (*enrich.
 // cache keyed by what a station chose to announce.
 const maxTitleCoverBytes = 2 << 20
 
+// deezerCoverAttempts bounds the pictures one FrontCover fetches.
+const deezerCoverAttempts = 3
+
 // FrontCover answers a cover for an announced artist and title, from the
 // album the track belongs to. A track search rather than Enrich's album
 // search, and both names matched: a wrong cover is worse than none.
@@ -506,7 +517,7 @@ func (d *Deezer) FrontCover(ctx context.Context, artist, title string) (TitleCov
 		return TitleCoverResult{}, ErrNoCover
 	}
 	q := url.Values{}
-	q.Set("q", `artist:"`+artist+`" track:"`+title+`"`)
+	q.Set("q", deezerTrackQuery(artist, title))
 	var parsed struct {
 		Data []struct {
 			Title  string `json:"title"`
@@ -521,17 +532,39 @@ func (d *Deezer) FrontCover(ctx context.Context, artist, title string) (TitleCov
 	if err := d.getJSON(ctx, d.base+"/search?"+q.Encode(), &parsed); err != nil {
 		return TitleCoverResult{}, err
 	}
-	// A song is routinely listed several times over - a single, an album,
-	// a deluxe edition - so one unusable cover is not the end of the walk.
-	var reachErr error
-	for _, hit := range parsed.Data {
-		if !deezerPicture(hit.Album.CoverBig) ||
-			!coverNameMatch(hit.Artist.Name, artist) ||
-			!coverNameMatch(hit.Title, title) {
+	// The song under its own title first, then one with its version
+	// dropped: the caller's side lost its brackets on the way in.
+	var own, versioned []int
+	for i, hit := range parsed.Data {
+		if !deezerPicture(hit.Album.CoverBig) || !coverNameMatch(hit.Artist.Name, artist) {
 			continue
 		}
+		switch {
+		case coverNameMatch(hit.Title, title):
+			own = append(own, i)
+		case coverNameMatch(StripBracketed(hit.Title), title):
+			versioned = append(versioned, i)
+		}
+	}
+	// A song is routinely listed several times over - a single, an album,
+	// a deluxe edition - so one unusable cover is not the end of the walk,
+	// but a host that fails is: every listing's picture lives there.
+	var reachErr error
+	tried := map[string]bool{}
+	for _, i := range append(own, versioned...) {
+		hit := parsed.Data[i]
+		if tried[hit.Album.CoverBig] {
+			continue
+		}
+		if len(tried) == deezerCoverAttempts {
+			break
+		}
+		tried[hit.Album.CoverBig] = true
 		data, _, err := fetchImage(ctx, d.core, hit.Album.CoverBig)
 		if err != nil {
+			if hostFailed(err) {
+				return TitleCoverResult{}, err
+			}
 			reachErr = err
 			continue
 		}
@@ -552,6 +585,14 @@ func (d *Deezer) FrontCover(ctx context.Context, artist, title string) (TitleCov
 		return TitleCoverResult{}, reachErr
 	}
 	return TitleCoverResult{}, ErrNoCover
+}
+
+// hostFailed reports a fetch that failed on the host rather than on the
+// picture: a refusal, a timeout, a connection that never opened.
+func hostFailed(err error) bool {
+	var uerr *url.Error
+	return errors.Is(err, ErrThrottled) || errors.As(err, &uerr) ||
+		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)
 }
 
 // ForgetMisses drops the track searches this rung cached, built as they

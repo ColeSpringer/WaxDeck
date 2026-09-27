@@ -2278,9 +2278,21 @@ class FakeRepository implements WaxDeckRepository {
     String? cursor,
     int? limit,
   }) async {
+    if (cursor != null) await savedPageGate?.future;
     final rows = _savedByLine.values.toList(growable: false).reversed.toList();
-    return RadioSavedSongPage(songs: rows);
+    final from = cursor == null ? 0 : int.parse(cursor);
+    final to = limit == null
+        ? rows.length
+        : math.min(rows.length, from + limit);
+    return RadioSavedSongPage(
+      songs: rows.sublist(from, to),
+      nextCursor: to < rows.length ? '$to' : null,
+    );
   }
+
+  /// Holds every page after the first open, so a test can act while the
+  /// list is still growing.
+  Completer<void>? savedPageGate;
 
   @override
   Future<RadioSavedSong> saveRadioSong({
@@ -2310,8 +2322,18 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<void> deleteRadioSavedSong(String pid) async {
+    await deleteSavedSongGate;
+    final error = deleteSavedSongError;
+    if (error != null) throw error;
     _savedByLine.removeWhere((_, song) => song.pid == pid);
   }
+
+  /// Thrown by [deleteRadioSavedSong] when set.
+  WaxDeckApiException? deleteSavedSongError;
+
+  /// Held open by a test that has to act while a saved song's delete is
+  /// in flight - leaving the list screen, say.
+  Future<void>? deleteSavedSongGate;
 
   @override
   String radioSavedArtUrlFor(String pid) => '/api/v1/radio/saved/$pid/art';

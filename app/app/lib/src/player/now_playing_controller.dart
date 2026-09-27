@@ -12,6 +12,7 @@ import '../providers.dart';
 import '../settings/client_prefs.dart';
 import '../settings/prefs_controller.dart';
 import '../queue/queue_controller.dart';
+import '../queue/queue_persistence.dart' show mediaTypeOfPid;
 import '../queue/queue_state.dart';
 import '../radio/radio_controller.dart';
 import '../shell/shell_messages.dart';
@@ -48,7 +49,13 @@ enum _Farewell {
 /// What the app is playing: the queue entry, the item behind it, and the
 /// live session driving it.
 class NowPlaying {
-  const NowPlaying({this.entry, this.item, this.session, this.error});
+  const NowPlaying({
+    this.entry,
+    this.item,
+    this.session,
+    this.error,
+    this.loading = false,
+  });
 
   static const NowPlaying nothing = NowPlaying();
 
@@ -63,6 +70,18 @@ class NowPlaying {
 
   /// Why the entry could not start, when it could not.
   final Object? error;
+
+  /// A start is under way: the entry is what plays next, not a stopped
+  /// one, and [session] lands when it loads.
+  final bool loading;
+
+  /// What the entry is, before its item resolves too: a pid says.
+  MediaType? get kind =>
+      item?.mediaType ??
+      switch (entry) {
+        final entry? => mediaTypeOfPid(entry.pid),
+        null => null,
+      };
 }
 
 /// Owns playback. One [PlaybackSession] at a time, following the queue's
@@ -271,6 +290,13 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// what it shows without asking the server again. Null means nobody
   /// has needed it yet, not that it does not exist.
   ItemSummary? summaryFor(String pid) => _known[pid];
+
+  /// Keeps a summary a caller fetched, so its entry starts named. Not an
+  /// episode's: the show its settings hang off comes from the episode read.
+  void noteSummary(ItemSummary item) {
+    if (item.mediaType == MediaType.podcast) return;
+    _known.putIfAbsent(item.pid, () => item);
+  }
 
   /// Resolves when the start in flight has finished, or immediately when
   /// none is.
@@ -636,7 +662,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
     _entryPositionMs = positionMs;
     _pendingPositionMs = null;
     _pendingPaused = false;
-    state = NowPlaying(entry: entry, item: _known[entry.pid]);
+    state = NowPlaying(entry: entry, item: _known[entry.pid], loading: true);
     try {
       // Live radio bypasses sessions; loading an item takes the engine
       // back, so the radio surface must stop claiming it - and stop its
@@ -655,6 +681,10 @@ class NowPlayingController extends Notifier<NowPlaying> {
       _preload = null;
       final item = await _resolve(entry.pid);
       if (_superseded(token)) return;
+      // Named as soon as it resolves rather than once it loads.
+      if (state.item == null) {
+        state = NowPlaying(entry: entry, item: item, loading: true);
+      }
       // Music starts at the head. Skipping away from a track and back is
       // a fresh play rather than a resume, and so is tapping a track in
       // a listing you had heard half of; the exceptions all say so
@@ -667,16 +697,8 @@ class NowPlayingController extends Notifier<NowPlaying> {
           item.mediaType == MediaType.music) {
         positionMs = 0;
       }
-      // Recorded as the head rather than as "unspecified", because this
-      // is what `resume` asks for again after a start that failed. Left
-      // null it would ask the session to read the checkpoint - the very
-      // checkpoint the line above just declined to honour, so a music
-      // start that failed would retry into the middle of the track.
-      // Recorded as the head rather than as "unspecified", because this
-      // is what `resume` asks for again after a start that failed. Left
-      // null it would ask the session to read the checkpoint - the very
-      // checkpoint the line above just declined to honour, so a music
-      // start that failed would retry into the middle of the track.
+      // The head, not "unspecified": a retry after a failed start would
+      // otherwise read the checkpoint and resume music mid-track.
       _entryPositionMs = positionMs;
       // Minted here rather than inside the session: the queue is what
       // gets rendered, and the queue is this layer's. Null everywhere
@@ -748,7 +770,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
         // and the session that owns what is playing, and the outgoing
         // session has already let go: say so rather than leave a
         // finalized session on the state for surfaces to read.
-        state = NowPlaying(entry: entry);
+        state = NowPlaying(entry: entry, loading: true);
         item = await _resolve(entry.pid);
         if (_superseded(token)) return;
       }

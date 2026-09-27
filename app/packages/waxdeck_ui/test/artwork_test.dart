@@ -9,12 +9,49 @@ Widget _host(Widget child) => MaterialApp(
 );
 
 void main() {
+  group('monogramInitials', () {
+    test('takes the first letter or digit of each word', () {
+      // Punctuation is skipped inside a word rather than drawn: "2(" on
+      // an empty artwork slot was the bug.
+      expect(monogramInitials('2morrow (Remix)'), '2R');
+      expect(monogramInitials("(What's the Story) Morning Glory?"), 'WT');
+      expect(monogramInitials('...hello'), 'H');
+      expect(monogramInitials('Salt Harbour Nights'), 'SH');
+    });
+
+    test('takes a whole grapheme and upper-cases it', () {
+      expect(monogramInitials('élan'), 'É');
+      // Decomposed: the letter plus its combining acute is one cluster.
+      expect(monogramInitials('élan'), 'É');
+    });
+
+    test('skips words with nothing usable and stops at max', () {
+      expect(monogramInitials('\u{1F3B5} Mix'), 'M');
+      expect(monogramInitials('_config', max: 1), 'C');
+      expect(monogramInitials('Salt Harbour', max: 1), 'S');
+    });
+
+    test('is null when no word has a letter or digit', () {
+      for (final name in <String>['', '   ', '...', '!? --', '\u{1F3B5}']) {
+        expect(monogramInitials(name), isNull, reason: '"$name"');
+      }
+    });
+  });
+
   group('artwork placeholder', () {
     testWidgets('draws initials from a title', (tester) async {
       await tester.pumpWidget(
         _host(const ArtworkImage(size: 96, monogram: 'Salt Harbour')),
       );
       expect(find.text('SH'), findsOneWidget);
+    });
+
+    testWidgets('skips punctuation to reach a letter', (tester) async {
+      await tester.pumpWidget(
+        _host(const ArtworkImage(size: 96, monogram: '2morrow (Remix)')),
+      );
+      expect(find.text('2R'), findsOneWidget);
+      expect(find.text('2('), findsNothing);
     });
 
     testWidgets('falls back to the domain glyph when a title has no '

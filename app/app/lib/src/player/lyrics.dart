@@ -12,6 +12,7 @@ import '../settings/settings_registry.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/side_panel.dart';
+import 'now_playing_controller.dart';
 import 'now_playing_view.dart';
 import 'playback_session.dart';
 
@@ -205,6 +206,11 @@ class LyricsPanel extends ConsumerWidget {
   }
 }
 
+/// Whether there are words to follow: a track playing or on its way. The
+/// deck bar's toggle and the lyrics command both ask this.
+bool lyricsAvailable(NowPlaying now) =>
+    now.kind == MediaType.music && (now.session != null || now.loading);
+
 /// Opens the lyrics wherever this caller keeps them.
 ///
 /// The panel beside the content where there is room for one and
@@ -225,7 +231,7 @@ void openLyrics(BuildContext context, WidgetRef ref, {bool overShell = false}) {
     return;
   }
   unawaited(
-    showModalBottomSheet<void>(
+    showWaxSheet<void>(
       context: context,
       isScrollControlled: true,
       // Nearly the whole window: a verse read four lines at a time is

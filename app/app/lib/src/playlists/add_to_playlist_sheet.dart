@@ -15,7 +15,7 @@ import 'playlists_controller.dart';
 Future<void> showAddToPlaylistSheet(
   BuildContext context, {
   required ItemSummary item,
-}) => showModalBottomSheet<void>(
+}) => showWaxSheet<void>(
   context: context,
   isScrollControlled: true,
   builder: (_) => AddToPlaylistSheet(item: item),

@@ -39,7 +39,7 @@ Future<void> confirmDetachItem(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(l10n.libraryMenuDetachConfirmBody),
+            WaxProse(l10n.libraryMenuDetachConfirmBody),
             const SizedBox(height: WaxSpace.s12),
             WaxSettingRow(
               title: l10n.metadataWriteBackTitle,

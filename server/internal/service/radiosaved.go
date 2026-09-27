@@ -158,28 +158,9 @@ func (l *Library) SaveRadioSong(ctx context.Context, uc *UserCtx, apiStationPID,
 	return radioSavedDTO(saved), nil
 }
 
-// radioSavedSnapshot copies whatever cover the listener was looking at.
-//
-// Copied rather than resolved later, because "resolve it again" turns
-// the list into a pile of third-party lookups against a rung an
-// operator may have switched off - and a picture that changes after the
-// fact is not the one that was kept.
-//
-// The order is the live ladder's, so the snapshot is the picture that
-// was on the face: the matched item's own cover first, then the one the
-// station announced, then the external lookup's. Nothing is fetched
-// here; every rung reads only what this server already holds, so a save
-// costs no network and never blocks on one.
-// A rung answers only with a picture that will actually be stored: past
-// the column's cap the row saves artless, so a rung holding an oversize
-// cover has not answered and the one below it gets its turn. Without
-// this a 400 KB library cover took the ladder and left the row drawing a
-// monogram while the announced cover went unasked.
-//
-// The cached rungs hold what the face draws rather than a list row, so
-// they are scaled to the snapshot's size before being measured: what
-// they hold is bounded well above this column's cap - 512 KB for a
-// station's announced cover, twice what a row may keep.
+// radioSavedSnapshot copies the cover the listener was looking at, from
+// what this server already holds and in the face's order, so a save costs
+// no network. A rung answers only with a picture the row can keep.
 func (l *Library) radioSavedSnapshot(ctx context.Context, uc *UserCtx, apiStationPID, stationName, line, artist, title string) ([]byte, string, string) {
 	fits := func(data []byte) bool {
 		return len(data) > 0 && len(data) <= wdb.RadioSavedArtMaxBytes
@@ -189,24 +170,28 @@ func (l *Library) radioSavedSnapshot(ctx context.Context, uc *UserCtx, apiStatio
 			return blob.Bytes, blob.MimeType, radioSavedETag(blob.Bytes)
 		}
 	}
-	// The picture the station named in its own stream, if it is still
-	// the picture for this line. Read under the same title the caller
-	// sent, so a rollover between the tap and the save cannot hand this
-	// row the next song's cover.
-	if announced, artURL := l.RadioNowPlayingMeta(apiStationPID); announced == line && artURL != "" {
-		if data, mime, ok := l.radioSnapshotCover(announcedArtKey(artURL, line), fits); ok {
-			return data, mime, radioSavedETag(data)
+	// Only while the announcement is still this line, so a rollover
+	// between the tap and the save cannot hand the row the next song's.
+	a := l.RadioNowPlayingAnnouncement(apiStationPID)
+	announced := func() ([]byte, string, bool) {
+		if a.Title != line || a.ArtURL == "" {
+			return nil, "", false
 		}
+		return l.radioSnapshotCover(announcedArtKey(a.ArtURL, line), fits)
 	}
-	// The external rung, and only while the operator has it switched on.
-	// The live cover's read path enforces the same rule for the same
-	// reason - turning the rung off means "stop serving third-party
-	// covers from this origin" - and a snapshot outlives both the toggle
-	// and the forget that comes with it, so copying one here would put
-	// that decision permanently out of reach.
-	if artist != "" && title != "" && l.RadioExternalArtEnabled() {
-		key := radioArtKey(radioSearchField(artist), radioSearchField(title))
-		if data, mime, ok := l.radioSnapshotCover(key, fits); ok {
+	// Only while the rung is on: a snapshot outlives the toggle.
+	external := func() ([]byte, string, bool) {
+		if artist == "" || title == "" || !l.RadioExternalArtEnabled() {
+			return nil, "", false
+		}
+		return l.radioSnapshotCover(radioArtKey(radioSearchField(artist), radioSearchField(title)), fits)
+	}
+	rungs := []func() ([]byte, string, bool){announced, external}
+	if a.Title == line && a.ArtURL != "" && !a.ArtProven {
+		rungs = []func() ([]byte, string, bool){external, announced}
+	}
+	for _, rung := range rungs {
+		if data, mime, ok := rung(); ok {
 			return data, mime, radioSavedETag(data)
 		}
 	}

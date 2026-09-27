@@ -53,7 +53,7 @@ class _DownloadNoticeRationaleState
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n.downloadsNoticeAskTitle),
-        content: Text(l10n.downloadsNoticeAskBody),
+        content: WaxProse(l10n.downloadsNoticeAskBody),
         actions: <Widget>[
           WaxButton(
             label: l10n.downloadsNoticeAskLater,

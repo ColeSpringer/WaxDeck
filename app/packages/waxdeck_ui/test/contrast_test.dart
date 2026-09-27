@@ -1,3 +1,6 @@
+import 'dart:math' as math;
+
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -284,5 +287,89 @@ void main() {
         );
       }
     });
+  });
+
+  group('shelf chevron', () {
+    // The chevron sits over any artwork at its resting opacity, and no one
+    // colour clears 3:1 over black and white, so disc or ring must.
+    for (final variant in WaxThemeVariant.values) {
+      testWidgets('${variant.name}: the disc or its ring clears 3:1 over '
+          'black and white art', (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildWaxTheme(variant: variant),
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.topLeft,
+                child: SizedBox(
+                  width: 500,
+                  child: ShelfRow(
+                    title: 'Recently added',
+                    cardWidth: 120,
+                    items: <MediaTileData>[
+                      for (var i = 0; i < 12; i++)
+                        MediaTileData(title: 'Card $i', subtitle: 'Nightjar'),
+                    ],
+                    onTapItem: (_) {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        // A mouse on the machine and nowhere near the shelf: the chevron
+        // shows at rest, which is the state that has to survive the art.
+        final gesture = await tester.createGesture(
+          kind: PointerDeviceKind.mouse,
+        );
+        await gesture.addPointer(location: const Offset(0, 590));
+        addTearDown(gesture.removePointer);
+        await tester.pumpAndSettle();
+
+        final chevron = find.byWidgetPredicate(
+          (w) => w is WaxIcon && w.glyph == WaxIcons.forward,
+        );
+        final disc = tester.widget<Material>(
+          find.ancestor(of: chevron, matching: find.byType(Material)).first,
+        );
+        final ring = (disc.shape! as CircleBorder).side.color;
+        final rest = tester
+            .widget<AnimatedOpacity>(
+              find.ancestor(
+                of: chevron,
+                matching: find.byType(AnimatedOpacity),
+              ),
+            )
+            .opacity;
+        expect(rest, lessThan(1));
+
+        const covers = <String, Color>{
+          'black': Color(0xFF000000),
+          'white': Color(0xFFFFFFFF),
+        };
+        for (final cover in covers.entries) {
+          final art = cover.value;
+          final discOnArt = WaxContrast.flatten(
+            disc.color!.withValues(alpha: rest),
+            art,
+          );
+          final ringOnArt = WaxContrast.flatten(
+            WaxContrast.flatten(ring, disc.color!).withValues(alpha: rest),
+            art,
+          );
+          final best = math.max(
+            WaxContrast.ratio(discOnArt, art),
+            WaxContrast.ratio(ringOnArt, art),
+          );
+          expect(
+            best,
+            greaterThanOrEqualTo(WaxContrast.aaLarge),
+            reason:
+                '${variant.name} over a ${cover.key} cover: '
+                '${best.toStringAsFixed(2)}:1',
+          );
+        }
+      }, variant: TargetPlatformVariant.only(TargetPlatform.linux));
+    }
   });
 }

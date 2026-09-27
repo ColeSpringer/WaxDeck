@@ -43,9 +43,9 @@ class WaxMarqueeText extends StatefulWidget {
     this.style,
     this.textAlign = TextAlign.start,
     this.velocity = 30,
-    this.pause = const Duration(milliseconds: 1200),
+    this.pause = const Duration(milliseconds: 900),
     this.cycles = 3,
-    this.rest = const Duration(seconds: 15),
+    this.rest = const Duration(seconds: 8),
     this.fadeWidth = 16,
     super.key,
   });
@@ -243,7 +243,9 @@ class _WaxMarqueeTextState extends State<WaxMarqueeText>
 
   @override
   Widget build(BuildContext context) {
-    final style = widget.style ?? DefaultTextStyle.of(context).style;
+    // The ambient style with the caller's over it, as drawn: the caller's
+    // alone missed a theme's letter spacing and stopped short of the end.
+    final style = DefaultTextStyle.of(context).style.merge(widget.style);
     // The static line, and the one every caller falls back to: it is
     // what a title that fits draws, what reduced motion draws, and what
     // a screen reader is handed in both cases.
@@ -263,10 +265,22 @@ class _WaxMarqueeTextState extends State<WaxMarqueeText>
       _disarm();
       return line;
     }
+    // What [Text] applies on top when it draws: bold text and a reader's
+    // text-spacing overrides.
+    var measured = MediaQuery.boldTextOf(context)
+        ? style.merge(const TextStyle(fontWeight: FontWeight.bold))
+        : style;
+    measured = measured.merge(
+      TextStyle(
+        height: MediaQuery.maybeLineHeightScaleFactorOverrideOf(context),
+        letterSpacing: MediaQuery.maybeLetterSpacingOverrideOf(context),
+        wordSpacing: MediaQuery.maybeWordSpacingOverrideOf(context),
+      ),
+    );
     return LayoutBuilder(
       builder: (context, constraints) {
         final painter = TextPainter(
-          text: TextSpan(text: widget.text, style: style),
+          text: TextSpan(text: widget.text, style: measured),
           maxLines: 1,
           textDirection: Directionality.of(context),
           // The scale the [Text] below will be drawn at, not the

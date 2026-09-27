@@ -1188,7 +1188,7 @@ Future<List<String>?> showMetadataGenrePicker(
   BuildContext context, {
   required List<GenreNode> tree,
   required List<String> selected,
-}) => showModalBottomSheet<List<String>>(
+}) => showWaxSheet<List<String>>(
   context: context,
   isScrollControlled: true,
   builder: (_) => _GenrePickerSheet(tree: tree, selected: selected),
@@ -1516,7 +1516,7 @@ class _MetadataCreditsSectionState extends State<MetadataCreditsSection> {
             storedByRole[r.name] ?? const [],
           ),
         if (roles.isEmpty)
-          Text(
+          WaxProse(
             l10n.metadataNoCreditRoles,
             style: WaxType.bodySmall.copyWith(color: colors.textTertiary),
           )

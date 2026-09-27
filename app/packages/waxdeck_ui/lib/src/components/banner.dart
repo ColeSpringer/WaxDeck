@@ -7,6 +7,7 @@ import '../tokens/colors.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
+import 'prose.dart';
 
 /// How loud a banner is.
 ///
@@ -142,7 +143,7 @@ class WaxBanner extends StatelessWidget {
                 // above already speaks it.
                 Expanded(
                   child: ExcludeSemantics(
-                    child: Text(
+                    child: WaxProse(
                       message,
                       style: WaxType.bodySmall.copyWith(color: foreground),
                     ),

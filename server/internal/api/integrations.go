@@ -102,7 +102,8 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 	// Read once and passed along, so the fields describe the same song:
 	// the relay rewrites the title whenever the station announces one,
 	// and a second read could land on the next track.
-	if title, artURL := s.svc.RadioNowPlayingMeta(req.Pid); title != "" {
+	if announced := s.svc.RadioNowPlayingAnnouncement(req.Pid); announced.Title != "" {
+		title := announced.Title
 		out.NowPlaying = ptr(title)
 		// One indexed read, and what keeps the heart honest across
 		// devices: a save made on the phone fills the desktop's heart on
@@ -114,26 +115,14 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 		}
 		// Resolved against this caller's own visibility, since the pid
 		// is going to be used to fetch cover art. Absent is the ordinary
-		// answer and the client falls back to the rungs below.
+		// answer, and the two rungs below it decide: the picture the
+		// station announced and the external lookup, which the service
+		// walks without ever waiting on either.
 		if pid := s.svc.RadioNowPlayingItem(ctx, uc, req.Pid, station.Name, title); pid != "" {
 			out.NowPlayingItemPid = ptr(pid)
-		} else if key, tryExternal := s.svc.EnsureRadioAnnouncedArt(req.Pid, artURL, title); key != "" {
-			// The station's own answer, and the better one: it names the
-			// picture for this exact broadcast, where an external lookup
-			// guesses a release from a parsed title.
+		} else if key := s.svc.RadioNowPlayingCover(req.Pid, station.Name, announced); key != "" {
 			out.NowPlayingArtKey = ptr(key)
 			out.NowPlayingArtSource = artSourceJSON(s.svc.RadioNowPlayingArtSource(key))
-		} else if tryExternal {
-			// Only once the two rungs above have missed. Ensure starts
-			// the lookup and answers the key for what is cached now, so
-			// the poll that first sees a new title answers nothing and a
-			// later one answers a key - it never waits on a paced third
-			// party. tryExternal is false only while an announced fetch
-			// is in flight, which is worth one poll's wait.
-			if key := s.svc.EnsureRadioNowPlayingArt(req.Pid, station.Name, title); key != "" {
-				out.NowPlayingArtKey = ptr(key)
-				out.NowPlayingArtSource = artSourceJSON(s.svc.RadioNowPlayingArtSource(key))
-			}
 		}
 	}
 	return GetRadioPlayInfo200JSONResponse(out), nil

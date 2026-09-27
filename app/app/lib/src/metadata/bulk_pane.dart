@@ -299,7 +299,7 @@ class _WorkbenchBulkPaneState extends ConsumerState<WorkbenchBulkPane> {
                 // What the endpoint always does, said where the save is
                 // decided: it locks what it writes, and one batch stops
                 // at a thousand items.
-                Text(
+                WaxProse(
                   l10n.metadataBulkLockNote,
                   style: WaxType.caption.copyWith(color: colors.textTertiary),
                 ),

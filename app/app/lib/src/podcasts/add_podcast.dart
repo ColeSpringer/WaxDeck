@@ -299,7 +299,7 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: WaxSpace.s8),
-                  child: Text(
+                  child: WaxProse(
                     _error!,
                     style: WaxType.caption.copyWith(color: colors.error),
                   ),
@@ -335,7 +335,7 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
       return <Widget>[
         Padding(
           padding: const EdgeInsets.all(WaxSpace.s12),
-          child: Text(l10n.podcastNoMatches),
+          child: WaxProse(l10n.podcastNoMatches),
         ),
       ];
     }

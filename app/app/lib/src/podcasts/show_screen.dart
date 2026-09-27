@@ -403,7 +403,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     final settings =
         ref.read(podcastDetailProvider(widget.pid)).value?.settings ??
         const SubscriptionSettings();
-    showModalBottomSheet<void>(
+    showWaxSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (_) =>
@@ -687,7 +687,7 @@ class _ShowHeader extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.podcastUnfollowTitle),
-        content: Text(l10n.podcastUnfollowBody),
+        content: WaxProse(l10n.podcastUnfollowBody),
         actions: <Widget>[
           WaxButton(
             label: l10n.podcastKeepFiles,

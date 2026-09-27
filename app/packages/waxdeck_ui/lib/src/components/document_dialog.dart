@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../tokens/colors.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
+import 'prose.dart';
 
 /// A generated document on screen, selectable, with one button that puts
 /// it on the clipboard.
@@ -36,7 +37,7 @@ Future<void> showDocumentDialog(
     content: SizedBox(
       width: 480,
       child: SingleChildScrollView(
-        child: SelectableText(
+        child: WaxProse(
           document,
           key: documentKey,
           style: WaxType.monoData.copyWith(

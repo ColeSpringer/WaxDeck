@@ -91,7 +91,7 @@ class _ConnectServerScreenState extends ConsumerState<ConnectServerScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n.authServerForgetTitle(address)),
-        content: Text(l10n.authServerForgetBody),
+        content: WaxProse(l10n.authServerForgetBody),
         actions: <Widget>[
           WaxButton(
             label: l10n.authServerForgetKeep,

@@ -332,7 +332,10 @@ class QueueRestoreController extends AsyncNotifier<RestorableQueue?> {
   void accept() {
     final offer = state.value;
     if (offer == null) return;
-    ref.read(nowPlayingProvider.notifier).restore(offer.queue);
+    final playback = ref.read(nowPlayingProvider.notifier);
+    // The offer read the entry it names; the start needs no second read.
+    if (offer.currentItem case final item?) playback.noteSummary(item);
+    playback.restore(offer.queue);
     state = const AsyncData(null);
   }
 

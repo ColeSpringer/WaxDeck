@@ -138,7 +138,7 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          Text(
+          WaxProse(
             l10n.sharingDialogBody,
             style: WaxType.body.copyWith(color: colors.textSecondary),
           ),

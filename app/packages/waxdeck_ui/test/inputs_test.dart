@@ -125,6 +125,31 @@ void main() {
       handle.dispose();
     });
 
+    testWidgets('what sits beside the box is centred on the box', (
+      tester,
+    ) async {
+      // A curation chip beside a field with help under it lined up with
+      // the help, not with the box.
+      await tester.pumpWidget(
+        _host(
+          const WaxTextField(
+            label: 'Sort name',
+            helperText: 'How this files in an A-to-Z list',
+            beside: SizedBox(key: Key('chip'), width: 40, height: 20),
+          ),
+          height: 160,
+        ),
+      );
+      expect(
+        tester.getCenter(find.byKey(const Key('chip'))).dy,
+        moreOrLessEquals(tester.getCenter(find.byType(TextField)).dy),
+      );
+      expect(
+        tester.getTopLeft(find.text('How this files in an A-to-Z list')).dy,
+        greaterThan(tester.getBottomLeft(find.byType(TextField)).dy),
+      );
+    });
+
     testWidgets('the drawn label is not announced a second time', (
       tester,
     ) async {

@@ -8,6 +8,7 @@ import '../tokens/motion.dart';
 import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
+import 'marquee.dart';
 
 /// Three amber bars beside the row or the card that is sounding.
 ///
@@ -138,6 +139,78 @@ class _BarsPainter extends CustomPainter {
   @override
   bool shouldRepaint(_BarsPainter old) =>
       old.phase != phase || old.playing != playing || old.color != color;
+}
+
+/// How much room a [LivePill] takes.
+enum LivePillSize {
+  /// Beside a caption line or on a logo: the deck bar, the dial.
+  compact,
+
+  /// Beside a body line: the full-screen radio face.
+  regular,
+}
+
+/// The LIVE marker a stream carries where an item would have a position,
+/// one widget so the deck bar, the dial and the face cannot drift apart.
+class LivePill extends StatelessWidget {
+  const LivePill({this.size = LivePillSize.compact, super.key});
+
+  final LivePillSize size;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return Container(
+      padding: switch (size) {
+        LivePillSize.compact => const EdgeInsets.symmetric(
+          horizontal: WaxSpace.s4,
+          vertical: 1,
+        ),
+        LivePillSize.regular => const EdgeInsets.symmetric(
+          horizontal: WaxSpace.s8,
+          vertical: 2,
+        ),
+      },
+      decoration: BoxDecoration(
+        color: colors.radio.container,
+        borderRadius: WaxRadius.pill,
+      ),
+      child: Text(
+        context.waxL10n.commonLiveChip,
+        style: WaxType.overline.copyWith(color: colors.radio.onContainer),
+      ),
+    );
+  }
+}
+
+/// A live face's line under its name: the pill, then the song the stream
+/// last named, scrolling where it does not fit.
+class LiveLine extends StatelessWidget {
+  const LiveLine(this.song, {super.key});
+
+  final String? song;
+
+  @override
+  Widget build(BuildContext context) {
+    final song = this.song;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        const LivePill(size: LivePillSize.regular),
+        if (song != null) ...<Widget>[
+          const SizedBox(width: WaxSpace.s8),
+          Flexible(
+            child: WaxMarqueeText(
+              song,
+              style: WaxType.body.copyWith(
+                color: WaxColors.of(context).textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 /// A small chip naming a domain, for cross-domain surfaces such as Home

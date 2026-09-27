@@ -1,6 +1,7 @@
 import 'dart:ui' show CheckedState, Tristate;
 
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -23,6 +24,35 @@ void activateBySemantics(WidgetTester tester, String identifier) {
 }
 
 void main() {
+  group('WaxTappable', () {
+    testWidgets('is one tab stop, whatever ink it draws with', (tester) async {
+      // A pill's and an icon button's own InkWell was a second, unnamed
+      // stop: two presses per control, the second with nothing focused.
+      await tester.pumpWidget(
+        _host(
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              WaxButton(label: 'Before', onPressed: () {}),
+              WaxPill(label: 'Speed', text: '1x', onPressed: () {}),
+              WaxIconButton(
+                glyph: WaxIcons.more,
+                label: 'More',
+                onPressed: () {},
+              ),
+              WaxButton(label: 'After', onPressed: () {}),
+            ],
+          ),
+        ),
+      );
+      for (var press = 0; press < 4; press++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
+      expect(Focus.of(tester.element(find.text('After'))).hasFocus, isTrue);
+    });
+  });
+
   group('WaxSwitch', () {
     testWidgets('reports the setting as its name and the state as toggled', (
       tester,

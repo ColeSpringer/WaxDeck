@@ -9,11 +9,11 @@ import '../l10n/wax_l10n.dart';
 import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
-import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'artwork.dart';
 import 'controls.dart';
+import 'indicators.dart';
 import 'snap_physics.dart';
 import 'view_data.dart';
 
@@ -364,7 +364,6 @@ class _Slot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = WaxColors.of(context);
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
@@ -400,25 +399,7 @@ class _Slot extends StatelessWidget {
                 // Inside the logo's own box rather than hanging below
                 // it: an overhang painted outside the slot collided
                 // with the band the moment playback started.
-                Positioned(
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: WaxSpace.s4,
-                      vertical: 1,
-                    ),
-                    decoration: BoxDecoration(
-                      color: colors.radio.container,
-                      borderRadius: WaxRadius.pill,
-                    ),
-                    child: Text(
-                      context.waxL10n.commonLiveChip,
-                      style: WaxType.overline.copyWith(
-                        color: colors.radio.onContainer,
-                      ),
-                    ),
-                  ),
-                ),
+                const Positioned(bottom: 0, child: LivePill()),
             ],
           ),
         ),

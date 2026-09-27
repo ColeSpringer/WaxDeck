@@ -9,6 +9,7 @@ import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
+import 'prose.dart';
 import 'view_data.dart';
 
 /// Artwork with its placeholder, its shape, and its resume ring.
@@ -311,6 +312,26 @@ enum ArtworkPlaceholder {
   wordmark,
 }
 
+/// Up to [max] initials for [name], each the first letter or digit of a
+/// word, so "2morrow (Remix)" gives "2R" rather than "2(". Null when no
+/// word has one, where a caller draws a glyph instead.
+String? monogramInitials(String name, {int max = 2}) {
+  final initials = <String>[];
+  for (final word in name.trim().split(RegExp(r'\s+'))) {
+    if (initials.length >= max) break;
+    for (final grapheme in word.characters) {
+      if (_initialStart.hasMatch(grapheme)) {
+        initials.add(grapheme.toUpperCase());
+        break;
+      }
+    }
+  }
+  return initials.isEmpty ? null : initials.join();
+}
+
+final RegExp _initialStart = RegExp(r'^[\p{L}\p{N}]', unicode: true);
+final RegExp _letterOrDigit = RegExp(r'[\p{L}\p{N}]', unicode: true);
+
 class _Placeholder extends StatelessWidget {
   const _Placeholder({
     required this.monogram,
@@ -335,7 +356,7 @@ class _Placeholder extends StatelessWidget {
   Widget build(BuildContext context) {
     final hue = colors.domain(domain);
     final name = (monogram ?? '').trim();
-    final hasName = RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(name);
+    final hasName = _letterOrDigit.hasMatch(name);
 
     // Decided once: everything below keys off it, including the grain,
     // which belongs to the station mark alone. An initials tile is the
@@ -371,19 +392,11 @@ class _Placeholder extends StatelessWidget {
         ),
       );
     } else {
-      final letters = name
-          .split(RegExp(r'\s+'))
-          .where((word) => word.isNotEmpty)
-          .take(2)
-          .map((word) => word.characters.first.toUpperCase())
-          .join();
-      // A title of "..." or "100%" yields punctuation or nothing at all,
-      // so initials are used only when they are actually letters or
-      // digits; otherwise the domain's own glyph stands in, which is at
-      // least true.
-      final usable = RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(letters);
+      // A title of "..." has no initials to give, so the domain's own
+      // glyph stands in, which is at least true.
+      final letters = monogramInitials(name);
       mark = Center(
-        child: usable
+        child: letters != null
             ? Text(
                 letters,
                 style: WaxType.titleEntity.copyWith(
@@ -475,7 +488,7 @@ class ArtworkCaption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    return Text(
+    return WaxProse(
       text,
       textAlign: align,
       style: WaxType.caption.copyWith(

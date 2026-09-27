@@ -12,6 +12,7 @@ import '../player/session_registry.dart';
 import '../providers.dart';
 import '../settings/integrations_controller.dart';
 import '../settings/prefs_controller.dart';
+import 'radio_saved_controller.dart';
 
 /// The shared internet radio station library.
 /// Whether two art attributions would draw the same caption.
@@ -283,9 +284,10 @@ class RadioPlayback {
   final String? nowPlaying;
 
   /// A library track the server matched [nowPlaying] to, when it
-  /// recognised one. The full player draws that track's cover; the deck
-  /// bar keeps the station's logo, because a bar that changed its
-  /// picture every few minutes would read as the station changing.
+  /// recognised one. Every surface that draws the station draws that
+  /// track's cover in its place - the full player, the deck bar, the
+  /// mini window - through one mapping, so the picture a face expands
+  /// from is the one it lands on.
   final String? nowPlayingItemPid;
 
   /// The token naming the external cover the server holds for
@@ -382,6 +384,10 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
   /// itself as what is on.
   int _tuning = 0;
 
+  /// A wake that arrived mid-tune, replayed once the tune publishes: the
+  /// tune's own read can predate the first title or cover it announced.
+  bool _wokenMidTune = false;
+
   @override
   RadioPlayback build() {
     ref.onDispose(_stopTitlePoll);
@@ -398,6 +404,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     // had not published yet.
     final tuning = ++_tuning;
     _stopTitlePoll();
+    _wokenMidTune = false;
     // The count belongs to the station being left. Carried over, a
     // station that had gone quiet spends the next one's grace for it,
     // and the first blank poll after a tune empties a title this very
@@ -460,6 +467,10 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         nowPlayingSavedPid: info.nowPlayingSavedPid,
       );
       _startTitlePoll(station.pid);
+      if (_wokenMidTune) {
+        _wokenMidTune = false;
+        unawaited(_refreshTitle(station.pid, counted: false));
+      }
     } on Object {
       // A tune that was overtaken is nobody's failure to hear about: it
       // owns neither the state nor the engine any more, and the station
@@ -617,10 +628,14 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
   /// period. A no-op untuned, which is what makes a broadcast cheap.
   void refreshNowPlaying() {
     final pid = state.station?.pid;
-    // Nothing to re-read untuned, and nothing worth re-reading over a
-    // tune still in flight: that one publishes its own answer, and this
-    // would land underneath it.
-    if (pid == null || state.starting) return;
+    // Nothing to re-read untuned. Over a tune still in flight the read
+    // would land underneath the tune's own answer, so it is held for the
+    // tune to replay once that answer is published.
+    if (pid == null) return;
+    if (state.starting) {
+      _wokenMidTune = true;
+      return;
+    }
     unawaited(_refreshTitle(pid, counted: false));
   }
 
@@ -742,6 +757,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         final pid = heldPid ?? await _pendingSavePID(line);
         if (pid != null) {
           await ref.read(repositoryProvider).deleteRadioSavedSong(pid);
+          _noteSavedList((list) => list.noteRemoved(pid));
         }
       } else {
         final save = ref
@@ -750,6 +766,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         _pendingSave = (line: line, save: save);
         try {
           final song = await save;
+          _noteSavedList((list) => list.noteSaved(song));
           if (stillTheSameSong()) {
             state = state.withSaved(saved: true, pid: song.pid);
           }
@@ -767,6 +784,21 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     } finally {
       if (generation == _saveGen) _saving = false;
     }
+  }
+
+  /// Tells the saved-songs list what the heart just did, where one is
+  /// open: it is read once per visit, and nothing else would tell it.
+  void _noteSavedList(void Function(RadioSavedController list) note) {
+    if (ref.exists(radioSavedProvider)) {
+      note(ref.read(radioSavedProvider.notifier));
+    }
+  }
+
+  /// A song let go of from the saved list. When it is the one the heart
+  /// is holding, the heart empties now rather than on the next poll.
+  void noteUnsaved(String pid) {
+    if (_saving || state.nowPlayingSavedPid != pid) return;
+    state = state.withSaved(saved: false);
   }
 
   /// The pid of the save in flight for [line], once it lands.

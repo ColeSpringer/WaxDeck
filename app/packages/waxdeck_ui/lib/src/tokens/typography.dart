@@ -166,6 +166,19 @@ abstract final class WaxType {
   /// Codec chips, ids, logs, admin diagnostics.
   static final TextStyle monoData = _mono(size: 12, height: 16, weight: 460);
 
+  /// The mono face alone, for a run of code inside other text: the size,
+  /// height, and weight stay the surrounding text's.
+  static const TextStyle monoRun = TextStyle(
+    fontFamily: WaxFonts.mono,
+    fontFamilyFallback: WaxFonts.fallbacks,
+    package: WaxFonts.package,
+    decoration: TextDecoration.none,
+    fontFeatures: <FontFeature>[
+      FontFeature.disable('liga'),
+      FontFeature.disable('clig'),
+    ],
+  );
+
   /// The Material text theme the tokens map onto, so any stray Material
   /// widget inherits the house type instead of Roboto.
   static TextTheme textTheme(Color primary, Color secondary) => TextTheme(

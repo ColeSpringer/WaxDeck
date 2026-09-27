@@ -22,7 +22,7 @@ final castPreflightProvider =
 /// at a moment, so there is nothing here a stranger could open a link to,
 /// and it is read on the way to fixing a cast rather than visited.
 Future<void> showCastPreflight(BuildContext context) {
-  return showModalBottomSheet<void>(
+  return showWaxSheet<void>(
     context: context,
     isScrollControlled: true,
     builder: (_) => const _CastPreflightSheet(),

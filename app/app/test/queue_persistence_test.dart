@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_persistence.dart';
@@ -388,6 +391,37 @@ void main() {
 
       expect(offer!.currentItem!.title, 'So What');
       expect(offer.currentItem!.artUrl, isNull);
+    });
+
+    test('accepting starts the entry named by the offer\'s own read', () async {
+      final repository = FakeRepository(items: [testItem('tr-A')])
+        ..sessionHistory = <PlaybackSessionHistoryEntry>[
+          PlaybackSessionHistoryEntry(
+            id: 'ps-1',
+            endpointId: 'pe-1',
+            authority: 'mirror',
+            index: 0,
+            positionMs: 42000,
+            positionAt: DateTime.utc(2026, 7, 28, 9),
+            rate: 1,
+            entries: const <PlaybackSessionEntry>[
+              PlaybackSessionEntry(pid: 'tr-A', title: 'So What'),
+            ],
+          ),
+        ];
+      final container = _container(
+        RecordingQueueStore(),
+        repository: repository,
+      );
+      final offer = await container.read(queueRestoreProvider.future);
+      expect(offer!.currentItem, isNotNull);
+
+      final gate = repository.getItemGate = Completer<void>();
+      container.read(queueRestoreProvider.notifier).accept();
+      await pumpEventQueue();
+      expect(container.read(nowPlayingProvider).item?.pid, 'tr-A');
+      gate.complete();
+      await pumpEventQueue();
     });
 
     test('accepting puts the queue back and retires the offer', () async {

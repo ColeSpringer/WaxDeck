@@ -49,7 +49,7 @@ class NotificationsScreen extends ConsumerWidget {
       builder: (context) => AlertDialog(
         key: const Key('notifications-clear-dialog'),
         title: Text(l10n.bellClearTitle),
-        content: Text(l10n.bellClearConfirm),
+        content: WaxProse(l10n.bellClearConfirm),
         actions: <Widget>[
           TextButton(
             onPressed: () => Navigator.of(context).pop(),

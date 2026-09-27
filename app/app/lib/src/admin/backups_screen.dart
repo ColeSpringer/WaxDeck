@@ -245,7 +245,7 @@ class _BackupRow extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.adminBackupRestoreTitle),
-        content: Text(l10n.adminBackupRestoreBody(backup.fileName)),
+        content: WaxProse(l10n.adminBackupRestoreBody(backup.fileName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -280,7 +280,7 @@ class _BackupRow extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.adminBackupDeleteTitle),
-        content: Text(l10n.adminBackupDeleteBody(backup.fileName)),
+        content: WaxProse(l10n.adminBackupDeleteBody(backup.fileName)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -406,39 +406,41 @@ class _RestorePlanDialog extends StatelessWidget {
       key: const Key('restore-plan-dialog'),
       title: Text(l10n.adminRestoreStagedTitle),
       content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(WaxSpace.s8),
-              color: colorScheme.tertiaryContainer,
-              child: Text(
-                l10n.adminRestoreAppliesAtRestart,
-                style: TextStyle(color: colorScheme.onTertiaryContainer),
-              ),
-            ),
-            const SizedBox(height: WaxSpace.s12),
-            Text(keyfileVerdict),
-            if (plan.sealedCasualties.isNotEmpty) ...[
-              const SizedBox(height: WaxSpace.s12),
-              Text(
-                l10n.adminRestoreLostWithRestore,
-                style: WaxType.label.copyWith(color: colors.textPrimary),
-              ),
-              for (final casualty in plan.sealedCasualties)
-                Text(l10n.adminRestoreCasualty(casualty.kind, casualty.name)),
-            ],
-            if (plan.warnings.isNotEmpty) ...[
-              const SizedBox(height: WaxSpace.s12),
-              for (final warning in plan.warnings)
-                Text(
-                  warning,
-                  style: WaxType.bodySmall.copyWith(color: colors.error),
+        child: WaxProse.block(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(WaxSpace.s8),
+                color: colorScheme.tertiaryContainer,
+                child: Text(
+                  l10n.adminRestoreAppliesAtRestart,
+                  style: TextStyle(color: colorScheme.onTertiaryContainer),
                 ),
+              ),
+              const SizedBox(height: WaxSpace.s12),
+              Text(keyfileVerdict),
+              if (plan.sealedCasualties.isNotEmpty) ...[
+                const SizedBox(height: WaxSpace.s12),
+                Text(
+                  l10n.adminRestoreLostWithRestore,
+                  style: WaxType.label.copyWith(color: colors.textPrimary),
+                ),
+                for (final casualty in plan.sealedCasualties)
+                  Text(l10n.adminRestoreCasualty(casualty.kind, casualty.name)),
+              ],
+              if (plan.warnings.isNotEmpty) ...[
+                const SizedBox(height: WaxSpace.s12),
+                for (final warning in plan.warnings)
+                  Text(
+                    warning,
+                    style: WaxType.bodySmall.copyWith(color: colors.error),
+                  ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: [

@@ -330,6 +330,26 @@ void main() {
     });
   });
 
+  testWidgets("a field's help sits under it, selectable and spoken", (
+    tester,
+  ) async {
+    final repo = _repo();
+    await _pump(tester, repo);
+    const help =
+        'How this release files in an A-to-Z list. Empty files it under '
+        'its title.';
+
+    expect(find.widgetWithText(WaxProse, help), findsOneWidget);
+    expect(
+      tester
+          .getSemantics(
+            find.bySemanticsIdentifier(SemanticsIds.metadataField('sort')),
+          )
+          .hint,
+      help,
+    );
+  });
+
   testWidgets('the cover pin is written through the entity endpoint', (
     tester,
   ) async {

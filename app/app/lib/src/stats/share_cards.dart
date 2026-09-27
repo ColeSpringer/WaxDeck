@@ -110,10 +110,9 @@ typedef ShareCardArtist = ({String name, String? artUrl});
 /// with the verb that keeps it.
 Future<void> showShareCardSheet(BuildContext context, ShareCardData data) {
   final colors = WaxColors.of(context);
-  return showModalBottomSheet<void>(
+  return showWaxSheet<void>(
     context: context,
     backgroundColor: colors.surface2,
-    showDragHandle: true,
     isScrollControlled: true,
     builder: (_) => _ShareCardSheet(data: data),
   );
@@ -462,18 +461,6 @@ class _Cover extends StatelessWidget {
   final String name;
   final ImageProvider? image;
 
-  /// The one letter a coverless square shows. Digits count as letters
-  /// here: a band called 65daysofstatic gets a 6 rather than a blank.
-  static String _initial(String name) {
-    for (final rune in name.trim().runes) {
-      final char = String.fromCharCode(rune);
-      if (RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(char)) {
-        return char.toUpperCase();
-      }
-    }
-    return '';
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
@@ -488,7 +475,8 @@ class _Cover extends StatelessWidget {
                 color: colors.surface2,
                 child: Center(
                   child: Text(
-                    _initial(name),
+                    // Digits count: 65daysofstatic gets a 6, not a blank.
+                    monogramInitials(name, max: 1) ?? '',
                     style: WaxType.titleEntity.copyWith(
                       fontSize: edge * 0.5,
                       height: 1,

@@ -42,10 +42,10 @@ components:
         client the named topic moved: for `catalog` pull `/sync/catalog`
         and for `user` pull `/sync/server` from the client's own
         cursor; for `player` pull `/player/endpoints` and
-        `/player/sessions`, and for `radio` - artwork for an announced
-        title landed - re-read `/radio/stations/{pid}/play-info` for the
-        station being listened to, all of which always return current
-        truth (no cursor); a client tuned to nothing ignores `radio`.
+        `/player/sessions`, and for `radio` - the station's song or cover
+        moved - re-read `/radio/stations/{pid}/play-info` for the station
+        being listened to, all of which always return current truth (no
+        cursor); a client tuned to nothing ignores `radio`.
         Invalidations are coalesced server-side, so one frame
         can cover many changes, and carry no data, so a redundant pull
         is harmless. A `resync` frame means continuity was lost for the
@@ -441,9 +441,9 @@ components:
         than every connection. A new tune replaces the previous one;
         omitting `station` says this client is no longer listening.
         Never acked, and never refused: an unknown pid simply matches no
-        landing. A client that never tunes hears no `radio`
-        invalidations, which is what a client with no station to draw
-        wants.
+        wake. A client that has never sent one keeps the topic's
+        older contract and hears every station's `radio` invalidations;
+        one that tunes to nothing (no `station`) hears none.
       required: [type]
       properties:
         type:

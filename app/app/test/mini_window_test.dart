@@ -1,8 +1,19 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/desktop/desktop_ports.dart';
 import 'package:waxdeck/src/desktop/mini_window.dart';
+import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/commands.dart';
+import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
+
+import 'fakes.dart';
+import 'localized_host.dart';
+import 'player_host.dart';
 
 /// A window layer that answers whatever a compositor was going to, and
 /// records what it was asked for.
@@ -64,6 +75,49 @@ ProviderContainer _container(_FakeWindow window) {
 
 void main() {
   group('the mini window', () {
+    testWidgets('names an entry still resolving as loading', (tester) async {
+      final window = _FakeWindow(
+        const MiniWindowCapabilities(
+          available: true,
+          frameless: true,
+          alwaysOnTop: true,
+        ),
+      );
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final container = playbackContainer(
+        repo: repo,
+        engine: FakeEngine(),
+        extra: [miniWindowPortProvider.overrideWithValue(window)],
+      );
+      container.read(miniWindowProvider);
+      await tester.pump();
+      await container.read(miniWindowProvider.notifier).enter();
+
+      final gate = repo.getItemGate = Completer<void>();
+      unawaited(
+        container.read(nowPlayingProvider.notifier).playPids([
+          'tr-A',
+        ], source: QueueSource.none),
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: localizedHost(
+            const MiniWindowGate(child: SizedBox()),
+            theme: buildWaxTheme(),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('Loading…'), findsOneWidget);
+      expect(find.text('Nothing is playing'), findsNothing);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      container.read(queueControllerProvider.notifier).clear();
+      await tester.pumpAndSettle();
+    });
+
     test('is not offered where the platform has no window', () async {
       final window = _FakeWindow(MiniWindowCapabilities.none);
       final container = _container(window);

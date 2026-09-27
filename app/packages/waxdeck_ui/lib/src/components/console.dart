@@ -10,6 +10,8 @@ import '../tokens/typography.dart';
 import 'controls.dart';
 import 'indicators.dart';
 import 'inputs.dart';
+import 'prose.dart';
+import 'sheet.dart';
 
 /// How much a table column matters when there is not room for all of
 /// them.
@@ -425,10 +427,9 @@ class _RowCard<T> extends StatelessWidget {
 /// read-only sheet is a control that lies.
 extension _RowCardDetails<T> on _RowCard<T> {
   void _showDetails(BuildContext context, WaxColors colors) {
-    showModalBottomSheet<void>(
+    showWaxSheet<void>(
       context: context,
       backgroundColor: colors.surface2,
-      showDragHandle: true,
       builder: (context) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -634,7 +635,9 @@ class _TypedConfirmDialogState extends State<_TypedConfirmDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
+          // The message alone: the field below keeps out of the
+          // selection area, which would take its focus on a held press.
+          WaxProse(
             widget.message,
             style: WaxType.body.copyWith(color: colors.textSecondary),
           ),

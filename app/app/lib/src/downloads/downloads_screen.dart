@@ -144,7 +144,7 @@ class _StorageHeader extends ConsumerWidget {
       context: context,
       builder: (context) => AlertDialog(
         title: Text(l10n.downloadsClearTitle),
-        content: Text(l10n.downloadsClearBody(freed)),
+        content: WaxProse(l10n.downloadsClearBody(freed)),
         actions: <Widget>[
           WaxButton(
             label: l10n.downloadsClearKeep,

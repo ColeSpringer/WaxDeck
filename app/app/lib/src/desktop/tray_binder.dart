@@ -121,7 +121,10 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
     final copy = ref.read(offTreeL10nProvider);
     return TrayFace(
       playing: ref.read(audioEngineProvider).playing,
-      title: station?.name ?? now.item?.title,
+      title:
+          station?.name ??
+          now.item?.title ??
+          (now.loading ? copy.commonLoadingTitle : null),
       subtitle: station == null ? now.item?.artist : null,
       // Radio never queues, so there is nothing to step to; an item
       // needs a queue with somewhere to go.

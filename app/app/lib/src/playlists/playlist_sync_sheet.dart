@@ -14,7 +14,7 @@ import 'playlist_sync_controller.dart';
 /// source URL, pick the mode and interval, dry-run what a sync would
 /// do, run one now, or stop syncing.
 Future<void> showPlaylistSyncSheet(BuildContext context, String pid) =>
-    showModalBottomSheet<void>(
+    showWaxSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (_) => _PlaylistSyncSheet(pid: pid),
@@ -493,40 +493,44 @@ Future<void> _showPreviewDialog(
       final colors = WaxColors.of(context);
       return AlertDialog(
         title: Text(l10n.playlistSyncPreviewTitle),
-        content: Semantics(
-          container: true,
-          explicitChildNodes: true,
-          identifier: SemanticsIds.playlistSyncPreviewDialog,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              if (lines.isEmpty)
-                Text(
-                  l10n.playlistSyncPreviewNothing,
-                  style: WaxType.body.copyWith(color: colors.textSecondary),
-                )
-              else
-                for (final line in lines)
+        content: WaxProse.block(
+          child: Semantics(
+            container: true,
+            explicitChildNodes: true,
+            identifier: SemanticsIds.playlistSyncPreviewDialog,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                if (lines.isEmpty)
+                  Text(
+                    l10n.playlistSyncPreviewNothing,
+                    style: WaxType.body.copyWith(color: colors.textSecondary),
+                  )
+                else
+                  for (final line in lines)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: WaxSpace.s4),
+                      child: Text(
+                        line,
+                        style: WaxType.body.copyWith(color: colors.textPrimary),
+                      ),
+                    ),
+                for (final miss in preview.misses.take(8))
                   Padding(
                     padding: const EdgeInsets.only(bottom: WaxSpace.s4),
                     child: Text(
-                      line,
-                      style: WaxType.body.copyWith(color: colors.textPrimary),
+                      [
+                        if ((miss.artist ?? '').isNotEmpty) miss.artist,
+                        miss.title,
+                      ].join(' - '),
+                      style: WaxType.caption.copyWith(
+                        color: colors.textTertiary,
+                      ),
                     ),
                   ),
-              for (final miss in preview.misses.take(8))
-                Padding(
-                  padding: const EdgeInsets.only(bottom: WaxSpace.s4),
-                  child: Text(
-                    [
-                      if ((miss.artist ?? '').isNotEmpty) miss.artist,
-                      miss.title,
-                    ].join(' - '),
-                    style: WaxType.caption.copyWith(color: colors.textTertiary),
-                  ),
-                ),
-            ],
+              ],
+            ),
           ),
         ),
         actions: <Widget>[

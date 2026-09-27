@@ -42,7 +42,7 @@ class TrashScreen extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.adminTrashPurgeTitle),
-        content: Text(l10n.adminTrashPurgeBody(entry.name)),
+        content: WaxProse(l10n.adminTrashPurgeBody(entry.name)),
         actions: <Widget>[
           WaxButton(
             label: l10n.commonCancel,
@@ -243,7 +243,7 @@ class _ArtworkCacheCard extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.adminThumbsClearTitle),
-        content: Text(l10n.adminThumbsClearBody),
+        content: WaxProse(l10n.adminThumbsClearBody),
         actions: <Widget>[
           WaxButton(
             label: l10n.commonCancel,

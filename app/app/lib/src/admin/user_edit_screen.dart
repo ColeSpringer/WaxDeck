@@ -229,7 +229,7 @@ class _UserEditScreenState extends ConsumerState<UserEditScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(title),
-        content: Text(body),
+        content: WaxProse(body),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),

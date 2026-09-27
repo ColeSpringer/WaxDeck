@@ -295,7 +295,7 @@ class _SettingsButton extends ConsumerWidget {
     glyph: WaxIcons.speed,
     label: context.l10n.bookPlaybackSettings,
     semanticsId: SemanticsIds.bookSettingsOpen,
-    onPressed: () => showModalBottomSheet<void>(
+    onPressed: () => showWaxSheet<void>(
       context: context,
       isScrollControlled: true,
       builder: (_) => BookSettingsSheet(

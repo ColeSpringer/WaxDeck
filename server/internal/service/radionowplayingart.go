@@ -68,12 +68,11 @@ const (
 	// track released this week can have no Cover Art Archive entry today
 	// and one tomorrow, and a permanent miss would never find it.
 	radioArtMissFreshFor = 24 * time.Hour
-	// radioArtFailureFreshFor is how long a transient failure is
-	// remembered - a 503, a rate-limit refusal, a timeout. Minutes, not
-	// a day: caching one bad minute upstream for a day turns it into a
-	// day of blank faces, and this is the case most likely to be
-	// upstream's problem rather than this title's.
-	radioArtFailureFreshFor = 5 * time.Minute
+	// radioArtFailureFreshFor is how long either rung remembers a timeout
+	// or an error: short of a song, so a song whose first ask failed gets
+	// a second. A refusal (429, 503) asks for longer, and gets it.
+	radioArtFailureFreshFor = 90 * time.Second
+	radioArtRefusalFreshFor = 5 * time.Minute
 	// radioArtCacheBytes bounds the whole cache, which is what the
 	// station-logo cache next door bounds and what matters: an entry
 	// count times the fetch cap is a resident ceiling in the gigabytes,
@@ -242,6 +241,26 @@ func announcedArtKey(artURL, announced string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
+// RadioNowPlayingCover answers the cover key for one announcement from
+// the station's picture and the lookup, starting fetches but never
+// waiting on one. An unproven picture yields to a cover the lookup holds.
+func (l *Library) RadioNowPlayingCover(stationPID, stationName string, a RadioAnnouncement) string {
+	announced, tryExternal := l.EnsureRadioAnnouncedArt(stationPID, a.ArtURL, a.Title)
+	switch {
+	case a.ArtURL != "" && !a.ArtProven:
+		if external := l.EnsureRadioNowPlayingArt(stationPID, stationName, a.Title); external != "" {
+			return external
+		}
+		return announced
+	case announced != "":
+		return announced
+	case !tryExternal:
+		// The station's picture is on its way, so no lookup starts for it.
+		return l.heldRadioNowPlayingArt(stationName, a.Title)
+	}
+	return l.EnsureRadioNowPlayingArt(stationPID, stationName, a.Title)
+}
+
 // EnsureRadioAnnouncedArt starts a fetch for a picture the station
 // announced, and answers the key it will be held under plus whether the
 // caller should fall through to the external rung.
@@ -308,13 +327,17 @@ func (l *Library) EnsureRadioAnnouncedArt(stationPID, artURL, announced string) 
 			l.storeRadioArt(key, radioArtEntry{
 				fetched: time.Now(), fresh: radioArtMissFreshFor, announced: true,
 			})
+			// Woken like a landing: while this fetch was in flight it held
+			// the external rung back, and its end is what lets that run.
+			l.wakeRadioArtWaiters(key)
 		default:
 			// A timeout, a refused connection, a 5xx: this one may well
-			// answer next time, so it is remembered for minutes.
+			// answer next time, so it is remembered only briefly.
 			l.log.Debug("announced radio artwork fetch failed", "err", fetchErr)
 			l.storeRadioArt(key, radioArtEntry{
 				fetched: time.Now(), fresh: radioArtFailureFreshFor, announced: true,
 			})
+			l.wakeRadioArtWaiters(key)
 		}
 		return nil
 	})
@@ -343,26 +366,10 @@ func (l *Library) EnsureRadioAnnouncedArt(stationPID, artURL, announced string) 
 // procCtx - taking a request context would say the poll can call the
 // work off, which is the opposite of the point.
 func (l *Library) EnsureRadioNowPlayingArt(stationPID, stationName, announced string) string {
-	if l.radioArtResolver == nil || !l.RadioExternalArtEnabled() {
+	artist, title, key := l.radioNowPlayingArtKey(stationName, announced)
+	if key == "" {
 		return ""
 	}
-	rawArtist, rawTitle, ok := parseRadioTitle(announced, stationName)
-	if !ok {
-		return ""
-	}
-	// Normalized once, and both the key and the upstream query are built
-	// from the same values. Keying on the normalized form while querying
-	// the raw one collapsed "Ornithology (Official Audio)" and
-	// "Ornithology" onto one entry and let whichever arrived first decide
-	// the search - so the noisy spelling, the one MusicBrainz misses,
-	// could cache a day-long miss against a key the clean spelling would
-	// have resolved. The local-match rung already normalizes before it
-	// searches; this is the same rule one rung down.
-	artist, title := radioSearchField(rawArtist), radioSearchField(rawTitle)
-	if artist == "" || title == "" {
-		return ""
-	}
-	key := radioArtKey(artist, title)
 	if entry, cached := l.cachedRadioArt(key); cached {
 		if len(entry.art.Bytes) == 0 {
 			return ""
@@ -409,32 +416,65 @@ func (l *Library) EnsureRadioNowPlayingArt(stationPID, stationName, announced st
 			l.storeRadioArt(key, radioArtEntry{fetched: time.Now(), fresh: radioArtMissFreshFor})
 		default:
 			// Answered nothing and may answer next time: remembered for
-			// minutes so a bad interval upstream does not become a day
-			// of blank faces, and so a retry storm cannot form either.
-			// A budget the walk never finished inside lands here too - an
-			// upstream that cannot answer in a minute is having an
-			// afternoon, and asking it again sooner helps nobody.
+			// radioArtFailureFreshFor, short of a song, so a bad interval
+			// upstream does not become a day of blank faces and a retry
+			// storm cannot form either. A budget the walk never finished
+			// inside lands here too, and waits out the same interval.
 			l.log.Debug("radio artwork lookup failed", "err", err)
-			l.storeRadioArt(key, radioArtEntry{fetched: time.Now(), fresh: radioArtFailureFreshFor})
+			fresh := radioArtFailureFreshFor
+			if errors.Is(err, providers.ErrThrottled) {
+				fresh = radioArtRefusalFreshFor
+			}
+			l.storeRadioArt(key, radioArtEntry{fetched: time.Now(), fresh: fresh})
 		}
 		return nil
 	})
 	return ""
 }
 
-// wakeRadioListeners tells the clients listening to stationPID that a
-// cover landed, so a tuned face fills on the fetch rather than on its
-// next poll. Never on a miss: a miss changes nothing to draw. An empty
-// pid reaches every connection, for a landing with no station to name.
+// radioNowPlayingArtKey names the lookup for an announcement, with the
+// query it sends; empty while the rung is off or the line names no song.
+// Key and query come from one normalization, so they cannot disagree.
+func (l *Library) radioNowPlayingArtKey(stationName, announced string) (artist, title, key string) {
+	if l.radioArtResolver == nil || !l.RadioExternalArtEnabled() {
+		return "", "", ""
+	}
+	rawArtist, rawTitle, ok := parseRadioTitle(announced, stationName)
+	if !ok {
+		return "", "", ""
+	}
+	artist, title = radioSearchField(rawArtist), radioSearchField(rawTitle)
+	if artist == "" || title == "" {
+		return "", "", ""
+	}
+	return artist, title, radioArtKey(artist, title)
+}
+
+// heldRadioNowPlayingArt answers the key of a cover the lookup already
+// holds for an announcement, and starts nothing.
+func (l *Library) heldRadioNowPlayingArt(stationName, announced string) string {
+	_, _, key := l.radioNowPlayingArtKey(stationName, announced)
+	if key == "" {
+		return ""
+	}
+	if entry, ok := l.cachedRadioArt(key); ok && len(entry.art.Bytes) > 0 {
+		return key
+	}
+	return ""
+}
+
+// wakeRadioListeners tells the clients tuned to stationPID that its face
+// has something new - a song, a cover, a failed picture letting the
+// lookup run - so they catch up now rather than on their next poll.
 func (l *Library) wakeRadioListeners(stationPID string) {
 	if fn := l.radioWake.Load(); fn != nil {
 		(*fn)(stationPID)
 	}
 }
 
-// SetRadioInvalidator installs the fan-out called when radio artwork
-// lands. A setter rather than a Config field because the event hub is
-// built over the service, so it does not exist when Config is.
+// SetRadioInvalidator installs the fan-out wakeRadioListeners calls. A
+// setter rather than a Config field because the event hub is built over
+// the service, so it does not exist when Config is.
 func (l *Library) SetRadioInvalidator(fn func(stationPID string)) {
 	if fn == nil {
 		l.radioWake.Store(nil)

@@ -244,7 +244,7 @@ func (s *Server) dispatchWS(ctx context.Context, conn *events.Conn, link *connec
 		// Handled before the command-bus guard below: naming the station
 		// this client is listening to is a radio-topic concern, and it
 		// has to work on a server with no Connect service. Never acked
-		// and never refused - an unknown pid simply matches no landing.
+		// and never refused - an unknown pid simply matches no wake.
 		// Bounded like an endpoint name: the frame is client input and
 		// the pid it should carry is thirty characters.
 		conn.Tune(truncateRunesafe(f.Station, 64))

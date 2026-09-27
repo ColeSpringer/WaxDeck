@@ -282,7 +282,7 @@ class _RescanDialogState extends State<_RescanDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(l10n.adminLibraryRescanBody),
+          WaxProse(l10n.adminLibraryRescanBody),
           const SizedBox(height: WaxSpace.s12),
           WaxSettingRow(
             title: l10n.adminLibraryRescanForce,

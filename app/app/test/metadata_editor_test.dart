@@ -228,6 +228,57 @@ void main() {
     expect(find.text('Empty'), findsNWidgets(4));
   });
 
+  testWidgets('an empty slot draws the domain glyph, not initials', (
+    tester,
+  ) async {
+    // Every empty slot drew the item's initials, which for a track
+    // called "2morrow (Remix)" was a grid of "2(".
+    final repo = _repo();
+    repo.itemFieldsByPid['tr-1']!['title'] = '2morrow (Remix)';
+    await _pump(tester, _host(_container(repo)));
+
+    for (final slot in ArtSlot.values) {
+      final tile = find.bySemanticsIdentifier(SemanticsIds.artSlot(slot.role));
+      final art = find.descendant(
+        of: tile,
+        matching: find.byType(ArtworkImage),
+      );
+      expect(
+        find.descendant(of: art, matching: find.byType(WaxIcon)),
+        findsOneWidget,
+        reason: slot.role,
+      );
+      expect(
+        find.descendant(of: art, matching: find.byType(Text)),
+        findsNothing,
+        reason: slot.role,
+      );
+    }
+  });
+
+  testWidgets("a book's empty slots draw the book glyph", (tester) async {
+    final container = _container(_bookRepo());
+    await _pump(
+      tester,
+      UncontrolledProviderScope(
+        container: container,
+        child: localizedHost(const MetadataScreen(pid: 'bk-1')),
+      ),
+    );
+
+    for (final slot in ArtSlot.values) {
+      final art = find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.artSlot(slot.role)),
+        matching: find.byType(ArtworkImage),
+      );
+      expect(
+        tester.widget<ArtworkImage>(art).domain,
+        WaxDomain.audiobooks,
+        reason: slot.role,
+      );
+    }
+  });
+
   testWidgets('the summary counts fields, and names artifacts apart', (
     tester,
   ) async {

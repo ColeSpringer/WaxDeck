@@ -1697,7 +1697,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get artworkLockHelp =>
-      'Keeps this cover through scans and enrichment runs, and holds the other slots against automatic fills too. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.';
+      'Holds every slot as it is, empty ones included, through scans and enrichment runs';
 
   @override
   String get artworkLockPinned => 'Cover pinned';

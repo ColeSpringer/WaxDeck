@@ -498,9 +498,8 @@ func run() error {
 	// The event hub fans the service's change wakeups out to WebSocket
 	// subscribers as coalesced invalidation frames.
 	hub := events.New(svc)
-	// Radio artwork lands on a detached worker seconds after the poll
-	// that started it; this is what saves the face a poll interval, and
-	// it reaches the connections tuned to that station alone.
+	// A station's new song or cover wakes the faces tuned to it, which
+	// would otherwise wait out a poll interval.
 	svc.SetRadioInvalidator(hub.MarkRadio)
 	group.Go(ctx, "event-hub", hub.Run)
 

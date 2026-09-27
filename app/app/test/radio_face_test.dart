@@ -8,6 +8,7 @@ import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/player/radio_face.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
+import 'package:waxdeck/src/radio/radio_saved_controller.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -226,6 +227,46 @@ void main() {
     await _stop(container);
   });
 
+  testWidgets("the song's controls share the action row with the timer", (
+    tester,
+  ) async {
+    // They sat on a row of their own between the title and the stop
+    // control, which on a wide window read as a stray toolbar. The
+    // action row under the transport is where a face's verbs go.
+    final repo = FakeRepository()
+      ..radioStationsByPid[_stationPid] = _station()
+      ..radioNowPlaying[_stationPid] = 'Salt Harbour - The Bree Trio';
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+
+    final timer = tester.getCenter(
+      find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen),
+    );
+    final stop = tester.getCenter(
+      find.bySemanticsIdentifier(SemanticsIds.playerToggle),
+    );
+    for (final id in <String>[
+      SemanticsIds.playerSaveSong,
+      SemanticsIds.playerFindInLibrary,
+    ]) {
+      final control = tester.getCenter(find.bySemanticsIdentifier(id));
+      expect(control.dy, moreOrLessEquals(timer.dy), reason: id);
+      expect(control.dy, greaterThan(stop.dy), reason: id);
+    }
+    // The live pill leads the song line, as it does on the deck bar.
+    expect(
+      tester.getCenter(find.text('LIVE')).dy,
+      moreOrLessEquals(
+        tester.getCenter(find.text('Salt Harbour - The Bree Trio')).dy,
+        epsilon: 2,
+      ),
+    );
+    await _stop(container);
+  });
+
   testWidgets('a station nobody has named offers no search shortcut', (
     tester,
   ) async {
@@ -255,8 +296,8 @@ void main() {
 
     final heart = find.bySemanticsIdentifier(SemanticsIds.playerSaveSong);
     expect(heart, findsOneWidget);
-    // The wording says song, never favourite: the star two rows up means
-    // "pin this station", and two affordances that both read as
+    // The wording says song, never favourite: the star in the header
+    // means "pin this station", and two affordances that both read as
     // favouriting would blur into each other.
     expect(tester.getSemantics(heart).label, 'Save this song');
 
@@ -512,6 +553,61 @@ void main() {
     await _stop(container);
   });
 
+  testWidgets('the heart keeps an open saved list in step', (tester) async {
+    // The list was read once a session and nothing told it about the
+    // heart, so a song untapped here stayed on it until a restart.
+    final repo = FakeRepository()
+      ..radioStationsByPid[_stationPid] = _station()
+      ..radioNowPlaying[_stationPid] = 'Salt Harbour - The Bree Trio';
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+    // Open elsewhere, which is what keeps it alive.
+    final list = container.listen(radioSavedProvider, (_, _) {});
+    addTearDown(list.close);
+    await tester.pumpAndSettle();
+    List<String>? lines() => container
+        .read(radioSavedProvider)
+        .value
+        ?.songs
+        .map((song) => song.nowPlaying)
+        .toList();
+    expect(lines(), isEmpty);
+
+    final heart = find.bySemanticsIdentifier(SemanticsIds.playerSaveSong);
+    await tester.tap(heart);
+    await tester.pumpAndSettle();
+    expect(lines(), <String>['Salt Harbour - The Bree Trio']);
+
+    await tester.tap(heart);
+    await tester.pumpAndSettle();
+    expect(lines(), isEmpty);
+    await _stop(container);
+  });
+
+  testWidgets('the sleep timer stays put when a title lands', (tester) async {
+    final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+    );
+    final untitled = tester.getRect(find.byType(SleepTimerButton));
+
+    repo.radioNowPlaying[_stationPid] = 'Salt Harbour - The Bree Trio';
+    container.read(radioPlaybackProvider.notifier).refreshNowPlaying();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playerSaveSong),
+      findsOneWidget,
+    );
+    expect(tester.getRect(find.byType(SleepTimerButton)), untitled);
+    await _stop(container);
+  });
+
   testWidgets('a station nobody has named offers no heart', (tester) async {
     final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
     final container = await _pumpTuned(
@@ -656,7 +752,7 @@ void main() {
     await _stop(container);
   });
 
-  testWidgets('a radio wakeup mid-tune leaves the station buffering', (
+  testWidgets('a wake during a tune is replayed once the tune publishes', (
     tester,
   ) async {
     final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
@@ -678,19 +774,34 @@ void main() {
     await tester.pump();
     expect(container.read(radioPlaybackProvider).starting, isTrue);
 
-    // A cover landing for somebody else's station reaches every client,
-    // so this arrives mid-tune. It must not answer for the tune.
+    // The station's first title lands while the tune's own read is in
+    // flight. Answered underneath the tune it would race it; dropped, as
+    // it was, the face waited out the first poll for a cover the server
+    // already held.
     container.read(radioPlaybackProvider.notifier).refreshNowPlaying();
     await tester.pump();
-
     expect(
       container.read(radioPlaybackProvider).starting,
       isTrue,
       reason: 'the transport control flipped to play over a buffering stream',
     );
-    expect(repo.radioPlayInfoReads, 1, reason: 'only the tune asked');
-    repo.radioPlayInfoGates[_stationPid]!.complete();
+    expect(repo.radioPlayInfoReads, 1, reason: 'only the tune has asked');
+
+    // The replay waits on a gate of its own, so the cover can land
+    // between the tune's answer and the replay's.
+    final replay = Completer<void>();
+    final tuneGate = repo.radioPlayInfoGates[_stationPid]!;
+    repo.radioPlayInfoGates[_stationPid] = replay;
+    tuneGate.complete();
     await tune;
+    expect(repo.radioPlayInfoReads, 2, reason: 'the wake is replayed');
+    expect(container.read(radioPlaybackProvider).nowPlayingArtKey, isNull);
+
+    repo.radioNowPlaying[_stationPid] = 'Charlie Parker - Ornithology';
+    repo.radioNowPlayingArtKey[_stationPid] = 'artkey-1';
+    replay.complete();
+    await tester.pumpAndSettle();
+    expect(container.read(radioPlaybackProvider).nowPlayingArtKey, 'artkey-1');
     await _stop(container);
   });
 
@@ -786,4 +897,33 @@ void main() {
       expect(sent.last, {'type': 'tune'});
     },
   );
+
+  test('a reconnect says this client is listening to nothing too', () async {
+    // The server forgets the tune with the socket, and an untuned
+    // connection hears every relayed station's wake, one per song.
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(FakeRepository()),
+        audioEngineProvider.overrideWithValue(FakeEngine()),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        clientSettingsStoreProvider.overrideWithValue(
+          MemoryClientSettingsStore(),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final sent = <Map<String, Object?>>[];
+    container.read(connectSenderProvider).impl = (frame) {
+      sent.add(frame);
+      return true;
+    };
+    final alive = container.listen(syncBinderProvider, (_, _) {});
+    addTearDown(alive.close);
+    await pumpEventQueue();
+
+    sent.clear();
+    container.read(connectBinderProvider).onConnected();
+    await pumpEventQueue();
+    expect(sent, contains(equals(<String, Object?>{'type': 'tune'})));
+  });
 }

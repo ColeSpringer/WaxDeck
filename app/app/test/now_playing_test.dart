@@ -7,6 +7,7 @@ import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/session_registry.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/queue/queue_item.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -594,6 +595,48 @@ void main() {
       // The show's remembered speed is the visible half of it: without
       // the show, an item detail plays every episode at 1.0.
       expect(h.engine.speed, 1.5);
+    });
+  });
+
+  group('the start window', () {
+    test('an entry named by pid alone is named before it loads', () async {
+      final h = _harness();
+      final gate = h.repo.playInfoGate = Completer<void>();
+      unawaited(h.container.playback.playPids([_a], source: _album));
+      await pumpEventQueue();
+
+      final now = h.container.read(nowPlayingProvider);
+      expect(now.session, isNull);
+      expect(now.loading, isTrue);
+      expect(now.item?.pid, _a);
+
+      gate.complete();
+      await pumpEventQueue();
+      expect(h.container.read(nowPlayingProvider).loading, isFalse);
+    });
+
+    test('a start that failed is not loading', () async {
+      final h = _harness();
+      await h.container.playback.playPids(['tr-gone'], source: _album);
+      await pumpEventQueue();
+
+      final now = h.container.read(nowPlayingProvider);
+      expect(now.error, isNotNull);
+      expect(now.loading, isFalse);
+    });
+
+    test('a summary a queue row fetched names its entry at once', () async {
+      final h = _harness();
+      final row = h.container.listen(queueItemProvider(_b), (_, _) {});
+      addTearDown(row.close);
+      await h.container.read(queueItemProvider(_b).future);
+
+      final gate = h.repo.getItemGate = Completer<void>();
+      unawaited(h.container.playback.playPids([_b], source: _album));
+      await pumpEventQueue();
+      expect(h.container.read(nowPlayingProvider).item?.pid, _b);
+      gate.complete();
+      await pumpEventQueue();
     });
   });
 

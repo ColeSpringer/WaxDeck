@@ -405,7 +405,7 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
         // reaches the person through the save.
         AsyncValue(value: final rows?) => SingleChildScrollView(
           padding: const EdgeInsets.all(WaxSpace.s16),
-          child: _body(rows, name),
+          child: _body(rows),
         ),
         AsyncValue(hasError: true, error: final Object error) => Padding(
           padding: const EdgeInsets.all(WaxSpace.s16),
@@ -420,7 +420,7 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
     );
   }
 
-  Widget _body(Map<String, EntityCuratedField> curation, String? name) {
+  Widget _body(Map<String, EntityCuratedField> curation) {
     final l10n = context.l10n;
     // Seeded at first sight of the curation map, the way the text
     // controllers seed at creation, so the choice never has to read
@@ -438,7 +438,6 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
           if (artist) ...<Widget>[
             ArtworkManager(
               pid: widget.pid,
-              title: name ?? widget.pid,
               hasArtwork:
                   ref
                       .watch(itemArtRolesProvider(widget.pid))
@@ -473,7 +472,7 @@ class _EntityEditorScreenState extends ConsumerState<EntityEditorScreen> {
                         : (v) => setState(() => _typeStaged = v),
                   ),
                   const SizedBox(height: WaxSpace.s4),
-                  Text(
+                  WaxProse(
                     _helpOf(l10n, field),
                     style: WaxType.caption.copyWith(
                       color: WaxColors.of(context).textSecondary,
@@ -574,43 +573,35 @@ class _EntityFieldRow extends StatelessWidget {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final row = curated;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: <Widget>[
-        Expanded(
-          child: WaxTextField(
-            label: label,
-            hint: help,
-            controller: controller,
-            semanticsId: SemanticsIds.metadataField(wire),
+    return WaxTextField(
+      label: label,
+      // Under the box, selectable, and spoken with it: a placeholder went
+      // the moment the field held a value.
+      helperText: help.isEmpty ? null : help,
+      controller: controller,
+      semanticsId: SemanticsIds.metadataField(wire),
+      beside: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          CodecChip(
+            row == null
+                ? l10n.metadataSourceUnknown
+                : provenanceProducerName(l10n, row.source),
+            emphasis: dirty,
           ),
-        ),
-        const SizedBox(width: WaxSpace.s8),
-        Padding(
-          padding: const EdgeInsets.only(bottom: WaxSpace.s8),
-          child: Row(
-            children: <Widget>[
-              CodecChip(
-                row == null
-                    ? l10n.metadataSourceUnknown
-                    : provenanceProducerName(l10n, row.source),
-                emphasis: dirty,
+          if (row?.locked ?? false)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(start: WaxSpace.s4),
+              child: WaxIcon(
+                WaxIcons.lock,
+                size: 16,
+                color: colors.accent,
+                active: true,
+                semanticLabel: l10n.musicAlbumEditorFieldLocked(label),
               ),
-              if (row?.locked ?? false)
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(start: WaxSpace.s4),
-                  child: WaxIcon(
-                    WaxIcons.lock,
-                    size: 16,
-                    color: colors.accent,
-                    active: true,
-                    semanticLabel: l10n.musicAlbumEditorFieldLocked(label),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
+            ),
+        ],
+      ),
     );
   }
 }

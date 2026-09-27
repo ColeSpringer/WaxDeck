@@ -9,6 +9,7 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -110,8 +111,12 @@ func TestEveryCoverProviderHashesItsCover(t *testing.T) {
 	data := testPNG(t)
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case "/search/album": // deezer
+		case "/search/album": // deezer, which ignores its own artist: filter
 			w.Header().Set("Content-Type", "application/json")
+			if strings.Contains(r.URL.Query().Get("q"), "artist:") {
+				fmt.Fprint(w, `{"data": []}`)
+				return
+			}
 			fmt.Fprintf(w, `{"data":[{"title":"Discovery","artist":{"name":"Daft Punk"},
 				"cover_xl":"https://%s/cover.png"}]}`, r.Host)
 		case "/search": // itunes

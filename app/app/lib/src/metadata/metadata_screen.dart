@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/art_source_label.dart';
 import '../l10n/l10n.dart';
+import '../media_view.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
 import '../shell/forbidden_page.dart';
@@ -394,11 +395,11 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
     final right = <Widget>[
       ArtworkManager(
         pid: widget.pid,
-        title: state.metadata.fields['title'] ?? widget.pid,
         hasArtwork: state.metadata.hasArtwork,
         // An episode's picture is the feed's: the item art lock only
         // applies to tracks and books, and the store refuses it.
         pinnable: state.metadata.mediaType != MediaType.podcast,
+        domain: waxDomainOf(state.metadata.mediaType),
       ),
       const SizedBox(height: WaxSpace.s32),
       _lyricsSection(context, state),
@@ -575,7 +576,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         SectionHeader(title: l10n.metadataIdentificationTitle),
-        Text(
+        WaxProse(
           l10n.metadataIdentificationBlurb,
           style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
         ),
@@ -788,15 +789,22 @@ class _Header extends ConsumerWidget {
             style: WaxType.body.copyWith(color: colors.textSecondary),
           ),
         const SizedBox(height: WaxSpace.s8),
-        Text(
-          provenanceSummary(l10n, metadata),
-          style: WaxType.caption.copyWith(color: colors.textTertiary),
-        ),
-        for (final line in artifactSources(l10n, metadata))
-          Text(
-            line,
-            style: WaxType.caption.copyWith(color: colors.textTertiary),
+        WaxProse.block(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                provenanceSummary(l10n, metadata),
+                style: WaxType.caption.copyWith(color: colors.textTertiary),
+              ),
+              for (final line in artifactSources(l10n, metadata))
+                Text(
+                  line,
+                  style: WaxType.caption.copyWith(color: colors.textTertiary),
+                ),
+            ],
           ),
+        ),
         if (origin != null || mayEditOrigin) ...<Widget>[
           const SizedBox(height: WaxSpace.s8),
           // An item with no recorded origin still offers the row to a
@@ -836,15 +844,22 @@ class _OriginBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final text = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Text(line, style: WaxType.caption.copyWith(color: colors.textTertiary)),
-        Text(
-          caption,
-          style: WaxType.caption.copyWith(color: colors.textTertiary),
-        ),
-      ],
+    // Selectable either way; for a curator a plain tap still edits.
+    final text = WaxProse.block(
+      onTap: onEdit,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            line,
+            style: WaxType.caption.copyWith(color: colors.textTertiary),
+          ),
+          Text(
+            caption,
+            style: WaxType.caption.copyWith(color: colors.textTertiary),
+          ),
+        ],
+      ),
     );
     if (onEdit == null) return text;
     final radius = BorderRadius.circular(WaxRadius.r6);
@@ -943,7 +958,7 @@ class _LyricsPreview extends StatelessWidget {
             .where((line) => line.trim().isNotEmpty)
             .toList();
         if (lines.isEmpty) {
-          return Text(
+          return WaxProse(
             l10n.metadataNothingToPreview,
             style: WaxType.caption.copyWith(color: colors.textTertiary),
           );
@@ -960,25 +975,29 @@ class _LyricsPreview extends StatelessWidget {
               borderRadius: WaxRadius.card,
               border: Border.all(color: colors.hairline),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                Text(
-                  synced == lines.length
-                      ? l10n.metadataLinesAllTimed(lines.length)
-                      : l10n.metadataLinesSomeTimed(lines.length, synced),
-                  style: WaxType.overline.copyWith(
-                    color: synced == 0 ? colors.textTertiary : colors.accent,
-                  ),
-                ),
-                const SizedBox(height: WaxSpace.s8),
-                for (final line in lines.take(6)) _previewLine(colors, line),
-                if (lines.length > 6)
+            child: WaxProse.block(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
                   Text(
-                    '...',
-                    style: WaxType.caption.copyWith(color: colors.textTertiary),
+                    synced == lines.length
+                        ? l10n.metadataLinesAllTimed(lines.length)
+                        : l10n.metadataLinesSomeTimed(lines.length, synced),
+                    style: WaxType.overline.copyWith(
+                      color: synced == 0 ? colors.textTertiary : colors.accent,
+                    ),
                   ),
-              ],
+                  const SizedBox(height: WaxSpace.s8),
+                  for (final line in lines.take(6)) _previewLine(colors, line),
+                  if (lines.length > 6)
+                    Text(
+                      '...',
+                      style: WaxType.caption.copyWith(
+                        color: colors.textTertiary,
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         );

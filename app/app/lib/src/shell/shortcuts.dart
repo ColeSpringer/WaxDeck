@@ -34,6 +34,25 @@ class AppShortcuts extends StatelessWidget {
     return context.findAncestorStateOfType<EditableTextState>() != null;
   }
 
+  /// A focused selection keeps the shift-arrows that stretch it.
+  static bool _stretchingSelection(KeyEvent event) {
+    if (!HardwareKeyboard.instance.isShiftPressed ||
+        !_stretchKeys.contains(event.logicalKey)) {
+      return false;
+    }
+    final context = FocusManager.instance.primaryFocus?.context;
+    return context?.findAncestorStateOfType<SelectableRegionState>() != null;
+  }
+
+  static final Set<LogicalKeyboardKey> _stretchKeys = <LogicalKeyboardKey>{
+    LogicalKeyboardKey.arrowLeft,
+    LogicalKeyboardKey.arrowRight,
+    LogicalKeyboardKey.arrowUp,
+    LogicalKeyboardKey.arrowDown,
+    LogicalKeyboardKey.home,
+    LogicalKeyboardKey.end,
+  };
+
   static bool _focusActivates() {
     final context = FocusManager.instance.primaryFocus?.context;
     if (context == null) return false;
@@ -55,7 +74,7 @@ class AppShortcuts extends StatelessWidget {
       entry.value();
       result = KeyEventResult.handled;
     }
-    if (_editingText()) return result;
+    if (_editingText() || _stretchingSelection(event)) return result;
     for (final entry in bindings.entries) {
       if (!entry.key.accepts(event, HardwareKeyboard.instance)) continue;
       if (_isBareSpace(entry.key) && _focusActivates()) continue;

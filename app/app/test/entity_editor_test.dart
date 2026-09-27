@@ -94,6 +94,30 @@ void main() {
     expect(edit.writeBack, isFalse);
   });
 
+  testWidgets('a field keeps its help on screen, selectable, with a value', (
+    tester,
+  ) async {
+    // It was the box's placeholder, which goes the moment the field
+    // holds anything and can never be copied.
+    final repo = _repo();
+    repo.entityCurationByKey['artist/$_artist'] = const [
+      EntityCuratedField(
+        field: 'sort',
+        value: 'Bree Trio, The',
+        source: 'user',
+        locked: false,
+      ),
+    ];
+    await _pump(tester, repo, entity: EditableEntity.artist, pid: _artist);
+    const help =
+        'How this artist files in an A-to-Z list. Empty files them under '
+        'their name.';
+
+    expect(find.widgetWithText(WaxProse, help), findsOneWidget);
+    // And spoken with the box, as a placeholder was.
+    expect(tester.getSemantics(_field('sort')).hint, help);
+  });
+
   testWidgets('an artist sort can fan out to the crediting files', (
     tester,
   ) async {

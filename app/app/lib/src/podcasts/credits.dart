@@ -59,7 +59,7 @@ class _Avatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final img = person.img;
     final hasImg = img != null && img.isNotEmpty;
-    final initial = person.name.isEmpty ? '?' : person.name.characters.first;
+    final initial = monogramInitials(person.name, max: 1) ?? '?';
     return CircleAvatar(
       radius: 16,
       backgroundColor: colorScheme.surfaceContainerHighest,
@@ -70,7 +70,7 @@ class _Avatar extends StatelessWidget {
       // foreground image, so both gate on hasImg.)
       foregroundImage: hasImg ? NetworkImage(img) : null,
       onForegroundImageError: hasImg ? (_, _) {} : null,
-      child: Text(initial.toUpperCase()),
+      child: Text(initial),
     );
   }
 }

@@ -110,6 +110,30 @@ func coverNameMatch(upstream, normalized string) bool {
 	return foldCoverName(upstream) == foldCoverName(normalized)
 }
 
+// StripBracketed drops every (...) and [...] span, which is where titles
+// carry tags that are not part of the name: a version, a featured artist.
+func StripBracketed(s string) string {
+	var b strings.Builder
+	depth := 0
+	for _, r := range s {
+		switch r {
+		case '(', '[':
+			depth++
+		case ')', ']':
+			if depth > 0 {
+				depth--
+				continue
+			}
+			b.WriteRune(r)
+		default:
+			if depth == 0 {
+				b.WriteRune(r)
+			}
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
 // foldCoverName lowercases and reduces everything that is not a letter
 // or a digit to single spaces, so the two sides meet in one shape
 // whichever of them carries the apostrophes and commas.

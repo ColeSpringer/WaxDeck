@@ -277,4 +277,20 @@ void main() {
     expect(labels.show, 'Mostrar WaxDeck');
     expect(labels.pause, 'Pausar');
   });
+
+  test('an entry still resolving is named as loading', () async {
+    final h = _Harness();
+    await h.start();
+    final gate = h.repo.getItemGate = Completer<void>();
+    unawaited(
+      h.container.read(nowPlayingProvider.notifier).playPids([
+        'tr-unnamed',
+      ], source: _album),
+    );
+    await pumpEventQueue();
+
+    expect(h.tray.faces.last.title, 'Loading…');
+    gate.complete();
+    await pumpEventQueue();
+  });
 }

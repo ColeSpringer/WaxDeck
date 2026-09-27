@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/semantics.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +11,7 @@ import 'package:waxdeck/src/connect/connect_providers.dart';
 import 'package:waxdeck/src/connect/remote_session.dart';
 import 'package:waxdeck/src/player/autoplay_gate.dart';
 import 'package:waxdeck/src/player/deck_bar_host.dart';
+import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/output_volume.dart';
 import 'package:waxdeck/src/playlists/add_to_playlist_sheet.dart';
 import 'package:waxdeck/src/providers.dart';
@@ -18,6 +20,8 @@ import 'package:waxdeck/src/queue/queue_panel.dart';
 import 'package:waxdeck/src/queue/queue_persistence.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_controller.dart';
+import 'package:waxdeck/src/radio/radio_saved_controller.dart';
+import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/side_panel.dart';
@@ -93,6 +97,26 @@ Future<PlayerHarness> _pumpDeck(
   await tester.pumpAndSettle();
   return harness;
 }
+
+/// Where the wide bar's three zones sit: the seek track in the centre,
+/// the left zone that names what is playing, and the right cluster. A
+/// skip that moves any of them is the bar reflowing under the hand.
+({Rect seek, Rect left, Rect right}) _layoutOf(WidgetTester tester) => (
+  seek: tester.getRect(_byId(SemanticsIds.deckSeek)),
+  left: tester.getRect(
+    find
+        .ancestor(
+          of: _byId(SemanticsIds.deckExpand),
+          matching: find.byType(Expanded),
+        )
+        .first,
+  ),
+  right: tester.getRect(
+    find
+        .ancestor(of: _byId(SemanticsIds.deckQueue), matching: find.byType(Row))
+        .first,
+  ),
+);
 
 StoredQueue _storedAlbum() => StoredQueue(
   entries: const <StoredQueueEntry>[
@@ -252,6 +276,166 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    // Words, speed and timecode digits left while the next entry loaded,
+    // resizing the zones twice a track.
+    for (final spoken in <bool>[false, true]) {
+      testWidgets('holds its layout through a skip'
+          '${spoken ? ', spoken word' : ''}', (tester) async {
+        final kind = spoken ? MediaType.audiobook : MediaType.music;
+        final a = testItem(
+          spoken ? 'bk-A' : 'tr-A',
+          mediaType: kind,
+          title: 'First',
+          durationMs: 245000,
+        );
+        final b = testItem(
+          spoken ? 'bk-B' : 'tr-B',
+          mediaType: kind,
+          title: 'Second',
+          durationMs: 750000,
+        );
+        final repo = FakeRepository(items: [a, b]);
+        final engine = FakeEngine(mediaDuration: const Duration(seconds: 245));
+        final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+        harness.play([a, b], source: _album);
+        await tester.pumpAndSettle();
+        final playing = _layoutOf(tester);
+
+        final gate = repo.playInfoGate = Completer<void>();
+        engine.mediaDuration = const Duration(seconds: 750);
+        unawaited(harness.playback.next());
+        await tester.pumpAndSettle();
+        expect(find.text('Second'), findsOneWidget);
+        expect(
+          harness.container.read(nowPlayingProvider).session,
+          isNull,
+          reason: 'the next entry is still loading',
+        );
+        expect(_layoutOf(tester), playing);
+
+        gate.complete();
+        await tester.pumpAndSettle();
+        expect(harness.container.read(nowPlayingProvider).session, isNotNull);
+        expect(_layoutOf(tester), playing);
+        await harness.endPlayback(tester);
+      });
+    }
+
+    testWidgets('keeps an unresolved entry\'s controls, disabled', (
+      tester,
+    ) async {
+      // Star, cast and menu need the item a pid-only entry has not
+      // resolved yet; they wait in their slots rather than arrive later.
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final harness = await _pumpDeck(tester, repo: repo, engine: FakeEngine());
+      final gate = repo.getItemGate = Completer<void>();
+      unawaited(harness.playback.playPids(['tr-A'], source: _album));
+      await tester.pumpAndSettle();
+      expect(harness.container.read(nowPlayingProvider).item, isNull);
+
+      for (final id in <String>[
+        SemanticsIds.deckStar,
+        SemanticsIds.deckCast,
+        SemanticsIds.deckMore,
+      ]) {
+        final control = tester.widget<Semantics>(_byId(id));
+        expect(control.properties.enabled, isFalse, reason: id);
+        expect(control.properties.label, isNotEmpty, reason: id);
+      }
+      final pending = _layoutOf(tester);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(harness.container.read(nowPlayingProvider).item, isNotNull);
+      expect(
+        tester
+            .widget<Semantics>(_byId(SemanticsIds.deckMore))
+            .properties
+            .enabled,
+        isTrue,
+      );
+      expect(_layoutOf(tester), pending);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('draws the kind of an entry named by pid alone', (
+      tester,
+    ) async {
+      // A track started after a book kept the book's transport until the
+      // track resolved.
+      final book = testItem(
+        'bk-1',
+        mediaType: MediaType.audiobook,
+        title: 'A Book',
+      );
+      final repo = FakeRepository(items: [book, testItem('tr-A')]);
+      final harness = await _pumpDeck(tester, repo: repo, engine: FakeEngine());
+      harness.play([book]);
+      await tester.pumpAndSettle();
+      expect(_byId(SemanticsIds.deckSkipBack), findsOneWidget);
+
+      final gate = repo.getItemGate = Completer<void>();
+      unawaited(harness.playback.playPids(['tr-A'], source: _album));
+      await tester.pumpAndSettle();
+      expect(harness.container.read(nowPlayingProvider).item, isNull);
+      expect(_byId(SemanticsIds.deckSkipBack), findsNothing);
+      expect(_byId(SemanticsIds.deckPrevious), findsOneWidget);
+      expect(_byId(SemanticsIds.deckLyrics), findsOneWidget);
+
+      gate.complete();
+      await tester.pumpAndSettle();
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('holds nothing pending for an entry that failed to resolve', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final harness = await _pumpDeck(tester, repo: repo, engine: FakeEngine());
+      unawaited(harness.playback.playPids(['tr-gone'], source: _album));
+      await tester.pumpAndSettle();
+      expect(harness.container.read(nowPlayingProvider).error, isNotNull);
+
+      for (final id in <String>[
+        SemanticsIds.deckStar,
+        SemanticsIds.deckCast,
+        SemanticsIds.deckMore,
+      ]) {
+        expect(_byId(id), findsNothing, reason: id);
+      }
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('offers the words exactly when the command does', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final harness = await _pumpDeck(tester, repo: repo, engine: FakeEngine());
+      bool command() => waxStandingCommands
+          .firstWhere((c) => c.id == 'lyrics')
+          .isEnabled(tester.element(find.byType(DeckBarHost)) as WidgetRef);
+
+      // Loading counts: the bar keeps the toggle through a skip.
+      final gate = repo.playInfoGate = Completer<void>();
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+      expect(harness.container.read(nowPlayingProvider).session, isNull);
+      expect(_byId(SemanticsIds.deckLyrics), findsOneWidget);
+      expect(command(), isTrue);
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      // A start that failed has nothing to follow the words of.
+      unawaited(harness.playback.playPids(['tr-gone'], source: _album));
+      await tester.pumpAndSettle();
+      expect(harness.container.read(nowPlayingProvider).error, isNotNull);
+      expect(_byId(SemanticsIds.deckLyrics), findsNothing);
+      expect(command(), isFalse);
+      await harness.endPlayback(tester);
+      // Connect reports a queue change after a pause.
+      await tester.pump(const Duration(seconds: 1));
+    });
+
     testWidgets('ticks its progress without rebuilding the bar', (
       tester,
     ) async {
@@ -380,6 +564,42 @@ void main() {
       tester.view.physicalSize = const Size(600, 900);
       await tester.pumpAndSettle();
       expect(heart, findsNothing);
+
+      await harness.container.read(radioPlaybackProvider.notifier).stop();
+      await tester.pumpAndSettle();
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets("the bar's heart keeps an open saved list in step", (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final station = RadioStation(
+        pid: 'ra-1',
+        name: 'Coastal FM',
+        streamUrl: 'https://radio.example/stream',
+        createdAt: DateTime.utc(2026, 7, 1),
+      );
+      repo.radioStationsByPid[station.pid] = station;
+      repo.radioNowPlaying[station.pid] = 'Salt Harbour - The Bree Trio';
+      final harness = await _pumpDeck(tester, repo: repo, engine: FakeEngine());
+      final list = harness.container.listen(radioSavedProvider, (_, _) {});
+      addTearDown(list.close);
+      await harness.container
+          .read(radioPlaybackProvider.notifier)
+          .play(station);
+      await tester.pumpAndSettle();
+      int? rows() =>
+          harness.container.read(radioSavedProvider).value?.songs.length;
+      expect(rows(), 0);
+
+      await tester.tap(_byId(SemanticsIds.deckSaveSong));
+      await tester.pumpAndSettle();
+      expect(rows(), 1);
+
+      await tester.tap(_byId(SemanticsIds.deckSaveSong));
+      await tester.pumpAndSettle();
+      expect(rows(), 0);
 
       await harness.container.read(radioPlaybackProvider.notifier).stop();
       await tester.pumpAndSettle();
@@ -935,11 +1155,8 @@ void main() {
       final seek = find.bySemanticsIdentifier(SemanticsIds.deckSeek);
       expect(seek, findsOneWidget);
       expect(
-        tester
-            .getSemantics(seek)
-            .getSemanticsData()
-            .hasAction(SemanticsAction.increase),
-        isFalse,
+        tester.getSemantics(seek).getSemanticsData().flagsCollection.isEnabled,
+        Tristate.isFalse,
         reason: 'a zero-length entry has nowhere to seek to',
       );
 

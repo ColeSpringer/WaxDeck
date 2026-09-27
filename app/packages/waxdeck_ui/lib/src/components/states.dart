@@ -8,6 +8,7 @@ import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
+import 'prose.dart';
 
 /// An empty state: an invitation with exactly one next action.
 ///
@@ -69,17 +70,30 @@ class EmptyState extends StatelessWidget {
                 // on a one-line bar. Here the lines are the page's own
                 // content: excluding them costs a reader the ability to
                 // navigate to the text, and costs a spec the ability to
-                // find it. Announced twice is the smaller price.
-                Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: WaxType.headline.copyWith(color: colors.textPrimary),
-                ),
-                const SizedBox(height: WaxSpace.s8),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: WaxType.body.copyWith(color: colors.textSecondary),
+                // find it. Announced twice is the smaller price. One
+                // block, so a selection runs from the title through the
+                // message; the button stays outside it.
+                WaxProse.block(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        title,
+                        textAlign: TextAlign.center,
+                        style: WaxType.headline.copyWith(
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: WaxSpace.s8),
+                      Text(
+                        message,
+                        textAlign: TextAlign.center,
+                        style: WaxType.body.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 if (actionLabel != null) ...<Widget>[
                   const SizedBox(height: WaxSpace.s20),
@@ -165,28 +179,41 @@ class ErrorState extends StatelessWidget {
                 const SizedBox(height: WaxSpace.s12),
                 // Kept in the tree for the same reason as EmptyState's:
                 // the live region above announces the failure once, and
-                // these are what a reader navigates to afterwards.
-                Text(
-                  heading,
-                  textAlign: TextAlign.center,
-                  style: WaxType.headline.copyWith(color: colors.textPrimary),
-                ),
-                const SizedBox(height: WaxSpace.s8),
-                Text(
-                  message,
-                  textAlign: TextAlign.center,
-                  style: WaxType.body.copyWith(color: colors.textSecondary),
-                ),
-                if (detail != null) ...<Widget>[
-                  const SizedBox(height: WaxSpace.s12),
-                  Text(
-                    detail!,
-                    textAlign: TextAlign.center,
-                    style: WaxType.monoData.copyWith(
-                      color: colors.textTertiary,
-                    ),
+                // these are what a reader navigates to afterwards. One
+                // block with the technical line, which is the part most
+                // worth pasting into a report.
+                WaxProse.block(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text(
+                        heading,
+                        textAlign: TextAlign.center,
+                        style: WaxType.headline.copyWith(
+                          color: colors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: WaxSpace.s8),
+                      Text(
+                        message,
+                        textAlign: TextAlign.center,
+                        style: WaxType.body.copyWith(
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      if (detail != null) ...<Widget>[
+                        const SizedBox(height: WaxSpace.s12),
+                        Text(
+                          detail!,
+                          textAlign: TextAlign.center,
+                          style: WaxType.monoData.copyWith(
+                            color: colors.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ],
+                ),
                 if (onRetry != null) ...<Widget>[
                   const SizedBox(height: WaxSpace.s20),
                   WaxButton(

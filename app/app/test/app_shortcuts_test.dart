@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/shell/shortcuts.dart';
@@ -99,5 +100,68 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
     await tester.pumpAndSettle();
     expect(palettes, 1);
+  });
+  testWidgets('a selection keeps the shift arrows that stretch it', (
+    tester,
+  ) async {
+    var seeks = 0;
+    await tester.pumpWidget(
+      localizedHost(
+        theme: buildWaxTheme(variant: WaxThemeVariant.dark),
+        Scaffold(
+          body: AppShortcuts(
+            autofocus: false,
+            bindings: <ShortcutActivator, VoidCallback>{
+              const SingleActivator(
+                LogicalKeyboardKey.arrowLeft,
+                shift: true,
+              ): () =>
+                  seeks++,
+            },
+            child: const Center(child: WaxProse('Holds every slot')),
+          ),
+        ),
+      ),
+    );
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    Future<String?> copy() async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyC);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pump();
+      return copied;
+    }
+
+    // The line's second half, so there is room to grow to the left.
+    final line = tester.getRect(find.text('Holds every slot'));
+    final drag = await tester.startGesture(
+      line.center,
+      kind: PointerDeviceKind.mouse,
+    );
+    await tester.pump();
+    await drag.moveTo(line.centerRight - const Offset(1, 0));
+    await tester.pump();
+    await drag.up();
+    await tester.pumpAndSettle();
+    final before = await copy();
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shiftLeft);
+    await tester.pumpAndSettle();
+
+    expect(seeks, 0);
+    final after = await copy();
+    expect(after, hasLength(before!.length + 1));
+    expect(after, endsWith(before));
   });
 }

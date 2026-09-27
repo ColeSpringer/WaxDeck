@@ -102,7 +102,7 @@ class BookmarkButton extends ConsumerWidget {
       badge: count == 0 ? null : '$count',
       semanticsId: SemanticsIds.playerBookmarks,
       onPressed: () => unawaited(
-        showModalBottomSheet<void>(
+        showWaxSheet<void>(
           context: context,
           isScrollControlled: true,
           builder: (_) => _BookmarkSheet(session: session),

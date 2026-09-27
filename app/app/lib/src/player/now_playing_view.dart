@@ -47,6 +47,10 @@ class _NowPlayingViewState extends ConsumerState<NowPlayingView> {
   StreamSubscription<Duration>? _feed;
   PlaybackSession? _following;
 
+  /// What was drawn last, kept through a skip's load rather than flashing
+  /// the idle state between two tracks.
+  ({PlaybackSession session, ItemSummary item})? _last;
+
   void _follow(PlaybackSession? session) {
     if (identical(session, _following)) return;
     _following = session;
@@ -70,11 +74,16 @@ class _NowPlayingViewState extends ConsumerState<NowPlayingView> {
     final now = ref.watch(nowPlayingProvider);
     final session = now.session;
     final item = now.item;
+    if (session != null && item != null) {
+      _last = (session: session, item: item);
+    } else if (!now.loading) {
+      _last = null;
+    }
+    final last = _last;
     // In build rather than in a listener: the session is what this
-    // watch already rebuilds for, and a `ref.listen` beside it would be
-    // the same event arriving twice.
-    _follow(session);
-    if (session == null || item == null) return widget.idle(context);
-    return widget.builder(context, session, item, _position);
+    // watch already rebuilds for.
+    _follow(last?.session);
+    if (last == null) return widget.idle(context);
+    return widget.builder(context, last.session, last.item, _position);
   }
 }

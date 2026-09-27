@@ -23,10 +23,9 @@ Future<void> showRadioSavedMenu(
 ) async {
   final colors = WaxColors.of(context);
   final l10n = context.l10n;
-  final choice = await showModalBottomSheet<String>(
+  final choice = await showWaxSheet<String>(
     context: context,
     backgroundColor: colors.surface2,
-    showDragHandle: true,
     builder: (sheetContext) => SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
@@ -70,11 +69,10 @@ Future<void> showRadioSavedMenu(
     case 'acquire':
       await acquireFromUrl(context, ref, initial: MediaType.music);
     case 'identify':
-      await showModalBottomSheet<void>(
+      await showWaxSheet<void>(
         context: context,
         backgroundColor: colors.surface2,
         isScrollControlled: true,
-        showDragHandle: true,
         builder: (_) => RadioSavedIdentifySheet(song: song),
       );
   }

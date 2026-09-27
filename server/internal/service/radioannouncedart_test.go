@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -272,10 +273,11 @@ func TestRepeatedAnnouncedPictureBecomesTheStationLogo(t *testing.T) {
 	_, svc, _ := newCatalogFixture(t)
 	const logo = "https://somafm.example/logos/groovesalad.jpg"
 
-	// One song with a picture: nothing yet says it is fixed.
+	// One song with a picture: nothing yet says it is fixed, and nothing
+	// yet says it is the song's either.
 	svc.NoteRadioMeta("rs-1", "Tetris - Green Hair", logo)
-	if _, art := svc.RadioNowPlayingMeta("rs-1"); art != logo {
-		t.Fatalf("first announcement art = %q, want the announced picture", art)
+	if a := svc.RadioNowPlayingAnnouncement("rs-1"); a.ArtURL != logo || a.ArtProven {
+		t.Fatalf("first announcement = %+v, want the picture offered unproven", a)
 	}
 
 	// The same picture against a different song is a mark.
@@ -287,11 +289,204 @@ func TestRepeatedAnnouncedPictureBecomesTheStationLogo(t *testing.T) {
 		t.Fatalf("logo hint = %q, want the station's own mark", got)
 	}
 
-	// A station whose picture moves with the title keeps its covers.
+	// A station whose picture moves with the title keeps its covers, and
+	// the second song is what proves them.
 	svc.NoteRadioMeta("rs-2", "Savoy Brown - I'm Tired", "https://rp.example/9696.jpg")
 	svc.NoteRadioMeta("rs-2", "Jay Farrar - Vitamins", "https://rp.example/14411.jpg")
-	if _, art := svc.RadioNowPlayingMeta("rs-2"); art != "https://rp.example/14411.jpg" {
-		t.Fatalf("per-track art = %q, want the current song's cover", art)
+	if a := svc.RadioNowPlayingAnnouncement("rs-2"); a.ArtURL != "https://rp.example/14411.jpg" || !a.ArtProven {
+		t.Fatalf("per-track art = %+v, want the current song's cover, proven", a)
+	}
+	// Proven stays proven through the song being announced again, and
+	// through a song announced with no picture at all.
+	svc.NoteRadioMeta("rs-2", "Jay Farrar - Vitamins", "https://rp.example/14411.jpg")
+	svc.NoteRadioMeta("rs-2", "Station ident", "")
+	svc.NoteRadioMeta("rs-2", "Uncle Tupelo - Chickamauga", "https://rp.example/2002.jpg")
+	if a := svc.RadioNowPlayingAnnouncement("rs-2"); !a.ArtProven {
+		t.Fatalf("after a bumper = %+v, want the station still proven", a)
+	}
+}
+
+// A pictureless ident between songs leaves no previous picture, so the
+// comparison reaches back past it: proof and the mark both survive it.
+func TestPicturesAreComparedAcrossIdentsWithNone(t *testing.T) {
+	t.Parallel()
+	_, svc, _ := newCatalogFixture(t)
+
+	svc.NoteRadioMeta("rs-1", "Savoy Brown - I'm Tired", "https://rp.example/9696.jpg")
+	svc.NoteRadioMeta("rs-1", "Station ident", "")
+	svc.NoteRadioMeta("rs-1", "Jay Farrar - Vitamins", "https://rp.example/14411.jpg")
+	if a := svc.RadioNowPlayingAnnouncement("rs-1"); !a.ArtProven || a.ArtURL != "https://rp.example/14411.jpg" {
+		t.Fatalf("across an ident = %+v, want the second song's picture proven", a)
+	}
+
+	const logo = "https://somafm.example/logos/groovesalad.jpg"
+	svc.NoteRadioMeta("rs-2", "Tetris - Green Hair", logo)
+	svc.NoteRadioMeta("rs-2", "Station ident", "")
+	svc.NoteRadioMeta("rs-2", "Fascinating Earthbound Objects - Charm", logo)
+	if a := svc.RadioNowPlayingAnnouncement("rs-2"); a.ArtURL != "" {
+		t.Fatalf("a mark repeated across an ident = %+v, want it recognised", a)
+	}
+}
+
+// A picture at a logo URL the station declared - its directory's, or its
+// connect headers' - is its mark from the first song, not the second.
+func TestAPictureAtTheStationsOwnLogoIsFixedAtOnce(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	const dirLogo = "https://directory.example/favicons/coastal.png"
+	station, err := svc.CreateRadioStation(ctx, uc, RadioStationEdit{
+		Name: "Coastal FM", StreamURL: "https://stream.example/coastal", LogoURL: dirLogo,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The proxy reads the source as it opens the stream, which is where
+	// the station's own logo is learned.
+	if _, err := svc.RadioStreamSource(ctx, station.PID); err != nil {
+		t.Fatal(err)
+	}
+	svc.NoteRadioMeta(station.PID, "Charlie Parker - Ornithology", dirLogo)
+	if a := svc.RadioNowPlayingAnnouncement(station.PID); a.ArtURL != "" {
+		t.Fatalf("directory logo offered as the first song's cover: %+v", a)
+	}
+
+	const hinted = "https://stream.example/icy-logo.png"
+	svc.NoteRadioLogoHint("rs-2", hinted)
+	svc.NoteRadioMeta("rs-2", "Pink Floyd - Echoes", hinted)
+	if a := svc.RadioNowPlayingAnnouncement("rs-2"); a.ArtURL != "" {
+		t.Fatalf("icy-logo offered as the first song's cover: %+v", a)
+	}
+
+	// A station naming both keeps both: the directory logo matching the
+	// picture says nothing against the one its connect headers named.
+	svc.NoteRadioLogoHint(station.PID, hinted)
+	svc.NoteRadioMeta(station.PID, "Pink Floyd - Echoes", dirLogo)
+	if got := svc.radioLogoHint(station.PID); got != hinted {
+		t.Fatalf("hint = %q, want the station's own %q kept", got, hinted)
+	}
+}
+
+// A station that announces its logo while it looks a song's cover up,
+// then the cover, draws the cover: a verdict on one picture does not
+// outlive it, and the logo stays the one the station named.
+func TestAWithheldPictureDoesNotWithholdTheNextOneForTheSameSong(t *testing.T) {
+	t.Parallel()
+	_, svc, _ := newCatalogFixture(t)
+	const logo = "https://stream.example/icy-logo.png"
+	const cover = "https://station.example/ornithology.jpg"
+	svc.NoteRadioLogoHint("rs-1", logo)
+	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", logo)
+	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", cover)
+	if a := svc.RadioNowPlayingAnnouncement("rs-1"); a.ArtURL != cover {
+		t.Fatalf("after the logo = %+v, want the song's cover offered", a)
+	}
+	if got := svc.radioLogoHint("rs-1"); got != logo {
+		t.Fatalf("hint = %q, want the station's own %q", got, logo)
+	}
+	svc.NoteRadioMeta("rs-1", "Pink Floyd - Echoes", logo)
+	if a := svc.RadioNowPlayingAnnouncement("rs-1"); a.ArtURL != "" {
+		t.Fatalf("the logo offered as the next song's cover: %+v", a)
+	}
+	const echoes = "https://station.example/echoes.jpg"
+	svc.NoteRadioMeta("rs-1", "Pink Floyd - Echoes", echoes)
+	if a := svc.RadioNowPlayingAnnouncement("rs-1"); a.ArtURL != echoes || !a.ArtProven {
+		t.Fatalf("second cover = %+v, want it offered and proven", a)
+	}
+
+	// The same for a mark only a repeat revealed.
+	const mark = "https://station.example/mark.jpg"
+	svc.NoteRadioMeta("rs-2", "Tetris - Green Hair", mark)
+	svc.NoteRadioMeta("rs-2", "Fascinating Earthbound Objects - Charm", mark)
+	svc.NoteRadioMeta("rs-2", "Fascinating Earthbound Objects - Charm", cover)
+	if a := svc.RadioNowPlayingAnnouncement("rs-2"); a.ArtURL != cover {
+		t.Fatalf("after a repeated mark = %+v, want the song's cover offered", a)
+	}
+	if got := svc.radioLogoHint("rs-2"); got != mark {
+		t.Fatalf("hint = %q, want the repeated %q kept", got, mark)
+	}
+}
+
+// Two songs in a row from one album share its cover, which reads as a
+// repeat; the album's next song, after another album's, still draws it.
+func TestARepeatIsNotTheStationsLogoForLaterSongs(t *testing.T) {
+	t.Parallel()
+	_, svc, _ := newCatalogFixture(t)
+	const album = "https://station.example/discovery.jpg"
+	svc.NoteRadioMeta("rs-1", "Daft Punk - One More Time", album)
+	svc.NoteRadioMeta("rs-1", "Daft Punk - Aerodynamic", album)
+	svc.NoteRadioMeta("rs-1", "Air - La Femme d'Argent", "https://station.example/moon-safari.jpg")
+	svc.NoteRadioMeta("rs-1", "Daft Punk - Digital Love", album)
+	if a := svc.RadioNowPlayingAnnouncement("rs-1"); a.ArtURL != album {
+		t.Fatalf("the album's cover after another's = %+v, want it offered", a)
+	}
+}
+
+// On the first song a station's picture cannot be told from its mark, so
+// a cover the lookup holds is drawn instead; from the second on, a
+// picture seen to change with the music outranks the lookup.
+func TestAnUnprovenPictureYieldsToAHeldLookup(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixture(t)
+	svc.allowPrivateRadioHosts = true
+	enableRadioExternalArt(t, ctx, svc)
+	svc.radioArtResolver = &fakeRadioArt{data: coverPNG(t, 40), mime: "image/png", provider: "deezer"}
+	var hits atomic.Int64
+	host := artHost(t, &hits, "image/png", coverPNG(t, 80))
+	const first = "Charlie Parker - Ornithology"
+	firstURL := host.URL + "/logo.png"
+
+	svc.NoteRadioMeta(testStationPID, first, firstURL)
+	a := svc.RadioNowPlayingAnnouncement(testStationPID)
+	if got := svc.RadioNowPlayingCover(testStationPID, "Test FM", a); got != "" {
+		t.Fatalf("first poll = %q, want both fetches started and nothing held yet", got)
+	}
+	external := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
+	waitForRadioArtLookupToSettle(t, svc, external)
+	waitForAnnouncedArt(t, svc, firstURL, first)
+	if got := svc.RadioNowPlayingCover(testStationPID, "Test FM", a); got != external {
+		t.Fatalf("unproven cover = %q, want the lookup's %q", got, external)
+	}
+
+	// The next song brings a different picture, which proves it.
+	const second = "Pink Floyd - Echoes"
+	secondURL := host.URL + "/echoes.png"
+	svc.NoteRadioMeta(testStationPID, second, secondURL)
+	a = svc.RadioNowPlayingAnnouncement(testStationPID)
+	svc.RadioNowPlayingCover(testStationPID, "Test FM", a)
+	waitForAnnouncedArt(t, svc, secondURL, second)
+	if got, want := svc.RadioNowPlayingCover(testStationPID, "Test FM", a), announcedArtKey(secondURL, second); got != want {
+		t.Fatalf("proven cover = %q, want the station's own %q", got, want)
+	}
+}
+
+// While a proven station's picture is fetched again, a cover the lookup
+// already holds is still the answer, rather than nothing and the logo.
+func TestAHeldCoverIsAnsweredWhileThePictureIsFetched(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixture(t)
+	svc.allowPrivateRadioHosts = true
+	enableRadioExternalArt(t, ctx, svc)
+	svc.radioArtResolver = &fakeRadioArt{err: errors.New("not asked")}
+	release := make(chan struct{})
+	host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		<-release
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(host.Close)
+	t.Cleanup(func() { close(release) })
+
+	svc.NoteRadioMeta(testStationPID, "Savoy Brown - I'm Tired", host.URL+"/9696.jpg")
+	svc.NoteRadioMeta(testStationPID, "Charlie Parker - Ornithology", host.URL+"/ornithology.jpg")
+	a := svc.RadioNowPlayingAnnouncement(testStationPID)
+	if !a.ArtProven {
+		t.Fatalf("announcement = %+v, want the station proven", a)
+	}
+	held := radioArtKey(radioSearchField("Charlie Parker"), radioSearchField("Ornithology"))
+	svc.storeRadioArt(held, radioArtEntry{
+		art: radioLogoFromBytes(coverPNG(t, 40), "image/png"), fetched: time.Now(), fresh: radioArtFreshFor,
+	})
+	if got := svc.RadioNowPlayingCover(testStationPID, "Test FM", a); got != held {
+		t.Fatalf("while the picture is fetched = %q, want the held %q", got, held)
 	}
 }
 

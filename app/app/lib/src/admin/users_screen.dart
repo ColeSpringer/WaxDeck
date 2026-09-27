@@ -324,7 +324,7 @@ class _RequestsTab extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.adminUsersRejectTitle(user.username)),
-        content: Text(l10n.adminUsersRejectBody),
+        content: WaxProse(l10n.adminUsersRejectBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
@@ -443,14 +443,14 @@ class _InvitesTab extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(l10n.adminInviteCreatedBody),
+              WaxProse(l10n.adminInviteCreatedBody),
               const SizedBox(height: WaxSpace.s12),
               Semantics(
                 identifier: SemanticsIds.inviteToken,
-                child: SelectableText(
+                child: WaxProse(
                   created.token,
                   key: const Key(SemanticsIds.inviteToken),
-                  style: const TextStyle(fontFamily: 'monospace'),
+                  style: WaxType.monoData,
                 ),
               ),
             ],
@@ -479,7 +479,7 @@ class _InvitesTab extends ConsumerWidget {
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(l10n.adminInviteRevokeTitle),
-        content: Text(l10n.adminInviteRevokeBody),
+        content: WaxProse(l10n.adminInviteRevokeBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),

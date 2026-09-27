@@ -196,7 +196,7 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
               onSelect: (kind) => setState(() => _kind = kind),
             ),
             const SizedBox(height: WaxSpace.s4),
-            Text(
+            WaxProse(
               _kind == 'smart'
                   ? l10n.playlistKindSmartHelp
                   : l10n.playlistKindManualHelp,
@@ -214,7 +214,7 @@ class _CreatePlaylistDialogState extends ConsumerState<_CreatePlaylistDialog> {
               ),
             ),
             if (_error != null)
-              Text(
+              WaxProse(
                 _error!,
                 style: WaxType.caption.copyWith(color: colors.error),
               ),

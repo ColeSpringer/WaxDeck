@@ -101,23 +101,6 @@ func TestContainsTokenRun(t *testing.T) {
 	}
 }
 
-func TestStripBracketed(t *testing.T) {
-	t.Parallel()
-	for _, tc := range []struct{ in, want string }{
-		{"Ornithology (Take 1)", "Ornithology"},
-		{"Ornithology [Live]", "Ornithology"},
-		{"A (B (C)) D", "A  D"},
-		// An unbalanced closer is content, not a bracket: station
-		// metadata is not reliably well formed.
-		{"Smiley )", "Smiley )"},
-		{"No brackets", "No brackets"},
-	} {
-		if got := stripBracketed(tc.in); got != tc.want {
-			t.Errorf("strip(%q) = %q, want %q", tc.in, got, tc.want)
-		}
-	}
-}
-
 // The scrobble parser must not have moved. A looser split there would
 // rewrite listening history for everyone, which is the whole reason the
 // normalization above lives in its own path.

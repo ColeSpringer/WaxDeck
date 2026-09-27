@@ -1,6 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/desktop/discord_binder.dart';
 import 'package:waxdeck/src/desktop/discord_presence.dart';
+
+import 'fakes.dart';
 
 /// A Discord that records what it was told, and can refuse to be there.
 class _FakeDiscord implements DiscordPresencePort {
@@ -41,6 +45,37 @@ void main() {
 
   /// Crosses the coalescing window, so whatever was held is sent.
   Future<void> settle() => Future<void>.delayed(interval * 3);
+
+  group('what it says of playback', () {
+    test('a skip still loading names the next track, without a bar', () {
+      // Cleared instead, the status waited out Discord's fifteen seconds
+      // to come back.
+      final shown = presenceOf(
+        NowPlaying(
+          entry: const QueueEntry(queueId: '1', pid: 'tr-B'),
+          item: testItem('tr-B', title: 'Second'),
+          loading: true,
+        ),
+        playing: true,
+      );
+      expect(shown?.title, 'Second');
+      expect(shown?.start, isNull);
+    });
+
+    test('a start that failed says nothing', () {
+      expect(
+        presenceOf(
+          NowPlaying(
+            entry: const QueueEntry(queueId: '1', pid: 'tr-B'),
+            item: testItem('tr-B'),
+            error: StateError('refused'),
+          ),
+          playing: false,
+        ),
+        isNull,
+      );
+    });
+  });
 
   test('nothing is published while presence is off', () async {
     binder.show(const DiscordActivity(title: 'Track'));

@@ -345,7 +345,7 @@ func (r RecordingCover) FrontCover(ctx context.Context, artist, title string) (T
 			// Held rather than returned: a release the archive could not
 			// be asked about says nothing about the next one, and the
 			// error only matters if none of them answers.
-			reachErr = err
+			reachErr = errors.Join(reachErr, err)
 		}
 	}
 	if reachErr != nil {
@@ -410,7 +410,8 @@ func (c CoverChain) FrontCover(ctx context.Context, artist, title string) (Title
 		case err == nil, errors.Is(err, ErrNoCover), errors.Is(err, missing):
 			continue
 		default:
-			reachErr = err
+			// Joined, so a refusal stays visible past a later failure.
+			reachErr = errors.Join(reachErr, err)
 		}
 	}
 	if reachErr != nil {

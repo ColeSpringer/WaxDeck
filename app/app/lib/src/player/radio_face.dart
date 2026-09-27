@@ -26,6 +26,11 @@ import 'player_screen.dart';
 /// repeat, and no speed. What it has instead is the station itself - the
 /// logo on a platter, what the stream says is playing, and a way into
 /// the library for the track it just named.
+///
+/// Laid out the way the deck bar composes the same things: the live
+/// pill leads the song line, and the song's two verbs join the sleep
+/// timer in the action row under the stop control rather than hanging
+/// on a row of their own between the title and the transport.
 class RadioFace extends ConsumerWidget {
   const RadioFace({required this.playback, super.key});
 
@@ -67,7 +72,6 @@ class RadioFace extends ConsumerWidget {
           ids: radioPlayerIds,
           now: NowPlayingData(
             title: station.name,
-            subtitle: playback.nowPlaying,
             artwork: art.artwork,
             domain: WaxDomain.radio,
             shape: art.shape,
@@ -101,24 +105,7 @@ class RadioFace extends ConsumerWidget {
           // as a hoop thrown over a square. The LIVE pill still says the
           // stream is running.
           heroOverlay: onTheRecord ? null : PlatterRing(playing: playing),
-          titleTrailing: playback.nowPlaying == null
-              ? null
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    _SaveSong(saved: playback.nowPlayingSaved),
-                    _FindInLibrary(track: playback.nowPlaying!),
-                  ],
-                ),
-          seek: const SeekCluster(
-            now: NowPlayingData(
-              title: '',
-              position: Duration.zero,
-              duration: Duration.zero,
-              playing: true,
-              live: true,
-            ),
-          ),
+          subtitleOverride: LiveLine(playback.nowPlaying),
           transport: TransportCluster(
             ids: radioPlayerIds,
             playing: playing,
@@ -131,11 +118,44 @@ class RadioFace extends ConsumerWidget {
             onPlayPause: () => unawaited(controller.toggle()),
           ),
           volume: const RadioVolumeRow(),
-          actionRow: const Center(child: SleepTimerButton(session: null)),
+          // A station nobody has named has no song to keep or look up;
+          // their slots stay, blank, so the timer does not move.
+          actionRow: Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: WaxSpace.s8,
+            runSpacing: WaxSpace.s8,
+            children: <Widget>[
+              if (playback.nowPlaying case final song?) ...<Widget>[
+                _SaveSong(saved: playback.nowPlayingSaved),
+                _FindInLibrary(track: song),
+              ] else
+                for (final glyph in <WaxGlyph>[WaxIcons.heart, WaxIcons.search])
+                  _BlankSlot(glyph),
+              const SleepTimerButton(session: null),
+            ],
+          ),
         );
       },
     );
   }
+}
+
+/// A song verb's place while the station names no song: the button's
+/// size, drawn and read as nothing.
+class _BlankSlot extends StatelessWidget {
+  const _BlankSlot(this.glyph);
+
+  final WaxGlyph glyph;
+
+  @override
+  Widget build(BuildContext context) => Visibility(
+    visible: false,
+    maintainSize: true,
+    maintainAnimation: true,
+    maintainState: true,
+    child: WaxIconButton(glyph: glyph, label: '', onPressed: null),
+  );
 }
 
 /// The handles the radio face's own controls carry. Its transport is
@@ -267,7 +287,6 @@ class _FindInLibrary extends StatelessWidget {
     return WaxIconButton(
       glyph: WaxIcons.search,
       label: context.l10n.playerFindInLibrary(track),
-      size: 18,
       semanticsId: SemanticsIds.playerFindInLibrary,
       // `go`, not `push`. A search is a location a stranger can open, so
       // the routing rule already says which verb it takes - and pushing
@@ -285,7 +304,7 @@ class _FindInLibrary extends StatelessWidget {
 /// The heart that keeps the song a station just named.
 ///
 /// It says *song*, never favourite, and that wording is load-bearing:
-/// the star two rows up means "pin this station to the dial", and two
+/// the star in the header means "pin this station to the dial", and two
 /// affordances on one face that both read as favouriting would blur into
 /// each other.
 class _SaveSong extends ConsumerWidget {
@@ -300,7 +319,6 @@ class _SaveSong extends ConsumerWidget {
       label: saved
           ? context.l10n.playerForgetSong
           : context.l10n.playerSaveSong,
-      size: 18,
       active: saved,
       semanticsId: SemanticsIds.playerSaveSong,
       onPressed: () => unawaited(saveNowPlayingSong(context, ref)),

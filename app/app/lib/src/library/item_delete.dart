@@ -162,7 +162,7 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          WaxProse(
             l10n.libraryDeletePreview(
               plan.totalFiles,
               l10n.formatBytes(plan.totalBytes),

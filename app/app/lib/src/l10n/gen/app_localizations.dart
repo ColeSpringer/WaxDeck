@@ -2949,10 +2949,10 @@ abstract class AppLocalizations {
   /// **'Held by the cover pin'**
   String get artworkHeldByCoverPin;
 
-  /// Help under the cover pin switch. The second sentence is the whole reason the pin is visible: a cleared-and-pinned cover refuses every later write.
+  /// One-line help under the cover pin switch, no full stop. Says both facts: the pin holds every slot through scans and enrichment, and an empty pinned slot stays empty (a cleared-and-pinned cover refuses every later write).
   ///
   /// In en, this message translates to:
-  /// **'Keeps this cover through scans and enrichment runs, and holds the other slots against automatic fills too. Pinned with the slot empty means \"leave this without one\" rather than \"nothing was found\", which is the state that otherwise refuses every cover with no explanation.'**
+  /// **'Holds every slot as it is, empty ones included, through scans and enrichment runs'**
   String get artworkLockHelp;
 
   /// Confirmation after pinning a cover.

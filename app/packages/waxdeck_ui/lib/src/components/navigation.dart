@@ -10,6 +10,7 @@ import '../tokens/motion.dart';
 import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
+import 'artwork.dart';
 import 'controls.dart';
 import 'tooltip.dart';
 
@@ -840,9 +841,8 @@ class WaxAccountButton extends StatelessWidget {
 ///
 /// A name with no letters in it still has to draw something, so the
 /// fallback is the domain-neutral listener glyph rather than an empty
-/// circle. The usable-initial rule is `ArtworkImage`'s, deliberately: a
-/// name of "..." or "_sam" yields punctuation, and punctuation on a disc
-/// is worse than a glyph that is at least true.
+/// circle. The initial comes from [monogramInitials], the rule artwork
+/// uses: "_sam" draws an S, and "..." draws the glyph.
 class _Monogram extends StatelessWidget {
   const _Monogram({required this.name});
 
@@ -861,14 +861,7 @@ class _Monogram extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    final trimmed = name.trim();
-    // The first grapheme cluster, not the first code unit: a name
-    // beginning with an emoji or anything outside the basic plane is two
-    // code units, and taking one of them draws a lone surrogate.
-    final letter = trimmed.isEmpty
-        ? ''
-        : trimmed.characters.first.toUpperCase();
-    final usable = RegExp(r'[\p{L}\p{N}]', unicode: true).hasMatch(letter);
+    final letter = monogramInitials(name, max: 1);
     return Container(
       width: size,
       height: size,
@@ -877,7 +870,7 @@ class _Monogram extends StatelessWidget {
         color: colors.accentContainer,
         shape: BoxShape.circle,
       ),
-      child: !usable
+      child: letter == null
           ? WaxIcon(
               WaxIcons.headphones,
               size: size * 0.6,

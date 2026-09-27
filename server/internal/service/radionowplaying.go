@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/colespringer/waxbin/model"
+
+	"github.com/colespringer/waxdeck/server/internal/providers"
 )
 
 // Resolving a station's announced title to a track this library holds,
@@ -294,7 +296,7 @@ func normalizeRadioText(s string, keepApostrophe bool) string {
 	// straight one collapsed to a space, which left "Don't" and "Don't"
 	// unable to match each other.
 	s = strings.NewReplacer("’", "'", "ʼ", "'").Replace(s)
-	s = stripBracketed(s)
+	s = providers.StripBracketed(s)
 	for _, noise := range radioTitleNoise {
 		// Only as a trailing fragment, so a song called "Explicit" is
 		// not normalized down to nothing.
@@ -332,28 +334,4 @@ func normalizeRadioText(s string, keepApostrophe bool) string {
 		}
 	}
 	return b.String()
-}
-
-// stripBracketed removes (...) and [...] spans, which is where stations
-// put tags that are not part of the name.
-func stripBracketed(s string) string {
-	var b strings.Builder
-	depth := 0
-	for _, r := range s {
-		switch r {
-		case '(', '[':
-			depth++
-		case ')', ']':
-			if depth > 0 {
-				depth--
-				continue
-			}
-			b.WriteRune(r)
-		default:
-			if depth == 0 {
-				b.WriteRune(r)
-			}
-		}
-	}
-	return strings.TrimSpace(b.String())
 }

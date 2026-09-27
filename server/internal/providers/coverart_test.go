@@ -546,8 +546,10 @@ func TestRecordingCoverStopsWalkingWhenTheBudgetIsSpent(t *testing.T) {
 	}
 }
 
-// deezerFixture serves the track search and the album cover behind it.
-// TLS because fetchImage refuses anything but https.
+// deezerFixture serves the track search and the covers behind it: a
+// cover under /busy answers 429, any other but two answers 404. TLS
+// because fetchImage refuses anything but https. Like Deezer, the search
+// answers nothing to its own artist: filter.
 func deezerFixture(t *testing.T, hits string) (*Deezer, *atomic.Int64, *atomic.Value) {
 	t.Helper()
 	var covers atomic.Int64
@@ -555,14 +557,24 @@ func deezerFixture(t *testing.T, hits string) (*Deezer, *atomic.Int64, *atomic.V
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/search":
-			gotQuery.Store(r.URL.Query().Get("q"))
+			q := r.URL.Query().Get("q")
+			gotQuery.Store(q)
 			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, hits, r.Host)
-		case "/cover.jpg":
+			if strings.Contains(q, "artist:") {
+				fmt.Fprint(w, `{"data": []}`)
+				return
+			}
+			fmt.Fprint(w, strings.ReplaceAll(hits, "%s", r.Host))
+		case "/cover.jpg", "/version.jpg":
 			covers.Add(1)
 			w.Header().Set("Content-Type", "image/jpeg")
 			w.Write(pngBytes())
 		default:
+			covers.Add(1)
+			if strings.HasPrefix(r.URL.Path, "/busy") {
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
@@ -586,8 +598,8 @@ func TestDeezerFrontCoverTakesTheAlbumOfTheMatchingTrack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if q, _ := gotQuery.Load().(string); q != `artist:"the beatles" track:"hello goodbye"` {
-		t.Fatalf("q = %q, want the advanced track query", q)
+	if q, _ := gotQuery.Load().(string); q != `the beatles track:"hello goodbye"` {
+		t.Fatalf("q = %q, want the artist as a term beside the track filter", q)
 	}
 	// The type is the bytes' rather than the header's, which said jpeg.
 	if got.MIME != "image/png" || len(got.Data) == 0 {
@@ -620,6 +632,99 @@ func TestDeezerFrontCoverRefusesAHitThatIsNotTheSong(t *testing.T) {
 	}
 	if got := covers.Load(); got != 0 {
 		t.Fatalf("fetched %d covers for a song nobody matched, want 0", got)
+	}
+}
+
+// The station's side lost its bracketed parts on the way in, so
+// "Yesterday (Remastered 2009)" is the song a station calls "Yesterday".
+func TestDeezerFrontCoverTakesAListingWithItsVersionAttached(t *testing.T) {
+	t.Parallel()
+	d, covers, _ := deezerFixture(t, `{"data": [
+		{"title": "Yesterday (Remastered 2009)", "artist": {"name": "The Beatles"},
+		 "album": {"cover_big": "https://%s/version.jpg"}}
+	]}`)
+
+	got, err := d.FrontCover(context.Background(), "the beatles", "yesterday")
+	if err != nil || len(got.Data) == 0 {
+		t.Fatalf("got (%d bytes, %v), want the remaster's cover", len(got.Data), err)
+	}
+	if got := covers.Load(); got != 1 {
+		t.Fatalf("fetched %d covers, want 1", got)
+	}
+}
+
+// The song under its own title outranks one with a version attached,
+// wherever the search put the two.
+func TestDeezerFrontCoverPrefersTheSongsOwnTitle(t *testing.T) {
+	t.Parallel()
+	d, covers, _ := deezerFixture(t, `{"data": [
+		{"title": "Yesterday (Live)", "artist": {"name": "The Beatles"},
+		 "album": {"cover_big": "https://%s/version.jpg"}},
+		{"title": "Yesterday", "artist": {"name": "The Beatles"},
+		 "album": {"cover_big": "https://%s/cover.jpg"}}
+	]}`)
+
+	got, err := d.FrontCover(context.Background(), "the beatles", "yesterday")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(got.SourceURL, "/cover.jpg") {
+		t.Fatalf("source = %q, want the listing under the song's own title", got.SourceURL)
+	}
+	if got := covers.Load(); got != 1 {
+		t.Fatalf("fetched %d covers, want only the one taken", got)
+	}
+}
+
+// Every listing's picture lives on one CDN, so a refusal or a host that
+// cannot be reached ends the walk: asking again spends the budget the
+// chain's next rung needs.
+func TestDeezerFrontCoverStopsAtAHostThatFails(t *testing.T) {
+	t.Parallel()
+	d, covers, _ := deezerFixture(t, `{"data": [
+		{"title": "Bohemian Rhapsody", "artist": {"name": "Queen"},
+		 "album": {"cover_big": "https://%s/busy-1.jpg"}},
+		{"title": "Bohemian Rhapsody", "artist": {"name": "Queen"},
+		 "album": {"cover_big": "https://%s/cover.jpg"}}
+	]}`)
+	if _, err := d.FrontCover(context.Background(), "queen", "bohemian rhapsody"); !errors.Is(err, ErrThrottled) {
+		t.Fatalf("err = %v, want the refusal", err)
+	}
+	if got := covers.Load(); got != 1 {
+		t.Fatalf("fetched %d covers after a refusal, want 1", got)
+	}
+
+	d, covers, _ = deezerFixture(t, `{"data": [
+		{"title": "Bohemian Rhapsody", "artist": {"name": "Queen"},
+		 "album": {"cover_big": "https://127.0.0.1:1/cover.jpg"}},
+		{"title": "Bohemian Rhapsody", "artist": {"name": "Queen"},
+		 "album": {"cover_big": "https://%s/cover.jpg"}}
+	]}`)
+	if _, err := d.FrontCover(context.Background(), "queen", "bohemian rhapsody"); err == nil || errors.Is(err, ErrNoCover) {
+		t.Fatalf("err = %v, want the host that could not be reached", err)
+	}
+	if got := covers.Load(); got != 0 {
+		t.Fatalf("fetched %d covers after an unreachable host, want 0", got)
+	}
+}
+
+// Listings that share a picture cost one fetch, and a walk over pictures
+// that will not load ends after a few.
+func TestDeezerFrontCoverBoundsItsWalk(t *testing.T) {
+	t.Parallel()
+	listing := func(path string) string {
+		return `{"title": "Bohemian Rhapsody", "artist": {"name": "Queen"},
+		 "album": {"cover_big": "https://%s` + path + `"}}`
+	}
+	d, covers, _ := deezerFixture(t, `{"data": [`+strings.Join([]string{
+		listing("/gone-1.jpg"), listing("/gone-1.jpg"), listing("/gone-2.jpg"),
+		listing("/gone-3.jpg"), listing("/gone-4.jpg"), listing("/cover.jpg"),
+	}, ",")+`]}`)
+	if _, err := d.FrontCover(context.Background(), "queen", "bohemian rhapsody"); err == nil {
+		t.Fatal("want the walk to end before the last listing's cover")
+	}
+	if got := covers.Load(); got != deezerCoverAttempts {
+		t.Fatalf("fetched %d covers, want %d distinct ones", got, deezerCoverAttempts)
 	}
 }
 
@@ -681,6 +786,19 @@ func TestCoverChainOutcomes(t *testing.T) {
 	_, err = chain.FrontCover(context.Background(), "a-ha", "Take On Me")
 	if err == nil || errors.Is(err, errUpstream) {
 		t.Fatalf("err = %v, want the reach error rather than the sentinel", err)
+	}
+
+	// A refusal stays visible past a later source's other failure, so the
+	// caller waits as long as a refusal asks.
+	chain = CoverChain{
+		Sources: []TitleCover{
+			&fakeTitleCover{err: fmt.Errorf("deezer: %w", ErrThrottled)},
+			&fakeTitleCover{err: errors.New("timeout")},
+		},
+		NoCover: errUpstream,
+	}
+	if _, err := chain.FrontCover(context.Background(), "a-ha", "Take On Me"); !errors.Is(err, ErrThrottled) {
+		t.Fatalf("err = %v, want the refusal kept", err)
 	}
 
 	// Everyone answered and nobody held one: that is the caller's own

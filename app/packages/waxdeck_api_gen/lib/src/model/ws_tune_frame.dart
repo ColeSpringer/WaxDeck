@@ -8,7 +8,7 @@ import 'package:built_value/serializer.dart';
 
 part 'ws_tune_frame.g.dart';
 
-/// Client-to-server: name the station this client is listening to, so a `radio` invalidation reaches the clients it is about rather than every connection. A new tune replaces the previous one; omitting `station` says this client is no longer listening. Never acked, and never refused: an unknown pid simply matches no landing. A client that never tunes hears no `radio` invalidations, which is what a client with no station to draw wants. 
+/// Client-to-server: name the station this client is listening to, so a `radio` invalidation reaches the clients it is about rather than every connection. A new tune replaces the previous one; omitting `station` says this client is no longer listening. Never acked, and never refused: an unknown pid simply matches no wake. A client that has never sent one keeps the topic's older contract and hears every station's `radio` invalidations; one that tunes to nothing (no `station`) hears none. 
 ///
 /// Properties:
 /// * [type] - Always `tune`.

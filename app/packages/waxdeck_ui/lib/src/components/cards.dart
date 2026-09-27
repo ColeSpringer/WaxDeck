@@ -22,6 +22,7 @@ import 'controls.dart';
 import 'edge_fade.dart';
 import 'indicators.dart';
 import 'secondary_tap.dart';
+import 'sheet.dart';
 import 'snap_physics.dart';
 import 'tooltip.dart';
 import 'view_data.dart';
@@ -931,10 +932,9 @@ Future<T?> showWaxOptionSheet<T>(
     WaxSpace.s24,
   );
   return waxWithoutBrowserMenu(
-    () => showModalBottomSheet<T>(
+    () => showWaxSheet<T>(
       context: context,
       backgroundColor: colors.surface2,
-      showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         child: scrolls
             ? SingleChildScrollView(
@@ -1553,6 +1553,11 @@ class _ShelfChevron extends StatelessWidget {
   /// the step to full.
   static const double _restOpacity = 0.75;
 
+  /// The ring in the primary text tone: no one colour clears 3:1 over
+  /// both black and white art, so over any cover the ring or the disc
+  /// does. The contrast test tunes this to the weakest pairing.
+  static const double _ringAlpha = 0.7;
+
   final WaxGlyph glyph;
   final String label;
   final String? semanticsId;
@@ -1587,7 +1592,11 @@ class _ShelfChevron extends StatelessWidget {
             child: Center(
               child: Material(
                 color: colors.surface1,
-                shape: CircleBorder(side: BorderSide(color: colors.hairline)),
+                shape: CircleBorder(
+                  side: BorderSide(
+                    color: colors.textPrimary.withValues(alpha: _ringAlpha),
+                  ),
+                ),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
                   onTap: onTap,

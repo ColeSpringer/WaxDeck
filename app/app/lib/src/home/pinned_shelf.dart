@@ -150,10 +150,9 @@ class PinnedShelf extends ConsumerWidget {
     EntityCard card,
   ) async {
     final colors = WaxColors.of(context);
-    final chosen = await showModalBottomSheet<bool>(
+    final chosen = await showWaxSheet<bool>(
       context: context,
       backgroundColor: colors.surface2,
-      showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(

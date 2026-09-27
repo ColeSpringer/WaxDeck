@@ -262,7 +262,6 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
             // a barcode.
             ArtworkManager(
               pid: widget.pid,
-              title: album.title,
               // Read off the identity the pane already has: a release
               // resolves a cover whenever anything answered for it, its
               // own or a member track's.
@@ -697,44 +696,35 @@ class _FieldRow extends StatelessWidget {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final row = curated;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: <Widget>[
-        Expanded(
-          child: WaxTextField(
-            label: label,
-            hint: help,
-            controller: controller,
-            semanticsId: SemanticsIds.metadataField(wire),
+    return WaxTextField(
+      label: label,
+      // Under the box, selectable, and spoken with it: a placeholder went
+      // the moment the field held a value.
+      helperText: help,
+      controller: controller,
+      semanticsId: SemanticsIds.metadataField(wire),
+      beside: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          CodecChip(
+            row == null ? l10n.musicAlbumEditorFromTags : row.source,
+            emphasis: dirty,
           ),
-        ),
-        const SizedBox(width: WaxSpace.s8),
-        Padding(
-          padding: const EdgeInsets.only(bottom: WaxSpace.s8),
-          child: Row(
-            children: <Widget>[
-              CodecChip(
-                row == null ? l10n.musicAlbumEditorFromTags : row.source,
-                emphasis: dirty,
+          // Read-only: the lock is set by the save below (through "Lock
+          // edited fields") and cleared by Force.
+          if (row?.locked ?? false)
+            Padding(
+              padding: const EdgeInsetsDirectional.only(start: WaxSpace.s4),
+              child: WaxIcon(
+                WaxIcons.lock,
+                size: 16,
+                color: colors.accent,
+                active: true,
+                semanticLabel: l10n.musicAlbumEditorFieldLocked(label),
               ),
-              // Read-only: the lock is set by the save below (through
-              // "Lock edited fields") and cleared by Force, so a toggle
-              // here would be a third way to say the same thing.
-              if (row?.locked ?? false)
-                Padding(
-                  padding: const EdgeInsetsDirectional.only(start: WaxSpace.s4),
-                  child: WaxIcon(
-                    WaxIcons.lock,
-                    size: 16,
-                    color: colors.accent,
-                    active: true,
-                    semanticLabel: l10n.musicAlbumEditorFieldLocked(label),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
+            ),
+        ],
+      ),
     );
   }
 }

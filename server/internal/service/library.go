@@ -280,9 +280,8 @@ type Library struct {
 	// radioArtLookupBudget is its default and its only production value.
 	// Tests set it short to reach the deadline without waiting a minute.
 	radioArtBudget time.Duration
-	// radioWake wakes the clients listening to one station when a cover
-	// lands, so the face fills on the fetch rather than on the next poll
-	// boundary. Set by SetRadioInvalidator; unset is a no-op.
+	// radioWake wakes the clients tuned to one station when its face has
+	// something new. Set by SetRadioInvalidator; unset is a no-op.
 	radioWake          atomic.Pointer[func(stationPID string)]
 	radioDirectoryBase string
 	// radioDirectoryMirrorList overrides mirror discovery, and
@@ -319,21 +318,23 @@ type Library struct {
 	// request to the station host rather than two. A dial and a grid draw
 	// the same station on one paint and two devices paint at once, and
 	// against a dead host each of those is a ten-second wait.
-	// radioLogoHints are the logo URLs stations named in their own
-	// connect headers while somebody was listening, tried ahead of
-	// discovery. Under the same lock as the cache they feed.
+	// radioLogoHints are logo URLs tried ahead of discovery: a station's
+	// Icy-Logo, or a picture it repeated song after song. radioIcyLogos
+	// and radioDirectoryLogos are only the logos stations declared.
 	// radioWarmSlots bounds concurrent warm lookups: a client restoring
 	// a whole station list creates in a burst, and an unbounded fan-out
 	// of discovery flights (each up to the 12s budget) is a lot of
 	// sockets for pictures. Queued warms hold only their claim; paints
 	// join the flight and wait the same either way.
-	radioLogos       map[string]radioLogo
-	radioLogosOrder  []string
-	radioLogosBytes  int
-	radioLogoFlights map[string]chan struct{}
-	radioLogoHints   map[string]string
-	radioLogosMu     sync.Mutex
-	radioWarmSlots   chan struct{}
+	radioLogos          map[string]radioLogo
+	radioLogosOrder     []string
+	radioLogosBytes     int
+	radioLogoFlights    map[string]chan struct{}
+	radioLogoHints      map[string]string
+	radioIcyLogos       map[string]string
+	radioDirectoryLogos map[string]string
+	radioLogosMu        sync.Mutex
+	radioWarmSlots      chan struct{}
 	// batchFinalizeMu serializes upload-batch finalization (the flip,
 	// entry opening, and member linking as one unit): two concurrent
 	// finalizes of one batch would otherwise both gather the same

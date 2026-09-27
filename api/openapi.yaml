@@ -8954,13 +8954,13 @@ paths:
       description: >
         The cover this server holds for whatever the station last
         announced, for the case the announced track is not in this
-        library or has no cover there. Draw it on the full-screen player face; the deck bar
-        keeps the station logo on purpose, because a bar whose picture
-        changed every few minutes would read as the station changing.
+        library or has no cover there. Draw it wherever the station is
+        drawn as playing - the full-screen face, the deck bar, the mini
+        window - in place of the station logo.
 
 
         Three rungs sit behind radio artwork and this endpoint serves
-        the middle two. The first is `nowPlayingItemPid` above: a match
+        the last two. The first is `nowPlayingItemPid` above: a match
         against this library, which costs no network and is the common
         answer for a listener playing a station whose music they own.
 
@@ -8974,7 +8974,9 @@ paths:
         and neither does switching that setting off drop what has
         already been fetched. The bytes are fetched through the
         SSRF-guarded client the station logo uses, capped, and typed by
-        sniffing them.
+        sniffing them. A picture the station repeats from song to song,
+        or at a logo URL it declared, is its mark rather than a cover and
+        is not served here.
 
 
         Last comes an external lookup from the announced artist and
@@ -8990,15 +8992,14 @@ paths:
         state rather than a gap.
 
 
-        Never blocking, and a client should expect that. The lookup is
-        started by the play-info poll and runs against paced third-party
-        services, so the first poll after a title
-        changes answers 404 here and a later one answers the image - on
-        the same fifteen-second cadence the play-info contract already
-        asks for. A miss is remembered for a day rather than forever,
-        because a track released this week can have no archive entry
-        today and one tomorrow, and a service that could not be reached
-        is remembered for minutes only.
+        The station's own picture outranks the lookup once it has been
+        seen to change with the music; on the first song after a tune-in
+        or a quiet spell, a cover the lookup holds is answered instead.
+
+
+        Never blocking: the play-info poll starts the fetches, so this
+        answers 404 until one lands, and a tuned client is woken on the
+        `radio` topic when it does. A miss is remembered for a day.
 
 
         The bytes go through the same raster-only check the station logo
@@ -14416,10 +14417,10 @@ components:
         client the named topic moved: for `catalog` pull `/sync/catalog`
         and for `user` pull `/sync/server` from the client's own
         cursor; for `player` pull `/player/endpoints` and
-        `/player/sessions`, and for `radio` - artwork for an announced
-        title landed - re-read `/radio/stations/{pid}/play-info` for the
-        station being listened to, all of which always return current
-        truth (no cursor); a client tuned to nothing ignores `radio`.
+        `/player/sessions`, and for `radio` - the station's song or cover
+        moved - re-read `/radio/stations/{pid}/play-info` for the station
+        being listened to, all of which always return current truth (no
+        cursor); a client tuned to nothing ignores `radio`.
         Invalidations are coalesced server-side, so one frame
         can cover many changes, and carry no data, so a redundant pull
         is harmless. A `resync` frame means continuity was lost for the
@@ -14815,9 +14816,9 @@ components:
         than every connection. A new tune replaces the previous one;
         omitting `station` says this client is no longer listening.
         Never acked, and never refused: an unknown pid simply matches no
-        landing. A client that never tunes hears no `radio`
-        invalidations, which is what a client with no station to draw
-        wants.
+        wake. A client that has never sent one keeps the topic's
+        older contract and hears every station's `radio` invalidations;
+        one that tunes to nothing (no `station`) hears none.
       required: [type]
       properties:
         type:

@@ -379,7 +379,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: WaxSpace.s8),
-                  child: Text(
+                  child: WaxProse(
                     _error!,
                     style: WaxType.caption.copyWith(color: colors.error),
                   ),
@@ -446,65 +446,69 @@ class _ImportReportDialog extends StatelessWidget {
       ),
       content: SizedBox(
         width: 480,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              made
-                  ? l10n.playlistImportCreated(
-                      result.name,
-                      result.resolved,
-                      result.requested,
-                    )
-                  : l10n.playlistImportNoMatches,
-              style: WaxType.body.copyWith(color: colors.textPrimary),
-            ),
-            if (binding != null) ...<Widget>[
-              const SizedBox(height: WaxSpace.s8),
+        child: WaxProse.block(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
               Text(
-                binding!.lineOf(l10n),
-                style: WaxType.bodySmall.copyWith(
-                  color: binding!.refused ? colors.error : colors.textSecondary,
-                ),
+                made
+                    ? l10n.playlistImportCreated(
+                        result.name,
+                        result.resolved,
+                        result.requested,
+                      )
+                    : l10n.playlistImportNoMatches,
+                style: WaxType.body.copyWith(color: colors.textPrimary),
               ),
-            ],
-            if (result.missing.isNotEmpty) ...<Widget>[
-              const SizedBox(height: WaxSpace.s12),
-              Text(
-                l10n.playlistImportMissingHeading,
-                style: WaxType.overline.copyWith(color: colors.textTertiary),
-              ),
-              const SizedBox(height: WaxSpace.s4),
-              ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 240),
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      for (final miss in result.missing)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            vertical: WaxSpace.s4,
-                          ),
-                          child: Text(
-                            miss.artist == null
-                                ? miss.title
-                                : l10n.playlistImportMissingRow(
-                                    miss.artist!,
-                                    miss.title,
-                                  ),
-                            style: WaxType.bodySmall.copyWith(
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                        ),
-                    ],
+              if (binding != null) ...<Widget>[
+                const SizedBox(height: WaxSpace.s8),
+                Text(
+                  binding!.lineOf(l10n),
+                  style: WaxType.bodySmall.copyWith(
+                    color: binding!.refused
+                        ? colors.error
+                        : colors.textSecondary,
                   ),
                 ),
-              ),
+              ],
+              if (result.missing.isNotEmpty) ...<Widget>[
+                const SizedBox(height: WaxSpace.s12),
+                Text(
+                  l10n.playlistImportMissingHeading,
+                  style: WaxType.overline.copyWith(color: colors.textTertiary),
+                ),
+                const SizedBox(height: WaxSpace.s4),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 240),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        for (final miss in result.missing)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              vertical: WaxSpace.s4,
+                            ),
+                            child: Text(
+                              miss.artist == null
+                                  ? miss.title
+                                  : l10n.playlistImportMissingRow(
+                                      miss.artist!,
+                                      miss.title,
+                                    ),
+                              style: WaxType.bodySmall.copyWith(
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
       actions: <Widget>[

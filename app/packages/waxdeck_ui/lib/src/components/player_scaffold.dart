@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -9,7 +10,6 @@ import '../l10n/wax_l10n.dart';
 import '../tokens/breakpoints.dart';
 import '../tokens/colors.dart';
 import '../tokens/motion.dart';
-import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'artwork.dart';
@@ -168,7 +168,8 @@ class TransportCluster extends StatelessWidget {
   }
 }
 
-/// The seek bar with its flanking timecodes, or the live pill for radio.
+/// The seek bar with its flanking timecodes. A live face passes no
+/// seek at all: see [PlayerScaffold.seek].
 class SeekCluster extends StatelessWidget {
   const SeekCluster({
     required this.now,
@@ -200,28 +201,6 @@ class SeekCluster extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    if (now.live) {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: <Widget>[
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: WaxSpace.s12,
-              vertical: WaxSpace.s4,
-            ),
-            decoration: BoxDecoration(
-              color: colors.radio.container,
-              borderRadius: WaxRadius.pill,
-            ),
-            child: Text(
-              context.waxL10n.commonLiveChip,
-              style: WaxType.overline.copyWith(color: colors.radio.onContainer),
-            ),
-          ),
-        ],
-      );
-    }
-
     return Column(
       children: <Widget>[
         WaxSeekBar(
@@ -270,7 +249,7 @@ class PlayerScaffold extends StatefulWidget {
   const PlayerScaffold({
     required this.now,
     required this.transport,
-    required this.seek,
+    this.seek,
     this.onCollapse,
     this.actionRow,
     this.artworkCaption,
@@ -288,7 +267,11 @@ class PlayerScaffold extends StatefulWidget {
 
   final NowPlayingData now;
   final Widget transport;
-  final Widget seek;
+
+  /// The seek cluster, or null on a face with nothing to seek: a live
+  /// stream. Null takes the slot out with its gap, rather than leaving
+  /// an empty band between the title and the transport.
+  final Widget? seek;
 
   final VoidCallback? onCollapse;
 
@@ -550,29 +533,33 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
               onPointerDown: widget.onCollapse == null ? null : _pointerDown,
               onPointerUp: widget.onCollapse == null ? null : _pointerGone,
               onPointerCancel: widget.onCollapse == null ? null : _pointerGone,
+              // Opaque, so the space around the artwork dismisses too;
+              // children hit-test first and keep their taps. Pointer only:
+              // readers use the collapse control.
               child: GestureDetector(
-                // Opaque, so the space around the artwork dismisses too.
-                // Children hit-test first and keep their taps; the seek
-                // bar's drag is told apart from this one by direction.
                 behavior: HitTestBehavior.opaque,
-                // Pointer only: in the semantics tree a reader's scroll
-                // would synthesise a dismissing drag, and the tap would be a
-                // nameless window-sized control. Readers use the collapse.
                 excludeFromSemantics: true,
-                // A mouse's way out, on the detector that owns the drag
-                // so the two agree on where the surface ends; a null
-                // onCollapse turns off both.
+                // A mouse's way out, on the surface the drag owns.
                 onTap: widget.onCollapse == null ? null : _tap,
-                onVerticalDragStart: widget.onCollapse == null
-                    ? null
-                    : _dragStart,
-                onVerticalDragUpdate: widget.onCollapse == null
-                    ? null
-                    : _dragUpdate,
-                onVerticalDragEnd: widget.onCollapse == null ? null : _dragEnd,
-                child: NotificationListener<SizeChangedLayoutNotification>(
-                  onNotification: _islandChanged,
-                  child: surface,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  excludeFromSemantics: true,
+                  // A finger's and a trackpad's pull, not a mouse's: that
+                  // is a selection of the text under the face.
+                  supportedDevices: _pullDevices,
+                  onVerticalDragStart: widget.onCollapse == null
+                      ? null
+                      : _dragStart,
+                  onVerticalDragUpdate: widget.onCollapse == null
+                      ? null
+                      : _dragUpdate,
+                  onVerticalDragEnd: widget.onCollapse == null
+                      ? null
+                      : _dragEnd,
+                  child: NotificationListener<SizeChangedLayoutNotification>(
+                    onNotification: _islandChanged,
+                    child: surface,
+                  ),
                 ),
               ),
             ),
@@ -581,6 +568,11 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
       ),
     );
   }
+
+  /// Every pointer that may pull the face down: all but a mouse.
+  static final Set<PointerDeviceKind> _pullDevices = PointerDeviceKind.values
+      .where((kind) => kind != PointerDeviceKind.mouse)
+      .toSet();
 
   /// The gutter each header control keeps around itself.
   ///
@@ -736,8 +728,10 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
                         children: <Widget>[
                           _titleBlock(colors),
                           const SizedBox(height: WaxSpace.s20),
-                          widget.seek,
-                          const SizedBox(height: WaxSpace.s16),
+                          if (widget.seek != null) ...<Widget>[
+                            widget.seek!,
+                            const SizedBox(height: WaxSpace.s16),
+                          ],
                           widget.transport,
                           if (widget.volume != null) ...<Widget>[
                             const SizedBox(height: WaxSpace.s8),
@@ -838,23 +832,13 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
         children: <Widget>[
           hero,
           const SizedBox(height: WaxSpace.s8),
-          // One line, which is what `_captionAllowance` above reserved
-          // room for - and the same line, blank, where the extent was
-          // taken for a caption this face has not got. Reserving the
-          // extent without standing in the box for it would centre a
-          // shorter column and move the cover up instead of resizing it,
-          // which is the same jump wearing a different hat.
-          //
-          // The same widget either way, so the column is the same height
-          // to the pixel: a zero-width space lays out one line of the
-          // caption's own type and draws nothing. Excluded from
-          // semantics, because a blank line is not a label.
-          if (caption == null)
-            const ExcludeSemantics(
-              child: ArtworkCaption('​', align: TextAlign.center),
-            )
-          else
-            ArtworkCaption(caption, align: TextAlign.center),
+          // The line `_captionAllowance` reserved, blank without a caption
+          // (a zero-width space is one line of its type), and one widget
+          // either way, so a flip is a new string, not a new area.
+          ExcludeSemantics(
+            excluding: caption == null,
+            child: ArtworkCaption(caption ?? '\u200b', align: TextAlign.center),
+          ),
         ],
       ),
     );
@@ -930,8 +914,10 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
                   children: <Widget>[
                     _titleBlock(colors, alignStart: true),
                     const SizedBox(height: WaxSpace.s16),
-                    widget.seek,
-                    const SizedBox(height: WaxSpace.s12),
+                    if (widget.seek != null) ...<Widget>[
+                      widget.seek!,
+                      const SizedBox(height: WaxSpace.s12),
+                    ],
                     widget.transport,
                     if (widget.volume != null) ...<Widget>[
                       const SizedBox(height: WaxSpace.s8),
@@ -987,9 +973,8 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
             style: WaxType.body.copyWith(color: colors.textSecondary),
           ),
         ),
-      // A row of controls, so it takes a control row's gap. Six buttons
-      // on the item faces and two on radio; both shrink-wrap, so the
-      // column's cross-axis alignment places them.
+      // A control row's gap; its buttons shrink-wrap, so the column's
+      // alignment places them. Radio's song verbs sit in the action row.
       if (widget.titleTrailing != null)
         Padding(
           padding: const EdgeInsets.only(top: WaxSpace.s8),

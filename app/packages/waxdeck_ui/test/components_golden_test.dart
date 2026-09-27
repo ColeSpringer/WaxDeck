@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:alchemist/alchemist.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -129,7 +131,44 @@ const _secondaryEntries = <WaxNavEntry>[
   ),
 ];
 
+/// A cover in the colour the shelf chevron has the hardest time over:
+/// near-black, where a dark disc and a hairline ring both vanished.
+/// Drawn at test setup rather than checked in.
+late final Uint8List _nearBlackCover;
+
+Future<Uint8List> _solidPng(Color color) async {
+  final recorder = ui.PictureRecorder();
+  Canvas(recorder).drawColor(color, BlendMode.src);
+  final image = await recorder.endRecording().toImage(4, 4);
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
+  image.dispose();
+  return bytes!.buffer.asUint8List();
+}
+
+/// One shelf for the chevron goldens, with the dark-art case beside the
+/// placeholder one.
+Widget _chevronShelf({required bool darkArt}) => SizedBox(
+  width: 420,
+  child: ShelfRow(
+    title: 'Recently added',
+    cardWidth: 120,
+    padding: const EdgeInsets.symmetric(horizontal: 16),
+    items: <MediaTileData>[
+      for (var i = 0; i < 6; i++)
+        MediaTileData(
+          title: 'Salt Harbour $i',
+          subtitle: 'Nightjar',
+          artwork: darkArt ? fixedArtwork(MemoryImage(_nearBlackCover)) : null,
+        ),
+    ],
+  ),
+);
+
 void main() {
+  setUpAll(() async {
+    _nearBlackCover = await _solidPng(const Color(0xFF0A0908));
+  });
+
   group('components', () {
     goldenTest(
       'buttons render in every theme',
@@ -416,6 +455,8 @@ void main() {
     goldenTest(
       'a hovered shelf offers to page toward what is out of view',
       fileName: 'shelf_chevrons',
+      // The covers decode before the capture, or it races them.
+      pumpBeforeTest: precacheImages,
       whilePerforming: _hoverAll(find.byType(ShelfRow)),
       builder: () => GoldenTestGroup(
         columns: 1,
@@ -424,27 +465,11 @@ void main() {
             WaxThemeVariant.dark,
             WaxThemeVariant.light,
           ])
-            GoldenTestScenario(
-              name: variant.name,
-              child: _themed(
-                variant,
-                SizedBox(
-                  width: 420,
-                  child: ShelfRow(
-                    title: 'Recently added',
-                    cardWidth: 120,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    items: <MediaTileData>[
-                      for (var i = 0; i < 6; i++)
-                        MediaTileData(
-                          title: 'Salt Harbour $i',
-                          subtitle: 'Nightjar',
-                        ),
-                    ],
-                  ),
-                ),
+            for (final darkArt in <bool>[false, true])
+              GoldenTestScenario(
+                name: darkArt ? '${variant.name}, dark art' : variant.name,
+                child: _themed(variant, _chevronShelf(darkArt: darkArt)),
               ),
-            ),
         ],
       ),
     );
@@ -452,6 +477,8 @@ void main() {
     goldenTest(
       'a desktop shelf shows its overflow before any hover',
       fileName: 'shelf_chevrons_rest',
+      // The covers decode before the capture, or it races them.
+      pumpBeforeTest: precacheImages,
       whilePerforming: _desktopMouseAtRest,
       builder: () => GoldenTestGroup(
         columns: 1,
@@ -460,27 +487,11 @@ void main() {
             WaxThemeVariant.dark,
             WaxThemeVariant.light,
           ])
-            GoldenTestScenario(
-              name: variant.name,
-              child: _themed(
-                variant,
-                SizedBox(
-                  width: 420,
-                  child: ShelfRow(
-                    title: 'Recently added',
-                    cardWidth: 120,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    items: <MediaTileData>[
-                      for (var i = 0; i < 6; i++)
-                        MediaTileData(
-                          title: 'Salt Harbour $i',
-                          subtitle: 'Nightjar',
-                        ),
-                    ],
-                  ),
-                ),
+            for (final darkArt in <bool>[false, true])
+              GoldenTestScenario(
+                name: darkArt ? '${variant.name}, dark art' : variant.name,
+                child: _themed(variant, _chevronShelf(darkArt: darkArt)),
               ),
-            ),
         ],
       ),
     );

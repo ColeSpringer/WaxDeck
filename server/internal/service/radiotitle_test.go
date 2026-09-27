@@ -181,3 +181,33 @@ func TestAnEmptyAnnouncementKeepsTheStreamFresh(t *testing.T) {
 		t.Fatalf("title = %q, want it held", title)
 	}
 }
+
+// A title landing is a wake of its own. The face otherwise learns of a
+// first song on its next poll, seconds or a quarter-minute late, and a
+// cover the server already holds waits out the same gap.
+func TestATitleChangeWakesTheStation(t *testing.T) {
+	t.Parallel()
+	_, svc, _ := newCatalogFixture(t)
+	var woke []string
+	svc.SetRadioInvalidator(func(station string) { woke = append(woke, station) })
+
+	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "")
+	if len(woke) != 1 || woke[0] != "rs-1" {
+		t.Fatalf("first title woke %v, want rs-1 once", woke)
+	}
+	// The same announcement again changes nothing a face draws.
+	svc.NoteRadioMeta("rs-1", "Charlie Parker - Ornithology", "")
+	if len(woke) != 1 {
+		t.Fatalf("a repeated title woke %v, want no second wake", woke)
+	}
+	svc.NoteRadioMeta("rs-1", "Pink Floyd - Echoes", "")
+	if len(woke) != 2 {
+		t.Fatalf("the next title woke %v, want a second wake", woke)
+	}
+	// An empty announcement is not a title, and neither is liveness.
+	svc.NoteRadioMeta("rs-1", "", "")
+	svc.NoteRadioAlive("rs-1")
+	if len(woke) != 2 {
+		t.Fatalf("an empty block woke %v", woke)
+	}
+}

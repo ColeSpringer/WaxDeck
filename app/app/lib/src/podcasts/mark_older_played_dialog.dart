@@ -242,7 +242,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          Text(
+          WaxProse(
             l10n.podcastMarkOlderBody,
             style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
           ),

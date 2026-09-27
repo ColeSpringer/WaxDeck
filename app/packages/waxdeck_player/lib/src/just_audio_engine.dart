@@ -189,6 +189,16 @@ class JustAudioEngine implements AudioEnginePort {
 
   bool _disposed = false;
 
+  /// Every just_audio call runs here (see [_run]): an error never reaches a
+  /// listener in another error zone, so one zone for all of them.
+  final Zone _zone = Zone.current.fork(
+    specification: const ZoneSpecification(handleUncaughtError: _dropEcho),
+  );
+
+  /// A load was issued and has not succeeded. Its start may still hold the
+  /// platform, so the next load stops first even while the player reads idle.
+  bool _unsettled = false;
+
   /// The two sources the window can hold, by identity.
   ///
   /// Every index the engine acts on is derived from these, never from
@@ -237,7 +247,10 @@ class JustAudioEngine implements AudioEnginePort {
       // that follows builds a fresh one with an empty cache. Nothing
       // gapless is lost: crossings ride the preload window and never
       // pass through here.
-      if (_player.processingState != ProcessingState.idle) {
+      final replacing =
+          _player.processingState != ProcessingState.idle || _unsettled;
+      _unsettled = true;
+      if (replacing) {
         // Bounded like the abandonment stop below and for the same
         // reason: this runs against a player that may be mid-hang from
         // a load the deadline already gave up on, and an unbounded wait
@@ -245,18 +258,19 @@ class JustAudioEngine implements AudioEnginePort {
         // no fault, no pane. A stop that will not land leaves the load
         // to fail on its own deadline, which is the honest report.
         try {
-          await _player.stop().timeout(_stopGrace);
+          await _run(_player.stop).timeout(_stopGrace);
         } on TimeoutException {
           // Swallowed: the load below is what answers for this player.
         }
       }
-      await _player
-          .setAudioSources(
-            [source],
-            initialIndex: 0,
-            initialPosition: initialPosition,
-          )
-          .timeout(_loadDeadline);
+      await _run(
+        () => _player.setAudioSources(
+          [source],
+          initialIndex: 0,
+          initialPosition: initialPosition,
+        ),
+      ).timeout(_loadDeadline);
+      if (generation == _generation) _unsettled = false;
     } on Object catch (failure) {
       throw MediaLoadException(
         await _faultOf(failure, url, generation),
@@ -311,7 +325,7 @@ class JustAudioEngine implements AudioEnginePort {
     // the load that timed out is owed an answer either way.
     if (generation == _generation) {
       try {
-        await _player.stop().timeout(_stopGrace);
+        await _run(_player.stop).timeout(_stopGrace);
       } on Object {
         // A player that will not stop is the same player that would not
         // load; the fault below is still the honest answer.
@@ -364,7 +378,7 @@ class JustAudioEngine implements AudioEnginePort {
       if (_player.sequence.isEmpty) return;
       await _dropPreloaded();
       final source = _sourceFor(url, clipStart, clipEnd);
-      await _player.addAudioSource(source);
+      await _run(() => _player.addAudioSource(source));
       // A load that started while the source was going in owns the
       // window now, and the repair it queued drops what landed here.
       // Recording a preload against it would leave the engine expecting
@@ -418,7 +432,7 @@ class JustAudioEngine implements AudioEnginePort {
   Future<void> _remove(AudioSource source) async {
     final index = _player.sequence.indexWhere((s) => identical(s, source));
     if (index < 0) return;
-    await _player.removeAudioSourceRange(index, index + 1);
+    await _run(() => _player.removeAudioSourceRange(index, index + 1));
   }
 
   /// Queues a trim back to the loaded item and does not wait for it.
@@ -437,7 +451,7 @@ class JustAudioEngine implements AudioEnginePort {
         // where they were.
         for (var i = _player.sequence.length - 1; i >= 0; i--) {
           if (identical(_player.sequence[i], keep)) continue;
-          await _player.removeAudioSourceRange(i, i + 1);
+          await _run(() => _player.removeAudioSourceRange(i, i + 1));
         }
       }).catchError((_) {}),
     );
@@ -539,8 +553,8 @@ class JustAudioEngine implements AudioEnginePort {
     // walk fires on every backend, and the refetch it costs is paid
     // only where the state machine offered no other door.
     if (_player.processingState == ProcessingState.completed) {
-      await _player.pause();
-      await _player.seek(Duration.zero);
+      await _run(_player.pause);
+      await _run(() => _player.seek(Duration.zero));
       var cleared = true;
       try {
         await _player.processingStateStream
@@ -556,7 +570,7 @@ class JustAudioEngine implements AudioEnginePort {
         // item, and the fields follow the list.
         _preloadedSource = null;
         _preloadedLength = null;
-        await _player.setAudioSources([source], initialIndex: 0);
+        await _run(() => _player.setAudioSources([source], initialIndex: 0));
         _repairWindow();
       }
     }
@@ -568,7 +582,35 @@ class JustAudioEngine implements AudioEnginePort {
     // a live stream, which never ends, never published one at all. The
     // request is raised synchronously inside that call, so issuing it
     // and letting go is what "playback is running" amounts to here.
-    unawaited(_player.play().catchError(_refused));
+    unawaited(_run(_player.play).catchError(_refused));
+  }
+
+  /// Runs a just_audio call in [_zone], its outcome carried out as a value,
+  /// since an error cannot leave an error zone.
+  Future<void> _run(Future<Object?> Function() call) async {
+    final failure = await _zone.run(
+      () => call().then<(Object, StackTrace)?>(
+        (_) => null,
+        onError: (Object error, StackTrace stack) => (error, stack),
+      ),
+    );
+    if (failure != null) Error.throwWithStackTrace(failure.$1, failure.$2);
+  }
+
+  /// just_audio 0.10.6 also leaves a failed start's error uncaught, on a
+  /// completer nothing listens to yet (on web, a page error). The call has
+  /// already reported it, so the player's own types are dropped here.
+  static void _dropEcho(
+    Zone self,
+    ZoneDelegate parent,
+    Zone zone,
+    Object error,
+    StackTrace stack,
+  ) {
+    if (error is PlayerException || error is PlayerInterruptedException) {
+      return;
+    }
+    parent.handleUncaughtError(zone, error, stack);
   }
 
   /// The platform turned the request down (a browser's autoplay policy).
@@ -586,7 +628,7 @@ class JustAudioEngine implements AudioEnginePort {
   Future<void> _refused(Object error) async {
     if (_disposed) return;
     try {
-      await _player.pause();
+      await _run(_player.pause);
     } on Object catch (failure) {
       // The flag stays raised, which is the lesser wrong: there is
       // nothing left to report it to either.
@@ -596,14 +638,14 @@ class JustAudioEngine implements AudioEnginePort {
   }
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() => _run(_player.pause);
 
   @override
-  Future<void> seek(Duration position) => _player.seek(position);
+  Future<void> seek(Duration position) => _run(() => _player.seek(position));
 
   @override
   Future<void> stop() async {
-    await _player.stop();
+    await _run(_player.stop);
     // Stopping releases the media, and the window with it: playing again
     // resumes the item that was loaded and ends there, rather than
     // crossing into one the caller stopped before reaching.
@@ -619,7 +661,7 @@ class JustAudioEngine implements AudioEnginePort {
     await _durationSub.cancel();
     await _boundaries.close();
     await _refusals.close();
-    await _player.dispose();
+    await _run(_player.dispose);
   }
 
   @override
@@ -670,13 +712,14 @@ class JustAudioEngine implements AudioEnginePort {
   Stream<Object> get playbackRefused => _refusals.stream;
 
   @override
-  Future<void> setSpeed(double speed) => _player.setSpeed(speed);
+  Future<void> setSpeed(double speed) => _run(() => _player.setSpeed(speed));
 
   @override
   double get speed => _player.speed;
 
   @override
-  Future<void> setVolume(double volume) => _player.setVolume(volume);
+  Future<void> setVolume(double volume) =>
+      _run(() => _player.setVolume(volume));
 
   @override
   double get volume => _player.volume;

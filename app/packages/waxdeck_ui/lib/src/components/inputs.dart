@@ -9,6 +9,7 @@ import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'controls.dart';
+import 'prose.dart';
 
 /// A single-line text input.
 ///
@@ -33,6 +34,7 @@ class WaxTextField extends StatefulWidget {
     this.maxLines = 1,
     this.errorText,
     this.helperText,
+    this.beside,
     this.semanticsId,
     this.clearSemanticsId,
     this.showLabel = true,
@@ -112,6 +114,10 @@ class WaxTextField extends StatefulWidget {
   /// is the "leave it blank to keep every backup" that a labelled
   /// number field cannot say on its own.
   final String? helperText;
+
+  /// A readout beside the box, centred on it rather than on the label
+  /// and the helper line around it.
+  final Widget? beside;
 
   final String? semanticsId;
 
@@ -287,7 +293,17 @@ class _WaxTextFieldState extends State<WaxTextField> {
       ),
     );
     final helper = widget.helperText;
-    if (error == null && helper == null && !widget.showLabel) return field;
+    final Widget box = switch (widget.beside) {
+      final beside? => Row(
+        children: <Widget>[
+          Expanded(child: field),
+          const SizedBox(width: WaxSpace.s8),
+          beside,
+        ],
+      ),
+      null => field,
+    };
+    if (error == null && helper == null && !widget.showLabel) return box;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -308,7 +324,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
               ),
             ),
           ),
-        field,
+        box,
         if (error != null || helper != null)
           Padding(
             padding: const EdgeInsetsDirectional.only(
@@ -319,7 +335,7 @@ class _WaxTextFieldState extends State<WaxTextField> {
             // field carries this string as its hint, and a second node
             // repeating it is one more stop reading the same words.
             child: ExcludeSemantics(
-              child: Text(
+              child: WaxProse(
                 error ?? helper!,
                 style: WaxType.bodySmall.copyWith(
                   color: error != null ? colors.error : colors.textTertiary,

@@ -78,18 +78,18 @@ class ArtworkManager extends ConsumerStatefulWidget {
   const ArtworkManager({
     super.key,
     required this.pid,
-    required this.title,
     required this.hasArtwork,
     this.entityType,
     this.writeBack = false,
     this.pinnable = true,
+    this.domain = WaxDomain.music,
     this.onChanged,
   });
 
   final String pid;
 
-  /// What the monogram falls back to on an empty slot.
-  final String title;
+  /// Whose glyph an empty slot draws.
+  final WaxDomain domain;
 
   /// Whether the item resolves a front cover at all, own or inherited.
   /// The read that answers this rides the metadata the editor already
@@ -389,7 +389,6 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
                     slot == ArtSlot.front &&
                     (own[ArtSlot.front.role]?.pinnedEmpty ?? true) &&
                     widget.hasArtwork,
-                title: widget.title,
                 // The resolved cover's provenance belongs to the front
                 // tile alone: it is the only slot that inherits, and the
                 // only one an inherited picture can appear in.
@@ -397,6 +396,7 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
                 artUrl: _urlFor(slot),
                 busy: _busyRole == slot.role,
                 canPick: picker != null,
+                domain: widget.domain,
                 // Null on the front, whose pin is the whole-artwork one
                 // and gets its own switch under the grid; drawing it
                 // twice would offer the same write in two places. Null
@@ -479,11 +479,11 @@ class _SlotTile extends ConsumerWidget {
     required this.slot,
     required this.info,
     required this.inherited,
-    required this.title,
     required this.resolved,
     required this.artUrl,
     required this.busy,
     required this.canPick,
+    required this.domain,
     required this.locked,
     required this.heldByCoverPin,
     required this.onTogglePin,
@@ -501,7 +501,6 @@ class _SlotTile extends ConsumerWidget {
   final ArtRoleInfo? info;
 
   final bool inherited;
-  final String title;
 
   /// Where the picture this tile actually draws came from, for the
   /// front slot: the entity's own attribution where it holds one, the
@@ -512,6 +511,7 @@ class _SlotTile extends ConsumerWidget {
   final String artUrl;
   final bool busy;
   final bool canPick;
+  final WaxDomain domain;
 
   /// Whether this slot's **own** pin is set, or null where no pin is
   /// offered on this slot at all: the front cover, whose pin is the
@@ -586,7 +586,7 @@ class _SlotTile extends ConsumerWidget {
     final holdsImage = info != null && !info!.pinnedEmpty;
     // The tile draws whatever the endpoint answers for this slot, which
     // for `front` may be the album's. Every other slot 404s when it is
-    // empty, and a 404 is the monogram.
+    // empty, and a 404 is the placeholder tile.
     final artwork = holdsImage || inherited ? store.source(artUrl) : null;
     return Semantics(
       identifier: SemanticsIds.artSlot(slot.role),
@@ -607,7 +607,9 @@ class _SlotTile extends ConsumerWidget {
                   ArtworkImage(
                     size: _size,
                     artwork: artwork,
-                    monogram: title,
+                    // No title, so an empty slot draws the domain glyph:
+                    // a title's initials there read as a picture.
+                    domain: domain,
                     semanticLabel: l10n.artworkSlotSpoken(
                       slot.labelOf(l10n),
                       source == null ? state : '$state, $source',

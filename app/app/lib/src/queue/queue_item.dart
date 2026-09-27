@@ -19,7 +19,11 @@ import '../providers.dart';
 /// the server answers 404 for is a row that stays gone.
 final queueItemProvider = FutureProvider.autoDispose
     .family<ItemSummary, String>((ref, pid) async {
-      final known = ref.read(nowPlayingProvider.notifier).summaryFor(pid);
+      final playback = ref.read(nowPlayingProvider.notifier);
+      final known = playback.summaryFor(pid);
       if (known != null) return known;
-      return ref.watch(repositoryProvider).getItem(pid);
+      final item = await ref.watch(repositoryProvider).getItem(pid);
+      // So the entry starts named when it plays.
+      if (ref.mounted) playback.noteSummary(item);
+      return item;
     }, retry: retryUnlessRefused);

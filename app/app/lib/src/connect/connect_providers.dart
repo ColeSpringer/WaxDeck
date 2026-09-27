@@ -89,10 +89,9 @@ class ConnectBinder {
     final watched = bus.watched;
     if (watched != null) bus.watch(watched);
     // The server holds the tuned station on the connection, so a
-    // reconnect starts untuned and a listening face would stop hearing
-    // its covers land.
-    final tuned = bus.tuned;
-    if (tuned != null) bus.tune(tuned);
+    // reconnect starts untuned: a listening face would stop hearing its
+    // covers land, and an idle client would hear every station's.
+    bus.tune(bus.tuned);
     bus.ping();
     _pingTimer?.cancel();
     _pingTimer = Timer.periodic(const Duration(seconds: 60), (_) => bus.ping());

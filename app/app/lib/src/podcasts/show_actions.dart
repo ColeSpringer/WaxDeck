@@ -170,14 +170,10 @@ Future<void> runShowAction(
         builder: (_) => MarkOlderPlayedDialog(pid: pid),
       );
     case ShowAction.setCover:
-      await showModalBottomSheet<void>(
+      await showWaxSheet<void>(
         context: context,
         isScrollControlled: true,
-        builder: (_) => ShowCoverSheet(
-          pid: pid,
-          title: title ?? pid,
-          initialHasArtwork: hasArtwork,
-        ),
+        builder: (_) => ShowCoverSheet(pid: pid, initialHasArtwork: hasArtwork),
       );
   }
 }
@@ -280,12 +276,10 @@ class ShowCoverSheet extends ConsumerWidget {
   const ShowCoverSheet({
     super.key,
     required this.pid,
-    required this.title,
     required this.initialHasArtwork,
   });
 
   final String pid;
-  final String title;
 
   /// What the show detail knew when the sheet opened, so the first
   /// frame does not read "no cover" while the art-roles read is in flight.
@@ -309,9 +303,9 @@ class ShowCoverSheet extends ConsumerWidget {
       child: SingleChildScrollView(
         child: ArtworkManager(
           pid: pid,
-          title: title,
           hasArtwork: hasArtwork,
           entityType: 'podcast',
+          domain: WaxDomain.podcasts,
           onChanged: () => ref.invalidate(podcastDetailProvider(pid)),
         ),
       ),

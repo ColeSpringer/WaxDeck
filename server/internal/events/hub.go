@@ -18,8 +18,8 @@ const (
 	TopicCatalog = "catalog"
 	TopicUser    = "user"
 	TopicPlayer  = "player"
-	// TopicRadio says artwork for an announced title has landed. A
-	// client not tuned to a station ignores it.
+	// TopicRadio says a station's face has something new: a song, a
+	// cover. A client not tuned to a station ignores it.
 	TopicRadio = "radio"
 )
 
@@ -51,10 +51,8 @@ const coalesceWindow = 250 * time.Millisecond
 type Hub struct {
 	src wakeSource
 
-	// radioDirty holds the stations whose artwork landed since the last
-	// tick. A set rather than a channel because the frame carries no
-	// data: many landings on one station inside one window are one
-	// invalidation.
+	// radioDirty holds the stations woken since the last tick: a set,
+	// because many wakes on one station inside a window are one frame.
 	radioMu    sync.Mutex
 	radioDirty map[string]struct{}
 
@@ -76,7 +74,7 @@ type Conn struct {
 	mu sync.Mutex
 	// station is the radio station this client says it is listening to,
 	// empty when it is listening to none, and tuned whether it has ever
-	// said. Together they decide which connections a cover landing
+	// said. Together they decide which connections a radio wake
 	// reaches; see Tune.
 	station string
 	tuned   bool
@@ -128,11 +126,9 @@ func (c *Conn) wants(topic string) bool {
 
 // Tune names the station this connection is listening to, replacing
 // whatever it named before; an empty pid says it is listening to none.
-// A connection that has tuned hears only its own station's landings. One
-// that never has keeps the topic's older contract - every landing, which
-// its subscription asked for before there was a frame to narrow it - so
-// a client from before the frame, or one that never sends it, loses
-// nothing it subscribed to.
+// A connection that has tuned hears only its own station's wakes; one
+// that never has keeps the topic's older contract and hears every
+// station's, so a client that never sends the frame loses nothing.
 func (c *Conn) Tune(stationPID string) {
 	c.mu.Lock()
 	c.station = stationPID
@@ -140,7 +136,7 @@ func (c *Conn) Tune(stationPID string) {
 	c.mu.Unlock()
 }
 
-// tunedTo reports whether a landing on one of the stations concerns
+// tunedTo reports whether a wake on one of the stations concerns
 // this connection: yes for one that never tuned, and for one tuned to a
 // station in the set.
 func (c *Conn) tunedTo(stations map[string]struct{}) bool {
@@ -244,12 +240,9 @@ func (h *Hub) Run(ctx context.Context) error {
 // visibility, so fanning to everyone is cheap and leaks nothing.
 func (h *Hub) MarkPlayerAll() { h.markAll(TopicPlayer) }
 
-// MarkRadio queues a radio-topic invalidation for the connections a
-// landing on stationPID concerns, at the next tick. Coalesced rather than
-// sent on the spot: covers land one detached worker at a time, and a
-// station whose stream announces a new title every three minutes can
-// land two rungs of artwork for it. A landing with no station to name
-// concerns nobody in particular and marks nothing.
+// MarkRadio queues a radio-topic invalidation for the connections a wake
+// on stationPID concerns, at the next tick: a song and its covers arrive
+// moments apart. A wake with no station to name marks nothing.
 func (h *Hub) MarkRadio(stationPID string) {
 	if stationPID == "" {
 		return
@@ -262,7 +255,7 @@ func (h *Hub) MarkRadio(stationPID string) {
 	h.radioDirty[stationPID] = struct{}{}
 }
 
-// takeRadio drains the stations that landed since the last tick.
+// takeRadio drains the stations woken since the last tick.
 func (h *Hub) takeRadio() map[string]struct{} {
 	h.radioMu.Lock()
 	defer h.radioMu.Unlock()
@@ -297,8 +290,8 @@ func (h *Hub) flush(catalog bool, users map[string]struct{}, stations map[string
 		if _, ok := users[c.userID]; ok {
 			c.Mark(TypeInvalidate, TopicUser)
 		}
-		// Checked only when something landed: the connection's lock is
-		// not worth taking four times a second for nothing.
+		// Checked only when a station woke: the connection's lock is not
+		// worth taking four times a second for nothing.
 		if len(stations) > 0 && c.tunedTo(stations) {
 			c.Mark(TypeInvalidate, TopicRadio)
 		}

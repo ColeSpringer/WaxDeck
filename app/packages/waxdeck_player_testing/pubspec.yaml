@@ -25,3 +25,6 @@ dev_dependencies:
   # exception to the classifier that reads it. Exact, like every pin in
   # waxdeck_player, since the codes are that version's.
   just_audio: 0.10.6
+  # For the failing-load test, which puts a platform under the real
+  # AudioPlayer so its activation path is the one exercised.
+  just_audio_platform_interface: 4.6.0

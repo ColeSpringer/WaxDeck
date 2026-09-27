@@ -3,8 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -489,6 +492,21 @@ func TestRadioArtBacksOffWhenUpstreamFails(t *testing.T) {
 	}
 }
 
+// A refusal asks for a longer wait than a failure, which is retried
+// within the song.
+func TestRadioArtWaitsLongerAfterARefusal(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newCatalogFixture(t)
+	enableRadioExternalArt(t, ctx, svc)
+	svc.radioArtResolver = &fakeRadioArt{err: fmt.Errorf("deezer: %w", providers.ErrThrottled)}
+
+	svc.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Nobody - Refused")
+	refused := waitForRadioArt(t, svc, "Nobody", "Refused")
+	if refused.fresh != radioArtRefusalFreshFor || refused.fresh <= radioArtFailureFreshFor {
+		t.Errorf("a refusal cached for %v, want %v", refused.fresh, radioArtRefusalFreshFor)
+	}
+}
+
 // A worker outlives the toggle it started under, so it asks again on the
 // way out: without that, bytes fetched from a third party sit resident
 // for a week past the operator saying stop, and nothing evicts them.
@@ -623,5 +641,38 @@ func TestRadioArtForgetReachesTheResolver(t *testing.T) {
 
 	if got := resolver.forgot.Load(); got != 1 {
 		t.Fatalf("the resolver was purged %d times, want 1", got)
+	}
+}
+
+// A station picture holds the lookup back only while it is fetched, so
+// its failure wakes the station the way a landing does.
+func TestAnnouncedArtFailureWakesTheStation(t *testing.T) {
+	t.Parallel()
+	for name, mime := range map[string]string{
+		"not an image": "text/html",
+		"a failure":    "",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, svc, _ := newCatalogFixture(t)
+			svc.allowPrivateRadioHosts = true
+			var woke atomic.Int64
+			svc.SetRadioInvalidator(func(string) { woke.Add(1) })
+			host := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if mime == "" {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				w.Header().Set("Content-Type", mime)
+				w.Write([]byte("<html></html>"))
+			}))
+			t.Cleanup(host.Close)
+
+			svc.EnsureRadioAnnouncedArt(testStationPID, host.URL+"/cover", "Fixture - Song")
+			waitForRadioArtLookupToSettle(t, svc, announcedArtKey(host.URL+"/cover", "Fixture - Song"))
+			if got := woke.Load(); got != 1 {
+				t.Fatalf("woke %d times, want the station woken once", got)
+			}
+		})
 	}
 }

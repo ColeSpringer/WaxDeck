@@ -11,6 +11,7 @@ import '../tokens/colors.dart';
 import '../tokens/motion.dart';
 import '../tokens/radii.dart';
 import '../tokens/spacing.dart';
+import 'reserved_size.dart';
 import 'secondary_tap.dart';
 import 'tooltip.dart';
 import '../tokens/typography.dart';
@@ -161,6 +162,7 @@ class WaxTappable extends StatefulWidget {
 
 class _WaxTappableState extends State<WaxTappable> {
   bool _focused = false;
+
   final FocusNode _focus = FocusNode(debugLabel: 'wax-tappable');
 
   @override
@@ -191,6 +193,9 @@ class _WaxTappableState extends State<WaxTappable> {
       child: FocusableActionDetector(
         enabled: enabled,
         focusNode: _focus,
+        // One stop, as it is one node to a reader: the ink a control
+        // draws with is focusable too, and was a second press of Tab.
+        descendantsAreTraversable: false,
         mouseCursor: SystemMouseCursors.click,
         onShowFocusHighlight: (value) => setState(() => _focused = value),
         actions: <Type, Action<Intent>>{
@@ -486,20 +491,13 @@ class WaxPill extends StatelessWidget {
               horizontal: WaxSpace.s12,
               vertical: WaxSpace.s8,
             ),
-            child: Stack(
-              alignment: Alignment.center,
-              children: <Widget>[
-                if (reserve case final room?)
-                  Visibility(
-                    visible: false,
-                    maintainSize: true,
-                    maintainAnimation: true,
-                    maintainState: true,
-                    child: Text(room, style: style),
-                  ),
-                Text(drawn, style: style),
-              ],
-            ),
+            child: switch (reserve) {
+              final room? => ReservedSize(
+                reserve: Text(room, style: style),
+                child: Text(drawn, style: style),
+              ),
+              null => Text(drawn, style: style),
+            },
           ),
         ),
       ),
@@ -1917,7 +1915,10 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
     return target > widget.duration ? widget.duration : target;
   }
 
-  void _seekBy(Duration delta) => widget.onSeek?.call(_offsetBy(delta));
+  void _seekBy(Duration delta) {
+    if (widget.duration <= Duration.zero) return;
+    widget.onSeek?.call(_offsetBy(delta));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1944,8 +1945,11 @@ class _WaxSeekBarState extends State<WaxSeekBar> {
       // (and an assertion failure).
       increasedValue: l10n.spellDuration(_offsetBy(widget.step)),
       decreasedValue: l10n.spellDuration(_offsetBy(-widget.step)),
-      onIncrease: enabled ? () => _seekBy(widget.step) : null,
-      onDecrease: enabled ? () => _seekBy(-widget.step) : null,
+      // Offered while disabled too, and inert then: the web build swaps a
+      // node's element when it gains or loses its steps, which would drop
+      // the identifier and a screen reader's place on every load.
+      onIncrease: () => _seekBy(widget.step),
+      onDecrease: () => _seekBy(-widget.step),
       child: ExcludeSemantics(
         child: LayoutBuilder(
           builder: (context, constraints) {

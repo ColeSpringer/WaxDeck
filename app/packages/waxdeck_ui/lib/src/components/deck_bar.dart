@@ -12,6 +12,8 @@ import '../tokens/typography.dart';
 import 'marquee.dart';
 import 'artwork.dart';
 import 'controls.dart';
+import 'indicators.dart';
+import 'reserved_size.dart';
 import 'semantics_slots.dart';
 import 'view_data.dart';
 
@@ -41,6 +43,7 @@ class DeckBarActions {
     this.onStar,
     this.onSaveSong,
     this.onSeek,
+    this.pending = false,
   });
 
   final VoidCallback? onPlayPause;
@@ -100,6 +103,10 @@ class DeckBarActions {
   final ValueChanged<bool>? onSaveSong;
 
   final ValueChanged<Duration>? onSeek;
+
+  /// The item's own controls (star, cast, more) wait for it to resolve:
+  /// drawn disabled in their slots, so the bar keeps its shape mid-skip.
+  final bool pending;
 }
 
 /// The persistent now-playing surface, docked at the bottom of every
@@ -317,9 +324,11 @@ class DeckBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
       child: Row(
         children: <Widget>[
-          // Left zone: what is playing. Flexible, and every text in it
-          // clips, so the zone yields before anything overflows.
+          // Left zone: what is playing. Every text in it clips, so it
+          // yields before anything overflows; two parts to the centre's
+          // three still leave the seek track 180 px at the breakpoint.
           Expanded(
+            flex: 2,
             child: GestureDetector(
               // Same opaque surface and the same semantics exclusion as
               // the compact bar's, so the desktop zone expands from its
@@ -345,13 +354,9 @@ class DeckBar extends StatelessWidget {
                       child: _titleBlock(context, colors, compact: false),
                     ),
                   ),
-                  // Only where the caller wired it, which is the rule the
-                  // right cluster already follows: a permanently greyed
-                  // control reads as broken rather than as absent. Live
-                  // radio is the case that proves it - a station has no
-                  // per-user state to star, so the bar drew a disabled
-                  // star over every stream.
-                  if (actions.onStar != null) ...<Widget>[
+                  // Wired or pending only: a star that can never work, as
+                  // over a stream, reads as broken rather than absent.
+                  if (actions.onStar != null || actions.pending) ...<Widget>[
                     const SizedBox(width: WaxSpace.s8),
                     StarButton(
                       starred: now.starred,
@@ -390,7 +395,7 @@ class DeckBar extends StatelessWidget {
           // transport centred in the band above the seek's visual slot.
           // The buttons are hit-tested first and keep their taps.
           Expanded(
-            flex: 2,
+            flex: 3,
             child: now.live
                 ? Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -403,22 +408,24 @@ class DeckBar extends StatelessWidget {
                         right: 0,
                         bottom: 0,
                         height: WaxSpace.touchTarget,
-                        child: _Ticking(
-                          ticker: positionTicker,
-                          fallback: now.position,
-                          builder: (context, position) => Row(
-                            children: <Widget>[
-                              ExcludeSemantics(
-                                child: Text(
-                                  formatTimecode(position),
-                                  style: WaxType.monoTime.copyWith(
-                                    color: colors.textTertiary,
-                                  ),
-                                ),
+                        child: Row(
+                          children: <Widget>[
+                            _Timecode(
+                              span: now.duration,
+                              alignment: AlignmentDirectional.centerEnd,
+                              child: _Ticking(
+                                ticker: positionTicker,
+                                fallback: now.position,
+                                builder: (context, position) =>
+                                    Text(formatTimecode(position)),
                               ),
-                              const SizedBox(width: WaxSpace.s8),
-                              Expanded(
-                                child: WaxSeekBar(
+                            ),
+                            const SizedBox(width: WaxSpace.s8),
+                            Expanded(
+                              child: _Ticking(
+                                ticker: positionTicker,
+                                fallback: now.position,
+                                builder: (context, position) => WaxSeekBar(
                                   position: position,
                                   duration: now.duration,
                                   buffered: now.buffered,
@@ -426,17 +433,14 @@ class DeckBar extends StatelessWidget {
                                   semanticsId: ids.seek,
                                 ),
                               ),
-                              const SizedBox(width: WaxSpace.s8),
-                              ExcludeSemantics(
-                                child: Text(
-                                  formatTimecode(now.duration),
-                                  style: WaxType.monoTime.copyWith(
-                                    color: colors.textTertiary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: WaxSpace.s8),
+                            _Timecode(
+                              span: now.duration,
+                              alignment: AlignmentDirectional.centerStart,
+                              child: Text(formatTimecode(now.duration)),
+                            ),
+                          ],
                         ),
                       ),
                       Positioned(
@@ -464,12 +468,9 @@ class DeckBar extends StatelessWidget {
           // buttons and a speed chip do not fit in a quarter of an
           // 840 px window, and a flex would have them overflow instead
           // of taking the space they need.
-          // Each of these is drawn only where the caller wired it. A
-          // surface the app has not built yet would otherwise sit here
-          // as a permanently greyed button, which reads as broken rather
-          // than as absent; the transport is the opposite case and keeps
-          // its controls disabled, because a bar that loses its next
-          // button on the last track is a bar that moves under the hand.
+          // Each drawn where wired or pending: a button that can never
+          // work reads as broken, and one that left for a load's length
+          // would move the bar under the hand.
           Row(
             mainAxisSize: MainAxisSize.min,
             children: <Widget>[
@@ -490,7 +491,7 @@ class DeckBar extends StatelessWidget {
                   onPressed: actions.onLyrics,
                   semanticsId: ids.lyrics,
                 ),
-              if (actions.onCast != null)
+              if (actions.onCast != null || actions.pending)
                 WaxIconButton(
                   glyph: WaxIcons.cast,
                   label: l10n.deckBarCast,
@@ -514,7 +515,7 @@ class DeckBar extends StatelessWidget {
                   semanticsId: ids.volume,
                   muteSemanticsId: ids.mute,
                 ),
-              if (actions.onMore != null)
+              if (actions.onMore != null || actions.pending)
                 WaxIconButton(
                   glyph: WaxIcons.more,
                   label: l10n.commonMore,
@@ -630,7 +631,7 @@ class DeckBar extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: <Widget>[
             if (now.live) ...<Widget>[
-              _livePill(context, colors),
+              const LivePill(),
               const SizedBox(width: WaxSpace.s8),
             ],
             Flexible(
@@ -653,18 +654,6 @@ class DeckBar extends StatelessWidget {
       ],
     );
   }
-
-  Widget _livePill(BuildContext context, WaxColors colors) => Container(
-    padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s4, vertical: 1),
-    decoration: BoxDecoration(
-      color: colors.radio.container,
-      borderRadius: WaxRadius.pill,
-    ),
-    child: Text(
-      context.waxL10n.commonLiveChip,
-      style: WaxType.overline.copyWith(color: colors.radio.onContainer),
-    ),
-  );
 
   Widget _speedChip(BuildContext context, WaxColors colors) => Container(
     margin: const EdgeInsetsDirectional.only(end: WaxSpace.s8),
@@ -960,6 +949,61 @@ class DeckBarOffer extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A seek timecode's box, as wide as the longest time the track can show,
+/// so the track between the two moves only across an hour. An unknown
+/// length, a skip still loading, keeps the box it had.
+class _Timecode extends StatefulWidget {
+  const _Timecode({
+    required this.span,
+    required this.alignment,
+    required this.child,
+  });
+
+  final Duration span;
+  final AlignmentGeometry alignment;
+  final Widget child;
+
+  @override
+  State<_Timecode> createState() => _TimecodeState();
+}
+
+class _TimecodeState extends State<_Timecode> {
+  late String _pattern = _patternFor(widget.span) ?? '00:00';
+
+  static final RegExp _digit = RegExp(r'\d');
+
+  static String? _patternFor(Duration span) {
+    if (span <= Duration.zero) return null;
+    if (span < const Duration(hours: 1)) return '00:00';
+    return formatTimecode(span).replaceAll(_digit, '0');
+  }
+
+  @override
+  void didUpdateWidget(_Timecode old) {
+    super.didUpdateWidget(old);
+    if (old.span != widget.span) {
+      _pattern = _patternFor(widget.span) ?? _pattern;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    return ExcludeSemantics(
+      child: DefaultTextStyle.merge(
+        style: WaxType.monoTime.copyWith(color: colors.textTertiary),
+        maxLines: 1,
+        softWrap: false,
+        child: ReservedSize(
+          reserve: Text(_pattern),
+          alignment: widget.alignment,
+          child: widget.child,
         ),
       ),
     );

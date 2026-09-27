@@ -394,7 +394,7 @@ class _LastfmCredentialsDialogState
             );
           },
         ),
-        AsyncError() => Text(l10n.settingsLastfmCredentialsError),
+        AsyncError() => WaxProse(l10n.settingsLastfmCredentialsError),
         _ => const Padding(
           padding: EdgeInsets.all(WaxSpace.s8),
           child: LinearProgressIndicator(),
@@ -590,12 +590,12 @@ class AppPasswordsSection extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(l10n.settingsAppPasswordCreatedMessage),
+              WaxProse(l10n.settingsAppPasswordCreatedMessage),
               const SizedBox(height: WaxSpace.s12),
-              SelectableText(
+              WaxProse(
                 created.secret,
                 key: const Key('app-password-secret'),
-                style: const TextStyle(fontFamily: 'monospace'),
+                style: WaxType.monoData,
               ),
             ],
           ),
@@ -1188,7 +1188,7 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
               if (_error != null)
                 Padding(
                   padding: const EdgeInsets.only(top: WaxSpace.s8),
-                  child: Text(
+                  child: WaxProse(
                     _error!,
                     key: const Key('notify-target-error'),
                     style: TextStyle(

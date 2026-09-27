@@ -174,6 +174,10 @@ func (l *Library) RadioStreamSource(ctx context.Context, apiStationPID string) (
 	if err := l.validateStreamURL(row.StreamURL); err != nil {
 		return "", err
 	}
+	// Kept as the stream opens, the one moment the proxy asks: a picture
+	// the station announces at its own logo's URL is that logo, and
+	// knowing it now spares the first song being handed it for a cover.
+	l.noteRadioDirectoryLogo(apiStationPID, row.LogoURL)
 	return row.StreamURL, nil
 }
 
@@ -991,6 +995,8 @@ func (l *Library) forgetRadioLogo(apiStationPID string) {
 	// it would keep answering for a decision the operator has just
 	// reversed.
 	delete(l.radioLogoHints, apiStationPID)
+	delete(l.radioIcyLogos, apiStationPID)
+	delete(l.radioDirectoryLogos, apiStationPID)
 }
 
 // dropRadioLogoLocked forgets one cached logo. Callers hold the lock.
@@ -1079,32 +1085,48 @@ func (l *Library) NoteRadioMeta(apiStationPID, title, artURL string) {
 		l.NoteRadioAlive(apiStationPID)
 		return
 	}
+	// Read before the title lock: the two locks are never held together.
+	mark := artURL != "" && l.isRadioStationMark(apiStationPID, artURL)
 	l.radioTitlesMu.Lock()
 	prev, had := l.radioTitles[apiStationPID]
-	// The same picture announced against a different song is the
-	// station's own mark, not that song's cover. Stations do this - a
-	// channel logo in StreamUrl on every track is a whole class of them -
-	// and taking it for cover art would park one image on the
-	// full-screen face forever, outranking the lookup that would have
-	// found the actual sleeve. A picture that changes with the title is
-	// what a per-track cover looks like.
-	fixed := prev.artFixed
-	if had && artURL != "" && prev.title != title && prev.artURL != "" {
-		fixed = prev.artURL == artURL
+	// A picture announced with two songs in a row is the station's mark;
+	// one that changes with the song is a cover. The comparison skips
+	// declared logos and announcements with no picture.
+	repeated, proven := prev.repeatedArtURL, prev.artProven
+	lastArt, lastArtTitle := prev.lastArtURL, prev.lastArtTitle
+	if artURL != "" && !mark {
+		if lastArt != "" && lastArtTitle != title {
+			repeated = ""
+			if lastArt == artURL {
+				repeated = artURL
+			}
+			proven = repeated == ""
+		}
+		lastArt, lastArtTitle = artURL, title
 	}
+	fixed := mark || (artURL != "" && artURL == repeated)
 	now := time.Now().UnixNano()
 	l.radioTitles[apiStationPID] = radioTitle{
-		title:       title,
-		artURL:      artURL,
-		artFixed:    fixed,
-		seenNS:      now,
-		announcedNS: now,
+		title:          title,
+		artURL:         artURL,
+		artFixed:       fixed,
+		artProven:      proven,
+		repeatedArtURL: repeated,
+		lastArtURL:     lastArt,
+		lastArtTitle:   lastArtTitle,
+		seenNS:         now,
+		announcedNS:    now,
 	}
 	l.radioTitlesMu.Unlock()
-	// Demoted rather than discarded: a station mark is exactly what the
-	// logo rung wants, and this one came from the station itself.
-	if fixed && artURL != "" {
-		l.NoteRadioLogoHint(apiStationPID, artURL)
+	// Demoted rather than discarded: a mark is what the logo rung wants.
+	if fixed && !mark {
+		l.noteRadioLogoHint(apiStationPID, artURL, false)
+	}
+	// A new song is news to a tuned face, which would otherwise learn of
+	// it on its next poll: up to a quarter-minute late, and longer for
+	// the cover the rungs below go and get for it.
+	if !had || prev.title != title {
+		l.wakeRadioListeners(apiStationPID)
 	}
 }
 
@@ -1116,17 +1138,36 @@ func (l *Library) RadioNowPlaying(apiStationPID string) string {
 }
 
 // RadioNowPlayingMeta reports the last observed title and the picture
-// announced with it, both read under one lock so the two describe the
-// same song: a second read could land the other side of a rollover.
+// announced with it. See RadioNowPlayingAnnouncement.
+func (l *Library) RadioNowPlayingMeta(apiStationPID string) (string, string) {
+	a := l.RadioNowPlayingAnnouncement(apiStationPID)
+	return a.Title, a.ArtURL
+}
+
+// RadioAnnouncement is what a station last said it was playing.
+type RadioAnnouncement struct {
+	Title string
+	// ArtURL is the picture announced with the title, empty where there
+	// was none or where it is the station's own mark.
+	ArtURL string
+	// ArtProven says the picture has been seen to change with the song,
+	// so it is this song's cover. Until then it might be the station's
+	// mark, which a single song cannot tell apart.
+	ArtProven bool
+}
+
+// RadioNowPlayingAnnouncement reports the last observed announcement,
+// read under one lock so its fields describe the same song: a second
+// read could land the other side of a rollover.
 //
 // Two clocks, because the stream stopping and the station going quiet
 // are different failures.
-func (l *Library) RadioNowPlayingMeta(apiStationPID string) (string, string) {
+func (l *Library) RadioNowPlayingAnnouncement(apiStationPID string) RadioAnnouncement {
 	l.radioTitlesMu.Lock()
 	defer l.radioTitlesMu.Unlock()
 	t, ok := l.radioTitles[apiStationPID]
 	if !ok {
-		return "", ""
+		return RadioAnnouncement{}
 	}
 	now := time.Now().UnixNano()
 	if now-t.seenNS > int64(l.radioTitleFresh) || now-t.announcedNS > int64(radioTitleHoldFor) {
@@ -1135,26 +1176,41 @@ func (l *Library) RadioNowPlayingMeta(apiStationPID string) (string, string) {
 		// station stops being relayed and nothing else would ever revisit
 		// its entry.
 		delete(l.radioTitles, apiStationPID)
-		return "", ""
+		return RadioAnnouncement{}
 	}
 	// A mark the station repeats on every song is not this song's cover,
 	// so it is not offered as one: it has already gone to the logo rung,
 	// which is where the ladder draws it from.
 	if t.artFixed {
-		return t.title, ""
+		return RadioAnnouncement{Title: t.title}
 	}
-	return t.title, t.artURL
+	return RadioAnnouncement{Title: t.title, ArtURL: t.artURL, ArtProven: t.artProven}
 }
 
 // NoteRadioLogoHint records the logo a station named in its connect
 // headers (`icy-logo`), which is a better answer than going looking for
 // one and costs nothing to keep.
 func (l *Library) NoteRadioLogoHint(apiStationPID, logoURL string) {
+	l.noteRadioLogoHint(apiStationPID, logoURL, true)
+}
+
+// noteRadioLogoHint records a logo to try ahead of discovery. Only one
+// the station declared is its mark from the first song; a repeat
+// NoteRadioMeta demoted is a guess, and never replaces a declared one.
+func (l *Library) noteRadioLogoHint(apiStationPID, logoURL string, declared bool) {
 	if logoURL == "" {
 		return
 	}
 	l.radioLogosMu.Lock()
 	defer l.radioLogosMu.Unlock()
+	if declared {
+		if l.radioIcyLogos == nil {
+			l.radioIcyLogos = map[string]string{}
+		}
+		l.radioIcyLogos[apiStationPID] = logoURL
+	} else if l.radioIcyLogos[apiStationPID] != "" {
+		return
+	}
 	if l.radioLogoHints == nil {
 		l.radioLogoHints = map[string]string{}
 	}
@@ -1162,12 +1218,8 @@ func (l *Library) NoteRadioLogoHint(apiStationPID, logoURL string) {
 		return
 	}
 	l.radioLogoHints[apiStationPID] = logoURL
-	// The station this arrives for is precisely the one that has "no
-	// logo we can draw" cached: the dial painted, discovery came up
-	// empty, and the answer was remembered for an hour. Only now, the
-	// moment somebody played it, has the station said where its mark
-	// is. Without dropping that entry the hint would sit unread until
-	// the miss went stale, which is the whole hour it exists to save.
+	// A station with no logo has a discovery miss cached for an hour;
+	// dropping it lets the hint answer now rather than then.
 	l.dropRadioLogoLocked(apiStationPID)
 }
 
@@ -1177,13 +1229,42 @@ func (l *Library) radioLogoHint(apiStationPID string) string {
 	return l.radioLogoHints[apiStationPID]
 }
 
+// noteRadioDirectoryLogo keeps the logo URL a station's record carries.
+func (l *Library) noteRadioDirectoryLogo(apiStationPID, logoURL string) {
+	l.radioLogosMu.Lock()
+	defer l.radioLogosMu.Unlock()
+	if logoURL == "" {
+		delete(l.radioDirectoryLogos, apiStationPID)
+		return
+	}
+	if l.radioDirectoryLogos == nil {
+		l.radioDirectoryLogos = map[string]string{}
+	}
+	l.radioDirectoryLogos[apiStationPID] = logoURL
+}
+
+// isRadioStationMark reports whether artURL is a logo the station
+// declared: the one its record carries, or the one its headers named.
+func (l *Library) isRadioStationMark(apiStationPID, artURL string) bool {
+	l.radioLogosMu.Lock()
+	defer l.radioLogosMu.Unlock()
+	return artURL == l.radioIcyLogos[apiStationPID] ||
+		artURL == l.radioDirectoryLogos[apiStationPID]
+}
+
 // radioTitle is one station's last observed in-stream announcement.
 type radioTitle struct {
 	title  string
 	artURL string
-	// artFixed marks a picture the station announces whatever is
-	// playing, which makes it the station's mark rather than a cover.
-	artFixed bool
+	// artFixed withholds this announcement's picture as the station's
+	// mark; artProven says the station's pictures change with the song.
+	artFixed  bool
+	artProven bool
+	// repeatedArtURL is the picture last seen with two songs in a row,
+	// and lastArtURL/lastArtTitle what the next picture is compared to.
+	repeatedArtURL string
+	lastArtURL     string
+	lastArtTitle   string
 	// seenNS is the last block of any kind, announcedNS the last one that
 	// named a song. Freshness needs both.
 	seenNS      int64

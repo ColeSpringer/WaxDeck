@@ -51,10 +51,9 @@ Future<void> showAddToLibrarySheet(
       ? MediaType.music
       : initial;
   final colors = WaxColors.of(context);
-  final choice = await showModalBottomSheet<String>(
+  final choice = await showWaxSheet<String>(
     context: context,
     backgroundColor: colors.surface2,
-    showDragHandle: true,
     builder: (sheetContext) => SafeArea(
       // Scrollable, because the sheet is capped at a fraction of the
       // window and four rows plus a header do not fit a phone held

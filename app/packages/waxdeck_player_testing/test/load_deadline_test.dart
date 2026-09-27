@@ -230,9 +230,10 @@ void main() {
       throwsA(isA<MediaLoadException>()),
     );
     expect(await abandoned, isA<MediaLoadException>());
+    // One stop before the replacement, one abandoning it.
     expect(
       player.stops,
-      1,
+      2,
       reason: 'the abandoned load stopped the player that replaced it',
     );
   });

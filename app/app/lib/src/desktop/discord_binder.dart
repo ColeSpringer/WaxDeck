@@ -149,6 +149,38 @@ class DiscordPresenceBinder {
   static const Duration _startSlack = Duration(seconds: 2);
 }
 
+/// What presence says of [now], or null for nothing. A skip still loading
+/// names its track without the bar: cleared, the status would wait out
+/// Discord's fifteen seconds to come back.
+DiscordActivity? presenceOf(NowPlaying now, {required bool playing}) {
+  final item = now.item;
+  if (item == null) return null;
+  final session = now.session;
+  if (session == null) {
+    if (!now.loading) return null;
+    return DiscordActivity(
+      title: item.title,
+      artist: item.artist,
+      album: item.album,
+    );
+  }
+  // From where the item started in wall-clock terms, so Discord keeps
+  // time itself; none while paused, or its bar would run on regardless.
+  final start = playing
+      ? DateTime.now().subtract(session.displayPosition)
+      : null;
+  final duration = session.isLoaded
+      ? session.mediaDuration
+      : Duration(milliseconds: item.durationMs);
+  return DiscordActivity(
+    title: item.title,
+    artist: item.artist,
+    album: item.album,
+    start: start,
+    end: start != null && duration > Duration.zero ? start.add(duration) : null,
+  );
+}
+
 /// Binds Discord presence to the signed-in session on a desktop.
 final discordPresenceProvider = Provider.autoDispose<DiscordPresenceBinder>((
   ref,
@@ -180,35 +212,10 @@ final discordPresenceProvider = Provider.autoDispose<DiscordPresenceBinder>((
       return;
     }
     final now = ref.read(nowPlayingProvider);
-    final item = now.item;
-    final session = now.session;
-    if (item == null || session == null) {
-      binder.show(null);
-      return;
-    }
-    // The bar is drawn from where this item started in wall-clock terms,
-    // which is what makes it keep time on Discord's side without this
-    // republishing per second. A seek moves the derived start, which is
-    // exactly when it should be republished.
-    //
-    // No timestamps while paused: Discord runs its bar from the start
-    // regardless, so a pause for lunch reads as an hour into the song.
-    final playing = ref.read(audioEngineProvider).playing;
-    final position = session.displayPosition;
-    final start = playing ? DateTime.now().subtract(position) : null;
-    final duration = session.isLoaded
-        ? session.mediaDuration
-        : Duration(milliseconds: item.durationMs);
+    // An entry still resolving keeps what is shown until it has a name.
+    if (now.loading && now.item == null) return;
     binder.show(
-      DiscordActivity(
-        title: item.title,
-        artist: item.artist,
-        album: item.album,
-        start: start,
-        end: start != null && duration > Duration.zero
-            ? start.add(duration)
-            : null,
-      ),
+      presenceOf(now, playing: ref.read(audioEngineProvider).playing),
     );
   }
 

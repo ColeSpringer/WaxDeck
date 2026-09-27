@@ -8,6 +8,7 @@ import '../tokens/spacing.dart';
 import '../tokens/typography.dart';
 import 'artwork.dart';
 import 'backdrop.dart';
+import 'prose.dart';
 import 'view_data.dart';
 
 /// The head of a detail page: album, artist, show, book, playlist.
@@ -131,7 +132,7 @@ class EntityHeader extends StatelessWidget {
               constraints: const BoxConstraints(
                 maxWidth: WaxSpace.readingWidth,
               ),
-              child: Text(
+              child: WaxProse(
                 description!,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,

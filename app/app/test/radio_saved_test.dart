@@ -1,11 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/radio/radio_controller.dart';
 import 'package:waxdeck/src/radio/radio_saved_controller.dart';
 import 'package:waxdeck/src/radio/radio_saved_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
+import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
@@ -32,8 +38,9 @@ RadioSavedSong _song({
 
 Future<ProviderContainer> _pump(
   WidgetTester tester,
-  FakeRepository repo,
-) async {
+  FakeRepository repo, {
+  FakeEngine? engine,
+}) async {
   // Desktop-sized: the identify handoff pushes the review entry, which
   // sits inside the admin console's sidebar shell and wants the width.
   tester.view.physicalSize = const Size(1600, 1000);
@@ -43,6 +50,13 @@ Future<ProviderContainer> _pump(
     overrides: [
       repositoryProvider.overrideWithValue(repo),
       credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      // The tests that tune a station need an engine to tune it through.
+      if (engine != null) ...[
+        audioEngineProvider.overrideWithValue(engine),
+        clientSettingsStoreProvider.overrideWithValue(
+          MemoryClientSettingsStore(),
+        ),
+      ],
     ],
   );
   addTearDown(container.dispose);
@@ -57,6 +71,89 @@ Future<ProviderContainer> _pump(
 }
 
 void main() {
+  group('the list while a page loads', () {
+    // Fifty-two songs: the second page holds rw-1 and rw-0.
+    ({ProviderContainer container, FakeRepository repo}) paged() {
+      final repo = FakeRepository();
+      for (var i = 0; i < RadioSavedController.pageSize + 2; i++) {
+        repo.seedSavedSong(_song(pid: 'rw-$i', line: 'Artist - Song $i'));
+      }
+      final container = ProviderContainer(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+      final held = container.listen(radioSavedProvider, (_, _) {});
+      addTearDown(held.close);
+      return (container: container, repo: repo);
+    }
+
+    List<String> pids(ProviderContainer container) => [
+      for (final song in container.read(radioSavedProvider).value!.songs)
+        song.pid,
+    ];
+
+    test('a song let go of meanwhile stays gone', () async {
+      final h = paged();
+      await h.container.read(radioSavedProvider.future);
+      final list = h.container.read(radioSavedProvider.notifier);
+      final gate = h.repo.savedPageGate = Completer<void>();
+      final more = list.loadMore();
+      list
+        ..noteRemoved('rw-51')
+        ..noteRemoved('rw-0');
+      gate.complete();
+      await more;
+
+      expect(pids(h.container), isNot(contains('rw-51')));
+      expect(pids(h.container), isNot(contains('rw-0')));
+      expect(pids(h.container), contains('rw-1'));
+    });
+
+    test('a song kept meanwhile stays, once', () async {
+      final h = paged();
+      await h.container.read(radioSavedProvider.future);
+      final list = h.container.read(radioSavedProvider.notifier);
+      final gate = h.repo.savedPageGate = Completer<void>();
+      final more = list.loadMore();
+      list
+        ..noteSaved(_song(pid: 'rw-new', line: 'New - Song'))
+        ..noteSaved(_song(pid: 'rw-0', line: 'Artist - Song 0'));
+      gate.complete();
+      await more;
+
+      final held = pids(h.container);
+      expect(held.first, 'rw-0');
+      expect(held, contains('rw-new'));
+      expect(held.where((pid) => pid == 'rw-0'), hasLength(1));
+      expect(held, hasLength(RadioSavedController.pageSize + 3));
+    });
+
+    test('a failed delete puts the row back and paging goes on', () async {
+      final h = paged();
+      await h.container.read(radioSavedProvider.future);
+      final list = h.container.read(radioSavedProvider.notifier);
+      final deleting = Completer<void>();
+      h.repo
+        ..deleteSavedSongGate = deleting.future
+        ..deleteSavedSongError = const WaxDeckApiException(
+          code: 'unavailable',
+          message: 'the server is restarting',
+        );
+      final gate = h.repo.savedPageGate = Completer<void>();
+      final more = list.loadMore();
+      final removal = list.remove('rw-51');
+      gate.complete();
+      await more;
+      deleting.complete();
+      await expectLater(removal, throwsA(isA<WaxDeckApiException>()));
+
+      final state = h.container.read(radioSavedProvider).value!;
+      expect(state.loadingMore, isFalse);
+      expect(pids(h.container).first, 'rw-51');
+      expect(pids(h.container), contains('rw-0'));
+    });
+  });
+
   testWidgets('the list names what was heard and where', (tester) async {
     final repo = FakeRepository()
       ..seedSavedSong(
@@ -127,6 +224,114 @@ void main() {
     expect(find.text('The Bree Trio'), findsNothing);
     expect(container.read(radioSavedProvider).value?.songs, isEmpty);
     expect((await repo.listRadioSavedSongs()).songs, isEmpty);
+  });
+
+  testWidgets('forgetting the song on air empties its heart', (tester) async {
+    final station = RadioStation(
+      pid: 'rs-01JZX5N8QW3F4V9T2B7KDSTATN1',
+      name: 'Coastal FM',
+      streamUrl: 'https://radio.example/stream',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    final repo = FakeRepository()
+      ..radioStationsByPid[station.pid] = station
+      ..radioNowPlaying[station.pid] = 'Salt Harbour - The Bree Trio'
+      ..seedSavedSong(_song(pid: 'rw-1', line: 'Salt Harbour - The Bree Trio'));
+    final container = await _pump(tester, repo, engine: FakeEngine());
+    await container.read(radioPlaybackProvider.notifier).play(station);
+    await tester.pumpAndSettle();
+    expect(container.read(radioPlaybackProvider).nowPlayingSaved, isTrue);
+
+    // Rather than on the next poll, a quarter-minute on.
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedRemove('rw-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(container.read(radioPlaybackProvider).nowPlayingSaved, isFalse);
+    await container.read(radioPlaybackProvider.notifier).stop();
+  });
+
+  testWidgets('leaving the list mid-delete still empties the heart', (
+    tester,
+  ) async {
+    // The list is released with its screen, so a delete that answers
+    // after the listener left finds its controller gone: touching it
+    // then threw into the zone, and the heart kept its song.
+    final station = RadioStation(
+      pid: 'rs-01JZX5N8QW3F4V9T2B7KDSTATN1',
+      name: 'Coastal FM',
+      streamUrl: 'https://radio.example/stream',
+      createdAt: DateTime.utc(2026, 7, 1),
+    );
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..radioStationsByPid[station.pid] = station
+      ..radioNowPlaying[station.pid] = 'Salt Harbour - The Bree Trio'
+      ..seedSavedSong(_song(pid: 'rw-1', line: 'Salt Harbour - The Bree Trio'))
+      ..deleteSavedSongGate = gate.future;
+    final container = await _pump(tester, repo, engine: FakeEngine());
+    await container.read(radioPlaybackProvider.notifier).play(station);
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.radioSavedRemove('rw-1')),
+    );
+    await tester.pump();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const SizedBox.shrink(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(container.read(radioPlaybackProvider).nowPlayingSaved, isFalse);
+    await container.read(radioPlaybackProvider.notifier).stop();
+  });
+
+  testWidgets('the list is read again when it is opened again', (tester) async {
+    // A song kept on another device showed up only after a restart: the
+    // list was fetched once and held for the session.
+    final repo = FakeRepository()
+      ..seedSavedSong(
+        _song(
+          pid: 'rw-1',
+          line: 'Salt Harbour - The Bree Trio',
+          artist: 'Salt Harbour',
+          title: 'The Bree Trio',
+        ),
+      );
+    final container = await _pump(tester, repo);
+    expect(find.text('The Bree Trio'), findsOneWidget);
+
+    // Closed the way leaving the screen closes it: the scope stays, and
+    // nothing reads the list any more.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const SizedBox.shrink(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    repo.seedSavedSong(
+      _song(
+        pid: 'rw-2',
+        line: 'Nightjar - Harbour Lights',
+        artist: 'Nightjar',
+        title: 'Harbour Lights',
+      ),
+    );
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(const RadioSavedScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Harbour Lights'), findsOneWidget);
   });
 
   testWidgets('half a parsed pair searches the announcement instead', (

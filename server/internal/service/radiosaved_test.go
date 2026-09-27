@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"image/jpeg"
 	"image/png"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -56,6 +57,40 @@ func TestRadioSavedSnapshotSkipsOversizeAndTheSwitchedOffRung(t *testing.T) {
 	})
 	if data, _, _ := svc.radioSavedSnapshot(ctx, uc, station, "Deck FM", line, "Charlie Parker", "Ornithology"); data != nil {
 		t.Fatalf("snapshot = %d bytes, want the oversize cover skipped", len(data))
+	}
+}
+
+// The heart keeps the cover the face shows: the lookup's while the
+// station's picture is unproven, the station's once it is proven.
+func TestRadioSavedSnapshotTakesTheCoverTheFaceShows(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	svc.allowPrivateRadioHosts = true
+	enableRadioExternalArt(t, ctx, svc)
+	svc.radioArtResolver = &fakeRadioArt{data: []byte("lookup-cover"), mime: "image/png"}
+	var hits atomic.Int64
+	pictures := artHost(t, &hits, "image/png", coverPNG(t, 30))
+	show := func(line, picture string) {
+		t.Helper()
+		svc.NoteRadioMeta(testStationPID, line, picture)
+		svc.RadioNowPlayingCover(testStationPID, "Test FM", svc.RadioNowPlayingAnnouncement(testStationPID))
+		waitForAnnouncedArt(t, svc, picture, line)
+		artist, title, _ := parseRadioTitle(line, "Test FM")
+		waitForRadioArtLookupToSettle(t, svc, radioArtKey(radioSearchField(artist), radioSearchField(title)))
+	}
+
+	show("Charlie Parker - Ornithology", pictures.URL+"/ornithology.png")
+	data, _, _ := svc.radioSavedSnapshot(ctx, uc, testStationPID, "Test FM",
+		"Charlie Parker - Ornithology", "Charlie Parker", "Ornithology")
+	if string(data) != "lookup-cover" {
+		t.Fatalf("unproven snapshot = %d bytes, want the lookup's cover", len(data))
+	}
+
+	show("Pink Floyd - Echoes", pictures.URL+"/echoes.png")
+	data, _, _ = svc.radioSavedSnapshot(ctx, uc, testStationPID, "Test FM",
+		"Pink Floyd - Echoes", "Pink Floyd", "Echoes")
+	if len(data) == 0 || string(data) == "lookup-cover" {
+		t.Fatalf("proven snapshot = %q, want the station's own picture", data)
 	}
 }
 
