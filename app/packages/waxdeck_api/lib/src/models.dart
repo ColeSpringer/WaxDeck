@@ -66,6 +66,12 @@ class WaxDeckApiException implements Exception {
   /// field alike, so refine on it, never require it.
   final Map<String, String>? params;
 
+  /// Whether this is the server out of reach rather than its answer: no
+  /// response at all, or a 503 from something in front of it. The one
+  /// rule the offline outboxes queue on - a refusal is an answer, and a
+  /// change the server refused must not wait to be refused again.
+  bool get unreachable => statusCode == null || statusCode == 503;
+
   @override
   String toString() => 'WaxDeckApiException($code, $statusCode): $message';
 }

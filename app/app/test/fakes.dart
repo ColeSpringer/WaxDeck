@@ -1143,8 +1143,13 @@ class FakeRepository implements WaxDeckRepository {
     );
   }
 
+  /// Pages the server-state stream answers with, in order; an empty page
+  /// once they run out.
+  final serverPages = <ServerSyncPage>[];
+
   @override
   Future<ServerSyncPage> syncServer({String? since, int? limit}) async {
+    if (serverPages.isNotEmpty) return serverPages.removeAt(0);
     return const ServerSyncPage(nextSince: 'fake-server-cursor');
   }
 
@@ -6581,4 +6586,26 @@ class FakeArtworkStore extends ArtworkStore {
 
   @override
   void dispose() {}
+}
+
+/// A channel that never reaches a server: connecting fails immediately,
+/// which is exactly what airplane mode looks like to the engine.
+class _DeadChannel extends EventsChannel {
+  _DeadChannel({
+    required super.onFrame,
+    required super.onDone,
+    required super.subscribe,
+  }) : super(url: 'ws://unreachable', authToken: null);
+
+  @override
+  Future<void> connect() => Future.error(Exception('unreachable'));
+
+  @override
+  Future<void> close() async {}
+}
+
+/// The factory tests hand the engine so it always lands offline.
+EventsChannelFactory deadChannelFactory() {
+  return ({required onFrame, required onDone, required subscribe}) =>
+      _DeadChannel(onFrame: onFrame, onDone: onDone, subscribe: subscribe);
 }

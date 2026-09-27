@@ -152,6 +152,65 @@ const _v3Schema = [
       '"catalog_since" TEXT NULL, "server_since" TEXT NULL, PRIMARY KEY ("id"));',
 ];
 
+/// The schema as v5 shipped it, verbatim from that version's generated
+/// DDL: every table current but the outbox, which carries no payload
+/// column yet. The path v6's one-column step runs on.
+const _v5Schema = [
+  'CREATE TABLE "artwork_pins" ("pid" TEXT NOT NULL, '
+      '"size_px" INTEGER NOT NULL, "art_url" TEXT NOT NULL, '
+      '"etag" TEXT NOT NULL, "local_path" TEXT NOT NULL, '
+      '"size_bytes" INTEGER NOT NULL, "pinned_at" INTEGER NOT NULL, '
+      'PRIMARY KEY ("pid", "size_px"));',
+  'CREATE TABLE "client_settings" ("key" TEXT NOT NULL, '
+      '"value" TEXT NOT NULL, PRIMARY KEY ("key"));',
+  'CREATE TABLE "download_records" ("pid" TEXT NOT NULL, '
+      '"file_index" INTEGER NOT NULL, "essence_hash" TEXT NOT NULL, '
+      '"etag" TEXT NOT NULL, "file_name" TEXT NOT NULL, '
+      '"local_path" TEXT NOT NULL, "size_bytes" INTEGER NOT NULL, '
+      '"state" TEXT NOT NULL, "span_start_ms" INTEGER NULL, '
+      '"span_end_ms" INTEGER NULL, "duration_ms" INTEGER NULL, '
+      'PRIMARY KEY ("pid", "file_index"));',
+  'CREATE TABLE "mirror_items" ("pid" TEXT NOT NULL, "ulid" TEXT NOT NULL, '
+      '"media_type" TEXT NOT NULL, "title" TEXT NOT NULL, "artist" TEXT NULL, '
+      '"album" TEXT NULL, "duration_ms" INTEGER NOT NULL, '
+      '"sort_key" TEXT NOT NULL, PRIMARY KEY ("pid"), UNIQUE ("ulid"));',
+  'CREATE TABLE "mirror_play_states" ("pid" TEXT NOT NULL, '
+      '"position_ms" INTEGER NOT NULL DEFAULT 0, '
+      '"played" INTEGER NOT NULL DEFAULT 0 CHECK ("played" IN (0, 1)), '
+      '"finished" INTEGER NOT NULL DEFAULT 0 CHECK ("finished" IN (0, 1)), '
+      '"play_count" INTEGER NOT NULL DEFAULT 0, '
+      '"starred" INTEGER NOT NULL DEFAULT 0 CHECK ("starred" IN (0, 1)), '
+      '"rating" INTEGER NULL, "updated_at" INTEGER NULL, '
+      '"last_played_at" INTEGER NULL, PRIMARY KEY ("pid"));',
+  'CREATE TABLE "outbox_listens" ("session_id" TEXT NOT NULL, '
+      '"pid" TEXT NOT NULL, "started_at" INTEGER NOT NULL, '
+      '"ms_played" INTEGER NOT NULL, '
+      '"finished" INTEGER NOT NULL DEFAULT 0 CHECK ("finished" IN (0, 1)), '
+      '"client" TEXT NOT NULL DEFAULT \'\', "skipped_ms" INTEGER NULL, '
+      'PRIMARY KEY ("session_id"));',
+  'CREATE TABLE "outbox_mutations" ("id" INTEGER NOT NULL PRIMARY KEY '
+      'AUTOINCREMENT, "kind" TEXT NOT NULL, "pid" TEXT NOT NULL, '
+      '"position_ms" INTEGER NULL, '
+      '"starred" INTEGER NULL CHECK ("starred" IN (0, 1)), '
+      '"rating" INTEGER NULL, "recorded_at" INTEGER NOT NULL);',
+  'CREATE TABLE "queue_entries" ("queue_id" TEXT NOT NULL, '
+      '"pid" TEXT NOT NULL, "position" INTEGER NOT NULL, '
+      '"source_rank" INTEGER NOT NULL, PRIMARY KEY ("queue_id"));',
+  'CREATE TABLE "queue_meta" ("id" INTEGER NOT NULL DEFAULT 1, '
+      '"current_index" INTEGER NOT NULL DEFAULT 0, '
+      '"shuffled" INTEGER NOT NULL DEFAULT 0 CHECK ("shuffled" IN (0, 1)), '
+      '"repeat" TEXT NOT NULL DEFAULT \'off\', '
+      '"source_kind" TEXT NOT NULL DEFAULT \'unknown\', '
+      '"source_label" TEXT NOT NULL DEFAULT \'\', "source_pid" TEXT NULL, '
+      '"source_rolling" INTEGER NOT NULL DEFAULT 0 '
+      'CHECK ("source_rolling" IN (0, 1)), '
+      '"next_queue_id" INTEGER NOT NULL DEFAULT 0, '
+      '"updated_at" INTEGER NOT NULL, '
+      '"source_cursor" TEXT NOT NULL DEFAULT \'\', PRIMARY KEY ("id"));',
+  'CREATE TABLE "sync_cursors" ("id" INTEGER NOT NULL DEFAULT 1, '
+      '"catalog_since" TEXT NULL, "server_since" TEXT NULL, PRIMARY KEY ("id"));',
+];
+
 /// A database holding what a v1 install would hold, opened through the
 /// current schema so the upgrade path runs on first use.
 MirrorDatabase _upgradedFromV1() {
@@ -230,6 +289,25 @@ MirrorDatabase _upgradedFromV3() {
   );
 }
 
+/// The same, for a v5 install: a star queued offline and not yet sent,
+/// which is what the outbox's new column must not cost.
+MirrorDatabase _upgradedFromV5() {
+  return MirrorDatabase(
+    NativeDatabase.memory(
+      setup: (raw) {
+        for (final statement in _v5Schema) {
+          raw.execute(statement);
+        }
+        raw.execute(
+          'INSERT INTO outbox_mutations (kind, pid, starred, recorded_at) '
+          "VALUES ('star', 'tr-A', 1, 1758931200);",
+        );
+        raw.userVersion = 5;
+      },
+    ),
+  );
+}
+
 /// Every table's columns, as sqlite reports them: name, type, and
 /// whether it is required. What a migration has to end up matching.
 Future<Map<String, List<String>>> _columns(MirrorDatabase db) async {
@@ -261,16 +339,19 @@ void main() {
     final upgraded = _upgradedFromV1();
     final fromV2 = _upgradedFromV2();
     final fromV3 = _upgradedFromV3();
+    final fromV5 = _upgradedFromV5();
     final fresh = inMemoryMirrorDatabase();
     addTearDown(upgraded.close);
     addTearDown(fromV2.close);
     addTearDown(fromV3.close);
+    addTearDown(fromV5.close);
     addTearDown(fresh.close);
 
     // Touch each database so the create and the upgrade both run.
     await upgraded.select(upgraded.mirrorItems).get();
     await fromV2.select(fromV2.mirrorItems).get();
     await fromV3.select(fromV3.mirrorItems).get();
+    await fromV5.select(fromV5.mirrorItems).get();
     await fresh.select(fresh.mirrorItems).get();
 
     final target = await _columns(fresh);
@@ -279,6 +360,21 @@ void main() {
     // an install that skipped a version is not a shape of its own.
     expect(await _columns(fromV2), target);
     expect(await _columns(fromV3), target);
+    expect(await _columns(fromV5), target);
+  });
+
+  test('v5 upgrades: a queued mutation survives with no payload', () async {
+    final db = _upgradedFromV5();
+    addTearDown(db.close);
+
+    final queued = await db.select(db.outboxMutations).getSingle();
+    expect(queued.kind, 'star');
+    expect(queued.pid, 'tr-A');
+    expect(queued.starred, isTrue);
+    expect(queued.payload, isNull);
+
+    final version = await db.customSelect('pragma user_version').getSingle();
+    expect(version.data.values.first, db.schemaVersion);
   });
 
   test('v1 upgrades: rows survive, the new surfaces exist', () async {

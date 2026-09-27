@@ -130,12 +130,15 @@ Future<MediaFault> probedMediaFaultOf(
 /// time. Taken knowingly, because it is the same verdict Android
 /// already gives garbage bytes on disk, and the skip surface names
 /// what happened.
+///
+/// Window edits and a replay's seek and reload are held to it too.
 const Duration _defaultLoadDeadline = Duration(seconds: 15);
 
 /// How long a `stop()` gets, both the one before a load and the one
-/// that abandons a timed-out load. A player that would not finish a
-/// load may not finish a stop either, so this is what keeps a hang from
-/// moving one call along rather than being reported.
+/// that abandons a timed-out load, and the pause a replay starts with.
+/// A player that would not finish a load may not finish a stop either,
+/// so this is what keeps a hang from moving one call along rather than
+/// being reported.
 const Duration _defaultStopGrace = Duration(seconds: 2);
 
 /// [AudioEnginePort] backed by just_audio.
@@ -199,6 +202,15 @@ class JustAudioEngine implements AudioEnginePort {
   /// platform, so the next load stops first even while the player reads idle.
   bool _unsettled = false;
 
+  /// Platform calls the engine stopped waiting for that have not answered
+  /// yet: window edits, loads, a replay's calls, stops. See [_stillOut].
+  int _unanswered = 0;
+
+  /// Bumped by everything that decides what is preloaded, so a preload
+  /// that lands after its deadline is adopted only while nothing has
+  /// changed that since.
+  int _preloadEpoch = 0;
+
   /// The two sources the window can hold, by identity.
   ///
   /// Every index the engine acts on is derived from these, never from
@@ -258,22 +270,36 @@ class JustAudioEngine implements AudioEnginePort {
         // no fault, no pane. A stop that will not land leaves the load
         // to fail on its own deadline, which is the honest report.
         try {
-          await _run(_player.stop).timeout(_stopGrace);
+          await _within(_run(_player.stop), _stopGrace);
         } on TimeoutException {
           // Swallowed: the load below is what answers for this player.
         }
       }
-      await _run(
+      final answer = _run(
         () => _player.setAudioSources(
           [source],
           initialIndex: 0,
           initialPosition: initialPosition,
         ),
-      ).timeout(_loadDeadline);
+      );
+      try {
+        await answer.timeout(_loadDeadline);
+      } on TimeoutException catch (timeout) {
+        // Read before this load is counted, and before the stop that
+        // abandons it can shake an earlier call loose.
+        final behind = _unanswered > 0;
+        _stillOut(answer);
+        throw _Abandoned(timeout, behindAnother: behind);
+      }
       if (generation == _generation) _unsettled = false;
+    } on _Abandoned catch (abandoned) {
+      throw MediaLoadException(
+        await _abandonedFault(abandoned, url, generation),
+        abandoned.timeout,
+      );
     } on Object catch (failure) {
       throw MediaLoadException(
-        await _faultOf(failure, url, generation),
+        await probedMediaFaultOf(failure, url, probe: _probe),
         failure,
       );
     } finally {
@@ -289,28 +315,26 @@ class JustAudioEngine implements AudioEnginePort {
     }
   }
 
-  /// What a failed load was, including the failure the platform never
-  /// reported.
+  /// What a load the deadline cut short was: the failure the platform
+  /// never reported.
   ///
-  /// A load the deadline cut short arrives as a `TimeoutException`, so
-  /// [probedMediaFaultOf] would take its own early exit - the probe is
-  /// spent only on a `PlayerException`, because everywhere else a
-  /// failure from outside the plugin says nothing about the media.
-  /// Here it says everything: a deadline is the only report the desktop
+  /// [probedMediaFaultOf] would take its own early exit here - the probe
+  /// is spent only on a `PlayerException`, because everywhere else a
+  /// failure from outside the plugin says nothing about the media. Here
+  /// it says everything: a deadline is the only report the desktop
   /// gives, so the probe is the whole classification rather than a
   /// refinement of one. A URL that answers a ranged GET while the
   /// player could not finish with it is the media's fault, and so is
   /// one that answers 415 - mpv giving up on a file the server would
   /// not serve as audio is the same file twice. A URL that answers
-  /// neither is the transport's.
-  Future<MediaFault> _faultOf(
-    Object failure,
+  /// neither is the transport's, and so is a load that waited behind a
+  /// call the platform never answered: it never reached the platform,
+  /// and a probe that answers would blame a file nobody tried.
+  Future<MediaFault> _abandonedFault(
+    _Abandoned abandoned,
     String url,
     int generation,
   ) async {
-    if (failure is! TimeoutException) {
-      return probedMediaFaultOf(failure, url, probe: _probe);
-    }
     // Abandoned, not cancelled: just_audio has no cancel, so the source
     // stays attached until something replaces it, and on the mpv bridge
     // that leaves the file open. Best-effort and time-bounded, and its
@@ -325,12 +349,13 @@ class JustAudioEngine implements AudioEnginePort {
     // the load that timed out is owed an answer either way.
     if (generation == _generation) {
       try {
-        await _run(_player.stop).timeout(_stopGrace);
+        await _within(_run(_player.stop), _stopGrace);
       } on Object {
         // A player that will not stop is the same player that would not
         // load; the fault below is still the honest answer.
       }
     }
+    if (abandoned.behindAnother) return MediaFault.transport;
     try {
       return (await _probe(url)).blamesMedia
           ? MediaFault.source
@@ -377,20 +402,43 @@ class JustAudioEngine implements AudioEnginePort {
       // make the preloaded item the one that plays.
       if (_player.sequence.isEmpty) return;
       await _dropPreloaded();
+      final epoch = ++_preloadEpoch;
+      // Behind a call the platform has not answered the add would only
+      // wait out a deadline in turn, holding up every edit after it.
+      // Best effort: the item runs off its end and loads on advance.
+      if (_unanswered > 0) return;
       final source = _sourceFor(url, clipStart, clipEnd);
-      await _run(() => _player.addAudioSource(source));
+      final length = _windowLength(clipStart, clipEnd);
+      final added = await _bounded(
+        () => _player.addAudioSource(source),
+        // Landed late, and nothing has been prepared, dropped, or loaded
+        // since: it is the preload the caller has recorded, and the
+        // crossing into it stays gapless.
+        onLateAnswer: () {
+          if (generation != _generation ||
+              epoch != _preloadEpoch ||
+              _preloadedSource != null) {
+            return;
+          }
+          _preloadedSource = source;
+          _preloadedLength = length;
+        },
+      );
       // A load that started while the source was going in owns the
       // window now, and the repair it queued drops what landed here.
       // Recording a preload against it would leave the engine expecting
       // a crossing that cannot come.
-      if (generation != _generation) return;
+      if (!added || generation != _generation) return;
       _preloadedSource = source;
-      _preloadedLength = _windowLength(clipStart, clipEnd);
+      _preloadedLength = length;
     });
   }
 
   @override
-  Future<void> clearPreload() => _edit((_) => _dropPreloaded());
+  Future<void> clearPreload() => _edit((_) {
+    _preloadEpoch++;
+    return _dropPreloaded();
+  });
 
   /// Runs a window edit after the ones already queued, against the list
   /// as it stands by then, and only while it still describes the window
@@ -420,38 +468,133 @@ class JustAudioEngine implements AudioEnginePort {
   /// engine cannot yet know about; a drop landing inside it stops
   /// playback of an item the caller had just asked to drop, and the load
   /// that follows the caller's own queue change puts it right.
+  ///
+  /// One the platform will not let go stays on record and throws: it is
+  /// still in the platform's list, so a crossing into it has to be
+  /// announced rather than played under the item before it, and the
+  /// caller keeps its own record for the same reason.
   Future<void> _dropPreloaded() async {
     final waiting = _preloadedSource;
     if (waiting == null) return;
-    await _remove(waiting);
+    final dropped = await _remove(
+      waiting,
+      // The removal landed after all: it no longer follows anything.
+      onLateAnswer: () {
+        if (identical(_preloadedSource, waiting) &&
+            !_player.sequence.any((s) => identical(s, waiting))) {
+          _preloadedSource = null;
+          _preloadedLength = null;
+        }
+      },
+    );
+    if (!dropped) {
+      throw TimeoutException(
+        'the platform did not let the preloaded item go',
+        _loadDeadline,
+      );
+    }
     _preloadedSource = null;
     _preloadedLength = null;
   }
 
-  /// Removes [source] from the window if it is still in it.
-  Future<void> _remove(AudioSource source) async {
+  /// Removes [source] from the window if it is still in it. False when it
+  /// was not taken out: the platform did not answer in time, or a call it
+  /// has not answered is ahead, which this would only wait behind.
+  Future<bool> _remove(
+    AudioSource source, {
+    void Function()? onLateAnswer,
+  }) async {
     final index = _player.sequence.indexWhere((s) => identical(s, source));
-    if (index < 0) return;
-    await _run(() => _player.removeAudioSourceRange(index, index + 1));
+    if (index < 0) return true;
+    if (_unanswered > 0) return false;
+    return _bounded(
+      () => _player.removeAudioSourceRange(index, index + 1),
+      onLateAnswer: onLateAnswer,
+    );
   }
 
-  /// Queues a trim back to the loaded item and does not wait for it.
+  /// Runs one window call under the load deadline, answering whether the
+  /// platform finished it in time.
   ///
-  /// A failure only costs an extra source in the window, which the next
-  /// edit clears anyway, so it is swallowed here rather than raised into
-  /// a caller that never asked for the trim. The handler also keeps a
+  /// A call that runs out is let go, not cancelled (just_audio has no
+  /// cancel), so it can still land and leave the window holding what the
+  /// engine never recorded. Once the last such call is answered the
+  /// window is trimmed back to what the engine holds.
+  Future<bool> _bounded(
+    Future<Object?> Function() call, {
+    void Function()? onLateAnswer,
+  }) async {
+    final answer = _run(call);
+    try {
+      await answer.timeout(_loadDeadline);
+      return true;
+    } on TimeoutException {
+      debugPrint('audio engine: gave up waiting on a window edit');
+      _stillOut(answer, onLateAnswer: onLateAnswer);
+      return false;
+    }
+  }
+
+  /// Waits for [answer] up to [limit], counting one that runs out as
+  /// still out (see [_stillOut]) and throwing the timeout.
+  Future<void> _within(Future<void> answer, Duration limit) async {
+    try {
+      await answer.timeout(limit);
+    } on TimeoutException {
+      _stillOut(answer);
+      rethrow;
+    }
+  }
+
+  /// Counts [answer] as out until the platform gets to it, running
+  /// [onLateAnswer] if it lands after all, and trims the window once the
+  /// last such call is answered.
+  ///
+  /// Only let go, never cancelled - just_audio has none - and the
+  /// platform takes its calls in turn, so every call after this one
+  /// waits behind it: while any is out a call made now only spends a
+  /// deadline, and a load that runs out never reached the platform.
+  void _stillOut(Future<void> answer, {void Function()? onLateAnswer}) {
+    _unanswered++;
+    unawaited(
+      answer
+          .then<void>((_) => onLateAnswer?.call(), onError: (Object _) {})
+          .whenComplete(() {
+            if (--_unanswered == 0) _repairWindow();
+          }),
+    );
+  }
+
+  /// Queues a trim back to the loaded item and the one preloaded behind
+  /// it, and does not wait for it.
+  ///
+  /// A failure only costs an extra source in the window until the next
+  /// trim, so it is swallowed here rather than raised into a caller
+  /// that never asked for the trim. The handler also keeps a
   /// fire-and-forget edit from ever reaching the zone as an unhandled
   /// error, whatever the queue does with it.
   void _repairWindow() {
     unawaited(
-      _edit((_) async {
-        final keep = _loadedSource;
-        if (keep == null) return;
+      _edit((generation) async {
         // Backwards, so each removal leaves the indices still to visit
         // where they were.
         for (var i = _player.sequence.length - 1; i >= 0; i--) {
-          if (identical(_player.sequence[i], keep)) continue;
-          await _run(() => _player.removeAudioSourceRange(i, i + 1));
+          final sequence = _player.sequence;
+          // Only the list the engine describes: just_audio runs playlist
+          // calls in turn, so a load made while a call is held leaves the
+          // old list standing, and indices counted in it would land on
+          // the new item after the reset.
+          if (generation != _generation ||
+              _unanswered > 0 ||
+              !sequence.any((s) => identical(s, _loadedSource))) {
+            return;
+          }
+          final source = sequence[i];
+          if (identical(source, _loadedSource) ||
+              identical(source, _preloadedSource)) {
+            continue;
+          }
+          await _bounded(() => _player.removeAudioSourceRange(i, i + 1));
         }
       }).catchError((_) {}),
     );
@@ -552,27 +695,22 @@ class JustAudioEngine implements AudioEnginePort {
     // past the grace the held source is reloaded outright - the load
     // walk fires on every backend, and the refetch it costs is paid
     // only where the state machine offered no other door.
+    //
+    // That makes the replay a load on the platform that declines to
+    // finish them, so it is bounded and fails like one. Its fault is read
+    // off the failure alone, with no probe: a replay is of an item already
+    // underway, which a failure puts on the error pane and never skips,
+    // so there is no verdict for a probe to decide.
     if (_player.processingState == ProcessingState.completed) {
-      await _run(_player.pause);
-      await _run(() => _player.seek(Duration.zero));
-      var cleared = true;
+      final bool ours;
       try {
-        await _player.processingStateStream
-            .firstWhere((s) => s != ProcessingState.completed)
-            .timeout(const Duration(milliseconds: 500));
-      } on TimeoutException {
-        cleared = false;
+        ours = await _replay();
+      } on Object catch (failure) {
+        throw MediaLoadException(mediaFaultOf(failure), failure);
       }
-      final source = _loadedSource;
-      if (!cleared && source != null) {
-        // A replay is a fresh single-item window, like stop-then-play:
-        // the reload drops anything preloaded behind the completed
-        // item, and the fields follow the list.
-        _preloadedSource = null;
-        _preloadedLength = null;
-        await _run(() => _player.setAudioSources([source], initialIndex: 0));
-        _repairWindow();
-      }
+      // A load took the player over mid-replay: whether its item starts
+      // is its caller's to say.
+      if (!ours) return;
     }
     // just_audio's own `play()` resolves when playback *stops*, which is
     // its documented contract ("completes when the playback completes or
@@ -583,6 +721,44 @@ class JustAudioEngine implements AudioEnginePort {
     // request is raised synchronously inside that call, so issuing it
     // and letting go is what "playback is running" amounts to here.
     unawaited(_run(_player.play).catchError(_refused));
+  }
+
+  /// Takes a completed item back to its top, reloading it where the
+  /// platform will not leave the completed state otherwise (see [play]).
+  ///
+  /// False when a load took the player over meanwhile. Checked after every
+  /// wait, since past one the seek would move the new item and the reload
+  /// would interrupt its load.
+  Future<bool> _replay() async {
+    final generation = _generation;
+    await _within(_run(_player.pause), _stopGrace);
+    if (generation != _generation) return false;
+    // The load deadline, not the stop grace: Android answers a seek only
+    // once the player is ready again, so the seek carries the buffering.
+    await _within(_run(() => _player.seek(Duration.zero)), _loadDeadline);
+    var cleared = true;
+    try {
+      await _player.processingStateStream
+          .firstWhere((s) => s != ProcessingState.completed)
+          .timeout(const Duration(milliseconds: 500));
+    } on TimeoutException {
+      cleared = false;
+    }
+    if (generation != _generation) return false;
+    final source = _loadedSource;
+    if (cleared || source == null) return true;
+    // A replay is a fresh single-item window, like stop-then-play: the
+    // reload drops anything preloaded behind the completed item, and the
+    // fields follow the list.
+    _preloadedSource = null;
+    _preloadedLength = null;
+    _preloadEpoch++;
+    await _within(
+      _run(() => _player.setAudioSources([source], initialIndex: 0)),
+      _loadDeadline,
+    );
+    _repairWindow();
+    return generation == _generation;
   }
 
   /// Runs a just_audio call in [_zone], its outcome carried out as a value,
@@ -649,7 +825,12 @@ class JustAudioEngine implements AudioEnginePort {
     // Stopping releases the media, and the window with it: playing again
     // resumes the item that was loaded and ends there, rather than
     // crossing into one the caller stopped before reaching.
-    await clearPreload();
+    try {
+      await clearPreload();
+    } on TimeoutException {
+      // The media is stopped. A preload the platform would not let go
+      // stays on record, so a play that crosses into it is announced.
+    }
   }
 
   @override
@@ -739,4 +920,13 @@ class JustAudioEngine implements AudioEnginePort {
       ProcessingState.completed => EngineProcessingState.completed,
     };
   }
+}
+
+/// A load the deadline gave up on, and whether a call the engine had
+/// already stopped waiting for was ahead of it.
+class _Abandoned implements Exception {
+  const _Abandoned(this.timeout, {required this.behindAnother});
+
+  final TimeoutException timeout;
+  final bool behindAnother;
 }

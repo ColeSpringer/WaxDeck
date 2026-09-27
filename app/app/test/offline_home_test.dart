@@ -15,28 +15,6 @@ import 'fakes.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
 
-/// A channel that never reaches a server: connecting fails immediately,
-/// which is exactly what airplane mode looks like to the engine.
-class _DeadChannel extends EventsChannel {
-  _DeadChannel({
-    required super.onFrame,
-    required super.onDone,
-    required super.subscribe,
-  }) : super(url: 'ws://unreachable', authToken: null);
-
-  @override
-  Future<void> connect() => Future.error(Exception('unreachable'));
-
-  @override
-  Future<void> close() async {}
-}
-
-/// The factory tests hand the engine so it always lands offline.
-EventsChannelFactory deadChannelFactory() {
-  return ({required onFrame, required onDone, required subscribe}) =>
-      _DeadChannel(onFrame: onFrame, onDone: onDone, subscribe: subscribe);
-}
-
 Finder _byId(String id) => find.bySemanticsIdentifier(id);
 
 void main() {

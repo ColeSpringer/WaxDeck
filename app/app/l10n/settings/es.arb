@@ -215,6 +215,7 @@
   "settingsNotifyUrl": "URL",
   "settingsNotifyWebhookHelp": "Recibe un objeto JSON con event, title, body y timestamp",
   "settingsNotifyWebhookUrl": "URL del webhook",
+  "settingsOfflineNotSaved": "Algunos ajustes cambiados sin conexión no se guardaron",
   "settingsOptionOff": "Desactivado",
   "settingsPasswordChangeAction": "Cambiar",
   "settingsPasswordChanged": "Contraseña cambiada",

@@ -8956,6 +8956,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsNotifyWebhookUrl => 'Webhook URL';
 
   @override
+  String get settingsOfflineNotSaved =>
+      'Some settings changed offline were not saved';
+
+  @override
   String get settingsOptionOff => 'Off';
 
   @override

@@ -70,7 +70,8 @@ class SyncCursors extends Table {
 class OutboxMutations extends Table {
   IntColumn get id => integer().autoIncrement()();
 
-  /// `position`, `star`, or `rating`.
+  /// `position`, `star`, `rating`, `entity-star`, `entity-rating`, or
+  /// `prefs`.
   TextColumn get kind => text()();
   TextColumn get pid => text()();
   IntColumn get positionMs => integer().nullable()();
@@ -79,6 +80,12 @@ class OutboxMutations extends Table {
   /// The rating value for `rating` entries; null clears the rating.
   IntColumn get rating => integer().nullable()();
   DateTimeColumn get recordedAt => dateTime()();
+
+  /// A mutation with no typed column of its own, as JSON: a `prefs`
+  /// entry's patch, the fields it changed at their new values.
+  ///
+  /// Last on purpose, for the reason [DownloadRecords.durationMs] gives.
+  TextColumn get payload => text().nullable()();
 }
 
 /// Queued listen sessions. The session id is the idempotency key, so a
@@ -291,7 +298,7 @@ class MirrorDatabase extends _$MirrorDatabase {
   });
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -326,6 +333,10 @@ class MirrorDatabase extends _$MirrorDatabase {
         // mirror_play_states is a v1 table, so this needs no version
         // guard for the reason the step above gives.
         await m.addColumn(mirrorPlayStates, mirrorPlayStates.lastPlayedAt);
+      }
+      if (from < 6) {
+        // outbox_mutations is a v1 table too.
+        await m.addColumn(outboxMutations, outboxMutations.payload);
       }
     },
   );

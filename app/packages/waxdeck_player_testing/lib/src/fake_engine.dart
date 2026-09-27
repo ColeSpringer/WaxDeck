@@ -68,6 +68,12 @@ class FakeEngine implements TimelineAudioEngine {
   /// [failNextLoad] covers.
   bool failEveryLoad = false;
 
+  /// Fails the next [play] that restarts a completed item, the way a
+  /// replay whose reload does not finish fails: it throws a
+  /// [MediaLoadException] carrying [loadFault], nothing plays, and the
+  /// item stays where it ended. Cleared as it fires.
+  bool failNextReplay = false;
+
   /// Which fault a refused [load] reports.
   ///
   /// [MediaFault.source] by default, which is the file that will not
@@ -429,6 +435,10 @@ class FakeEngine implements TimelineAudioEngine {
       return;
     }
     if (_state == EngineProcessingState.completed) {
+      if (failNextReplay) {
+        failNextReplay = false;
+        throw MediaLoadException(loadFault, const MediaWillNotOpen());
+      }
       // Match real engines: replay after completion restarts from the top.
       _setPosition(Duration.zero);
       _setState(EngineProcessingState.ready);

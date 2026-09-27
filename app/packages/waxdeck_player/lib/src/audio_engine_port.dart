@@ -124,6 +124,10 @@ abstract interface class AudioEnginePort {
   /// Does nothing when nothing is preloaded. [load] and [stop] clear the
   /// preload too: a fresh load starts a fresh window, and a stop
   /// releases the whole one.
+  ///
+  /// Throws when the platform does not let the item go in time. It then
+  /// stays preloaded, and a crossing into it still fires [itemBoundary],
+  /// so a caller keeps its own record of it too.
   Future<void> clearPreload();
 
   /// Starts or resumes playback.
@@ -137,6 +141,10 @@ abstract interface class AudioEnginePort {
   /// [playbackRefused] rather than here: the refusal arrives after the
   /// request has been dispatched, and waiting for one would mean
   /// waiting on every start that is going to succeed.
+  ///
+  /// A play after the item ended starts it again from the top, which on
+  /// some platforms is a fresh load of the same media. A replay that
+  /// cannot load throws [MediaLoadException], as [load] does.
   Future<void> play();
 
   /// Pauses playback, keeping the position.
@@ -147,7 +155,8 @@ abstract interface class AudioEnginePort {
 
   /// Stops playback and releases the media, keeping the engine usable.
   /// Anything [preloadNext] prepared goes with it, so playing again
-  /// resumes the loaded item and ends there.
+  /// resumes the loaded item and ends there - unless the platform would
+  /// not let it go in time ([clearPreload]), when it stays preloaded.
   Future<void> stop();
 
   /// Releases the engine permanently. No calls are valid afterwards.

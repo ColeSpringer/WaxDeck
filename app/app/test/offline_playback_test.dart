@@ -2,10 +2,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/playback_session.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
+import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
-import 'offline_home_test.dart' show deadChannelFactory;
 
 void main() {
   const unreachable = WaxDeckApiException(
@@ -344,6 +344,39 @@ void main() {
       // The loaded part is untouched by the refused resolve, timeline
       // state included: a checkpoint now still reads on part 0.
       expect(engine.loadedUrl, contains('part=0'));
+      await sub.cancel();
+      await session.dispose();
+    });
+
+    test('a replay that cannot reach the first part starts nothing', () async {
+      // Repeat-one at the end of a book is a jump back to part 0. When
+      // that jump fails it is already on the error surface, and starting
+      // the engine anyway would play the head of the last part under the
+      // pane - and move the checkpoint the release writes there.
+      final repo = FakeRepository()
+        ..books[bookPid] = testBook(bookPid, durationMs: 180000, partCount: 3);
+      final engine = FakeEngine(mediaDuration: const Duration(minutes: 1));
+      final session = PlaybackSession(
+        repository: repo,
+        engine: engine,
+        item: bookItem(),
+        clientId: 'test',
+        initialPositionMs: 120000,
+        downloads: FakeDownloads(),
+      );
+      await session.start();
+      engine.advance(const Duration(minutes: 1, seconds: 1));
+      await pumpEventQueue();
+      expect(engine.processingState, EngineProcessingState.completed);
+
+      repo.playInfoError = unreachable;
+      final failures = <Object>[];
+      final sub = session.sessionFailed.listen(failures.add);
+      await session.replay();
+      await pumpEventQueue();
+
+      expect(failures, [unreachable]);
+      expect(engine.playing, isFalse);
       await sub.cancel();
       await session.dispose();
     });

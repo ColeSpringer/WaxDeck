@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:drift/drift.dart' hide isNull;
@@ -137,6 +138,32 @@ class ScriptedRepository implements WaxDeckRepository {
   @override
   Future<List<PlayState>> listPlayStates(List<String> pids) async => const [];
 
+  /// The account's preference document as the server holds it.
+  Prefs prefs = const Prefs();
+
+  /// Every preference document written, in order.
+  final prefsWrites = <Prefs>[];
+
+  /// Thrown by every preference write while set.
+  WaxDeckApiException? prefsWriteError;
+
+  /// Holds every preference read until completed, when set.
+  Completer<void>? prefsReadGate;
+
+  @override
+  Future<Prefs> getPrefs() async {
+    await prefsReadGate?.future;
+    return prefs;
+  }
+
+  @override
+  Future<Prefs> putPrefs(Prefs next) async {
+    final error = prefsWriteError;
+    if (error != null) throw error;
+    prefsWrites.add(next);
+    return prefs = next;
+  }
+
   void _maybeFail() {
     if (failNextMutations > 0) {
       failNextMutations--;
@@ -184,6 +211,30 @@ EventsChannelFactory capturingFrames(
   };
 }
 
+/// The account the preference tests queue for.
+const _owner = 'us-1';
+
+/// A channel factory whose connections come up at once and carry
+/// nothing: the engine is online, with no server frames to drive it.
+EventsChannelFactory _connects() {
+  return ({required onFrame, required onDone, required subscribe}) =>
+      _QuietChannel(onFrame: onFrame, onDone: onDone, subscribe: subscribe);
+}
+
+class _QuietChannel extends EventsChannel {
+  _QuietChannel({
+    required super.onFrame,
+    required super.onDone,
+    required super.subscribe,
+  }) : super(url: 'ws://unused', authToken: null);
+
+  @override
+  Future<void> connect() async {}
+
+  @override
+  Future<void> close() async {}
+}
+
 void main() {
   late MirrorDatabase db;
   late ScriptedRepository repo;
@@ -196,7 +247,7 @@ void main() {
       db: db,
       repository: repo,
       channelFactory: neverConnects(),
-    );
+    )..prefsOwner = _owner;
   });
 
   tearDown(() async {
@@ -510,6 +561,249 @@ void main() {
     expect(repo.reportedSessions, {'S1'});
     expect(repo.duplicateListens, 1); // absorbed by idempotency server-side
     expect(await db.select(db.outboxListens).get(), isEmpty);
+  });
+
+  group('a preference patch', () {
+    test('lands over the document as it stands', () async {
+      // Another device moved the timezone and the pins while this one
+      // was offline; the patch carries only what this one changed.
+      repo.prefs = const Prefs(timezone: 'Europe/Madrid', pinned: ['AL-1']);
+      final flushed = engine.prefsFlushed.first;
+      await engine.queuePrefsPatch({'locale': 'es'}, owner: _owner);
+
+      await engine.flushOutbox();
+      await flushed;
+
+      expect(repo.prefsWrites, hasLength(1));
+      expect(repo.prefs.timezone, 'Europe/Madrid');
+      expect(repo.prefs.pinned, ['AL-1']);
+      expect(repo.prefs.locale, 'es');
+      expect(await engine.pendingPrefsPatch(_owner), isNull);
+    });
+
+    test('the server refuses is dropped and reported', () async {
+      repo.prefsWriteError = const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'unknown timezone',
+        statusCode: 400,
+      );
+      final refused = engine.prefsRefused.first;
+      await engine.queuePrefsPatch({'timezone': 'Mars/Olympus'}, owner: _owner);
+
+      await engine.flushOutbox();
+      await refused;
+
+      expect(await engine.pendingPrefsPatch(_owner), isNull);
+    });
+
+    test('that fails in passing waits for the next flush', () async {
+      repo.prefsWriteError = const WaxDeckApiException(
+        code: 'internal',
+        message: 'transient',
+        statusCode: 500,
+      );
+      await engine.queuePrefsPatch({'locale': 'es'}, owner: _owner);
+
+      await expectLater(
+        engine.flushOutbox(),
+        throwsA(isA<WaxDeckApiException>()),
+      );
+      expect(await engine.pendingPrefsPatch(_owner), {'locale': 'es'});
+
+      repo.prefsWriteError = null;
+      await engine.flushOutbox();
+      expect(repo.prefs.locale, 'es');
+    });
+
+    test('that no longer reads is dropped, not wedged', () async {
+      // Written by a build that spelled a field some other way. Nothing
+      // will ever read it, and a flush that threw on it would never get
+      // past it to the rest of the queue.
+      await db
+          .into(db.outboxMutations)
+          .insert(
+            OutboxMutationsCompanion.insert(
+              kind: 'prefs',
+              pid: _owner,
+              recordedAt: DateTime.utc(2026, 9, 27),
+              payload: const Value('{"crossfadeSeconds": "loud"}'),
+            ),
+          );
+      await engine.queueCheckpoint('tr-A', 1000);
+      final refused = engine.prefsRefused.first;
+
+      await engine.flushOutbox();
+      await refused;
+
+      expect(repo.prefsWrites, isEmpty);
+      expect(repo.replayed, ['position:tr-A:1000:true']);
+      expect(await db.select(db.outboxMutations).get(), isEmpty);
+    });
+
+    test('queued while connected is sent without a reconnect', () async {
+      // A patch queued with the socket up would otherwise wait for the
+      // next reconnect, and every write after it would queue behind it.
+      final live = SyncEngine(
+        db: db,
+        repository: repo,
+        channelFactory: _connects(),
+      )..prefsOwner = _owner;
+      addTearDown(live.dispose);
+      await live.start();
+      await pumpEventQueue();
+      expect(live.current.online, isTrue);
+
+      final flushed = live.prefsFlushed.first;
+      await live.queuePrefsPatch({'locale': 'es'}, owner: _owner);
+      await flushed;
+
+      expect(repo.prefs.locale, 'es');
+    });
+
+    test('a change queued while one is out waits for the next flush', () async {
+      // The flush sends what it read; a change made while it was out is
+      // merged into the waiting entry and is not answered by it.
+      await engine.queuePrefsPatch({
+        'pinned': ['AL-1'],
+      }, owner: _owner);
+      final gate = repo.prefsReadGate = Completer<void>();
+      final flushing = engine.flushOutbox();
+      await pumpEventQueue();
+
+      await engine.queuePrefsPatch({'locale': 'es'}, owner: _owner);
+      gate.complete();
+      await flushing;
+
+      expect(repo.prefs.pinned, ['AL-1']);
+      expect(await engine.pendingPrefsPatch(_owner), {'locale': 'es'});
+    });
+
+    test('a refusal keeps what was queued while it was out', () async {
+      await engine.queuePrefsPatch({'timezone': 'Mars/Olympus'}, owner: _owner);
+      repo.prefsWriteError = const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'unknown timezone',
+        statusCode: 400,
+      );
+      final gate = repo.prefsReadGate = Completer<void>();
+      final flushing = engine.flushOutbox();
+      await pumpEventQueue();
+
+      await engine.queuePrefsPatch({'locale': 'es'}, owner: _owner);
+      gate.complete();
+      await flushing;
+
+      expect(await engine.pendingPrefsPatch(_owner), {'locale': 'es'});
+    });
+
+    test('that is not an object reads as nothing waiting', () async {
+      await db
+          .into(db.outboxMutations)
+          .insert(
+            OutboxMutationsCompanion.insert(
+              kind: 'prefs',
+              pid: _owner,
+              recordedAt: DateTime.utc(2026, 9, 27),
+              payload: const Value('not json'),
+            ),
+          );
+
+      expect(await engine.pendingPrefsPatch(_owner), isNull);
+      await engine.queuePrefsPatch({'locale': 'es'}, owner: _owner);
+      expect(await engine.pendingPrefsPatch(_owner), {'locale': 'es'});
+    });
+
+    test('sent after the mirror closed raises nothing', () async {
+      // Teardown can close the mirror under a flush a write scheduled;
+      // an error escaping that unawaited flush has no handler.
+      final mirror = MirrorDatabase(
+        DatabaseConnection(NativeDatabase.memory()),
+      );
+      final live = SyncEngine(
+        db: mirror,
+        repository: repo,
+        channelFactory: _connects(),
+      )..prefsOwner = _owner;
+      addTearDown(live.dispose);
+      await live.start();
+      await pumpEventQueue();
+      final gate = repo.prefsReadGate = Completer<void>();
+      await live.queuePrefsPatch({'locale': 'es'}, owner: _owner);
+      await pumpEventQueue();
+
+      await mirror.close();
+      gate.complete();
+      await pumpEventQueue();
+    });
+
+    test('waits for its own account', () async {
+      // The outbox outlives a session, so a patch one account left behind
+      // is not the next account's to send: it goes out when its own
+      // account is back.
+      await engine.queuePrefsPatch({'locale': 'es'}, owner: _owner);
+      engine.prefsOwner = 'us-2';
+
+      await engine.flushOutbox();
+      expect(repo.prefsWrites, isEmpty);
+      expect(await engine.pendingPrefsPatch('us-2'), isNull);
+
+      engine.prefsOwner = _owner;
+      await engine.flushOutbox();
+      expect(repo.prefs.locale, 'es');
+    });
+
+    test('a flush hands over what the server stored', () async {
+      repo.prefs = const Prefs(timezone: 'Europe/Madrid');
+      final flushed = engine.prefsFlushed.first;
+      await engine.queuePrefsPatch({'locale': 'es'}, owner: _owner);
+
+      await engine.flushOutbox();
+      final flush = await flushed;
+
+      expect(flush.owner, _owner);
+      expect(flush.stored.timezone, 'Europe/Madrid');
+      expect(flush.stored.locale, 'es');
+      expect(flush.waiting, isNull);
+    });
+
+    test('sent now, does not wait for the socket', () async {
+      // The server can answer while the socket is down: a caller with a
+      // reason to think so sends the waiting patch itself.
+      await engine.queuePrefsPatch({'locale': 'es'}, owner: _owner);
+
+      await engine.sendPrefs(_owner);
+
+      expect(repo.prefs.locale, 'es');
+      expect(await engine.pendingPrefsPatch(_owner), isNull);
+    });
+
+    test('sent now and failing in passing, still waits', () async {
+      await engine.queuePrefsPatch({'locale': 'es'}, owner: _owner);
+      repo.prefsWriteError = const WaxDeckApiException(
+        code: 'transport',
+        message: 'no route to host',
+      );
+
+      await expectLater(
+        engine.sendPrefs(_owner),
+        throwsA(isA<WaxDeckApiException>()),
+      );
+
+      expect(await engine.pendingPrefsPatch(_owner), {'locale': 'es'});
+    });
+
+    test('two sort changes queued keep both', () async {
+      await engine.queuePrefsPatch({
+        'browseSorts': {'year': 'name'},
+      }, owner: _owner);
+      await engine.queuePrefsPatch({
+        'browseSorts': {'genre': 'count'},
+      }, owner: _owner);
+
+      expect(await engine.pendingPrefsPatch(_owner), {
+        'browseSorts': {'year': 'name', 'genre': 'count'},
+      });
+    });
   });
 
   test('server deltas hydrate mirrored play states', () async {

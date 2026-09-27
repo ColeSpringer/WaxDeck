@@ -83,7 +83,7 @@ abstract class OptimisticStateController<T> extends AsyncNotifier<T> {
       // Not mounted: the replacement controller built with the intent
       // overlaid, which is exactly the value the server just stored.
     } on WaxDeckApiException catch (e, st) {
-      if (engine != null && _unreachable(e)) {
+      if (engine != null && e.unreachable) {
         await queue(engine);
         return;
       }
@@ -101,9 +101,5 @@ abstract class OptimisticStateController<T> extends AsyncNotifier<T> {
     } finally {
       settle();
     }
-  }
-
-  static bool _unreachable(WaxDeckApiException e) {
-    return e.statusCode == null || e.statusCode == 503;
   }
 }

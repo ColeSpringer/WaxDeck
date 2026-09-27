@@ -14041,6 +14041,12 @@ abstract class AppLocalizations {
   /// **'Webhook URL'**
   String get settingsNotifyWebhookUrl;
 
+  /// Raised when the server refused preference changes made while offline, once the connection came back; the changes are dropped and the settings show what the server holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Some settings changed offline were not saved'**
+  String get settingsOfflineNotSaved;
+
   /// The option that turns a setting off, on the pickers that have one - the casting crossfade and the rewind on resume.
   ///
   /// In en, this message translates to:

@@ -938,6 +938,10 @@
   "@settingsNotifyWebhookUrl": {
     "description": "Discord field: the webhook the notification is posted to."
   },
+  "settingsOfflineNotSaved": "Some settings changed offline were not saved",
+  "@settingsOfflineNotSaved": {
+    "description": "Raised when the server refused preference changes made while offline, once the connection came back; the changes are dropped and the settings show what the server holds."
+  },
   "settingsOptionOff": "Off",
   "@settingsOptionOff": {
     "description": "The option that turns a setting off, on the pickers that have one - the casting crossfade and the rewind on resume."

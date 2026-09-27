@@ -67,6 +67,18 @@ void main() {
   // The detail behind an umbrella code. A caller keys on it instead of
   // matching the message's prose, so what does and does not become a
   // param has to be exact.
+  test('only no answer or a 503 reads as the server being out of reach', () {
+    // The one rule both outboxes queue on: a refusal is an answer, and a
+    // change the server refused must not wait to be refused again.
+    WaxDeckApiException failure(int? status) =>
+        WaxDeckApiException(code: 'x', message: 'x', statusCode: status);
+    expect(failure(null).unreachable, isTrue);
+    expect(failure(503).unreachable, isTrue);
+    expect(failure(500).unreachable, isFalse);
+    expect(failure(400).unreachable, isFalse);
+    expect(failure(401).unreachable, isFalse);
+  });
+
   group('structured params', () {
     test('a string map carries through', () {
       final e = apiExceptionFromDio(

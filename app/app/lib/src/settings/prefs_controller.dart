@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/shell_messages.dart';
+import '../sync/sync_providers.dart';
 import 'client_prefs.dart';
 
 /// The caller's synced preferences. Empty while signed out; refetched when
@@ -58,17 +63,34 @@ class PrefsController extends AsyncNotifier<Prefs> {
   /// whether one landed while it was in flight.
   int _writes = 0;
 
+  /// A flush or a refusal the held document answered for while a write
+  /// was in flight, to be read back once that write settles.
+  bool _readBackOwed = false;
+
+  /// Whether the state holds [_storedFor]'s own document. Not across an
+  /// account change, until that account's first read lands: the state
+  /// still holds the last account's until then.
+  bool _stateOwned = false;
+
   @override
   Future<Prefs> build() async {
+    // Before the first await: a rebuild cancels the last build's
+    // listeners as it starts, and a refusal landing in the gap would go
+    // unsaid.
+    final engine = ref.watch(syncEngineProvider);
+    if (engine != null) _followOutbox(engine);
     final session = await ref.watch(authControllerProvider.future);
     if (!session.authenticated) {
       _forget(null);
+      engine?.prefsOwner = null;
       return const Prefs();
     }
     // A different account is not a stale document, it is somebody
     // else's: drop it rather than answering this session with it.
     final owner = session.user?.id ?? '';
     if (owner != _storedFor) _forget(owner);
+    // Whose waiting patch the engine sends: the one this document is.
+    engine?.prefsOwner = owner;
 
     // Watched before the early return below, not after it: a build that
     // answers from the held document still depends on the repository,
@@ -79,6 +101,10 @@ class PrefsController extends AsyncNotifier<Prefs> {
     if (_writing != null && held != null) return held;
     final before = _writes;
     final fetched = await repository.getPrefs();
+    // A patch still waiting to be sent is laid over the answer the way
+    // the flush will lay it, or a refetch takes the change back off every
+    // surface until then.
+    final waiting = await engine?.pendingPrefsPatch(owner);
     // A write that landed while this read was in flight is newer than
     // what the read was served, whatever order the two answers arrived
     // in. Without this the first write of a session has no held
@@ -86,9 +112,59 @@ class PrefsController extends AsyncNotifier<Prefs> {
     // a PUT is exactly how the document loses an update.
     final landed = _stored;
     if (_writes != before && landed != null) return landed;
-    _stored = fetched;
+    final known = waiting == null ? fetched : _overlaid(fetched, waiting);
+    _stored = known;
     _confirmed = fetched;
-    return fetched;
+    _stateOwned = true;
+    return known;
+  }
+
+  /// [fetched] with [waiting] over it, or alone when the patch no longer
+  /// reads (a build that spelled a field some other way): the flush drops
+  /// that one and says so.
+  static Prefs _overlaid(Prefs fetched, Map<String, Object?> waiting) {
+    try {
+      return applyPrefsPatch(fetched, waiting);
+    } on Object {
+      return fetched;
+    }
+  }
+
+  /// Shows what the server stored once a waiting patch is sent, and says
+  /// so when the server refused one: the settings changed offline are
+  /// about to change back. Another account's patch is not this
+  /// document's news.
+  void _followOutbox(SyncEngine engine) {
+    void readBack() {
+      if (_writing != null) _readBackOwed = true;
+      ref.invalidateSelf();
+    }
+
+    final flushed = engine.prefsFlushed.listen((flush) {
+      if (flush.owner != _storedFor) return;
+      _confirmed = flush.stored;
+      if (_writing != null) {
+        _readBackOwed = true;
+        return;
+      }
+      // What the server stored, with whatever still waits over it:
+      // nothing to read back.
+      final waiting = flush.waiting;
+      _publish(
+        waiting == null ? flush.stored : _overlaid(flush.stored, waiting),
+      );
+    });
+    final refused = engine.prefsRefused.listen((owner) {
+      if (owner != _storedFor) return;
+      ref
+          .read(shellMessengerProvider.notifier)
+          .showLocalized((l10n) => l10n.settingsOfflineNotSaved);
+      readBack();
+    });
+    ref.onDispose(() {
+      unawaited(flushed.cancel());
+      unawaited(refused.cancel());
+    });
   }
 
   /// Drops every document held for the previous session.
@@ -96,11 +172,23 @@ class PrefsController extends AsyncNotifier<Prefs> {
     _stored = null;
     _confirmed = null;
     _storedFor = owner;
+    _stateOwned = false;
   }
 
   /// Replaces the document, one write at a time. [change] runs against the
   /// loaded value after any queued write has landed.
-  Future<void> _write(Prefs Function(Prefs current) change) {
+  ///
+  /// [validated] is for a value only the server can judge (a timezone
+  /// name): it is never queued, so the server's word on it reaches the
+  /// caller now, rather than a refusal later that drops every change
+  /// queued beside it.
+  Future<void> _write(
+    Prefs Function(Prefs current) change, {
+    bool validated = false,
+  }) {
+    // The account the write is for: whoever the session names now, which
+    // runs ahead of this provider across an account change.
+    final signedIn = ref.read(authControllerProvider).value?.user?.id;
     // Published here, synchronously with the call, and not only from
     // the body below. The body is deferred, and an invalidation can
     // arrive before it has started - the server's echo of the previous
@@ -111,16 +199,19 @@ class PrefsController extends AsyncNotifier<Prefs> {
     // and the next toggle is computed from that. Three taps in a row
     // then settle on the first one.
     //
-    // Skipped while nothing is loaded: there is no document to change
-    // yet, and the body's `await future` is what waits for one.
-    final loaded = state.value;
+    // Skipped until this account's own read has landed: there is no
+    // document to change yet, and the body's `await future` is what waits
+    // for one. Until then the state still holds the last account's, and a
+    // change built on it would be written into this one's.
+    final ours = signedIn != null && signedIn == _storedFor && _stateOwned;
+    final loaded = ours ? state.value : null;
     if (loaded != null) _publish(change(loaded));
 
-    // The account this write belongs to. Null before the first load has
-    // settled, which is the early-tap case: such a write has no account
-    // yet and adopts whichever one the load lands on, rather than
-    // reading "not the same" and dropping itself.
-    var owner = _storedFor;
+    // The account this write belongs to. Null while the session has not
+    // settled, which is the early-tap case: such a write adopts whichever
+    // account the load lands on, rather than reading "not the same" and
+    // dropping itself.
+    var owner = signedIn;
     final queued = _writing;
     var failed = false;
     late final Future<void> mine;
@@ -138,12 +229,18 @@ class PrefsController extends AsyncNotifier<Prefs> {
         // starts from: the optimistic copy above was for whoever
         // rebuilt in the meantime, and a queued write's base is what
         // the one ahead of it stored.
-        final current = state.value ?? await future;
+        final current =
+            (_stateOwned && _storedFor == owner ? state.value : null) ??
+            await future;
         owner ??= _storedFor;
+        final account = owner;
         // A queued write can wait out a sign-out: without this fence it
         // resumes against the next account's document, applies a change
         // nobody there made, and PUTs it into their prefs.
-        if (_storedFor != owner) return;
+        if (_storedFor != account) return;
+        // What the server held when this write began, for a patch this
+        // write queues after the account has gone.
+        final confirmed = _confirmed;
         final next = change(current);
         // Published only while this is still the newest write. One
         // queued behind it has already published something later, and
@@ -154,14 +251,50 @@ class PrefsController extends AsyncNotifier<Prefs> {
         // path exists to close.
         _publishIfNewest(mine, next);
         try {
-          final stored = await ref.read(repositoryProvider).putPrefs(next);
-          _confirmed = stored;
-          if (_storedFor != owner) return;
-          _publishIfNewest(mine, stored);
+          final engine = account == null ? null : ref.read(syncEngineProvider);
+          if (engine != null && account != null) {
+            if (await engine.pendingPrefsPatch(account) != null) {
+              if (!validated) {
+                // Behind a waiting patch this one waits too: sent on its
+                // own it would land first, for the flush to put older
+                // values back. Sent now rather than at the next
+                // reconnect, since the server may answer while the
+                // socket that carries the outbox does not.
+                await _queue(engine, account, next, confirmed);
+                unawaited(
+                  engine
+                      .sendPrefs(account)
+                      .then<void>((_) {}, onError: (Object _) {}),
+                );
+                return;
+              }
+              // What waits goes first, so this write's answer is its own.
+              await engine.sendPrefs(account);
+            }
+          }
+          try {
+            final stored = await ref.read(repositoryProvider).putPrefs(next);
+            // An answer for an account that has gone is not this one's
+            // confirmed document.
+            if (_storedFor != account) return;
+            _confirmed = stored;
+            _publishIfNewest(mine, stored);
+          } on Object catch (error) {
+            // No route to the server is not a refusal: the change waits in
+            // the outbox and the document keeps it.
+            if (engine == null ||
+                account == null ||
+                validated ||
+                error is! WaxDeckApiException ||
+                !error.unreachable) {
+              rethrow;
+            }
+            await _queue(engine, account, next, confirmed);
+          }
         } on Object {
-          // The write did not land, so the document must stop claiming
-          // it did - both the copy held for readers and the state every
-          // list is recomputed from.
+          // The write neither landed nor waits in the outbox, so the
+          // document must stop claiming it did - both the copy held for
+          // readers and the state every list is recomputed from.
           failed = true;
           final confirmed = _confirmed;
           if (_storedFor == owner && confirmed != null) {
@@ -174,10 +307,11 @@ class PrefsController extends AsyncNotifier<Prefs> {
           _writing = null;
           // A failed write leaves this client unsure what the document
           // holds, and any invalidation that arrived while it ran was
-          // answered from the held copy without a read. Ask once now
-          // that nothing is in flight, so a change made elsewhere is
-          // not lost with the failure.
-          if (failed) {
+          // answered from the held copy without a read - a flush or a
+          // refusal among them. Ask once now that nothing is in flight,
+          // so a change made elsewhere is not lost with the failure.
+          if (failed || _readBackOwed) {
+            _readBackOwed = false;
             _stored = null;
             ref.invalidateSelf();
           }
@@ -186,6 +320,28 @@ class PrefsController extends AsyncNotifier<Prefs> {
     });
     _writing = mine;
     return mine;
+  }
+
+  /// Queues what [next] holds that the server will not, for [owner].
+  ///
+  /// Measured against the server's document with the patch already
+  /// waiting laid over it, not against the write's own base, which
+  /// carries the change already: it was published when the write was
+  /// made. Changing a field back to what the server stored is then a
+  /// change too, rather than nothing, which would send the waiting value.
+  /// [confirmedAtStart] stands in for [_confirmed] once the account has
+  /// gone from under the write; with neither, every field is the change.
+  Future<void> _queue(
+    SyncEngine engine,
+    String owner,
+    Prefs next,
+    Prefs? confirmedAtStart,
+  ) async {
+    final confirmed =
+        (_storedFor == owner ? _confirmed : confirmedAtStart) ?? const Prefs();
+    final waiting = await engine.pendingPrefsPatch(owner);
+    final base = waiting == null ? confirmed : _overlaid(confirmed, waiting);
+    await engine.queuePrefsPatch(prefsPatch(base, next), owner: owner);
   }
 
   /// [_publish], but only while [mine] is still the newest write. An
@@ -207,6 +363,7 @@ class PrefsController extends AsyncNotifier<Prefs> {
   /// Makes [document] what this client knows, for readers and for the
   /// next write alike.
   void _publish(Prefs document) {
+    _stateOwned = true;
     _stored = document;
     _writes++;
     state = AsyncData(document);
@@ -229,8 +386,10 @@ class PrefsController extends AsyncNotifier<Prefs> {
   /// Stores the IANA timezone the calendar stats bucket in. Errors
   /// propagate so the editor can show the server's validation message
   /// (the server is the authority on what names exist).
-  Future<void> setTimezone(String timezone) =>
-      _write((current) => current.copyWith(timezone: timezone));
+  Future<void> setTimezone(String timezone) => _write(
+    (current) => current.copyWith(timezone: timezone),
+    validated: true,
+  );
 
   /// Stores the BCP 47 tag the interface draws in. Same replace
   /// semantics as [setSharedStatsOptOut].

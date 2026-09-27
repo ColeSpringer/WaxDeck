@@ -439,6 +439,47 @@ void main() {
         isNot(h.repo.reportedSessions.last.sessionId),
       );
     });
+
+    // Restarting a finished item is a reload on the platform that will
+    // not leave the completed state by itself, and a reload can fail the
+    // way any load does. The item is already underway, so the answer is
+    // the pane and its retry - never a skip, whatever the fault says.
+    test('a play after the end that cannot reload stands the pane', () async {
+      final h = _harness();
+      h.container.playback.play([testItem(_a)], source: _album);
+      await pumpEventQueue();
+      await _play(h.engine, 4000);
+      await _runOut(h.engine);
+
+      h.engine.failNextReplay = true;
+      h.container.playback.togglePlayback();
+      await pumpEventQueue();
+
+      final now = h.container.read(nowPlayingProvider);
+      expect(now.error, isA<MediaLoadException>());
+      expect(now.session, isNull);
+      expect(h.container.queueState.currentPid, _a);
+      expect(h.engine.playing, isFalse);
+    });
+
+    test('repeat-one that cannot reload stands the pane', () async {
+      final h = _harness();
+      h.container.queue.setRepeat(QueueRepeat.one);
+      h.container.playback.play([testItem(_a)], source: _album);
+      await pumpEventQueue();
+      await _play(h.engine, 4000);
+
+      h.engine.failNextReplay = true;
+      await _runOut(h.engine);
+      await pumpEventQueue();
+
+      final now = h.container.read(nowPlayingProvider);
+      expect(now.error, isA<MediaLoadException>());
+      expect(now.session, isNull);
+      expect(h.container.queueState.currentPid, _a);
+      // The pass that did play is reported, and finished.
+      expect(h.repo.reportedSessions.single.finished, isTrue);
+    });
   });
 
   group('preloading the next entry', () {

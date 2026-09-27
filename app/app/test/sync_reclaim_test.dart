@@ -10,7 +10,6 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
-import 'offline_home_test.dart' show deadChannelFactory;
 
 /// What a delete tombstone costs an offline client.
 ///

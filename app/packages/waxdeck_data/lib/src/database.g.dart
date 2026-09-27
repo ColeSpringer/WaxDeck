@@ -1440,6 +1440,17 @@ class $OutboxMutationsTable extends OutboxMutations
     type: DriftSqlType.dateTime,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _payloadMeta = const VerificationMeta(
+    'payload',
+  );
+  @override
+  late final GeneratedColumn<String> payload = GeneratedColumn<String>(
+    'payload',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1449,6 +1460,7 @@ class $OutboxMutationsTable extends OutboxMutations
     starred,
     rating,
     recordedAt,
+    payload,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1507,6 +1519,12 @@ class $OutboxMutationsTable extends OutboxMutations
     } else if (isInserting) {
       context.missing(_recordedAtMeta);
     }
+    if (data.containsKey('payload')) {
+      context.handle(
+        _payloadMeta,
+        payload.isAcceptableOrUnknown(data['payload']!, _payloadMeta),
+      );
+    }
     return context;
   }
 
@@ -1544,6 +1562,10 @@ class $OutboxMutationsTable extends OutboxMutations
         DriftSqlType.dateTime,
         data['${effectivePrefix}recorded_at'],
       )!,
+      payload: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}payload'],
+      ),
     );
   }
 
@@ -1556,7 +1578,8 @@ class $OutboxMutationsTable extends OutboxMutations
 class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
   final int id;
 
-  /// `position`, `star`, or `rating`.
+  /// `position`, `star`, `rating`, `entity-star`, `entity-rating`, or
+  /// `prefs`.
   final String kind;
   final String pid;
   final int? positionMs;
@@ -1565,6 +1588,12 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
   /// The rating value for `rating` entries; null clears the rating.
   final int? rating;
   final DateTime recordedAt;
+
+  /// A mutation with no typed column of its own, as JSON: a `prefs`
+  /// entry's patch, the fields it changed at their new values.
+  ///
+  /// Last on purpose, for the reason [DownloadRecords.durationMs] gives.
+  final String? payload;
   const OutboxMutation({
     required this.id,
     required this.kind,
@@ -1573,6 +1602,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
     this.starred,
     this.rating,
     required this.recordedAt,
+    this.payload,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1590,6 +1620,9 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
       map['rating'] = Variable<int>(rating);
     }
     map['recorded_at'] = Variable<DateTime>(recordedAt);
+    if (!nullToAbsent || payload != null) {
+      map['payload'] = Variable<String>(payload);
+    }
     return map;
   }
 
@@ -1608,6 +1641,9 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
           ? const Value.absent()
           : Value(rating),
       recordedAt: Value(recordedAt),
+      payload: payload == null && nullToAbsent
+          ? const Value.absent()
+          : Value(payload),
     );
   }
 
@@ -1624,6 +1660,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
       starred: serializer.fromJson<bool?>(json['starred']),
       rating: serializer.fromJson<int?>(json['rating']),
       recordedAt: serializer.fromJson<DateTime>(json['recordedAt']),
+      payload: serializer.fromJson<String?>(json['payload']),
     );
   }
   @override
@@ -1637,6 +1674,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
       'starred': serializer.toJson<bool?>(starred),
       'rating': serializer.toJson<int?>(rating),
       'recordedAt': serializer.toJson<DateTime>(recordedAt),
+      'payload': serializer.toJson<String?>(payload),
     };
   }
 
@@ -1648,6 +1686,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
     Value<bool?> starred = const Value.absent(),
     Value<int?> rating = const Value.absent(),
     DateTime? recordedAt,
+    Value<String?> payload = const Value.absent(),
   }) => OutboxMutation(
     id: id ?? this.id,
     kind: kind ?? this.kind,
@@ -1656,6 +1695,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
     starred: starred.present ? starred.value : this.starred,
     rating: rating.present ? rating.value : this.rating,
     recordedAt: recordedAt ?? this.recordedAt,
+    payload: payload.present ? payload.value : this.payload,
   );
   OutboxMutation copyWithCompanion(OutboxMutationsCompanion data) {
     return OutboxMutation(
@@ -1670,6 +1710,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
       recordedAt: data.recordedAt.present
           ? data.recordedAt.value
           : this.recordedAt,
+      payload: data.payload.present ? data.payload.value : this.payload,
     );
   }
 
@@ -1682,14 +1723,23 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
           ..write('positionMs: $positionMs, ')
           ..write('starred: $starred, ')
           ..write('rating: $rating, ')
-          ..write('recordedAt: $recordedAt')
+          ..write('recordedAt: $recordedAt, ')
+          ..write('payload: $payload')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, kind, pid, positionMs, starred, rating, recordedAt);
+  int get hashCode => Object.hash(
+    id,
+    kind,
+    pid,
+    positionMs,
+    starred,
+    rating,
+    recordedAt,
+    payload,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1700,7 +1750,8 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
           other.positionMs == this.positionMs &&
           other.starred == this.starred &&
           other.rating == this.rating &&
-          other.recordedAt == this.recordedAt);
+          other.recordedAt == this.recordedAt &&
+          other.payload == this.payload);
 }
 
 class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
@@ -1711,6 +1762,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
   final Value<bool?> starred;
   final Value<int?> rating;
   final Value<DateTime> recordedAt;
+  final Value<String?> payload;
   const OutboxMutationsCompanion({
     this.id = const Value.absent(),
     this.kind = const Value.absent(),
@@ -1719,6 +1771,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
     this.starred = const Value.absent(),
     this.rating = const Value.absent(),
     this.recordedAt = const Value.absent(),
+    this.payload = const Value.absent(),
   });
   OutboxMutationsCompanion.insert({
     this.id = const Value.absent(),
@@ -1728,6 +1781,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
     this.starred = const Value.absent(),
     this.rating = const Value.absent(),
     required DateTime recordedAt,
+    this.payload = const Value.absent(),
   }) : kind = Value(kind),
        pid = Value(pid),
        recordedAt = Value(recordedAt);
@@ -1739,6 +1793,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
     Expression<bool>? starred,
     Expression<int>? rating,
     Expression<DateTime>? recordedAt,
+    Expression<String>? payload,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1748,6 +1803,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
       if (starred != null) 'starred': starred,
       if (rating != null) 'rating': rating,
       if (recordedAt != null) 'recorded_at': recordedAt,
+      if (payload != null) 'payload': payload,
     });
   }
 
@@ -1759,6 +1815,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
     Value<bool?>? starred,
     Value<int?>? rating,
     Value<DateTime>? recordedAt,
+    Value<String?>? payload,
   }) {
     return OutboxMutationsCompanion(
       id: id ?? this.id,
@@ -1768,6 +1825,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
       starred: starred ?? this.starred,
       rating: rating ?? this.rating,
       recordedAt: recordedAt ?? this.recordedAt,
+      payload: payload ?? this.payload,
     );
   }
 
@@ -1795,6 +1853,9 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
     if (recordedAt.present) {
       map['recorded_at'] = Variable<DateTime>(recordedAt.value);
     }
+    if (payload.present) {
+      map['payload'] = Variable<String>(payload.value);
+    }
     return map;
   }
 
@@ -1807,7 +1868,8 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
           ..write('positionMs: $positionMs, ')
           ..write('starred: $starred, ')
           ..write('rating: $rating, ')
-          ..write('recordedAt: $recordedAt')
+          ..write('recordedAt: $recordedAt, ')
+          ..write('payload: $payload')
           ..write(')'))
         .toString();
   }
@@ -5415,6 +5477,7 @@ typedef $$OutboxMutationsTableCreateCompanionBuilder =
       Value<bool?> starred,
       Value<int?> rating,
       required DateTime recordedAt,
+      Value<String?> payload,
     });
 typedef $$OutboxMutationsTableUpdateCompanionBuilder =
     OutboxMutationsCompanion Function({
@@ -5425,6 +5488,7 @@ typedef $$OutboxMutationsTableUpdateCompanionBuilder =
       Value<bool?> starred,
       Value<int?> rating,
       Value<DateTime> recordedAt,
+      Value<String?> payload,
     });
 
 class $$OutboxMutationsTableFilterComposer
@@ -5468,6 +5532,11 @@ class $$OutboxMutationsTableFilterComposer
 
   ColumnFilters<DateTime> get recordedAt => $composableBuilder(
     column: $table.recordedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get payload => $composableBuilder(
+    column: $table.payload,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5515,6 +5584,11 @@ class $$OutboxMutationsTableOrderingComposer
     column: $table.recordedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get payload => $composableBuilder(
+    column: $table.payload,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$OutboxMutationsTableAnnotationComposer
@@ -5550,6 +5624,9 @@ class $$OutboxMutationsTableAnnotationComposer
     column: $table.recordedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get payload =>
+      $composableBuilder(column: $table.payload, builder: (column) => column);
 }
 
 class $$OutboxMutationsTableTableManager
@@ -5596,6 +5673,7 @@ class $$OutboxMutationsTableTableManager
                 Value<bool?> starred = const Value.absent(),
                 Value<int?> rating = const Value.absent(),
                 Value<DateTime> recordedAt = const Value.absent(),
+                Value<String?> payload = const Value.absent(),
               }) => OutboxMutationsCompanion(
                 id: id,
                 kind: kind,
@@ -5604,6 +5682,7 @@ class $$OutboxMutationsTableTableManager
                 starred: starred,
                 rating: rating,
                 recordedAt: recordedAt,
+                payload: payload,
               ),
           createCompanionCallback:
               ({
@@ -5614,6 +5693,7 @@ class $$OutboxMutationsTableTableManager
                 Value<bool?> starred = const Value.absent(),
                 Value<int?> rating = const Value.absent(),
                 required DateTime recordedAt,
+                Value<String?> payload = const Value.absent(),
               }) => OutboxMutationsCompanion.insert(
                 id: id,
                 kind: kind,
@@ -5622,6 +5702,7 @@ class $$OutboxMutationsTableTableManager
                 starred: starred,
                 rating: rating,
                 recordedAt: recordedAt,
+                payload: payload,
               ),
           withReferenceMapper: (p0) => p0
               .map(

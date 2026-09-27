@@ -1,13 +1,7 @@
 # Deferred work
 
 The tracked list of WaxDeck work that was cut from an otherwise
-shipped slice. Roadmap items that have simply not started yet do not
-belong here, and deliberate v1 scope exclusions live in the roadmap;
-this list is for the residuals that would otherwise
-survive only as a sentence in a progress note. Agents: when you cut
-something from a slice, add it here in the same change (as with
-upstream-requests.md, which holds the sibling-repo asks); when the
-work lands, remove the entry.
+shipped slice.
 
 Every entry carries a gate tag saying what actually blocks it:
 
@@ -51,24 +45,6 @@ here waits on upstream.
   right after sign-in. Wanted from cnativeapi: the asynchronous call, or
   registration off the UI thread. Meanwhile: none; a missing watcher
   answers at once and a slow one is rare.
-
-- `[in-repo]` **The engine's load deadline covers `load` and nothing
-  else.** `JustAudioEngine.load` now abandons a load mpv never finishes
-  and reports it as a `MediaLoadException`, and the stops on either
-  side of it are bounded too. Two sibling calls into the same plugin on
-  the same platform are still unbounded: `preloadNext`'s
-  `addAudioSource` and the replay `setAudioSources` in `play()`. The
-  preload is the sharper of the two - it runs inside `_edit`, which
-  serializes on one future, so a hang there stalls every queued window
-  edit including the repair `load`'s own failure path depends on. The
-  replay is the likelier: its comment says it exists because the mpv
-  bridge never leaves the completed state on its own, so it reloads
-  unconditionally on exactly the platform that declines to finish
-  loads. Not bounded with `load` because a timeout in either leaves the
-  window in a state the port has no vocabulary for - a preload that
-  half-landed is not a preload that failed - and deciding what the
-  engine reports for those is a design question `load` did not have to
-  answer.
 
 - `[in-repo]` **A touch never holds the browser menu off before a
   sheet appears.** `WaxSecondaryTapRegion` is pointer-driven, and
@@ -148,17 +124,40 @@ here waits on upstream.
   not adopted with the alias fix; it is here so whoever builds the
   rendering knows it exists.
 
-- `[in-repo]` **Preference writes have no offline outbox.** Play-state
-  and entity-state writes queue through `OptimisticStateController`,
-  which holds an intent while the network is gone and replays it;
-  `PrefsController` publishes optimistically and serializes writes but
-  has no such branch, so a pin, a crossfade, or a browse sort made
-  offline is reverted when its PUT fails rather than sent when the
-  connection returns. The two are close enough in shape that folding
-  the document controller onto the same protocol looks obvious - the
-  reason it has not been done is that the outbox is per-pid and keyed
-  to one entity's state, while this is one whole-document singleton
-  whose "intent" is a function over the document rather than a value.
+- `[in-repo]` **A platform call that never answers wedges the player
+  until restart.** `JustAudioEngine` bounds loads, window edits, and a
+  replay, and a load stuck behind a held edit reports the transport, but
+  just_audio runs every playlist call in turn under one lock (media_kit
+  adds its own on mpv), so one call that never returns holds every later
+  load there for good. Recovering means building a new `AudioPlayer`,
+  which a final `_player`, and the stream subscriptions every consumer
+  holds on it, rule out today. The port's own `seek`, `pause`, `stop`, and `dispose`
+  are still unbounded, so on such a player the seek a session's replay
+  starts with waits forever before the bounded replay is reached.
+
+- `[in-repo]` **Preferences have no offline copy.** A change made offline
+  waits in the outbox and is laid over every read, but a launch with no
+  server cannot read the document at all, so preference surfaces draw
+  their defaults and a change waits for the first read. A mirror of the
+  document beside the outbox would close it.
+
+- `[in-repo]` **A persistent server error on an outbox entry makes the
+  sync socket flap.** Reconcile drops the channel on any failure but a
+  401, and the backoff resets on every successful connect, so an entry
+  the server keeps answering with a 5xx reconnects the engine about every
+  second for as long as it keeps failing. Whether such an entry should
+  drop the socket at all, or be parked and retried on its own clock, is
+  the open question.
+
+- `[in-repo]` **The mirror and the play-state outbox belong to the server,
+  not the account.** Signing out keeps `mirror_play_states` and the
+  queued checkpoints, stars, ratings, and listens; only forgetting the
+  server wipes them. The next account to sign in on the device reads the
+  last one's play states offline, and the flush sends the last one's
+  queued mutations and listens under the new session. Preference
+  patches are keyed to their account for this reason, and wait for it.
+  The rest is a decision: drop it at sign-out (an offline listen never
+  sent is lost), or key the rows to the account the same way.
 
 - `[in-repo]` **The enrichment source set has an order but no operator
   control.** The per-field precedence is now stated and enforced

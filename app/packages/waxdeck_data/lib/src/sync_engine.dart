@@ -11,6 +11,13 @@ import 'events_channel.dart';
 /// How the engine currently reaches the server.
 enum SyncConnection { connected, connecting, offline }
 
+/// A preference patch the server took (see [SyncEngine.prefsFlushed]).
+typedef PrefsFlush = ({
+  String owner,
+  Prefs stored,
+  Map<String, Object?>? waiting,
+});
+
 /// One frame of engine status for the UI.
 class SyncStatus {
   const SyncStatus({required this.connection, this.lastSyncAt});
@@ -117,6 +124,27 @@ class SyncEngine {
 
   final _itemsRemoved = StreamController<String>.broadcast();
 
+  /// The account whose preference patches a flush sends; null sends
+  /// none.
+  ///
+  /// Patches are kept per account because the outbox outlives a session:
+  /// one an account left behind waits for that account rather than going
+  /// out under whoever signs in next. Set by the app as a session begins.
+  String? prefsOwner;
+
+  /// Fires when a queued preference patch reached the server: whose it
+  /// was, the document the server stored, and what of the patch still
+  /// waits (a change merged in while it was out).
+  Stream<PrefsFlush> get prefsFlushed => _prefsFlushed.stream;
+
+  /// Fires with the account whose queued preference patch the server
+  /// refused, which is dropped: the changes made offline that it carried
+  /// are not coming.
+  Stream<String> get prefsRefused => _prefsRefused.stream;
+
+  final _prefsFlushed = StreamController<PrefsFlush>.broadcast();
+  final _prefsRefused = StreamController<String>.broadcast();
+
   /// Whether the first walk of this session has been made, after which
   /// what arrives is news rather than backlog.
   bool _caughtUp = false;
@@ -143,6 +171,8 @@ class SyncEngine {
     _playStateChanged.close();
     _serverEvents.close();
     _itemsRemoved.close();
+    _prefsFlushed.close();
+    _prefsRefused.close();
   }
 
   void _setStatus(SyncConnection c) {
@@ -445,8 +475,8 @@ class SyncEngine {
             // refetch.
             _playStateChanged.add(ev.pid!);
           }
-          // prefs events invalidate through catalogChanged consumers
-          // watching prefs; the prefs controller refetches on its own.
+          // Every other kind reaches the app through [serverEvents]; the
+          // mirror keeps play states only.
         }
         since = page.nextSince;
         if (!page.more) break;
@@ -651,6 +681,87 @@ class SyncEngine {
             );
       });
 
+  /// Queues a change to the preference document: the fields it changed,
+  /// at their new values, as the wire spells them (see `prefsPatch`).
+  ///
+  /// One entry, merged rather than replaced, so a field named twice keeps
+  /// the later value. Sent as a read with the patch laid over it and a
+  /// write, so a field another device changed meanwhile survives unless
+  /// this one changed it too. Queued while connected it is sent at once:
+  /// nothing else would send it before the next reconnect, and a caller
+  /// keeping its writes in order queues every later one behind it.
+  ///
+  /// Kept for [owner] alone and sent only while it is [prefsOwner].
+  Future<void> queuePrefsPatch(
+    Map<String, Object?> patch, {
+    required String owner,
+  }) async {
+    if (patch.isEmpty) return;
+    await _outboxWrite(
+      () => db.transaction(() async {
+        final waiting = await pendingPrefsPatch(owner);
+        await _coalesce(_prefsKind, owner);
+        await db
+            .into(db.outboxMutations)
+            .insert(
+              OutboxMutationsCompanion.insert(
+                kind: _prefsKind,
+                pid: owner,
+                payload: Value(
+                  jsonEncode(
+                    waiting == null ? patch : mergePrefsPatches(waiting, patch),
+                  ),
+                ),
+                recordedAt: DateTime.now(),
+              ),
+            );
+      }),
+    );
+    if (_running && _current.online) {
+      unawaited(
+        _serialized(() async {
+          try {
+            await flushOutbox();
+          } on WaxDeckApiException catch (e) {
+            _handleApiFailure(e);
+          }
+        }),
+      );
+    }
+  }
+
+  /// [owner]'s preference patch waiting to be sent, or null when none
+  /// is, or when what is stored does not read as one.
+  Future<Map<String, Object?>?> pendingPrefsPatch(String owner) async =>
+      _patchOf((await _prefsRow(owner))?.payload);
+
+  Future<OutboxMutation?> _prefsRow(String owner) =>
+      (db.select(db.outboxMutations)
+            ..where((t) => t.kind.equals(_prefsKind) & t.pid.equals(owner)))
+          .getSingleOrNull();
+
+  /// Sends [owner]'s waiting preference patch now, off the reconnect
+  /// path: for a caller with reason to think the server answers while
+  /// the socket is down. A refusal is settled as a flush settles one;
+  /// any other failure is thrown, the patch still waiting.
+  Future<void> sendPrefs(String owner) => _serialized(() async {
+    final row = await _prefsRow(owner);
+    if (row != null) await _flushPrefs(row);
+  });
+
+  static Map<String, Object?>? _patchOf(String? payload) {
+    if (payload == null) return null;
+    try {
+      final decoded = jsonDecode(payload);
+      return decoded is Map ? decoded.cast<String, Object?>() : null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// A preference entry, one per account, keyed by the account's id.
+  static const _prefsKind = 'prefs';
+
   /// Queues a finished listen session; the session id is the
   /// idempotency key, so a duplicate flush can never double-count.
   Future<void> queueListen(ListenSession session) => _outboxWrite(() async {
@@ -679,6 +790,11 @@ class SyncEngine {
       db.outboxMutations,
     )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
     for (final m in mutations) {
+      if (m.kind == _prefsKind) {
+        // A patch waits for its own account; see [prefsOwner].
+        if (m.pid == prefsOwner) await _flushPrefs(m);
+        continue;
+      }
       try {
         switch (m.kind) {
           case 'position':
@@ -713,12 +829,9 @@ class SyncEngine {
             );
         }
       } on WaxDeckApiException catch (e) {
-        if (_permanent(e)) {
-          // The item is gone or the write is invalid forever; keeping
-          // the entry would wedge the queue.
-        } else {
-          rethrow;
-        }
+        if (!_permanent(e)) rethrow;
+        // The item is gone or the write is invalid forever; keeping the
+        // entry would wedge the queue.
       }
       await (db.delete(
         db.outboxMutations,
@@ -749,6 +862,76 @@ class SyncEngine {
       }
     }
   }
+
+  /// Sends one waiting preference patch and settles it. A refusal, or a
+  /// patch that no longer reads, drops it and is reported; any other
+  /// failure is thrown, the patch still waiting.
+  Future<void> _flushPrefs(OutboxMutation m) async {
+    final sent = _patchOf(m.payload);
+    Prefs? stored;
+    if (sent != null) {
+      try {
+        stored = await _sendPrefs(sent);
+      } on WaxDeckApiException catch (e) {
+        if (!_permanent(e)) rethrow;
+      }
+    }
+    final waiting = await _settlePrefs(m, sent);
+    if (stored == null) {
+      if (!_prefsRefused.isClosed) _prefsRefused.add(m.pid);
+    } else if (!_prefsFlushed.isClosed) {
+      _prefsFlushed.add((owner: m.pid, stored: stored, waiting: waiting));
+    }
+  }
+
+  /// Sends one queued preference patch over the document as it stands,
+  /// answering what the server stored. Null when the patch no longer
+  /// makes a document (written by a build that spelled a field some
+  /// other way), which is as final as a refusal.
+  Future<Prefs?> _sendPrefs(Map<String, Object?> patch) async {
+    final current = await repository.getPrefs();
+    final Prefs next;
+    try {
+      next = applyPrefsPatch(current, patch);
+    } on Object {
+      return null;
+    }
+    return repository.putPrefs(next);
+  }
+
+  /// Takes what [m] carried out of the waiting entry, landed or refused,
+  /// answering what still waits.
+  ///
+  /// By value, not by row: a change merged in while [m] was out replaced
+  /// its row, and what is left of the merge (the fields [sent] does not
+  /// name, or names at an older value) still waits.
+  Future<Map<String, Object?>?> _settlePrefs(
+    OutboxMutation m,
+    Map<String, Object?>? sent,
+  ) => db.transaction(() async {
+    if (sent == null) {
+      await (db.delete(
+        db.outboxMutations,
+      )..where((t) => t.id.equals(m.id))).go();
+      return pendingPrefsPatch(m.pid);
+    }
+    final waiting = await pendingPrefsPatch(m.pid);
+    await _coalesce(_prefsKind, m.pid);
+    if (waiting == null) return null;
+    final left = unsettledPrefsPatch(waiting, sent);
+    if (left.isEmpty) return null;
+    await db
+        .into(db.outboxMutations)
+        .insert(
+          OutboxMutationsCompanion.insert(
+            kind: _prefsKind,
+            pid: m.pid,
+            payload: Value(jsonEncode(left)),
+            recordedAt: DateTime.now(),
+          ),
+        );
+    return left;
+  });
 
   bool _permanent(WaxDeckApiException e) {
     return e.code == 'not-found' || e.code == 'invalid-request';

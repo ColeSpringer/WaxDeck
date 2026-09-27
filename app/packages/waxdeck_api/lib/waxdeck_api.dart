@@ -7,4 +7,5 @@ library;
 
 export 'src/client.dart';
 export 'src/models.dart';
+export 'src/prefs_patch.dart';
 export 'src/session_id.dart';

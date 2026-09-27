@@ -839,7 +839,7 @@ class PlaybackSession {
   Future<LocalPlayback?> _localFallback(WaxDeckApiException e) async {
     final port = downloads;
     if (port == null) return null;
-    if (e.statusCode != null && e.statusCode != 503) return null;
+    if (!e.unreachable) return null;
     return port.localFor(item.pid);
   }
 
@@ -1145,6 +1145,11 @@ class PlaybackSession {
   /// passes true, because the engine stopped at the end of the item and
   /// nothing else would start it; a press of previous passes whether
   /// the item was playing, since a skip is not a play command.
+  ///
+  /// A play from the end of the item can be a reload (the port's
+  /// [AudioEnginePort.play]), and one that fails is announced on
+  /// [sessionFailed] rather than thrown, for the reason [seek] gives:
+  /// the transport's toggle and repeat-one both reach here unawaited.
   Future<void> replay({bool play = true}) async {
     _outroFired = false;
     _lastJumpedSpan = -1;
@@ -1154,9 +1159,14 @@ class PlaybackSession {
     // than where this play actually stopped.
     _endedAt = null;
     // Through the display timeline, so a book on repeat-one goes back to
-    // its first part rather than to the top of the part it ended on.
-    await seek(Duration.zero);
-    if (play) await engine.play();
+    // its first part rather than to the top of the part it ended on. A
+    // jump that failed is already on [sessionFailed].
+    if (!await seek(Duration.zero) || !play) return;
+    try {
+      await engine.play();
+    } on MediaLoadException catch (error) {
+      _announceFailed(error);
+    }
   }
 
   /// Stops playback, flushing a final checkpoint and the listen report.
