@@ -657,3 +657,10 @@ table users
   column waxbin_user_pid|TEXT|notnull=1|default=<none>|pk=0
   autoindex pk|unique=1|(id)
   autoindex u|unique=1|(username_ci)
+table youtube_pending
+  column handover|INTEGER|notnull=1|default=0|pk=0
+  column last_probed_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column seen_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column source_id|TEXT|notnull=1|default=<none>|pk=1
+  column video_id|TEXT|notnull=1|default=<none>|pk=2
+  autoindex pk|unique=1|(source_id,video_id)

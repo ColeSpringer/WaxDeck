@@ -9505,7 +9505,7 @@ export interface components {
         SubscriptionSettings: {
             /** @description Keep the newest N downloaded episode files for this user; 0 means keep all. Null (or absent) means the server default, which is keep-all unless the administrator configured otherwise. The effective policy for a show is the most generous union across its subscribers, and removing a file never removes playback history (archive, not delete). */
             retentionKeep?: number | null;
-            /** @description Fetch new episodes to the server automatically as the feed publishes them. `autoDownloadFilter` narrows which ones. */
+            /** @description Fetch new episodes to the server automatically as the feed publishes them. `autoDownloadFilter` narrows which ones. A new episode dated behind as many downloads as the show's retention keeps is left unfetched, since retention would remove it again. */
             autoDownload?: boolean;
             autoDownloadFilter?: components["schemas"]["EpisodeFilter"];
             /** @description Folder path for organizing subscriptions, as segments joined by `/` (round-trips through OPML outline nesting). */

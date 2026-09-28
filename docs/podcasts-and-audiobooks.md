@@ -116,7 +116,11 @@ The effective policy for a show is the most generous union across its
 subscribers: if anyone keeps everything, everything stays; otherwise
 the largest N wins. Episodes starred by any subscriber or sitting in
 someone's play queue are kept regardless, and a file someone is
-actively listening to is never reclaimed under them.
+actively listening to is never reclaimed under them. Automatic
+download follows the same N: a new episode dated behind that many
+downloads (an older one a feed adds late, or a YouTube stream that
+ended after a newer upload) is left unfetched rather than fetched only
+to be reclaimed.
 
 ## Private feeds
 
@@ -159,6 +163,14 @@ appear as episodes and fetch as audio, stamped with their source URL
 and acquisition date. The optional WaxSeal sidecar (compose profile
 `youtube`) unlocks the full-quality path. SponsorBlock segment cutting
 is available opt-in via `WAXDECK_YOUTUBE_SPONSORBLOCK`.
+
+A premiere or a stream that is still live when the channel is checked
+cannot be downloaded yet, so the server remembers it and looks again on
+later checks, a few at a time, and it arrives as an episode within a
+few checks of its end, fetched like any new episode when automatic
+download is on. One that turns out members-only, blocked in the
+server's region, age-restricted or private is let go at once, and one
+that never becomes downloadable 90 days after a check last saw it live.
 
 ## Audiobooks
 

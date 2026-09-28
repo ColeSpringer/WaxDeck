@@ -91,13 +91,14 @@ const (
 )
 
 // syncShow syncs one show now, records the outcome in feed_state, and
-// fans out what a change implies: auto-download for the newest
-// arrivals and a retention re-evaluation.
+// fans out what a change implies: auto-download for what the sync added
+// and a retention re-evaluation.
 func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOrigin) (int, error) {
 	pod, err := l.lib.Podcasts().Get(ctx, showPID)
 	if err != nil {
 		return 0, classify(err)
 	}
+	started := time.Now().UnixNano()
 	res, err := l.lib.Podcasts().Sync(ctx, showPID)
 	now := time.Now().UnixNano()
 	if err != nil {
@@ -143,7 +144,7 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOr
 		l.log.Warn("recording feed success", "show", string(showPID), "err", err)
 	}
 	if res.EpisodesAdded > 0 {
-		l.autoDownloadNewest(ctx, showPID, res.EpisodesAdded)
+		l.autoDownloadArrivals(ctx, showPID, started, res.EpisodesAdded)
 		if err := l.db.EnqueueRetention(ctx, string(showPID), now); err != nil {
 			l.log.Warn("queuing retention", "show", string(showPID), "err", err)
 		}
@@ -151,8 +152,14 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOr
 	return res.EpisodesAdded, nil
 }
 
-// autoDownloadNewest queues enclosure fetches for the newest arrivals
-// that at least one subscriber's auto-download policy admits.
+// autoDownloadArrivals queues enclosure fetches for the episodes a sync
+// added, those the catalog created at or after since, that at least one
+// subscriber's auto-download policy admits. Arrival, not date: a sync
+// can add an episode older than ones already held (a backfill, or a
+// YouTube stream that ended after a newer upload), and the catalog
+// reports only a count. Retention keeps the newest downloads by date,
+// so an arrival dated behind as many as it keeps is left alone rather
+// than fetched for the next sweep to remove.
 //
 // The decision is per subscriber and per episode, because a keyword
 // filter makes it so. The union is deliberate and matches retention's:
@@ -160,7 +167,7 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOr
 // subscribers, so one subscriber wanting an episode is enough to fetch
 // the shared file, and a filter narrows what that subscriber asks for
 // rather than what everyone else gets.
-func (l *Library) autoDownloadNewest(ctx context.Context, showPID model.PID, added int) {
+func (l *Library) autoDownloadArrivals(ctx context.Context, showPID model.PID, since int64, added int) {
 	subs, err := l.db.SubscribersByShow(ctx, string(showPID))
 	if err != nil {
 		l.log.Warn("listing subscribers", "show", string(showPID), "err", err)
@@ -175,20 +182,46 @@ func (l *Library) autoDownloadNewest(ctx context.Context, showPID model.PID, add
 	if len(filters) == 0 {
 		return
 	}
+	// Arrivals are usually the newest by date, and then the top rows are
+	// all of them; one dated among older episodes takes the whole show.
 	eps, err := l.lib.Podcasts().Episodes(ctx, showPID, added)
+	if err == nil && !allCreatedSince(eps, since) {
+		eps, err = l.lib.Podcasts().Episodes(ctx, showPID, 0)
+	}
 	if err != nil {
 		l.log.Warn("listing new episodes", "show", string(showPID), "err", err)
 		return
 	}
+	keep := l.unionRetention(subs)
+	kept := int64(0) // downloads ahead of this episode by date, fetched ones counted
 	now := time.Now().UnixNano()
 	for _, ep := range eps {
-		if ep.Downloaded || !anyFilterAdmits(filters, ep.Title) {
+		if keep > 0 && kept >= keep {
+			break
+		}
+		if ep.Downloaded {
+			kept++
+			continue
+		}
+		if ep.CreatedAt < since || !anyFilterAdmits(filters, ep.Title) {
 			continue
 		}
 		if err := l.db.EnqueueFetch(ctx, string(ep.PID), "auto", now); err != nil {
 			l.log.Warn("queuing auto download", "episode", string(ep.PID), "err", err)
 		}
+		kept++
 	}
+}
+
+// allCreatedSince reports whether every episode arrived at or after
+// since.
+func allCreatedSince(eps []*model.Episode, since int64) bool {
+	for _, ep := range eps {
+		if ep.CreatedAt < since {
+			return false
+		}
+	}
+	return true
 }
 
 // anyFilterAdmits is the union: one subscriber wanting the episode is

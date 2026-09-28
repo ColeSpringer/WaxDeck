@@ -92,9 +92,22 @@ func newFeedServer(t *testing.T, episodes int) *feedServer {
 // a larger n simulates a feed publishing new entries.
 func (fs *feedServer) writeFeed(t *testing.T, n int) {
 	t.Helper()
+	var eps []int
+	for i := 1; i <= n && i <= len(fs.files); i++ {
+		eps = append(eps, i)
+	}
+	fs.writeFeedOf(t, eps...)
+}
+
+// writeFeedOf renders feed.xml for the given episodes, numbered from 1;
+// each keeps its own date, so a later write can add one older than the
+// rest.
+func (fs *feedServer) writeFeedOf(t *testing.T, eps ...int) {
+	t.Helper()
 	var items strings.Builder
 	base := time.Date(2026, 6, 1, 8, 0, 0, 0, time.UTC)
-	for i := 0; i < n && i < len(fs.files); i++ {
+	for _, n := range eps {
+		i := n - 1
 		info, err := os.Stat(filepath.Join(fs.dir, fs.files[i]))
 		if err != nil {
 			t.Fatal(err)
@@ -1569,6 +1582,111 @@ func TestAutoDownloadFilterUnion(t *testing.T) {
 		if byTitle[old] {
 			t.Errorf("%s is backlog and must not be fetched by a filter change", old)
 		}
+	}
+}
+
+// TestAutoDownloadFetchesWhatTheRefreshAdded is an arrival dated before
+// the newest episode, the shape of a YouTube stream that ended after a
+// newer upload. The newest by date is backlog and stays unfetched.
+func TestAutoDownloadFetchesWhatTheRefreshAdded(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 3)
+	feed.writeFeedOf(t, 2, 3)
+	ctx := context.Background()
+
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+	resp = reqAs(t, h, "PUT", "/api/v1/podcasts/"+show+"/settings", h.token, map[string]any{"autoDownload": true})
+	if resp.StatusCode != 200 {
+		t.Fatalf("settings status = %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	feed.writeFeedOf(t, 1, 2, 3) // episode 1 is the oldest by date
+	h.svc.RefreshDueFeeds(ctx, 0)
+	drainFetches(t, h)
+
+	resp = get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
+	downloaded := map[string]bool{}
+	for _, ep := range decode[EpisodePage](t, resp).Items {
+		downloaded[ep.Title] = ep.Downloaded
+	}
+	if len(downloaded) != 3 {
+		t.Fatalf("episodes = %v, want three", downloaded)
+	}
+	if !downloaded["Episode 1"] {
+		t.Error("the episode the refresh added was not fetched")
+	}
+	for _, old := range []string{"Episode 2", "Episode 3"} {
+		if downloaded[old] {
+			t.Errorf("%s is backlog and must not be fetched", old)
+		}
+	}
+}
+
+// TestAutoDownloadLeavesWhatRetentionWouldReclaim: retention keeps the
+// newest downloads by date, so an arrival dated behind as many as it
+// keeps would be fetched only to be removed at the next sweep, possibly
+// hours of a rescued stream. It is left unfetched unless there is room.
+func TestAutoDownloadLeavesWhatRetentionWouldReclaim(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		keep    int
+		before  []int // episodes the feed carries at subscribe
+		fetched []int // of those, downloaded by hand
+		want    map[string]bool
+	}{
+		{"an older arrival behind the kept download", 1, []int{2, 3}, []int{3},
+			map[string]bool{"Episode 1": false, "Episode 3": true}},
+		{"room for the older arrival", 2, []int{2, 3}, []int{3},
+			map[string]bool{"Episode 1": true, "Episode 3": true}},
+		{"two arrivals and room for one", 1, []int{1}, nil,
+			map[string]bool{"Episode 2": false, "Episode 3": true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := newPodcastHarness(t)
+			feed := newFeedServer(t, 3)
+			feed.writeFeedOf(t, tc.before...)
+			ctx := context.Background()
+
+			resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+			show := decode[Subscription](t, resp).Show.Pid
+			resp = reqAs(t, h, "PUT", "/api/v1/podcasts/"+show+"/settings", h.token,
+				map[string]any{"autoDownload": true, "retentionKeep": tc.keep})
+			if resp.StatusCode != 200 {
+				t.Fatalf("settings status = %d", resp.StatusCode)
+			}
+			resp.Body.Close()
+			episodes := func() map[string]EpisodeSummary {
+				t.Helper()
+				resp := get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)
+				out := map[string]EpisodeSummary{}
+				for _, ep := range decode[EpisodePage](t, resp).Items {
+					out[ep.Title] = ep
+				}
+				return out
+			}
+			for _, n := range tc.fetched {
+				ep := episodes()[fmt.Sprintf("Episode %d", n)]
+				resp = h.postJSON(t, "/api/v1/episodes/"+ep.Pid+"/fetch", nil)
+				resp.Body.Close()
+			}
+			drainFetches(t, h)
+
+			feed.writeFeedOf(t, 1, 2, 3)
+			h.svc.RefreshDueFeeds(ctx, 0)
+			drainFetches(t, h)
+
+			got := episodes()
+			for title, want := range tc.want {
+				if got[title].Downloaded != want {
+					t.Errorf("%s downloaded = %v, want %v", title, got[title].Downloaded, want)
+				}
+			}
+		})
 	}
 }
 

@@ -20129,7 +20129,10 @@ components:
           type: boolean
           description: >
             Fetch new episodes to the server automatically as the feed
-            publishes them. `autoDownloadFilter` narrows which ones.
+            publishes them. `autoDownloadFilter` narrows which ones. A
+            new episode dated behind as many downloads as the show's
+            retention keeps is left unfetched, since retention would
+            remove it again.
         autoDownloadFilter:
           $ref: "#/components/schemas/EpisodeFilter"
         folder:

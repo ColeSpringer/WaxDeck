@@ -93,3 +93,28 @@ func TestRunPruneHonoursTaskRetention(t *testing.T) {
 		t.Fatal("an old finished task survived a seven-day retention pass")
 	}
 }
+
+// The prune lets go of the YouTube entries a listing last showed live
+// more than the horizon ago, for shows nobody polls any more too.
+func TestRunPruneLetsStaleHeldYouTubeEntriesGo(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := newAdminFixture(t)
+	now := time.Now()
+	if err := svc.db.RememberYouTubePending(ctx, "UUgone", []string{"old00000001"}, now.Add(-91*24*time.Hour).UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.RememberYouTubePending(ctx, "UUgone", []string{"new00000001"}, now.Add(-24*time.Hour).UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RunPrune(ctx); err != nil {
+		t.Fatal(err)
+	}
+	// Listed as of the old sighting, so the horizon hides neither row.
+	held, err := svc.db.YouTubePending(ctx, "UUgone", now.Add(-91*24*time.Hour).UnixNano())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(held) != 1 || held[0] != "new00000001" {
+		t.Errorf("held after the prune = %v, want only the recent entry", held)
+	}
+}

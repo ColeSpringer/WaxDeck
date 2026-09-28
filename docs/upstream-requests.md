@@ -88,6 +88,18 @@ note.
   over, on the peaks read. Shipped workaround: windows placed by the
   stated length; a window it cannot hold answers unavailable.
 
+- **A sync's commit is not part of the provider contract.** WaxDeck's
+  YouTube provider hands a premiere it found after the cursor passed it
+  to the catalog under a token it adds to the enumeration's ETag, and
+  the next poll's ETag is its receipt that the episode was written.
+  That rests on `UpsertFeed` storing the ETag in the transaction that
+  writes the episodes, which `source.Provider` does not promise; were
+  the two written apart, a receipt could outlive episodes that never
+  landed, and the provider would let an entry go the catalog never
+  wrote. Wanted: that atomicity stated in the provider contract, or a
+  call to the provider once a sync's writes commit. Shipped workaround:
+  the receipt, relying on today's single transaction.
+
 ## WaxTap
 
 - **A chunked download has no stall timeout.** `Timeouts.ChunkRetry`

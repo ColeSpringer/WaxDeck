@@ -291,6 +291,7 @@ func run() error {
 			SponsorBlock:   categories,
 			EmbedThumbnail: *ytThumbnail,
 			EmbedMetadata:  true,
+			Pending:        store,
 			Logger:         log,
 		})
 		if err != nil {

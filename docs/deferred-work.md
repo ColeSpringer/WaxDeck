@@ -459,17 +459,3 @@ here waits on upstream.
   authority or an unscoped path fails here), the temp-then-rename
   leaves no `.tmp` behind, and a second export of the same card
   replaces rather than duplicates.
-
-## Acquisition
-
-- `[in-repo]` **A live or upcoming YouTube entry pushed below a newer
-  upload before it ends is never cataloged.** WaxTap lists a premiere or
-  a running stream without looking it up, and a subscription drops it
-  because it cannot download yet. The cursor stays below one at the top
-  of the feed, so that one is listed again and cataloged once it is a
-  VOD; but the next poll stops at a newer upload's id, so an entry still
-  live when something else is published is passed over for good.
-  Holding the cursor below it instead would re-enrich every newer upload
-  on every poll, which a perpetual live stream makes unbounded. The fix
-  wants a bounded second look: remember the passed-over ids and probe
-  each until it resolves or ages out.

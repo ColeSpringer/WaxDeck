@@ -40,6 +40,14 @@ type formatFetcher interface {
 	FetchFormat(ctx context.Context, req source.FetchRequest, w io.Writer, format string) (*source.FetchResult, error)
 }
 
+// onceEnumerator is the optional capability a source provider advertises
+// when its Enumerate, a subscription's poll, keeps state a one-shot read
+// must leave alone: the YouTube provider's poll hands over and forgets
+// premieres it was holding for the subscription.
+type onceEnumerator interface {
+	EnumerateOnce(ctx context.Context, req source.Request) (*source.Enumeration, error)
+}
+
 // acquireMaxItems bounds one acquisition; a channel's full archive is
 // a subscription's job, not one task's.
 const acquireMaxItems = 200
@@ -339,7 +347,11 @@ func kindIsPermanent(k ErrorKind) bool {
 func (l *Library) acquireList(ctx context.Context, rawURL string) (source.Provider, []acquireItem, error) {
 	var firstErr error
 	for _, p := range l.sourceProviders {
-		en, err := p.Enumerate(ctx, source.Request{URL: rawURL})
+		enumerate := p.Enumerate
+		if o, ok := p.(onceEnumerator); ok {
+			enumerate = o.EnumerateOnce
+		}
+		en, err := enumerate(ctx, source.Request{URL: rawURL})
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err

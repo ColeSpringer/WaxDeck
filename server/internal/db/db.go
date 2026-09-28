@@ -291,6 +291,24 @@ const baselineSchema = `
 		last_attempt_ns      INTEGER NOT NULL DEFAULT 0,
 		last_synced_ns       INTEGER NOT NULL DEFAULT 0
 	);
+	-- Live and upcoming YouTube entries a subscription's listing passed
+	-- over, keyed by the listing's playlist id. The listing's cursor
+	-- moves past them once a newer upload lands, so each poll looks at
+	-- a few again, least recently probed first, until one can be
+	-- cataloged, a verdict says it never will, or 90 days pass after a
+	-- listing last showed it live (seen_ns): then the read stops listing
+	-- it and the daily prune deletes it. One that aired is handed to the
+	-- catalog under a token the poll's answer also carries in its cursor
+	-- (handover, 0 until then); the next poll's cursor confirms it, and
+	-- until then it is held.
+	CREATE TABLE youtube_pending (
+		source_id      TEXT    NOT NULL,
+		video_id       TEXT    NOT NULL,
+		seen_ns        INTEGER NOT NULL,
+		last_probed_ns INTEGER NOT NULL,
+		handover       INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (source_id, video_id)
+	);
 	CREATE TABLE silence_maps (
 		essence_hash     TEXT    PRIMARY KEY,
 		detector_version TEXT    NOT NULL,

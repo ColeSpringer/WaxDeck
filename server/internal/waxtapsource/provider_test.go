@@ -20,6 +20,7 @@ import (
 	"github.com/colespringer/waxbin/podcast"
 	"github.com/colespringer/waxbin/source"
 	"github.com/colespringer/waxdeck/fixtures"
+	"github.com/colespringer/waxdeck/server/internal/db"
 	waxlabel "github.com/colespringer/waxlabel"
 	"github.com/colespringer/waxlabel/tag"
 	waxtap "github.com/colespringer/waxtap/v3"
@@ -34,6 +35,11 @@ type fakeTap struct {
 	infos     map[string]*waxtap.Video
 	infoErrs  map[string]error
 	infoCalls []string
+	// infoOpts is how many read options each Info call carried, beside
+	// infoCalls.
+	infoOpts []int
+	// beforeInfo, when set, runs as each Info call starts.
+	beforeInfo func(id string)
 
 	// workDir is where the provider stages downloads; Download writes payload
 	// into the staged fetch file it finds there.
@@ -95,9 +101,13 @@ func (f *fakeTap) Enumerate(ctx context.Context, _ string, opts waxtap.Enumerate
 	return out, nil
 }
 
-func (f *fakeTap) Info(_ context.Context, url string, _ waxtap.InfoDepth, _ ...waxtap.ReadOption) (*waxtap.Video, error) {
+func (f *fakeTap) Info(_ context.Context, url string, _ waxtap.InfoDepth, opts ...waxtap.ReadOption) (*waxtap.Video, error) {
 	id := strings.TrimPrefix(url, "https://www.youtube.com/watch?v=")
+	if f.beforeInfo != nil {
+		f.beforeInfo(id)
+	}
 	f.infoCalls = append(f.infoCalls, id)
+	f.infoOpts = append(f.infoOpts, len(opts))
 	if err, ok := f.infoErrs[id]; ok {
 		return nil, err
 	}
@@ -625,18 +635,767 @@ func TestEnumerateTakesTheImagePastALiveEntry(t *testing.T) {
 	}
 }
 
-// Once a newer upload lists above it, an upcoming entry no longer holds the cursor.
-func TestEnumerateCursorPassesAnUpcomingEntryBelowANewerUpload(t *testing.T) {
+// examplePlaylist is channelFake's playlist id, which the held entries
+// are keyed by.
+const examplePlaylist = "UUexample0123456789abcd"
+
+// pendingProvider is testProvider with the second look wired to a real
+// store and a clock the test moves.
+func pendingProvider(t *testing.T, f *fakeTap, logs *bytes.Buffer) (*Provider, *db.DB, *time.Time) {
+	t.Helper()
+	store, err := db.Open(context.Background(), filepath.Join(t.TempDir(), "waxdeck.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Close() })
+	p := testProviderWith(t, f, logs, func(c *Config) { c.Pending = store })
+	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	p.now = func() time.Time { return clock }
+	return p, store, &clock
+}
+
+// heldIDs lists what the second look holds at the test's clock.
+func heldIDs(t *testing.T, store *db.DB, clock *time.Time) []string {
+	t.Helper()
+	ids, err := store.YouTubePending(context.Background(), examplePlaylist, clock.UnixNano())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ids
+}
+
+// infoCallsFor counts the lookups made for one id.
+func infoCallsFor(f *fakeTap, id string) int {
+	n := 0
+	for _, c := range f.infoCalls {
+		if c == id {
+			n++
+		}
+	}
+	return n
+}
+
+// A premiere below a newer upload no longer holds the cursor, so the
+// listing never names it again; it is looked at on later polls and
+// cataloged on the first one after it airs, with the cursor left where
+// the listing put it.
+func TestEnumerateCatalogsAPassedOverPremiereOnceItAirs(t *testing.T) {
+	f := channelFake(3)
+	f.playlist.Entries[1].LiveStatus = waxtap.LiveUpcoming // vid(2), below vid(3)
+	f.infoErrs = map[string]error{vid(2): waxtap.ErrLiveNotStarted}
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+
+	first, err := p.Enumerate(ctx, source.Request{URL: "u"})
+	if err != nil {
+		t.Fatalf("first sync: %v", err)
+	}
+	if first.ETag != vid(3) {
+		t.Fatalf("ETag = %q, want %q", first.ETag, vid(3))
+	}
+	if got, want := episodeGUIDs(first.Feed), []string{vid(3), vid(1)}; !slices.Equal(got, want) {
+		t.Fatalf("episodes = %v, want %v", got, want)
+	}
+
+	still, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(3)})
+	if err != nil {
+		t.Fatalf("poll while upcoming: %v", err)
+	}
+	if !still.NotModified {
+		t.Errorf("poll while upcoming = %+v, want NotModified", still)
+	}
+	if n := infoCallsFor(f, vid(2)); n != 1 {
+		t.Errorf("lookups for the premiere = %d, want 1", n)
+	}
+
+	// The premiere airs: a lookup now answers with the video.
+	f.playlist.Entries[1].LiveStatus = waxtap.LiveNone
+	delete(f.infoErrs, vid(2))
+	aired, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(3)})
+	if err != nil {
+		t.Fatalf("poll after it aired: %v", err)
+	}
+	if aired.NotModified || aired.Feed == nil {
+		t.Fatalf("poll after it aired = %+v, want a feed", aired)
+	}
+	if got := episodeGUIDs(aired.Feed); !slices.Equal(got, []string{vid(2)}) {
+		t.Fatalf("episodes = %v, want the premiere alone", got)
+	}
+	ep := aired.Feed.Episodes[0]
+	if ep.Title != "full title "+vid(2) || ep.Description == "" || ep.PubDateNS == 0 {
+		t.Errorf("premiere not built as an enriched entry: %+v", ep)
+	}
+	if want := "https://www.youtube.com/watch?v=" + vid(2); ep.EnclosureURL != want {
+		t.Errorf("enclosure = %q, want %q", ep.EnclosureURL, want)
+	}
+	// The listing named nothing, so the feed's own fields are what keep
+	// the show row from being blanked.
+	if aired.Feed.Title != "Example Uploads" || aired.Feed.Author != "Example" {
+		t.Errorf("feed title/author = %q/%q", aired.Feed.Title, aired.Feed.Author)
+	}
+	if want := "https://i.ytimg.com/vi/" + vid(2) + "/max.jpg"; aired.Feed.ImageURL != want {
+		t.Errorf("feed image = %q, want %q", aired.Feed.ImageURL, want)
+	}
+
+	// The catalog stores the answer's cursor, which still stops where the
+	// listing left it and now confirms the hand-over.
+	after, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: aired.ETag})
+	if err != nil {
+		t.Fatalf("poll after cataloging: %v", err)
+	}
+	if !after.NotModified {
+		t.Errorf("poll after cataloging = %+v, want NotModified", after)
+	}
+	if n := infoCallsFor(f, vid(2)); n != 2 {
+		t.Errorf("lookups for the premiere = %d, want no more after it was cataloged", n)
+	}
+	if held := heldIDs(t, store, clock); len(held) != 0 {
+		t.Errorf("held = %v, want nothing", held)
+	}
+}
+
+// An aired entry is let go only once the catalog has written it, which
+// the next poll's cursor says: one whose sync failed, so the catalog
+// still holds the old cursor, is offered again.
+func TestEnumerateOffersAnAiredEntryAgainUntilTheCatalogHasIt(t *testing.T) {
 	f := channelFake(3)
 	f.playlist.Entries[1].LiveStatus = waxtap.LiveUpcoming // vid(2)
-	p := testProvider(t, f, nil)
+	f.infoErrs = map[string]error{vid(2): waxtap.ErrLiveNotStarted}
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	first, err := p.Enumerate(ctx, source.Request{URL: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	delete(f.infoErrs, vid(2))
+	if _, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: first.ETag}); err != nil {
+		t.Fatal(err)
+	}
+
+	again, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: first.ETag})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.Feed == nil || !slices.Equal(episodeGUIDs(again.Feed), []string{vid(2)}) {
+		t.Fatalf("poll after the lost answer = %+v, want the premiere offered again", again)
+	}
+	if held := heldIDs(t, store, clock); !slices.Equal(held, []string{vid(2)}) {
+		t.Errorf("held = %v, want the premiere until the catalog has it", held)
+	}
+
+	done, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: again.ETag})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !done.NotModified {
+		t.Errorf("poll after the stored answer = %+v, want NotModified", done)
+	}
+	if held := heldIDs(t, store, clock); len(held) != 0 {
+		t.Errorf("held = %v, want nothing", held)
+	}
+}
+
+// A throttled pass holds the cursor, and a hand-over in the same poll
+// still rides it: the next poll re-lists the deferred upload and lets
+// the premiere the listing cataloged go.
+func TestEnumerateHandsOverBesideADeferredPass(t *testing.T) {
+	f := channelFake(3)
+	f.playlist.Entries[0].LiveStatus = waxtap.LiveUpcoming // vid(3), at the top
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	first, err := p.Enumerate(ctx, source.Request{URL: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The premiere airs as a newer upload lands whose enrichment is deferred.
+	f.playlist.Entries[0].LiveStatus = waxtap.LiveNone
+	f.playlist.Entries = append([]waxtap.PlaylistEntry{{VideoID: vid(4), Title: "upload " + vid(4)}}, f.playlist.Entries...)
+	f.infoErrs = map[string]error{vid(4): deferredErr()}
+	both, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: first.ETag})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := episodeGUIDs(both.Feed), []string{vid(4), vid(3)}; !slices.Equal(got, want) {
+		t.Fatalf("episodes = %v, want %v", got, want)
+	}
+
+	delete(f.infoErrs, vid(4))
+	next, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: both.ETag})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Feed == nil || !slices.Equal(episodeGUIDs(next.Feed), []string{vid(4), vid(3)}) {
+		t.Fatalf("next poll = %+v, want the held cursor's page listed again", next)
+	}
+	if held := heldIDs(t, store, clock); len(held) != 0 {
+		t.Errorf("held = %v, want the premiere let go", held)
+	}
+}
+
+// The horizon runs from the last listing that showed an entry live, so
+// one passed over late in a long wait still gets all of it.
+func TestEnumerateCountsTheHorizonFromTheLastLiveListing(t *testing.T) {
+	f := channelFake(3)
+	f.playlist.Entries[0].LiveStatus = waxtap.LiveUpcoming // vid(3), at the top
+	f.infoErrs = map[string]error{vid(3): waxtap.ErrLiveNotStarted}
+	p, _, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	first, err := p.Enumerate(ctx, source.Request{URL: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 89 days on it is still listed at the top when an upload passes it.
+	*clock = clock.Add(89 * 24 * time.Hour)
+	f.playlist.Entries = append([]waxtap.PlaylistEntry{{VideoID: vid(4), Title: "upload " + vid(4)}}, f.playlist.Entries...)
+	passed, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: first.ETag})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	*clock = clock.Add(2 * 24 * time.Hour)
+	f.infoCalls = nil
+	if _, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: passed.ETag}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.infoCalls, []string{vid(3)}) {
+		t.Errorf("lookups two days after it was passed over = %v, want the premiere", f.infoCalls)
+	}
+}
+
+// A stream that starts and ends between two polls lists as an ordinary
+// video, and its lookup can still say live or not started. That is "not
+// yet", so the entry is held like a live one rather than dropped while
+// the cursor passes it.
+func TestEnumerateHoldsAnEntryWhoseLookupFindsItLive(t *testing.T) {
+	f := channelFake(3)
+	f.infoErrs = map[string]error{vid(3): fmt.Errorf("enrich: %w", waxtap.ErrLiveNotStarted)}
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	first, err := p.Enumerate(ctx, source.Request{URL: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := episodeGUIDs(first.Feed), []string{vid(2), vid(1)}; !slices.Equal(got, want) {
+		t.Fatalf("episodes = %v, want %v", got, want)
+	}
+	if held := heldIDs(t, store, clock); !slices.Equal(held, []string{vid(3)}) {
+		t.Fatalf("held = %v, want the stream", held)
+	}
+
+	delete(f.infoErrs, vid(3))
+	ready, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: first.ETag})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ready.Feed == nil || !slices.Equal(episodeGUIDs(ready.Feed), []string{vid(3)}) {
+		t.Errorf("poll once it is ready = %+v, want the stream", ready)
+	}
+}
+
+// A held stream that ends lists as an ordinary video while its
+// recording is still processing, and a lookup then answers in ways that
+// are not a verdict. It stays held, and is cataloged once it is ready.
+func TestEnumerateKeepsAHeldEntryTheListingCouldNotSettle(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"still live", waxtap.ErrLiveNotStarted},
+		{"removed-shaped", deadErr()},
+		{"no audio yet", waxtap.ErrNoAudioFormats},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := channelFake(3)
+			f.playlist.Entries[0].LiveStatus = waxtap.LiveNow // vid(3), at the top
+			p, store, clock := pendingProvider(t, f, nil)
+			ctx := context.Background()
+			first, err := p.Enumerate(ctx, source.Request{URL: "u"})
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			f.playlist.Entries[0].LiveStatus = waxtap.LiveNone
+			f.infoErrs = map[string]error{vid(3): fmt.Errorf("enrich: %w", tc.err)}
+			ended, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: first.ETag})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ended.Feed != nil && slices.Contains(episodeGUIDs(ended.Feed), vid(3)) {
+				t.Fatalf("episodes = %v, want the stream left out until it is ready", episodeGUIDs(ended.Feed))
+			}
+			if held := heldIDs(t, store, clock); !slices.Equal(held, []string{vid(3)}) {
+				t.Fatalf("held = %v, want the stream kept", held)
+			}
+
+			delete(f.infoErrs, vid(3))
+			ready, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: ended.ETag})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ready.Feed == nil || !slices.Equal(episodeGUIDs(ready.Feed), []string{vid(3)}) {
+				t.Errorf("poll once it is ready = %+v, want the stream", ready)
+			}
+		})
+	}
+}
+
+// A settled verdict says the entry will never download here, whoever
+// asks, so it is let go whether the listing or a lookup gives it.
+func TestEnumerateLetsAHeldEntryGoOnASettledVerdict(t *testing.T) {
+	settled := []struct {
+		name string
+		err  error
+	}{
+		{"members only", waxtap.ErrMembersOnly},
+		{"geo blocked", waxtap.ErrGeoBlocked},
+		{"age restricted", waxtap.ErrAgeRestricted},
+		{"private", waxtap.ErrVideoRestricted},
+	}
+	for _, tc := range settled {
+		t.Run("lookup, "+tc.name, func(t *testing.T) {
+			f := channelFake(3)
+			f.playlist.Entries[1].LiveStatus = waxtap.LiveNow // vid(2), below vid(3)
+			p, store, clock := pendingProvider(t, f, nil)
+			ctx := context.Background()
+			first, err := p.Enumerate(ctx, source.Request{URL: "u"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			f.infoErrs = map[string]error{vid(2): tc.err}
+			if _, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: first.ETag}); err != nil {
+				t.Fatal(err)
+			}
+			if held := heldIDs(t, store, clock); len(held) != 0 {
+				t.Errorf("held = %v, want the entry let go", held)
+			}
+		})
+	}
+	t.Run("listing, members only", func(t *testing.T) {
+		f := channelFake(3)
+		f.playlist.Entries[0].LiveStatus = waxtap.LiveNow // vid(3), at the top
+		p, store, clock := pendingProvider(t, f, nil)
+		ctx := context.Background()
+		first, err := p.Enumerate(ctx, source.Request{URL: "u"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		f.playlist.Entries[0].LiveStatus = waxtap.LiveNone
+		f.infoErrs = map[string]error{vid(3): fmt.Errorf("enrich: %w", waxtap.ErrMembersOnly)}
+		if _, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: first.ETag}); err != nil {
+			t.Fatal(err)
+		}
+		if held := heldIDs(t, store, clock); len(held) != 0 {
+			t.Errorf("held = %v, want the entry let go", held)
+		}
+	})
+}
+
+// A held entry a full listing reaches past its enrichment budget is
+// cataloged bare, which would leave it undated for good; it stays held,
+// so the next poll looks it up and fills it in.
+func TestEnumerateLooksUpAHeldEntryTheListingLeftBare(t *testing.T) {
+	f := channelFake(30)
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	if err := store.RememberYouTubePending(ctx, examplePlaylist, []string{vid(2)}, clock.UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	full, err := p.Enumerate(ctx, source.Request{URL: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bare model.FeedEpisode
+	for _, ep := range full.Feed.Episodes {
+		if ep.GUID == vid(2) {
+			bare = ep
+		}
+	}
+	if bare.GUID == "" || bare.PubDateNS != 0 {
+		t.Fatalf("held entry in the full listing = %+v, want it cataloged bare", bare)
+	}
+
+	next, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: full.ETag})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Feed == nil || !slices.Equal(episodeGUIDs(next.Feed), []string{vid(2)}) {
+		t.Fatalf("next poll = %+v, want the bare entry again", next)
+	}
+	if ep := next.Feed.Episodes[0]; ep.PubDateNS == 0 || ep.Title != "full title "+vid(2) {
+		t.Errorf("entry after its lookup = %+v, want it dated and titled", ep)
+	}
+}
+
+// A subscribe or a re-add is an unconditional request, not a poll: it
+// leaves the lookups to the polls, which auto-download what they add.
+func TestEnumerateLeavesLookupsToThePolls(t *testing.T) {
+	f := channelFake(3)
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	if err := store.RememberYouTubePending(ctx, examplePlaylist, []string{"aired000001"}, clock.UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	sub, err := p.Enumerate(ctx, source.Request{URL: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := infoCallsFor(f, "aired000001"); n != 0 {
+		t.Errorf("the subscribe looked the held entry up %d times", n)
+	}
+
+	poll, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: sub.ETag})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if poll.Feed == nil || !slices.Equal(episodeGUIDs(poll.Feed), []string{"aired000001"}) {
+		t.Errorf("first poll = %+v, want the held entry", poll)
+	}
+}
+
+// A listing the throttle deferred says the session is being refused;
+// lookups then would only be refused too, and spend what the next
+// show's enrichment needs. They wait for a poll that was not.
+func TestEnumerateSkipsLookupsAfterAThrottledListing(t *testing.T) {
+	f := channelFake(3)
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	if err := store.RememberYouTubePending(ctx, examplePlaylist, []string{"aired000001"}, clock.UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	f.playlist.Entries = append([]waxtap.PlaylistEntry{{VideoID: vid(4), Title: "upload " + vid(4)}}, f.playlist.Entries...)
+	f.infoErrs = map[string]error{vid(4): deferredErr()}
+	throttled, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(3)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := infoCallsFor(f, "aired000001"); n != 0 {
+		t.Errorf("the held entry was looked up %d times after a throttled listing", n)
+	}
+
+	delete(f.infoErrs, vid(4))
+	next, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: throttled.ETag})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Feed == nil || !slices.Equal(episodeGUIDs(next.Feed), []string{vid(4), "aired000001"}) {
+		t.Errorf("next poll = %+v, want the upload and the held entry", next)
+	}
+}
+
+// A lookup that cannot settle the entry leaves it held: still live,
+// still upcoming, the throttle's removed-shaped refusal, and even a
+// removal, which a recording still being processed can look like.
+func TestEnumerateKeepsAnEntryALookupCannotSettle(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"live", waxtap.ErrLiveContent},
+		{"upcoming", waxtap.ErrLiveNotStarted},
+		{"throttled", provenUnplayableErr()},
+		{"removed", deadErr()},
+		{"no audio yet", waxtap.ErrNoAudioFormats},
+		{"sign-in wall", waxtap.ErrLoginRequired},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := channelFake(3)
+			f.playlist.Entries[1].LiveStatus = waxtap.LiveNow // vid(2)
+			p, store, clock := pendingProvider(t, f, nil)
+			ctx := context.Background()
+			if _, err := p.Enumerate(ctx, source.Request{URL: "u"}); err != nil {
+				t.Fatal(err)
+			}
+
+			f.infoErrs = map[string]error{vid(2): tc.err}
+			enum, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(3)})
+			if err != nil {
+				t.Fatalf("Enumerate = %v, want the refusal absorbed", err)
+			}
+			if !enum.NotModified {
+				t.Errorf("enumeration = %+v, want NotModified", enum)
+			}
+			if n := infoCallsFor(f, vid(2)); n != 1 {
+				t.Errorf("lookups = %d, want 1", n)
+			}
+			if held := heldIDs(t, store, clock); !slices.Equal(held, []string{vid(2)}) {
+				t.Errorf("held = %v, want the entry kept", held)
+			}
+		})
+	}
+}
+
+// Premieres are scheduled weeks out, so an entry is looked for over
+// months; one first seen more than 90 days ago is let go unasked.
+func TestEnumerateForgetsAPassedOverEntryAfterNinetyDays(t *testing.T) {
+	f := channelFake(3)
+	f.playlist.Entries[1].LiveStatus = waxtap.LiveUpcoming // vid(2)
+	f.infoErrs = map[string]error{vid(2): waxtap.ErrLiveNotStarted}
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	if _, err := p.Enumerate(ctx, source.Request{URL: "u"}); err != nil {
+		t.Fatal(err)
+	}
+
+	*clock = clock.Add(89 * 24 * time.Hour)
+	if _, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(3)}); err != nil {
+		t.Fatal(err)
+	}
+	if n := infoCallsFor(f, vid(2)); n != 1 {
+		t.Fatalf("lookups at 89 days = %d, want 1", n)
+	}
+
+	*clock = clock.Add(2 * 24 * time.Hour)
+	if _, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(3)}); err != nil {
+		t.Fatal(err)
+	}
+	if n := infoCallsFor(f, vid(2)); n != 1 {
+		t.Errorf("lookups at 91 days = %d, want none after the first", n)
+	}
+	if held := heldIDs(t, store, clock); len(held) != 0 {
+		t.Errorf("held = %v, want the entry forgotten", held)
+	}
+}
+
+// A poll looks at five held entries at most, the ones looked at longest
+// ago, so a handful that never resolve cannot starve the rest.
+func TestEnumerateLooksAtFiveHeldEntriesPerPollInTurn(t *testing.T) {
+	f := channelFake(1)
+	f.infoErrs = map[string]error{}
+	var held []string
+	for i := 1; i <= 7; i++ {
+		id := fmt.Sprintf("held%07d", i)
+		held = append(held, id)
+		f.infoErrs[id] = waxtap.ErrLiveContent
+	}
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	if err := store.RememberYouTubePending(ctx, examplePlaylist, held, clock.UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+
+	*clock = clock.Add(time.Hour)
+	if _, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(1)}); err != nil {
+		t.Fatal(err)
+	}
+	if want := held[:5]; !slices.Equal(f.infoCalls, want) {
+		t.Errorf("first poll looked at %v, want %v", f.infoCalls, want)
+	}
+
+	f.infoCalls = nil
+	*clock = clock.Add(time.Hour)
+	if _, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(1)}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{held[5], held[6], held[0], held[1], held[2]}; !slices.Equal(f.infoCalls, want) {
+		t.Errorf("second poll looked at %v, want %v", f.infoCalls, want)
+	}
+}
+
+// An entry the listing catalogs with its video rides the same receipt
+// as one a lookup found: held until the catalog's next cursor says it
+// was written, and not looked up once it has.
+func TestEnumerateLetsTheListingTakeAHeldEntry(t *testing.T) {
+	f := channelFake(3)
+	f.playlist.Entries[0].LiveStatus = waxtap.LiveUpcoming // vid(3), at the top
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	first, err := p.Enumerate(ctx, source.Request{URL: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if held := heldIDs(t, store, clock); !slices.Equal(held, []string{vid(3)}) {
+		t.Fatalf("held = %v, want the premiere", held)
+	}
+
+	// It airs above the cursor, so the listing names it again.
+	f.playlist.Entries[0].LiveStatus = waxtap.LiveNone
+	aired, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: first.ETag})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := episodeGUIDs(aired.Feed); !slices.Equal(got, []string{vid(3)}) {
+		t.Fatalf("episodes = %v, want the premiere from the listing", got)
+	}
+	if held := heldIDs(t, store, clock); !slices.Equal(held, []string{vid(3)}) {
+		t.Errorf("held = %v, want the premiere until the catalog has it", held)
+	}
+
+	f.infoCalls = nil
+	after, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: aired.ETag})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.NotModified || len(f.infoCalls) != 0 {
+		t.Errorf("next poll = %+v with lookups %v, want NotModified and none", after, f.infoCalls)
+	}
+	if held := heldIDs(t, store, clock); len(held) != 0 {
+		t.Errorf("held = %v, want nothing once the receipt came back", held)
+	}
+}
+
+// A rate limit is about the address, not the entry, and WaxTap has
+// already waited it out once, so the poll stops looking and keeps
+// everything it holds.
+func TestEnumerateStopsLookingWhenRateLimited(t *testing.T) {
+	f := channelFake(1)
+	held := []string{"held0000001", "held0000002", "held0000003"}
+	f.infoErrs = map[string]error{held[0]: fmt.Errorf("probe: %w", waxtap.ErrRateLimited)}
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	if err := store.RememberYouTubePending(ctx, examplePlaylist, held, clock.UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+
+	*clock = clock.Add(time.Hour)
+	enum, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(1)})
+	if err != nil {
+		t.Fatalf("Enumerate = %v, want the rate limit absorbed", err)
+	}
+	if !enum.NotModified {
+		t.Errorf("enumeration = %+v, want NotModified", enum)
+	}
+	if !slices.Equal(f.infoCalls, held[:1]) {
+		t.Errorf("lookups = %v, want only %v", f.infoCalls, held[:1])
+	}
+	if got := heldIDs(t, store, clock); len(got) != 3 {
+		t.Errorf("held = %v, want all three kept", got)
+	}
+
+	// The refused lookup counts as a look, so the next poll starts past it.
+	for _, id := range held {
+		f.infoErrs[id] = waxtap.ErrLiveContent
+	}
+	f.infoCalls = nil
+	*clock = clock.Add(time.Hour)
+	if _, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(1)}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{held[1], held[2], held[0]}; !slices.Equal(f.infoCalls, want) {
+		t.Errorf("next poll looked at %v, want %v", f.infoCalls, want)
+	}
+}
+
+// The lookup asks for what the listing's enrichment asks for, so the
+// episode carries its publish date: the show lists, and retention keeps,
+// episodes by date, and an undated one sorts last.
+func TestEnumerateLooksAHeldEntryUpInFull(t *testing.T) {
+	f := channelFake(3)
+	f.playlist.Entries[1].LiveStatus = waxtap.LiveUpcoming // vid(2)
+	p, _, _ := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	if _, err := p.Enumerate(ctx, source.Request{URL: "u"}); err != nil {
+		t.Fatal(err)
+	}
+	f.infoCalls, f.infoOpts = nil, nil
+	if _, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(3)}); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(f.infoCalls, []string{vid(2)}) {
+		t.Fatalf("lookups = %v, want the held entry", f.infoCalls)
+	}
+	if f.infoOpts[0] != len(f.lastEnum.EnrichOptions) {
+		t.Errorf("lookup carried %d read options, want the enrichment's %d", f.infoOpts[0], len(f.lastEnum.EnrichOptions))
+	}
+}
+
+// Acquiring a channel is a one-shot read: it must not hand a held
+// premiere to a download and forget it before the subscription sees
+// it, nor hold entries for a listing nobody polls.
+func TestEnumerateOnceLeavesTheHeldEntriesAlone(t *testing.T) {
+	f := channelFake(3)
+	f.playlist.Entries[1].LiveStatus = waxtap.LiveNow // vid(2)
+	p, store, clock := pendingProvider(t, f, nil)
+	ctx := context.Background()
+	if err := store.RememberYouTubePending(ctx, examplePlaylist, []string{"aired000001"}, clock.UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+
+	once, err := p.EnumerateOnce(ctx, source.Request{URL: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := episodeGUIDs(once.Feed), []string{vid(3), vid(1)}; !slices.Equal(got, want) {
+		t.Errorf("episodes = %v, want %v", got, want)
+	}
+	if n := infoCallsFor(f, "aired000001"); n != 0 {
+		t.Errorf("the held entry was looked up %d times", n)
+	}
+	if held := heldIDs(t, store, clock); !slices.Equal(held, []string{"aired000001"}) {
+		t.Errorf("held = %v, want only the subscription's entry", held)
+	}
+
+	sub, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(3)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sub.Feed == nil {
+		t.Fatalf("subscription poll = %+v, want a feed", sub)
+	}
+	if got := episodeGUIDs(sub.Feed); !slices.Equal(got, []string{"aired000001"}) {
+		t.Errorf("subscription poll episodes = %v, want the held entry", got)
+	}
+}
+
+// The second look is best effort: a store that fails is logged, and the
+// listing's own episodes still reach the catalog.
+func TestEnumerateCatalogsTheListingWhenTheStoreFails(t *testing.T) {
+	f := channelFake(3)
+	f.playlist.Entries[1].LiveStatus = waxtap.LiveNow // vid(2)
+	var logs bytes.Buffer
+	p, store, _ := pendingProvider(t, f, &logs)
+	store.Close()
 
 	enum, err := p.Enumerate(context.Background(), source.Request{URL: "u"})
 	if err != nil {
-		t.Fatalf("Enumerate: %v", err)
+		t.Fatalf("Enumerate = %v, want the store's failure absorbed", err)
 	}
-	if enum.ETag != vid(3) {
-		t.Errorf("ETag = %q, want %q", enum.ETag, vid(3))
+	if got, want := episodeGUIDs(enum.Feed), []string{vid(3), vid(1)}; !slices.Equal(got, want) {
+		t.Errorf("episodes = %v, want %v", got, want)
+	}
+	if !strings.Contains(logs.String(), "level=WARN") {
+		t.Errorf("the store's failure was not logged:\n%s", logs.String())
+	}
+}
+
+// A sync being torn down stops looking rather than spending lookups
+// whose answers nothing will write, whether the cancel lands before the
+// second look or between two of its lookups.
+func TestEnumerateStopsLookingWhenTheSyncIsCanceled(t *testing.T) {
+	held := []string{"aired000001", "aired000002"}
+	for _, tc := range []struct {
+		name     string
+		cancelAt string // the lookup that cancels; "" cancels up front
+		want     []string
+	}{
+		{name: "before the look", want: nil},
+		{name: "between lookups", cancelAt: held[0], want: held[:1]},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := channelFake(1)
+			p, store, clock := pendingProvider(t, f, nil)
+			if err := store.RememberYouTubePending(context.Background(), examplePlaylist, held, clock.UnixNano()); err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if tc.cancelAt == "" {
+				cancel()
+			}
+			f.beforeInfo = func(id string) {
+				if id == tc.cancelAt {
+					cancel()
+				}
+			}
+
+			if _, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(1)}); !errors.Is(err, context.Canceled) {
+				t.Errorf("Enumerate = %v, want context.Canceled", err)
+			}
+			if !slices.Equal(f.infoCalls, tc.want) {
+				t.Errorf("lookups = %v, want %v", f.infoCalls, tc.want)
+			}
+		})
 	}
 }
 
@@ -1148,6 +1907,78 @@ func TestWaxBinIntegration(t *testing.T) {
 	}
 	if !detail.Episode.Downloaded {
 		t.Error("episode did not flip to downloaded")
+	}
+}
+
+// TestWaxBinCatalogsAPremiereAfterItAirs is the catalog's half of the
+// second look: a feed that carries only the premiere, under a cursor that
+// did not move, is written like any other, and the cursor stored with it
+// lets the premiere go on the next sync.
+func TestWaxBinCatalogsAPremiereAfterItAirs(t *testing.T) {
+	ctx := context.Background()
+	f := channelFake(3)
+	for _, v := range f.infos {
+		v.Thumbnails = nil // keeps the catalog off the network
+	}
+	f.playlist.Entries[1].LiveStatus = waxtap.LiveUpcoming // vid(2)
+	f.infoErrs = map[string]error{vid(2): waxtap.ErrLiveNotStarted}
+	p, store, clock := pendingProvider(t, f, nil)
+
+	dir := t.TempDir()
+	lib, err := waxbin.Open(ctx, waxbin.Options{
+		DBPath:          filepath.Join(dir, "waxbin.db"),
+		Podcasts:        config.PodcastConfig{Dir: filepath.Join(dir, "podcasts")},
+		SourceProviders: []source.Provider{p},
+	})
+	if err != nil {
+		t.Fatalf("waxbin.Open: %v", err)
+	}
+	defer lib.Close()
+
+	pod, err := lib.Podcasts().AddSource(ctx, "https://www.youtube.com/@example", model.SourceYouTube, podcast.AddOptions{})
+	if err != nil {
+		t.Fatalf("AddSource: %v", err)
+	}
+	if res, err := lib.Podcasts().Sync(ctx, pod.PID); err != nil || res.EpisodesAdded != 0 {
+		t.Fatalf("sync while upcoming = (%+v, %v), want nothing added", res, err)
+	}
+
+	delete(f.infoErrs, vid(2))
+	res, err := lib.Podcasts().Sync(ctx, pod.PID)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if res.EpisodesAdded != 1 {
+		t.Errorf("episodes added = %d, want the premiere", res.EpisodesAdded)
+	}
+	eps, err := lib.Podcasts().Episodes(ctx, pod.PID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	titles := map[string]string{}
+	for _, ep := range eps {
+		titles[ep.GUID] = ep.Title
+	}
+	if got := titles[vid(2)]; got != "full title "+vid(2) {
+		t.Errorf("premiere title = %q, want the enriched one (episodes %v)", got, titles)
+	}
+	after, err := lib.Podcasts().Get(ctx, pod.PID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Title != "Example Uploads" {
+		t.Errorf("show title = %q, want the channel's", after.Title)
+	}
+	if held := heldIDs(t, store, clock); !slices.Equal(held, []string{vid(2)}) {
+		t.Fatalf("held = %v, want the premiere until the catalog's cursor confirms it", held)
+	}
+
+	res, err = lib.Podcasts().Sync(ctx, pod.PID)
+	if err != nil || res.EpisodesAdded != 0 || res.EpisodesUpdated != 0 {
+		t.Errorf("next sync = (%+v, %v), want nothing touched", res, err)
+	}
+	if held := heldIDs(t, store, clock); len(held) != 0 {
+		t.Errorf("held = %v, want nothing once the catalog had it", held)
 	}
 }
 

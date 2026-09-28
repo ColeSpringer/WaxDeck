@@ -1,6 +1,7 @@
 // Package waxtapsource implements WaxBin's source.Provider over WaxTap, so a
 // YouTube channel or playlist can be subscribed and synced like a podcast feed.
-// Enumerate maps a channel/playlist listing to a model.Feed, Fetch downloads one
+// Enumerate maps a channel/playlist listing to a model.Feed, and looks again
+// at live entries an earlier listing passed over; Fetch downloads one
 // video's audio through WaxTap, and Resolve is the cheap identity probe. The
 // provider is injected into WaxBin via waxbin.Options.SourceProviders; nothing in
 // this package touches WaxBin's store directly.
@@ -11,7 +12,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"math/rand/v2"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,8 +57,37 @@ type Config struct {
 	// MaxItems caps the entries returned by one enumeration (0 = 200).
 	MaxItems int
 
+	// Pending holds the live and upcoming entries a subscription's
+	// listing passed over, for later polls to look at again. Nil
+	// disables the second look.
+	Pending PendingLive
+
 	// Logger receives structured logs; nil discards them.
 	Logger *slog.Logger
+}
+
+// PendingLive stores the entries Enumerate passed over while they were
+// live or upcoming, keyed by the listing's playlist id. *db.DB
+// implements it, and owns the horizon: an entry a listing last showed
+// live longer ago than that is no longer listed, and a sweep outside
+// the provider deletes it.
+type PendingLive interface {
+	// YouTubePending lists one playlist's held ids at nowNS, least
+	// recently probed first, leaving out those past the horizon.
+	YouTubePending(ctx context.Context, sourceID string, nowNS int64) ([]string, error)
+	// RememberYouTubePending holds ids a listing showed live at nowNS.
+	// One already held takes the sighting, which restarts its horizon,
+	// and keeps its probe stamp.
+	RememberYouTubePending(ctx context.Context, sourceID string, ids []string, nowNS int64) error
+	// MarkYouTubePendingProbed stamps a look that left an id held.
+	MarkYouTubePendingProbed(ctx context.Context, sourceID, videoID string, nowNS int64) error
+	// HandOverYouTubePending marks ids handed to the catalog under
+	// token; they stay held until confirmed.
+	HandOverYouTubePending(ctx context.Context, sourceID string, ids []string, token int64) error
+	// ConfirmYouTubePending drops the ids handed over under token.
+	ConfirmYouTubePending(ctx context.Context, sourceID string, token int64) error
+	// ForgetYouTubePending drops ids from one playlist's held set.
+	ForgetYouTubePending(ctx context.Context, sourceID string, ids []string) error
 }
 
 // tap is the narrow slice of *waxtap.Client the provider uses. Tests inject a
@@ -74,6 +107,7 @@ type Provider struct {
 	cfg        Config
 	log        *slog.Logger
 	categories []waxtap.Category // SponsorBlock cut categories; empty = no cut
+	now        func() time.Time
 }
 
 var _ source.Provider = (*Provider)(nil)
@@ -141,7 +175,7 @@ func newProvider(t tap, cfg Config, log *slog.Logger, categories []waxtap.Catego
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	return &Provider{tap: t, cfg: cfg, log: log, categories: categories}
+	return &Provider{tap: t, cfg: cfg, log: log, categories: categories, now: time.Now}
 }
 
 // parseCategories validates SponsorBlock category names against WaxTap's
@@ -186,11 +220,26 @@ func (p *Provider) Resolve(ctx context.Context, req source.Request) (*source.Res
 	}, nil
 }
 
-// Enumerate lists a channel or playlist as a feed. The ETag is the sync
-// cursor, the newest id that is not a live or upcoming broadcast; listing
-// stops at it, and only new entries are enriched, at most enrichLimit.
+// Enumerate lists a channel or playlist as a feed for a subscription's
+// poll. The ETag is the sync cursor, the newest id that is not a live or
+// upcoming broadcast; listing stops at it, and only new entries are
+// enriched, at most enrichLimit. With Config.Pending set, the poll also
+// takes the second look (see secondLook), and an answer that hands
+// entries to the catalog adds the hand-over's token to the cursor.
 func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.Enumeration, error) {
-	lastSeen := req.ETag
+	return p.enumerate(ctx, req, p.cfg.Pending)
+}
+
+// EnumerateOnce is Enumerate for a one-shot read such as an acquisition.
+// It leaves the second look's held entries alone: a lookup there would
+// hand an aired premiere to the one-shot reader and forget it before the
+// subscription saw it.
+func (p *Provider) EnumerateOnce(ctx context.Context, req source.Request) (*source.Enumeration, error) {
+	return p.enumerate(ctx, req, nil)
+}
+
+func (p *Provider) enumerate(ctx context.Context, req source.Request, pending PendingLive) (*source.Enumeration, error) {
+	lastSeen, receipt := splitETag(req.ETag)
 	opts := enrichedOptions(p.cfg.MaxItems, enrichLimit)
 	if lastSeen != "" {
 		opts.Stop = func(id string) bool { return id == lastSeen }
@@ -199,28 +248,37 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 	if err != nil {
 		return nil, err
 	}
-	if lastSeen != "" && len(pl.Entries) == 0 {
-		// The stop cursor matched the newest entry: nothing new upstream.
-		return &source.Enumeration{
-			NotModified: true,
-			ETag:        lastSeen,
-			IdentityKey: identityKey(pl.ID),
-			SourceID:    pl.ID,
-		}, nil
-	}
 
 	feed := &model.Feed{Title: pl.Title, Author: pl.Author}
+	// The newest entry with a video lends the feed its image, which a live
+	// one at the top is not.
+	lend := func(v *waxtap.Video) {
+		if feed.ImageURL == "" && v != nil && len(v.Thumbnails) > 0 {
+			feed.ImageURL = v.Thumbnails[0].URL
+		}
+	}
 	failures, wholesale := p.enrichFailures(pl)
 	deferred := false
+	listed := make(listings, len(pl.Entries))
 	for i := range pl.Entries {
 		entry := pl.Entries[i]
 		if liveEntry(entry) {
 			// It cannot download until the broadcast ends; see the cursor below.
 			p.log.Debug("skipping live youtube entry", "video", entry.VideoID, "live", entry.LiveStatus.String())
+			listed.note(entry.VideoID, listedLive)
 			continue
 		}
 		if ferr, ok := failures[entry.Index]; ok {
 			switch {
+			case liveVerdict(ferr):
+				// Listed as an ordinary video but live or not started by its
+				// lookup: a stream that began and ended between two polls, or
+				// one whose recording is still processing. Not yet rather
+				// than never, so it goes to the second look as a live one
+				// does.
+				p.log.Debug("holding youtube entry its lookup found live", "video", entry.VideoID, "err", ferr)
+				listed.note(entry.VideoID, listedLive)
+				continue
 			case wholesale || errors.Is(ferr, waxtap.ErrTemporarilyUnavailable):
 				// Not a verdict about this video: enrichment ran out of
 				// budget before a fresh identity could settle it, or the
@@ -237,31 +295,29 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 				// geo-blocked, removed, ...). Cataloging it would create an
 				// episode that can never download, so drop it and move on.
 				p.log.Warn("skipping unavailable youtube entry", "video", entry.VideoID, "err", ferr)
+				if settledVerdict(ferr) {
+					listed.note(entry.VideoID, listedSettled)
+				} else {
+					listed.note(entry.VideoID, listedDropped)
+				}
 				continue
 			default:
 				return nil, ferr
 			}
 		}
-		ep := model.FeedEpisode{
-			GUID:          entry.VideoID,
-			Title:         entry.Title,
-			DurationMS:    entry.Duration.Milliseconds(),
-			EnclosureURL:  watchURL(entry.VideoID),
-			EnclosureType: "audio/mp4",
-		}
+		feed.Episodes = append(feed.Episodes, episodeOf(entry.VideoID, entry.Title, entry.Duration, entry.Video))
+		lend(entry.Video)
 		if entry.Video != nil {
-			enrichEpisode(&ep, entry.Video)
-			// The newest entry with a video, which a live one at the top is not.
-			if feed.ImageURL == "" && len(entry.Video.Thumbnails) > 0 {
-				feed.ImageURL = entry.Video.Thumbnails[0].URL
-			}
+			listed.note(entry.VideoID, listedCataloged)
+		} else {
+			listed.note(entry.VideoID, listedBare)
 		}
-		feed.Episodes = append(feed.Episodes, ep)
 	}
 
 	// The newest listed id, even if enrichment dropped that entry: the cursor
 	// tracks what was seen, not what was cataloged. A live or upcoming entry
-	// is not seen yet, so one at the top is listed again next poll.
+	// is not seen yet, so one at the top is listed again next poll; one
+	// below a newer upload is left to the second look.
 	etag := lastSeen
 	for _, e := range pl.Entries {
 		if !liveEntry(e) {
@@ -269,11 +325,28 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 			break
 		}
 	}
+	var handover int64
+	if pending != nil {
+		// A subscribe or a re-add is no poll, and a throttled listing says a
+		// lookup would only be refused too: both leave the lookups to a poll
+		// that follows, whose sync then auto-downloads what they find.
+		lookups := req.ETag != "" && !deferred
+		aired, token, err := p.secondLook(ctx, pending, pl.ID, listed, receipt, lookups)
+		if err != nil {
+			return nil, err
+		}
+		handover = token
+		// After the listing's own entries, so those lend the image first.
+		for _, a := range aired {
+			feed.Episodes = append(feed.Episodes, episodeOf(a.id, "", 0, a.video))
+			lend(a.video)
+		}
+	}
 	if lastSeen != "" && etag == lastSeen && len(feed.Episodes) == 0 {
-		// Nothing but live entries is new: the feed has not changed.
+		// Nothing new, or nothing but live entries: the feed has not changed.
 		return &source.Enumeration{
 			NotModified: true,
-			ETag:        lastSeen,
+			ETag:        req.ETag,
 			IdentityKey: identityKey(pl.ID),
 			SourceID:    pl.ID,
 		}, nil
@@ -290,6 +363,9 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 		// is what the throttle already forced.
 		etag = lastSeen
 	}
+	if handover != 0 {
+		etag += receiptSep + strconv.FormatInt(handover, 10)
+	}
 	return &source.Enumeration{
 		Feed:        feed,
 		ETag:        etag,
@@ -297,6 +373,172 @@ func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.E
 		SourceID:    pl.ID,
 	}, nil
 }
+
+// episodeOf builds one entry's feed episode: the listing's title and
+// duration, overlaid with its lookup's metadata where there is one.
+func episodeOf(id, title string, duration time.Duration, v *waxtap.Video) model.FeedEpisode {
+	ep := model.FeedEpisode{
+		GUID:          id,
+		Title:         title,
+		DurationMS:    duration.Milliseconds(),
+		EnclosureURL:  watchURL(id),
+		EnclosureType: "audio/mp4",
+	}
+	if v != nil {
+		enrichEpisode(&ep, v)
+	}
+	return ep
+}
+
+// receiptSep joins the listing cursor and a hand-over token in the ETag.
+// A video id never holds it.
+const receiptSep = "@"
+
+// splitETag parts a stored ETag into the listing cursor and the token of
+// the hand-over the catalog stored with it, 0 when there is none. The
+// catalog writes the ETag in the transaction that writes the episodes,
+// so a token read back here is a receipt for them.
+func splitETag(etag string) (cursor string, receipt int64) {
+	cursor, token, ok := strings.Cut(etag, receiptSep)
+	if ok {
+		receipt, _ = strconv.ParseInt(token, 10, 64)
+	}
+	return cursor, receipt
+}
+
+// probeLimit caps the held entries one poll looks up.
+const probeLimit = 5
+
+// listing is what one poll's listing did with an entry, which decides
+// what the second look does with it if held.
+type listing int
+
+const (
+	listedLive      listing = iota + 1 // live by its badge or its lookup: not yet
+	listedCataloged                    // in the feed with its video
+	listedBare                         // in the feed without one
+	listedSettled                      // dropped on a verdict that will not change
+	listedDropped                      // dropped on one that may
+)
+
+// listings maps video ids to what the listing did with them.
+type listings map[string]listing
+
+// note records an entry; a playlist can list one video twice, and one
+// of those in the feed with its video is the one that counts.
+func (l listings) note(id string, o listing) {
+	if l[id] != listedCataloged {
+		l[id] = o
+	}
+}
+
+// airedEntry is a held entry whose lookup answered with the video.
+type airedEntry struct {
+	id    string
+	video *waxtap.Video
+}
+
+// secondLook is how a live or upcoming entry reaches the feed once the
+// cursor has passed it. Every entry the listing found live is held. A
+// held entry the listing cataloged with its video is handed over, one it
+// dropped on a settled verdict is let go, and the rest stay held: one
+// cataloged bare is left for its own lookup. With lookups on, it then
+// looks up at most probeLimit held entries the listing did not name, the
+// ones looked at longest ago, and returns those that answered with the
+// video. A lookup keeps its entry on anything but a settled verdict,
+// since the metadata throttle refuses in a removed video's words and a
+// recording still processing answers much the same. The store is best
+// effort, its failures logged; only a canceled sync fails the look.
+//
+// A handed-over entry stays held under the returned token until a later
+// poll's cursor carries that token back as receipt: a sync that fails
+// before the catalog writes it offers the entry again.
+func (p *Provider) secondLook(ctx context.Context, pending PendingLive, sourceID string, listed listings, receipt int64, lookups bool) ([]airedEntry, int64, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, 0, err
+	}
+	if receipt != 0 {
+		if err := pending.ConfirmYouTubePending(ctx, sourceID, receipt); err != nil {
+			p.log.Warn("confirming handed-over youtube entries", "playlist", sourceID, "err", err)
+		}
+	}
+	now := p.now()
+	held, err := pending.YouTubePending(ctx, sourceID, now.UnixNano())
+	if err != nil {
+		p.log.Warn("reading held youtube entries", "playlist", sourceID, "err", err)
+	}
+	var live []string
+	for id, o := range listed {
+		if o == listedLive {
+			live = append(live, id)
+		}
+	}
+	if len(live) > 0 {
+		if err := pending.RememberYouTubePending(ctx, sourceID, live, now.UnixNano()); err != nil {
+			p.log.Warn("holding live youtube entries", "playlist", sourceID, "err", err)
+		}
+	}
+
+	var forget, handed, probe []string
+	for _, id := range held {
+		switch o, ok := listed[id]; {
+		case !ok:
+			if lookups && len(probe) < probeLimit {
+				probe = append(probe, id)
+			}
+		case o == listedCataloged:
+			handed = append(handed, id)
+		case o == listedSettled:
+			forget = append(forget, id)
+		}
+	}
+	var aired []airedEntry
+	for _, id := range probe {
+		v, err := p.tap.Info(ctx, watchURL(id), waxtap.InfoBasic, fullMetadata...)
+		if cerr := ctx.Err(); cerr != nil {
+			return nil, 0, cerr
+		}
+		if err == nil {
+			p.log.Info("held youtube entry is downloadable now", "video", id)
+			aired = append(aired, airedEntry{id: id, video: v})
+			handed = append(handed, id)
+			continue
+		}
+		if settledVerdict(err) {
+			p.log.Info("held youtube entry will not download; letting it go", "video", id, "err", err)
+			forget = append(forget, id)
+			continue
+		}
+		p.log.Debug("held youtube entry still pending", "video", id, "err", err)
+		if merr := pending.MarkYouTubePendingProbed(ctx, sourceID, id, now.UnixNano()); merr != nil {
+			p.log.Warn("stamping a held youtube entry", "video", id, "err", merr)
+		}
+		if errors.Is(err, waxtap.ErrRateLimited) {
+			p.log.Info("youtube rate limited; held entries wait for the next poll", "playlist", sourceID)
+			break
+		}
+	}
+	if len(forget) > 0 {
+		if err := pending.ForgetYouTubePending(ctx, sourceID, forget); err != nil {
+			p.log.Warn("forgetting held youtube entries", "playlist", sourceID, "err", err)
+		}
+	}
+	var token int64
+	if len(handed) > 0 {
+		// Random, not a clock reading: two concurrent polls of one show
+		// on a coarse clock could otherwise share one, and confirming
+		// the stored answer would let the other's entries go too.
+		token = rand.Int64N(math.MaxInt64) + 1
+		if err := pending.HandOverYouTubePending(ctx, sourceID, handed, token); err != nil {
+			p.log.Warn("handing over youtube entries", "playlist", sourceID, "err", err)
+		}
+	}
+	return aired, token, nil
+}
+
+// fullMetadata is the read the listing's enrichment and the second
+// look's lookups both ask with: the watch-page pass that dates a video.
+var fullMetadata = []waxtap.ReadOption{waxtap.WithFullMetadata()}
 
 // enrichedOptions builds the enumeration options both listing paths share: a
 // listing capped at maxItems whose leading budget entries are refreshed with
@@ -312,7 +554,7 @@ func enrichedOptions(maxItems, budget int) waxtap.EnumerateOptions {
 		MaxItems:      maxItems,
 		Enrich:        true,
 		MaxEnrich:     budget,
-		EnrichOptions: []waxtap.ReadOption{waxtap.WithFullMetadata()},
+		EnrichOptions: fullMetadata,
 	}
 }
 
@@ -430,4 +672,29 @@ func isSkipClass(err error) bool {
 		}
 	}
 	return false
+}
+
+// settledVerdicts are the skip-class refusals that say a video will never
+// download here, whoever asks. The rest (removed-shaped, no audio, a
+// sign-in wall) are also what the metadata throttle, a bot check or a
+// recording still processing answer, so a held entry outlasts them.
+var settledVerdicts = []error{
+	waxtap.ErrMembersOnly,
+	waxtap.ErrGeoBlocked,
+	waxtap.ErrAgeRestricted,
+	waxtap.ErrVideoRestricted,
+}
+
+func settledVerdict(err error) bool {
+	for _, s := range settledVerdicts {
+		if errors.Is(err, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// liveVerdict reports a lookup that found the video live or not started.
+func liveVerdict(err error) bool {
+	return errors.Is(err, waxtap.ErrLiveContent) || errors.Is(err, waxtap.ErrLiveNotStarted)
 }

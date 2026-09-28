@@ -170,8 +170,9 @@ func (l *Library) MarkScheduleRun(ctx context.Context, kind string, runErr error
 }
 
 // RunPrune is the scheduled prune pass: event log, mutation stamps,
-// bookmark tombstones, audit log, ended playback sessions, finished tool
-// tasks, and analysis rows that will never come good. Horizons are
+// bookmark tombstones, held YouTube entries, audit log, ended playback
+// sessions, finished tool tasks, and analysis rows that will never come
+// good. Horizons are
 // deliberately server-owned constants; sync consumers whose cursor falls
 // below the surviving event floor get a clean resync by design.
 func (l *Library) RunPrune(ctx context.Context) error {
@@ -215,6 +216,11 @@ func (l *Library) RunPrune(ctx context.Context) error {
 	record("bookmark tombstones", err)
 	if bn > 0 {
 		l.log.Info("pruned bookmark tombstones", "rows", bn)
+	}
+	yn, err := l.db.PruneYouTubePending(ctx, time.Now().UnixNano())
+	record("held youtube entries", err)
+	if yn > 0 {
+		l.log.Info("pruned held youtube entries", "rows", yn)
 	}
 	an, err := l.db.PruneAudit(ctx, keepAudit)
 	record("audit log", err)
