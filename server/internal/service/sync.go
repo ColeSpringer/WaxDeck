@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -13,6 +14,8 @@ import (
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/read"
 	"github.com/oklog/ulid/v2"
+
+	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // The sync surface: snapshot and changed-since mirroring of the catalog
@@ -1024,11 +1027,12 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 			seenSub[e.ItemPID] = true
 			ev := ServerSyncEvent{Kind: eventSubscription, PID: apiPID(PrefixPodcast, model.PID(e.ItemPID))}
 			// Hydrate fresh: subscribed carries the current subscription,
-			// unsubscribed carries none (the removal is the payload).
+			// unsubscribed carries none (the removal is the payload), and a
+			// missing subscription row is how unsubscribed reads.
 			if pod, err := l.lib.Podcasts().Get(ctx, model.PID(e.ItemPID)); err == nil {
 				if sub, err := l.subscriptionFor(ctx, uc, pod); err == nil {
 					ev.Subscription = &sub
-				} else if KindOf(err) != KindNotFound {
+				} else if !errors.Is(err, wdb.ErrNotFound) && KindOf(err) != KindNotFound {
 					l.log.Warn("hydrating subscription event", "show", e.ItemPID, "err", err)
 				}
 			} else if KindOf(classify(err)) != KindNotFound {

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -5,6 +7,7 @@ import 'package:waxdeck/src/app.dart';
 import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
+import 'package:waxdeck/src/discovery/track_list_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
@@ -15,6 +18,7 @@ import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/queue/queue_screen.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/radio/radio_screen.dart';
 import 'package:waxdeck/src/search/search_controller.dart';
@@ -164,6 +168,36 @@ String? _selected(WidgetTester tester) =>
 
 Future<void> _tapNav(WidgetTester tester, String name) async {
   await tester.tap(_nav(name));
+  await tester.pumpAndSettle();
+}
+
+FakeRepository _similarRepo(ProviderContainer container) =>
+    container.read(repositoryProvider) as FakeRepository;
+
+final _kelpLine = SimilarTracks(
+  basis: MixBasis.sonic,
+  items: [testItem('tr-B', title: 'Kelp Line')],
+);
+
+/// Plays a track, opens the player over the shell, and asks it for
+/// similar tracks.
+Future<void> _askForSimilar(
+  WidgetTester tester,
+  ProviderContainer container,
+) async {
+  container.read(nowPlayingProvider.notifier).play(
+    [testItem('tr-A', title: 'Salt Harbour')],
+    source: const QueueSource(
+      kind: QueueSourceKind.single,
+      label: 'Salt Harbour',
+    ),
+  );
+  await tester.pumpAndSettle();
+  container.read(routerProvider).push<void>(WaxRoute.nowPlaying);
+  await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerDiscover));
+  await tester.pumpAndSettle();
+  await tester.tap(find.bySemanticsIdentifier(SemanticsIds.similarTracks));
   await tester.pumpAndSettle();
 }
 
@@ -562,6 +596,79 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(PlayerScreen), findsNothing);
     expect(find.byType(WaxSidebar), findsOneWidget);
+  });
+
+  testWidgets('similar tracks leaves the player for a list in the shell', (
+    tester,
+  ) async {
+    // The list lives in the shell and the player is an overlay over it,
+    // so pushing one from the other built a second shell whose navigator
+    // keys the first still held.
+    final container = await _pumpShell(tester);
+    final router = container.read(routerProvider);
+    _similarRepo(container).similarTracksResult = _kelpLine;
+
+    await _askForSimilar(tester, container);
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(find.byType(TrackListScreen), findsOneWidget);
+    expect(find.text('Kelp Line'), findsOneWidget);
+    expect(find.byType(WaxSidebar), findsOneWidget);
+
+    // And the list is an excursion from where the player was opened.
+    await router.routerDelegate.popRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(TrackListScreen), findsNothing);
+    expect(find.byType(HomeScreen), findsOneWidget);
+
+    container.read(queueControllerProvider.notifier).clear();
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('similar tracks lands past whatever overlay is up by then', (
+    tester,
+  ) async {
+    // The player stays while the answer is on its way, so the push meets
+    // whatever is up when it lands: here, the queue opened over it.
+    final container = await _pumpShell(tester);
+    final gate = Completer<void>();
+    _similarRepo(container)
+      ..similarTracksResult = _kelpLine
+      ..similarTracksGate = gate;
+
+    await _askForSimilar(tester, container);
+    expect(find.byType(PlayerScreen), findsOneWidget);
+    container.read(routerProvider).push<void>(WaxRoute.queue);
+    await tester.pumpAndSettle();
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(PlayerScreen), findsNothing);
+    expect(find.byType(QueueScreen), findsNothing);
+    expect(find.byType(TrackListScreen), findsOneWidget);
+    expect(find.byType(WaxSidebar), findsOneWidget);
+
+    container.read(queueControllerProvider.notifier).clear();
+    await tester.pump(const Duration(seconds: 1));
+  });
+
+  testWidgets('a similar tracks failure is told on the player', (tester) async {
+    final container = await _pumpShell(tester);
+    _similarRepo(container).discoveryError = const WaxDeckApiException(
+      code: 'transport',
+      message: 'network unreachable',
+    );
+
+    await _askForSimilar(tester, container);
+
+    expect(find.byType(PlayerScreen), findsOneWidget);
+    expect(find.byType(SnackBar), findsOneWidget);
+    expect(find.byType(TrackListScreen), findsNothing);
+
+    container.read(queueControllerProvider.notifier).clear();
+    await tester.pump(const Duration(seconds: 1));
   });
 
   testWidgets('playback keeps its slot across every destination', (

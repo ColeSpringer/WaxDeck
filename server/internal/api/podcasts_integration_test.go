@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -902,6 +904,71 @@ func TestEpisodeVisibilityFollowsSubscription(t *testing.T) {
 	resp = get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)
 	if eps := decode[EpisodePage](t, resp); len(eps.Items) != 2 {
 		t.Fatalf("show's episode surface should stay browsable, got %d rows", len(eps.Items))
+	}
+}
+
+// warnings keeps the messages of every warning the service logs.
+type warnings struct {
+	mu   sync.Mutex
+	msgs []string
+}
+
+func (w *warnings) Enabled(_ context.Context, l slog.Level) bool { return l >= slog.LevelWarn }
+
+func (w *warnings) Handle(_ context.Context, r slog.Record) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.msgs = append(w.msgs, r.Message)
+	return nil
+}
+
+func (w *warnings) WithAttrs([]slog.Attr) slog.Handler { return w }
+func (w *warnings) WithGroup(string) slog.Handler      { return w }
+
+func (w *warnings) seen() []string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return append([]string(nil), w.msgs...)
+}
+
+// An unsubscribe reaches the caller's other devices as an event with no
+// subscription on it, which is the ordinary shape and nothing to warn
+// about.
+func TestUnsubscribeEventWarnsNothing(t *testing.T) {
+	t.Parallel()
+	logged := &warnings{}
+	h := newPodcastHarnessWith(t, func(cfg *service.Config) {
+		cfg.Logger = slog.New(logged)
+	})
+	feed := newFeedServer(t, 1)
+
+	resp := get(t, h.ts, "/api/v1/sync/server", h.token)
+	since := decode[ServerSyncPage](t, resp).NextSince
+	resp = h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	if resp.StatusCode != 201 {
+		t.Fatalf("subscribe status = %d", resp.StatusCode)
+	}
+	sub := decode[Subscription](t, resp)
+	resp = reqAs(t, h, "DELETE", "/api/v1/podcasts/"+sub.Show.Pid, h.token, nil)
+	resp.Body.Close()
+	if resp.StatusCode != 204 {
+		t.Fatalf("unsubscribe status = %d, want 204", resp.StatusCode)
+	}
+
+	resp = get(t, h.ts, "/api/v1/sync/server?since="+since, h.token)
+	var removal *ServerSyncEvent
+	for _, ev := range decode[ServerSyncPage](t, resp).Events {
+		if ev.Kind == "subscription" && ev.Pid != nil && *ev.Pid == sub.Show.Pid {
+			removal = &ev
+		}
+	}
+	if removal == nil || removal.Subscription != nil {
+		t.Fatalf("the delta's subscription event = %+v, want one with none on it", removal)
+	}
+	for _, msg := range logged.seen() {
+		if strings.Contains(msg, "subscription event") {
+			t.Fatalf("the unsubscribe was logged as %q", msg)
+		}
 	}
 }
 

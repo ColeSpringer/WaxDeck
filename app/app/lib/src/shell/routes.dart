@@ -391,3 +391,30 @@ extension WaxLeaveContext on BuildContext {
   void leave({String fallback = WaxRoute.home, Object? result}) =>
       GoRouter.of(this).leave(fallback: fallback, result: result);
 }
+
+/// Opening a destination in the shell from under an overlay.
+extension WaxPushInShell on GoRouter {
+  /// Pushes [location], which lives in the shell, once no overlay stands
+  /// over the shell.
+  ///
+  /// The player, the queue and the other overlays are pushed beside the
+  /// shell rather than into it, and a push from under one stacks a second
+  /// shell whose navigator keys the first still holds. Read at the push,
+  /// so a caller that awaited something first clears whatever is up by
+  /// then rather than what was up when it asked.
+  Future<T?> pushInShell<T extends Object?>(String location, {Object? extra}) {
+    while (_overlayOnTop && canPop()) {
+      pop();
+    }
+    // An overlay opened by its own link has nothing under it to pop to.
+    if (_overlayOnTop) go(WaxRoute.home);
+    return push<T>(location, extra: extra);
+  }
+
+  /// The signed-in scope is a shell route whose children are the shell
+  /// and the overlays beside it, so its last child says which is on top.
+  bool get _overlayOnTop {
+    final top = routerDelegate.currentConfiguration.matches.lastOrNull;
+    return top is ShellRouteMatch && top.matches.lastOrNull is! ShellRouteMatch;
+  }
+}

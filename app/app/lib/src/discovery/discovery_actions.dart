@@ -149,9 +149,10 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
       // Reached whenever the sheet rises with nothing playing - a
       // listing row's or a card's Instant mix, not just the player's
       // own menu - and this is the right answer there: enqueueing
-      // behind nothing would leave the tracks queued and silent.
+      // behind nothing would leave the tracks queued and silent. In the
+      // shell, past the player when it was the player's menu.
       unawaited(
-        router.push<void>(
+        router.pushInShell<void>(
           WaxRoute.tracks,
           extra: TrackListArgs(
             title: l10n.discoveryInstantMixTitle,
@@ -233,6 +234,10 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
 }
 
 /// Fetches similar tracks for a seed and pushes the result list.
+///
+/// The player that asked stays up while the answer is on its way, so a
+/// failure is told where it was asked. The list lives in the shell, so it
+/// lands past whatever overlay is up by then.
 Future<void> openSimilarTracks(
   BuildContext context,
   WidgetRef ref,
@@ -245,7 +250,7 @@ Future<void> openSimilarTracks(
     final similar = await ref
         .read(repositoryProvider)
         .getSimilarTracks(seed.pid, limit: instantMixSize);
-    await router.push<void>(
+    await router.pushInShell<void>(
       WaxRoute.tracks,
       extra: TrackListArgs(
         title: l10n.discoverySimilarTitle(seed.title),

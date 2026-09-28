@@ -179,6 +179,42 @@ void main() {
       expect(tester.state(find.byType(SelectableRegion)), same(area));
     });
 
+    testWidgets('a rebuild reaches the text without rebuilding the area', (
+      tester,
+    ) async {
+      // On the web the area builds a different subtree while the browser
+      // menu is on, and one rebuilt across a flip breaks its own selection;
+      // hovering anything with a menu of its own flips it.
+      Widget host(String text, {bool showing = true}) =>
+          _host(TickerMode(enabled: showing, child: WaxProse(text)));
+      await tester.pumpWidget(host('One line'));
+      final area = tester.widget(find.byType(SelectableRegion));
+
+      await tester.pumpWidget(host('Another line'));
+      await tester.pumpWidget(host('Another line', showing: false));
+      await tester.pumpWidget(host('Another line'));
+
+      expect(tester.widget(find.byType(SelectableRegion)), same(area));
+      await _dragAcross(tester, find.text('Another line'));
+      expect(await _copy(tester), 'Another line');
+    });
+
+    testWidgets('a reload builds a new area rather than rebuilding it', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_host(const WaxProse('One line')));
+      final area = tester.state(find.byType(SelectableRegion));
+
+      // Settles on the frame the pump draws, so pumped before it is awaited.
+      final reassembled = tester.binding.reassembleApplication();
+      await tester.pump();
+      await reassembled;
+
+      expect(tester.state(find.byType(SelectableRegion)), isNot(same(area)));
+      await _dragAcross(tester, find.text('One line'));
+      expect(await _copy(tester), 'One line');
+    });
+
     testWidgets('is not a tab stop, nor is anything in it', (tester) async {
       // The inner node stands in for the web build's context-menu view.
       await tester.pumpWidget(

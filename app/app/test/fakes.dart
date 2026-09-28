@@ -5751,6 +5751,9 @@ class FakeRepository implements WaxDeckRepository {
   /// sonic path) when set.
   WaxDeckApiException? discoveryError;
 
+  /// Held open, a similar-tracks read waits on it.
+  Completer<void>? similarTracksGate;
+
   /// Canned results served by the discovery endpoints.
   SimilarTracks similarTracksResult = const SimilarTracks(
     basis: MixBasis.metadata,
@@ -5774,6 +5777,8 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<SimilarTracks> getSimilarTracks(String pid, {int? limit}) async {
     similarTracksCalls.add((pid: pid, limit: limit));
+    final gate = similarTracksGate;
+    if (gate != null) await gate.future;
     final error = discoveryError;
     if (error != null) throw error;
     return similarTracksResult;

@@ -1,3 +1,7 @@
+import 'package:cupertino_ui/cupertino_ui.dart'
+    show
+        cupertinoDesktopTextSelectionHandleControls,
+        cupertinoTextSelectionHandleControls;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart' show SelectedContent;
 import 'package:material_ui/material_ui.dart';
@@ -49,7 +53,43 @@ class _WaxProseState extends State<WaxProse> {
 
   /// Holds the child across its texts leaving the area and coming back,
   /// so it is moved rather than rebuilt.
-  final GlobalKey _child = GlobalKey(debugLabel: 'wax-prose-child');
+  GlobalKey _child = GlobalKey(debugLabel: 'wax-prose-child');
+
+  /// The area, built once and handed back unchanged, so rebuilding the
+  /// prose never rebuilds it. On the web it builds a different subtree
+  /// while the browser menu is on, and rebuilt across a flip it swaps
+  /// that subtree out from under its own selection state, which throws
+  /// on the next flip - and hovering anything with a menu of its own
+  /// flips it. What does change reaches the child through [_ProseContent].
+  late Widget _area = _newArea();
+
+  Widget _newArea() => SelectableRegion(
+    // Keyed for [reassemble], which has to replace it.
+    key: UniqueKey(),
+    // Not left to the theme: a theme change would rebuild the area.
+    selectionControls: switch (defaultTargetPlatform) {
+      TargetPlatform.android ||
+      TargetPlatform.fuchsia => materialTextSelectionHandleControls,
+      TargetPlatform.linux ||
+      TargetPlatform.windows => desktopTextSelectionHandleControls,
+      TargetPlatform.iOS => cupertinoTextSelectionHandleControls,
+      TargetPlatform.macOS => cupertinoDesktopTextSelectionHandleControls,
+    },
+    magnifierConfiguration: TextMagnifier.adaptiveMagnifierConfiguration,
+    focusNode: _focus,
+    contextMenuBuilder: _menu,
+    onSelectionChanged: _selectionChanged,
+    child: _ProseChild(_child),
+  );
+
+  @override
+  void reassemble() {
+    super.reassemble();
+    // A reload rebuilds every element, so a new area instead, with a new
+    // child rather than one carried out of the old area.
+    _child = GlobalKey(debugLabel: 'wax-prose-child');
+    _area = _newArea();
+  }
 
   @override
   void dispose() {
@@ -83,20 +123,41 @@ class _WaxProseState extends State<WaxProse> {
         child: content,
       );
     }
-    content = KeyedSubtree(key: _child, child: content);
+    return WaxSecondaryTapRegion(
+      child: _ProseContent(content: content, child: _area),
+    );
+  }
+}
+
+/// The prose's current child, handed past the area it must not rebuild.
+class _ProseContent extends InheritedWidget {
+  const _ProseContent({required this.content, required super.child});
+
+  final Widget content;
+
+  @override
+  bool updateShouldNotify(_ProseContent old) => content != old.content;
+}
+
+/// Where the child meets the area: rebuilt for a new child or a covered
+/// page, neither of which rebuilds the area around it.
+class _ProseChild extends StatelessWidget {
+  const _ProseChild(this.childKey);
+
+  final GlobalKey childKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = context
+        .dependOnInheritedWidgetOfExactType<_ProseContent>()!
+        .content;
+    Widget child = KeyedSubtree(key: childKey, child: content);
     // A covered page is never laid out, and the area orders its texts by
     // where they sit on screen: they join it once the page shows.
     if (!TickerMode.valuesOf(context).enabled) {
-      content = SelectionContainer.disabled(child: content);
+      child = SelectionContainer.disabled(child: child);
     }
-    return WaxSecondaryTapRegion(
-      child: SelectionArea(
-        focusNode: _focus,
-        contextMenuBuilder: _menu,
-        onSelectionChanged: _selectionChanged,
-        child: content,
-      ),
-    );
+    return child;
   }
 }
 
