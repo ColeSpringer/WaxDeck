@@ -498,6 +498,15 @@ injected providers are asked first, because they answer where
 MusicBrainz has no genre at all - and even there a MusicBrainz genre is
 never evicted.
 
+Among the injected providers, the order they are asked in is the
+administrator's: the **Enrichment** screen in the admin console moves
+each one up or down and switches it off. Order decides which provider
+fills an empty field first, since the next one finds it filled; a
+provider switched off opens no phase and fills nothing, and switched back
+on it is not asked about what a pass finished while it was off unless a
+run forces its phases. The catalog's key-free built-ins come after them
+in every order.
+
 Artist portraits come from one pass. The catalog's enrichment walk
 reaches every artist by name, whether or not MusicBrainz matched one,
 and asks fanart.tv (by MusicBrainz id, where the artist has one and the

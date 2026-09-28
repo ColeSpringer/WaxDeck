@@ -1044,6 +1044,8 @@ export interface paths {
         /**
          * Mark a place in a book
          * @description Records a bookmark at a book-timeline position, with an optional note. Positions past the book's own duration are rejected. A book holds at most 200 bookmarks per user; the request is refused rather than silently evicting the oldest, because what would be dropped is something the listener wrote.
+         *
+         *     An offline mark carries the `id` its client minted, and is dated by it. A replay answers the stored mark, unchecked; a removed mark's `id` is `conflict` with `params.reason` `removed`.
          */
         post: operations["createBookmark"];
         delete?: never;
@@ -1064,7 +1066,9 @@ export interface paths {
         post?: never;
         /**
          * Remove one bookmark
-         * @description Deletes one of the caller's bookmarks. Deleting a bookmark that is already gone answers 204: the outcome the caller asked for holds either way, and an offline client replaying its queue must not stall on one it already removed.
+         * @description Deletes one of the caller's bookmarks. One already gone answers 204, so a client replaying its queue never stalls on a mark it removed.
+         *
+         *     One on a book out of the caller's sight is deleted all the same.
          */
         delete: operations["deleteBookmark"];
         options?: never;
@@ -1171,6 +1175,26 @@ export interface paths {
          */
         get: operations["getEnrichmentStatus"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/library/enrichment/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Order and switch the enrichment sources
+         * @description Saves the order this server's own providers are asked in and which are asked at all, naming each once; one not wired now keeps its switch. A running pass keeps its order until it ends. Administrators only.
+         */
+        put: operations["putEnrichmentSources"];
         post?: never;
         delete?: never;
         options?: never;
@@ -2840,11 +2864,14 @@ export interface paths {
         /**
          * Get an item's waveform overview
          * @description The item's amplitude envelope, for painting a waveform behind a seek bar. A pure read: the values come from the catalog's analyze pass and this endpoint computes nothing and queues nothing, so a server whose analyze pass has never run answers `pending` everywhere. `POST /library/analyze` and the `analyze` schedule are what produce them.
-         *     `peaks` is one value per bucket, `0` silence and `255` full scale, at the fixed `resolution` the catalog stores (1000 buckets per track today, about a kilobyte). There is no `points` parameter: a resizable seek bar has to downsample to its own pixel width anyway, and a server-side width would add a query dimension to the cache key for work the renderer does for free. The stored values are 16-bit and narrowed to a byte here, so the low bits are dropped rather than rounded; that is invisible at any width a seek bar is drawn at.
+         *     `peaks` is one value per bucket, `0` silence and `255` full scale, at the `resolution` the catalog stores (1000 buckets a file today); downsample to the width drawn. Stored 16-bit, narrowed by truncation.
+         *     A cue-carved track answers its window of its file's envelope: `resolution` is its share of the buckets, `essenceHash` names the file, and the `ETag` carries the window and the length placing it.
          *     Waveforms are per audio file: for a multi-file audiobook, pass `partIndex` to get the envelope of one part, in that part's own timeline, and the answer echoes the `partIndex` it describes. An omitted `partIndex` is part zero, so a client that does not know about parts gets the first one rather than nothing.
          *     `span=item` answers one envelope over the whole item instead: the parts stitched in reading order into the same `Waveform` shape, with the buckets spread evenly across the total duration and each part given bucket-space in proportion to how long it is. That is what a book scrubber draws, because a book's timeline is the book rather than the file the reader happens to be in; `partIndex` is ignored under it, and a single-file item answers exactly what `span=part` would. `resolution` is not fixed under `span=item` - a long book gets more buckets than a short one, so a chapter is still a shape rather than three bars - so read it rather than assuming it.
          *     A stitched answer is `ready` only when every part has an envelope. A book with one unanalyzed part is `pending`, and one with a part that can never be measured is `unavailable`: half a book's envelope drawn across a whole book's timeline would be silence somebody could seek into, which is a convincing wrong answer rather than a partial one.
-         *     `state` is `ready`, `pending` (this item is analyzable and has not been analyzed yet; poll again after an analyze pass), or `unavailable` (there will never be a waveform for this item). Read `unavailable` as final. Three populations answer it: podcast episodes, which are deliberately never analyzed; a track carved out of a shared file by a cue sheet, which has no envelope of its own to report; and a file the pass analyzed but could not measure, which is not retried until its audio changes. A client should draw its plain seek bar for `unavailable` rather than spinning. A book part whose file has simply not been analyzed yet is `pending`, not `unavailable`, so a partly analyzed book can report the two states across its parts.
+         *     `state` is `ready`, `pending` (not analyzed yet; ask after a pass), or `unavailable`, which is final: an episode, a file the pass could not measure, or a carved track its file's stated length cannot place.
+         *
+         *     A book part not yet analyzed is `pending`, so a partly analyzed book can report both states across its parts.
          *     A `ready` answer is content-addressed by the audio essence of the file being described (so a multi-file book's parts carry different validators) and cacheable for a day; revalidate with `If-None-Match`. `pending` and `unavailable` are `no-store`, since both are expected to change.
          */
         get: operations["getWaveform"];
@@ -3189,7 +3216,9 @@ export interface paths {
          * Import a Navidrome smart playlist (NSP)
          * @description Creates a **smart** playlist from an NSP document, which is the request body itself. The document's `name` names the playlist (the `name` parameter overrides it, and is what lets a nameless document be imported) and `public` sets its visibility; `comment` is read and discarded, since a WaxDeck playlist has no comment.
          *
-         *     Fields map onto the rule vocabulary (`GET /playlists/rule-fields`): `title`, `album`, `artist`, `albumartist`, `genre`, `year`, `trackNumber`, `discNumber`, `bpm`, `playCount` by name, plus `dateAdded` to `addedAt`, `lastPlayed` to `lastPlayedAt`, `filepath` to `path`, `loved` to `starred`, `duration` to `durationMs`, and `rating`. Two of those carry different units on each side and are **rescaled**: NSP counts duration in seconds where WaxDeck counts milliseconds, and rates 0 to 5 where WaxDeck rates 0 to 100, so an unscaled `rating gt 3` would mean "rated above 3 out of 100", which is every rated track.
+         *     Fields map onto the rule vocabulary (`GET /playlists/rule-fields`): `title`, `album`, `artist`, `albumartist`, `genre`, `year`, `bpm`, `trackNumber`, `discNumber`, `playCount`, `starred` and `rating`.
+         *
+         *     `dateAdded` maps to `addedAt` and `lastPlayed` to `lastPlayedAt`. `rating` is **rescaled**: NSP rates 0 to 5 where WaxDeck rates 0 to 100, so an unscaled `rating gt 3` would match every rated track.
          *
          *     `notContains` imports as a `not` node wrapping `contains`; every other operator has a WaxDeck spelling of the same name.
          *
@@ -3333,9 +3362,15 @@ export interface paths {
          * Export a smart playlist as NSP
          * @description The playlist's rule as a Navidrome smart playlist document. A static playlist has no rule and answers `feature-unavailable`.
          *
-         *     Export is **all-or-nothing** by default, like the import: a rule holding anything NSP cannot say is refused with **every** offender named, rather than written as a document that means something else. WaxDeck's rule vocabulary is the larger one, so this is the common answer for a rule built in the editor. `notContains` is the only negation NSP can carry, so every other `not` refuses; `gte`, `lte`, `isPresent`, and `isMissing` have no NSP form; the `minutes` and `megabytes` limit modes and a pinned random seed have none; a rating that is not a whole number of stars has none; NSP sorts on one term, so a rule ordered by a second refuses rather than dropping it; and neither do the fields NSP does not carry (`mediaType`, `state`, `source`, `container`, `codec`, `podcast`, `season`, `publishedAt`, `updatedAt`, `starredAt`, `played`, `finished`, `albumBarcode`, `albumLabel`, `albumCatalogNumber`, `albumMedia`, `albumCountry`, `tag.KEY`, and `playlist`). `albumArtist` is **not** among them: NSP carries it, and it round-trips.
+         *     Export is **all-or-nothing** by default, like the import: a rule holding anything NSP cannot say is refused with **every** offender named, rather than written as a document that means something else.
          *
-         *     `partial=true` accepts the loss instead: the parts NSP cannot say are dropped and the rest is written. Still refused when nothing survives, since a document with every condition dropped matches the whole library on the far side. Ask `GET /playlists/{pid}/nsp/report` first to see what would go.
+         *     NSP cannot say a `not` other than `notContains`, `gte`, `lte`, `isPresent`, `isMissing`, the `minutes` and `megabytes` limit modes, a pinned random seed, a rating in part stars, or a second sort term.
+         *
+         *     Nor the fields `mediaType`, `state`, `source`, `container`, `codec`, `path`, `durationMs`, `podcast`, `season`, `publishedAt`, `updatedAt`, `starredAt`, `played`, `finished`, `tag.KEY` and `playlist`,
+         *
+         *     nor `albumBarcode`, `albumLabel`, `albumCatalogNumber`, `albumMedia` and `albumCountry`. `albumArtist` it carries, and it round-trips.
+         *
+         *     `partial=true` drops what NSP cannot say and writes the rest; still refused when nothing survives, since that matches the whole library. Read `GET /playlists/{pid}/nsp/report` first and pass its `ruleHash`.
          *
          *     The response carries the playlist's own `name`, and `public` when it is shared - neither is part of the rule.
          */
@@ -4321,7 +4356,9 @@ export interface paths {
         };
         /**
          * Pull analysis work (worker)
-         * @description Leases a batch of tracks awaiting embedding. Each work item names the track and where to pull decode-ready audio; the worker computes an embedding per item and posts the batch back. Leases expire on their own, so a crashed worker's items return to the queue without cleanup. An empty batch means the library is fully embedded; workers should sleep `retryAfterSeconds` before polling again. Requires the worker token.
+         * @description Leases a batch of tracks awaiting embedding, each naming where to pull its decode-ready audio (a cue-carved track's own window). Leases lapse on their own; an empty batch means sleep `retryAfterSeconds`. Worker token.
+         *
+         *     A server without the streaming engine cannot serve a carved track's window, so it keeps those tracks for its own analysis.
          */
         get: operations["pullSimilarityWork"];
         put?: never;
@@ -4343,7 +4380,7 @@ export interface paths {
         put?: never;
         /**
          * Post computed embeddings (worker)
-         * @description Records a batch of computed embeddings. Vectors are keyed by the track's audio essence, so an identical rip re-imported later never needs re-analysis. All vectors in one batch carry the batch's `model` and `dims`; a vector whose length differs from `dims` is rejected per item. Posting a different `model` than the stored vectors replaces coverage model-wide: mixed models never compare, so the server drops stored vectors of other models as new ones arrive. Ingest also maintains the nearest-neighbor graph that powers sonic paths. Requires the worker token.
+         * @description Records a batch of embeddings, keyed by each item's analysis key, in the batch's `model` and `dims` (a vector of another length is refused alone). A new `model` replaces coverage, since models never mix. Worker token.
          */
         post: operations["reportEmbeddings"];
         delete?: never;
@@ -6153,6 +6190,11 @@ export interface components {
         /** @description A new bookmark on the book timeline. */
         BookmarkCreate: {
             /**
+             * @description A client-minted bookmark PID, for a mark made offline; the server mints one when absent.
+             * @example bm-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            id?: string;
+            /**
              * Format: int64
              * @description Book-timeline position in milliseconds.
              */
@@ -6304,20 +6346,25 @@ export interface components {
         };
         /** @description Enrichment providers and coverage. */
         EnrichmentStatus: {
-            /** @description Registered providers in priority order (this server's own first, then the catalog's key-free built-ins). */
+            /** @description Registered providers in the order they are asked: this server's own in the operator's order, then the catalog's key-free built-ins. */
             providers: components["schemas"]["EnrichmentProvider"][];
             coverage: components["schemas"]["EnrichmentCoverage"];
             /** @description Whether a whole-library pass is running now. */
             running: boolean;
             /**
-             * @description Whether a whole-library pass would do anything: some phase can run. That is true on any server carrying a provider that gates a phase of its own, and true on every server with a MusicBrainz contact. Read `phases` for which half.
+             * @description The running pass's job pid, when one runs; `GET /jobs/{pid}` follows it more cheaply than this read.
+             * @example jb-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            runningJob?: string;
+            /**
+             * @description Whether a whole-library pass would do anything: some phase can run, which a switched-on provider gating one or a MusicBrainz contact makes true. Read `phases` for which.
              *
              *     False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key.
              */
             configured: boolean;
             /** @description Whether the MusicBrainz identity phases can run, which needs the `WAXDECK_ENRICHMENT_CONTACT` boot setting. The Cover Art Archive and LRCLIB wait on it too; the provider-gated phases do not. */
             musicbrainzConfigured: boolean;
-            /** @description The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider, the rest a provider. */
+            /** @description The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider switched on, the rest one. */
             phases: components["schemas"]["EnrichmentPhase"][];
             lastRun?: components["schemas"]["EnrichmentLastRun"];
         };
@@ -6334,6 +6381,26 @@ export interface components {
             configured: boolean;
             /** @description True for the catalog's built-ins. */
             builtin: boolean;
+            /**
+             * @description Whether it is asked at all. Switched back on, it is not asked about what a pass finished while it was off unless a run forces its phases.
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /** @description The operator's order over the orderable providers. */
+        EnrichmentSourcesUpdate: {
+            /** @description Every provider the status lists that is not `builtin`, in the order they are to be asked. */
+            sources: components["schemas"]["EnrichmentSource"][];
+        };
+        /** @description One provider's place in the order, and its switch. */
+        EnrichmentSource: {
+            /**
+             * @description The provider's `name` from the status.
+             * @example fanarttv
+             */
+            name: string;
+            /** @description Whether it is asked. */
+            enabled: boolean;
         };
         /** @description What the most recent finished pass did, every tally it keeps; absent until one has finished. Each walk counts what it looked up and what something answered for. */
         EnrichmentLastRun: {
@@ -6403,7 +6470,7 @@ export interface components {
              */
             finishedAt?: string;
         };
-        /** @description How much of the catalog has enriched. */
+        /** @description How much of the catalog has enriched. Lyrics carries its total alone, the music tracks: the catalog does not count lyrics per track, so its enriched reads zero. */
         EnrichmentCoverage: {
             artists: components["schemas"]["CoverageCount"];
             releaseGroups: components["schemas"]["CoverageCount"];
@@ -8554,7 +8621,7 @@ export interface components {
             /** @description One amplitude per bucket in playback order, `0` silence and `255` full scale (`ready` only). Downsample to the pixel width being drawn. */
             peaks?: number[];
             /**
-             * @description How many buckets `peaks` carries (`ready` only). Fixed by the catalog at 1000 today; read it rather than assuming, because an analysis version bump may change it.
+             * @description How many buckets `peaks` carries (`ready` only): 1000 per file today, a carved track's share of its file's; read it rather than assuming.
              * @example 1000
              */
             resolution?: number;
@@ -9348,7 +9415,7 @@ export interface components {
             /** @description The sentence the strict conversion would refuse with for this gap. Written by the converter about what the caller built, so a client renders it as-is rather than mapping it to a phrase of its own. */
             reason: string;
         };
-        /** @description What one NSP mapping could not carry. `gaps` block the strict conversion and are what a `partial=true` conversion drops; `notes` are losses that block nothing, so a client mentions them without refusing. Both are empty when the mapping is lossless. */
+        /** @description What one NSP mapping could not carry: `gaps` block a strict conversion and are what `partial=true` drops; `notes` block nothing. An export report carries `ruleHash`, and `rule` when a partial export keeps some. */
         NspReport: {
             /**
              * @description Which way the mapping ran, and so whose vocabulary the gaps' `field` and `op` are written in.
@@ -9363,6 +9430,9 @@ export interface components {
             gaps?: components["schemas"]["NspGap"][];
             /** @description Losses that refuse nothing. Deduplicated and capped the same way. */
             notes?: components["schemas"]["NspGap"][];
+            /** @description Export only: names the rule this report was read from, to pass back as the export's `ruleHash`. */
+            ruleHash?: string;
+            rule?: components["schemas"]["SmartRule"];
         };
         /** @description An M3U8 document to import as a static playlist. */
         M3uImport: {
@@ -10301,14 +10371,14 @@ export interface components {
              * @example tr-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             pid: string;
-            /** @description The track's audio-essence hash. Echo it back with the vector; embeddings are keyed by essence so identical audio never re-analyzes. */
+            /** @description The analysis key: the audio essence, windowed for a cue-carved track. Opaque to workers; echo it back with the vector. */
             essence: string;
             /**
              * @description Origin-relative URL serving decode-ready audio (16 kHz mono, gain untouched). Append `format=flac` for lossless at roughly half the bytes (remote workers); the default is WAV. Authenticate with the same worker token.
              * @example /media/analysis/tr-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             audioUrl: string;
-            /** @description Library-relative path of the source file, present only when the server is configured to expose paths to same-host workers (`WAXDECK_WORKER_LOCAL_PATHS`); such workers mount the library read-only and decode locally instead of pulling audio over HTTP. */
+            /** @description The source file's library-relative path, for a same-host worker (`WAXDECK_WORKER_LOCAL_PATHS`) that mounts the library read-only; never for a cue-carved track, whose file is the whole rip. */
             localPath?: string;
             /**
              * Format: int64
@@ -10335,7 +10405,7 @@ export interface components {
              * @example tr-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             pid: string;
-            /** @description The audio-essence hash (from the work item). */
+            /** @description The analysis key (from the work item). */
             essence: string;
             /** @description The embedding. The server L2-normalizes vectors at ingest, so any consistent scale works. */
             vector: number[];
@@ -10353,7 +10423,7 @@ export interface components {
         RejectedEmbedding: {
             /** @description The refused item's pid, when it was parseable. */
             pid?: string;
-            /** @description The refused item's essence hash, when it was parseable. */
+            /** @description The refused item's analysis key, when it was parseable. */
             essence?: string;
             /** @description Stable machine-readable reason (`not-found`, `invalid-request`). */
             code: string;
@@ -10664,7 +10734,11 @@ export interface components {
         /** @description One change to server-side state visible to the calling user (their own state, plus other users' shared playlists), with the current value hydrated fresh. `kind` is a string, not a closed enum, so new kinds can appear; clients must skip events whose `kind` they do not recognize. Hydrated `playlist` payloads omit a smart playlist's computed `itemCount`, like list pages. */
         ServerSyncEvent: {
             /**
-             * @description What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). Curation surfaces emit marker kinds carrying only `pid`: `review` (a review entry changed; refetch the review endpoints), `upload` (an upload session changed), `task` (a tool task changed), and `entity-state` (an artist or album was starred or rated). Markers hydrate nothing because those surfaces are live reads, not mirrored state.
+             * @description What changed: `play-state` (`pid`, `playState`), `prefs`, or `subscription` (`pid`, the show; `subscription` absent once the caller unsubscribed); `book-settings` (`pid`, `bookSettings`);
+             *
+             *     `bookmarks` (`pid`, the book, and `bookmarks`, its whole current list: a mark missing from it was deleted); or `playlist` (`pid`; `playlist` absent when deleted or replaced under a new pid).
+             *
+             *     Markers carry only `pid` and hydrate nothing: `review`, `upload`, `task` (refetch that surface), and `entity-state` (an artist or album was starred or rated).
              *
              *     Further markers are announcements rather than refetch hints, carrying the same news as the notification-target event of the same name: `feed-disabled` (`pid` is the show whose scheduled refresh was suspended), `import-completed` (`pid` is the review entry that filed itself), `episode-downloaded` (`pid` is the episode whose enclosure the server finished fetching), and `playlist-synced` (`pid` is the playlist whose sync run changed its membership, or whose scheduled syncing was suspended after repeated failures).
              *
@@ -10683,6 +10757,8 @@ export interface components {
             prefs?: components["schemas"]["Prefs"];
             subscription?: components["schemas"]["Subscription"];
             bookSettings?: components["schemas"]["BookSettings"];
+            /** @description On `bookmarks`: the caller's bookmarks in the book, in timeline order. Present and empty when none are left. */
+            bookmarks?: components["schemas"]["Bookmark"][];
             playlist?: components["schemas"]["Playlist"];
         };
         /** @description One page of the caller's server-side state changes. */
@@ -13199,6 +13275,7 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -13361,6 +13438,34 @@ export interface operations {
                     "application/json": components["schemas"]["EnrichmentStatus"];
                 };
             };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    putEnrichmentSources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EnrichmentSourcesUpdate"];
+            };
+        };
+        responses: {
+            /** @description The status under the new order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrichmentStatus"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             503: components["responses"]["CatalogMaintenance"];
@@ -16041,7 +16146,7 @@ export interface operations {
             /** @description The waveform, or its pending or unavailable state. */
             200: {
                 headers: {
-                    /** @description Validator derived from the audio essence of the file being described, which for a multi-file book is the requested part. Present on `ready` only; the other two states are not cacheable. */
+                    /** @description The described file's audio essence (a multi-file book's requested part), plus a carved track's window and the length placing it. Present on `ready` only. */
                     ETag?: string;
                     /** @description `private, max-age=86400, stale-while-revalidate=604800` for `ready`, `no-store` otherwise. Not `immutable`: the URL names a pid, not the bytes, so re-analysis under the same pid has to be able to invalidate it. */
                     "Cache-Control"?: string;
@@ -16841,6 +16946,8 @@ export interface operations {
             query?: {
                 /** @description Export what maps and drop the rest, rather than refusing the whole rule. */
                 partial?: boolean;
+                /** @description The `ruleHash` of the report the caller read. When the rule has changed since, the export answers `conflict` instead. */
+                ruleHash?: string;
             };
             header?: never;
             path: {
@@ -16860,8 +16967,10 @@ export interface operations {
                     "application/json": components["schemas"]["NspDocument"];
                 };
             };
+            400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             501: components["responses"]["FeatureUnavailable"];
             503: components["responses"]["CatalogMaintenance"];
         };

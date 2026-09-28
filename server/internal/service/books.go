@@ -199,76 +199,105 @@ func (l *Library) BookmarksFor(ctx context.Context, uc *UserCtx, apiBookPID stri
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
-	out := make([]Bookmark, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, Bookmark{
-			ID:          apiPID(PrefixBookmark, model.PID(r.ID)),
-			PositionMS:  r.PositionMS,
-			Note:        r.Note,
-			CreatedAtNS: r.CreatedAtNS,
-		})
-	}
-	return out, nil
+	return bookmarkDTOs(rows), nil
 }
 
-// CreateBookmark records a mark at a book-timeline position.
-//
-// The position is checked against the book's own length rather than
-// taken on trust: a bookmark past the end is one nothing can seek to,
-// and the two ways to get one - a stale client and an arithmetic slip
-// on a multi-part book - both produce a mark that silently does
-// nothing.
-func (l *Library) CreateBookmark(ctx context.Context, uc *UserCtx, apiBookPID string, positionMS int64, note string) (Bookmark, error) {
+// ErrBookmarkRemoved marks a create replaying the id of a removed mark.
+var ErrBookmarkRemoved = errors.New("that bookmark was removed")
+
+// CreateBookmark records a mark at a book-timeline position, under the
+// client's own bookmark pid when it minted one (an offline mark, dated by
+// that pid): a replay answers the stored mark, unchecked.
+func (l *Library) CreateBookmark(ctx context.Context, uc *UserCtx, apiBookPID, apiID string, positionMS int64, note string) (Bookmark, error) {
 	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
 	if err != nil {
 		return Bookmark{}, err
 	}
-	if positionMS < 0 {
-		return Bookmark{}, errInvalid("positionMs must not be negative")
-	}
-	if total := bd.TotalDurationMS; total > 0 && positionMS > total {
-		return Bookmark{}, errInvalid("positionMs is past the end of the book")
-	}
 	note = strings.TrimSpace(note)
-	if len([]rune(note)) > bookmarkNoteMax {
-		return Bookmark{}, errInvalid("note is too long")
+	id, made := ulid.Make(), time.Now()
+	if apiID != "" {
+		prefix, bare, ok := parseAPIPID(apiID)
+		if !ok || prefix != PrefixBookmark {
+			return Bookmark{}, errInvalid("id must be a bookmark pid")
+		}
+		id = ulid.MustParseStrict(string(bare))
+		if minted := ulid.Time(id.Time()); minted.Before(made) {
+			made = minted
+		}
 	}
-	row := wdb.Bookmark{
-		ID:          ulid.Make().String(),
+	// A mark past the end of the book is one nothing can seek to.
+	check := func() error {
+		switch total := bd.TotalDurationMS; {
+		case positionMS < 0:
+			return errInvalid("positionMs must not be negative")
+		case total > 0 && positionMS > total:
+			return errInvalid("that position is past the end of the book")
+		case len([]rune(note)) > bookmarkNoteMax:
+			return errInvalid("note is too long")
+		}
+		return nil
+	}
+	stored, created, err := l.db.CreateBookmark(ctx, wdb.Bookmark{
+		ID:          id.String(),
 		UserID:      uc.ID,
 		BookPID:     string(bd.Item.PID),
 		PositionMS:  positionMS,
 		Note:        note,
-		CreatedAtNS: time.Now().UnixNano(),
-	}
-	if err := l.db.CreateBookmark(ctx, row); err != nil {
-		if errors.Is(err, wdb.ErrConflict) {
-			return Bookmark{}, &Error{Kind: KindConflict, Msg: "this book already holds as many bookmarks as it can"}
-		}
+		CreatedAtNS: made.UnixNano(),
+	}, check)
+	switch {
+	case errors.Is(err, wdb.ErrBookmarkFull):
+		return Bookmark{}, errInvalid("this book already holds as many bookmarks as it can")
+	case errors.Is(err, wdb.ErrBookmarkRemoved):
+		return Bookmark{}, &Error{Kind: KindConflict, Msg: ErrBookmarkRemoved.Error(), Err: ErrBookmarkRemoved}
+	case errors.Is(err, wdb.ErrConflict):
+		return Bookmark{}, &Error{Kind: KindConflict, Msg: "that id already names another bookmark"}
+	case KindOf(err) == KindInvalid:
+		return Bookmark{}, err
+	case err != nil:
 		return Bookmark{}, &Error{Kind: KindInternal, Err: err}
 	}
-	return Bookmark{
-		ID:          apiPID(PrefixBookmark, model.PID(row.ID)),
-		PositionMS:  row.PositionMS,
-		Note:        row.Note,
-		CreatedAtNS: row.CreatedAtNS,
-	}, nil
+	if created {
+		l.emitUserEvent(ctx, uc.ID, eventBookmarks, string(bd.Item.PID))
+	}
+	return bookmarkDTO(stored), nil
 }
 
-// DeleteBookmark removes one of the caller's marks. Removing one that
-// is already gone succeeds, so a retry after a lost answer is not an
-// error.
+func bookmarkDTOs(rows []wdb.Bookmark) []Bookmark {
+	out := make([]Bookmark, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, bookmarkDTO(r))
+	}
+	return out
+}
+
+func bookmarkDTO(r wdb.Bookmark) Bookmark {
+	return Bookmark{
+		ID:          apiPID(PrefixBookmark, model.PID(r.ID)),
+		PositionMS:  r.PositionMS,
+		Note:        r.Note,
+		CreatedAtNS: r.CreatedAtNS,
+	}
+}
+
+// DeleteBookmark removes one of the caller's marks. Removing one that is
+// already gone succeeds, so a retry after a lost answer is not an error,
+// and so does one on a book out of their sight: the mark is still theirs.
 func (l *Library) DeleteBookmark(ctx context.Context, uc *UserCtx, apiBookPID, apiBookmarkID string) error {
-	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
-	if err != nil {
-		return err
+	prefix, book, ok := parseAPIPID(apiBookPID)
+	if !ok || prefix != PrefixBook {
+		return errNotFound("no book with pid " + apiBookPID)
 	}
 	prefix, id, ok := parseAPIPID(apiBookmarkID)
 	if !ok || prefix != PrefixBookmark {
 		return errNotFound("no bookmark with id " + apiBookmarkID)
 	}
-	if err := l.db.DeleteBookmark(ctx, uc.ID, string(bd.Item.PID), string(id)); err != nil {
+	removed, err := l.db.DeleteBookmark(ctx, uc.ID, string(book), string(id))
+	if err != nil {
 		return &Error{Kind: KindInternal, Err: err}
+	}
+	if removed {
+		l.emitUserEvent(ctx, uc.ID, eventBookmarks, string(book))
 	}
 	return nil
 }

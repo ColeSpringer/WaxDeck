@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/smart_rule.dart';
 import 'package:built_collection/built_collection.dart';
 import 'package:waxdeck_api_gen/src/model/nsp_gap.dart';
 import 'package:built_value/built_value.dart';
@@ -10,12 +11,14 @@ import 'package:built_value/serializer.dart';
 
 part 'nsp_report.g.dart';
 
-/// What one NSP mapping could not carry. `gaps` block the strict conversion and are what a `partial=true` conversion drops; `notes` are losses that block nothing, so a client mentions them without refusing. Both are empty when the mapping is lossless. 
+/// What one NSP mapping could not carry: `gaps` block a strict conversion and are what `partial=true` drops; `notes` block nothing. An export report carries `ruleHash`, and `rule` when a partial export keeps some. 
 ///
 /// Properties:
 /// * [direction] - Which way the mapping ran, and so whose vocabulary the gaps' `field` and `op` are written in. 
 /// * [gaps] - Losses that refuse the strict conversion.  Deduplicated by `reason` and capped: a rule or a document repeating one problem is one problem, and the row a client draws per entry says nothing new the second time. `path` names the first place the problem was found. The strict refusal's message is composed from this same list, so a refusal and a report never disagree about what is wrong. 
 /// * [notes] - Losses that refuse nothing. Deduplicated and capped the same way. 
+/// * [ruleHash] - Export only: names the rule this report was read from, to pass back as the export's `ruleHash`. 
+/// * [rule] 
 @BuiltValue()
 abstract class NspReport implements Built<NspReport, NspReportBuilder> {
   /// Which way the mapping ran, and so whose vocabulary the gaps' `field` and `op` are written in. 
@@ -30,6 +33,13 @@ abstract class NspReport implements Built<NspReport, NspReportBuilder> {
   /// Losses that refuse nothing. Deduplicated and capped the same way. 
   @BuiltValueField(wireName: r'notes')
   BuiltList<NspGap>? get notes;
+
+  /// Export only: names the rule this report was read from, to pass back as the export's `ruleHash`. 
+  @BuiltValueField(wireName: r'ruleHash')
+  String? get ruleHash;
+
+  @BuiltValueField(wireName: r'rule')
+  SmartRule? get rule;
 
   NspReport._();
 
@@ -71,6 +81,20 @@ class _$NspReportSerializer implements PrimitiveSerializer<NspReport> {
       yield serializers.serialize(
         object.notes,
         specifiedType: const FullType(BuiltList, [FullType(NspGap)]),
+      );
+    }
+    if (object.ruleHash != null) {
+      yield r'ruleHash';
+      yield serializers.serialize(
+        object.ruleHash,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.rule != null) {
+      yield r'rule';
+      yield serializers.serialize(
+        object.rule,
+        specifiedType: const FullType(SmartRule),
       );
     }
   }
@@ -118,6 +142,22 @@ class _$NspReportSerializer implements PrimitiveSerializer<NspReport> {
           ) as BuiltList<NspGap>?;
           if (valueDes == null) continue;
           result.notes.replace(valueDes);
+          break;
+        case r'ruleHash':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.ruleHash = valueDes;
+          break;
+        case r'rule':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(SmartRule),
+          ) as SmartRule?;
+          if (valueDes == null) continue;
+          result.rule.replace(valueDes);
           break;
         default:
           unhandled.add(key);

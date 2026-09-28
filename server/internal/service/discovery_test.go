@@ -27,6 +27,18 @@ const (
 // the catalog's fingerprint dedup never merges the synthesized tones.
 func newCatalogFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 	t.Helper()
+	return newCatalogFixtureWith(t, catalogFixtureOptions{})
+}
+
+// catalogFixtureOptions widens the fixture: more files beside the four
+// tracks, and the config switches a test needs.
+type catalogFixtureOptions struct {
+	extra            func(t *testing.T, libDir string)
+	workerLocalPaths bool
+}
+
+func newCatalogFixtureWith(t *testing.T, opts catalogFixtureOptions) (context.Context, *Library, *UserCtx) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 
@@ -61,6 +73,9 @@ func newCatalogFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 	); err != nil {
 		t.Fatalf("generating fixtures: %v", err)
 	}
+	if opts.extra != nil {
+		opts.extra(t, libDir)
+	}
 
 	dataDir := t.TempDir()
 	store, err := wdb.Open(ctx, filepath.Join(dataDir, "waxdeck.db"))
@@ -69,9 +84,10 @@ func newCatalogFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 	}
 	group := supervise.NewGroup(log)
 	svc, err := Open(ctx, Config{
-		DataDir: dataDir,
-		Roots:   []Root{{Name: "lib", Path: libDir}},
-		Logger:  log,
+		DataDir:          dataDir,
+		Roots:            []Root{{Name: "lib", Path: libDir}},
+		Logger:           log,
+		WorkerLocalPaths: opts.workerLocalPaths,
 	}, store, group)
 	if err != nil {
 		t.Fatal(err)

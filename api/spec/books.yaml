@@ -169,6 +169,11 @@ paths:
         book holds at most 200 bookmarks per user; the request is
         refused rather than silently evicting the oldest, because what
         would be dropped is something the listener wrote.
+
+
+        An offline mark carries the `id` its client minted, and is dated
+        by it. A replay answers the stored mark, unchecked; a removed
+        mark's `id` is `conflict` with `params.reason` `removed`.
       tags: [books]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -191,6 +196,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -199,10 +206,11 @@ paths:
       operationId: deleteBookmark
       summary: Remove one bookmark
       description: >
-        Deletes one of the caller's bookmarks. Deleting a bookmark that
-        is already gone answers 204: the outcome the caller asked for
-        holds either way, and an offline client replaying its queue must
-        not stall on one it already removed.
+        Deletes one of the caller's bookmarks. One already gone answers 204,
+        so a client replaying its queue never stalls on a mark it removed.
+
+
+        One on a book out of the caller's sight is deleted all the same.
       tags: [books]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -383,6 +391,13 @@ components:
       description: A new bookmark on the book timeline.
       required: [positionMs]
       properties:
+        id:
+          type: string
+          description: >
+            A client-minted bookmark PID, for a mark made offline;
+            the server mints one when absent.
+          pattern: "^bm-[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          example: bm-01JZX5N8QW3F4V9T2B7KD3M9R6
         positionMs:
           type: integer
           format: int64

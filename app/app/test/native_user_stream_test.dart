@@ -172,4 +172,37 @@ void main() {
 
     expect((b.repo as _CountingRepository).prefsReads, reads + 1);
   });
+
+  test('a bookmarks event refreshes none of the user surfaces', () async {
+    // The mirror stores the book's list and says so itself; nothing in
+    // the user fan-out reads bookmarks.
+    final b = await _bind(
+      serverPages: [
+        const ServerSyncPage(nextSince: 'scur-1'),
+        ServerSyncPage(
+          events: [
+            ServerSyncEvent(
+              kind: 'bookmarks',
+              pid: 'bk-A',
+              bookmarks: [
+                Bookmark(
+                  id: 'bm-01JZX5N8QW3F4V9T2B7KD3M9R6',
+                  positionMs: 1000,
+                  createdAt: DateTime.utc(2026, 9, 1),
+                ),
+              ],
+            ),
+          ],
+          nextSince: 'scur-2',
+        ),
+      ],
+    );
+    await b.engine.pullServer();
+    final reads = (b.repo as _CountingRepository).prefsReads;
+
+    await b.engine.pullServer();
+    await Future<void>.delayed(const Duration(milliseconds: 1500));
+
+    expect((b.repo as _CountingRepository).prefsReads, reads);
+  });
 }

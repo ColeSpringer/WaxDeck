@@ -14,6 +14,8 @@ class _$EnrichmentStatus extends EnrichmentStatus {
   @override
   final bool running;
   @override
+  final String? runningJob;
+  @override
   final bool configured;
   @override
   final bool musicbrainzConfigured;
@@ -30,6 +32,7 @@ class _$EnrichmentStatus extends EnrichmentStatus {
     required this.providers,
     required this.coverage,
     required this.running,
+    this.runningJob,
     required this.configured,
     required this.musicbrainzConfigured,
     required this.phases,
@@ -50,6 +53,7 @@ class _$EnrichmentStatus extends EnrichmentStatus {
         providers == other.providers &&
         coverage == other.coverage &&
         running == other.running &&
+        runningJob == other.runningJob &&
         configured == other.configured &&
         musicbrainzConfigured == other.musicbrainzConfigured &&
         phases == other.phases &&
@@ -62,6 +66,7 @@ class _$EnrichmentStatus extends EnrichmentStatus {
     _$hash = $jc(_$hash, providers.hashCode);
     _$hash = $jc(_$hash, coverage.hashCode);
     _$hash = $jc(_$hash, running.hashCode);
+    _$hash = $jc(_$hash, runningJob.hashCode);
     _$hash = $jc(_$hash, configured.hashCode);
     _$hash = $jc(_$hash, musicbrainzConfigured.hashCode);
     _$hash = $jc(_$hash, phases.hashCode);
@@ -76,6 +81,7 @@ class _$EnrichmentStatus extends EnrichmentStatus {
           ..add('providers', providers)
           ..add('coverage', coverage)
           ..add('running', running)
+          ..add('runningJob', runningJob)
           ..add('configured', configured)
           ..add('musicbrainzConfigured', musicbrainzConfigured)
           ..add('phases', phases)
@@ -103,6 +109,10 @@ class EnrichmentStatusBuilder
   bool? _running;
   bool? get running => _$this._running;
   set running(bool? running) => _$this._running = running;
+
+  String? _runningJob;
+  String? get runningJob => _$this._runningJob;
+  set runningJob(String? runningJob) => _$this._runningJob = runningJob;
 
   bool? _configured;
   bool? get configured => _$this._configured;
@@ -133,6 +143,7 @@ class EnrichmentStatusBuilder
       _providers = $v.providers.toBuilder();
       _coverage = $v.coverage.toBuilder();
       _running = $v.running;
+      _runningJob = $v.runningJob;
       _configured = $v.configured;
       _musicbrainzConfigured = $v.musicbrainzConfigured;
       _phases = $v.phases.toBuilder();
@@ -168,6 +179,7 @@ class EnrichmentStatusBuilder
               r'EnrichmentStatus',
               'running',
             ),
+            runningJob: runningJob,
             configured: BuiltValueNullFieldError.checkNotNull(
               configured,
               r'EnrichmentStatus',

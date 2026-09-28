@@ -91,18 +91,14 @@ type SonicPathResult struct {
 	Items    []ItemSummary
 }
 
-// itemEssence resolves an item's audio essence for similarity queries;
-// empty for virtual tracks (they share the backing file's essence) and
-// for items whose file cannot be read.
-func (l *Library) itemEssence(ctx context.Context, it *model.ItemView) string {
-	if it.Virtual {
-		return ""
-	}
+// itemAnalysisKey resolves the key an item's vector is stored under;
+// empty when its file cannot be read.
+func (l *Library) itemAnalysisKey(ctx context.Context, it *model.ItemView) string {
 	f, err := l.lib.File(ctx, it.FilePID)
 	if err != nil {
 		return ""
 	}
-	return f.EssenceHash
+	return analysisKey(f.EssenceHash, it)
 }
 
 // SimilarTracksFor answers tracks similar to a seed track.
@@ -119,7 +115,7 @@ func (l *Library) SimilarTracksFor(ctx context.Context, uc *UserCtx, apiItemPID 
 	}
 	exclude := newExclusionSet(map[string]bool{})
 	exclude.addSeed(string(it.PID))
-	if essence := l.itemEssence(ctx, it); essence != "" && l.sim.Has(essence) {
+	if essence := l.itemAnalysisKey(ctx, it); essence != "" && l.sim.Has(essence) {
 		edges := l.sim.Similar(essence, limit*4, nil)
 		items, err := l.edgesToSummaries(ctx, uc, edges, limit, exclude)
 		if err != nil {
@@ -199,7 +195,7 @@ func (l *Library) trackMix(ctx context.Context, uc *UserCtx, apiItemPID string, 
 		return InstantMixResult{}, errInvalid("instant mix needs a music seed")
 	}
 	exclude.addSeed(string(it.PID))
-	if essence := l.itemEssence(ctx, it); essence != "" && l.sim.Has(essence) {
+	if essence := l.itemAnalysisKey(ctx, it); essence != "" && l.sim.Has(essence) {
 		if vec, ok := l.sim.Vector(essence); ok {
 			items, err := l.sonicSample(ctx, uc, vec, map[string]bool{essence: true}, adv, size, exclude)
 			if err != nil {
@@ -244,7 +240,7 @@ func (l *Library) artistMix(ctx context.Context, uc *UserCtx, apiArtistPID strin
 		if genre == "" && t.Genre != "" {
 			genre = t.Genre
 		}
-		if es := l.itemEssence(ctx, t); es != "" {
+		if es := l.itemAnalysisKey(ctx, t); es != "" {
 			essences = append(essences, es)
 		}
 	}
@@ -295,7 +291,7 @@ func (l *Library) albumMix(ctx context.Context, uc *UserCtx, apiAlbumPID string,
 				artist = t.Artist
 			}
 		}
-		if es := l.itemEssence(ctx, t); es != "" {
+		if es := l.itemAnalysisKey(ctx, t); es != "" {
 			essences = append(essences, es)
 		}
 	}
@@ -329,7 +325,7 @@ func (l *Library) genreMix(ctx context.Context, uc *UserCtx, genre string, adv f
 	// random.
 	var essences []string
 	for _, t := range tracks {
-		if es := l.itemEssence(ctx, t); es != "" && l.sim.Has(es) {
+		if es := l.itemAnalysisKey(ctx, t); es != "" && l.sim.Has(es) {
 			essences = append(essences, es)
 			if len(essences) >= 50 {
 				break
@@ -371,7 +367,7 @@ func (l *Library) SonicPathFor(ctx context.Context, uc *UserCtx, fromPID, toPID 
 	if err := l.warmSimilarity(ctx); err != nil {
 		return SonicPathResult{}, err
 	}
-	fromEss, toEss := l.itemEssence(ctx, from), l.itemEssence(ctx, to)
+	fromEss, toEss := l.itemAnalysisKey(ctx, from), l.itemAnalysisKey(ctx, to)
 	if fromEss == "" || toEss == "" || !l.sim.Has(fromEss) || !l.sim.Has(toEss) {
 		return SonicPathResult{}, &Error{Kind: KindFeature,
 			Msg: "no embedding coverage for these tracks; the similarity worker has not analyzed them yet"}

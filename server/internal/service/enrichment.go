@@ -63,6 +63,8 @@ type EnrichmentProviderDTO struct {
 	Capabilities []string
 	Configured   bool
 	Builtin      bool
+	// Enabled is the operator's switch.
+	Enabled bool
 }
 
 // CoverageCountDTO is enriched versus total for one entity class.
@@ -131,6 +133,8 @@ type EnrichmentStatusDTO struct {
 	Providers []EnrichmentProviderDTO
 	Coverage  EnrichmentCoverageDTO
 	Running   bool
+	// RunningJob is the API pid of the running pass's job, when one runs.
+	RunningJob string
 	// Configured reports whether a whole-library pass would do anything:
 	// some phase can run. Not a provider's own Configured -- every
 	// provider can have its key and no phase still be runnable.
@@ -182,11 +186,13 @@ var enrichPhaseTable = []enrichPhaseSpec{
 
 // catalogBuiltins are the catalog's key-free providers, registered only
 // with the contact: what each supplies, and the per-item want it fills.
-var catalogBuiltins = []struct {
+type catalogBuiltin struct {
 	name string
 	cap  enrich.Capability
 	want string
-}{
+}
+
+var catalogBuiltins = []catalogBuiltin{
 	{"coverartarchive", enrich.CapCover, enrichWantCover},
 	{"listenbrainz", enrich.CapGenres, enrichWantGenres},
 	{"lrclib", enrich.CapLyrics, enrichWantLyrics},
@@ -204,8 +210,13 @@ func builtinFor(want string) (string, bool) {
 
 // enrichmentPhases names the phases a run started now would execute.
 func (l *Library) enrichmentPhases() []string {
+	return l.phasesWith(l.sources.live())
+}
+
+// phasesWith names the phases a run over providers would execute.
+func (l *Library) phasesWith(providers []enrich.Provider) []string {
 	var caps enrich.Capability
-	for _, p := range l.enrichProviders {
+	for _, p := range providers {
 		caps |= p.Capabilities()
 	}
 	if l.musicbrainzConfigured {
@@ -226,29 +237,24 @@ func (l *Library) enrichmentPhases() []string {
 	return phases
 }
 
-// EnrichmentStatusFor reports the registered providers, the catalog's
-// enrichment coverage, and whether a whole-library pass is running.
-func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (EnrichmentStatusDTO, error) {
-	if !uc.Admin {
-		return EnrichmentStatusDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
-	}
-	phases := l.enrichmentPhases()
-	out := EnrichmentStatusDTO{
-		Providers: []EnrichmentProviderDTO{},
-		// A pass does something exactly when it has a phase to run,
-		// which is the same rule the catalog refuses on.
-		Configured:            len(phases) > 0,
-		MusicbrainzConfigured: l.musicbrainzConfigured,
-		Phases:                phases,
-	}
-	// This server's own providers first (priority order). They are
-	// configured by construction: an injected provider is only wired
+// fillEnrichmentRoster sets the parts of the status the source order
+// decides: the providers as listed, the phases, and whether any runs.
+func (l *Library) fillEnrichmentRoster(out *EnrichmentStatusDTO) {
+	out.Phases = l.enrichmentPhases()
+	// A pass does something exactly when it has a phase to run, which is
+	// the same rule the catalog refuses on.
+	out.Configured = len(out.Phases) > 0
+	out.Providers = []EnrichmentProviderDTO{}
+	// This server's own providers first, in the operator's order. They
+	// are configured by construction: an injected provider is only wired
 	// when its key is set.
-	for _, p := range l.enrichProviders {
+	for _, src := range l.sources.resolved() {
+		p := l.sources.provider(src.Name)
 		out.Providers = append(out.Providers, EnrichmentProviderDTO{
 			Name:         p.Name(),
 			Capabilities: providers.CapabilityNames(p.Capabilities()),
 			Configured:   true,
+			Enabled:      src.Enabled,
 		})
 	}
 	// The catalog's key-free built-ins, listed statically: the facade
@@ -262,9 +268,19 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	for _, b := range catalogBuiltins {
 		out.Providers = append(out.Providers, EnrichmentProviderDTO{
 			Name: b.name, Capabilities: providers.CapabilityNames(b.cap),
-			Configured: l.musicbrainzConfigured, Builtin: true,
+			Configured: l.musicbrainzConfigured, Builtin: true, Enabled: true,
 		})
 	}
+}
+
+// EnrichmentStatusFor reports the registered providers, the catalog's
+// enrichment coverage, and whether a whole-library pass is running.
+func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (EnrichmentStatusDTO, error) {
+	if !uc.Admin {
+		return EnrichmentStatusDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	out := EnrichmentStatusDTO{MusicbrainzConfigured: l.musicbrainzConfigured}
+	l.fillEnrichmentRoster(&out)
 
 	cov, err := l.lib.EnrichmentCoverage(ctx)
 	if err != nil {
@@ -308,6 +324,7 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 			}
 			if j.State == model.JobRunning {
 				out.Running = true
+				out.RunningJob = apiPID(PrefixJob, j.PID)
 				continue
 			}
 			// Newest first, so the first that parses wins; a run with no
@@ -319,6 +336,11 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 				}
 			}
 		}
+	}
+	// A pass later jobs have pushed out of that window.
+	if pid, ok, _ := l.followedJob(ctx, "enrich"); ok && !out.Running {
+		out.Running = true
+		out.RunningJob = apiPID(PrefixJob, pid)
 	}
 	return out, nil
 }
@@ -340,8 +362,12 @@ func (l *Library) forcedPhases(force bool, names []string) ([]model.EnrichPhase,
 			return nil, errInvalid("unknown enrichment phase " + strconv.Quote(name))
 		}
 		if !slices.Contains(runs, name) {
+			needs := enrichPhaseTable[i].needs
+			if slices.Contains(l.phasesWith(l.sources.registered), name) {
+				needs = "the sources that supply it are switched off"
+			}
 			return nil, &Error{Kind: KindUnsupported,
-				Msg: "the " + name + " phase does not run on this server: " + enrichPhaseTable[i].needs}
+				Msg: "the " + name + " phase does not run on this server: " + needs}
 		}
 		out = append(out, enrichPhaseTable[i].catalog...)
 	}
@@ -355,6 +381,11 @@ func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool, fo
 	if !uc.Admin {
 		return "", &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
+	// The saved order goes in first, unless a walk holds the one it
+	// started with: then this run meets the conflict a second pass does.
+	if !l.sources.apply(l.enrichPassRunning(ctx)) {
+		return "", &Error{Kind: KindConflict, Msg: "an enrichment pass is already running"}
+	}
 	phases, err := l.forcedPhases(force, forcePhases)
 	if err != nil {
 		return "", err
@@ -367,32 +398,38 @@ func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool, fo
 		ForcePhases: phases,
 		WriteTags:   l.currentToggles().enrichWriteTags,
 	})
-	if err == nil {
-		l.watchEnrichArtwork(pid)
-	}
 	if err != nil {
-		if KindOf(classify(err)) == KindUnsupported && len(phases) > 0 {
-			// Every phase passed the mirror above, so the mirror drifted.
-			l.log.Warn("enrichment: the catalog refused a forced phase this server lists", "phases", forcePhases, "err", err)
-			return "", &Error{Kind: KindUnsupported, Err: err,
-				Msg: "the catalog does not run " + strings.Join(forcePhases, ", ") + ", though this server lists it; its phase list is out of date"}
-		}
-		// The catalog's refusal names WAXBIN_ENRICH_CONTACT, a knob a
-		// WaxDeck operator does not have.
-		if KindOf(classify(err)) == KindUnsupported {
-			return "", &Error{
-				Kind: KindUnsupported,
-				Msg: "this server has nothing for an enrichment pass to do. " +
-					"Set -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) to an email " +
-					"or a URL, which is what MusicBrainz requires before anything is " +
-					"sent and what the identity phases need, or configure a provider " +
-					"that supplies artwork, lyrics, fields or book metadata; then restart",
-				Err: err,
-			}
-		}
-		return "", classify(err)
+		return "", l.explainEnrichRefusal(err, forcePhases)
 	}
+	l.watchEnrichArtwork(pid)
 	return apiPID(PrefixJob, pid), nil
+}
+
+// explainEnrichRefusal words the catalog's refusal of a run for a WaxDeck
+// operator: the catalog's own names WAXBIN_ENRICH_CONTACT, a knob they do
+// not have.
+func (l *Library) explainEnrichRefusal(err error, forcePhases []string) error {
+	if KindOf(classify(err)) != KindUnsupported {
+		return classify(err)
+	}
+	var msg string
+	switch {
+	case len(forcePhases) > 0:
+		// Every phase passed the mirror above, so the mirror drifted.
+		l.log.Warn("enrichment: the catalog refused a forced phase this server lists", "phases", forcePhases, "err", err)
+		msg = "the catalog does not run " + strings.Join(forcePhases, ", ") + ", though this server lists it; its phase list is out of date"
+	case l.sources.anyOff():
+		msg = "this server has nothing for an enrichment pass to do: the " +
+			"sources that could run are switched off. Switch one on, or set " +
+			"-enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) and restart"
+	default:
+		msg = "this server has nothing for an enrichment pass to do. " +
+			"Set -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) to an email " +
+			"or a URL, which is what MusicBrainz requires before anything is " +
+			"sent and what the identity phases need, or configure a provider " +
+			"that supplies artwork, lyrics, fields or book metadata; then restart"
+	}
+	return &Error{Kind: KindUnsupported, Msg: msg, Err: err}
 }
 
 // scheduledEnrichLimit caps one nightly pass. A first pass over a large
@@ -406,6 +443,8 @@ const scheduledEnrichLimit = 2000
 // so entities already enriched are left alone, and capped; the job row
 // carries the outcome the status surface reads.
 func (l *Library) RunScheduledEnrichment(ctx context.Context) error {
+	// A walk still running keeps its order, and the catalog refuses this.
+	l.sources.apply(l.enrichPassRunning(ctx))
 	pid, err := l.lib.StartEnrich(l.procCtx, waxbin.EnrichOptions{
 		WriteTags: l.currentToggles().enrichWriteTags,
 		Limit:     scheduledEnrichLimit,
@@ -429,23 +468,13 @@ const (
 	enrichArtWatchLimit = 12 * time.Hour
 )
 
-// watchEnrichArtwork bumps the artwork epoch once the pass ends, if it
-// gathered any pictures.
-//
-// The epoch is what tells a generated playlist cover to re-composite,
-// and enrichment is the one path that fills artwork without anybody
-// asking: a nightly pass that fetches two hundred portraits would
-// otherwise leave every mosaic built from them serving its old
-// composite until the playlist's membership changed. Every hand edit
-// bumps it at the write; a background job has no such moment, and the
-// catalog offers no completion hook, so this follows the job row.
-//
-// Best effort throughout: a missed bump costs a stale mosaic, which is
-// not worth failing a pass over.
+// watchEnrichArtwork bumps the artwork epoch once a pass that gathered
+// pictures ends, so generated playlist covers re-composite: the catalog has
+// no completion hook, so this follows the job row. Best effort.
 func (l *Library) watchEnrichArtwork(jobPID model.PID) {
 	l.workers.GoOnce(l.procCtx, "enrich-artwork-epoch", func(ctx context.Context) error {
 		deadline := time.Now().Add(enrichArtWatchLimit)
-		tick := time.NewTicker(enrichArtWatchInterval)
+		tick := time.NewTicker(cmp.Or(l.enrichWatchEvery, enrichArtWatchInterval))
 		defer tick.Stop()
 		for {
 			select {
@@ -575,7 +604,9 @@ func (l *Library) enrichItemCatalogPass(ctx context.Context, it *model.ItemView,
 	// Item-scoped, fill-when-empty: the engine enriches this item's own
 	// entities and never overwrites, so a provider only fills real gaps. It
 	// runs synchronously under the engine's shared enrich lease.
-	if _, err := l.lib.Enrich(ctx, waxbin.EnrichOptions{ItemPID: it.PID}); err != nil {
+	l.sources.apply(l.enrichPassRunning(ctx))
+	_, err := l.lib.Enrich(ctx, waxbin.EnrichOptions{ItemPID: it.PID})
+	if err != nil {
 		if KindOf(classify(err)) == KindConflict {
 			// A concurrent enrich (a whole-catalog pass, or another fetch)
 			// holds the lease: the still-missing wants read as deferred, not
@@ -838,16 +869,23 @@ func (l *Library) validateEnrichProposal(wants []string, proposal EnrichProposal
 	for _, w := range wants {
 		wanted[w] = true
 	}
-	registered := map[string]bool{}
-	for _, p := range l.enrichProviders {
-		registered[p.Name()] = true
+	enabled := map[string]bool{}
+	for _, p := range l.sources.live() {
+		enabled[p.Name()] = true
+	}
+	// A registered source the operator switched off is called that.
+	unusable := func(what, name string) error {
+		if l.sources.provider(name) != nil {
+			return errInvalid(what + " " + name + " is switched off on this server")
+		}
+		return errInvalid(what + " " + name + " is not registered on this server")
 	}
 	if c := proposal.Cover; c != nil {
 		if !wanted[enrichWantCover] {
 			return errInvalid("the proposal carries a cover the request does not want")
 		}
-		if !registered[c.Provider] {
-			return errInvalid("cover provider " + c.Provider + " is not registered on this server")
+		if !enabled[c.Provider] {
+			return unusable("cover provider", c.Provider)
 		}
 		if err := validateArtworkBytes(c.Data); err != nil {
 			// One kind for the caller: a format refusal here is a bad
@@ -870,8 +908,8 @@ func (l *Library) validateEnrichProposal(wants []string, proposal EnrichProposal
 		if !wanted[w] {
 			return errInvalid("the proposal fills " + f.Name + ", which the request does not want")
 		}
-		if !registered[f.Provider] {
-			return errInvalid("provider " + f.Provider + " is not registered on this server")
+		if !enabled[f.Provider] {
+			return unusable("provider", f.Provider)
 		}
 		if w == enrichWantBook {
 			if bookProvider == "" {
@@ -967,11 +1005,11 @@ func namedEnrichProviders(providers []enrich.Provider, log *slog.Logger) []enric
 	return out
 }
 
-// enrichProvidersWith returns the registered providers advertising the
-// wanted capability.
+// enrichProvidersWith returns the enabled providers advertising the
+// wanted capability, in the operator's order.
 func (l *Library) enrichProvidersWith(want enrich.Capability) []enrich.Provider {
 	var out []enrich.Provider
-	for _, p := range l.enrichProviders {
+	for _, p := range l.sources.live() {
 		if p.Capabilities().Has(want) {
 			out = append(out, p)
 		}

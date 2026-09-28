@@ -20,6 +20,8 @@ class _$ServerSyncEvent extends ServerSyncEvent {
   @override
   final BookSettings? bookSettings;
   @override
+  final BuiltList<Bookmark>? bookmarks;
+  @override
   final Playlist? playlist;
 
   factory _$ServerSyncEvent([void Function(ServerSyncEventBuilder)? updates]) =>
@@ -32,6 +34,7 @@ class _$ServerSyncEvent extends ServerSyncEvent {
     this.prefs,
     this.subscription,
     this.bookSettings,
+    this.bookmarks,
     this.playlist,
   }) : super._();
   @override
@@ -51,6 +54,7 @@ class _$ServerSyncEvent extends ServerSyncEvent {
         prefs == other.prefs &&
         subscription == other.subscription &&
         bookSettings == other.bookSettings &&
+        bookmarks == other.bookmarks &&
         playlist == other.playlist;
   }
 
@@ -63,6 +67,7 @@ class _$ServerSyncEvent extends ServerSyncEvent {
     _$hash = $jc(_$hash, prefs.hashCode);
     _$hash = $jc(_$hash, subscription.hashCode);
     _$hash = $jc(_$hash, bookSettings.hashCode);
+    _$hash = $jc(_$hash, bookmarks.hashCode);
     _$hash = $jc(_$hash, playlist.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -77,6 +82,7 @@ class _$ServerSyncEvent extends ServerSyncEvent {
           ..add('prefs', prefs)
           ..add('subscription', subscription)
           ..add('bookSettings', bookSettings)
+          ..add('bookmarks', bookmarks)
           ..add('playlist', playlist))
         .toString();
   }
@@ -114,6 +120,12 @@ class ServerSyncEventBuilder
   set bookSettings(BookSettingsBuilder? bookSettings) =>
       _$this._bookSettings = bookSettings;
 
+  ListBuilder<Bookmark>? _bookmarks;
+  ListBuilder<Bookmark> get bookmarks =>
+      _$this._bookmarks ??= ListBuilder<Bookmark>();
+  set bookmarks(ListBuilder<Bookmark>? bookmarks) =>
+      _$this._bookmarks = bookmarks;
+
   PlaylistBuilder? _playlist;
   PlaylistBuilder get playlist => _$this._playlist ??= PlaylistBuilder();
   set playlist(PlaylistBuilder? playlist) => _$this._playlist = playlist;
@@ -131,6 +143,7 @@ class ServerSyncEventBuilder
       _prefs = $v.prefs?.toBuilder();
       _subscription = $v.subscription?.toBuilder();
       _bookSettings = $v.bookSettings?.toBuilder();
+      _bookmarks = $v.bookmarks?.toBuilder();
       _playlist = $v.playlist?.toBuilder();
       _$v = null;
     }
@@ -166,6 +179,7 @@ class ServerSyncEventBuilder
             prefs: _prefs?.build(),
             subscription: _subscription?.build(),
             bookSettings: _bookSettings?.build(),
+            bookmarks: _bookmarks?.build(),
             playlist: _playlist?.build(),
           );
     } catch (_) {
@@ -179,6 +193,8 @@ class ServerSyncEventBuilder
         _subscription?.build();
         _$failedField = 'bookSettings';
         _bookSettings?.build();
+        _$failedField = 'bookmarks';
+        _bookmarks?.build();
         _$failedField = 'playlist';
         _playlist?.build();
       } catch (e) {

@@ -22,6 +22,11 @@ func (s *Server) GetEnrichmentStatus(ctx context.Context, _ GetEnrichmentStatusR
 		}
 		return nil, err
 	}
+	return GetEnrichmentStatus200JSONResponse(enrichmentStatusJSON(st)), nil
+}
+
+// enrichmentStatusJSON is the status surface on the wire.
+func enrichmentStatusJSON(st service.EnrichmentStatusDTO) EnrichmentStatus {
 	phases := make([]EnrichmentPhase, 0, len(st.Phases))
 	for _, ph := range st.Phases {
 		phases = append(phases, EnrichmentPhase(ph))
@@ -39,6 +44,7 @@ func (s *Server) GetEnrichmentStatus(ctx context.Context, _ GetEnrichmentStatusR
 			Lyrics:        CoverageCount{Enriched: st.Coverage.Lyrics.Enriched, Total: st.Coverage.Lyrics.Total},
 		},
 	}
+	setOpt(&out.RunningJob, st.RunningJob)
 	if st.LastRun != nil {
 		out.LastRun = enrichmentLastRun(st.LastRun)
 	}
@@ -52,9 +58,10 @@ func (s *Server) GetEnrichmentStatus(ctx context.Context, _ GetEnrichmentStatusR
 			Capabilities: caps,
 			Configured:   p.Configured,
 			Builtin:      p.Builtin,
+			Enabled:      ptr(p.Enabled),
 		})
 	}
-	return GetEnrichmentStatus200JSONResponse(out), nil
+	return out
 }
 
 // enrichmentLastRun is the status surface's last-run block.
@@ -233,4 +240,29 @@ func enrichCoverProposalJSON(c service.EnrichCoverProposalDTO) *EnrichCoverPropo
 		out.SourceUrl = ptr(c.SourceURL)
 	}
 	return out
+}
+
+func (s *Server) PutEnrichmentSources(ctx context.Context, req PutEnrichmentSourcesRequestObject) (PutEnrichmentSourcesResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return PutEnrichmentSources400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	list := make([]service.EnrichmentSource, 0, len(req.Body.Sources))
+	for _, src := range req.Body.Sources {
+		list = append(list, service.EnrichmentSource{Name: src.Name, Enabled: src.Enabled})
+	}
+	st, err := s.svc.PutEnrichmentSources(ctx, uc, list)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return PutEnrichmentSources400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return PutEnrichmentSources403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return PutEnrichmentSources200JSONResponse(enrichmentStatusJSON(st)), nil
 }

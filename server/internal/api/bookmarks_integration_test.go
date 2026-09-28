@@ -1,9 +1,14 @@
 package api
 
 import (
+	"context"
+	"crypto/rand"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/oklog/ulid/v2"
 
 	"github.com/colespringer/waxdeck/fixtures"
 )
@@ -134,15 +139,250 @@ func TestBookmarksEndToEnd(t *testing.T) {
 	wantStatus(t, get(t, h.ts, missing, h.token), 404, "missing book list")
 	wantStatus(t, h.postJSON(t, missing, map[string]any{"positionMs": 0}), 404, "missing book create")
 
-	// And a delete against a book nobody can see says so, rather than
-	// telling the caller the bookmark it named is gone. Two things can
-	// be missing on this route and the message has to say which.
-	resp = h.deleteReq(t, missing+"/"+later.Id)
-	if resp.StatusCode != 404 {
+	// A delete is the caller's own mark going, book or no book: refused,
+	// a mark on a book out of sight would come back with it.
+	wantStatus(t, h.deleteReq(t, missing+"/"+later.Id), 204, "delete under a missing book")
+}
+
+// A mark made offline carries the id the client minted, so replaying
+// its create after a lost answer lands on the same bookmark.
+func TestBookmarkCreateTakesTheClientsID(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	if _, err := fixtures.GenerateChapteredBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook")
+	if len(books.Items) != 2 {
+		t.Fatalf("scanned %d books, want 2", len(books.Items))
+	}
+	book, otherBook := books.Items[0].Pid, books.Items[1].Pid
+	base := "/api/v1/books/" + book + "/bookmarks"
+	const id = "bm-01JZX5N8QW3F4V9T2B7KD3M9R6"
+
+	resp := h.postJSON(t, base, map[string]any{"id": id, "positionMs": 1500, "note": "offline"})
+	if resp.StatusCode != 201 {
 		resp.Body.Close()
-		t.Fatalf("delete under a missing book = %d, want 404", resp.StatusCode)
+		t.Fatalf("create with an id = %d, want 201", resp.StatusCode)
 	}
-	if msg := decode[Error](t, resp).Message; !strings.Contains(msg, "no book with pid") {
-		t.Fatalf("delete under a missing book said %q, want it to name the book", msg)
+	if got := decode[Bookmark](t, resp); got.Id != id || got.PositionMs != 1500 {
+		t.Fatalf("created %+v, want the minted id", got)
 	}
+
+	// The replay answers the stored row, whatever the retry carried.
+	resp = h.postJSON(t, base, map[string]any{"id": id, "positionMs": 9})
+	if resp.StatusCode != 201 {
+		resp.Body.Close()
+		t.Fatalf("replay = %d, want 201", resp.StatusCode)
+	}
+	if got := decode[Bookmark](t, resp); got.Id != id || got.PositionMs != 1500 || deref(got.Note) != "offline" {
+		t.Fatalf("replay answered %+v, want the stored bookmark", got)
+	}
+	// Crockford's alphabet reads either case, so one id is one bookmark.
+	resp = h.postJSON(t, base, map[string]any{"id": strings.ToLower(id), "positionMs": 9})
+	if resp.StatusCode != 201 {
+		resp.Body.Close()
+		t.Fatalf("lowercase replay = %d, want 201", resp.StatusCode)
+	}
+	if got := decode[Bookmark](t, resp); got.Id != id {
+		t.Fatalf("lowercase replay answered %s, want the stored %s", got.Id, id)
+	}
+	if list := decode[BookmarkList](t, get(t, h.ts, base, h.token)); len(list.Bookmarks) != 1 {
+		t.Fatalf("a replay left %d bookmarks", len(list.Bookmarks))
+	}
+
+	// The same id under another book, or another account, is a conflict.
+	resp = h.postJSON(t, "/api/v1/books/"+otherBook+"/bookmarks", map[string]any{"id": id, "positionMs": 1})
+	if resp.StatusCode != 409 {
+		resp.Body.Close()
+		t.Fatalf("id reused under another book = %d, want 409", resp.StatusCode)
+	}
+	if code := decode[Error](t, resp).Code; code != "conflict" {
+		t.Fatalf("code = %q, want conflict", code)
+	}
+	resp = h.postJSON(t, "/api/v1/users", map[string]any{"username": "sam", "password": testPassword})
+	resp.Body.Close()
+	sam := loginAs(t, h.ts, "sam", testPassword)
+	resp = reqAs(t, h, "POST", base, sam.Token, map[string]any{"id": id, "positionMs": 1})
+	if resp.StatusCode != 409 {
+		resp.Body.Close()
+		t.Fatalf("id reused by another account = %d, want 409", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	// An id that is not a bookmark pid is refused as the request's fault.
+	for _, bad := range []string{"tr-01JZX5N8QW3F4V9T2B7KD3M9R6", "bm-nope", "bm-81JZX5N8QW3F4V9T2B7KD3M9R6"} {
+		wantStatus(t, h.postJSON(t, base, map[string]any{"id": bad, "positionMs": 1}), 400, "malformed id "+bad)
+	}
+
+	// And a removal spelled in lowercase removes it.
+	wantStatus(t, reqAs(t, h, "DELETE", base+"/"+strings.ToLower(id), h.token, nil), 204, "lowercase delete")
+	if list := decode[BookmarkList](t, get(t, h.ts, base, h.token)); len(list.Bookmarks) != 0 {
+		t.Fatalf("a lowercase delete left %d bookmarks", len(list.Bookmarks))
+	}
+}
+
+// A replay answers what is stored, even when the book has since been
+// measured shorter than the mark; a replay after the mark was removed
+// says so rather than bringing it back.
+func TestBookmarkReplaysAnswerWhatHappened(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	book := h.items(t, "?mediaType=audiobook").Items[0].Pid
+	base := "/api/v1/books/" + book + "/bookmarks"
+	made := time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC)
+	id := "bm-" + ulid.MustNew(ulid.Timestamp(made), rand.Reader).String()
+
+	resp := h.postJSON(t, base, map[string]any{"id": id, "positionMs": 1500})
+	if resp.StatusCode != 201 {
+		resp.Body.Close()
+		t.Fatalf("create = %d, want 201", resp.StatusCode)
+	}
+	// Made offline, it was made when the client minted its id.
+	if got := decode[Bookmark](t, resp); !got.CreatedAt.Equal(made) {
+		t.Fatalf("createdAt = %v, want the minted %v", got.CreatedAt, made)
+	}
+
+	resp = h.postJSON(t, base, map[string]any{"id": id, "positionMs": int64(1) << 40, "note": strings.Repeat("x", 5000)})
+	if resp.StatusCode != 201 {
+		resp.Body.Close()
+		t.Fatalf("replay carrying what a new mark could not = %d, want 201", resp.StatusCode)
+	}
+	if got := decode[Bookmark](t, resp); got.PositionMs != 1500 {
+		t.Fatalf("replay answered %+v, want the stored mark", got)
+	}
+
+	wantStatus(t, h.deleteReq(t, base+"/"+id), 204, "delete")
+	resp = h.postJSON(t, base, map[string]any{"id": id, "positionMs": 1500})
+	if resp.StatusCode != 409 {
+		resp.Body.Close()
+		t.Fatalf("replay after the removal = %d, want 409", resp.StatusCode)
+	}
+	if e := decode[Error](t, resp); e.Code != "conflict" || e.Params == nil || (*e.Params)["reason"] != "removed" {
+		t.Fatalf("replay after the removal answered %+v, want conflict with reason removed", e)
+	}
+	if list := decode[BookmarkList](t, get(t, h.ts, base, h.token)); len(list.Bookmarks) != 0 {
+		t.Fatalf("the replay brought back %d bookmarks", len(list.Bookmarks))
+	}
+}
+
+// A mark on a book its owner can no longer see still goes when they ask:
+// it is theirs, and a delete refused over the book comes back with it.
+func TestABookmarkOnAHiddenBookCanStillBeRemoved(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	book := h.items(t, "?mediaType=audiobook").Items[0].Pid
+	base := "/api/v1/books/" + book + "/bookmarks"
+	resp := h.postJSON(t, base, map[string]any{"positionMs": 1500})
+	if resp.StatusCode != 201 {
+		resp.Body.Close()
+		t.Fatalf("create = %d, want 201", resp.StatusCode)
+	}
+	mark := decode[Bookmark](t, resp)
+
+	ctx := context.Background()
+	uc, err := h.svc.UserCtxByID(ctx, adminUserID(t, h))
+	if err != nil {
+		t.Fatal(err)
+	}
+	hidden := *uc
+	hidden.AllLibraries, hidden.Libraries = false, map[string]bool{}
+	if err := h.svc.DeleteBookmark(ctx, &hidden, book, mark.Id); err != nil {
+		t.Fatalf("deleting a mark on a book out of sight = %v, want it gone", err)
+	}
+	if list := decode[BookmarkList](t, get(t, h.ts, base, h.token)); len(list.Bookmarks) != 0 {
+		t.Fatalf("the mark is back with the book: %d bookmarks", len(list.Bookmarks))
+	}
+}
+
+// The cap is still the request's fault, answered 400 rather than the
+// conflict a reused id is.
+func TestBookmarkCapIsStillInvalidRequest(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	book := h.items(t, "?mediaType=audiobook").Items[0].Pid
+	base := "/api/v1/books/" + book + "/bookmarks"
+	for i := range 200 {
+		resp := h.postJSON(t, base, map[string]any{"positionMs": i})
+		if resp.StatusCode != 201 {
+			resp.Body.Close()
+			t.Fatalf("mark %d = %d", i, resp.StatusCode)
+		}
+		resp.Body.Close()
+	}
+	resp := h.postJSON(t, base, map[string]any{"positionMs": 1})
+	if resp.StatusCode != 400 {
+		resp.Body.Close()
+		t.Fatalf("mark past the cap = %d, want 400", resp.StatusCode)
+	}
+	if code := decode[Error](t, resp).Code; code != "invalid-request" {
+		t.Fatalf("code = %q, want invalid-request", code)
+	}
+}
+
+// The user delta carries a book's whole bookmark list when one is made
+// or removed, so an offline device can mirror it.
+func TestBookmarksRideTheUserDelta(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	book := h.items(t, "?mediaType=audiobook").Items[0].Pid
+	base := "/api/v1/books/" + book + "/bookmarks"
+	mint := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server", h.token))
+
+	first := decode[Bookmark](t, h.postJSON(t, base, map[string]any{"positionMs": 1000, "note": "one"}))
+	second := decode[Bookmark](t, h.postJSON(t, base, map[string]any{"positionMs": 2000}))
+	wantStatus(t, h.deleteReq(t, base+"/"+first.Id), 204, "delete")
+	// A delete of what is already gone changes nothing and says nothing.
+	wantStatus(t, h.deleteReq(t, base+"/"+first.Id), 204, "repeat delete")
+
+	page := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server?since="+mint.NextSince, h.token))
+	var marks []ServerSyncEvent
+	for _, ev := range page.Events {
+		if ev.Kind == "bookmarks" {
+			marks = append(marks, ev)
+		}
+	}
+	if len(marks) != 1 {
+		t.Fatalf("delta carries %d bookmark events, want one per book: %+v", len(marks), page.Events)
+	}
+	ev := marks[0]
+	if ev.Pid == nil || *ev.Pid != book {
+		t.Fatalf("bookmark event pid = %v, want %s", ev.Pid, book)
+	}
+	if ev.Bookmarks == nil || len(*ev.Bookmarks) != 1 || (*ev.Bookmarks)[0].Id != second.Id {
+		t.Fatalf("bookmark event list = %+v, want only the surviving mark", ev.Bookmarks)
+	}
+
+	// Removing the last one still says so: an empty list, not an absent one.
+	wantStatus(t, h.deleteReq(t, base+"/"+second.Id), 204, "delete the last")
+	page = decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server?since="+page.NextSince, h.token))
+	for _, ev := range page.Events {
+		if ev.Kind == "bookmarks" {
+			if ev.Bookmarks == nil || len(*ev.Bookmarks) != 0 {
+				t.Fatalf("emptied book's list = %+v, want present and empty", ev.Bookmarks)
+			}
+			return
+		}
+	}
+	t.Fatalf("deleting the last mark emitted no bookmarks event: %+v", page.Events)
 }

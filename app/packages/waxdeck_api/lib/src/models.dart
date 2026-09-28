@@ -1123,16 +1123,20 @@ class ServerSyncEvent {
     this.prefs,
     this.subscription,
     this.bookSettings,
+    this.bookmarks,
   });
 
-  /// `play-state`, `prefs`, `subscription`, or `book-settings`; events
-  /// with an unrecognized kind are skipped.
+  /// `play-state`, `prefs`, `subscription`, `book-settings`, or
+  /// `bookmarks`; events with an unrecognized kind are skipped.
   final String kind;
   final String? pid;
   final PlayState? playState;
   final Prefs? prefs;
   final Subscription? subscription;
   final BookSettings? bookSettings;
+
+  /// On `bookmarks`: the book's whole list, empty once none are left.
+  final List<Bookmark>? bookmarks;
 }
 
 /// One page of the caller's server-side state changes.
@@ -1804,15 +1808,9 @@ class SkipMap {
   bool get ready => state == 'ready';
 }
 
-/// One item's amplitude envelope, for the seek bar to paint.
-///
-/// The three states are not interchangeable. `ready` carries [peaks];
-/// `pending` means the analyze pass has not reached this file, so asking
-/// again later may answer differently; `unavailable` is final, and the
-/// four populations that get it (podcast episodes, cue-carved tracks,
-/// multi-file audiobooks, files the pass could not measure) will never
-/// have one. A client draws its plain seek bar for the last of those
-/// rather than spinning at it.
+/// One item's amplitude envelope. `ready` carries [peaks]; `pending` may
+/// answer otherwise later; `unavailable` is final (an episode, a file the pass
+/// could not measure, a carved track its file cannot place): draw a plain bar.
 class Waveform {
   const Waveform({
     required this.state,
@@ -4436,12 +4434,144 @@ class EnrichmentProvider {
     this.capabilities = const [],
     required this.configured,
     required this.builtin,
+    this.enabled = true,
   });
 
   final String name;
   final List<String> capabilities;
   final bool configured;
   final bool builtin;
+
+  /// Whether it is asked at all. Only a provider that is not [builtin]
+  /// can be moved or switched.
+  final bool enabled;
+}
+
+/// One provider's place in the operator's order, and its switch.
+class EnrichmentSource {
+  const EnrichmentSource({required this.name, required this.enabled});
+
+  final String name;
+  final bool enabled;
+}
+
+/// What the most recent finished enrichment pass did. Each walk counts
+/// what it looked up and what some provider answered for.
+class EnrichmentLastRun {
+  const EnrichmentLastRun({
+    this.artistsEnriched = 0,
+    this.artistsMatched = 0,
+    this.releaseGroupsEnriched = 0,
+    this.releaseGroupsMatched = 0,
+    this.albumsSearched = 0,
+    this.albumsMatched = 0,
+    this.booksEnriched = 0,
+    this.booksMatched = 0,
+    this.lyricsEnriched = 0,
+    this.lyricsMatched = 0,
+    this.auxArtEnriched = 0,
+    this.auxArtMatched = 0,
+    this.artistArtEnriched = 0,
+    this.artistArtMatched = 0,
+    this.albumArtEnriched = 0,
+    this.albumArtMatched = 0,
+    this.trackFieldsEnriched = 0,
+    this.trackFieldsMatched = 0,
+    this.bookFieldsEnriched = 0,
+    this.bookFieldsMatched = 0,
+    this.albumFieldsEnriched = 0,
+    this.albumFieldsMatched = 0,
+    this.retried = 0,
+    this.artFetched = 0,
+    this.auxArtFetched = 0,
+    this.artReused = 0,
+    this.tagsWritten = 0,
+    this.tagsFailed = 0,
+    this.tagsUnrepresented = 0,
+    this.tagsSkipped = 0,
+    this.finishedAt,
+  });
+
+  final int artistsEnriched;
+  final int artistsMatched;
+  final int releaseGroupsEnriched;
+  final int releaseGroupsMatched;
+  final int albumsSearched;
+  final int albumsMatched;
+  final int booksEnriched;
+  final int booksMatched;
+  final int lyricsEnriched;
+  final int lyricsMatched;
+  final int auxArtEnriched;
+  final int auxArtMatched;
+  final int artistArtEnriched;
+  final int artistArtMatched;
+  final int albumArtEnriched;
+  final int albumArtMatched;
+  final int trackFieldsEnriched;
+  final int trackFieldsMatched;
+  final int bookFieldsEnriched;
+  final int bookFieldsMatched;
+  final int albumFieldsEnriched;
+  final int albumFieldsMatched;
+  final int retried;
+  final int artFetched;
+  final int auxArtFetched;
+  final int artReused;
+  final int tagsWritten;
+  final int tagsFailed;
+  final int tagsUnrepresented;
+  final int tagsSkipped;
+  final DateTime? finishedAt;
+}
+
+/// The enrichment response cache, by kind of answer kept.
+class EnrichmentCacheKind {
+  const EnrichmentCacheKind({
+    required this.kind,
+    required this.rows,
+    required this.bytes,
+    this.exempt = false,
+  });
+
+  final String kind;
+  final int rows;
+  final int bytes;
+
+  /// Kept by every prune: losing one costs a download, not a request.
+  final bool exempt;
+}
+
+/// What the enrichment response cache holds.
+class EnrichmentCacheReport {
+  const EnrichmentCacheReport({
+    required this.rows,
+    required this.bytes,
+    this.oldestAt,
+    this.newestAt,
+    this.kinds = const [],
+    this.exemptRows = 0,
+    this.exemptBytes = 0,
+  });
+
+  final int rows;
+  final int bytes;
+  final DateTime? oldestAt;
+  final DateTime? newestAt;
+  final List<EnrichmentCacheKind> kinds;
+  final int exemptRows;
+  final int exemptBytes;
+}
+
+/// What a prune of the enrichment response cache dropped.
+class EnrichmentCachePruneResult {
+  const EnrichmentCachePruneResult({
+    required this.removed,
+    required this.freedBytes,
+  });
+
+  final int removed;
+  final int freedBytes;
 }
 
 /// Enriched-versus-total counts for one artifact class.
@@ -4473,13 +4603,34 @@ class EnrichmentStatus {
     this.providers = const [],
     required this.coverage,
     required this.running,
+    this.runningJob,
+    this.configured = true,
+    this.musicbrainzConfigured = false,
+    this.phases = const [],
+    this.lastRun,
   });
 
+  /// In the order they are asked: this server's own, then the built-ins.
   final List<EnrichmentProvider> providers;
   final EnrichmentCoverage coverage;
 
   /// True while an enrichment job is running.
   final bool running;
+
+  /// The running pass's job pid, which [WaxDeckRepository.getJob] follows.
+  final String? runningJob;
+
+  /// Whether a pass would do anything: some phase can run.
+  final bool configured;
+
+  /// Whether the MusicBrainz identity phases can run.
+  final bool musicbrainzConfigured;
+
+  /// The phases a pass started now would run, in wire spelling.
+  final List<String> phases;
+
+  /// The newest finished pass, or null before one has finished.
+  final EnrichmentLastRun? lastRun;
 }
 
 /// Which libraries an account may see.
@@ -5745,6 +5896,8 @@ class NspReport {
     required this.direction,
     this.gaps = const [],
     this.notes = const [],
+    this.ruleHash,
+    this.rule,
   });
 
   /// `export` or `import`.
@@ -5752,6 +5905,14 @@ class NspReport {
 
   final List<NspGap> gaps;
   final List<NspGap> notes;
+
+  /// Export only: the rule this report was read from, to pass back to
+  /// the export so a rule edited in between is refused.
+  final String? ruleHash;
+
+  /// Export only: what a partial export keeps, when it drops something
+  /// and keeps something.
+  final SmartRule? rule;
 
   /// Everything worth showing, in one list: the losses that refuse and
   /// the losses that do not. A person deciding whether to accept the

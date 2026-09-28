@@ -9,6 +9,7 @@ import '../radio/radio_controller.dart';
 import '../settings/client_prefs.dart';
 import 'discord_ipc_io.dart'
     if (dart.library.js_interop) 'discord_ipc_stub.dart';
+import 'discord_cover.dart';
 import 'discord_presence.dart';
 
 final discordPresencePortProvider = Provider<DiscordPresencePort>(
@@ -24,8 +25,33 @@ final discordPresencePortProvider = Provider<DiscordPresencePort>(
 /// progress bar from a start and an end timestamp, so a seek is worth
 /// republishing and a tick is not.
 class DiscordPresenceBinder {
-  DiscordPresenceBinder(this._port, {Duration? interval})
-    : _interval = interval ?? kDiscordUpdateInterval;
+  DiscordPresenceBinder(
+    this._port, {
+    Duration? interval,
+    Duration? coverWait,
+    this._covers,
+  }) : _interval = interval ?? kDiscordUpdateInterval,
+       _coverWait = coverWait ?? const Duration(seconds: 3) {
+    _port.onImageRefused = _imageRefused;
+  }
+
+  DiscordCoverResolver? _covers;
+
+  /// Covers switched on or off in place: the status is redrawn, the
+  /// connection kept.
+  set covers(DiscordCoverResolver? value) {
+    if (identical(value, _covers)) return;
+    _covers = value;
+    final current = _wanted;
+    if (current != null) show(current.withCover(null), albumPid: _album);
+  }
+
+  /// How long a new album's first send waits for its cover, rather than
+  /// spending the rate-limited update on the logo and the next on it.
+  final Duration _coverWait;
+
+  /// The album whose cover a send waits on, and when it goes anyway.
+  ({String album, DateTime due})? _coverWaited;
 
   final DiscordPresencePort _port;
 
@@ -38,6 +64,9 @@ class DiscordPresenceBinder {
 
   /// The newest state, and whether it is still to be sent.
   DiscordActivity? _wanted;
+
+  /// The album behind [_wanted], whose cover may still be on its way.
+  String? _album;
   bool _pending = false;
   DateTime? _sentAt;
   Timer? _flush;
@@ -60,8 +89,8 @@ class DiscordPresenceBinder {
     await _port.close();
     if (generation != _generation) return;
     _connected = false;
+    // What is playing is kept, so switching back on shows it.
     if (applicationId == null || applicationId.isEmpty) {
-      _wanted = null;
       _pending = false;
       return;
     }
@@ -80,15 +109,51 @@ class DiscordPresenceBinder {
     // track: turning the setting on mid-album should show the album.
     // Only if there is something, though - a status cleared before it
     // was ever set spends the rate-limit window on nothing.
+    _wanted = _covered(_wanted);
     _pending = _wanted != null;
     _schedule();
   }
 
   /// The newest thing worth showing, or null for a status to clear.
-  void show(DiscordActivity? activity) {
+  /// [albumPid] names the album whose cover it shows.
+  void show(DiscordActivity? activity, {String? albumPid}) {
     if (_closed) return;
-    if (_same(activity, _wanted) && !_pending) return;
-    _wanted = activity;
+    _album = activity == null ? null : albumPid;
+    final wanted = _covered(activity);
+    if (_same(wanted, _wanted) && !_pending) return;
+    _wanted = wanted;
+    _pending = true;
+    _schedule();
+  }
+
+  /// [activity] with its album's cover once known. An unknown one is
+  /// looked up while there is a Discord to show it to, then shown.
+  DiscordActivity? _covered(DiscordActivity? activity) {
+    final album = _album;
+    final covers = _covers;
+    if (activity == null || album == null || covers == null) return activity;
+    if (!_port.takesImageUrls) return activity.withCover(null);
+    final lookup = _connected && !_closed ? covers.lookUp(album) : null;
+    if (lookup != null) {
+      _coverWaited = (album: album, due: DateTime.now().add(_coverWait));
+      unawaited(
+        lookup.then((_) {
+          if (_closed || _album != album) return;
+          _coverWaited = null;
+          // Waited for, so sent now rather than at the end of the wait.
+          _flush?.cancel();
+          _flush = null;
+          show(_wanted, albumPid: album);
+        }),
+      );
+    }
+    return activity.withCover(covers.coverOf(album));
+  }
+
+  /// Discord refused the image: the activity again, on this clock.
+  void _imageRefused() {
+    if (_closed || _wanted == null) return;
+    _wanted = _wanted!.withCover(null);
     _pending = true;
     _schedule();
   }
@@ -106,14 +171,21 @@ class DiscordPresenceBinder {
   /// Sends now if the last send is far enough behind, and otherwise arms
   /// one for the moment it will be.
   void _schedule() {
-    if (!_connected || !_pending || _closed || _flush != null) return;
+    if (!_connected || !_pending || _closed) return;
+    final now = DateTime.now();
     final sent = _sentAt;
-    final since = sent == null ? _interval : DateTime.now().difference(sent);
-    if (since >= _interval) {
+    var wait = sent == null ? Duration.zero : _interval - now.difference(sent);
+    final waited = _coverWaited;
+    final cover = waited?.album == _album ? waited?.due.difference(now) : null;
+    if (cover != null && cover > wait) wait = cover;
+    // Armed afresh each time: a newer album's cover moves the moment.
+    _flush?.cancel();
+    _flush = null;
+    if (wait <= Duration.zero) {
       _send();
       return;
     }
-    _flush = Timer(_interval - since, () {
+    _flush = Timer(wait, () {
       _flush = null;
       _send();
     });
@@ -137,6 +209,7 @@ class DiscordPresenceBinder {
     return a.title == b.title &&
         a.artist == b.artist &&
         a.album == b.album &&
+        a.largeImageUrl == b.largeImageUrl &&
         _sameStart(a.start, b.start);
   }
 
@@ -181,11 +254,25 @@ DiscordActivity? presenceOf(NowPlaying now, {required bool playing}) {
   );
 }
 
+/// Album covers for presence, remembered for as long as the app runs.
+final discordCoversProvider = Provider<DiscordCoverResolver>(
+  (ref) => DiscordCoverResolver(
+    album: (pid) => ref.read(repositoryProvider).getAlbum(pid),
+    front: coverArtLookup(),
+  ),
+);
+
 /// Binds Discord presence to the signed-in session on a desktop.
 final discordPresenceProvider = Provider.autoDispose<DiscordPresenceBinder>((
   ref,
 ) {
-  final binder = DiscordPresenceBinder(ref.watch(discordPresencePortProvider));
+  DiscordCoverResolver? covers() => ref.read(discordCoversEnabledProvider)
+      ? ref.read(discordCoversProvider)
+      : null;
+  final binder = DiscordPresenceBinder(
+    ref.watch(discordPresencePortProvider),
+    covers: covers(),
+  );
 
   void configure() {
     final on = ref.read(discordPresenceEnabledProvider);
@@ -216,11 +303,13 @@ final discordPresenceProvider = Provider.autoDispose<DiscordPresenceBinder>((
     if (now.loading && now.item == null) return;
     binder.show(
       presenceOf(now, playing: ref.read(audioEngineProvider).playing),
+      albumPid: now.item?.albumPid,
     );
   }
 
   ref.listen(discordPresenceEnabledProvider, (_, _) => configure());
   ref.listen(discordApplicationIdProvider, (_, _) => configure());
+  ref.listen(discordCoversEnabledProvider, (_, _) => binder.covers = covers());
   ref.listen(radioPlaybackProvider, (_, _) => publish());
   // The engine is not a provider, and pause is the other half of what
   // presence follows.

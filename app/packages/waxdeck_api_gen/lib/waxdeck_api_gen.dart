@@ -123,6 +123,8 @@ export 'package:waxdeck_api_gen/src/model/enrichment_phase.dart';
 export 'package:waxdeck_api_gen/src/model/enrichment_provider.dart';
 export 'package:waxdeck_api_gen/src/model/enrichment_run_request.dart';
 export 'package:waxdeck_api_gen/src/model/enrichment_run_result.dart';
+export 'package:waxdeck_api_gen/src/model/enrichment_source.dart';
+export 'package:waxdeck_api_gen/src/model/enrichment_sources_update.dart';
 export 'package:waxdeck_api_gen/src/model/enrichment_status.dart';
 export 'package:waxdeck_api_gen/src/model/entity_card.dart';
 export 'package:waxdeck_api_gen/src/model/entity_card_list.dart';

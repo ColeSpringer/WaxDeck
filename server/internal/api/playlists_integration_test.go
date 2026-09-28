@@ -900,8 +900,11 @@ func TestPlaylistNspExportRefusesWhatItCannotSay(t *testing.T) {
 		t.Fatalf("export status = %d, want 501", resp.StatusCode)
 	}
 	refusal := decode[Error](t, resp)
-	if !strings.Contains(refusal.Message, "kind") && !strings.Contains(refusal.Message, "mediaType") {
-		t.Fatalf("refusal does not name the offender: %q", refusal.Message)
+	if !strings.Contains(refusal.Message, "unsupported field: mediaType") {
+		t.Fatalf("refusal does not name the offender as the rule does: %q", refusal.Message)
+	}
+	if strings.Contains(refusal.Message, "field: kind") {
+		t.Fatalf("refusal names the engine's spelling: %q", refusal.Message)
 	}
 }
 
@@ -1144,6 +1147,34 @@ func TestPlaylistNspExportReportThenPartial(t *testing.T) {
 	if !slices.Contains(fields, "title") {
 		t.Errorf("report fields = %v, want the dropped sort term named", fields)
 	}
+	var reasons []string
+	for _, g := range *rep.Gaps {
+		reasons = append(reasons, g.Reason)
+	}
+	if !slices.Contains(reasons, "nsp: unsupported field: mediaType") {
+		t.Errorf("report reasons = %q, want the field in the rule's spelling", reasons)
+	}
+	if rep.RuleHash == nil || len(*rep.RuleHash) != 16 {
+		t.Errorf("export report ruleHash = %v, want 16 hex characters", rep.RuleHash)
+	}
+	// What the partial export keeps: the genre condition alone.
+	if rep.Rule == nil {
+		t.Fatal("a lossy export report carries no kept rule")
+	}
+	kept := rep.Rule.Root
+	if kept.Nodes == nil || len(*kept.Nodes) != 1 {
+		t.Fatalf("kept rule root = %+v, want the one condition that maps", kept)
+	}
+	if c := (*kept.Nodes)[0]; c.Field == nil || *c.Field != "genre" {
+		t.Errorf("kept condition = %+v, want genre", c)
+	}
+	// And the sort term and the minutes budget NSP cannot say are gone.
+	if rep.Rule.Sorts == nil || len(*rep.Rule.Sorts) != 1 || (*rep.Rule.Sorts)[0].Field != "playCount" {
+		t.Errorf("kept sorts = %+v, want playCount alone", rep.Rule.Sorts)
+	}
+	if rep.Rule.LimitMode != nil && *rep.Rule.LimitMode == "minutes" {
+		t.Errorf("kept limit mode = %v, want the minutes budget dropped", *rep.Rule.LimitMode)
+	}
 
 	// Strict still refuses, and names more than one of them.
 	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp", h.token)
@@ -1191,6 +1222,9 @@ func TestPlaylistNspImportReportThenPartial(t *testing.T) {
 	rep := decode[NspReport](t, resp)
 	if rep.Direction != "import" {
 		t.Errorf("report direction = %q, want import", rep.Direction)
+	}
+	if rep.RuleHash != nil || rep.Rule != nil {
+		t.Errorf("an import report carries export fields: %+v", rep)
 	}
 	if rep.Gaps == nil || len(*rep.Gaps) != 1 {
 		t.Fatalf("report names %v gaps, want the one unmappable field", rep.Gaps)
@@ -1254,6 +1288,19 @@ func TestPlaylistNspPartialRefusesAnEmptyResult(t *testing.T) {
 	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp?partial=true", h.token)
 	wantStatus(t, resp, 501, "a partial export with nothing left")
 	resp.Body.Close()
+
+	// The report still answers, with the loss and no kept rule.
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp/report", h.token)
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d, want 200", resp.StatusCode)
+	}
+	rep := decode[NspReport](t, resp)
+	if rep.Gaps == nil || len(*rep.Gaps) == 0 {
+		t.Fatalf("report = %+v, want the gap named", rep)
+	}
+	if rep.Rule != nil {
+		t.Errorf("report keeps %+v of a rule nothing survives", *rep.Rule)
+	}
 }
 
 // A static playlist has no rule, which is the one thing the export
@@ -1296,6 +1343,79 @@ func TestPlaylistNspExportReportIsEmptyWhenNothingIsLost(t *testing.T) {
 	rep := decode[NspReport](t, resp)
 	if rep.Gaps != nil || rep.Notes != nil {
 		t.Fatalf("a lossless rule reports %+v", rep)
+	}
+	if rep.Rule != nil {
+		t.Errorf("a lossless report carries a kept rule %+v", *rep.Rule)
+	}
+	if rep.RuleHash == nil {
+		t.Error("a lossless export report carries no ruleHash")
+	}
+}
+
+// The export is refused when the rule changed after its report was read,
+// so a dialog cannot accept one loss and export another.
+func TestPlaylistNspExportRefusesAStaleReport(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	rule := func(genre string) map[string]any {
+		return map[string]any{"root": map[string]any{"type": "all", "nodes": []any{
+			map[string]any{"type": "condition", "field": "genre", "op": "is", "value": genre},
+			map[string]any{"type": "condition", "field": "mediaType", "op": "is", "value": "music"},
+		}}}
+	}
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Edited under the dialog", "kind": "smart", "rule": rule("Rock"),
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+	report := func() string {
+		t.Helper()
+		resp := get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp/report", h.token)
+		if resp.StatusCode != 200 {
+			t.Fatalf("report status = %d, want 200", resp.StatusCode)
+		}
+		rep := decode[NspReport](t, resp)
+		if rep.RuleHash == nil {
+			t.Fatal("export report carries no ruleHash")
+		}
+		return *rep.RuleHash
+	}
+	read := report()
+	if again := report(); again != read {
+		t.Fatalf("an unchanged rule hashed %q then %q", read, again)
+	}
+
+	resp = h.patchJSON(t, "/api/v1/playlists/"+pl.Pid, map[string]any{"rule": rule("Jazz")})
+	wantStatus(t, resp, 200, "rule edit")
+	resp.Body.Close()
+
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp?partial=true&ruleHash="+read, h.token)
+	if resp.StatusCode != 409 {
+		resp.Body.Close()
+		t.Fatalf("export against a stale report = %d, want 409", resp.StatusCode)
+	}
+	if code := decode[Error](t, resp).Code; code != "conflict" {
+		t.Errorf("stale export code = %q, want conflict", code)
+	}
+
+	fresh := report()
+	if fresh == read {
+		t.Fatalf("an edited rule kept its hash %q", read)
+	}
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp?partial=true&ruleHash="+fresh, h.token)
+	wantStatus(t, resp, 200, "export against a fresh report")
+	resp.Body.Close()
+	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp?partial=true", h.token)
+	wantStatus(t, resp, 200, "export without a hash")
+	resp.Body.Close()
+
+	// A hash no report ever gave is the request's fault, not a changed rule.
+	for _, bad := range []string{"NOTAHASH", strings.ToUpper(fresh)} {
+		resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp?partial=true&ruleHash="+bad, h.token)
+		wantStatus(t, resp, 400, "export with the hash "+bad)
 	}
 }
 

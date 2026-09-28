@@ -641,10 +641,7 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	params.Set("src", ref)
 	params.Set("format", shape.Format)
 	params.Set("id", fmt.Sprintf("%d-%d", src.Size, src.MTimeNS))
-	if src.Virtual {
-		params.Set("from", strconv.FormatInt(src.FromSample, 10))
-		params.Set("to", strconv.FormatInt(src.ToSample, 10))
-	}
+	setWindow(params, src)
 	if boost {
 		params.Set("dynamics", "voice")
 		params.Set("gain", strconv.FormatFloat(gainDB, 'f', 1, 64))
@@ -713,10 +710,7 @@ func (b *Bridge) ServeShareStream(w http.ResponseWriter, r *http.Request, apiIte
 	params.Set("src", ref)
 	params.Set("format", shape.Format)
 	params.Set("id", fmt.Sprintf("%d-%d", src.Size, src.MTimeNS))
-	if src.Virtual {
-		params.Set("from", strconv.FormatInt(src.FromSample, 10))
-		params.Set("to", strconv.FormatInt(src.ToSample, 10))
-	}
+	setWindow(params, src)
 	if b.gate != nil && !shape.Seekable && lossyBitrateFormats[shape.Format] {
 		if cap := b.gate.MaxBitrateKbps(r.Context(), ownerUserID); cap > 0 {
 			params.Set("bitrate", strconv.Itoa(cap))
@@ -726,17 +720,26 @@ func (b *Bridge) ServeShareStream(w http.ResponseWriter, r *http.Request, apiIte
 	b.proxy.ServeHTTP(w, r)
 }
 
+// setWindow bounds a virtual source to its window. An end at the end of
+// the file is omitted: the sidecar reads to=0 as the empty span.
+func setWindow(params url.Values, src Source) {
+	if !src.Virtual {
+		return
+	}
+	params.Set("from", strconv.FormatInt(src.FromSample, 10))
+	if src.ToSample > 0 {
+		params.Set("to", strconv.FormatInt(src.ToSample, 10))
+	}
+}
+
 // analysisFormats are the transports the worker audio pull serves:
 // WAV for loopback workers, FLAC for remote ones (losslessly identical
 // input at roughly half the bytes).
 var analysisFormats = map[string]bool{"wav": true, "flac": true}
 
-// ServeAnalysisAudio proxies decode-ready audio for the similarity
-// worker: 16 kHz mono, gain untouched. The caller (the API layer)
-// authenticates the worker token; this only shapes and proxies. No
-// session gate applies: analysis is a server-level integration paced
-// by the worker's own concurrency, and the sidecar's live-slot
-// admission keeps bulk analysis from starving playback.
+// ServeAnalysisAudio proxies decode-ready audio for the similarity worker:
+// 16 kHz mono, gain untouched, a carved track's own window. The API layer
+// authenticates the worker; the sidecar's live-slot admission guards playback.
 func (b *Bridge) ServeAnalysisAudio(w http.ResponseWriter, r *http.Request, apiItemPID string) {
 	format := r.URL.Query().Get("format")
 	if format == "" {
@@ -756,12 +759,6 @@ func (b *Bridge) ServeAnalysisAudio(w http.ResponseWriter, r *http.Request, apiI
 		writeJSONError(w, http.StatusNotFound, "not-found", "no streamable item with pid "+apiItemPID)
 		return
 	}
-	if src.Virtual {
-		// Virtual tracks share their backing file's essence and are not
-		// analyzed per window; work items never name them.
-		writeJSONError(w, http.StatusBadRequest, "invalid-request", "virtual tracks are not analyzed")
-		return
-	}
 	ref, err := b.srcRef(src.Path)
 	if err != nil {
 		b.log.Error("analysis stream resolution", "pid", apiItemPID, "err", err)
@@ -774,6 +771,7 @@ func (b *Bridge) ServeAnalysisAudio(w http.ResponseWriter, r *http.Request, apiI
 	params.Set("rate", "16000")
 	params.Set("ch", "1")
 	params.Set("id", fmt.Sprintf("%d-%d", src.Size, src.MTimeNS))
+	setWindow(params, src)
 	r = r.WithContext(context.WithValue(r.Context(), upstreamQueryKey{}, params.Encode()))
 	b.proxy.ServeHTTP(w, r)
 }

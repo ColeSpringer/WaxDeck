@@ -28,14 +28,13 @@ paths:
       operationId: pullSimilarityWork
       summary: Pull analysis work (worker)
       description: >
-        Leases a batch of tracks awaiting embedding. Each work item
-        names the track and where to pull decode-ready audio; the
-        worker computes an embedding per item and posts the batch
-        back. Leases expire on their own, so a crashed worker's items
-        return to the queue without cleanup. An empty batch means the
-        library is fully embedded; workers should sleep
-        `retryAfterSeconds` before polling again. Requires the worker
-        token.
+        Leases a batch of tracks awaiting embedding, each naming where to pull
+        its decode-ready audio (a cue-carved track's own window). Leases lapse
+        on their own; an empty batch means sleep `retryAfterSeconds`. Worker token.
+
+
+        A server without the streaming engine cannot serve a carved
+        track's window, so it keeps those tracks for its own analysis.
       tags: [similarity]
       security:
         - workerAuth: []
@@ -63,16 +62,9 @@ paths:
       operationId: reportEmbeddings
       summary: Post computed embeddings (worker)
       description: >
-        Records a batch of computed embeddings. Vectors are keyed by
-        the track's audio essence, so an identical rip re-imported
-        later never needs re-analysis. All vectors in one batch carry
-        the batch's `model` and `dims`; a vector whose length differs
-        from `dims` is rejected per item. Posting a different `model`
-        than the stored vectors replaces coverage model-wide: mixed
-        models never compare, so the server drops stored vectors of
-        other models as new ones arrive. Ingest also maintains the
-        nearest-neighbor graph that powers sonic paths. Requires the
-        worker token.
+        Records a batch of embeddings, keyed by each item's analysis key, in the
+        batch's `model` and `dims` (a vector of another length is refused alone).
+        A new `model` replaces coverage, since models never mix. Worker token.
       tags: [similarity]
       security:
         - workerAuth: []
@@ -165,9 +157,9 @@ components:
         essence:
           type: string
           description: >
-            The track's audio-essence hash. Echo it back with the
-            vector; embeddings are keyed by essence so identical audio
-            never re-analyzes.
+            The analysis key: the audio essence, windowed for a
+            cue-carved track. Opaque to workers; echo it back with the
+            vector.
         audioUrl:
           type: string
           description: >
@@ -179,11 +171,9 @@ components:
         localPath:
           type: string
           description: >
-            Library-relative path of the source file, present only
-            when the server is configured to expose paths to same-host
-            workers (`WAXDECK_WORKER_LOCAL_PATHS`); such workers mount
-            the library read-only and decode locally instead of
-            pulling audio over HTTP.
+            The source file's library-relative path, for a same-host worker
+            (`WAXDECK_WORKER_LOCAL_PATHS`) that mounts the library read-only;
+            never for a cue-carved track, whose file is the whole rip.
         durationMs:
           type: integer
           format: int64
@@ -228,7 +218,7 @@ components:
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         essence:
           type: string
-          description: The audio-essence hash (from the work item).
+          description: The analysis key (from the work item).
         vector:
           type: array
           minItems: 8
@@ -266,7 +256,7 @@ components:
           description: The refused item's pid, when it was parseable.
         essence:
           type: string
-          description: The refused item's essence hash, when it was parseable.
+          description: The refused item's analysis key, when it was parseable.
         code:
           type: string
           description: >

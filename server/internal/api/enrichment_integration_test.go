@@ -881,3 +881,89 @@ func TestEnrichItemMergesFieldsAcrossProviders(t *testing.T) {
 		t.Fatalf("stored fields = %v, want both providers' values", meta.Fields)
 	}
 }
+
+// capProvider advertises a capability set and answers nothing.
+type capProvider struct {
+	name string
+	caps enrich.Capability
+}
+
+func (c capProvider) Name() string                    { return c.name }
+func (c capProvider) Capabilities() enrich.Capability { return c.caps }
+func (c capProvider) Enrich(context.Context, enrich.Request) (*enrich.Candidate, error) {
+	return nil, nil
+}
+
+// An administrator orders and switches this server's own sources; the
+// catalog's built-ins stay pinned after them.
+func TestEnrichmentSourcesOrderAndSwitch(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentContact = ""
+		c.EnrichmentProviders = []enrich.Provider{
+			capProvider{"lyrics-a", enrich.CapLyrics},
+			capProvider{"fanart", enrich.CapAuxArt},
+		}
+	})
+	const sources = "/api/v1/library/enrichment/sources"
+	order := func(st EnrichmentStatus) []string {
+		var out []string
+		for _, p := range st.Providers {
+			out = append(out, p.Name)
+		}
+		return out
+	}
+
+	st := decode[EnrichmentStatus](t, get(t, h.ts, "/api/v1/library/enrichment", h.token))
+	for _, p := range st.Providers {
+		if p.Enabled != nil && !*p.Enabled {
+			t.Errorf("provider %s listed switched off before any save", p.Name)
+		}
+	}
+
+	resp := h.putJSON(t, sources, map[string]any{"sources": []any{
+		map[string]any{"name": "fanart", "enabled": true},
+		map[string]any{"name": "lyrics-a", "enabled": true},
+	}})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("reorder = %d", resp.StatusCode)
+	}
+	st = decode[EnrichmentStatus](t, resp)
+	if got := order(st); len(got) < 2 || got[0] != "fanart" || got[1] != "lyrics-a" {
+		t.Fatalf("order after the reorder = %v", got)
+	}
+
+	// Switching off aux-art's only provider takes the phase with it, and
+	// with nothing else configured, the whole pass.
+	resp = h.putJSON(t, sources, map[string]any{"sources": []any{
+		map[string]any{"name": "fanart", "enabled": false},
+		map[string]any{"name": "lyrics-a", "enabled": false},
+	}})
+	st = decode[EnrichmentStatus](t, resp)
+	if slices.Contains(st.Phases, "aux-art") || slices.Contains(st.Phases, "lyrics") || st.Configured {
+		t.Fatalf("with both off: phases %v, configured %v", st.Phases, st.Configured)
+	}
+	resp = h.postJSON(t, "/api/v1/library/enrichment/run", map[string]any{})
+	wantStatus(t, resp, 501, "a run with every source off")
+
+	for name, list := range map[string][]any{
+		"empty":     {},
+		"partial":   {map[string]any{"name": "fanart", "enabled": true}},
+		"unknown":   {map[string]any{"name": "nobody", "enabled": true}},
+		"duplicate": {map[string]any{"name": "fanart", "enabled": true}, map[string]any{"name": "fanart", "enabled": false}},
+		"built-in":  {map[string]any{"name": "lrclib", "enabled": false}},
+	} {
+		wantStatus(t, h.putJSON(t, sources, map[string]any{"sources": list}), 400, name)
+	}
+
+	audit := decode[AuditEventPage](t, get(t, h.ts, "/api/v1/admin/audit?action=enrichment.sources", h.token))
+	if len(audit.Events) != 2 {
+		t.Fatalf("audit = %+v, want the two saves", audit.Events)
+	}
+
+	resp = h.postJSON(t, "/api/v1/users", map[string]any{"username": "listener", "password": "long-enough-pw"})
+	wantStatus(t, resp, 201, "create non-admin user")
+	userToken := loginAs(t, h.ts, "listener", "long-enough-pw").Token
+	wantStatus(t, reqAs(t, h, "PUT", sources, userToken, map[string]any{"sources": []any{}}), 403, "a user's reorder")
+}

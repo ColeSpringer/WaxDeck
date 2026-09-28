@@ -196,6 +196,354 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminDashboardTitle => 'Admin';
 
   @override
+  String get adminEnrichmentAnsweredColumn => 'Answered';
+
+  @override
+  String get adminEnrichmentArtFetched => 'Covers fetched';
+
+  @override
+  String get adminEnrichmentArtReused => 'Covers reused';
+
+  @override
+  String get adminEnrichmentAuxArtFetched => 'Other art fetched';
+
+  @override
+  String get adminEnrichmentBuiltin => 'Built into the catalog';
+
+  @override
+  String get adminEnrichmentCacheAnswers => 'Answers kept';
+
+  @override
+  String get adminEnrichmentCacheBlurb =>
+      'What MusicBrainz and the Cover Art Archive answered, kept so a pass does not ask twice. A pruned answer costs one request the next time it is needed.';
+
+  @override
+  String get adminEnrichmentCacheBytesColumn => 'Size';
+
+  @override
+  String get adminEnrichmentCacheEmpty => 'Nothing is cached yet.';
+
+  @override
+  String get adminEnrichmentCacheExempt => 'Kept by every prune';
+
+  @override
+  String get adminEnrichmentCacheGroup => 'Response cache';
+
+  @override
+  String get adminEnrichmentCacheKindColumn => 'Kind';
+
+  @override
+  String get adminEnrichmentCacheLoadError =>
+      'Could not read the response cache.';
+
+  @override
+  String get adminEnrichmentCacheMaxMegabytes => 'Down to (MB)';
+
+  @override
+  String adminEnrichmentCacheNeedsWhole(int max) {
+    final intl.NumberFormat maxNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String maxString = maxNumberFormat.format(max);
+
+    return 'Enter a whole number from 0 to $maxString.';
+  }
+
+  @override
+  String get adminEnrichmentCacheOlderThan => 'Older than (days)';
+
+  @override
+  String get adminEnrichmentCachePrune => 'Prune';
+
+  @override
+  String get adminEnrichmentCachePruneBody =>
+      'Pruned answers are asked for again, one request at a time, the next time a pass needs them. The catalog\'s values stay as they are.';
+
+  @override
+  String get adminEnrichmentCachePruneTitle => 'Prune the response cache?';
+
+  @override
+  String get adminEnrichmentCachePruneWord => 'PRUNE';
+
+  @override
+  String adminEnrichmentCachePruned(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count answers pruned, $size freed',
+      one: '1 answer pruned, $size freed',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get adminEnrichmentCacheRowsColumn => 'Answers';
+
+  @override
+  String get adminEnrichmentCacheSize => 'Size';
+
+  @override
+  String get adminEnrichmentCapBook => 'Book details';
+
+  @override
+  String get adminEnrichmentCapCover => 'Covers';
+
+  @override
+  String get adminEnrichmentCapFields => 'Details';
+
+  @override
+  String get adminEnrichmentCapGenres => 'Genres';
+
+  @override
+  String get adminEnrichmentCapIdentity => 'Identity';
+
+  @override
+  String get adminEnrichmentCoverageArtists => 'Artists';
+
+  @override
+  String get adminEnrichmentCoverageBooks => 'Books';
+
+  @override
+  String get adminEnrichmentCoverageGroup => 'Coverage';
+
+  @override
+  String get adminEnrichmentCoverageLyrics => 'Lyrics';
+
+  @override
+  String adminEnrichmentCoverageOf(int enriched, int total) {
+    return '$enriched of $total';
+  }
+
+  @override
+  String get adminEnrichmentCoverageReleaseGroups => 'Release groups';
+
+  @override
+  String adminEnrichmentCoverageTracks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count tracks',
+      one: '1 track',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get adminEnrichmentCoverageUncounted => 'Not counted';
+
+  @override
+  String adminEnrichmentLastRunFinished(String when) {
+    return 'Finished $when';
+  }
+
+  @override
+  String get adminEnrichmentLastRunGroup => 'Last run';
+
+  @override
+  String get adminEnrichmentLastRunNone => 'No pass has finished yet.';
+
+  @override
+  String get adminEnrichmentLoadError =>
+      'Could not load the enrichment status.';
+
+  @override
+  String get adminEnrichmentLookedUpColumn => 'Looked up';
+
+  @override
+  String get adminEnrichmentMusicbrainzOffHelp =>
+      'Off until WAXDECK_ENRICHMENT_CONTACT is set, which also keeps the Cover Art Archive and LRCLIB closed';
+
+  @override
+  String get adminEnrichmentMusicbrainzOnHelp =>
+      'Identifies artists, albums and books, and opens the Cover Art Archive and LRCLIB';
+
+  @override
+  String get adminEnrichmentMusicbrainzTitle => 'MusicBrainz';
+
+  @override
+  String get adminEnrichmentNothingToDo =>
+      'A pass has nothing to do: no source can run. Set a MusicBrainz contact or configure a provider, then restart.';
+
+  @override
+  String get adminEnrichmentNothingToDoSwitchedOff =>
+      'A pass has nothing to do: the sources that could run are switched off. Switch one on below, or set a MusicBrainz contact and restart.';
+
+  @override
+  String get adminEnrichmentPhaseAlbumArt => 'Album covers';
+
+  @override
+  String get adminEnrichmentPhaseAlbumArtHelp =>
+      'Front covers for albums with none';
+
+  @override
+  String get adminEnrichmentPhaseAlbumFields => 'Album details';
+
+  @override
+  String get adminEnrichmentPhaseAlbumFieldsHelp => 'Label and year for albums';
+
+  @override
+  String get adminEnrichmentPhaseArtistArt => 'Artist pictures';
+
+  @override
+  String get adminEnrichmentPhaseArtistArtHelp =>
+      'Pictures for artists missing one';
+
+  @override
+  String get adminEnrichmentPhaseAuxArt => 'Other artwork';
+
+  @override
+  String get adminEnrichmentPhaseAuxArtHelp =>
+      'Backs, discs, booklets and backgrounds for albums that have a front';
+
+  @override
+  String get adminEnrichmentPhaseBookFields => 'Book details';
+
+  @override
+  String get adminEnrichmentPhaseBookFieldsHelp =>
+      'Publisher, narrator, description and more for books';
+
+  @override
+  String get adminEnrichmentPhaseIdentity => 'Identity';
+
+  @override
+  String get adminEnrichmentPhaseIdentityHelp =>
+      'Match artists, release groups and books against MusicBrainz';
+
+  @override
+  String get adminEnrichmentPhaseLyrics => 'Lyrics';
+
+  @override
+  String get adminEnrichmentPhaseLyricsHelp => 'Lyrics for tracks without them';
+
+  @override
+  String get adminEnrichmentPhaseReleases => 'Release match';
+
+  @override
+  String get adminEnrichmentPhaseReleasesHelp =>
+      'Pin albums to the pressing their barcode or catalog number names';
+
+  @override
+  String get adminEnrichmentPhaseTrackFields => 'Track details';
+
+  @override
+  String get adminEnrichmentPhaseTrackFieldsHelp =>
+      'Tempo, ISRC and composer where they are empty';
+
+  @override
+  String get adminEnrichmentRetried => 'Asked again';
+
+  @override
+  String get adminEnrichmentRunAction => 'Run the pass';
+
+  @override
+  String get adminEnrichmentRunAll => 'Ask again about everything';
+
+  @override
+  String get adminEnrichmentRunAllHelp =>
+      'Every source, about every entity: slow on a large library';
+
+  @override
+  String get adminEnrichmentRunBusy => 'A pass is already running.';
+
+  @override
+  String get adminEnrichmentRunGroup => 'Run a pass';
+
+  @override
+  String get adminEnrichmentRunNormal => 'Fill what is missing';
+
+  @override
+  String get adminEnrichmentRunNormalHelp =>
+      'Asks about what has not been looked up, or whose miss has expired';
+
+  @override
+  String get adminEnrichmentRunPhases => 'Ask again in chosen phases';
+
+  @override
+  String get adminEnrichmentRunPhasesHelp =>
+      'Only the phases switched on below';
+
+  @override
+  String get adminEnrichmentRunStarted => 'Enrichment pass started';
+
+  @override
+  String get adminEnrichmentRunningNow => 'A pass is running now.';
+
+  @override
+  String adminEnrichmentSourceDown(String name) {
+    return 'Move $name down';
+  }
+
+  @override
+  String adminEnrichmentSourceSwitch(String name) {
+    return 'Ask $name';
+  }
+
+  @override
+  String adminEnrichmentSourceUp(String name) {
+    return 'Move $name up';
+  }
+
+  @override
+  String get adminEnrichmentSourcesBlurb =>
+      'Asked in this order, and a source switched off is not asked; switched back on, it is not asked about what a pass already finished unless a run forces its phases. The catalog\'s own sources come last and cannot be moved.';
+
+  @override
+  String get adminEnrichmentSourcesGroup => 'Sources';
+
+  @override
+  String get adminEnrichmentSourcesRevert => 'Revert';
+
+  @override
+  String get adminEnrichmentSourcesSave => 'Save order';
+
+  @override
+  String get adminEnrichmentSourcesSaved => 'Source order saved';
+
+  @override
+  String get adminEnrichmentSourcesSavedAfterPass =>
+      'Source order saved. The pass running now keeps the order it started with.';
+
+  @override
+  String get adminEnrichmentSourcesStale =>
+      'The sources changed on the server. Look them over and save again.';
+
+  @override
+  String get adminEnrichmentStale =>
+      'Could not read the latest status. What is shown is from the last read.';
+
+  @override
+  String get adminEnrichmentStandingGroup => 'Standing';
+
+  @override
+  String get adminEnrichmentStateOff => 'Off';
+
+  @override
+  String get adminEnrichmentStateOn => 'On';
+
+  @override
+  String get adminEnrichmentTagsFailed => 'Tag writes failed';
+
+  @override
+  String get adminEnrichmentTagsSkipped => 'Book parts skipped';
+
+  @override
+  String get adminEnrichmentTagsUnrepresented => 'Tags a format cannot hold';
+
+  @override
+  String get adminEnrichmentTagsWritten => 'Tags written';
+
+  @override
+  String get adminEnrichmentTitle => 'Enrichment';
+
+  @override
+  String get adminEnrichmentWalkAlbums => 'Albums';
+
+  @override
+  String get adminEnrichmentWalkColumn => 'Walk';
+
+  @override
   String get adminForbiddenMessage =>
       'The admin console is for accounts with the administrator role. Ask an administrator if you need something from it.';
 
@@ -698,6 +1046,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminRoleUser => 'user';
 
   @override
+  String get adminScanBusy =>
+      'A scan or another catalog job is already running.';
+
+  @override
   String get adminScanLibrary => 'Scan library';
 
   @override
@@ -810,6 +1162,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminSectionDiagnosticsBlurb => 'Files the catalog could not read';
+
+  @override
+  String get adminSectionEnrichmentBlurb =>
+      'Where artwork, lyrics and details come from';
 
   @override
   String get adminSectionGenresBlurb =>
@@ -5162,8 +5518,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get playerBookmarkPending => 'Not sent yet';
+
+  @override
   String playerBookmarkPlayFrom(String time) {
     return 'Play from $time';
+  }
+
+  @override
+  String playerBookmarkRefused(String reason) {
+    return 'Not saved: $reason';
   }
 
   @override
@@ -5185,6 +5549,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerBookmarksError => 'Could not load the bookmarks.';
+
+  @override
+  String get playerBookmarksFull =>
+      'This book already holds as many bookmarks as it can. Remove one to mark another.';
 
   @override
   String get playerCancelTimer => 'Cancel timer';
@@ -5658,6 +6026,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistExportNsp => 'Export as NSP';
 
   @override
+  String get playlistExportNspAnyway => 'Export anyway';
+
+  @override
+  String get playlistExportNspKeeps => 'What the export keeps';
+
+  @override
   String playlistExportNspLossCount(num count) {
     final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
       locale: localeName,
@@ -5676,6 +6050,10 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get playlistExportNspLossTitle =>
       'Some of this rule cannot be exported';
+
+  @override
+  String get playlistExportNspNotesTitle =>
+      'This rule exports with a difference';
 
   @override
   String get playlistExportNspProceed => 'Export without them';
@@ -8517,15 +8895,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDiscordApplicationHelp =>
-      'Empty publishes as WaxDeck. An application ID from discord.com/developers changes the name Discord shows and where its cover art comes from';
+      'Empty publishes as WaxDeck. An application ID from discord.com/developers changes the name Discord shows and the image for albums with no cover';
 
   @override
   String get settingsDiscordApplicationLabel =>
       'Publish as another application (optional)';
 
   @override
-  String get settingsDiscordCoverNote =>
-      'The cover is one image for every track, uploaded to that application rather than taken from your library: Discord fetches art through its own servers, which cannot reach a private one.';
+  String get settingsDiscordCoversHelp =>
+      'This device asks the Cover Art Archive for the cover of each album it plays that has a MusicBrainz release ID. Off, or with none found, Discord shows the application\'s own image.';
+
+  @override
+  String get settingsDiscordCoversTitle => 'Show album covers';
 
   @override
   String get settingsDiscordPresenceHelp =>
@@ -8533,7 +8914,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDiscordPresenceKeywords =>
-      'discord, rich presence, status, listening to';
+      'discord, rich presence, status, listening to, album cover';
 
   @override
   String get settingsDiscordPresenceRowTitle => 'Show what I am listening to';

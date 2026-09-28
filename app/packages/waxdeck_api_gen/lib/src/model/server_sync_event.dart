@@ -6,6 +6,8 @@
 import 'package:waxdeck_api_gen/src/model/subscription.dart';
 import 'package:waxdeck_api_gen/src/model/book_settings.dart';
 import 'package:waxdeck_api_gen/src/model/prefs.dart';
+import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/bookmark.dart';
 import 'package:waxdeck_api_gen/src/model/play_state.dart';
 import 'package:waxdeck_api_gen/src/model/playlist.dart';
 import 'package:built_value/built_value.dart';
@@ -16,16 +18,17 @@ part 'server_sync_event.g.dart';
 /// One change to server-side state visible to the calling user (their own state, plus other users' shared playlists), with the current value hydrated fresh. `kind` is a string, not a closed enum, so new kinds can appear; clients must skip events whose `kind` they do not recognize. Hydrated `playlist` payloads omit a smart playlist's computed `itemCount`, like list pages. 
 ///
 /// Properties:
-/// * [kind] - What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). Curation surfaces emit marker kinds carrying only `pid`: `review` (a review entry changed; refetch the review endpoints), `upload` (an upload session changed), `task` (a tool task changed), and `entity-state` (an artist or album was starred or rated). Markers hydrate nothing because those surfaces are live reads, not mirrored state.  Further markers are announcements rather than refetch hints, carrying the same news as the notification-target event of the same name: `feed-disabled` (`pid` is the show whose scheduled refresh was suspended), `import-completed` (`pid` is the review entry that filed itself), `episode-downloaded` (`pid` is the episode whose enclosure the server finished fetching), and `playlist-synced` (`pid` is the playlist whose sync run changed its membership, or whose scheduled syncing was suspended after repeated failures).  `notification` (`pid` is the inbox row that was written; refetch `GET /users/me/notifications`) rides every emit, whether or not the account has a delivery target for the event.  `account` carries no `pid`: the caller's own roles or effective permissions changed, which is what `GET /auth/session` reports (roles plus the `uploadEnabled`, `managePodcasts` and `delete` booleans), so re-read it. The session itself keeps working; only what it may do moved. 
+/// * [kind] - What changed: `play-state` (`pid`, `playState`), `prefs`, or `subscription` (`pid`, the show; `subscription` absent once the caller unsubscribed); `book-settings` (`pid`, `bookSettings`);  `bookmarks` (`pid`, the book, and `bookmarks`, its whole current list: a mark missing from it was deleted); or `playlist` (`pid`; `playlist` absent when deleted or replaced under a new pid).  Markers carry only `pid` and hydrate nothing: `review`, `upload`, `task` (refetch that surface), and `entity-state` (an artist or album was starred or rated).  Further markers are announcements rather than refetch hints, carrying the same news as the notification-target event of the same name: `feed-disabled` (`pid` is the show whose scheduled refresh was suspended), `import-completed` (`pid` is the review entry that filed itself), `episode-downloaded` (`pid` is the episode whose enclosure the server finished fetching), and `playlist-synced` (`pid` is the playlist whose sync run changed its membership, or whose scheduled syncing was suspended after repeated failures).  `notification` (`pid` is the inbox row that was written; refetch `GET /users/me/notifications`) rides every emit, whether or not the account has a delivery target for the event.  `account` carries no `pid`: the caller's own roles or effective permissions changed, which is what `GET /auth/session` reports (roles plus the `uploadEnabled`, `managePodcasts` and `delete` booleans), so re-read it. The session itself keeps working; only what it may do moved. 
 /// * [pid] - The item, show, book, or playlist the event is about (absent for `prefs` and `account`). 
 /// * [playState] 
 /// * [prefs] 
 /// * [subscription] 
 /// * [bookSettings] 
+/// * [bookmarks] - On `bookmarks`: the caller's bookmarks in the book, in timeline order. Present and empty when none are left. 
 /// * [playlist] 
 @BuiltValue()
 abstract class ServerSyncEvent implements Built<ServerSyncEvent, ServerSyncEventBuilder> {
-  /// What changed: `play-state` (carries `pid` and `playState`), `prefs` (carries `prefs`), `subscription` (carries `pid`, the show; `subscription` is the current state, absent when the caller unsubscribed), `book-settings` (carries `pid`, the book, and `bookSettings`), or `playlist` (carries `pid`; `playlist` is the current state, absent when the playlist was deleted or replaced under a new pid). Curation surfaces emit marker kinds carrying only `pid`: `review` (a review entry changed; refetch the review endpoints), `upload` (an upload session changed), `task` (a tool task changed), and `entity-state` (an artist or album was starred or rated). Markers hydrate nothing because those surfaces are live reads, not mirrored state.  Further markers are announcements rather than refetch hints, carrying the same news as the notification-target event of the same name: `feed-disabled` (`pid` is the show whose scheduled refresh was suspended), `import-completed` (`pid` is the review entry that filed itself), `episode-downloaded` (`pid` is the episode whose enclosure the server finished fetching), and `playlist-synced` (`pid` is the playlist whose sync run changed its membership, or whose scheduled syncing was suspended after repeated failures).  `notification` (`pid` is the inbox row that was written; refetch `GET /users/me/notifications`) rides every emit, whether or not the account has a delivery target for the event.  `account` carries no `pid`: the caller's own roles or effective permissions changed, which is what `GET /auth/session` reports (roles plus the `uploadEnabled`, `managePodcasts` and `delete` booleans), so re-read it. The session itself keeps working; only what it may do moved. 
+  /// What changed: `play-state` (`pid`, `playState`), `prefs`, or `subscription` (`pid`, the show; `subscription` absent once the caller unsubscribed); `book-settings` (`pid`, `bookSettings`);  `bookmarks` (`pid`, the book, and `bookmarks`, its whole current list: a mark missing from it was deleted); or `playlist` (`pid`; `playlist` absent when deleted or replaced under a new pid).  Markers carry only `pid` and hydrate nothing: `review`, `upload`, `task` (refetch that surface), and `entity-state` (an artist or album was starred or rated).  Further markers are announcements rather than refetch hints, carrying the same news as the notification-target event of the same name: `feed-disabled` (`pid` is the show whose scheduled refresh was suspended), `import-completed` (`pid` is the review entry that filed itself), `episode-downloaded` (`pid` is the episode whose enclosure the server finished fetching), and `playlist-synced` (`pid` is the playlist whose sync run changed its membership, or whose scheduled syncing was suspended after repeated failures).  `notification` (`pid` is the inbox row that was written; refetch `GET /users/me/notifications`) rides every emit, whether or not the account has a delivery target for the event.  `account` carries no `pid`: the caller's own roles or effective permissions changed, which is what `GET /auth/session` reports (roles plus the `uploadEnabled`, `managePodcasts` and `delete` booleans), so re-read it. The session itself keeps working; only what it may do moved. 
   @BuiltValueField(wireName: r'kind')
   String get kind;
 
@@ -44,6 +47,10 @@ abstract class ServerSyncEvent implements Built<ServerSyncEvent, ServerSyncEvent
 
   @BuiltValueField(wireName: r'bookSettings')
   BookSettings? get bookSettings;
+
+  /// On `bookmarks`: the caller's bookmarks in the book, in timeline order. Present and empty when none are left. 
+  @BuiltValueField(wireName: r'bookmarks')
+  BuiltList<Bookmark>? get bookmarks;
 
   @BuiltValueField(wireName: r'playlist')
   Playlist? get playlist;
@@ -109,6 +116,13 @@ class _$ServerSyncEventSerializer implements PrimitiveSerializer<ServerSyncEvent
       yield serializers.serialize(
         object.bookSettings,
         specifiedType: const FullType(BookSettings),
+      );
+    }
+    if (object.bookmarks != null) {
+      yield r'bookmarks';
+      yield serializers.serialize(
+        object.bookmarks,
+        specifiedType: const FullType(BuiltList, [FullType(Bookmark)]),
       );
     }
     if (object.playlist != null) {
@@ -187,6 +201,14 @@ class _$ServerSyncEventSerializer implements PrimitiveSerializer<ServerSyncEvent
           ) as BookSettings?;
           if (valueDes == null) continue;
           result.bookSettings.replace(valueDes);
+          break;
+        case r'bookmarks':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltList, [FullType(Bookmark)]),
+          ) as BuiltList<Bookmark>?;
+          if (valueDes == null) continue;
+          result.bookmarks.replace(valueDes);
           break;
         case r'playlist':
           final valueDes = serializers.deserialize(

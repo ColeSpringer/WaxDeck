@@ -78,11 +78,21 @@ class _$NspReport extends NspReport {
   final BuiltList<NspGap>? gaps;
   @override
   final BuiltList<NspGap>? notes;
+  @override
+  final String? ruleHash;
+  @override
+  final SmartRule? rule;
 
   factory _$NspReport([void Function(NspReportBuilder)? updates]) =>
       (NspReportBuilder()..update(updates))._build();
 
-  _$NspReport._({required this.direction, this.gaps, this.notes}) : super._();
+  _$NspReport._({
+    required this.direction,
+    this.gaps,
+    this.notes,
+    this.ruleHash,
+    this.rule,
+  }) : super._();
   @override
   NspReport rebuild(void Function(NspReportBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -96,7 +106,9 @@ class _$NspReport extends NspReport {
     return other is NspReport &&
         direction == other.direction &&
         gaps == other.gaps &&
-        notes == other.notes;
+        notes == other.notes &&
+        ruleHash == other.ruleHash &&
+        rule == other.rule;
   }
 
   @override
@@ -105,6 +117,8 @@ class _$NspReport extends NspReport {
     _$hash = $jc(_$hash, direction.hashCode);
     _$hash = $jc(_$hash, gaps.hashCode);
     _$hash = $jc(_$hash, notes.hashCode);
+    _$hash = $jc(_$hash, ruleHash.hashCode);
+    _$hash = $jc(_$hash, rule.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -114,7 +128,9 @@ class _$NspReport extends NspReport {
     return (newBuiltValueToStringHelper(r'NspReport')
           ..add('direction', direction)
           ..add('gaps', gaps)
-          ..add('notes', notes))
+          ..add('notes', notes)
+          ..add('ruleHash', ruleHash)
+          ..add('rule', rule))
         .toString();
   }
 }
@@ -135,6 +151,14 @@ class NspReportBuilder implements Builder<NspReport, NspReportBuilder> {
   ListBuilder<NspGap> get notes => _$this._notes ??= ListBuilder<NspGap>();
   set notes(ListBuilder<NspGap>? notes) => _$this._notes = notes;
 
+  String? _ruleHash;
+  String? get ruleHash => _$this._ruleHash;
+  set ruleHash(String? ruleHash) => _$this._ruleHash = ruleHash;
+
+  SmartRuleBuilder? _rule;
+  SmartRuleBuilder get rule => _$this._rule ??= SmartRuleBuilder();
+  set rule(SmartRuleBuilder? rule) => _$this._rule = rule;
+
   NspReportBuilder() {
     NspReport._defaults(this);
   }
@@ -145,6 +169,8 @@ class NspReportBuilder implements Builder<NspReport, NspReportBuilder> {
       _direction = $v.direction;
       _gaps = $v.gaps?.toBuilder();
       _notes = $v.notes?.toBuilder();
+      _ruleHash = $v.ruleHash;
+      _rule = $v.rule?.toBuilder();
       _$v = null;
     }
     return this;
@@ -176,6 +202,8 @@ class NspReportBuilder implements Builder<NspReport, NspReportBuilder> {
             ),
             gaps: _gaps?.build(),
             notes: _notes?.build(),
+            ruleHash: ruleHash,
+            rule: _rule?.build(),
           );
     } catch (_) {
       late String _$failedField;
@@ -184,6 +212,9 @@ class NspReportBuilder implements Builder<NspReport, NspReportBuilder> {
         _gaps?.build();
         _$failedField = 'notes';
         _notes?.build();
+
+        _$failedField = 'rule';
+        _rule?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'NspReport',

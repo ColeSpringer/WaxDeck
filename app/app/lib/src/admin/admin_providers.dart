@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
@@ -307,3 +309,111 @@ final libraryReadOnlyProvider =
     AsyncNotifierProvider.family<LibraryReadOnlyController, bool, String>(
       LibraryReadOnlyController.new,
     );
+
+/// How often a running pass is asked after: no event says it ended.
+const enrichmentRunningPoll = Duration(seconds: 5);
+
+/// Enrichment's roster, coverage, phases and last pass, with the source
+/// order and a run acting on it.
+class EnrichmentStatusController extends AsyncNotifier<EnrichmentStatus> {
+  @override
+  Future<EnrichmentStatus> build() async {
+    final repository = ref.watch(repositoryProvider);
+    // This build's own ref: [ref] answers for whichever build is newest.
+    final built = ref;
+    final status = await repository.getEnrichmentStatus();
+    if (status.running && built.mounted) {
+      final poll = Timer.periodic(
+        enrichmentRunningPoll,
+        (_) => unawaited(_follow(built, repository, status.runningJob)),
+      );
+      built.onDispose(poll.cancel);
+    }
+    return status;
+  }
+
+  /// Reads the status again once the pass has ended, asking after its
+  /// job alone when the status named one; a failed job read waits a beat.
+  Future<void> _follow(
+    Ref built,
+    WaxDeckRepository repository,
+    String? job,
+  ) async {
+    if (job != null) {
+      try {
+        final state = (await repository.getJob(job)).state;
+        if (!const {'done', 'failed', 'crashed', 'canceled'}.contains(state)) {
+          return;
+        }
+      } on WaxDeckApiException catch (e) {
+        if (e.statusCode == null || e.statusCode! >= 500) return;
+      }
+    }
+    if (built.mounted) built.invalidateSelf();
+  }
+
+  /// Saves the order and switches over this server's own sources, then
+  /// reads the status again: a read already out answers the old order.
+  Future<EnrichmentStatus> saveSources(List<EnrichmentSource> sources) async {
+    final repository = ref.read(repositoryProvider);
+    try {
+      final stored = await repository.putEnrichmentSources(sources);
+      if (ref.mounted) state = AsyncData(stored);
+      return stored;
+    } finally {
+      if (ref.mounted) ref.invalidateSelf();
+    }
+  }
+
+  /// Starts a pass; the status and the jobs are read again either way.
+  Future<String> run({
+    bool force = false,
+    List<String> forcePhases = const [],
+  }) async {
+    final repository = ref.read(repositoryProvider);
+    try {
+      return await repository.runEnrichment(
+        force: force,
+        forcePhases: forcePhases,
+      );
+    } finally {
+      if (ref.mounted) {
+        ref.invalidateSelf();
+        ref.invalidate(adminJobsProvider);
+      }
+    }
+  }
+}
+
+final enrichmentStatusProvider =
+    AsyncNotifierProvider.autoDispose<
+      EnrichmentStatusController,
+      EnrichmentStatus
+    >(EnrichmentStatusController.new, retry: retryUnlessRefused);
+
+/// The enrichment response cache, with the prune acting on it.
+class EnrichmentCacheController extends AsyncNotifier<EnrichmentCacheReport> {
+  @override
+  Future<EnrichmentCacheReport> build() =>
+      ref.watch(repositoryProvider).getEnrichmentCache();
+
+  Future<EnrichmentCachePruneResult> prune({
+    int? olderThanSeconds,
+    int? maxBytes,
+  }) async {
+    final result = await ref
+        .read(repositoryProvider)
+        .pruneEnrichmentCache(
+          olderThanSeconds: olderThanSeconds,
+          maxBytes: maxBytes,
+        );
+    if (ref.mounted) ref.invalidateSelf();
+    return result;
+  }
+}
+
+final enrichmentCacheProvider =
+    AsyncNotifierProvider.autoDispose<
+      EnrichmentCacheController,
+      EnrichmentCacheReport
+    >(EnrichmentCacheController.new, retry: (_, _) => null);

@@ -15,6 +15,8 @@ class _$EnrichmentProvider extends EnrichmentProvider {
   final bool configured;
   @override
   final bool builtin;
+  @override
+  final bool? enabled;
 
   factory _$EnrichmentProvider([
     void Function(EnrichmentProviderBuilder)? updates,
@@ -25,6 +27,7 @@ class _$EnrichmentProvider extends EnrichmentProvider {
     required this.capabilities,
     required this.configured,
     required this.builtin,
+    this.enabled,
   }) : super._();
   @override
   EnrichmentProvider rebuild(
@@ -42,7 +45,8 @@ class _$EnrichmentProvider extends EnrichmentProvider {
         name == other.name &&
         capabilities == other.capabilities &&
         configured == other.configured &&
-        builtin == other.builtin;
+        builtin == other.builtin &&
+        enabled == other.enabled;
   }
 
   @override
@@ -52,6 +56,7 @@ class _$EnrichmentProvider extends EnrichmentProvider {
     _$hash = $jc(_$hash, capabilities.hashCode);
     _$hash = $jc(_$hash, configured.hashCode);
     _$hash = $jc(_$hash, builtin.hashCode);
+    _$hash = $jc(_$hash, enabled.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -62,7 +67,8 @@ class _$EnrichmentProvider extends EnrichmentProvider {
           ..add('name', name)
           ..add('capabilities', capabilities)
           ..add('configured', configured)
-          ..add('builtin', builtin))
+          ..add('builtin', builtin)
+          ..add('enabled', enabled))
         .toString();
   }
 }
@@ -89,6 +95,10 @@ class EnrichmentProviderBuilder
   bool? get builtin => _$this._builtin;
   set builtin(bool? builtin) => _$this._builtin = builtin;
 
+  bool? _enabled;
+  bool? get enabled => _$this._enabled;
+  set enabled(bool? enabled) => _$this._enabled = enabled;
+
   EnrichmentProviderBuilder() {
     EnrichmentProvider._defaults(this);
   }
@@ -100,6 +110,7 @@ class EnrichmentProviderBuilder
       _capabilities = $v.capabilities.toBuilder();
       _configured = $v.configured;
       _builtin = $v.builtin;
+      _enabled = $v.enabled;
       _$v = null;
     }
     return this;
@@ -140,6 +151,7 @@ class EnrichmentProviderBuilder
               r'EnrichmentProvider',
               'builtin',
             ),
+            enabled: enabled,
           );
     } catch (_) {
       late String _$failedField;

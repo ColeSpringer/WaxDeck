@@ -198,18 +198,14 @@ paths:
         no comment.
 
 
-        Fields map onto the rule vocabulary
-        (`GET /playlists/rule-fields`): `title`, `album`, `artist`,
-        `albumartist`, `genre`, `year`, `trackNumber`, `discNumber`,
-        `bpm`, `playCount` by name, plus
-        `dateAdded` to `addedAt`, `lastPlayed` to `lastPlayedAt`,
-        `filepath` to `path`, `loved` to `starred`, `duration` to
-        `durationMs`, and `rating`. Two of those carry different units
-        on each side and are **rescaled**: NSP counts duration in
-        seconds where WaxDeck counts milliseconds, and rates 0 to 5
-        where WaxDeck rates 0 to 100, so an unscaled `rating gt 3`
-        would mean "rated above 3 out of 100", which is every rated
-        track.
+        Fields map onto the rule vocabulary (`GET /playlists/rule-fields`):
+        `title`, `album`, `artist`, `albumartist`, `genre`, `year`, `bpm`,
+        `trackNumber`, `discNumber`, `playCount`, `starred` and `rating`.
+
+
+        `dateAdded` maps to `addedAt` and `lastPlayed` to `lastPlayedAt`.
+        `rating` is **rescaled**: NSP rates 0 to 5 where WaxDeck rates 0 to
+        100, so an unscaled `rating gt 3` would match every rated track.
 
 
         `notContains` imports as a `not` node wrapping `contains`;
@@ -593,31 +589,28 @@ paths:
         `feature-unavailable`.
 
 
-        Export is **all-or-nothing** by default, like the import: a rule
-        holding anything NSP cannot say is refused with **every**
-        offender named, rather than written as a document that means
-        something else. WaxDeck's rule vocabulary is the larger one, so
-        this is the common answer for a rule built in the editor.
-        `notContains` is the only negation NSP can carry, so every
-        other `not` refuses; `gte`, `lte`, `isPresent`, and `isMissing`
-        have no NSP form; the `minutes` and `megabytes` limit modes and
-        a pinned random seed have none; a rating that is not a whole
-        number of stars has none; NSP sorts on one term, so a rule
-        ordered by a second refuses rather than dropping it; and
-        neither do the fields NSP does not carry (`mediaType`, `state`,
-        `source`, `container`, `codec`, `podcast`, `season`,
-        `publishedAt`, `updatedAt`, `starredAt`, `played`, `finished`,
-        `albumBarcode`, `albumLabel`, `albumCatalogNumber`,
-        `albumMedia`, `albumCountry`, `tag.KEY`, and `playlist`).
-        `albumArtist` is **not** among them: NSP carries it, and it
-        round-trips.
+        Export is **all-or-nothing** by default, like the import: a rule holding
+        anything NSP cannot say is refused with **every** offender named,
+        rather than written as a document that means something else.
 
 
-        `partial=true` accepts the loss instead: the parts NSP cannot
-        say are dropped and the rest is written. Still refused when
-        nothing survives, since a document with every condition dropped
-        matches the whole library on the far side. Ask
-        `GET /playlists/{pid}/nsp/report` first to see what would go.
+        NSP cannot say a `not` other than `notContains`, `gte`, `lte`,
+        `isPresent`, `isMissing`, the `minutes` and `megabytes` limit modes,
+        a pinned random seed, a rating in part stars, or a second sort term.
+
+
+        Nor the fields `mediaType`, `state`, `source`, `container`, `codec`,
+        `path`, `durationMs`, `podcast`, `season`, `publishedAt`, `updatedAt`,
+        `starredAt`, `played`, `finished`, `tag.KEY` and `playlist`,
+
+
+        nor `albumBarcode`, `albumLabel`, `albumCatalogNumber`, `albumMedia`
+        and `albumCountry`. `albumArtist` it carries, and it round-trips.
+
+
+        `partial=true` drops what NSP cannot say and writes the rest; still
+        refused when nothing survives, since that matches the whole library.
+        Read `GET /playlists/{pid}/nsp/report` first and pass its `ruleHash`.
 
 
         The response carries the playlist's own `name`, and `public`
@@ -634,6 +627,15 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: ruleHash
+          in: query
+          required: false
+          description: >
+            The `ruleHash` of the report the caller read. When the rule
+            has changed since, the export answers `conflict` instead.
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{16}$"
       responses:
         "200":
           description: The NSP document.
@@ -641,10 +643,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/NspDocument"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "501":
           $ref: "#/components/responses/FeatureUnavailable"
         "503":
@@ -1850,11 +1856,9 @@ components:
     NspReport:
       type: object
       description: >
-        What one NSP mapping could not carry. `gaps` block the strict
-        conversion and are what a `partial=true` conversion drops;
-        `notes` are losses that block nothing, so a client mentions
-        them without refusing. Both are empty when the mapping is
-        lossless.
+        What one NSP mapping could not carry: `gaps` block a strict conversion
+        and are what `partial=true` drops; `notes` block nothing. An export
+        report carries `ruleHash`, and `rule` when a partial export keeps some.
       required: [direction]
       properties:
         direction:
@@ -1886,6 +1890,14 @@ components:
           maxItems: 12
           items:
             $ref: "#/components/schemas/NspGap"
+        ruleHash:
+          type: string
+          description: >
+            Export only: names the rule this report was read from, to
+            pass back as the export's `ruleHash`.
+          pattern: "^[0-9a-f]{16}$"
+        rule:
+          $ref: "#/components/schemas/SmartRule"
 
     M3uImport:
       type: object

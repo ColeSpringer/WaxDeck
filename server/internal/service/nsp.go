@@ -2,9 +2,12 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/colespringer/waxbin/model"
@@ -186,11 +189,14 @@ type NSPGap struct {
 }
 
 // NSPReport is what one mapping could not carry: gaps refuse the strict
-// conversion and are what a partial one drops, notes refuse nothing.
+// conversion and are what a partial one drops, notes refuse nothing. An
+// export's also names the rule read and what a partial export keeps.
 type NSPReport struct {
 	Direction string
 	Gaps      []NSPGap
 	Notes     []NSPGap
+	RuleHash  string
+	Rule      *SmartRule
 }
 
 func nspReport(rep playlist.NSPReport) NSPReport {
@@ -202,22 +208,9 @@ func nspReport(rep playlist.NSPReport) NSPReport {
 	}
 }
 
-// nspGaps re-shapes the converter's gaps for WaxDeck's own callers.
-//
-// Three things happen here, and export is where all three matter. The
-// gap's field is named in the vocabulary of the side being read, and on
-// an export that side is WaxDeck - whose vocabulary is the one
-// `GET /playlists/rule-fields` publishes and the rule editor speaks, not
-// the engine spelling underneath it; untranslated, a rule holding
-// "mediaType is music" reports a gap on `kind`, a field the person who
-// built the rule has never seen. The pointer's root segment is the
-// converter's `where`, which is `root` in the rule schema a client would
-// dereference it against. And the list is deduped by sentence and
-// capped: a rule or a document repeating one problem is one problem, and
-// the row a client draws per entry says nothing new the second time.
-//
-// The import direction is Navidrome's vocabulary and its pointers are
-// into the document the caller sent, so only the dedupe applies.
+// nspGaps re-shapes the converter's gaps for WaxDeck's callers: on an
+// export, field names and pointers in the rule's own vocabulary; either
+// way, deduped by sentence and capped.
 func nspGaps(gaps []playlist.NSPGap, export bool) []NSPGap {
 	if len(gaps) == 0 {
 		return nil
@@ -225,13 +218,6 @@ func nspGaps(gaps []playlist.NSPGap, export bool) []NSPGap {
 	seen := make(map[string]bool, len(gaps))
 	out := make([]NSPGap, 0, min(len(gaps), maxNSPGaps))
 	for _, g := range gaps {
-		if seen[g.Reason] {
-			continue
-		}
-		seen[g.Reason] = true
-		if len(out) == maxNSPGaps {
-			break
-		}
 		row := NSPGap{
 			Kind:   string(g.Kind),
 			Field:  g.Field,
@@ -247,11 +233,69 @@ func nspGaps(gaps []playlist.NSPGap, export bool) []NSPGap {
 			if spec, ok := ruleFieldsByEngine[row.Field]; ok {
 				row.Field = spec.api
 			}
+			row.Reason = nspRuleReason(g)
 			row.Path = nspRulePointer(row.Path)
+		}
+		if seen[row.Reason] {
+			continue
+		}
+		seen[row.Reason] = true
+		if len(out) == maxNSPGaps {
+			break
 		}
 		out = append(out, row)
 	}
 	return out
+}
+
+// nspDateFields are the file's own names for the dates it carries, which
+// an export sentence can end on.
+var nspDateFields = map[string]string{"dateadded": "added", "lastplayed": "last_played"}
+
+// nspRuleReason respells the field an export sentence ends on, in the
+// engine's or the file's name, or the terms in its trailing parentheses
+// (the dropped sort terms). Nothing else in the sentence is touched.
+func nspRuleReason(g playlist.NSPGap) string {
+	reason := g.Reason
+	cut := strings.LastIndexByte(reason, ' ') + 1
+	last := reason[cut:]
+	if engine, ok := nspDateFields[last]; ok {
+		last = engine
+	}
+	if spec, ok := ruleFieldsByEngine[last]; ok {
+		return reason[:cut] + spec.api
+	}
+	if g.Kind != playlist.NSPGapSort || g.Path != "/sorts/1" {
+		return reason
+	}
+	open, end := strings.LastIndexByte(reason, '('), strings.LastIndexByte(reason, ')')
+	if open < 0 || end < open {
+		return reason
+	}
+	terms := strings.Split(reason[open+1:end], ", ")
+	for i, term := range terms {
+		field, dir, desc := strings.Cut(term, " ")
+		if spec, ok := ruleFieldsByEngine[field]; ok {
+			terms[i] = spec.api
+			if desc {
+				terms[i] += " " + dir
+			}
+		}
+	}
+	return reason[:open+1] + strings.Join(terms, ", ") + reason[end:]
+}
+
+// ruleHashForm is what ruleHash answers.
+var ruleHashForm = regexp.MustCompile(`^[0-9a-f]{16}$`)
+
+// ruleHash names a rule's current form: its canonical JSON, hashed.
+func ruleHash(q query.Query) string {
+	raw, err := json.Marshal(q)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])[:16]
 }
 
 // nspRulePointer rewrites the converter's pointer into the rule schema a
@@ -347,26 +391,44 @@ func (l *Library) exportableRule(ctx context.Context, uc *UserCtx, apiPlaylistPI
 }
 
 // ReportPlaylistNSPExport says what exporting a playlist's rule would
-// drop, without exporting it. Never refuses on expressiveness, so the
-// static playlist is the one thing it can refuse for.
+// drop, and what a partial export would keep, without exporting it.
 func (l *Library) ReportPlaylistNSPExport(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (NSPReport, error) {
 	pl, err := l.exportableRule(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return NSPReport{}, err
 	}
-	return nspReport(playlist.CheckNSPExport(*pl.Rule)), nil
+	rule := *pl.Rule
+	var rep NSPReport
+	if res, perr := playlist.ExportNSPPartial(rule); perr == nil {
+		rep = nspReport(res.Report)
+		if len(rep.Gaps) > 0 {
+			kept := queryToRule(res.Rule)
+			rep.Rule = &kept
+		}
+	} else {
+		// Nothing survives, so there is no kept rule to show.
+		rep = nspReport(playlist.CheckNSPExport(rule))
+	}
+	rep.RuleHash = ruleHash(rule)
+	return rep, nil
 }
 
-// ExportPlaylistNSP renders a smart playlist's rule as an NSP document.
-// A static playlist has no rule, and a rule holding anything NSP cannot
-// say is refused with every offender named rather than written as
-// something else. partial drops those parts and writes the rest.
-func (l *Library) ExportPlaylistNSP(ctx context.Context, uc *UserCtx, apiPlaylistPID string, partial bool) (map[string]any, error) {
+// ExportPlaylistNSP renders a smart playlist's rule as an NSP document,
+// refusing what NSP cannot say unless partial drops it. wantHash, when
+// set, refuses a rule changed since its report was read.
+func (l *Library) ExportPlaylistNSP(ctx context.Context, uc *UserCtx, apiPlaylistPID string, partial bool, wantHash string) (map[string]any, error) {
+	// A hash no report could have given is the request's fault.
+	if wantHash != "" && !ruleHashForm.MatchString(wantHash) {
+		return nil, errInvalid("ruleHash must be the 16 lower-case hex characters a report gave")
+	}
 	pl, err := l.exportableRule(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return nil, err
 	}
 	rule := *pl.Rule
+	if wantHash != "" && ruleHash(rule) != wantHash {
+		return nil, &Error{Kind: KindConflict, Msg: "the rule changed since the report was read; ask again"}
+	}
 	var raw []byte
 	if partial {
 		// Refuses only when nothing survives: a document with every

@@ -14,6 +14,7 @@ abstract final class SemanticsIds {
   static const String adminBackups = 'admin-backups';
   static const String adminConsole = 'admin-console';
   static const String adminDashboard = 'admin-dashboard';
+  static const String adminEnrichment = 'admin-enrichment';
   static const String adminForbidden = 'admin-forbidden';
   static const String adminGenres = 'admin-genres';
   static const String adminLibraries = 'admin-libraries';
@@ -41,6 +42,20 @@ abstract final class SemanticsIds {
   static const String confirmAccept = 'confirm-accept';
   static const String confirmCancel = 'confirm-cancel';
   static const String confirmField = 'confirm-field';
+  static const String enrichmentCacheMaxBytes = 'enrichment-cache-max-bytes';
+  static const String enrichmentCacheOlderThan = 'enrichment-cache-older-than';
+  static const String enrichmentCachePrune = 'enrichment-cache-prune';
+  static String enrichmentPhase(Object phase) => 'enrichment-phase-$phase';
+  static const String enrichmentRun = 'enrichment-run';
+  static String enrichmentRunMode(Object mode) => 'enrichment-run-mode-$mode';
+  static String enrichmentSource(Object name) => 'enrichment-source-$name';
+  static String enrichmentSourceDown(Object name) =>
+      'enrichment-source-down-$name';
+  static String enrichmentSourceEnabled(Object name) =>
+      'enrichment-source-enabled-$name';
+  static String enrichmentSourceUp(Object name) => 'enrichment-source-up-$name';
+  static const String enrichmentSourcesRevert = 'enrichment-sources-revert';
+  static const String enrichmentSourcesSave = 'enrichment-sources-save';
   static const String genreAdd = 'genre-add';
   static const String genreAliases = 'genre-aliases';
   static const String genreDelete = 'genre-delete';
@@ -531,6 +546,8 @@ abstract final class SemanticsIds {
       'player-bookmark-delete-$index';
   static const String playerBookmarkNote = 'player-bookmark-note';
   static const String playerBookmarkSheet = 'player-bookmark-sheet';
+  static String playerBookmarkState(Object index) =>
+      'player-bookmark-state-$index';
   static const String playerBookmarks = 'player-bookmarks';
   static const String playerCarMode = 'player-car-mode';
   static String playerChapter(Object index) => 'player-chapter-$index';
@@ -613,6 +630,7 @@ abstract final class SemanticsIds {
   static const String playlistExportCopy = 'playlist-export-copy';
   static const String playlistExportM3u = 'playlist-export-m3u';
   static const String playlistExportNsp = 'playlist-export-nsp';
+  static const String playlistExportNspKeeps = 'playlist-export-nsp-keeps';
   static const String playlistExportNspLoss = 'playlist-export-nsp-loss';
   static String playlistExportNspLossRow(Object index) =>
       'playlist-export-nsp-loss-$index';

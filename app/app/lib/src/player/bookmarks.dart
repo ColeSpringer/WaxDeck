@@ -2,81 +2,228 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../sync/server_event_bus.dart';
+import '../sync/sync_providers.dart';
 import 'playback_session.dart';
 
-/// One book's bookmarks, in timeline order.
-///
-/// A live read rather than mirrored state, and deliberately: a book
-/// holds a handful of these, the sheet that shows them is opened on
-/// purpose, and a mirror table for them would be a sync kind, a delta
-/// shape, and an offline write queue for a feature nobody uses offline
-/// today. Marking a place needs the server, and so far that is the
-/// whole of it.
-/// Auto-disposed, which is what makes "on open" true: the button that
-/// watches it goes with the player, so the next book player fetches
-/// again and a mark made on another device is there when it does. Kept
-/// alive, the first read would be the only one this process ever made.
+/// One book's bookmarks as this listener has them, in timeline order. On
+/// native they live in the mirror, which sends what waits; on web they
+/// are the server's. Auto-disposed, so the next player reads again.
 final bookmarksProvider = AsyncNotifierProvider.autoDispose
-    .family<BookmarksController, List<Bookmark>, String>(
+    .family<BookmarksController, List<LocalBookmark>, String>(
       BookmarksController.new,
+      retry: retryUnlessRefused,
     );
 
-class BookmarksController extends AsyncNotifier<List<Bookmark>> {
+/// The most bookmarks a book holds per listener, as the server counts.
+const bookmarkCap = 200;
+
+/// A mark refused here because the book already holds [bookmarkCap].
+class BookmarksFullException implements Exception {
+  const BookmarksFullException();
+}
+
+class BookmarksController extends AsyncNotifier<List<LocalBookmark>> {
   BookmarksController(this.pid);
 
   final String pid;
 
   @override
-  Future<List<Bookmark>> build() =>
-      ref.watch(repositoryProvider).listBookmarks(pid);
-
-  /// Marks [positionMs] on the book timeline. Errors propagate so the
-  /// caller can say what the server refused (a full book, a position
-  /// past the end).
-  Future<void> add(int positionMs, {String? note}) async {
-    await _settled();
-    final created = await ref
-        .read(repositoryProvider)
-        .createBookmark(pid, positionMs, note: note);
-    // Placed rather than refetched: the answer carries the whole row,
-    // and a listener marking a passage mid-listen should not wait out a
-    // round trip to see it land.
-    final marks = <Bookmark>[...?state.value, created]
-      ..sort((a, b) => a.positionMs.compareTo(b.positionMs));
-    state = AsyncData(marks);
+  Future<List<LocalBookmark>> build() async {
+    final engine = ref.watch(syncEngineProvider);
+    final account = ref.watch(signedInAccountProvider);
+    final repository = ref.watch(repositoryProvider);
+    // This build's own ref: [ref] answers for whichever build is newest.
+    final built = ref;
+    if (engine == null || account == null) {
+      final bus = ref.watch(serverEventBusProvider);
+      final served = await repository.listBookmarks(pid);
+      if (!built.mounted) return const [];
+      // A change on another device arrives as the book's whole list.
+      final changes = bus.events
+          .where((e) => e.kind == 'bookmarks' && e.pid == pid)
+          .listen((e) {
+            if (!built.mounted) return;
+            state = AsyncData([
+              for (final mark in e.bookmarks ?? const <Bookmark>[])
+                LocalBookmark(mark),
+            ]);
+          });
+      built.onDispose(changes.cancel);
+      return [for (final mark in served) LocalBookmark(mark)];
+    }
+    // Read, not watched: a link coming or going is no reason to read again.
+    if (ref.read(offlineProvider)) {
+      unawaited(_refresh(engine, repository, account));
+    } else {
+      try {
+        await _take(engine, repository, account);
+      } on WaxDeckApiException catch (e) {
+        if (_refused(e)) rethrow;
+      }
+    }
+    if (!built.mounted) return const [];
+    final changes = engine.bookmarksChanged
+        .where((book) => book == pid)
+        .listen((_) => unawaited(_reread(engine, account)));
+    built.onDispose(changes.cancel);
+    return engine.localBookmarks(pid, owner: account);
   }
 
+  static bool _refused(WaxDeckApiException e) =>
+      (e.statusCode ?? 0) >= 400 && (e.statusCode ?? 0) < 500;
+
+  Future<void> _take(
+    SyncEngine engine,
+    WaxDeckRepository repository,
+    String account,
+  ) async {
+    final served = await repository.listBookmarks(pid);
+    await engine.storeBookmarks(pid, served, owner: account);
+  }
+
+  /// Reads the server's list behind the mirror's: the link is down, but a
+  /// plain request may still land.
+  Future<void> _refresh(
+    SyncEngine engine,
+    WaxDeckRepository repository,
+    String account,
+  ) async {
+    try {
+      await _take(engine, repository, account);
+    } on WaxDeckApiException {
+      // The mirror stands until the next read.
+    }
+  }
+
+  /// Takes up what the mirror now holds: a mark sent, refused, or pulled.
+  Future<void> _reread(SyncEngine engine, String account) async {
+    final marks = await engine.localBookmarks(pid, owner: account);
+    if (ref.mounted) state = AsyncData(marks);
+  }
+
+  ({SyncEngine engine, String account})? _mirror() {
+    final engine = ref.read(syncEngineProvider);
+    final account = ref.read(signedInAccountProvider);
+    return engine == null || account == null
+        ? null
+        : (engine: engine, account: account);
+  }
+
+  static bool _full(List<LocalBookmark> held) =>
+      held.where((m) => m.sync != BookmarkSync.refused).length >= bookmarkCap;
+
+  /// Marks [positionMs] under an id minted here, so a mark sent later is
+  /// the same mark. Throws [BookmarksFullException] for a full book; on
+  /// web, what the server refused.
+  Future<void> add(int positionMs, {String? note}) async {
+    final mark = Bookmark(
+      id: 'bm-${newUlid()}',
+      positionMs: positionMs,
+      note: note,
+      createdAt: DateTime.now(),
+    );
+    final mirror = _mirror();
+    if (mirror == null) return _addServed(mark);
+    final held = await mirror.engine.localBookmarks(pid, owner: mirror.account);
+    if (_full(held)) throw const BookmarksFullException();
+    // Held before it is sent: nothing the sheet or the link does loses it.
+    await mirror.engine.queueBookmarkCreate(pid, mark, owner: mirror.account);
+    await _send(mirror.engine);
+  }
+
+  /// Removes a mark, and any create of it still waiting to be sent.
   Future<void> remove(String bookmarkId) async {
+    final mirror = _mirror();
+    if (mirror == null) return _removeServed(bookmarkId);
+    await mirror.engine.queueBookmarkDelete(
+      pid,
+      bookmarkId,
+      owner: mirror.account,
+    );
+    await _send(mirror.engine);
+  }
+
+  /// Sends what this book has waiting. Refusals settle on their rows; a
+  /// write the server cannot take now waits, shown as not sent.
+  Future<void> _send(SyncEngine engine) async {
+    try {
+      await engine.sendBookmarks(pid);
+    } on WaxDeckApiException {
+      // Sent with the next flush.
+    }
+  }
+
+  Future<void> _addServed(Bookmark mark) async {
+    final repository = ref.read(repositoryProvider);
     await _settled();
-    await ref.read(repositoryProvider).deleteBookmark(pid, bookmarkId);
-    state = AsyncData(<Bookmark>[
-      for (final mark in state.value ?? const <Bookmark>[])
-        if (mark.id != bookmarkId) mark,
+    if (!ref.mounted) return;
+    if (_full(state.value ?? const [])) throw const BookmarksFullException();
+    // Placed rather than refetched, unless there is no list to place it in.
+    final placed = state.hasValue;
+    if (placed) _place(LocalBookmark(mark));
+    try {
+      final created = await repository.createBookmark(
+        pid,
+        mark.positionMs,
+        note: mark.note,
+        id: mark.id,
+      );
+      if (!ref.mounted) return;
+      placed ? _place(LocalBookmark(created)) : ref.invalidateSelf();
+    } on WaxDeckApiException {
+      if (placed && ref.mounted) _drop(mark.id);
+      rethrow;
+    }
+  }
+
+  Future<void> _removeServed(String bookmarkId) async {
+    final repository = ref.read(repositoryProvider);
+    await _settled();
+    if (!ref.mounted) return;
+    final gone = state.value?.where((m) => m.mark.id == bookmarkId).firstOrNull;
+    _drop(bookmarkId);
+    try {
+      await repository.deleteBookmark(pid, bookmarkId);
+    } on WaxDeckApiException {
+      if (gone != null && ref.mounted) _place(gone);
+      rethrow;
+    }
+  }
+
+  /// Puts [mark] in place of any row with its id, in timeline order.
+  void _place(LocalBookmark mark) {
+    state = AsyncData(
+      <LocalBookmark>[
+        for (final m in state.value ?? const <LocalBookmark>[])
+          if (m.mark.id != mark.mark.id) m,
+        mark,
+      ]..sort((a, b) => a.mark.positionMs.compareTo(b.mark.positionMs)),
+    );
+  }
+
+  void _drop(String id) {
+    state = AsyncData(<LocalBookmark>[
+      for (final m in state.value ?? const <LocalBookmark>[])
+        if (m.mark.id != id) m,
     ]);
   }
 
   /// Waits for the first read to land before editing what it will
-  /// publish.
-  ///
-  /// The button that opens the sheet is drawn while that read is still
-  /// in flight, so a quick tap-and-mark reaches here first. Without
-  /// this, the edit places itself on an empty list and the read - which
-  /// was issued before the mark existed and cannot carry it - lands
-  /// afterwards and takes it straight back off the screen.
-  ///
-  /// A failed read is not this call's to report: the edit goes ahead
-  /// and the sheet already draws the error the read left behind.
+  /// publish, else a read issued before a mark existed takes it off the
+  /// screen. A failed read is the sheet's to show; the edit goes ahead.
   Future<void> _settled() async {
     try {
       await future;
     } on Object {
-      // The edit stands on its own; what the listing could not fetch is
-      // the listing's problem to show.
+      // Shown by the sheet from the state the read left.
     }
   }
 }
@@ -156,6 +303,10 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
       // controller goes with it: clearing a disposed one throws where
       // the field is simply no longer there to clear.
       if (mounted) _note.clear();
+    } on BookmarksFullException {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(l10n.playerBookmarksFull)));
     } on WaxDeckApiException catch (e) {
       messenger
         ..hideCurrentSnackBar()
@@ -252,10 +403,10 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
                     padding: const EdgeInsets.only(bottom: WaxSpace.s16),
                     itemCount: value.length,
                     itemBuilder: (context, index) => _BookmarkRow(
-                      mark: value[index],
+                      held: value[index],
                       index: index,
-                      onJump: () => _jumpTo(value[index].positionMs),
-                      onRemove: () => unawaited(_remove(value[index].id)),
+                      onJump: () => _jumpTo(value[index].mark.positionMs),
+                      onRemove: () => unawaited(_remove(value[index].mark.id)),
                     ),
                   ),
                   AsyncError(:final error) => Padding(
@@ -283,13 +434,13 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
 
 class _BookmarkRow extends StatelessWidget {
   const _BookmarkRow({
-    required this.mark,
+    required this.held,
     required this.index,
     required this.onJump,
     required this.onRemove,
   });
 
-  final Bookmark mark;
+  final LocalBookmark held;
   final int index;
   final VoidCallback onJump;
   final VoidCallback onRemove;
@@ -298,51 +449,90 @@ class _BookmarkRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
+    final mark = held.mark;
     final stamp = formatTimecode(Duration(milliseconds: mark.positionMs));
     final note = mark.note;
+    final caption = switch (held.sync) {
+      BookmarkSync.synced => null,
+      BookmarkSync.pending => l10n.playerBookmarkPending,
+      BookmarkSync.refused => l10n.playerBookmarkRefused(
+        explainRefusal(l10n, held.refusal ?? const Object()),
+      ),
+    };
+    final label = note == null
+        ? l10n.playerBookmarkPlayFrom(stamp)
+        : l10n.playerBookmarkNoteAt(note, stamp);
     return Row(
       children: <Widget>[
         Expanded(
-          child: WaxTappable(
-            semanticsId: SemanticsIds.playerBookmark(index),
-            label: note == null
-                ? l10n.playerBookmarkPlayFrom(stamp)
-                : l10n.playerBookmarkNoteAt(note, stamp),
-            onPressed: onJump,
-            borderRadius: WaxRadius.thumb,
-            child: InkWell(
-              borderRadius: WaxRadius.thumb,
-              onTap: onJump,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: WaxSpace.s24,
-                  vertical: WaxSpace.s12,
-                ),
-                child: Row(
-                  children: <Widget>[
-                    Text(
-                      stamp,
-                      style: WaxType.monoTime.copyWith(
-                        color: colors.textSecondary,
-                      ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              WaxTappable(
+                semanticsId: SemanticsIds.playerBookmark(index),
+                label: caption == null ? label : '$label, $caption',
+                onPressed: onJump,
+                borderRadius: WaxRadius.thumb,
+                child: InkWell(
+                  borderRadius: WaxRadius.thumb,
+                  onTap: onJump,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: WaxSpace.s24,
+                      vertical: WaxSpace.s12,
                     ),
-                    const SizedBox(width: WaxSpace.s12),
-                    Expanded(
-                      child: Text(
-                        note ?? l10n.playerBookmarkNoNote,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: WaxType.body.copyWith(
-                          color: note == null
-                              ? colors.textTertiary
-                              : colors.textPrimary,
+                    child: Row(
+                      children: <Widget>[
+                        Text(
+                          stamp,
+                          style: WaxType.monoTime.copyWith(
+                            color: colors.textSecondary,
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: WaxSpace.s12),
+                        Expanded(
+                          child: Text(
+                            note ?? l10n.playerBookmarkNoNote,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: WaxType.body.copyWith(
+                              color: note == null
+                                  ? colors.textTertiary
+                                  : colors.textPrimary,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
+              // Outside the tappable, which hides its children, and not
+              // read aloud: the tappable's own label already says it.
+              if (caption != null)
+                Semantics(
+                  identifier: SemanticsIds.playerBookmarkState(index),
+                  container: true,
+                  excludeSemantics: true,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      WaxSpace.s24,
+                      0,
+                      WaxSpace.s24,
+                      WaxSpace.s12,
+                    ),
+                    child: Text(
+                      caption,
+                      style: WaxType.caption.copyWith(
+                        color: held.sync == BookmarkSync.refused
+                            ? colors.error
+                            : colors.textTertiary,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
         Padding(

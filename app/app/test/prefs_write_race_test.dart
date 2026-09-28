@@ -122,7 +122,7 @@ class _HeldEngine extends SyncEngine {
 ) {
   final db = inMemoryMirrorDatabase();
   // The account the binder names as a session begins.
-  final engine = _HeldEngine(db: db, repository: repo)..prefsOwner = _user.id;
+  final engine = _HeldEngine(db: db, repository: repo)..account = _user.id;
   final container = ProviderContainer(
     overrides: [
       repositoryProvider.overrideWithValue(repo),
@@ -560,7 +560,7 @@ void main() {
         ..putPrefsError = null
         ..sessionState = const SessionState(authenticated: true, user: _other)
         ..prefs = const Prefs(pinned: ['AL-9']);
-      h.engine.prefsOwner = _other.id;
+      h.engine.account = _other.id;
       h.container.invalidate(authControllerProvider);
       final loaded = await h.container.read(prefsControllerProvider.future);
       await h.engine.flushOutbox();

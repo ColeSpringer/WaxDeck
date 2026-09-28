@@ -211,6 +211,16 @@ const _v5Schema = [
       '"catalog_since" TEXT NULL, "server_since" TEXT NULL, PRIMARY KEY ("id"));',
 ];
 
+/// The schema as v6 shipped it: v5's, with the outbox's payload column
+/// appended the way its migration appends it. The path v7 runs on.
+final _v6Schema = [
+  for (final statement in _v5Schema)
+    statement.replaceFirst(
+      '"recorded_at" INTEGER NOT NULL);',
+      '"recorded_at" INTEGER NOT NULL, "payload" TEXT NULL);',
+    ),
+];
+
 /// A database holding what a v1 install would hold, opened through the
 /// current schema so the upgrade path runs on first use.
 MirrorDatabase _upgradedFromV1() {
@@ -308,6 +318,25 @@ MirrorDatabase _upgradedFromV5() {
   );
 }
 
+/// The same, for a v6 install: a preference patch queued offline, which
+/// the bookmark table's arrival must not cost.
+MirrorDatabase _upgradedFromV6() {
+  return MirrorDatabase(
+    NativeDatabase.memory(
+      setup: (raw) {
+        for (final statement in _v6Schema) {
+          raw.execute(statement);
+        }
+        raw.execute(
+          'INSERT INTO outbox_mutations (kind, pid, recorded_at, payload) '
+          "VALUES ('prefs', 'us-1', 1758931200, '{\"locale\":\"es\"}');",
+        );
+        raw.userVersion = 6;
+      },
+    ),
+  );
+}
+
 /// Every table's columns, as sqlite reports them: name, type, and
 /// whether it is required. What a migration has to end up matching.
 Future<Map<String, List<String>>> _columns(MirrorDatabase db) async {
@@ -340,11 +369,13 @@ void main() {
     final fromV2 = _upgradedFromV2();
     final fromV3 = _upgradedFromV3();
     final fromV5 = _upgradedFromV5();
+    final fromV6 = _upgradedFromV6();
     final fresh = inMemoryMirrorDatabase();
     addTearDown(upgraded.close);
     addTearDown(fromV2.close);
     addTearDown(fromV3.close);
     addTearDown(fromV5.close);
+    addTearDown(fromV6.close);
     addTearDown(fresh.close);
 
     // Touch each database so the create and the upgrade both run.
@@ -352,6 +383,7 @@ void main() {
     await fromV2.select(fromV2.mirrorItems).get();
     await fromV3.select(fromV3.mirrorItems).get();
     await fromV5.select(fromV5.mirrorItems).get();
+    await fromV6.select(fromV6.mirrorItems).get();
     await fresh.select(fresh.mirrorItems).get();
 
     final target = await _columns(fresh);
@@ -361,6 +393,20 @@ void main() {
     expect(await _columns(fromV2), target);
     expect(await _columns(fromV3), target);
     expect(await _columns(fromV5), target);
+    expect(await _columns(fromV6), target);
+  });
+
+  test('v6 upgrades: a queued patch survives, bookmarks can be held', () async {
+    final db = _upgradedFromV6();
+    addTearDown(db.close);
+
+    final queued = await db.select(db.outboxMutations).getSingle();
+    expect(queued.kind, 'prefs');
+    expect(queued.payload, '{"locale":"es"}');
+    expect(await db.select(db.mirrorBookmarks).get(), isEmpty);
+
+    final version = await db.customSelect('pragma user_version').getSingle();
+    expect(version.data.values.first, db.schemaVersion);
   });
 
   test('v5 upgrades: a queued mutation survives with no payload', () async {

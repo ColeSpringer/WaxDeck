@@ -11,10 +11,15 @@ part 'bookmark_create.g.dart';
 /// A new bookmark on the book timeline.
 ///
 /// Properties:
+/// * [id] - A client-minted bookmark PID, for a mark made offline; the server mints one when absent. 
 /// * [positionMs] - Book-timeline position in milliseconds.
 /// * [note] - An optional note.
 @BuiltValue()
 abstract class BookmarkCreate implements Built<BookmarkCreate, BookmarkCreateBuilder> {
+  /// A client-minted bookmark PID, for a mark made offline; the server mints one when absent. 
+  @BuiltValueField(wireName: r'id')
+  String? get id;
+
   /// Book-timeline position in milliseconds.
   @BuiltValueField(wireName: r'positionMs')
   int get positionMs;
@@ -46,6 +51,13 @@ class _$BookmarkCreateSerializer implements PrimitiveSerializer<BookmarkCreate> 
     BookmarkCreate object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
+    if (object.id != null) {
+      yield r'id';
+      yield serializers.serialize(
+        object.id,
+        specifiedType: const FullType(String),
+      );
+    }
     yield r'positionMs';
     yield serializers.serialize(
       object.positionMs,
@@ -81,6 +93,14 @@ class _$BookmarkCreateSerializer implements PrimitiveSerializer<BookmarkCreate> 
       final key = serializedList[i] as String;
       final value = serializedList[i + 1];
       switch (key) {
+        case r'id':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.id = valueDes;
+          break;
         case r'positionMs':
           final valueDes = serializers.deserialize(
             value,

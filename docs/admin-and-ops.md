@@ -211,6 +211,26 @@ Archive's group records are kept, since losing one costs a cover
 download. The space is freed inside the catalog file, and a vacuum
 returns it to the filesystem.
 
+## Enrichment
+
+**Enrichment** in the console gathers everything about where artwork,
+lyrics and details come from. It says first whether a pass can do
+anything at all (with no MusicBrainz contact and no provider configured
+and switched on, none can) and whether one is running, then how much of
+the library is covered; lyrics show only the track total, since the
+catalog does not count them. A pass started from here can fill only
+what is missing, ask again about everything, or ask again in the phases
+you pick; only the phases this server can run are offered.
+
+**Sources** lists the providers in the order they are asked. This
+server's own can be moved up or down and switched off, and **Save order**
+keeps the change without a restart; the catalog's built-ins are listed
+after them and cannot be moved. A pass already running keeps the order
+it started with, and a source switched back on is not asked about what a
+pass finished while it was off unless a run forces its phases. **Last run** shows what the newest finished pass looked
+up and what some source answered, walk by walk, and **Response cache**
+holds the census and prune described under scheduled jobs.
+
 ## The trash
 
 Deletions go to the catalog's reversible trash - a same-volume

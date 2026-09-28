@@ -59,8 +59,12 @@ class ScriptedRepository implements WaxDeckRepository {
     return catalogPages.removeAt(0);
   }
 
+  /// The cursor each server walk was asked from; null mints a fresh one.
+  final serverSinces = <String?>[];
+
   @override
   Future<ServerSyncPage> syncServer({String? since, int? limit}) async {
+    serverSinces.add(since);
     if (serverPages.isEmpty) {
       return const ServerSyncPage(nextSince: 'scur-0');
     }
@@ -164,6 +168,56 @@ class ScriptedRepository implements WaxDeckRepository {
     return prefs = next;
   }
 
+  /// Bookmarks the server holds, per book, as creates and deletes left
+  /// them; and every create and delete sent, in order.
+  final bookmarks = <String, List<Bookmark>>{};
+  final bookmarkCalls = <String>[];
+
+  /// Thrown by the next bookmark write while set.
+  WaxDeckApiException? bookmarkError;
+
+  /// Holds every bookmark create until completed, when set.
+  Completer<void>? bookmarkGate;
+
+  /// What reading one book's marks throws, per book.
+  final listBookmarksErrors = <String, WaxDeckApiException>{};
+
+  @override
+  Future<List<Bookmark>> listBookmarks(String pid) async {
+    bookmarkCalls.add('list:$pid');
+    if (listBookmarksErrors[pid] case final error?) throw error;
+    return [...?bookmarks[pid]];
+  }
+
+  @override
+  Future<Bookmark> createBookmark(
+    String pid,
+    int positionMs, {
+    String? note,
+    String? id,
+  }) async {
+    bookmarkCalls.add('create:$pid:$id:$positionMs');
+    await bookmarkGate?.future;
+    final error = bookmarkError;
+    if (error != null) throw error;
+    final mark = Bookmark(
+      id: id ?? 'bm-SERVER',
+      positionMs: positionMs,
+      note: note,
+      createdAt: DateTime.utc(2026, 9, 27),
+    );
+    (bookmarks[pid] ??= []).add(mark);
+    return mark;
+  }
+
+  @override
+  Future<void> deleteBookmark(String pid, String bookmarkId) async {
+    bookmarkCalls.add('delete:$pid:$bookmarkId');
+    final error = bookmarkError;
+    if (error != null) throw error;
+    bookmarks[pid]?.removeWhere((m) => m.id == bookmarkId);
+  }
+
   void _maybeFail() {
     if (failNextMutations > 0) {
       failNextMutations--;
@@ -247,7 +301,7 @@ void main() {
       db: db,
       repository: repo,
       channelFactory: neverConnects(),
-    )..prefsOwner = _owner;
+    )..account = _owner;
   });
 
   tearDown(() async {
@@ -647,7 +701,7 @@ void main() {
         db: db,
         repository: repo,
         channelFactory: _connects(),
-      )..prefsOwner = _owner;
+      )..account = _owner;
       addTearDown(live.dispose);
       await live.start();
       await pumpEventQueue();
@@ -723,7 +777,7 @@ void main() {
         db: mirror,
         repository: repo,
         channelFactory: _connects(),
-      )..prefsOwner = _owner;
+      )..account = _owner;
       addTearDown(live.dispose);
       await live.start();
       await pumpEventQueue();
@@ -741,13 +795,13 @@ void main() {
       // is not the next account's to send: it goes out when its own
       // account is back.
       await engine.queuePrefsPatch({'locale': 'es'}, owner: _owner);
-      engine.prefsOwner = 'us-2';
+      engine.account = 'us-2';
 
       await engine.flushOutbox();
       expect(repo.prefsWrites, isEmpty);
       expect(await engine.pendingPrefsPatch('us-2'), isNull);
 
-      engine.prefsOwner = _owner;
+      engine.account = _owner;
       await engine.flushOutbox();
       expect(repo.prefs.locale, 'es');
     });
@@ -919,5 +973,45 @@ void main() {
     // No cursor and no mirror half: the frame says a cover landed, and
     // the listener re-reads play-info rather than pulling a stream.
     expect(repo.catalogCalls, 0);
+  });
+
+  test('a failed call drops the link it was made over', () async {
+    // Closing the channel cancels its own done callback, so nothing else
+    // would ever say the link went: connected, and never reconnecting.
+    final live = SyncEngine(
+      db: db,
+      repository: repo,
+      channelFactory: _connects(),
+    )..account = _owner;
+    addTearDown(live.dispose);
+    await live.queueCheckpoint('tr-A', 1000);
+    repo.failNextMutations = 1;
+
+    await live.start();
+    await pumpEventQueue();
+
+    expect(live.current.connection, isNot(SyncConnection.connected));
+  });
+
+  test('what one account left waiting is sent only for it', () async {
+    await engine.queueCheckpoint('tr-A', 1000);
+    await engine.queueListen(
+      ListenSession(
+        sessionId: 's-1',
+        pid: 'tr-A',
+        startedAt: DateTime.utc(2026, 9, 1),
+        msPlayed: 1000,
+      ),
+    );
+    engine.account = 'us-2';
+
+    await engine.flushOutbox();
+    expect(repo.replayed, isEmpty);
+    expect(repo.reportedSessions, isEmpty);
+
+    engine.account = _owner;
+    await engine.flushOutbox();
+    expect(repo.replayed, ['position:tr-A:1000:true']);
+    expect(repo.reportedSessions, {'s-1'});
   });
 }

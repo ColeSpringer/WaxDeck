@@ -153,7 +153,9 @@ info:
       defined for `feature` so far is `windowed-track` (a track that is a
       window into a larger file, sent to a device endpoint on a server
       running without the streaming engine), and other refusals under
-      that code carry no params yet. Values are
+      that code carry no params yet. Under `conflict`, a bookmark create
+      replaying the id of a removed bookmark carries `reason: removed`,
+      and a client drops its copy. Values are
       strings even when they read as numbers. Clients must ignore keys
       they do not know, and an absent `params` means the plain code.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
@@ -2351,6 +2353,11 @@ paths:
         book holds at most 200 bookmarks per user; the request is
         refused rather than silently evicting the oldest, because what
         would be dropped is something the listener wrote.
+
+
+        An offline mark carries the `id` its client minted, and is dated
+        by it. A replay answers the stored mark, unchecked; a removed
+        mark's `id` is `conflict` with `params.reason` `removed`.
       tags: [books]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -2373,6 +2380,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -2381,10 +2390,11 @@ paths:
       operationId: deleteBookmark
       summary: Remove one bookmark
       description: >
-        Deletes one of the caller's bookmarks. Deleting a bookmark that
-        is already gone answers 204: the outcome the caller asked for
-        holds either way, and an offline client replaying its queue must
-        not stall on one it already removed.
+        Deletes one of the caller's bookmarks. One already gone answers 204,
+        so a client replaying its queue never stalls on a mark it removed.
+
+
+        One on a book out of the caller's sight is deleted all the same.
       tags: [books]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -2598,6 +2608,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/EnrichmentStatus"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /library/enrichment/sources:
+    put:
+      operationId: putEnrichmentSources
+      summary: Order and switch the enrichment sources
+      description: >
+        Saves the order this server's own providers are asked in and which are
+        asked at all, naming each once; one not wired now keeps its switch. A
+        running pass keeps its order until it ends. Administrators only.
+      tags: [enrichment]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrichmentSourcesUpdate"
+      responses:
+        "200":
+          description: The status under the new order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichmentStatus"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -6380,15 +6421,13 @@ paths:
         everywhere. `POST /library/analyze` and the `analyze` schedule are
         what produce them.
 
-        `peaks` is one value per bucket, `0` silence and `255` full
-        scale, at the fixed `resolution` the catalog stores (1000 buckets
-        per track today, about a kilobyte). There is no `points`
-        parameter: a resizable seek bar has to downsample to its own
-        pixel width anyway, and a server-side width would add a query
-        dimension to the cache key for work the renderer does for free.
-        The stored values are 16-bit and narrowed to a byte here, so the
-        low bits are dropped rather than rounded; that is invisible at
-        any width a seek bar is drawn at.
+        `peaks` is one value per bucket, `0` silence and `255` full scale,
+        at the `resolution` the catalog stores (1000 buckets a file today);
+        downsample to the width drawn. Stored 16-bit, narrowed by truncation.
+
+        A cue-carved track answers its window of its file's envelope:
+        `resolution` is its share of the buckets, `essenceHash` names the
+        file, and the `ETag` carries the window and the length placing it.
 
         Waveforms are per audio file: for a multi-file audiobook, pass
         `partIndex` to get the envelope of one part, in that part's own
@@ -6415,18 +6454,13 @@ paths:
         silence somebody could seek into, which is a convincing wrong
         answer rather than a partial one.
 
-        `state` is `ready`, `pending` (this item is analyzable and has
-        not been analyzed yet; poll again after an analyze pass), or
-        `unavailable` (there will never be a waveform for this item).
-        Read `unavailable` as final. Three populations answer it: podcast
-        episodes, which are deliberately never analyzed; a track carved
-        out of a shared file by a cue sheet, which has no envelope of
-        its own to report; and a file the pass analyzed but could not
-        measure, which is not retried until its audio changes. A client
-        should draw its plain seek bar for `unavailable` rather than
-        spinning. A book part whose file has simply not been analyzed
-        yet is `pending`, not `unavailable`, so a partly analyzed book
-        can report the two states across its parts.
+        `state` is `ready`, `pending` (not analyzed yet; ask after a pass),
+        or `unavailable`, which is final: an episode, a file the pass could
+        not measure, or a carved track its file's stated length cannot place.
+
+
+        A book part not yet analyzed is `pending`, so a partly analyzed
+        book can report both states across its parts.
 
         A `ready` answer is content-addressed by the audio essence of
         the file being described (so a multi-file book's parts carry
@@ -6465,10 +6499,9 @@ paths:
           headers:
             ETag:
               description: >
-                Validator derived from the audio essence of the file
-                being described, which for a multi-file book is the
-                requested part. Present on `ready` only; the other two
-                states are not cacheable.
+                The described file's audio essence (a multi-file book's
+                requested part), plus a carved track's window and the length
+                placing it. Present on `ready` only.
               schema:
                 type: string
             Cache-Control:
@@ -7230,18 +7263,14 @@ paths:
         no comment.
 
 
-        Fields map onto the rule vocabulary
-        (`GET /playlists/rule-fields`): `title`, `album`, `artist`,
-        `albumartist`, `genre`, `year`, `trackNumber`, `discNumber`,
-        `bpm`, `playCount` by name, plus
-        `dateAdded` to `addedAt`, `lastPlayed` to `lastPlayedAt`,
-        `filepath` to `path`, `loved` to `starred`, `duration` to
-        `durationMs`, and `rating`. Two of those carry different units
-        on each side and are **rescaled**: NSP counts duration in
-        seconds where WaxDeck counts milliseconds, and rates 0 to 5
-        where WaxDeck rates 0 to 100, so an unscaled `rating gt 3`
-        would mean "rated above 3 out of 100", which is every rated
-        track.
+        Fields map onto the rule vocabulary (`GET /playlists/rule-fields`):
+        `title`, `album`, `artist`, `albumartist`, `genre`, `year`, `bpm`,
+        `trackNumber`, `discNumber`, `playCount`, `starred` and `rating`.
+
+
+        `dateAdded` maps to `addedAt` and `lastPlayed` to `lastPlayedAt`.
+        `rating` is **rescaled**: NSP rates 0 to 5 where WaxDeck rates 0 to
+        100, so an unscaled `rating gt 3` would match every rated track.
 
 
         `notContains` imports as a `not` node wrapping `contains`;
@@ -7625,31 +7654,28 @@ paths:
         `feature-unavailable`.
 
 
-        Export is **all-or-nothing** by default, like the import: a rule
-        holding anything NSP cannot say is refused with **every**
-        offender named, rather than written as a document that means
-        something else. WaxDeck's rule vocabulary is the larger one, so
-        this is the common answer for a rule built in the editor.
-        `notContains` is the only negation NSP can carry, so every
-        other `not` refuses; `gte`, `lte`, `isPresent`, and `isMissing`
-        have no NSP form; the `minutes` and `megabytes` limit modes and
-        a pinned random seed have none; a rating that is not a whole
-        number of stars has none; NSP sorts on one term, so a rule
-        ordered by a second refuses rather than dropping it; and
-        neither do the fields NSP does not carry (`mediaType`, `state`,
-        `source`, `container`, `codec`, `podcast`, `season`,
-        `publishedAt`, `updatedAt`, `starredAt`, `played`, `finished`,
-        `albumBarcode`, `albumLabel`, `albumCatalogNumber`,
-        `albumMedia`, `albumCountry`, `tag.KEY`, and `playlist`).
-        `albumArtist` is **not** among them: NSP carries it, and it
-        round-trips.
+        Export is **all-or-nothing** by default, like the import: a rule holding
+        anything NSP cannot say is refused with **every** offender named,
+        rather than written as a document that means something else.
 
 
-        `partial=true` accepts the loss instead: the parts NSP cannot
-        say are dropped and the rest is written. Still refused when
-        nothing survives, since a document with every condition dropped
-        matches the whole library on the far side. Ask
-        `GET /playlists/{pid}/nsp/report` first to see what would go.
+        NSP cannot say a `not` other than `notContains`, `gte`, `lte`,
+        `isPresent`, `isMissing`, the `minutes` and `megabytes` limit modes,
+        a pinned random seed, a rating in part stars, or a second sort term.
+
+
+        Nor the fields `mediaType`, `state`, `source`, `container`, `codec`,
+        `path`, `durationMs`, `podcast`, `season`, `publishedAt`, `updatedAt`,
+        `starredAt`, `played`, `finished`, `tag.KEY` and `playlist`,
+
+
+        nor `albumBarcode`, `albumLabel`, `albumCatalogNumber`, `albumMedia`
+        and `albumCountry`. `albumArtist` it carries, and it round-trips.
+
+
+        `partial=true` drops what NSP cannot say and writes the rest; still
+        refused when nothing survives, since that matches the whole library.
+        Read `GET /playlists/{pid}/nsp/report` first and pass its `ruleHash`.
 
 
         The response carries the playlist's own `name`, and `public`
@@ -7666,6 +7692,15 @@ paths:
           schema:
             type: boolean
             default: false
+        - name: ruleHash
+          in: query
+          required: false
+          description: >
+            The `ruleHash` of the report the caller read. When the rule
+            has changed since, the export answers `conflict` instead.
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{16}$"
       responses:
         "200":
           description: The NSP document.
@@ -7673,10 +7708,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/NspDocument"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "501":
           $ref: "#/components/responses/FeatureUnavailable"
         "503":
@@ -10037,14 +10076,13 @@ paths:
       operationId: pullSimilarityWork
       summary: Pull analysis work (worker)
       description: >
-        Leases a batch of tracks awaiting embedding. Each work item
-        names the track and where to pull decode-ready audio; the
-        worker computes an embedding per item and posts the batch
-        back. Leases expire on their own, so a crashed worker's items
-        return to the queue without cleanup. An empty batch means the
-        library is fully embedded; workers should sleep
-        `retryAfterSeconds` before polling again. Requires the worker
-        token.
+        Leases a batch of tracks awaiting embedding, each naming where to pull
+        its decode-ready audio (a cue-carved track's own window). Leases lapse
+        on their own; an empty batch means sleep `retryAfterSeconds`. Worker token.
+
+
+        A server without the streaming engine cannot serve a carved
+        track's window, so it keeps those tracks for its own analysis.
       tags: [similarity]
       security:
         - workerAuth: []
@@ -10072,16 +10110,9 @@ paths:
       operationId: reportEmbeddings
       summary: Post computed embeddings (worker)
       description: >
-        Records a batch of computed embeddings. Vectors are keyed by
-        the track's audio essence, so an identical rip re-imported
-        later never needs re-analysis. All vectors in one batch carry
-        the batch's `model` and `dims`; a vector whose length differs
-        from `dims` is rejected per item. Posting a different `model`
-        than the stored vectors replaces coverage model-wide: mixed
-        models never compare, so the server drops stored vectors of
-        other models as new ones arrive. Ingest also maintains the
-        nearest-neighbor graph that powers sonic paths. Requires the
-        worker token.
+        Records a batch of embeddings, keyed by each item's analysis key, in the
+        batch's `model` and `dims` (a vector of another length is refused alone).
+        A new `model` replaces coverage, since models never mix. Worker token.
       tags: [similarity]
       security:
         - workerAuth: []
@@ -13800,6 +13831,13 @@ components:
       description: A new bookmark on the book timeline.
       required: [positionMs]
       properties:
+        id:
+          type: string
+          description: >
+            A client-minted bookmark PID, for a mark made offline;
+            the server mints one when absent.
+          pattern: "^bm-[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+          example: bm-01JZX5N8QW3F4V9T2B7KD3M9R6
         positionMs:
           type: integer
           format: int64
@@ -14070,8 +14108,9 @@ components:
         providers:
           type: array
           description: >
-            Registered providers in priority order (this server's
-            own first, then the catalog's key-free built-ins).
+            Registered providers in the order they are asked: this
+            server's own in the operator's order, then the catalog's
+            key-free built-ins.
           items:
             $ref: "#/components/schemas/EnrichmentProvider"
         coverage:
@@ -14079,13 +14118,18 @@ components:
         running:
           type: boolean
           description: Whether a whole-library pass is running now.
+        runningJob:
+          type: string
+          description: >
+            The running pass's job pid, when one runs; `GET /jobs/{pid}` follows
+            it more cheaply than this read.
+          example: jb-01JZX5N8QW3F4V9T2B7KD3M9R6
         configured:
           type: boolean
           description: >
-            Whether a whole-library pass would do anything: some phase
-            can run. That is true on any server carrying a provider
-            that gates a phase of its own, and true on every server
-            with a MusicBrainz contact. Read `phases` for which half.
+            Whether a whole-library pass would do anything: some phase can
+            run, which a switched-on provider gating one or a MusicBrainz
+            contact makes true. Read `phases` for which.
 
 
             False means every run refuses with `source-unavailable`, so
@@ -14103,7 +14147,7 @@ components:
           description: >
             The phases a run started now would execute; empty exactly when
             `configured` is false. `identity` and `releases` need the contact,
-            `album-art` and `lyrics` it or a provider, the rest a provider.
+            `album-art` and `lyrics` it or a provider switched on, the rest one.
           items:
             $ref: "#/components/schemas/EnrichmentPhase"
         lastRun:
@@ -14135,6 +14179,38 @@ components:
         builtin:
           type: boolean
           description: True for the catalog's built-ins.
+        enabled:
+          type: boolean
+          default: true
+          description: >
+            Whether it is asked at all. Switched back on, it is not asked about
+            what a pass finished while it was off unless a run forces its phases.
+
+    EnrichmentSourcesUpdate:
+      type: object
+      description: The operator's order over the orderable providers.
+      required: [sources]
+      properties:
+        sources:
+          type: array
+          description: >
+            Every provider the status lists that is not `builtin`, in the order
+            they are to be asked.
+          items:
+            $ref: "#/components/schemas/EnrichmentSource"
+
+    EnrichmentSource:
+      type: object
+      description: One provider's place in the order, and its switch.
+      required: [name, enabled]
+      properties:
+        name:
+          type: string
+          description: The provider's `name` from the status.
+          example: fanarttv
+        enabled:
+          type: boolean
+          description: Whether it is asked.
 
     EnrichmentLastRun:
       type: object
@@ -14309,7 +14385,10 @@ components:
 
     EnrichmentCoverage:
       type: object
-      description: How much of the catalog has enriched.
+      description: >-
+        How much of the catalog has enriched. Lyrics carries its total alone,
+        the music tracks: the catalog does not count lyrics per track, so its
+        enriched reads zero.
       required: [artists, releaseGroups, books, lyrics]
       properties:
         artists:
@@ -18352,9 +18431,9 @@ components:
         resolution:
           type: integer
           description: >
-            How many buckets `peaks` carries (`ready` only). Fixed by the
-            catalog at 1000 today; read it rather than assuming, because
-            an analysis version bump may change it.
+            How many buckets `peaks` carries (`ready` only): 1000 per
+            file today, a carved track's share of its file's; read it
+            rather than assuming.
           example: 1000
         essenceHash:
           type: string
@@ -19863,11 +19942,9 @@ components:
     NspReport:
       type: object
       description: >
-        What one NSP mapping could not carry. `gaps` block the strict
-        conversion and are what a `partial=true` conversion drops;
-        `notes` are losses that block nothing, so a client mentions
-        them without refusing. Both are empty when the mapping is
-        lossless.
+        What one NSP mapping could not carry: `gaps` block a strict conversion
+        and are what `partial=true` drops; `notes` block nothing. An export
+        report carries `ruleHash`, and `rule` when a partial export keeps some.
       required: [direction]
       properties:
         direction:
@@ -19899,6 +19976,14 @@ components:
           maxItems: 12
           items:
             $ref: "#/components/schemas/NspGap"
+        ruleHash:
+          type: string
+          description: >
+            Export only: names the rule this report was read from, to
+            pass back as the export's `ruleHash`.
+          pattern: "^[0-9a-f]{16}$"
+        rule:
+          $ref: "#/components/schemas/SmartRule"
 
     M3uImport:
       type: object
@@ -21647,9 +21732,9 @@ components:
         essence:
           type: string
           description: >
-            The track's audio-essence hash. Echo it back with the
-            vector; embeddings are keyed by essence so identical audio
-            never re-analyzes.
+            The analysis key: the audio essence, windowed for a
+            cue-carved track. Opaque to workers; echo it back with the
+            vector.
         audioUrl:
           type: string
           description: >
@@ -21661,11 +21746,9 @@ components:
         localPath:
           type: string
           description: >
-            Library-relative path of the source file, present only
-            when the server is configured to expose paths to same-host
-            workers (`WAXDECK_WORKER_LOCAL_PATHS`); such workers mount
-            the library read-only and decode locally instead of
-            pulling audio over HTTP.
+            The source file's library-relative path, for a same-host worker
+            (`WAXDECK_WORKER_LOCAL_PATHS`) that mounts the library read-only;
+            never for a cue-carved track, whose file is the whole rip.
         durationMs:
           type: integer
           format: int64
@@ -21710,7 +21793,7 @@ components:
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         essence:
           type: string
-          description: The audio-essence hash (from the work item).
+          description: The analysis key (from the work item).
         vector:
           type: array
           minItems: 8
@@ -21748,7 +21831,7 @@ components:
           description: The refused item's pid, when it was parseable.
         essence:
           type: string
-          description: The refused item's essence hash, when it was parseable.
+          description: The refused item's analysis key, when it was parseable.
         code:
           type: string
           description: >
@@ -22257,19 +22340,19 @@ components:
         kind:
           type: string
           description: >
-            What changed: `play-state` (carries `pid` and `playState`),
-            `prefs` (carries `prefs`), `subscription` (carries `pid`, the
-            show; `subscription` is the current state, absent when the
-            caller unsubscribed), `book-settings` (carries `pid`, the
-            book, and `bookSettings`), or `playlist` (carries `pid`;
-            `playlist` is the current state, absent when the playlist
-            was deleted or replaced under a new pid). Curation surfaces
-            emit marker kinds carrying only `pid`: `review` (a review
-            entry changed; refetch the review endpoints), `upload` (an
-            upload session changed), `task` (a tool task changed), and
-            `entity-state` (an artist or album was starred or rated).
-            Markers hydrate nothing because those surfaces are live
-            reads, not mirrored state.
+            What changed: `play-state` (`pid`, `playState`), `prefs`, or
+            `subscription` (`pid`, the show; `subscription` absent once the
+            caller unsubscribed); `book-settings` (`pid`, `bookSettings`);
+
+
+            `bookmarks` (`pid`, the book, and `bookmarks`, its whole current
+            list: a mark missing from it was deleted); or `playlist` (`pid`;
+            `playlist` absent when deleted or replaced under a new pid).
+
+
+            Markers carry only `pid` and hydrate nothing: `review`, `upload`,
+            `task` (refetch that surface), and `entity-state` (an artist or
+            album was starred or rated).
 
 
             Further markers are announcements rather than refetch
@@ -22310,6 +22393,13 @@ components:
           $ref: "#/components/schemas/Subscription"
         bookSettings:
           $ref: "#/components/schemas/BookSettings"
+        bookmarks:
+          type: array
+          description: >
+            On `bookmarks`: the caller's bookmarks in the book, in
+            timeline order. Present and empty when none are left.
+          items:
+            $ref: "#/components/schemas/Bookmark"
         playlist:
           $ref: "#/components/schemas/Playlist"
 

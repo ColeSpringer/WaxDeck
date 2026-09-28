@@ -3,14 +3,19 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/pidpath"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
+	"github.com/colespringer/waxbin/waxerr"
 
+	"github.com/colespringer/waxdeck/server/internal/analyzer"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/similarity"
 )
@@ -69,7 +74,7 @@ const workLease = 10 * time.Minute
 type SonicAnalyzer interface {
 	Model() string
 	VectorDims() int
-	AnalyzeFile(ctx context.Context, path string) ([]float32, error)
+	AnalyzeFileWindow(ctx context.Context, path string, fromSample, toSample int64) ([]float32, error)
 }
 
 // embeddedAnalysisPace is the breath between tracks in the embedded
@@ -90,7 +95,7 @@ func (l *Library) DrainEmbeddedAnalysis(ctx context.Context, an SonicAnalyzer) (
 	if an == nil || !l.SonicAnalysisEnabled() {
 		return false, nil
 	}
-	work, err := l.db.LeaseSimilarityWork(ctx, 5, workLease)
+	work, err := l.db.LeaseSimilarityWork(ctx, 5, workLease, true)
 	if err != nil {
 		return false, &Error{Kind: KindInternal, Err: err}
 	}
@@ -101,49 +106,47 @@ func (l *Library) DrainEmbeddedAnalysis(ctx context.Context, an SonicAnalyzer) (
 		if err := ctx.Err(); err != nil {
 			return true, nil
 		}
-		// Catalog misses retire the row: the item left the library,
-		// and a return re-enqueues under a fresh data version.
+		// A catalog miss retires the row: the item left the library, and
+		// a return re-enqueues under a fresh data version.
 		it, err := l.lib.Get(ctx, model.PID(w.ItemPID))
 		if err != nil {
 			l.completeAnalysis(ctx, w.Essence)
 			continue
 		}
-		f, err := l.lib.File(ctx, it.FilePID)
-		if err != nil {
+		path, from, to, err := l.sonicSource(ctx, it)
+		if err != nil && !errors.Is(err, errNoWindow) {
 			l.completeAnalysis(ctx, w.Essence)
 			continue
 		}
-		vec, err := an.AnalyzeFile(ctx, string(f.Path))
-		if err != nil {
-			// A filesystem-level failure (a locked file, a NAS hiccup,
-			// a slow mount) keeps the row leased: it re-offers when
-			// the lease lapses and rests after the attempt cap, like a
-			// leased-but-silent external worker. Anything the decoder
-			// or embedder concluded about the bytes (undecodable, too
-			// short, silent) is a verdict retrying cannot change, so
-			// those retire their rows; a rescan re-enqueues if the
-			// file changes.
-			var pathErr *fs.PathError
-			if errors.As(err, &pathErr) {
-				l.log.Warn("embedded analysis could not read a track; it will retry", "pid", w.ItemPID, "err", err)
-				continue
+		var vec []float32
+		if err == nil {
+			vec, err = an.AnalyzeFileWindow(ctx, path, from, to)
+		}
+		var pathErr *fs.PathError
+		switch {
+		case errors.As(err, &pathErr):
+			// A filesystem-level failure (a locked file, a NAS hiccup, a
+			// slow mount) keeps the row leased: it re-offers when the
+			// lease lapses and rests after the attempt cap.
+			l.log.Warn("embedded analysis could not read a track; it will retry", "pid", w.ItemPID, "err", err)
+		case err != nil:
+			// A verdict on the audio (undecodable, too short, silent, a
+			// window with nothing to place it by) that retrying cannot move.
+			l.retireAnalysis(ctx, w, err.Error())
+		default:
+			res, err := l.IngestEmbeddings(ctx, an.Model(), an.VectorDims(), []EmbeddingUpload{{
+				PID:     apiPID(PrefixTrack, model.PID(w.ItemPID)),
+				Essence: w.Essence,
+				Vector:  vec,
+			}})
+			if err != nil {
+				return true, err
 			}
-			l.log.Warn("embedded analysis skipped a track", "pid", w.ItemPID, "err", err)
-			l.completeAnalysis(ctx, w.Essence)
-			continue
+			for _, rej := range res.Rejected {
+				l.retireAnalysis(ctx, w, rej.Message)
+			}
 		}
-		res, err := l.IngestEmbeddings(ctx, an.Model(), an.VectorDims(), []EmbeddingUpload{{
-			PID:     apiPID(PrefixTrack, model.PID(w.ItemPID)),
-			Essence: w.Essence,
-			Vector:  vec,
-		}})
-		if err != nil {
-			return true, err
-		}
-		for _, rej := range res.Rejected {
-			l.log.Warn("embedded analysis vector rejected", "pid", w.ItemPID, "reason", rej.Message)
-			l.completeAnalysis(ctx, w.Essence)
-		}
+		// Paced whatever came of it: the decode is the cost.
 		select {
 		case <-ctx.Done():
 			return true, nil
@@ -151,6 +154,54 @@ func (l *Library) DrainEmbeddedAnalysis(ctx context.Context, an SonicAnalyzer) (
 		}
 	}
 	return true, nil
+}
+
+// errNoWindow is a carved track whose frame window cannot be placed in
+// samples: its file declares no rate, or the window ends before it starts.
+var errNoWindow = errors.New("the track's window cannot be placed in its file")
+
+// sonicSource is where an item's own audio lives: its file, and for a
+// carved track the sample window its frames name (to 0 running to the
+// end). Read off it, the view the analysis key was taken from.
+func (l *Library) sonicSource(ctx context.Context, it *model.ItemView) (path string, from, to int64, err error) {
+	f, err := l.lib.File(ctx, it.FilePID)
+	if err != nil {
+		return "", 0, 0, err
+	}
+	// Placed the way streaming places it.
+	loc := pidpath.Location{FilePID: it.FilePID, SampleRate: it.SampleRate,
+		Virtual: it.Virtual, StartFrames: it.StartFrames, EndFrames: it.EndFrames}
+	switch from, to, err = loc.Span(); {
+	case err != nil:
+		return "", 0, 0, fmt.Errorf("%w: the file declares no sample rate", errNoWindow)
+	case to > 0 && to < from:
+		return "", 0, 0, fmt.Errorf("%w: it ends before it starts", errNoWindow)
+	}
+	return string(f.Path), from, to, nil
+}
+
+// retireAnalysis rests a key whose audio cannot be analyzed, and says so.
+func (l *Library) retireAnalysis(ctx context.Context, w wdb.SimilarityWork, reason string) {
+	l.log.Warn("sonic analysis cannot read a track; it rests until its audio changes", "pid", w.ItemPID, "reason", reason)
+	if err := l.db.RetireSimilarityWork(ctx, w.Essence, reason); err != nil {
+		l.log.Warn("retiring analysis work", "essence", w.Essence, "err", err)
+	}
+}
+
+// analysisKey names the audio a vector describes: the file's essence, or
+// for a cue-carved track the essence and its frame window, so the tracks
+// of one rip never share a vector. Opaque to workers.
+func analysisKey(essence string, it *model.ItemView) string {
+	if essence == "" || !it.Virtual {
+		return essence
+	}
+	return fmt.Sprintf("%s%s%d-%d", essence, wdb.CarvedKeyMark, it.StartFrames, it.EndFrames)
+}
+
+// keyAudio is the file essence an analysis key belongs to.
+func keyAudio(key string) string {
+	essence, _, _ := strings.Cut(key, wdb.CarvedKeyMark)
+	return essence
 }
 
 func (l *Library) completeAnalysis(ctx context.Context, essence string) {
@@ -228,10 +279,8 @@ func (l *Library) SimilarityStatusFor(ctx context.Context, uc *UserCtx) (Similar
 	return st, nil
 }
 
-// countAnalyzableTracks counts the catalog's music tracks; virtual
-// (CUE-carved) tracks share their backing file's essence and are not
-// analyzed per window, but they are a small minority and the coverage
-// figure tolerates them.
+// countAnalyzableTracks counts the catalog's music tracks, carved ones
+// included.
 func (l *Library) countAnalyzableTracks(ctx context.Context, catalogPID string) (int, error) {
 	q := visibleItems().Where("kind", query.OpIs, string(model.KindTrack)).Build()
 	n, err := l.lib.Count(ctx, q, model.PID(catalogPID))
@@ -242,8 +291,8 @@ func (l *Library) countAnalyzableTracks(ctx context.Context, catalogPID string) 
 }
 
 // LeaseSimilarityWork leases a work batch for a polling worker.
-func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int) ([]SimilarityWorkItem, error) {
-	work, err := l.db.LeaseSimilarityWork(ctx, limit, workLease)
+func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int, windows bool) ([]SimilarityWorkItem, error) {
+	work, err := l.db.LeaseSimilarityWork(ctx, limit, workLease, windows)
 	if err != nil {
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
@@ -260,7 +309,9 @@ func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int) ([]Similar
 		}
 		if it, err := l.lib.Get(ctx, model.PID(w.ItemPID)); err == nil {
 			item.DurationMs = it.DurationMS
-			if l.workerLocalPaths && singleRoot {
+			// A carved track's file is the whole rip; only its audio URL
+			// serves the window.
+			if l.workerLocalPaths && singleRoot && !it.Virtual {
 				if f, err := l.lib.File(ctx, it.FilePID); err == nil {
 					item.LocalPath = string(f.RelPath)
 				}
@@ -278,11 +329,9 @@ func (l *Library) LeaseSimilarityWork(ctx context.Context, limit int) ([]Similar
 	return out, nil
 }
 
-// IngestEmbeddings records a worker's batch: vectors persist keyed by
-// essence, the in-memory engine updates its neighbor graph
-// incrementally, and the touched nodes' edge lists persist alongside.
-// A model different from the stored vectors' replaces coverage
-// model-wide (mixed models never compare).
+// IngestEmbeddings records a worker's batch: vectors persist by analysis
+// key, the engine updates its neighbor graph incrementally, and the touched
+// edge lists persist. A new model replaces coverage (models never mix).
 func (l *Library) IngestEmbeddings(ctx context.Context, mdl string, dims int, batch []EmbeddingUpload) (EmbeddingIngestResult, error) {
 	if err := l.warmSimilarity(ctx); err != nil {
 		return EmbeddingIngestResult{}, err
@@ -401,6 +450,8 @@ func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 		return worked, classify(err)
 	}
 	live := map[string]bool{}
+	// Carved siblings share one file: read it once.
+	essences := map[model.PID]string{}
 	q := visibleItems().Where("kind", query.OpIs, string(model.KindTrack)).OrderBy("title", false).Build()
 	cursor := ""
 	for {
@@ -409,18 +460,30 @@ func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 			return worked, classify(err)
 		}
 		for _, it := range page.Items {
-			if it.Virtual {
-				// A CUE-carved track shares its backing file's essence;
-				// per-window embeddings are not computed.
+			essence, ok := essences[it.FilePID]
+			if !ok {
+				f, err := l.catalogFile(ctx, it.FilePID)
+				switch {
+				case err == nil:
+					essence = f.EssenceHash
+				case waxerr.CodeOf(err) != waxerr.CodeNotFound:
+					// Unread is not gone: a sweep that cannot read the
+					// catalog prunes nothing, and runs again next time.
+					return worked, classify(err)
+				}
+				essences[it.FilePID] = essence
+			}
+			if essence == "" {
 				continue
 			}
-			f, err := l.lib.File(ctx, it.FilePID)
-			if err != nil || f.EssenceHash == "" {
+			key := analysisKey(essence, it)
+			live[key] = true
+			// Under the floor the analyzer refuses it, every time it is asked.
+			if it.DurationMS > 0 && it.DurationMS < analyzer.MinDurationMs {
 				continue
 			}
-			live[f.EssenceHash] = true
-			if !l.sim.Has(f.EssenceHash) {
-				if err := l.db.EnqueueSimilarity(ctx, f.EssenceHash, string(it.PID)); err != nil {
+			if !l.sim.Has(key) {
+				if err := l.db.EnqueueSimilarity(ctx, key, string(it.PID)); err != nil {
 					return worked, &Error{Kind: KindInternal, Err: err}
 				}
 				worked = true
@@ -430,6 +493,16 @@ func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 			break
 		}
 		cursor = string(page.Next)
+	}
+	// Rows whose audio left the catalog, resting ones included.
+	keys, err := l.db.SimilarityWorkKeys(ctx)
+	if err != nil {
+		return worked, &Error{Kind: KindInternal, Err: err}
+	}
+	for _, key := range keys {
+		if !live[key] {
+			l.completeAnalysis(ctx, key)
+		}
 	}
 	// Prune vectors whose audio left the catalog. The essence keying
 	// exists to survive retags and moves (the item row stays); a truly
@@ -469,9 +542,15 @@ func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
 		if err != nil {
 			return worked, classify(err)
 		}
-		stale = slices.DeleteFunc(stale, func(essence string) bool {
-			return len(restorable[owner[essence]]) > 0
-		})
+		// A trashed rip is logged against one of its tracks: a key kept
+		// keeps every key of its audio.
+		kept := map[string]bool{}
+		for _, key := range stale {
+			if len(restorable[owner[key]]) > 0 {
+				kept[keyAudio(key)] = true
+			}
+		}
+		stale = slices.DeleteFunc(stale, func(key string) bool { return kept[keyAudio(key)] })
 	}
 	for _, essence := range stale {
 		affected, err := l.db.RemoveEmbedding(ctx, essence)

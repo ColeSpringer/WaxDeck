@@ -110,7 +110,8 @@ func parseAPIPID(s string) (prefix string, pid model.PID, ok bool) {
 	if !found || len(prefix) != 2 {
 		return "", "", false
 	}
-	pid = model.PID(rest)
+	// Crockford's alphabet reads either case; the stored spelling is upper.
+	pid = model.PID(strings.ToUpper(rest))
 	if !pid.Valid() {
 		return "", "", false
 	}

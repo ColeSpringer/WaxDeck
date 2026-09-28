@@ -101,6 +101,8 @@ import 'package:waxdeck_api_gen/src/model/enrichment_phase.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_provider.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_run_request.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_run_result.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_source.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_sources_update.dart';
 import 'package:waxdeck_api_gen/src/model/enrichment_status.dart';
 import 'package:waxdeck_api_gen/src/model/entity_card.dart';
 import 'package:waxdeck_api_gen/src/model/entity_card_list.dart';
@@ -491,6 +493,8 @@ part 'serializers.g.dart';
   EnrichmentProvider,
   EnrichmentRunRequest,
   EnrichmentRunResult,
+  EnrichmentSource,
+  EnrichmentSourcesUpdate,
   EnrichmentStatus,
   EntityCard,
   EntityCardList,
@@ -1063,6 +1067,10 @@ Serializers serializers = (_$serializers.toBuilder()
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(CastPreflightBase)]),
         () => ListBuilder<CastPreflightBase>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(EnrichmentSource)]),
+        () => ListBuilder<EnrichmentSource>(),
       )
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(DeviceSession)]),

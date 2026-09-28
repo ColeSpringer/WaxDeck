@@ -481,7 +481,6 @@ class _DiscordPresenceSectionState
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final on = ref.watch(discordPresenceEnabledProvider);
-    final colors = WaxColors.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -524,13 +523,16 @@ class _DiscordPresenceSectionState
                     onSubmitted: (_) => _commit(),
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.only(top: WaxSpace.s8),
-                  child: Text(
-                    l10n.settingsDiscordCoverNote,
-                    style: WaxType.bodySmall.copyWith(
-                      color: colors.textSecondary,
-                    ),
+                WaxSettingRow(
+                  title: l10n.settingsDiscordCoversTitle,
+                  help: l10n.settingsDiscordCoversHelp,
+                  control: WaxSwitch(
+                    value: ref.watch(discordCoversEnabledProvider),
+                    label: l10n.settingsDiscordCoversTitle,
+                    semanticsId: SemanticsIds.setting('discord-covers'),
+                    onChanged: ref
+                        .read(discordCoversEnabledProvider.notifier)
+                        .set,
                   ),
                 ),
               ],

@@ -247,8 +247,8 @@ provider.
 - `WAXDECK_ENRICH_PROVIDER_URLS`: custom enrichment providers as
   `name=url` pairs, comma separated, each implementing the contract in
   `docs/custom-provider-api/`. Validated at startup (the capabilities
-  document must answer and advertise a name) and registered ahead of
-  every built-in provider.
+  document must answer and advertise a name) and asked first, ahead of
+  the providers WaxDeck ships, until an administrator reorders them.
 - `WAXDECK_ENRICH_PROVIDER_AUTH`: bearer tokens for custom enrichment
   providers as `name=token` pairs, comma separated; names must match
   the URLs variable.
@@ -277,6 +277,17 @@ provider.
   source that has since learned it is reached without a forced run. `0`
   never asks again, and a negative value is refused at startup. A match
   is never re-asked.
+
+The providers are asked custom ones first, then fanart.tv, Deezer,
+iTunes, Discogs, Audnexus, Hardcover, Google Books and Open Library,
+unless an administrator sets another order: **Enrichment** in the admin
+console moves each one up or down and switches it off, without a
+restart. A provider switched off opens no phase and fills nothing.
+Switched back on, it is not asked about what a pass finished while it
+was off, unless a run forces its phases. A pass already running keeps
+its order until it ends. The catalog's key-free built-ins (the Cover Art
+Archive, ListenBrainz, LRCLIB) are always asked after them and cannot
+be moved from WaxDeck.
 
 ## YouTube
 

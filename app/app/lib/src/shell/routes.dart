@@ -282,6 +282,10 @@ abstract final class WaxRoute {
   /// instance reports operations events, the other is where an account
   /// asks to be told about its own.
   static const adminNotifications = '$admin/notifications';
+
+  /// Where artwork, lyrics and details come from, and passes over the
+  /// library that fill them.
+  static const adminEnrichment = '$admin/enrichment';
   static const schedules = '$admin/schedules';
   static const backups = '$admin/backups';
   static const trash = '$admin/trash';

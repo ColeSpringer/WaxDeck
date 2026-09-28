@@ -104,6 +104,8 @@ Serializers _$serializers =
           ..add(EnrichmentProvider.serializer)
           ..add(EnrichmentRunRequest.serializer)
           ..add(EnrichmentRunResult.serializer)
+          ..add(EnrichmentSource.serializer)
+          ..add(EnrichmentSourcesUpdate.serializer)
           ..add(EnrichmentStatus.serializer)
           ..add(EntityCard.serializer)
           ..add(EntityCardKindEnum.serializer)
@@ -452,6 +454,10 @@ Serializers _$serializers =
             () => ListBuilder<Bookmark>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(Bookmark)]),
+            () => ListBuilder<Bookmark>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [
               const FullType(CandidateComponent),
             ]),
@@ -570,6 +576,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(EnrichmentPhase)]),
             () => ListBuilder<EnrichmentPhase>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(EnrichmentSource)]),
+            () => ListBuilder<EnrichmentSource>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(EntityCard)]),

@@ -1098,6 +1098,573 @@ class MirrorPlayStatesCompanion extends UpdateCompanion<MirrorPlayState> {
   }
 }
 
+class $MirrorBookmarksTable extends MirrorBookmarks
+    with TableInfo<$MirrorBookmarksTable, MirrorBookmark> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MirrorBookmarksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _ownerMeta = const VerificationMeta('owner');
+  @override
+  late final GeneratedColumn<String> owner = GeneratedColumn<String>(
+    'owner',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _bookPidMeta = const VerificationMeta(
+    'bookPid',
+  );
+  @override
+  late final GeneratedColumn<String> bookPid = GeneratedColumn<String>(
+    'book_pid',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _positionMsMeta = const VerificationMeta(
+    'positionMs',
+  );
+  @override
+  late final GeneratedColumn<int> positionMs = GeneratedColumn<int>(
+    'position_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _noteMeta = const VerificationMeta('note');
+  @override
+  late final GeneratedColumn<String> note = GeneratedColumn<String>(
+    'note',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _syncStateMeta = const VerificationMeta(
+    'syncState',
+  );
+  @override
+  late final GeneratedColumn<String> syncState = GeneratedColumn<String>(
+    'sync_state',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _refusalMeta = const VerificationMeta(
+    'refusal',
+  );
+  @override
+  late final GeneratedColumn<String> refusal = GeneratedColumn<String>(
+    'refusal',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _refusalCodeMeta = const VerificationMeta(
+    'refusalCode',
+  );
+  @override
+  late final GeneratedColumn<String> refusalCode = GeneratedColumn<String>(
+    'refusal_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    owner,
+    bookPid,
+    positionMs,
+    note,
+    createdAt,
+    syncState,
+    refusal,
+    refusalCode,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'mirror_bookmarks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MirrorBookmark> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('owner')) {
+      context.handle(
+        _ownerMeta,
+        owner.isAcceptableOrUnknown(data['owner']!, _ownerMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_ownerMeta);
+    }
+    if (data.containsKey('book_pid')) {
+      context.handle(
+        _bookPidMeta,
+        bookPid.isAcceptableOrUnknown(data['book_pid']!, _bookPidMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bookPidMeta);
+    }
+    if (data.containsKey('position_ms')) {
+      context.handle(
+        _positionMsMeta,
+        positionMs.isAcceptableOrUnknown(data['position_ms']!, _positionMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_positionMsMeta);
+    }
+    if (data.containsKey('note')) {
+      context.handle(
+        _noteMeta,
+        note.isAcceptableOrUnknown(data['note']!, _noteMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('sync_state')) {
+      context.handle(
+        _syncStateMeta,
+        syncState.isAcceptableOrUnknown(data['sync_state']!, _syncStateMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_syncStateMeta);
+    }
+    if (data.containsKey('refusal')) {
+      context.handle(
+        _refusalMeta,
+        refusal.isAcceptableOrUnknown(data['refusal']!, _refusalMeta),
+      );
+    }
+    if (data.containsKey('refusal_code')) {
+      context.handle(
+        _refusalCodeMeta,
+        refusalCode.isAcceptableOrUnknown(
+          data['refusal_code']!,
+          _refusalCodeMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  MirrorBookmark map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MirrorBookmark(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      owner: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner'],
+      )!,
+      bookPid: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}book_pid'],
+      )!,
+      positionMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}position_ms'],
+      )!,
+      note: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      syncState: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_state'],
+      )!,
+      refusal: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}refusal'],
+      ),
+      refusalCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}refusal_code'],
+      ),
+    );
+  }
+
+  @override
+  $MirrorBookmarksTable createAlias(String alias) {
+    return $MirrorBookmarksTable(attachedDatabase, alias);
+  }
+}
+
+class MirrorBookmark extends DataClass implements Insertable<MirrorBookmark> {
+  /// The bookmark's pid, minted by the server or, offline, by the client.
+  final String id;
+  final String owner;
+  final String bookPid;
+  final int positionMs;
+  final String? note;
+  final DateTime createdAt;
+  final String syncState;
+
+  /// The server's sentence and error code, on a refused mark.
+  final String? refusal;
+  final String? refusalCode;
+  const MirrorBookmark({
+    required this.id,
+    required this.owner,
+    required this.bookPid,
+    required this.positionMs,
+    this.note,
+    required this.createdAt,
+    required this.syncState,
+    this.refusal,
+    this.refusalCode,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['owner'] = Variable<String>(owner);
+    map['book_pid'] = Variable<String>(bookPid);
+    map['position_ms'] = Variable<int>(positionMs);
+    if (!nullToAbsent || note != null) {
+      map['note'] = Variable<String>(note);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['sync_state'] = Variable<String>(syncState);
+    if (!nullToAbsent || refusal != null) {
+      map['refusal'] = Variable<String>(refusal);
+    }
+    if (!nullToAbsent || refusalCode != null) {
+      map['refusal_code'] = Variable<String>(refusalCode);
+    }
+    return map;
+  }
+
+  MirrorBookmarksCompanion toCompanion(bool nullToAbsent) {
+    return MirrorBookmarksCompanion(
+      id: Value(id),
+      owner: Value(owner),
+      bookPid: Value(bookPid),
+      positionMs: Value(positionMs),
+      note: note == null && nullToAbsent ? const Value.absent() : Value(note),
+      createdAt: Value(createdAt),
+      syncState: Value(syncState),
+      refusal: refusal == null && nullToAbsent
+          ? const Value.absent()
+          : Value(refusal),
+      refusalCode: refusalCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(refusalCode),
+    );
+  }
+
+  factory MirrorBookmark.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MirrorBookmark(
+      id: serializer.fromJson<String>(json['id']),
+      owner: serializer.fromJson<String>(json['owner']),
+      bookPid: serializer.fromJson<String>(json['bookPid']),
+      positionMs: serializer.fromJson<int>(json['positionMs']),
+      note: serializer.fromJson<String?>(json['note']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      syncState: serializer.fromJson<String>(json['syncState']),
+      refusal: serializer.fromJson<String?>(json['refusal']),
+      refusalCode: serializer.fromJson<String?>(json['refusalCode']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'owner': serializer.toJson<String>(owner),
+      'bookPid': serializer.toJson<String>(bookPid),
+      'positionMs': serializer.toJson<int>(positionMs),
+      'note': serializer.toJson<String?>(note),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'syncState': serializer.toJson<String>(syncState),
+      'refusal': serializer.toJson<String?>(refusal),
+      'refusalCode': serializer.toJson<String?>(refusalCode),
+    };
+  }
+
+  MirrorBookmark copyWith({
+    String? id,
+    String? owner,
+    String? bookPid,
+    int? positionMs,
+    Value<String?> note = const Value.absent(),
+    DateTime? createdAt,
+    String? syncState,
+    Value<String?> refusal = const Value.absent(),
+    Value<String?> refusalCode = const Value.absent(),
+  }) => MirrorBookmark(
+    id: id ?? this.id,
+    owner: owner ?? this.owner,
+    bookPid: bookPid ?? this.bookPid,
+    positionMs: positionMs ?? this.positionMs,
+    note: note.present ? note.value : this.note,
+    createdAt: createdAt ?? this.createdAt,
+    syncState: syncState ?? this.syncState,
+    refusal: refusal.present ? refusal.value : this.refusal,
+    refusalCode: refusalCode.present ? refusalCode.value : this.refusalCode,
+  );
+  MirrorBookmark copyWithCompanion(MirrorBookmarksCompanion data) {
+    return MirrorBookmark(
+      id: data.id.present ? data.id.value : this.id,
+      owner: data.owner.present ? data.owner.value : this.owner,
+      bookPid: data.bookPid.present ? data.bookPid.value : this.bookPid,
+      positionMs: data.positionMs.present
+          ? data.positionMs.value
+          : this.positionMs,
+      note: data.note.present ? data.note.value : this.note,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      syncState: data.syncState.present ? data.syncState.value : this.syncState,
+      refusal: data.refusal.present ? data.refusal.value : this.refusal,
+      refusalCode: data.refusalCode.present
+          ? data.refusalCode.value
+          : this.refusalCode,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MirrorBookmark(')
+          ..write('id: $id, ')
+          ..write('owner: $owner, ')
+          ..write('bookPid: $bookPid, ')
+          ..write('positionMs: $positionMs, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('syncState: $syncState, ')
+          ..write('refusal: $refusal, ')
+          ..write('refusalCode: $refusalCode')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    owner,
+    bookPid,
+    positionMs,
+    note,
+    createdAt,
+    syncState,
+    refusal,
+    refusalCode,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MirrorBookmark &&
+          other.id == this.id &&
+          other.owner == this.owner &&
+          other.bookPid == this.bookPid &&
+          other.positionMs == this.positionMs &&
+          other.note == this.note &&
+          other.createdAt == this.createdAt &&
+          other.syncState == this.syncState &&
+          other.refusal == this.refusal &&
+          other.refusalCode == this.refusalCode);
+}
+
+class MirrorBookmarksCompanion extends UpdateCompanion<MirrorBookmark> {
+  final Value<String> id;
+  final Value<String> owner;
+  final Value<String> bookPid;
+  final Value<int> positionMs;
+  final Value<String?> note;
+  final Value<DateTime> createdAt;
+  final Value<String> syncState;
+  final Value<String?> refusal;
+  final Value<String?> refusalCode;
+  final Value<int> rowid;
+  const MirrorBookmarksCompanion({
+    this.id = const Value.absent(),
+    this.owner = const Value.absent(),
+    this.bookPid = const Value.absent(),
+    this.positionMs = const Value.absent(),
+    this.note = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.syncState = const Value.absent(),
+    this.refusal = const Value.absent(),
+    this.refusalCode = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MirrorBookmarksCompanion.insert({
+    required String id,
+    required String owner,
+    required String bookPid,
+    required int positionMs,
+    this.note = const Value.absent(),
+    required DateTime createdAt,
+    required String syncState,
+    this.refusal = const Value.absent(),
+    this.refusalCode = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       owner = Value(owner),
+       bookPid = Value(bookPid),
+       positionMs = Value(positionMs),
+       createdAt = Value(createdAt),
+       syncState = Value(syncState);
+  static Insertable<MirrorBookmark> custom({
+    Expression<String>? id,
+    Expression<String>? owner,
+    Expression<String>? bookPid,
+    Expression<int>? positionMs,
+    Expression<String>? note,
+    Expression<DateTime>? createdAt,
+    Expression<String>? syncState,
+    Expression<String>? refusal,
+    Expression<String>? refusalCode,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (owner != null) 'owner': owner,
+      if (bookPid != null) 'book_pid': bookPid,
+      if (positionMs != null) 'position_ms': positionMs,
+      if (note != null) 'note': note,
+      if (createdAt != null) 'created_at': createdAt,
+      if (syncState != null) 'sync_state': syncState,
+      if (refusal != null) 'refusal': refusal,
+      if (refusalCode != null) 'refusal_code': refusalCode,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MirrorBookmarksCompanion copyWith({
+    Value<String>? id,
+    Value<String>? owner,
+    Value<String>? bookPid,
+    Value<int>? positionMs,
+    Value<String?>? note,
+    Value<DateTime>? createdAt,
+    Value<String>? syncState,
+    Value<String?>? refusal,
+    Value<String?>? refusalCode,
+    Value<int>? rowid,
+  }) {
+    return MirrorBookmarksCompanion(
+      id: id ?? this.id,
+      owner: owner ?? this.owner,
+      bookPid: bookPid ?? this.bookPid,
+      positionMs: positionMs ?? this.positionMs,
+      note: note ?? this.note,
+      createdAt: createdAt ?? this.createdAt,
+      syncState: syncState ?? this.syncState,
+      refusal: refusal ?? this.refusal,
+      refusalCode: refusalCode ?? this.refusalCode,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (owner.present) {
+      map['owner'] = Variable<String>(owner.value);
+    }
+    if (bookPid.present) {
+      map['book_pid'] = Variable<String>(bookPid.value);
+    }
+    if (positionMs.present) {
+      map['position_ms'] = Variable<int>(positionMs.value);
+    }
+    if (note.present) {
+      map['note'] = Variable<String>(note.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (syncState.present) {
+      map['sync_state'] = Variable<String>(syncState.value);
+    }
+    if (refusal.present) {
+      map['refusal'] = Variable<String>(refusal.value);
+    }
+    if (refusalCode.present) {
+      map['refusal_code'] = Variable<String>(refusalCode.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MirrorBookmarksCompanion(')
+          ..write('id: $id, ')
+          ..write('owner: $owner, ')
+          ..write('bookPid: $bookPid, ')
+          ..write('positionMs: $positionMs, ')
+          ..write('note: $note, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('syncState: $syncState, ')
+          ..write('refusal: $refusal, ')
+          ..write('refusalCode: $refusalCode, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $SyncCursorsTable extends SyncCursors
     with TableInfo<$SyncCursorsTable, SyncCursor> {
   @override
@@ -1136,8 +1703,24 @@ class $SyncCursorsTable extends SyncCursors
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _serverAccountMeta = const VerificationMeta(
+    'serverAccount',
+  );
   @override
-  List<GeneratedColumn> get $columns => [id, catalogSince, serverSince];
+  late final GeneratedColumn<String> serverAccount = GeneratedColumn<String>(
+    'server_account',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    catalogSince,
+    serverSince,
+    serverAccount,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -1171,6 +1754,15 @@ class $SyncCursorsTable extends SyncCursors
         ),
       );
     }
+    if (data.containsKey('server_account')) {
+      context.handle(
+        _serverAccountMeta,
+        serverAccount.isAcceptableOrUnknown(
+          data['server_account']!,
+          _serverAccountMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1192,6 +1784,10 @@ class $SyncCursorsTable extends SyncCursors
         DriftSqlType.string,
         data['${effectivePrefix}server_since'],
       ),
+      serverAccount: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}server_account'],
+      ),
     );
   }
 
@@ -1205,7 +1801,16 @@ class SyncCursor extends DataClass implements Insertable<SyncCursor> {
   final int id;
   final String? catalogSince;
   final String? serverSince;
-  const SyncCursor({required this.id, this.catalogSince, this.serverSince});
+
+  /// The account [serverSince] was walked for: another's walk skipped
+  /// this account's events.
+  final String? serverAccount;
+  const SyncCursor({
+    required this.id,
+    this.catalogSince,
+    this.serverSince,
+    this.serverAccount,
+  });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -1215,6 +1820,9 @@ class SyncCursor extends DataClass implements Insertable<SyncCursor> {
     }
     if (!nullToAbsent || serverSince != null) {
       map['server_since'] = Variable<String>(serverSince);
+    }
+    if (!nullToAbsent || serverAccount != null) {
+      map['server_account'] = Variable<String>(serverAccount);
     }
     return map;
   }
@@ -1228,6 +1836,9 @@ class SyncCursor extends DataClass implements Insertable<SyncCursor> {
       serverSince: serverSince == null && nullToAbsent
           ? const Value.absent()
           : Value(serverSince),
+      serverAccount: serverAccount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(serverAccount),
     );
   }
 
@@ -1240,6 +1851,7 @@ class SyncCursor extends DataClass implements Insertable<SyncCursor> {
       id: serializer.fromJson<int>(json['id']),
       catalogSince: serializer.fromJson<String?>(json['catalogSince']),
       serverSince: serializer.fromJson<String?>(json['serverSince']),
+      serverAccount: serializer.fromJson<String?>(json['serverAccount']),
     );
   }
   @override
@@ -1249,6 +1861,7 @@ class SyncCursor extends DataClass implements Insertable<SyncCursor> {
       'id': serializer.toJson<int>(id),
       'catalogSince': serializer.toJson<String?>(catalogSince),
       'serverSince': serializer.toJson<String?>(serverSince),
+      'serverAccount': serializer.toJson<String?>(serverAccount),
     };
   }
 
@@ -1256,10 +1869,14 @@ class SyncCursor extends DataClass implements Insertable<SyncCursor> {
     int? id,
     Value<String?> catalogSince = const Value.absent(),
     Value<String?> serverSince = const Value.absent(),
+    Value<String?> serverAccount = const Value.absent(),
   }) => SyncCursor(
     id: id ?? this.id,
     catalogSince: catalogSince.present ? catalogSince.value : this.catalogSince,
     serverSince: serverSince.present ? serverSince.value : this.serverSince,
+    serverAccount: serverAccount.present
+        ? serverAccount.value
+        : this.serverAccount,
   );
   SyncCursor copyWithCompanion(SyncCursorsCompanion data) {
     return SyncCursor(
@@ -1270,6 +1887,9 @@ class SyncCursor extends DataClass implements Insertable<SyncCursor> {
       serverSince: data.serverSince.present
           ? data.serverSince.value
           : this.serverSince,
+      serverAccount: data.serverAccount.present
+          ? data.serverAccount.value
+          : this.serverAccount,
     );
   }
 
@@ -1278,45 +1898,52 @@ class SyncCursor extends DataClass implements Insertable<SyncCursor> {
     return (StringBuffer('SyncCursor(')
           ..write('id: $id, ')
           ..write('catalogSince: $catalogSince, ')
-          ..write('serverSince: $serverSince')
+          ..write('serverSince: $serverSince, ')
+          ..write('serverAccount: $serverAccount')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, catalogSince, serverSince);
+  int get hashCode => Object.hash(id, catalogSince, serverSince, serverAccount);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is SyncCursor &&
           other.id == this.id &&
           other.catalogSince == this.catalogSince &&
-          other.serverSince == this.serverSince);
+          other.serverSince == this.serverSince &&
+          other.serverAccount == this.serverAccount);
 }
 
 class SyncCursorsCompanion extends UpdateCompanion<SyncCursor> {
   final Value<int> id;
   final Value<String?> catalogSince;
   final Value<String?> serverSince;
+  final Value<String?> serverAccount;
   const SyncCursorsCompanion({
     this.id = const Value.absent(),
     this.catalogSince = const Value.absent(),
     this.serverSince = const Value.absent(),
+    this.serverAccount = const Value.absent(),
   });
   SyncCursorsCompanion.insert({
     this.id = const Value.absent(),
     this.catalogSince = const Value.absent(),
     this.serverSince = const Value.absent(),
+    this.serverAccount = const Value.absent(),
   });
   static Insertable<SyncCursor> custom({
     Expression<int>? id,
     Expression<String>? catalogSince,
     Expression<String>? serverSince,
+    Expression<String>? serverAccount,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (catalogSince != null) 'catalog_since': catalogSince,
       if (serverSince != null) 'server_since': serverSince,
+      if (serverAccount != null) 'server_account': serverAccount,
     });
   }
 
@@ -1324,11 +1951,13 @@ class SyncCursorsCompanion extends UpdateCompanion<SyncCursor> {
     Value<int>? id,
     Value<String?>? catalogSince,
     Value<String?>? serverSince,
+    Value<String?>? serverAccount,
   }) {
     return SyncCursorsCompanion(
       id: id ?? this.id,
       catalogSince: catalogSince ?? this.catalogSince,
       serverSince: serverSince ?? this.serverSince,
+      serverAccount: serverAccount ?? this.serverAccount,
     );
   }
 
@@ -1344,6 +1973,9 @@ class SyncCursorsCompanion extends UpdateCompanion<SyncCursor> {
     if (serverSince.present) {
       map['server_since'] = Variable<String>(serverSince.value);
     }
+    if (serverAccount.present) {
+      map['server_account'] = Variable<String>(serverAccount.value);
+    }
     return map;
   }
 
@@ -1352,7 +1984,8 @@ class SyncCursorsCompanion extends UpdateCompanion<SyncCursor> {
     return (StringBuffer('SyncCursorsCompanion(')
           ..write('id: $id, ')
           ..write('catalogSince: $catalogSince, ')
-          ..write('serverSince: $serverSince')
+          ..write('serverSince: $serverSince, ')
+          ..write('serverAccount: $serverAccount')
           ..write(')'))
         .toString();
   }
@@ -1451,6 +2084,15 @@ class $OutboxMutationsTable extends OutboxMutations
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _ownerMeta = const VerificationMeta('owner');
+  @override
+  late final GeneratedColumn<String> owner = GeneratedColumn<String>(
+    'owner',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1461,6 +2103,7 @@ class $OutboxMutationsTable extends OutboxMutations
     rating,
     recordedAt,
     payload,
+    owner,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1525,6 +2168,12 @@ class $OutboxMutationsTable extends OutboxMutations
         payload.isAcceptableOrUnknown(data['payload']!, _payloadMeta),
       );
     }
+    if (data.containsKey('owner')) {
+      context.handle(
+        _ownerMeta,
+        owner.isAcceptableOrUnknown(data['owner']!, _ownerMeta),
+      );
+    }
     return context;
   }
 
@@ -1566,6 +2215,10 @@ class $OutboxMutationsTable extends OutboxMutations
         DriftSqlType.string,
         data['${effectivePrefix}payload'],
       ),
+      owner: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner'],
+      ),
     );
   }
 
@@ -1578,8 +2231,8 @@ class $OutboxMutationsTable extends OutboxMutations
 class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
   final int id;
 
-  /// `position`, `star`, `rating`, `entity-star`, `entity-rating`, or
-  /// `prefs`.
+  /// `position`, `star`, `rating`, `entity-star`, `entity-rating`,
+  /// `prefs`, `bookmark-create`, or `bookmark-delete`.
   final String kind;
   final String pid;
   final int? positionMs;
@@ -1589,11 +2242,13 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
   final int? rating;
   final DateTime recordedAt;
 
-  /// A mutation with no typed column of its own, as JSON: a `prefs`
-  /// entry's patch, the fields it changed at their new values.
-  ///
-  /// Last on purpose, for the reason [DownloadRecords.durationMs] gives.
+  /// A mutation with no typed column of its own, as JSON: a `prefs` entry's
+  /// patch, or a bookmark write. Last for [DownloadRecords.durationMs]'s reason.
   final String? payload;
+
+  /// The account that queued it, sent only for that account; null on
+  /// what an older build queued.
+  final String? owner;
   const OutboxMutation({
     required this.id,
     required this.kind,
@@ -1603,6 +2258,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
     this.rating,
     required this.recordedAt,
     this.payload,
+    this.owner,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1622,6 +2278,9 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
     map['recorded_at'] = Variable<DateTime>(recordedAt);
     if (!nullToAbsent || payload != null) {
       map['payload'] = Variable<String>(payload);
+    }
+    if (!nullToAbsent || owner != null) {
+      map['owner'] = Variable<String>(owner);
     }
     return map;
   }
@@ -1644,6 +2303,9 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
       payload: payload == null && nullToAbsent
           ? const Value.absent()
           : Value(payload),
+      owner: owner == null && nullToAbsent
+          ? const Value.absent()
+          : Value(owner),
     );
   }
 
@@ -1661,6 +2323,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
       rating: serializer.fromJson<int?>(json['rating']),
       recordedAt: serializer.fromJson<DateTime>(json['recordedAt']),
       payload: serializer.fromJson<String?>(json['payload']),
+      owner: serializer.fromJson<String?>(json['owner']),
     );
   }
   @override
@@ -1675,6 +2338,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
       'rating': serializer.toJson<int?>(rating),
       'recordedAt': serializer.toJson<DateTime>(recordedAt),
       'payload': serializer.toJson<String?>(payload),
+      'owner': serializer.toJson<String?>(owner),
     };
   }
 
@@ -1687,6 +2351,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
     Value<int?> rating = const Value.absent(),
     DateTime? recordedAt,
     Value<String?> payload = const Value.absent(),
+    Value<String?> owner = const Value.absent(),
   }) => OutboxMutation(
     id: id ?? this.id,
     kind: kind ?? this.kind,
@@ -1696,6 +2361,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
     rating: rating.present ? rating.value : this.rating,
     recordedAt: recordedAt ?? this.recordedAt,
     payload: payload.present ? payload.value : this.payload,
+    owner: owner.present ? owner.value : this.owner,
   );
   OutboxMutation copyWithCompanion(OutboxMutationsCompanion data) {
     return OutboxMutation(
@@ -1711,6 +2377,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
           ? data.recordedAt.value
           : this.recordedAt,
       payload: data.payload.present ? data.payload.value : this.payload,
+      owner: data.owner.present ? data.owner.value : this.owner,
     );
   }
 
@@ -1724,7 +2391,8 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
           ..write('starred: $starred, ')
           ..write('rating: $rating, ')
           ..write('recordedAt: $recordedAt, ')
-          ..write('payload: $payload')
+          ..write('payload: $payload, ')
+          ..write('owner: $owner')
           ..write(')'))
         .toString();
   }
@@ -1739,6 +2407,7 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
     rating,
     recordedAt,
     payload,
+    owner,
   );
   @override
   bool operator ==(Object other) =>
@@ -1751,7 +2420,8 @@ class OutboxMutation extends DataClass implements Insertable<OutboxMutation> {
           other.starred == this.starred &&
           other.rating == this.rating &&
           other.recordedAt == this.recordedAt &&
-          other.payload == this.payload);
+          other.payload == this.payload &&
+          other.owner == this.owner);
 }
 
 class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
@@ -1763,6 +2433,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
   final Value<int?> rating;
   final Value<DateTime> recordedAt;
   final Value<String?> payload;
+  final Value<String?> owner;
   const OutboxMutationsCompanion({
     this.id = const Value.absent(),
     this.kind = const Value.absent(),
@@ -1772,6 +2443,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
     this.rating = const Value.absent(),
     this.recordedAt = const Value.absent(),
     this.payload = const Value.absent(),
+    this.owner = const Value.absent(),
   });
   OutboxMutationsCompanion.insert({
     this.id = const Value.absent(),
@@ -1782,6 +2454,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
     this.rating = const Value.absent(),
     required DateTime recordedAt,
     this.payload = const Value.absent(),
+    this.owner = const Value.absent(),
   }) : kind = Value(kind),
        pid = Value(pid),
        recordedAt = Value(recordedAt);
@@ -1794,6 +2467,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
     Expression<int>? rating,
     Expression<DateTime>? recordedAt,
     Expression<String>? payload,
+    Expression<String>? owner,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1804,6 +2478,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
       if (rating != null) 'rating': rating,
       if (recordedAt != null) 'recorded_at': recordedAt,
       if (payload != null) 'payload': payload,
+      if (owner != null) 'owner': owner,
     });
   }
 
@@ -1816,6 +2491,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
     Value<int?>? rating,
     Value<DateTime>? recordedAt,
     Value<String?>? payload,
+    Value<String?>? owner,
   }) {
     return OutboxMutationsCompanion(
       id: id ?? this.id,
@@ -1826,6 +2502,7 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
       rating: rating ?? this.rating,
       recordedAt: recordedAt ?? this.recordedAt,
       payload: payload ?? this.payload,
+      owner: owner ?? this.owner,
     );
   }
 
@@ -1856,6 +2533,9 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
     if (payload.present) {
       map['payload'] = Variable<String>(payload.value);
     }
+    if (owner.present) {
+      map['owner'] = Variable<String>(owner.value);
+    }
     return map;
   }
 
@@ -1869,7 +2549,8 @@ class OutboxMutationsCompanion extends UpdateCompanion<OutboxMutation> {
           ..write('starred: $starred, ')
           ..write('rating: $rating, ')
           ..write('recordedAt: $recordedAt, ')
-          ..write('payload: $payload')
+          ..write('payload: $payload, ')
+          ..write('owner: $owner')
           ..write(')'))
         .toString();
   }
@@ -1959,6 +2640,15 @@ class $OutboxListensTable extends OutboxListens
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _ownerMeta = const VerificationMeta('owner');
+  @override
+  late final GeneratedColumn<String> owner = GeneratedColumn<String>(
+    'owner',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     sessionId,
@@ -1968,6 +2658,7 @@ class $OutboxListensTable extends OutboxListens
     finished,
     client,
     skippedMs,
+    owner,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -2031,6 +2722,12 @@ class $OutboxListensTable extends OutboxListens
         skippedMs.isAcceptableOrUnknown(data['skipped_ms']!, _skippedMsMeta),
       );
     }
+    if (data.containsKey('owner')) {
+      context.handle(
+        _ownerMeta,
+        owner.isAcceptableOrUnknown(data['owner']!, _ownerMeta),
+      );
+    }
     return context;
   }
 
@@ -2068,6 +2765,10 @@ class $OutboxListensTable extends OutboxListens
         DriftSqlType.int,
         data['${effectivePrefix}skipped_ms'],
       ),
+      owner: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}owner'],
+      ),
     );
   }
 
@@ -2088,6 +2789,9 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
   /// Time the listener did not sit through (silence trimming, speed
   /// above 1x). Null when neither applied, matching the wire field.
   final int? skippedMs;
+
+  /// As [OutboxMutations.owner].
+  final String? owner;
   const OutboxListen({
     required this.sessionId,
     required this.pid,
@@ -2096,6 +2800,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
     required this.finished,
     required this.client,
     this.skippedMs,
+    this.owner,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2108,6 +2813,9 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
     map['client'] = Variable<String>(client);
     if (!nullToAbsent || skippedMs != null) {
       map['skipped_ms'] = Variable<int>(skippedMs);
+    }
+    if (!nullToAbsent || owner != null) {
+      map['owner'] = Variable<String>(owner);
     }
     return map;
   }
@@ -2123,6 +2831,9 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
       skippedMs: skippedMs == null && nullToAbsent
           ? const Value.absent()
           : Value(skippedMs),
+      owner: owner == null && nullToAbsent
+          ? const Value.absent()
+          : Value(owner),
     );
   }
 
@@ -2139,6 +2850,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
       finished: serializer.fromJson<bool>(json['finished']),
       client: serializer.fromJson<String>(json['client']),
       skippedMs: serializer.fromJson<int?>(json['skippedMs']),
+      owner: serializer.fromJson<String?>(json['owner']),
     );
   }
   @override
@@ -2152,6 +2864,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
       'finished': serializer.toJson<bool>(finished),
       'client': serializer.toJson<String>(client),
       'skippedMs': serializer.toJson<int?>(skippedMs),
+      'owner': serializer.toJson<String?>(owner),
     };
   }
 
@@ -2163,6 +2876,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
     bool? finished,
     String? client,
     Value<int?> skippedMs = const Value.absent(),
+    Value<String?> owner = const Value.absent(),
   }) => OutboxListen(
     sessionId: sessionId ?? this.sessionId,
     pid: pid ?? this.pid,
@@ -2171,6 +2885,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
     finished: finished ?? this.finished,
     client: client ?? this.client,
     skippedMs: skippedMs.present ? skippedMs.value : this.skippedMs,
+    owner: owner.present ? owner.value : this.owner,
   );
   OutboxListen copyWithCompanion(OutboxListensCompanion data) {
     return OutboxListen(
@@ -2181,6 +2896,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
       finished: data.finished.present ? data.finished.value : this.finished,
       client: data.client.present ? data.client.value : this.client,
       skippedMs: data.skippedMs.present ? data.skippedMs.value : this.skippedMs,
+      owner: data.owner.present ? data.owner.value : this.owner,
     );
   }
 
@@ -2193,7 +2909,8 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
           ..write('msPlayed: $msPlayed, ')
           ..write('finished: $finished, ')
           ..write('client: $client, ')
-          ..write('skippedMs: $skippedMs')
+          ..write('skippedMs: $skippedMs, ')
+          ..write('owner: $owner')
           ..write(')'))
         .toString();
   }
@@ -2207,6 +2924,7 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
     finished,
     client,
     skippedMs,
+    owner,
   );
   @override
   bool operator ==(Object other) =>
@@ -2218,7 +2936,8 @@ class OutboxListen extends DataClass implements Insertable<OutboxListen> {
           other.msPlayed == this.msPlayed &&
           other.finished == this.finished &&
           other.client == this.client &&
-          other.skippedMs == this.skippedMs);
+          other.skippedMs == this.skippedMs &&
+          other.owner == this.owner);
 }
 
 class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
@@ -2229,6 +2948,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
   final Value<bool> finished;
   final Value<String> client;
   final Value<int?> skippedMs;
+  final Value<String?> owner;
   final Value<int> rowid;
   const OutboxListensCompanion({
     this.sessionId = const Value.absent(),
@@ -2238,6 +2958,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
     this.finished = const Value.absent(),
     this.client = const Value.absent(),
     this.skippedMs = const Value.absent(),
+    this.owner = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   OutboxListensCompanion.insert({
@@ -2248,6 +2969,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
     this.finished = const Value.absent(),
     this.client = const Value.absent(),
     this.skippedMs = const Value.absent(),
+    this.owner = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : sessionId = Value(sessionId),
        pid = Value(pid),
@@ -2261,6 +2983,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
     Expression<bool>? finished,
     Expression<String>? client,
     Expression<int>? skippedMs,
+    Expression<String>? owner,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2271,6 +2994,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
       if (finished != null) 'finished': finished,
       if (client != null) 'client': client,
       if (skippedMs != null) 'skipped_ms': skippedMs,
+      if (owner != null) 'owner': owner,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2283,6 +3007,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
     Value<bool>? finished,
     Value<String>? client,
     Value<int?>? skippedMs,
+    Value<String?>? owner,
     Value<int>? rowid,
   }) {
     return OutboxListensCompanion(
@@ -2293,6 +3018,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
       finished: finished ?? this.finished,
       client: client ?? this.client,
       skippedMs: skippedMs ?? this.skippedMs,
+      owner: owner ?? this.owner,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2321,6 +3047,9 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
     if (skippedMs.present) {
       map['skipped_ms'] = Variable<int>(skippedMs.value);
     }
+    if (owner.present) {
+      map['owner'] = Variable<String>(owner.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2337,6 +3066,7 @@ class OutboxListensCompanion extends UpdateCompanion<OutboxListen> {
           ..write('finished: $finished, ')
           ..write('client: $client, ')
           ..write('skippedMs: $skippedMs, ')
+          ..write('owner: $owner, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4702,6 +5432,9 @@ abstract class _$MirrorDatabase extends GeneratedDatabase {
   late final $MirrorPlayStatesTable mirrorPlayStates = $MirrorPlayStatesTable(
     this,
   );
+  late final $MirrorBookmarksTable mirrorBookmarks = $MirrorBookmarksTable(
+    this,
+  );
   late final $SyncCursorsTable syncCursors = $SyncCursorsTable(this);
   late final $OutboxMutationsTable outboxMutations = $OutboxMutationsTable(
     this,
@@ -4721,6 +5454,7 @@ abstract class _$MirrorDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     mirrorItems,
     mirrorPlayStates,
+    mirrorBookmarks,
     syncCursors,
     outboxMutations,
     outboxListens,
@@ -5299,17 +6033,314 @@ typedef $$MirrorPlayStatesTableProcessedTableManager =
       MirrorPlayState,
       PrefetchHooks Function()
     >;
+typedef $$MirrorBookmarksTableCreateCompanionBuilder =
+    MirrorBookmarksCompanion Function({
+      required String id,
+      required String owner,
+      required String bookPid,
+      required int positionMs,
+      Value<String?> note,
+      required DateTime createdAt,
+      required String syncState,
+      Value<String?> refusal,
+      Value<String?> refusalCode,
+      Value<int> rowid,
+    });
+typedef $$MirrorBookmarksTableUpdateCompanionBuilder =
+    MirrorBookmarksCompanion Function({
+      Value<String> id,
+      Value<String> owner,
+      Value<String> bookPid,
+      Value<int> positionMs,
+      Value<String?> note,
+      Value<DateTime> createdAt,
+      Value<String> syncState,
+      Value<String?> refusal,
+      Value<String?> refusalCode,
+      Value<int> rowid,
+    });
+
+class $$MirrorBookmarksTableFilterComposer
+    extends Composer<_$MirrorDatabase, $MirrorBookmarksTable> {
+  $$MirrorBookmarksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get owner => $composableBuilder(
+    column: $table.owner,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get bookPid => $composableBuilder(
+    column: $table.bookPid,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get positionMs => $composableBuilder(
+    column: $table.positionMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncState => $composableBuilder(
+    column: $table.syncState,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get refusal => $composableBuilder(
+    column: $table.refusal,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get refusalCode => $composableBuilder(
+    column: $table.refusalCode,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MirrorBookmarksTableOrderingComposer
+    extends Composer<_$MirrorDatabase, $MirrorBookmarksTable> {
+  $$MirrorBookmarksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get owner => $composableBuilder(
+    column: $table.owner,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get bookPid => $composableBuilder(
+    column: $table.bookPid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get positionMs => $composableBuilder(
+    column: $table.positionMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get note => $composableBuilder(
+    column: $table.note,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncState => $composableBuilder(
+    column: $table.syncState,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get refusal => $composableBuilder(
+    column: $table.refusal,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get refusalCode => $composableBuilder(
+    column: $table.refusalCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MirrorBookmarksTableAnnotationComposer
+    extends Composer<_$MirrorDatabase, $MirrorBookmarksTable> {
+  $$MirrorBookmarksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get owner =>
+      $composableBuilder(column: $table.owner, builder: (column) => column);
+
+  GeneratedColumn<String> get bookPid =>
+      $composableBuilder(column: $table.bookPid, builder: (column) => column);
+
+  GeneratedColumn<int> get positionMs => $composableBuilder(
+    column: $table.positionMs,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get note =>
+      $composableBuilder(column: $table.note, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<String> get syncState =>
+      $composableBuilder(column: $table.syncState, builder: (column) => column);
+
+  GeneratedColumn<String> get refusal =>
+      $composableBuilder(column: $table.refusal, builder: (column) => column);
+
+  GeneratedColumn<String> get refusalCode => $composableBuilder(
+    column: $table.refusalCode,
+    builder: (column) => column,
+  );
+}
+
+class $$MirrorBookmarksTableTableManager
+    extends
+        RootTableManager<
+          _$MirrorDatabase,
+          $MirrorBookmarksTable,
+          MirrorBookmark,
+          $$MirrorBookmarksTableFilterComposer,
+          $$MirrorBookmarksTableOrderingComposer,
+          $$MirrorBookmarksTableAnnotationComposer,
+          $$MirrorBookmarksTableCreateCompanionBuilder,
+          $$MirrorBookmarksTableUpdateCompanionBuilder,
+          (
+            MirrorBookmark,
+            BaseReferences<
+              _$MirrorDatabase,
+              $MirrorBookmarksTable,
+              MirrorBookmark
+            >,
+          ),
+          MirrorBookmark,
+          PrefetchHooks Function()
+        > {
+  $$MirrorBookmarksTableTableManager(
+    _$MirrorDatabase db,
+    $MirrorBookmarksTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MirrorBookmarksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MirrorBookmarksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MirrorBookmarksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> owner = const Value.absent(),
+                Value<String> bookPid = const Value.absent(),
+                Value<int> positionMs = const Value.absent(),
+                Value<String?> note = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<String> syncState = const Value.absent(),
+                Value<String?> refusal = const Value.absent(),
+                Value<String?> refusalCode = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MirrorBookmarksCompanion(
+                id: id,
+                owner: owner,
+                bookPid: bookPid,
+                positionMs: positionMs,
+                note: note,
+                createdAt: createdAt,
+                syncState: syncState,
+                refusal: refusal,
+                refusalCode: refusalCode,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String owner,
+                required String bookPid,
+                required int positionMs,
+                Value<String?> note = const Value.absent(),
+                required DateTime createdAt,
+                required String syncState,
+                Value<String?> refusal = const Value.absent(),
+                Value<String?> refusalCode = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MirrorBookmarksCompanion.insert(
+                id: id,
+                owner: owner,
+                bookPid: bookPid,
+                positionMs: positionMs,
+                note: note,
+                createdAt: createdAt,
+                syncState: syncState,
+                refusal: refusal,
+                refusalCode: refusalCode,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$MirrorBookmarksTable, MirrorBookmark>(table),
+                  BaseReferences<
+                    _$MirrorDatabase,
+                    $MirrorBookmarksTable,
+                    MirrorBookmark
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MirrorBookmarksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$MirrorDatabase,
+      $MirrorBookmarksTable,
+      MirrorBookmark,
+      $$MirrorBookmarksTableFilterComposer,
+      $$MirrorBookmarksTableOrderingComposer,
+      $$MirrorBookmarksTableAnnotationComposer,
+      $$MirrorBookmarksTableCreateCompanionBuilder,
+      $$MirrorBookmarksTableUpdateCompanionBuilder,
+      (
+        MirrorBookmark,
+        BaseReferences<_$MirrorDatabase, $MirrorBookmarksTable, MirrorBookmark>,
+      ),
+      MirrorBookmark,
+      PrefetchHooks Function()
+    >;
 typedef $$SyncCursorsTableCreateCompanionBuilder =
     SyncCursorsCompanion Function({
       Value<int> id,
       Value<String?> catalogSince,
       Value<String?> serverSince,
+      Value<String?> serverAccount,
     });
 typedef $$SyncCursorsTableUpdateCompanionBuilder =
     SyncCursorsCompanion Function({
       Value<int> id,
       Value<String?> catalogSince,
       Value<String?> serverSince,
+      Value<String?> serverAccount,
     });
 
 class $$SyncCursorsTableFilterComposer
@@ -5333,6 +6364,11 @@ class $$SyncCursorsTableFilterComposer
 
   ColumnFilters<String> get serverSince => $composableBuilder(
     column: $table.serverSince,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get serverAccount => $composableBuilder(
+    column: $table.serverAccount,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5360,6 +6396,11 @@ class $$SyncCursorsTableOrderingComposer
     column: $table.serverSince,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get serverAccount => $composableBuilder(
+    column: $table.serverAccount,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SyncCursorsTableAnnotationComposer
@@ -5381,6 +6422,11 @@ class $$SyncCursorsTableAnnotationComposer
 
   GeneratedColumn<String> get serverSince => $composableBuilder(
     column: $table.serverSince,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get serverAccount => $composableBuilder(
+    column: $table.serverAccount,
     builder: (column) => column,
   );
 }
@@ -5419,20 +6465,24 @@ class $$SyncCursorsTableTableManager
                 Value<int> id = const Value.absent(),
                 Value<String?> catalogSince = const Value.absent(),
                 Value<String?> serverSince = const Value.absent(),
+                Value<String?> serverAccount = const Value.absent(),
               }) => SyncCursorsCompanion(
                 id: id,
                 catalogSince: catalogSince,
                 serverSince: serverSince,
+                serverAccount: serverAccount,
               ),
           createCompanionCallback:
               ({
                 Value<int> id = const Value.absent(),
                 Value<String?> catalogSince = const Value.absent(),
                 Value<String?> serverSince = const Value.absent(),
+                Value<String?> serverAccount = const Value.absent(),
               }) => SyncCursorsCompanion.insert(
                 id: id,
                 catalogSince: catalogSince,
                 serverSince: serverSince,
+                serverAccount: serverAccount,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -5478,6 +6528,7 @@ typedef $$OutboxMutationsTableCreateCompanionBuilder =
       Value<int?> rating,
       required DateTime recordedAt,
       Value<String?> payload,
+      Value<String?> owner,
     });
 typedef $$OutboxMutationsTableUpdateCompanionBuilder =
     OutboxMutationsCompanion Function({
@@ -5489,6 +6540,7 @@ typedef $$OutboxMutationsTableUpdateCompanionBuilder =
       Value<int?> rating,
       Value<DateTime> recordedAt,
       Value<String?> payload,
+      Value<String?> owner,
     });
 
 class $$OutboxMutationsTableFilterComposer
@@ -5537,6 +6589,11 @@ class $$OutboxMutationsTableFilterComposer
 
   ColumnFilters<String> get payload => $composableBuilder(
     column: $table.payload,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get owner => $composableBuilder(
+    column: $table.owner,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5589,6 +6646,11 @@ class $$OutboxMutationsTableOrderingComposer
     column: $table.payload,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get owner => $composableBuilder(
+    column: $table.owner,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$OutboxMutationsTableAnnotationComposer
@@ -5627,6 +6689,9 @@ class $$OutboxMutationsTableAnnotationComposer
 
   GeneratedColumn<String> get payload =>
       $composableBuilder(column: $table.payload, builder: (column) => column);
+
+  GeneratedColumn<String> get owner =>
+      $composableBuilder(column: $table.owner, builder: (column) => column);
 }
 
 class $$OutboxMutationsTableTableManager
@@ -5674,6 +6739,7 @@ class $$OutboxMutationsTableTableManager
                 Value<int?> rating = const Value.absent(),
                 Value<DateTime> recordedAt = const Value.absent(),
                 Value<String?> payload = const Value.absent(),
+                Value<String?> owner = const Value.absent(),
               }) => OutboxMutationsCompanion(
                 id: id,
                 kind: kind,
@@ -5683,6 +6749,7 @@ class $$OutboxMutationsTableTableManager
                 rating: rating,
                 recordedAt: recordedAt,
                 payload: payload,
+                owner: owner,
               ),
           createCompanionCallback:
               ({
@@ -5694,6 +6761,7 @@ class $$OutboxMutationsTableTableManager
                 Value<int?> rating = const Value.absent(),
                 required DateTime recordedAt,
                 Value<String?> payload = const Value.absent(),
+                Value<String?> owner = const Value.absent(),
               }) => OutboxMutationsCompanion.insert(
                 id: id,
                 kind: kind,
@@ -5703,6 +6771,7 @@ class $$OutboxMutationsTableTableManager
                 rating: rating,
                 recordedAt: recordedAt,
                 payload: payload,
+                owner: owner,
               ),
           withReferenceMapper: (p0) => p0
               .map(
@@ -5747,6 +6816,7 @@ typedef $$OutboxListensTableCreateCompanionBuilder =
       Value<bool> finished,
       Value<String> client,
       Value<int?> skippedMs,
+      Value<String?> owner,
       Value<int> rowid,
     });
 typedef $$OutboxListensTableUpdateCompanionBuilder =
@@ -5758,6 +6828,7 @@ typedef $$OutboxListensTableUpdateCompanionBuilder =
       Value<bool> finished,
       Value<String> client,
       Value<int?> skippedMs,
+      Value<String?> owner,
       Value<int> rowid,
     });
 
@@ -5802,6 +6873,11 @@ class $$OutboxListensTableFilterComposer
 
   ColumnFilters<int> get skippedMs => $composableBuilder(
     column: $table.skippedMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get owner => $composableBuilder(
+    column: $table.owner,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5849,6 +6925,11 @@ class $$OutboxListensTableOrderingComposer
     column: $table.skippedMs,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get owner => $composableBuilder(
+    column: $table.owner,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$OutboxListensTableAnnotationComposer
@@ -5880,6 +6961,9 @@ class $$OutboxListensTableAnnotationComposer
 
   GeneratedColumn<int> get skippedMs =>
       $composableBuilder(column: $table.skippedMs, builder: (column) => column);
+
+  GeneratedColumn<String> get owner =>
+      $composableBuilder(column: $table.owner, builder: (column) => column);
 }
 
 class $$OutboxListensTableTableManager
@@ -5922,6 +7006,7 @@ class $$OutboxListensTableTableManager
                 Value<bool> finished = const Value.absent(),
                 Value<String> client = const Value.absent(),
                 Value<int?> skippedMs = const Value.absent(),
+                Value<String?> owner = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OutboxListensCompanion(
                 sessionId: sessionId,
@@ -5931,6 +7016,7 @@ class $$OutboxListensTableTableManager
                 finished: finished,
                 client: client,
                 skippedMs: skippedMs,
+                owner: owner,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -5942,6 +7028,7 @@ class $$OutboxListensTableTableManager
                 Value<bool> finished = const Value.absent(),
                 Value<String> client = const Value.absent(),
                 Value<int?> skippedMs = const Value.absent(),
+                Value<String?> owner = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => OutboxListensCompanion.insert(
                 sessionId: sessionId,
@@ -5951,6 +7038,7 @@ class $$OutboxListensTableTableManager
                 finished: finished,
                 client: client,
                 skippedMs: skippedMs,
+                owner: owner,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -7253,6 +8341,8 @@ class $MirrorDatabaseManager {
       $$MirrorItemsTableTableManager(_db, _db.mirrorItems);
   $$MirrorPlayStatesTableTableManager get mirrorPlayStates =>
       $$MirrorPlayStatesTableTableManager(_db, _db.mirrorPlayStates);
+  $$MirrorBookmarksTableTableManager get mirrorBookmarks =>
+      $$MirrorBookmarksTableTableManager(_db, _db.mirrorBookmarks);
   $$SyncCursorsTableTableManager get syncCursors =>
       $$SyncCursorsTableTableManager(_db, _db.syncCursors);
   $$OutboxMutationsTableTableManager get outboxMutations =>

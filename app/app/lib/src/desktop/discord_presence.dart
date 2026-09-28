@@ -16,6 +16,7 @@ class DiscordActivity {
     this.album,
     this.start,
     this.end,
+    this.largeImageUrl,
   });
 
   /// The line Discord calls `details`. What is playing.
@@ -32,6 +33,18 @@ class DiscordActivity {
   /// has neither.
   final DateTime? start;
   final DateTime? end;
+
+  /// The album's cover as a public URL, or null for [kDiscordCoverAsset].
+  final String? largeImageUrl;
+
+  DiscordActivity withCover(String? url) => DiscordActivity(
+    title: title,
+    artist: artist,
+    album: album,
+    start: start,
+    end: end,
+    largeImageUrl: url,
+  );
 }
 
 /// Publishing presence to a Discord client on this machine.
@@ -45,11 +58,24 @@ abstract interface class DiscordPresencePort {
   Future<void> publish(DiscordActivity? activity);
 
   Future<void> close();
+
+  /// Whether an image URL is still sent; false once Discord refused one.
+  bool get takesImageUrls;
+
+  /// Called when Discord refused an image URL: the activity it came with
+  /// is worth sending again, which is the caller's to pace.
+  set onImageRefused(void Function()? callback);
 }
 
 /// The port where presence cannot be published: web, and both mobiles.
 class NoDiscordPresence implements DiscordPresencePort {
   const NoDiscordPresence();
+
+  @override
+  bool get takesImageUrls => false;
+
+  @override
+  set onImageRefused(void Function()? callback) {}
 
   @override
   Future<bool> connect(String applicationId) async => false;
@@ -84,16 +110,9 @@ String discordApplicationId(String override) {
   return chosen.isEmpty ? kWaxDeckDiscordApplicationId : chosen;
 }
 
-/// The cover Discord draws.
-///
-/// A key into the assets uploaded beside the application id, not a URL,
-/// and that is the whole of what is reachable today. Discord fetches art
-/// through its own media proxy, so the URL has to be public: the
-/// `/items/{pid}/art` every client uses needs a session credential, the
-/// tokenized `/media/art` a cast receiver uses needs the play-info token
-/// this layer does not hold, and Cover Art Archive needs a MusicBrainz
-/// release id the item read surface does not carry. Both are recorded as
-/// work rather than guessed at here.
+/// The image Discord draws when an album has no public cover: a key into
+/// the assets uploaded beside the application id. Library art cannot be
+/// used, since Discord fetches images through its own proxy.
 const String kDiscordCoverAsset = 'waxdeck';
 
 /// How often presence may be republished.

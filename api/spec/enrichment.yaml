@@ -25,6 +25,37 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /library/enrichment/sources:
+    put:
+      operationId: putEnrichmentSources
+      summary: Order and switch the enrichment sources
+      description: >
+        Saves the order this server's own providers are asked in and which are
+        asked at all, naming each once; one not wired now keeps its switch. A
+        running pass keeps its order until it ends. Administrators only.
+      tags: [enrichment]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrichmentSourcesUpdate"
+      responses:
+        "200":
+          description: The status under the new order.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichmentStatus"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /library/enrichment/run:
     post:
       operationId: runEnrichment
@@ -70,8 +101,9 @@ components:
         providers:
           type: array
           description: >
-            Registered providers in priority order (this server's
-            own first, then the catalog's key-free built-ins).
+            Registered providers in the order they are asked: this
+            server's own in the operator's order, then the catalog's
+            key-free built-ins.
           items:
             $ref: "#/components/schemas/EnrichmentProvider"
         coverage:
@@ -79,13 +111,18 @@ components:
         running:
           type: boolean
           description: Whether a whole-library pass is running now.
+        runningJob:
+          type: string
+          description: >
+            The running pass's job pid, when one runs; `GET /jobs/{pid}` follows
+            it more cheaply than this read.
+          example: jb-01JZX5N8QW3F4V9T2B7KD3M9R6
         configured:
           type: boolean
           description: >
-            Whether a whole-library pass would do anything: some phase
-            can run. That is true on any server carrying a provider
-            that gates a phase of its own, and true on every server
-            with a MusicBrainz contact. Read `phases` for which half.
+            Whether a whole-library pass would do anything: some phase can
+            run, which a switched-on provider gating one or a MusicBrainz
+            contact makes true. Read `phases` for which.
 
 
             False means every run refuses with `source-unavailable`, so
@@ -103,7 +140,7 @@ components:
           description: >
             The phases a run started now would execute; empty exactly when
             `configured` is false. `identity` and `releases` need the contact,
-            `album-art` and `lyrics` it or a provider, the rest a provider.
+            `album-art` and `lyrics` it or a provider switched on, the rest one.
           items:
             $ref: "#/components/schemas/EnrichmentPhase"
         lastRun:
@@ -135,6 +172,38 @@ components:
         builtin:
           type: boolean
           description: True for the catalog's built-ins.
+        enabled:
+          type: boolean
+          default: true
+          description: >
+            Whether it is asked at all. Switched back on, it is not asked about
+            what a pass finished while it was off unless a run forces its phases.
+
+    EnrichmentSourcesUpdate:
+      type: object
+      description: The operator's order over the orderable providers.
+      required: [sources]
+      properties:
+        sources:
+          type: array
+          description: >
+            Every provider the status lists that is not `builtin`, in the order
+            they are to be asked.
+          items:
+            $ref: "#/components/schemas/EnrichmentSource"
+
+    EnrichmentSource:
+      type: object
+      description: One provider's place in the order, and its switch.
+      required: [name, enabled]
+      properties:
+        name:
+          type: string
+          description: The provider's `name` from the status.
+          example: fanarttv
+        enabled:
+          type: boolean
+          description: Whether it is asked.
 
     EnrichmentLastRun:
       type: object
@@ -309,7 +378,10 @@ components:
 
     EnrichmentCoverage:
       type: object
-      description: How much of the catalog has enriched.
+      description: >-
+        How much of the catalog has enriched. Lyrics carries its total alone,
+        the music tracks: the catalog does not count lyrics per track, so its
+        enriched reads zero.
       required: [artists, releaseGroups, books, lyrics]
       properties:
         artists:

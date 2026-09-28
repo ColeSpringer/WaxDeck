@@ -16,6 +16,7 @@ part 'enrichment_provider.g.dart';
 /// * [capabilities] - What it supplies, as open strings: `identity`, `genres`, `cover` (a front), `aux-art` (the other slots), `artist-art`, `lyrics`, `book` and `fields`, each gating its own pass. 
 /// * [configured] - Whether the provider can run: a keyed one once its key is set, a built-in once the MusicBrainz contact is, since the catalog registers none of the key-free public services without one. 
 /// * [builtin] - True for the catalog's built-ins.
+/// * [enabled] - Whether it is asked at all. Switched back on, it is not asked about what a pass finished while it was off unless a run forces its phases. 
 @BuiltValue()
 abstract class EnrichmentProvider implements Built<EnrichmentProvider, EnrichmentProviderBuilder> {
   /// Stable provider id.
@@ -34,12 +35,17 @@ abstract class EnrichmentProvider implements Built<EnrichmentProvider, Enrichmen
   @BuiltValueField(wireName: r'builtin')
   bool get builtin;
 
+  /// Whether it is asked at all. Switched back on, it is not asked about what a pass finished while it was off unless a run forces its phases. 
+  @BuiltValueField(wireName: r'enabled')
+  bool? get enabled;
+
   EnrichmentProvider._();
 
   factory EnrichmentProvider([void updates(EnrichmentProviderBuilder b)]) = _$EnrichmentProvider;
 
   @BuiltValueHook(initializeBuilder: true)
-  static void _defaults(EnrichmentProviderBuilder b) => b;
+  static void _defaults(EnrichmentProviderBuilder b) => b
+      ..enabled = true;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<EnrichmentProvider> get serializer => _$EnrichmentProviderSerializer();
@@ -77,6 +83,13 @@ class _$EnrichmentProviderSerializer implements PrimitiveSerializer<EnrichmentPr
       object.builtin,
       specifiedType: const FullType(bool),
     );
+    if (object.enabled != null) {
+      yield r'enabled';
+      yield serializers.serialize(
+        object.enabled,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -127,6 +140,14 @@ class _$EnrichmentProviderSerializer implements PrimitiveSerializer<EnrichmentPr
             specifiedType: const FullType(bool),
           ) as bool;
           result.builtin = valueDes;
+          break;
+        case r'enabled':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.enabled = valueDes;
           break;
         default:
           unhandled.add(key);

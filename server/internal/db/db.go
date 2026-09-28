@@ -276,6 +276,13 @@ const baselineSchema = `
 		created_at_ns INTEGER NOT NULL
 	);
 	CREATE INDEX book_bookmarks_by_book ON book_bookmarks (user_id, book_pid, position_ms, id);
+	-- Ids of removed marks: a create replayed after its mark was
+	-- removed (the first answer lost) must not bring it back.
+	CREATE TABLE book_bookmark_tombstones (
+		id            TEXT    PRIMARY KEY,
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		removed_at_ns INTEGER NOT NULL
+	);
 	CREATE TABLE feed_state (
 		show_pid             TEXT    PRIMARY KEY,
 		consecutive_failures INTEGER NOT NULL DEFAULT 0,
@@ -777,9 +784,10 @@ const baselineSchema = `
 	);
 
 	-- Sonic similarity and public shares. Embeddings and the neighbor
-	-- graph are keyed by audio essence (tag-stable, identical across
-	-- re-rips of the same bytes), so a retag or a move never
-	-- re-analyzes; item_pid is a convenience pointer for joins and
+	-- graph are keyed by analysis key: the audio essence (tag-stable,
+	-- identical across re-rips of the same bytes), or essence@window for
+	-- a cue-carved track, so a retag or a move never re-analyzes and a
+	-- bare essence join misses carved tracks; item_pid is a pointer for joins and
 	-- display, refreshed at ingest. similarity_queue is the analysis
 	-- work queue on the standard lease shape; similarity_backfill
 	-- names graph nodes that lost neighbor edges to a deletion and

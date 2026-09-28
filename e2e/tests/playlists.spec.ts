@@ -359,6 +359,10 @@ test('an NSP export reports every gap, and offers the partial', async ({ app }) 
     expect(gap.path).toBeTruthy();
     expect(gap.reason).toBeTruthy();
   }
+  // Sentences name fields as the rule does, not as the query engine does.
+  expect(gaps.map((g) => g.reason)).toContain('nsp: unsupported field: mediaType');
+  expect(report.rule?.root.nodes?.map((n) => n.field)).toEqual(['genre']);
+  expect(report.ruleHash).toMatch(/^[0-9a-f]{16}$/);
 
   // Strict still refuses, and the refusal names the dropped sort term
   // rather than stopping at the first offender it met.
@@ -388,13 +392,12 @@ test('an NSP export reports every gap, and offers the partial', async ({ app }) 
     app.playlists.exportNsp(),
     app.playlists.exportNspLoss(),
   );
-  // The converter's sentence names the query engine's spelling (`kind`
-  // for a mediaType condition), so the row leads with the field's own
-  // name from the rule editor - which is what ties the refusal to a row
-  // somebody actually built.
+  // Each row leads with the field's name from the rule editor, which
+  // ties the sentence to a row somebody actually built.
   await expect(app.playlists.exportNspLossRow(0)).toContainText('Media type');
   await expect(app.playlists.exportNspLossRow(1)).toContainText('Title');
   await expect(app.playlists.exportNspLoss()).toContainText('single sort term');
+  await expect(app.playlists.exportNspKeeps()).toContainText('Genre is Rock');
 
   // Proceeding lands on the same document dialog the other exports use.
   // What it holds is asserted through the API above and in the widget

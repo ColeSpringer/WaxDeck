@@ -943,8 +943,9 @@ class _SlowCreateRepo extends FakeRepository {
     String pid,
     int positionMs, {
     String? note,
+    String? id,
   }) async {
     await createGate.future;
-    return super.createBookmark(pid, positionMs, note: note);
+    return super.createBookmark(pid, positionMs, note: note, id: id);
   }
 }

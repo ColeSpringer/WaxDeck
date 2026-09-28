@@ -822,6 +822,19 @@ class DiscordApplicationId extends StringSetting {
 final discordApplicationIdProvider =
     NotifierProvider<DiscordApplicationId, String>(DiscordApplicationId.new);
 
+/// Whether presence shows album covers, which this device looks up at the
+/// Cover Art Archive. Off, Discord shows the application's own image.
+class DiscordCoversEnabled extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.discordCovers;
+
+  @override
+  bool get defaultValue => true;
+}
+
+final discordCoversEnabledProvider =
+    NotifierProvider<DiscordCoversEnabled, bool>(DiscordCoversEnabled.new);
+
 // --- accessibility -----------------------------------------------------------
 
 /// An in-app reduce-motion override.

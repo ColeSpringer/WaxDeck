@@ -141,6 +141,13 @@ func (s *Server) SyncServer(ctx context.Context, req SyncServerRequestObject) (S
 			bs := bookSettingsJSON(*e.BookSettings)
 			je.BookSettings = &bs
 		}
+		if e.Bookmarks != nil {
+			marks := make([]Bookmark, 0, len(e.Bookmarks))
+			for _, m := range e.Bookmarks {
+				marks = append(marks, bookmarkJSON(m))
+			}
+			je.Bookmarks = &marks
+		}
 		if e.Playlist != nil {
 			pl := playlistJSON(*e.Playlist)
 			je.Playlist = &pl

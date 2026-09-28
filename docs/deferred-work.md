@@ -74,55 +74,13 @@ here waits on upstream.
   both want checking against the move. Worth doing when a public route
   first needs to say something, not before.
 
-- `[in-repo]` **An NSP export's loss list is not pinned to the rule it
-  was computed from.** The report is asked at one moment and
-  `partial=true` is applied to whatever the rule is when the person taps
-  through the dialog. `exportableRule` resolves through `resolvePlaylist`
-  rather than `resolveOwnedPlaylist`, so a shared smart playlist's owner
-  can save a rule change while a second viewer holds the dialog open:
-  the viewer accepts a list naming A and B and the export drops C and D.
-  A rule hash on the report, echoed as `If-Match` on the export, would
-  close it - and would let the export reuse the walk the report already
-  did rather than paying for a second catalog read on the lossless path.
-
-- `[in-repo]` **The NSP loss dialog shows what goes, not what stays.**
-  `GET /playlists/{pid}/nsp/report` answers the gaps, and the dialog
-  before a partial export lists them in the converter's own sentences.
-  For somebody deciding whether to accept the loss, the more answerable
-  question is the other one: what does the exported playlist actually
-  select? `playlist.ExportNSPPartial` already returns that as
-  `NSPExport.Rule`, in WaxDeck's own rule vocabulary, so the mechanism
-  is a nullable `rule` on the report (running `ExportNSPPartial`
-  alongside `CheckNSPExport`) plus a rule-tree rendering in the dialog
-  through the `rule_vocabulary.dart` the rule editor already uses. That
-  is a second, larger UI than "can I accept this loss?", which is why
-  the loss list shipped first.
-
-  The same rendering would close a smaller thing on the way: the
-  converter writes its refusal sentences against the query engine's
-  spelling, so a `mediaType` condition is refused for `kind`. The gap's
-  `field` is translated back to WaxDeck's vocabulary and the dialog
-  leads each row with that name, but the sentence under it still says
-  `kind` - as does the strict refusal's 501 message, which has no row
-  to lead with at all.
-
-  One more thing waits on the same rendering: the dialog's forward
-  button reads "Export without them", which is right for a gap and
-  wrong for a note - a note is a loss the format makes either way and
-  that a partial export does not drop. Unreachable today, because
-  `ruleToQuery` always builds `query.EntityItems` and WaxBin's single
-  export note fires on `EntityTracks`, so no WaxDeck rule can produce a
-  notes-only report.
-
-  Upstream has since shipped the coarse half of the same question:
-  `playlist.NSPExportableFields()` lists every WaxBin query field that
-  has an `.nsp` name at all, alias spellings included. It is not the
-  rendering above - a field on the list can still be dropped for the
-  operator or the value it carries, which is what `CheckNSPExport`
-  answers - but it is enough to grey an unexportable field in the rule
-  editor, or to say up front that a rule can never export. Deliberately
-  not adopted with the alias fix; it is here so whoever builds the
-  rendering knows it exists.
+- `[in-repo]` **The rule editor does not say which fields can never
+  reach `.nsp`.** An export's report names every loss after the fact;
+  WaxBin's `playlist.NSPExportableFields()` lists the query fields that
+  have an `.nsp` name at all, alias spellings included, which is enough
+  to grey a field in the editor before it is picked. Not adopted: a
+  field on the list can still be lost for its operator or value, which
+  only the export report answers.
 
 - `[in-repo]` **A platform call that never answers wedges the player
   until restart.** `JustAudioEngine` bounds loads, window edits, and a
@@ -149,37 +107,25 @@ here waits on upstream.
   drop the socket at all, or be parked and retried on its own clock, is
   the open question.
 
-- `[in-repo]` **The mirror and the play-state outbox belong to the server,
-  not the account.** Signing out keeps `mirror_play_states` and the
-  queued checkpoints, stars, ratings, and listens; only forgetting the
-  server wipes them. The next account to sign in on the device reads the
-  last one's play states offline, and the flush sends the last one's
-  queued mutations and listens under the new session. Preference
-  patches are keyed to their account for this reason, and wait for it.
-  The rest is a decision: drop it at sign-out (an offline listen never
-  sent is lost), or key the rows to the account the same way.
+- `[in-repo]` **The play-state mirror belongs to the server, not the
+  account.** Signing out keeps `mirror_play_states`; only forgetting the
+  server wipes it. The next account to sign in on the device reads the
+  last one's play states offline, and its re-mint refreshes only
+  downloaded items. Queued writes are keyed to their account and wait for
+  it (one queued while signed out goes with whoever flushes next).
+  The rest is a decision: drop the mirror at sign-out, or key its rows to
+  the account the way the queue is.
 
-- `[in-repo]` **The enrichment source set has an order but no operator
-  control.** The per-field precedence is now stated and enforced
-  (`docs/curation-and-metadata.md`): MusicBrainz matching is
-  authoritative for identity and locks what it writes, every injected
-  provider fills only empty unlocked fields, and genres invert the order
-  deliberately without ever evicting a MusicBrainz genre. What is left
-  is the operator's half. The set grew one provider at a time - Deezer,
-  iTunes, Audnexus, Fanart.tv behind a key, MusicBrainz and the Cover
-  Art Archive through matching - and it is still a list rather than an
-  ordering anyone chose: the confidence numbers (Deezer 0.7, and
-  friends) were picked one at a time and have never been compared,
-  nothing says which one a self-hoster with no keys ends up on, and the
-  only control is one all-or-nothing toggle per subsystem. Radio's
-  artwork rung has the shape this wants (`CoverChain` in
-  `server/internal/providers/coverart.go`, Deezer first for speed, the
-  archive behind it for coverage and licensing). Worth a pass that lets
-  an operator order or disable sources individually, and that revisits
-  whether the set is the right one - iTunes in particular sits
-  awkwardly, since its terms restrict artwork use to promoting store
-  content and it shares a per-IP budget with the radio path if both
-  ever ask it.
+- `[in-repo]` **The enrichment source set has never been reviewed as a
+  set.** Operators order and switch the providers now, but the
+  confidence numbers (Deezer 0.7, and friends) were picked one at a time
+  and never compared, nothing says which provider a self-hoster with no
+  keys ends up on, and iTunes sits awkwardly: its terms restrict artwork
+  use to promoting store content, and it shares a per-IP budget with the
+  radio path if both ever ask it. Radio's cover chain (`CoverChain` in
+  `server/internal/providers/coverart.go`) deliberately does not follow
+  the operator's order: it is built once at boot, Deezer first for
+  speed and the archive behind it for coverage and licensing.
 
 - `[hardware]` **Android UnifiedPush distributor integration.** The server, API,
   and settings surface shipped; the client still needs the
@@ -191,16 +137,6 @@ here waits on upstream.
   half of that gap, but no provider supplies prose and no catalog field
   holds it, so this stays sequenced behind that rather than behind a
   query.
-- `[in-repo]` **A place cannot be marked offline.** Audiobook bookmarks
-  are a live read against the server: the sheet fetches on
-  open and marking one needs a round trip. Everything else a listener
-  does to a book while offline is mirrored - the position checkpoints
-  through the outbox, the audio plays from the download - so a plane is
-  exactly where this shows. Making it work is the shape the checkpoint
-  queue already has: a sync kind, a delta, a mirror table, and a queued
-  create with a client-minted id the server accepts. Left out because a
-  book holds a handful of these and nothing else about them wants a
-  mirror, so the machinery would be built entirely for this one gap.
 - `[in-repo]` **The downloads manager reports what WaxDeck holds and not
   what the device has left.** The storage header adds up used bytes by
   medium, which is the half a listener can act on; the layout also asks
@@ -260,34 +196,6 @@ here waits on upstream.
   freshness - so a miss on the grid is a signal about the virtualized
   list rather than about artwork, and `-covers=false` is the run that
   tells the two apart.
-
-- `[in-repo]` **Discord presence shows the application's own cover, not
-  the album's.** Presence shipped in P22 with the status,
-  the track, the artist, the album, and the timestamps that drive the
-  progress bar; the image beside them is the `waxdeck` art
-  asset uploaded against the Discord application (the emblem, since
-  the official mark landed), the same for every track. Of the two richer
-  sources named when this was first recorded, one has since come within
-  reach. **Cover Art Archive** was blocked on a MusicBrainz release id
-  the catalog would not project; that upstream ask landed, `model.ItemView`
-  now carries `MBID`, `AlbumMBID` and `ReleaseGroupMBID`, and the
-  `missing-mbid` health rule already reads the first of them
-  (`server/internal/service/health.go`). What is left is WaxDeck's own
-  contract: `mbid` is on the album schema, and the binder holds playback
-  state, so it would take an album mbid on the surface the player reads -
-  or an album detail read per track - before a `coverartarchive.org` URL
-  could be built. That is a spec change and a binder change, not a wall.
-  **The tokenized `/media/art`**
-  a cast receiver uses would work on an instance the internet can reach,
-  but the token is minted per play-info and the presence binder does not
-  hold one: `PlaybackSession` fetches its `PlayInfo`, uses the stream
-  URL, and lets it go, and asking for another would open a second
-  server-side stream session. Either fix is a change to a layer that
-  exists for something else, for a 512-pixel square in a chat client.
-  Also unbuilt: presence for playback happening on *another* device this
-  desktop is mirroring through Connect. The binder reads local playback
-  only, which is the honest half - "listening to" is a claim about this
-  machine's ears - and a remote session is what the deck bar names.
 
 - `[in-repo]` **How far ahead the artwork precacher warms is a guess.**
   The music listing and the music indexes call it when a scroll stops,
@@ -497,24 +405,6 @@ here waits on upstream.
   reader does not go looking for a notification API to fix it with.
   Server-side enclosure fetches are a different event and do reach every
   platform, through the `episode-downloaded` marker on the user stream.
-- `[in-repo]` **Virtual tracks are not sonically analyzed.** A track
-  carved out of a shared single-file rip by a cue sheet shares its
-  backing file's audio essence, and embeddings are keyed by essence,
-  so per-window analysis would collide with itself. The analysis
-  sweep skips virtual tracks; they still appear in metadata-based
-  mixes and inherit nothing sonic. Fixing it means keying embeddings
-  by essence plus sample window and teaching the worker audio pull to
-  serve the window (the stream surface already can).
-
-  The waveform seek bar is the same gap seen from the catalog side and
-  wants the same fix. `GET /items/{pid}/waveform` answers `unavailable`
-  for a virtual track, because the peaks row belongs to the backing file
-  and drawing the whole album's envelope under track three would be a
-  convincing wrong answer. Windowing the stored buckets by the track's
-  sample span is the cheaper half of this entry (no new analysis, just a
-  slice of what is stored) and costs effective resolution, since a
-  three-minute track out of a seventy-minute rip gets some forty of the
-  thousand buckets. Whoever takes this entry should decide both together.
 - `[in-repo]` **Time and mood mixes.** Daylist-style rotating mixes
   with scheduled auto-names are a scheduler and a naming table over
   the instant-mix engine that shipped; nothing else blocks them.
@@ -583,22 +473,3 @@ here waits on upstream.
   on every poll, which a perpetual live stream makes unbounded. The fix
   wants a bounded second look: remember the passed-over ids and probe
   each until it resolves or ages out.
-
-## Admin and ops
-
-- `[in-repo]` **The enrichment status surface has no client reader.**
-  `GET /library/enrichment` answers `configured`,
-  `musicbrainzConfigured`, `phases` and a `lastRun` block carrying the
-  pass's thirty counters, mirrored one for one, and the app's
-  hand-written `EnrichmentStatus` carries three fields: providers,
-  coverage, and whether a pass is running. The run's `forcePhases` and
-  the enrichment-cache census and prune (`/admin/enrichment-cache`) have
-  no reader either. So the spec's own instruction - read `phases` before
-  offering a button that errors, and do not say "enrichment is off" when
-  only the identity half is - is unfollowable by WaxDeck's own client,
-  and the last-run counters have nobody to show them. Not a mapping
-  oversight: there is no admin enrichment screen to put them on, and the
-  two halves land together. Take it with that screen, which also wants
-  the operator ordering and per-source enable that already have their
-  own entry above; the mapping is mechanical once there is somewhere to
-  draw them.

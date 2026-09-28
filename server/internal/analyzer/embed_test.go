@@ -1,8 +1,11 @@
 package analyzer
 
 import (
+	"context"
 	"math"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 )
@@ -100,5 +103,49 @@ func TestEmbedRefusesShortAndSilentInput(t *testing.T) {
 	}
 	if _, err := e.Embed(make([]float32, 3*Rate)); err == nil {
 		t.Fatal("expected an error for silence (the zero vector is rejected server-side)")
+	}
+}
+
+func writeWAV(t *testing.T, name string, samples []int16) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), name)
+	if err := os.WriteFile(path, wavPCM16(samples, Rate, 1), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestAnalyzeFileWindowReadsOnlyItsWindow(t *testing.T) {
+	low, high := toneInt16(330, 3, Rate), toneInt16(880, 3, Rate)
+	both := writeWAV(t, "both.wav", append(slices.Clone(low), high...))
+	second := writeWAV(t, "second.wav", high)
+	a := New()
+	ctx := context.Background()
+
+	tail, err := a.AnalyzeFileWindow(ctx, both, int64(len(low)), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	alone, err := a.AnalyzeFileWindow(ctx, second, 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(tail, alone) {
+		t.Error("the second half's window embeds differently from the same audio on its own")
+	}
+
+	closed, err := a.AnalyzeFileWindow(ctx, both, 0, int64(len(low)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.Equal(closed, tail) {
+		t.Error("the two halves embed the same")
+	}
+}
+
+func TestAnalyzeFileWindowRefusesAShortWindow(t *testing.T) {
+	path := writeWAV(t, "tone.wav", toneInt16(440, 4, Rate))
+	if _, err := New().AnalyzeFileWindow(context.Background(), path, 0, Rate*MinDurationMs/1000-1); err == nil {
+		t.Fatal("a window under the minimum duration was embedded")
 	}
 }

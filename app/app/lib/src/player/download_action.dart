@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
@@ -73,6 +75,8 @@ class _DownloadActionState extends ConsumerState<DownloadAction> {
   Future<void> _download() async {
     final port = ref.read(downloadManagerProvider);
     if (port == null) return;
+    // Read now: the widget may be gone by the time the download is queued.
+    final sync = ref.read(syncEngineProvider);
     setState(() => _inFlight = true);
     try {
       // Listen before enqueuing so a fast completion cannot slip past,
@@ -88,6 +92,8 @@ class _DownloadActionState extends ConsumerState<DownloadAction> {
       });
       try {
         await port.download(widget.pid);
+        // A book's marks come along, for listening where nothing answers.
+        if (widget.pid.startsWith('bk-')) unawaited(_fillMarks(sync));
         // Everything may already be on disk (an early tap before the
         // probe landed, or a server-side retag): nothing was enqueued,
         // so no event will ever come.
@@ -108,6 +114,14 @@ class _DownloadActionState extends ConsumerState<DownloadAction> {
     } finally {
       if (mounted) setState(() => _inFlight = false);
       await _probe();
+    }
+  }
+
+  Future<void> _fillMarks(SyncEngine? sync) async {
+    try {
+      await sync?.fillBookmarks(widget.pid);
+    } on WaxDeckApiException {
+      // The next remint or bookmarks event fills them instead.
     }
   }
 

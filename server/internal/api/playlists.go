@@ -325,7 +325,7 @@ func (s *Server) ExportPlaylistNsp(ctx context.Context, req ExportPlaylistNspReq
 	if err != nil {
 		return nil, err
 	}
-	doc, err := s.svc.ExportPlaylistNSP(ctx, uc, req.Pid, derefBool(req.Params.Partial))
+	doc, err := s.svc.ExportPlaylistNSP(ctx, uc, req.Pid, derefBool(req.Params.Partial), deref(req.Params.RuleHash))
 	if err != nil {
 		return nil, err
 	}
@@ -353,6 +353,13 @@ func nspReportJSON(rep service.NSPReport) NspReport {
 	}
 	if notes := nspGapsJSON(rep.Notes); notes != nil {
 		out.Notes = &notes
+	}
+	if rep.RuleHash != "" {
+		out.RuleHash = ptr(rep.RuleHash)
+	}
+	if rep.Rule != nil {
+		r := ruleToWire(*rep.Rule)
+		out.Rule = &r
 	}
 	return out
 }

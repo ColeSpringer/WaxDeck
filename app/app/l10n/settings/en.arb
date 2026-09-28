@@ -389,7 +389,7 @@
   "@settingsDevicesTitle": {
     "description": "Name of the \"Signed-in devices\" setting, drawn on its own row and in settings search."
   },
-  "settingsDiscordApplicationHelp": "Empty publishes as WaxDeck. An application ID from discord.com/developers changes the name Discord shows and where its cover art comes from",
+  "settingsDiscordApplicationHelp": "Empty publishes as WaxDeck. An application ID from discord.com/developers changes the name Discord shows and the image for albums with no cover",
   "@settingsDiscordApplicationHelp": {
     "description": "The line under the Discord application ID field."
   },
@@ -397,15 +397,19 @@
   "@settingsDiscordApplicationLabel": {
     "description": "Field for a Discord application ID of the listener's own, instead of WaxDeck's."
   },
-  "settingsDiscordCoverNote": "The cover is one image for every track, uploaded to that application rather than taken from your library: Discord fetches art through its own servers, which cannot reach a private one.",
-  "@settingsDiscordCoverNote": {
-    "description": "Note under the Discord application ID field explaining why the cover art cannot be the album's."
+  "settingsDiscordCoversHelp": "This device asks the Cover Art Archive for the cover of each album it plays that has a MusicBrainz release ID. Off, or with none found, Discord shows the application's own image.",
+  "@settingsDiscordCoversHelp": {
+    "description": "Help under the album covers switch: what it contacts and what shows otherwise."
+  },
+  "settingsDiscordCoversTitle": "Show album covers",
+  "@settingsDiscordCoversTitle": {
+    "description": "Title of the switch that has Discord presence show album covers."
   },
   "settingsDiscordPresenceHelp": "Sets your Discord status while WaxDeck plays, through the Discord app on this machine",
   "@settingsDiscordPresenceHelp": {
     "description": "The line under the Discord presence switch."
   },
-  "settingsDiscordPresenceKeywords": "discord, rich presence, status, listening to",
+  "settingsDiscordPresenceKeywords": "discord, rich presence, status, listening to, album cover",
   "@settingsDiscordPresenceKeywords": {
     "description": "Comma-separated search keywords for the \"Show what I am listening to on Discord\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
   },

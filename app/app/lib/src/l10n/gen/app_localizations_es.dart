@@ -198,6 +198,358 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminDashboardTitle => 'Administración';
 
   @override
+  String get adminEnrichmentAnsweredColumn => 'Con respuesta';
+
+  @override
+  String get adminEnrichmentArtFetched => 'Portadas descargadas';
+
+  @override
+  String get adminEnrichmentArtReused => 'Portadas reutilizadas';
+
+  @override
+  String get adminEnrichmentAuxArtFetched => 'Otras imágenes descargadas';
+
+  @override
+  String get adminEnrichmentBuiltin => 'Integrada en el catálogo';
+
+  @override
+  String get adminEnrichmentCacheAnswers => 'Respuestas guardadas';
+
+  @override
+  String get adminEnrichmentCacheBlurb =>
+      'Lo que respondieron MusicBrainz y el Cover Art Archive, guardado para que una pasada no pregunte dos veces. Una respuesta podada cuesta una petición la próxima vez que haga falta.';
+
+  @override
+  String get adminEnrichmentCacheBytesColumn => 'Tamaño';
+
+  @override
+  String get adminEnrichmentCacheEmpty => 'Todavía no hay nada en caché.';
+
+  @override
+  String get adminEnrichmentCacheExempt => 'Nunca se poda';
+
+  @override
+  String get adminEnrichmentCacheGroup => 'Caché de respuestas';
+
+  @override
+  String get adminEnrichmentCacheKindColumn => 'Tipo';
+
+  @override
+  String get adminEnrichmentCacheLoadError =>
+      'No se ha podido leer la caché de respuestas.';
+
+  @override
+  String get adminEnrichmentCacheMaxMegabytes => 'Hasta (MB)';
+
+  @override
+  String adminEnrichmentCacheNeedsWhole(int max) {
+    final intl.NumberFormat maxNumberFormat =
+        intl.NumberFormat.decimalPatternDigits(
+          locale: localeName,
+          decimalDigits: 0,
+        );
+    final String maxString = maxNumberFormat.format(max);
+
+    return 'Escribe un número entero de 0 a $maxString.';
+  }
+
+  @override
+  String get adminEnrichmentCacheOlderThan => 'Con más de (días)';
+
+  @override
+  String get adminEnrichmentCachePrune => 'Podar';
+
+  @override
+  String get adminEnrichmentCachePruneBody =>
+      'Las respuestas podadas se vuelven a pedir, una petición cada vez, la próxima vez que una pasada las necesite. Los valores del catálogo no cambian.';
+
+  @override
+  String get adminEnrichmentCachePruneTitle => '¿Podar la caché de respuestas?';
+
+  @override
+  String get adminEnrichmentCachePruneWord => 'PODAR';
+
+  @override
+  String adminEnrichmentCachePruned(int count, String size) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count respuestas podadas, $size liberados',
+      one: '1 respuesta podada, $size liberados',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get adminEnrichmentCacheRowsColumn => 'Respuestas';
+
+  @override
+  String get adminEnrichmentCacheSize => 'Tamaño';
+
+  @override
+  String get adminEnrichmentCapBook => 'Datos de libros';
+
+  @override
+  String get adminEnrichmentCapCover => 'Portadas';
+
+  @override
+  String get adminEnrichmentCapFields => 'Datos';
+
+  @override
+  String get adminEnrichmentCapGenres => 'Géneros';
+
+  @override
+  String get adminEnrichmentCapIdentity => 'Identidad';
+
+  @override
+  String get adminEnrichmentCoverageArtists => 'Artistas';
+
+  @override
+  String get adminEnrichmentCoverageBooks => 'Libros';
+
+  @override
+  String get adminEnrichmentCoverageGroup => 'Cobertura';
+
+  @override
+  String get adminEnrichmentCoverageLyrics => 'Letras';
+
+  @override
+  String adminEnrichmentCoverageOf(int enriched, int total) {
+    return '$enriched de $total';
+  }
+
+  @override
+  String get adminEnrichmentCoverageReleaseGroups => 'Grupos de lanzamientos';
+
+  @override
+  String adminEnrichmentCoverageTracks(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count pistas',
+      one: '1 pista',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get adminEnrichmentCoverageUncounted => 'Sin contar';
+
+  @override
+  String adminEnrichmentLastRunFinished(String when) {
+    return 'Terminó $when';
+  }
+
+  @override
+  String get adminEnrichmentLastRunGroup => 'Última pasada';
+
+  @override
+  String get adminEnrichmentLastRunNone =>
+      'Todavía no ha terminado ninguna pasada.';
+
+  @override
+  String get adminEnrichmentLoadError =>
+      'No se ha podido cargar el estado del enriquecimiento.';
+
+  @override
+  String get adminEnrichmentLookedUpColumn => 'Consultados';
+
+  @override
+  String get adminEnrichmentMusicbrainzOffHelp =>
+      'Apagado hasta que se configure WAXDECK_ENRICHMENT_CONTACT, que también mantiene cerrados el Cover Art Archive y LRCLIB';
+
+  @override
+  String get adminEnrichmentMusicbrainzOnHelp =>
+      'Identifica artistas, álbumes y libros, y abre el Cover Art Archive y LRCLIB';
+
+  @override
+  String get adminEnrichmentMusicbrainzTitle => 'MusicBrainz';
+
+  @override
+  String get adminEnrichmentNothingToDo =>
+      'Una pasada no tiene nada que hacer: ninguna fuente puede funcionar. Configura un contacto de MusicBrainz o un proveedor y reinicia.';
+
+  @override
+  String get adminEnrichmentNothingToDoSwitchedOff =>
+      'Una pasada no tiene nada que hacer: las fuentes que podrían funcionar están desactivadas. Activa una abajo, o configura un contacto de MusicBrainz y reinicia.';
+
+  @override
+  String get adminEnrichmentPhaseAlbumArt => 'Portadas de álbumes';
+
+  @override
+  String get adminEnrichmentPhaseAlbumArtHelp =>
+      'Portadas para los álbumes que no tienen';
+
+  @override
+  String get adminEnrichmentPhaseAlbumFields => 'Datos de álbumes';
+
+  @override
+  String get adminEnrichmentPhaseAlbumFieldsHelp =>
+      'Sello y año para los álbumes';
+
+  @override
+  String get adminEnrichmentPhaseArtistArt => 'Fotos de artistas';
+
+  @override
+  String get adminEnrichmentPhaseArtistArtHelp =>
+      'Fotos para los artistas que no tienen';
+
+  @override
+  String get adminEnrichmentPhaseAuxArt => 'Otras imágenes';
+
+  @override
+  String get adminEnrichmentPhaseAuxArtHelp =>
+      'Traseras, discos, libretos y fondos para los álbumes que tienen portada';
+
+  @override
+  String get adminEnrichmentPhaseBookFields => 'Datos de libros';
+
+  @override
+  String get adminEnrichmentPhaseBookFieldsHelp =>
+      'Editorial, narrador, descripción y más para los libros';
+
+  @override
+  String get adminEnrichmentPhaseIdentity => 'Identidad';
+
+  @override
+  String get adminEnrichmentPhaseIdentityHelp =>
+      'Emparejar artistas, grupos de lanzamientos y libros con MusicBrainz';
+
+  @override
+  String get adminEnrichmentPhaseLyrics => 'Letras';
+
+  @override
+  String get adminEnrichmentPhaseLyricsHelp =>
+      'Letras para las pistas que no las tienen';
+
+  @override
+  String get adminEnrichmentPhaseReleases => 'Edición exacta';
+
+  @override
+  String get adminEnrichmentPhaseReleasesHelp =>
+      'Fijar cada álbum a la edición que nombran su código de barras o su número de catálogo';
+
+  @override
+  String get adminEnrichmentPhaseTrackFields => 'Datos de pistas';
+
+  @override
+  String get adminEnrichmentPhaseTrackFieldsHelp =>
+      'Tempo, ISRC y compositor donde están vacíos';
+
+  @override
+  String get adminEnrichmentRetried => 'Vueltas a preguntar';
+
+  @override
+  String get adminEnrichmentRunAction => 'Hacer la pasada';
+
+  @override
+  String get adminEnrichmentRunAll => 'Volver a preguntar por todo';
+
+  @override
+  String get adminEnrichmentRunAllHelp =>
+      'Todas las fuentes, sobre todo: lento en una biblioteca grande';
+
+  @override
+  String get adminEnrichmentRunBusy => 'Ya hay una pasada en curso.';
+
+  @override
+  String get adminEnrichmentRunGroup => 'Hacer una pasada';
+
+  @override
+  String get adminEnrichmentRunNormal => 'Completar lo que falta';
+
+  @override
+  String get adminEnrichmentRunNormalHelp =>
+      'Pregunta por lo que no se ha buscado, o cuya falta ha caducado';
+
+  @override
+  String get adminEnrichmentRunPhases =>
+      'Volver a preguntar en las fases elegidas';
+
+  @override
+  String get adminEnrichmentRunPhasesHelp => 'Solo las fases activadas abajo';
+
+  @override
+  String get adminEnrichmentRunStarted => 'Pasada de enriquecimiento iniciada';
+
+  @override
+  String get adminEnrichmentRunningNow => 'Hay una pasada en curso.';
+
+  @override
+  String adminEnrichmentSourceDown(String name) {
+    return 'Bajar $name';
+  }
+
+  @override
+  String adminEnrichmentSourceSwitch(String name) {
+    return 'Consultar $name';
+  }
+
+  @override
+  String adminEnrichmentSourceUp(String name) {
+    return 'Subir $name';
+  }
+
+  @override
+  String get adminEnrichmentSourcesBlurb =>
+      'Se consultan en este orden, y una fuente desactivada no se consulta; al reactivarla, no se le pregunta por lo que una pasada ya terminó salvo que una ejecución fuerce sus fases. Las fuentes propias del catálogo van al final y no se pueden mover.';
+
+  @override
+  String get adminEnrichmentSourcesGroup => 'Fuentes';
+
+  @override
+  String get adminEnrichmentSourcesRevert => 'Revertir';
+
+  @override
+  String get adminEnrichmentSourcesSave => 'Guardar el orden';
+
+  @override
+  String get adminEnrichmentSourcesSaved => 'Orden de fuentes guardado';
+
+  @override
+  String get adminEnrichmentSourcesSavedAfterPass =>
+      'Orden de fuentes guardado. La pasada en curso conserva el orden con el que empezó.';
+
+  @override
+  String get adminEnrichmentSourcesStale =>
+      'Las fuentes cambiaron en el servidor. Revísalas y vuelve a guardar.';
+
+  @override
+  String get adminEnrichmentStale =>
+      'No se pudo leer el estado más reciente. Lo que se ve es de la última lectura.';
+
+  @override
+  String get adminEnrichmentStandingGroup => 'Situación';
+
+  @override
+  String get adminEnrichmentStateOff => 'Desactivado';
+
+  @override
+  String get adminEnrichmentStateOn => 'Activado';
+
+  @override
+  String get adminEnrichmentTagsFailed => 'Escrituras fallidas';
+
+  @override
+  String get adminEnrichmentTagsSkipped => 'Partes de libros omitidas';
+
+  @override
+  String get adminEnrichmentTagsUnrepresented =>
+      'Etiquetas que el formato no admite';
+
+  @override
+  String get adminEnrichmentTagsWritten => 'Etiquetas escritas';
+
+  @override
+  String get adminEnrichmentTitle => 'Enriquecimiento';
+
+  @override
+  String get adminEnrichmentWalkAlbums => 'Álbumes';
+
+  @override
+  String get adminEnrichmentWalkColumn => 'Recorrido';
+
+  @override
   String get adminForbiddenMessage =>
       'La consola de administración es para las cuentas con el rol de administrador. Pide lo que necesites de ella a una persona administradora.';
 
@@ -708,6 +1060,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminRoleUser => 'usuario';
 
   @override
+  String get adminScanBusy =>
+      'Ya hay un escaneo u otro trabajo del catálogo en curso.';
+
+  @override
   String get adminScanLibrary => 'Escanear la biblioteca';
 
   @override
@@ -822,6 +1178,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get adminSectionDiagnosticsBlurb =>
       'Archivos que el catálogo no ha podido leer';
+
+  @override
+  String get adminSectionEnrichmentBlurb =>
+      'De dónde salen las imágenes, las letras y los datos';
 
   @override
   String get adminSectionGenresBlurb =>
@@ -5219,8 +5579,16 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get playerBookmarkPending => 'Sin enviar todavía';
+
+  @override
   String playerBookmarkPlayFrom(String time) {
     return 'Reproducir desde $time';
+  }
+
+  @override
+  String playerBookmarkRefused(String reason) {
+    return 'No se guardó: $reason';
   }
 
   @override
@@ -5242,6 +5610,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playerBookmarksError => 'No se han podido cargar los marcadores.';
+
+  @override
+  String get playerBookmarksFull =>
+      'Este libro ya tiene todos los marcadores que admite. Quita uno para marcar otro.';
 
   @override
   String get playerCancelTimer => 'Cancelar el temporizador';
@@ -5718,6 +6090,12 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playlistExportNsp => 'Exportar como NSP';
 
   @override
+  String get playlistExportNspAnyway => 'Exportar de todos modos';
+
+  @override
+  String get playlistExportNspKeeps => 'Lo que conserva la exportación';
+
+  @override
   String playlistExportNspLossCount(num count) {
     final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
       locale: localeName,
@@ -5736,6 +6114,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get playlistExportNspLossTitle =>
       'Parte de esta regla no se puede exportar';
+
+  @override
+  String get playlistExportNspNotesTitle =>
+      'Esta regla se exporta con una diferencia';
 
   @override
   String get playlistExportNspProceed => 'Exportar sin ellas';
@@ -8618,15 +9000,18 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsDiscordApplicationHelp =>
-      'Vacío publica como WaxDeck. Un ID de aplicación de discord.com/developers cambia el nombre que muestra Discord y de dónde sale su carátula';
+      'Vacío publica como WaxDeck. Un ID de aplicación de discord.com/developers cambia el nombre que muestra Discord y la imagen de los álbumes sin carátula';
 
   @override
   String get settingsDiscordApplicationLabel =>
       'Publicar como otra aplicación (opcional)';
 
   @override
-  String get settingsDiscordCoverNote =>
-      'La carátula es una sola imagen para todas las pistas, subida a esa aplicación en vez de tomada de tu biblioteca: Discord obtiene las imágenes a través de sus propios servidores, que no pueden llegar a uno privado.';
+  String get settingsDiscordCoversHelp =>
+      'Este dispositivo pide al Cover Art Archive la portada de cada álbum que reproduce con un ID de lanzamiento de MusicBrainz. Desactivado, o si no la encuentra, Discord muestra la imagen propia de la aplicación.';
+
+  @override
+  String get settingsDiscordCoversTitle => 'Mostrar portadas de álbum';
 
   @override
   String get settingsDiscordPresenceHelp =>
@@ -8634,7 +9019,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsDiscordPresenceKeywords =>
-      'discord, presencia enriquecida, estado, escuchando';
+      'discord, presencia enriquecida, estado, escuchando, portada de álbum';
 
   @override
   String get settingsDiscordPresenceRowTitle =>

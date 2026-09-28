@@ -94,6 +94,49 @@ void main() {
       final mapped = nspReportFromGen(report);
       expect(mapped.isLossless, isTrue);
       expect(mapped.all, isEmpty);
+      expect(mapped.ruleHash, isNull);
+      expect(mapped.rule, isNull);
+    });
+
+    test('an export report carries its rule hash and the kept rule', () {
+      final report = gen.standardSerializers.deserializeWith(
+        gen.NspReport.serializer,
+        <String, Object?>{
+          'direction': 'export',
+          'ruleHash': '0123456789abcdef',
+          'gaps': <Object?>[
+            <String, Object?>{
+              'kind': 'field',
+              'field': 'mediaType',
+              'path': '/root/nodes/1',
+              'reason': 'nsp: unsupported field: mediaType',
+            },
+          ],
+          'rule': <String, Object?>{
+            'root': <String, Object?>{
+              'type': 'all',
+              'nodes': <Object?>[
+                <String, Object?>{
+                  'type': 'condition',
+                  'field': 'genre',
+                  'op': 'is',
+                  'value': 'Rock',
+                },
+              ],
+            },
+            'sorts': <Object?>[
+              <String, Object?>{'field': 'playCount', 'desc': true},
+            ],
+          },
+        },
+      )!;
+      final mapped = nspReportFromGen(report);
+      expect(mapped.ruleHash, '0123456789abcdef');
+      final kept = mapped.rule!;
+      expect(kept.root.nodes.single.field, 'genre');
+      expect(kept.root.nodes.single.value, 'Rock');
+      expect(kept.sorts.single.field, 'playCount');
+      expect(kept.sorts.single.desc, isTrue);
     });
   });
 }

@@ -137,6 +137,14 @@
   "@playlistExportNsp": {
     "description": "Row in a smart playlist's overflow menu offering its rule as a Navidrome smart-playlist document, and the title of the dialog that shows it."
   },
+  "playlistExportNspAnyway": "Export anyway",
+  "@playlistExportNspAnyway": {
+    "description": "Confirms an NSP export that drops nothing but reads differently."
+  },
+  "playlistExportNspKeeps": "What the export keeps",
+  "@playlistExportNspKeeps": {
+    "description": "Heading over the chips describing the rule a partial NSP export would still carry, in the NSP loss dialog."
+  },
   "playlistExportNspLossCount": "{count, plural, =1{One part of this rule has no NSP form.} other{{count} parts of this rule have no NSP form.}}",
   "@playlistExportNspLossCount": {
     "description": "Frame above the list of parts of a rule that NSP cannot carry. Says only that they have no NSP form: some of them are dropped by the export and some are losses the format makes either way, and the row under each one says which.",
@@ -150,6 +158,10 @@
   "playlistExportNspLossTitle": "Some of this rule cannot be exported",
   "@playlistExportNspLossTitle": {
     "description": "Title of the dialog listing what an NSP export would drop."
+  },
+  "playlistExportNspNotesTitle": "This rule exports with a difference",
+  "@playlistExportNspNotesTitle": {
+    "description": "Title of the NSP export dialog when nothing is dropped, only read differently."
   },
   "playlistExportNspProceed": "Export without them",
   "@playlistExportNspProceed": {

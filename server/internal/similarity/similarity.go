@@ -1,19 +1,6 @@
-// Package similarity is the in-memory sonic-similarity engine: unit
-// vectors keyed by audio essence, cosine distance, and a top-K
-// nearest-neighbor graph maintained incrementally at ingest.
-//
-// Single-seed queries are deliberate brute-force scans: at library
-// scale (100k tracks, ~200 dims) an exhaustive dot-product pass is
-// milliseconds, which beats carrying an approximate-nearest-neighbor
-// index. Path queries never sweep: the ingest pass precomputes each
-// track's top-K neighbor edges, and pathfinding is plain graph
-// traversal over them. Graph maintenance is incremental by
-// construction: the ingest sweep's distances also update any existing
-// node whose current worst neighbor the new track beats (O(K) per
-// affected node, no additional vector math), and deletions prune edges
-// and queue only the affected nodes for lazy recompute. There is no
-// full-rebuild job on purpose; a periodic top-K recompute would be
-// O(N^2) across the library.
+// Package similarity is the in-memory sonic-similarity engine: vectors keyed by
+// analysis key (essence, or essence@window), brute-force cosine scans (fast at
+// library scale), and a top-K graph kept at ingest, repaired lazily on deletion.
 package similarity
 
 import (

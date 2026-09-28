@@ -21,6 +21,7 @@ import 'playlist_actions.dart';
 import 'playlist_play.dart';
 import 'playlist_sync_controller.dart';
 import 'playlists_controller.dart';
+import 'rule_chip_row.dart';
 import 'rule_vocabulary.dart';
 
 /// One playlist: what it is, what is in it, and what its owner may do
@@ -261,12 +262,9 @@ class _StatusChips extends ConsumerWidget {
       },
     );
     final editable = view.playlist.isOwner;
-    final summary = Wrap(
-      spacing: WaxSpace.s8,
-      runSpacing: WaxSpace.s8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: <Widget>[
-        for (final chip in chips) CodecChip(chip),
+    final summary = RuleChipRow(
+      chips,
+      trailing: <Widget>[
         if (editable)
           WaxButton(
             label: l10n.playlistEditRules,

@@ -9,7 +9,7 @@ import 'package:built_value/serializer.dart';
 
 part 'enrichment_coverage.g.dart';
 
-/// How much of the catalog has enriched.
+/// How much of the catalog has enriched. Lyrics carries its total alone, the music tracks: the catalog does not count lyrics per track, so its enriched reads zero.
 ///
 /// Properties:
 /// * [artists] 

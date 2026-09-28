@@ -6,7 +6,8 @@ library in the background, paced so it never competes with playback,
 and there is nothing to install or configure. Analysis is
 incremental: new tracks queue as they are scanned, and identical
 audio never re-analyzes (embeddings are keyed by the audio essence
-hash, which survives retags and moves). Until a track is analyzed,
+hash, which survives retags and moves; a track carved out of a shared
+file by a cue sheet adds its window to that key). Until a track is analyzed,
 discovery answers with metadata heuristics, so nothing waits on
 coverage.
 
@@ -47,18 +48,19 @@ token (`WAXDECK_WORKER_TOKENS`, comma separated for rotation) as a
 bearer:
 
 1. `GET /api/v1/similarity/work?limit=` leases a batch of tracks
-   awaiting analysis. Each item names the track, its essence hash,
+   awaiting analysis. Each item names the track, its analysis key,
    and where to pull audio. Leases expire on their own, so a crashed
    worker needs no cleanup. An empty batch means full coverage; sleep
    `retryAfterSeconds` and poll again.
 2. `GET /media/analysis/{pid}?format=wav|flac` serves decode-ready
-   audio: 16 kHz mono, gain untouched. WAV is the loopback default;
+   audio: 16 kHz mono, gain untouched, and for a carved track only
+   its own window of the file. WAV is the loopback default;
    remote workers request FLAC for losslessly identical input at
    roughly half the bytes. Needs the streaming engine.
 3. `POST /api/v1/similarity/embeddings` records a batch:
    `{model, dims, embeddings: [{pid, essence, vector}]}`. Echo the
-   essence from the work item; the server normalizes vectors and
-   maintains the neighbor graph at ingest.
+   work item's key as `essence` (it is opaque); the server normalizes
+   vectors and maintains the neighbor graph at ingest.
 
 Rules of the contract:
 
@@ -67,16 +69,16 @@ Rules of the contract:
   coverage restarts. Version your model tag; never change what a tag
   computes.
 - Vectors must be deterministic for identical audio.
-- Only music tracks are analyzed. Virtual tracks carved from a shared
-  file by a cue sheet are excluded (they share the backing file's
-  essence).
+- Only music tracks are analyzed, cue-carved ones included: each is
+  analyzed over its own window of the shared file.
 
 ## Same-host mode
 
 A worker on the server's own host can skip the HTTP audio pull: set
 `WAXDECK_WORKER_LOCAL_PATHS=true` on the server and mount the library
 read-only into the worker. Work items then carry a library-relative
-`localPath` and the worker decodes the original file itself. Only
+`localPath` and the worker decodes the original file itself, except
+for cue-carved tracks, which always come over HTTP. Only
 meaningful for single-root libraries; multi-root setups use the HTTP
 pull regardless.
 

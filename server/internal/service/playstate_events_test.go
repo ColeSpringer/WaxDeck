@@ -197,3 +197,17 @@ func TestAnnouncementMarkersReachTheDelta(t *testing.T) {
 		t.Fatalf("a marker carried a payload: %+v", delta.Events[0])
 	}
 }
+
+// The event for a change already made is written even when the request
+// that made it is gone: a client that hung up has still changed things.
+func TestAnEventOutlivesItsRequest(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	tail := eventTail(t, ctx, svc, uc)
+	gone, cancel := context.WithCancel(ctx)
+	cancel()
+	svc.emitUserEvent(gone, uc.ID, eventBookmarks, "bk-X")
+	if evs := eventsAfter(t, ctx, svc, uc, tail); len(evs) != 1 || evs[0].Kind != eventBookmarks {
+		t.Fatalf("events after a cancelled request = %+v, want the bookmarks event", evs)
+	}
+}

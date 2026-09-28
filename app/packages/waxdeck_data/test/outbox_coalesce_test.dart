@@ -44,7 +44,7 @@ void main() {
       db: db,
       repository: repo,
       channelFactory: neverConnects(),
-    )..prefsOwner = 'us-1';
+    )..account = 'us-1';
     addTearDown(() async {
       engine.dispose();
       await db.close();

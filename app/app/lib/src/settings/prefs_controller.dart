@@ -82,15 +82,15 @@ class PrefsController extends AsyncNotifier<Prefs> {
     final session = await ref.watch(authControllerProvider.future);
     if (!session.authenticated) {
       _forget(null);
-      engine?.prefsOwner = null;
+      engine?.account = null;
       return const Prefs();
     }
     // A different account is not a stale document, it is somebody
     // else's: drop it rather than answering this session with it.
     final owner = session.user?.id ?? '';
     if (owner != _storedFor) _forget(owner);
-    // Whose waiting patch the engine sends: the one this document is.
-    engine?.prefsOwner = owner;
+    // Whose queued writes the engine sends: this document's account's.
+    engine?.account = owner;
 
     // Watched before the early return below, not after it: a build that
     // answers from the held document still depends on the repository,

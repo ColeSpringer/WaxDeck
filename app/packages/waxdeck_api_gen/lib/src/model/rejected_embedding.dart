@@ -12,7 +12,7 @@ part 'rejected_embedding.g.dart';
 ///
 /// Properties:
 /// * [pid] - The refused item's pid, when it was parseable.
-/// * [essence] - The refused item's essence hash, when it was parseable.
+/// * [essence] - The refused item's analysis key, when it was parseable.
 /// * [code] - Stable machine-readable reason (`not-found`, `invalid-request`). 
 /// * [message] - Human-readable explanation.
 @BuiltValue()
@@ -21,7 +21,7 @@ abstract class RejectedEmbedding implements Built<RejectedEmbedding, RejectedEmb
   @BuiltValueField(wireName: r'pid')
   String? get pid;
 
-  /// The refused item's essence hash, when it was parseable.
+  /// The refused item's analysis key, when it was parseable.
   @BuiltValueField(wireName: r'essence')
   String? get essence;
 

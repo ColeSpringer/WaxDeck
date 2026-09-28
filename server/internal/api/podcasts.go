@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -648,19 +649,19 @@ func (s *Server) CreateBookmark(ctx context.Context, req CreateBookmarkRequestOb
 	if req.Body == nil {
 		return CreateBookmark400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a request body is required"))}, nil
 	}
-	var note string
-	if req.Body.Note != nil {
-		note = *req.Body.Note
-	}
-	mark, err := s.svc.CreateBookmark(ctx, uc, req.Pid, req.Body.PositionMs, note)
+	mark, err := s.svc.CreateBookmark(ctx, uc, req.Pid, deref(req.Body.Id), req.Body.PositionMs, deref(req.Body.Note))
 	if err != nil {
 		switch service.KindOf(err) {
-		case service.KindInvalid, service.KindConflict:
-			// The cap is a refusal the listener can act on ("delete one
-			// first"), which is what an invalid-request message is for;
-			// a conflict code would send a client looking for a
-			// concurrent write that never happened.
+		case service.KindInvalid:
+			// The cap among them: a refusal the listener acts on
+			// ("delete one first").
 			return CreateBookmark400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindConflict:
+			e := errObj("conflict", err.Error())
+			if errors.Is(err, service.ErrBookmarkRemoved) {
+				e.Params = &map[string]string{"reason": "removed"}
+			}
+			return CreateBookmark409JSONResponse{ConflictJSONResponse(e)}, nil
 		case service.KindNotFound:
 			return CreateBookmark404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no book with pid "+req.Pid))}, nil
 		}
@@ -800,7 +801,12 @@ func (s *Server) GetWaveform(ctx context.Context, req GetWaveformRequestObject) 
 	// audio whose essence never changed and can rewrite both the values
 	// and the bucket count, which a client would otherwise not see for
 	// a day of freshness plus a week of stale-while-revalidate.
-	etag := fmt.Sprintf("%q", fmt.Sprintf("%s-%d", wf.EssenceHash, wf.Version))
+	tag := fmt.Sprintf("%s-%d", wf.EssenceHash, wf.Version)
+	if wf.Window != "" {
+		// Carved siblings share the file's essence and version.
+		tag += "-w" + wf.Window
+	}
+	etag := fmt.Sprintf("%q", tag)
 	cacheControl, vary := waveformCacheControl, artVary
 	if req.Params.IfNoneMatch != nil && httpcache.ETagMatches(*req.Params.IfNoneMatch, etag) {
 		return GetWaveform304Response{Headers: GetWaveform304ResponseHeaders{

@@ -94,7 +94,7 @@ func (s *Server) PullSimilarityWork(ctx context.Context, req PullSimilarityWorkR
 	if !ok {
 		return nil, &service.Error{Kind: service.KindInvalid, Msg: "limit must be between 1 and 50"}
 	}
-	work, err := s.svc.LeaseSimilarityWork(ctx, limit)
+	work, err := s.svc.LeaseSimilarityWork(ctx, limit, s.bridge != nil)
 	if err != nil {
 		return nil, err
 	}

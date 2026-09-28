@@ -738,6 +738,43 @@ void main() {
       expect(events.events.single.kind, 'book-settings');
       expect(events.events.single.bookSettings?.speed, 2.0);
     });
+
+    test('a bookmarks event carries the book\'s list, empty included', () {
+      final page = serverSyncPageFromGen(
+        gen.standardSerializers.deserializeWith(
+          gen.ServerSyncPage.serializer,
+          <String, Object?>{
+            'nextSince': 'scur-2',
+            'events': <Object?>[
+              <String, Object?>{
+                'kind': 'bookmarks',
+                'pid': 'bk-BOOK',
+                'bookmarks': <Object?>[
+                  <String, Object?>{
+                    'id': 'bm-01JZX5N8QW3F4V9T2B7KD3M9R6',
+                    'positionMs': 1500,
+                    'note': 'the turn',
+                    'createdAt': '2026-09-27T12:00:00Z',
+                  },
+                ],
+              },
+              <String, Object?>{
+                'kind': 'bookmarks',
+                'pid': 'bk-EMPTY',
+                'bookmarks': <Object?>[],
+              },
+              <String, Object?>{'kind': 'prefs'},
+            ],
+          },
+        )!,
+      );
+      final marks = page.events[0].bookmarks!;
+      expect(marks.single.id, 'bm-01JZX5N8QW3F4V9T2B7KD3M9R6');
+      expect(marks.single.positionMs, 1500);
+      expect(marks.single.note, 'the turn');
+      expect(page.events[1].bookmarks, isEmpty);
+      expect(page.events[2].bookmarks, isNull);
+    });
   });
 
   group('facet pages', () {

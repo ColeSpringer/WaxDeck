@@ -15,6 +15,7 @@ import (
 
 	"github.com/colespringer/waxflow"
 	"github.com/colespringer/waxflow/container"
+	"github.com/colespringer/waxflow/format"
 )
 
 // Analyzer decodes source audio and embeds it. Construction builds the
@@ -38,9 +39,10 @@ func (a *Analyzer) Model() string { return Model }
 // VectorDims is the embedding dimensionality.
 func (a *Analyzer) VectorDims() int { return Dims }
 
-// AnalyzeFile decodes one source file (any codec WaxFlow knows) and
-// embeds it.
-func (a *Analyzer) AnalyzeFile(ctx context.Context, path string) ([]float32, error) {
+// AnalyzeFileWindow embeds the source samples [from, to) of one file (any
+// codec WaxFlow knows), to 0 running to its end: a cue-carved track's own
+// audio, or with both 0 the whole file.
+func (a *Analyzer) AnalyzeFileWindow(ctx context.Context, path string, from, to int64) ([]float32, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -51,7 +53,24 @@ func (a *Analyzer) AnalyzeFile(ctx context.Context, path string) ([]float32, err
 		return nil, err
 	}
 	hint := strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
-	samples, err := a.DecodeSource(ctx, src, hint)
+	med, err := a.engine.OpenStream(src, hint)
+	if err != nil {
+		return nil, fmt.Errorf("decoding: %w", err)
+	}
+	// The outermost wrapper, which closes what it wraps.
+	defer func() { med.Close() }()
+	if from > 0 || to > 0 {
+		end := to
+		if end <= 0 {
+			end = waxflow.ToEnd
+		}
+		sliced, err := waxflow.Slice(med, from, end)
+		if err != nil {
+			return nil, fmt.Errorf("decoding: %w", err)
+		}
+		med = sliced
+	}
+	samples, err := a.decodeMedia(ctx, med)
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +88,17 @@ func (a *Analyzer) EmbedSamples(samples []float32) ([]float32, error) {
 // intermediate is 16-bit WAV in memory; the dither in that
 // quantization is position-seeded, so the path stays deterministic.
 func (a *Analyzer) DecodeSource(ctx context.Context, src container.Source, hint string) ([]float32, error) {
+	med, err := a.engine.OpenStream(src, hint)
+	if err != nil {
+		return nil, fmt.Errorf("decoding: %w", err)
+	}
+	defer med.Close()
+	return a.decodeMedia(ctx, med)
+}
+
+func (a *Analyzer) decodeMedia(ctx context.Context, med format.Media) ([]float32, error) {
 	dst := &memWriteSeeker{}
-	if _, err := a.engine.Transcode(ctx, src, hint, dst, waxflow.TranscodeOptions{
+	if _, err := a.engine.TranscodeMedia(ctx, med, dst, waxflow.TranscodeOptions{
 		Format:   "wav",
 		Rate:     Rate,
 		Channels: 1,

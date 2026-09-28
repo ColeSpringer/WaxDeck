@@ -1196,7 +1196,9 @@ void main() {
       findsNothing,
     );
     expect(repo.nspReports, [created.pid]);
-    expect(repo.nspExports, [(pid: created.pid, partial: false)]);
+    expect(repo.nspExports, [
+      (pid: created.pid, partial: false, ruleHash: null),
+    ]);
     expect(find.textContaining('"genre"'), findsWidgets);
 
     await tester.tap(
@@ -1290,7 +1292,9 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.playlistExportNspProceed),
     );
     await tester.pumpAndSettle();
-    expect(repo.nspExports, [(pid: created.pid, partial: true)]);
+    expect(repo.nspExports, [
+      (pid: created.pid, partial: true, ruleHash: null),
+    ]);
   });
 
   testWidgets('a refused NSP export keeps the server\'s sentence', (
@@ -1308,7 +1312,7 @@ void main() {
           NspGap(
             kind: 'field',
             path: '/root/nodes/0',
-            reason: 'nsp: unsupported field: kind',
+            reason: 'nsp: unsupported field: mediaType',
             field: 'mediaType',
           ),
         ],
@@ -1342,8 +1346,254 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(repo.nspExports, [(pid: created.pid, partial: true)]);
+    expect(repo.nspExports, [
+      (pid: created.pid, partial: true, ruleHash: null),
+    ]);
     expect(find.textContaining('nothing in this rule'), findsOneWidget);
+  });
+
+  NspReport lossyReport(String hash, String genre) => NspReport(
+    direction: 'export',
+    ruleHash: hash,
+    gaps: const [
+      NspGap(
+        kind: 'field',
+        path: '/root/nodes/1',
+        reason: 'nsp: unsupported field: mediaType',
+        field: 'mediaType',
+      ),
+    ],
+    rule: SmartRule(
+      root: RuleNode.all([
+        RuleNode.condition(field: 'genre', op: 'is', value: genre),
+      ]),
+    ),
+  );
+
+  Future<Playlist> lossyPlaylist(FakeRepository repo) => repo.createPlaylist(
+    name: 'Mostly exportable',
+    kind: 'smart',
+    rule: const SmartRule(
+      root: RuleNode.all([
+        RuleNode.condition(field: 'genre', op: 'is', value: 'Rock'),
+        RuleNode.condition(field: 'mediaType', op: 'is', value: 'music'),
+      ]),
+    ),
+  );
+
+  Future<void> exportAsNsp(WidgetTester tester) async {
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistOverflow));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNsp),
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a rule that only reads differently is offered as it is', (
+    tester,
+  ) async {
+    // Notes drop nothing: the file says the same rule, which re-imports
+    // wider. "Cannot be exported" and "without them" would both be false.
+    final repo = FakeRepository(items: const [_track])
+      ..nspReport = const NspReport(
+        direction: 'export',
+        notes: [
+          NspGap(
+            kind: 'entity',
+            path: '/entity',
+            reason:
+                'nsp: .nsp has no track/book distinction, so this rule '
+                're-imports as one over every kind of item',
+          ),
+        ],
+      );
+    final created = await lossyPlaylist(repo);
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => null,
+    );
+
+    await exportAsNsp(tester);
+
+    expect(find.text('Some of this rule cannot be exported'), findsNothing);
+    expect(find.text('This rule exports with a difference'), findsOneWidget);
+    expect(find.textContaining('no NSP form'), findsNothing);
+    expect(find.text('Export anyway'), findsOneWidget);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspProceed),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.nspExports, [
+      (pid: created.pid, partial: false, ruleHash: null),
+    ]);
+  });
+
+  testWidgets('the NSP loss dialog shows what the export keeps', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track])
+      ..nspReport = lossyReport('00000000000000aa', 'Rock');
+    final created = await lossyPlaylist(repo);
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => null,
+    );
+
+    await exportAsNsp(tester);
+
+    final keeps = find.bySemanticsIdentifier(
+      SemanticsIds.playlistExportNspKeeps,
+    );
+    expect(keeps, findsOneWidget);
+    expect(
+      find.descendant(of: keeps, matching: find.text('What the export keeps')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: keeps, matching: find.text('Genre is Rock')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspProceed),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.nspExports, [
+      (pid: created.pid, partial: true, ruleHash: '00000000000000aa'),
+    ]);
+  });
+
+  testWidgets('a loss with nothing kept draws no keeps section', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track])
+      ..nspReport = const NspReport(
+        direction: 'export',
+        ruleHash: '00000000000000aa',
+        gaps: [
+          NspGap(
+            kind: 'field',
+            path: '/root/nodes/0',
+            reason: 'nsp: unsupported field: mediaType',
+            field: 'mediaType',
+          ),
+        ],
+      );
+    final created = await lossyPlaylist(repo);
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    await exportAsNsp(tester);
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspLoss),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspKeeps),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a rule edited under the dialog is asked about again, once', (
+    tester,
+  ) async {
+    const stale = WaxDeckApiException(
+      code: 'conflict',
+      message: 'the rule changed since the report was read; ask again',
+    );
+    final repo = FakeRepository(items: const [_track])
+      ..nspReportQueue.addAll([
+        lossyReport('00000000000000aa', 'Rock'),
+        lossyReport('00000000000000bb', 'Jazz'),
+      ])
+      ..nspExportFailures.add(stale);
+    final created = await lossyPlaylist(repo);
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => null,
+    );
+
+    await exportAsNsp(tester);
+    // In the dialog, not the header chip under it.
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.playlistExportNspKeeps),
+        matching: find.text('Genre is Rock'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspProceed),
+    );
+    await tester.pumpAndSettle();
+
+    // The refusal re-reads the report and asks about the new rule.
+    expect(repo.nspReports, [created.pid, created.pid]);
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.playlistExportNspKeeps),
+        matching: find.text('Genre is Jazz'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspProceed),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.nspExports, [
+      (pid: created.pid, partial: true, ruleHash: '00000000000000aa'),
+      (pid: created.pid, partial: true, ruleHash: '00000000000000bb'),
+    ]);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportCopy),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a second stale refusal stops and says so', (tester) async {
+    const stale = WaxDeckApiException(
+      code: 'conflict',
+      message: 'the rule changed since the report was read; ask again',
+    );
+    final repo = FakeRepository(items: const [_track])
+      ..nspReportQueue.addAll([
+        lossyReport('00000000000000aa', 'Rock'),
+        lossyReport('00000000000000bb', 'Jazz'),
+      ])
+      ..nspExportFailures.addAll([stale, stale]);
+    final created = await lossyPlaylist(repo);
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    await exportAsNsp(tester);
+    for (var i = 0; i < 2; i++) {
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playlistExportNspProceed),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    expect(repo.nspExports, hasLength(2));
+    expect(repo.nspReports, hasLength(2));
+    expect(
+      find.text(
+        'Something else changed this first. Take another look and try again.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspLoss),
+      findsNothing,
+    );
   });
 
   testWidgets('a report this playlist cannot answer never exports', (

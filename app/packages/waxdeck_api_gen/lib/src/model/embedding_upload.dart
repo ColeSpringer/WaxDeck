@@ -13,7 +13,7 @@ part 'embedding_upload.g.dart';
 ///
 /// Properties:
 /// * [pid] - The analyzed track (from the work item).
-/// * [essence] - The audio-essence hash (from the work item).
+/// * [essence] - The analysis key (from the work item).
 /// * [vector] - The embedding. The server L2-normalizes vectors at ingest, so any consistent scale works. 
 @BuiltValue()
 abstract class EmbeddingUpload implements Built<EmbeddingUpload, EmbeddingUploadBuilder> {
@@ -21,7 +21,7 @@ abstract class EmbeddingUpload implements Built<EmbeddingUpload, EmbeddingUpload
   @BuiltValueField(wireName: r'pid')
   String get pid;
 
-  /// The audio-essence hash (from the work item).
+  /// The analysis key (from the work item).
   @BuiltValueField(wireName: r'essence')
   String get essence;
 

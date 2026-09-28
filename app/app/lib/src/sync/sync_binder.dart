@@ -193,14 +193,17 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   if (engine != null) {
     final catalogSub = engine.catalogChanged.listen((_) => catalog.hint());
     final stateSub = engine.playStateChanged.listen((_) => user.hint());
-    // Every other kind the user stream carries, as web hints on every user
-    // invalidation: the mirror stores play states only, so a preference,
-    // a subscription, or a playlist changed elsewhere reaches the fan-out
-    // through here or not at all. Not the two the line above hints on: a
-    // second hint inside the pacing window runs the fan-out again at its
-    // end.
+    // Kinds the mirror does not store reach the fan-out only here, as web
+    // hints on every user invalidation. Not the two hinted above (that runs
+    // it twice), nor bookmarks, which the mirror stores and announces.
     final eventSub = engine.serverEvents
-        .where((e) => e.kind != 'play-state' && e.kind != 'entity-state')
+        .where(
+          (e) => !const {
+            'play-state',
+            'entity-state',
+            'bookmarks',
+          }.contains(e.kind),
+        )
         .listen((_) => user.hint());
     // An item whose audio the server cannot give back takes its download
     // and its pinned artwork with it. Only `removed` reaches this stream:
@@ -241,11 +244,10 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     engine.onConnected = connect.onConnected;
     engine.onPlayerInvalidate = connect.onPlayerInvalidate;
     engine.onRadioInvalidate = radio.hint;
-    // The account whose waiting preference patch a flush sends: patches
-    // are kept per account, since the outbox outlives a session. Read,
-    // not watched: this binder lives inside one session, and the
-    // preference controller keeps the name current as accounts change.
-    engine.prefsOwner = ref.read(signedInAccountProvider);
+    // The account whose queued writes a flush sends; each waits for the
+    // account that queued it. Read, not watched: this binder lives inside
+    // one session, and the preference controller keeps the name current.
+    engine.account = ref.read(signedInAccountProvider);
     engine.start();
     ref.onDispose(() {
       catalogSub.cancel();

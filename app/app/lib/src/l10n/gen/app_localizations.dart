@@ -435,6 +435,588 @@ abstract class AppLocalizations {
   /// **'Admin'**
   String get adminDashboardTitle;
 
+  /// Column header: how many some source answered for.
+  ///
+  /// In en, this message translates to:
+  /// **'Answered'**
+  String get adminEnrichmentAnsweredColumn;
+
+  /// Tile: front covers downloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Covers fetched'**
+  String get adminEnrichmentArtFetched;
+
+  /// Tile: album fronts taken from the release group's picture.
+  ///
+  /// In en, this message translates to:
+  /// **'Covers reused'**
+  String get adminEnrichmentArtReused;
+
+  /// Tile: back, disc, booklet and background images downloaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Other art fetched'**
+  String get adminEnrichmentAuxArtFetched;
+
+  /// Caption under a source the catalog registers itself.
+  ///
+  /// In en, this message translates to:
+  /// **'Built into the catalog'**
+  String get adminEnrichmentBuiltin;
+
+  /// Tile: how many answers the cache holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Answers kept'**
+  String get adminEnrichmentCacheAnswers;
+
+  /// Line under the response cache heading.
+  ///
+  /// In en, this message translates to:
+  /// **'What MusicBrainz and the Cover Art Archive answered, kept so a pass does not ask twice. A pruned answer costs one request the next time it is needed.'**
+  String get adminEnrichmentCacheBlurb;
+
+  /// Column header: how much room a kind takes.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get adminEnrichmentCacheBytesColumn;
+
+  /// Shown in place of the cache table when it is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is cached yet.'**
+  String get adminEnrichmentCacheEmpty;
+
+  /// Tile: what no prune removes.
+  ///
+  /// In en, this message translates to:
+  /// **'Kept by every prune'**
+  String get adminEnrichmentCacheExempt;
+
+  /// Heading over the cache of what enrichment sources answered.
+  ///
+  /// In en, this message translates to:
+  /// **'Response cache'**
+  String get adminEnrichmentCacheGroup;
+
+  /// Column header: which answers a row counts.
+  ///
+  /// In en, this message translates to:
+  /// **'Kind'**
+  String get adminEnrichmentCacheKindColumn;
+
+  /// Shown when the cache census failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the response cache.'**
+  String get adminEnrichmentCacheLoadError;
+
+  /// Field: prune the oldest answers until the cache fits this many megabytes.
+  ///
+  /// In en, this message translates to:
+  /// **'Down to (MB)'**
+  String get adminEnrichmentCacheMaxMegabytes;
+
+  /// Under a cache prune bound that is not a whole number in range.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number from 0 to {max}.'**
+  String adminEnrichmentCacheNeedsWhole(int max);
+
+  /// Field: prune answers older than this many days.
+  ///
+  /// In en, this message translates to:
+  /// **'Older than (days)'**
+  String get adminEnrichmentCacheOlderThan;
+
+  /// Button pruning the response cache, and the confirm dialog's action.
+  ///
+  /// In en, this message translates to:
+  /// **'Prune'**
+  String get adminEnrichmentCachePrune;
+
+  /// Body of the dialog confirming a cache prune.
+  ///
+  /// In en, this message translates to:
+  /// **'Pruned answers are asked for again, one request at a time, the next time a pass needs them. The catalog\'s values stay as they are.'**
+  String get adminEnrichmentCachePruneBody;
+
+  /// Title of the dialog confirming a cache prune.
+  ///
+  /// In en, this message translates to:
+  /// **'Prune the response cache?'**
+  String get adminEnrichmentCachePruneTitle;
+
+  /// The word typed to confirm a cache prune.
+  ///
+  /// In en, this message translates to:
+  /// **'PRUNE'**
+  String get adminEnrichmentCachePruneWord;
+
+  /// Said after a prune. {size} is a formatted size.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 answer pruned, {size} freed} other{{count} answers pruned, {size} freed}}'**
+  String adminEnrichmentCachePruned(int count, String size);
+
+  /// Column header: how many answers of a kind.
+  ///
+  /// In en, this message translates to:
+  /// **'Answers'**
+  String get adminEnrichmentCacheRowsColumn;
+
+  /// Tile: how much room the cache takes.
+  ///
+  /// In en, this message translates to:
+  /// **'Size'**
+  String get adminEnrichmentCacheSize;
+
+  /// What a source supplies: audiobook metadata.
+  ///
+  /// In en, this message translates to:
+  /// **'Book details'**
+  String get adminEnrichmentCapBook;
+
+  /// What a source supplies: front covers.
+  ///
+  /// In en, this message translates to:
+  /// **'Covers'**
+  String get adminEnrichmentCapCover;
+
+  /// What a source supplies: track and album fields.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get adminEnrichmentCapFields;
+
+  /// What a source supplies: genres.
+  ///
+  /// In en, this message translates to:
+  /// **'Genres'**
+  String get adminEnrichmentCapGenres;
+
+  /// What a source supplies: entity identity.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity'**
+  String get adminEnrichmentCapIdentity;
+
+  /// Coverage tile and last-run row for artists.
+  ///
+  /// In en, this message translates to:
+  /// **'Artists'**
+  String get adminEnrichmentCoverageArtists;
+
+  /// Coverage tile and last-run row for audiobooks.
+  ///
+  /// In en, this message translates to:
+  /// **'Books'**
+  String get adminEnrichmentCoverageBooks;
+
+  /// Heading over the counts of what enrichment has covered.
+  ///
+  /// In en, this message translates to:
+  /// **'Coverage'**
+  String get adminEnrichmentCoverageGroup;
+
+  /// Coverage tile and last-run row for lyrics.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics'**
+  String get adminEnrichmentCoverageLyrics;
+
+  /// Value of a coverage tile: how many are enriched out of how many there are.
+  ///
+  /// In en, this message translates to:
+  /// **'{enriched} of {total}'**
+  String adminEnrichmentCoverageOf(int enriched, int total);
+
+  /// Coverage tile and last-run row for release groups (an album across all its pressings).
+  ///
+  /// In en, this message translates to:
+  /// **'Release groups'**
+  String get adminEnrichmentCoverageReleaseGroups;
+
+  /// Caption of a coverage tile the catalog cannot count: how many tracks there are.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 track} other{{count} tracks}}'**
+  String adminEnrichmentCoverageTracks(int count);
+
+  /// Value of a coverage tile whose enriched count the server does not report.
+  ///
+  /// In en, this message translates to:
+  /// **'Not counted'**
+  String get adminEnrichmentCoverageUncounted;
+
+  /// When the last pass finished. {when} is a relative time.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished {when}'**
+  String adminEnrichmentLastRunFinished(String when);
+
+  /// Heading over what the newest finished pass did.
+  ///
+  /// In en, this message translates to:
+  /// **'Last run'**
+  String get adminEnrichmentLastRunGroup;
+
+  /// Shown under the last run heading before any pass has finished.
+  ///
+  /// In en, this message translates to:
+  /// **'No pass has finished yet.'**
+  String get adminEnrichmentLastRunNone;
+
+  /// Shown when the enrichment screen's status read failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load the enrichment status.'**
+  String get adminEnrichmentLoadError;
+
+  /// Column header: how many a walk asked about.
+  ///
+  /// In en, this message translates to:
+  /// **'Looked up'**
+  String get adminEnrichmentLookedUpColumn;
+
+  /// Help under the MusicBrainz row when no contact is set.
+  ///
+  /// In en, this message translates to:
+  /// **'Off until WAXDECK_ENRICHMENT_CONTACT is set, which also keeps the Cover Art Archive and LRCLIB closed'**
+  String get adminEnrichmentMusicbrainzOffHelp;
+
+  /// Help under the MusicBrainz row when its contact is set.
+  ///
+  /// In en, this message translates to:
+  /// **'Identifies artists, albums and books, and opens the Cover Art Archive and LRCLIB'**
+  String get adminEnrichmentMusicbrainzOnHelp;
+
+  /// Row naming the MusicBrainz identity service.
+  ///
+  /// In en, this message translates to:
+  /// **'MusicBrainz'**
+  String get adminEnrichmentMusicbrainzTitle;
+
+  /// Banner when no enrichment phase can run on this server.
+  ///
+  /// In en, this message translates to:
+  /// **'A pass has nothing to do: no source can run. Set a MusicBrainz contact or configure a provider, then restart.'**
+  String get adminEnrichmentNothingToDo;
+
+  /// Banner when no pass can run and some of this server's own sources are switched off.
+  ///
+  /// In en, this message translates to:
+  /// **'A pass has nothing to do: the sources that could run are switched off. Switch one on below, or set a MusicBrainz contact and restart.'**
+  String get adminEnrichmentNothingToDoSwitchedOff;
+
+  /// Front covers: a phase and a last-run row.
+  ///
+  /// In en, this message translates to:
+  /// **'Album covers'**
+  String get adminEnrichmentPhaseAlbumArt;
+
+  /// Help under the album-covers phase.
+  ///
+  /// In en, this message translates to:
+  /// **'Front covers for albums with none'**
+  String get adminEnrichmentPhaseAlbumArtHelp;
+
+  /// The phase filling album fields, and its last-run row.
+  ///
+  /// In en, this message translates to:
+  /// **'Album details'**
+  String get adminEnrichmentPhaseAlbumFields;
+
+  /// Help under the album details phase.
+  ///
+  /// In en, this message translates to:
+  /// **'Label and year for albums'**
+  String get adminEnrichmentPhaseAlbumFieldsHelp;
+
+  /// Artist portraits: a phase, a capability, and a last-run row.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist pictures'**
+  String get adminEnrichmentPhaseArtistArt;
+
+  /// Help under the artist-pictures phase.
+  ///
+  /// In en, this message translates to:
+  /// **'Pictures for artists missing one'**
+  String get adminEnrichmentPhaseArtistArtHelp;
+
+  /// Backs, discs, booklets and backgrounds: a phase, a capability, and a last-run row.
+  ///
+  /// In en, this message translates to:
+  /// **'Other artwork'**
+  String get adminEnrichmentPhaseAuxArt;
+
+  /// Help under the other-artwork phase.
+  ///
+  /// In en, this message translates to:
+  /// **'Backs, discs, booklets and backgrounds for albums that have a front'**
+  String get adminEnrichmentPhaseAuxArtHelp;
+
+  /// The phase filling audiobook fields, and its last-run row.
+  ///
+  /// In en, this message translates to:
+  /// **'Book details'**
+  String get adminEnrichmentPhaseBookFields;
+
+  /// Help under the book details phase.
+  ///
+  /// In en, this message translates to:
+  /// **'Publisher, narrator, description and more for books'**
+  String get adminEnrichmentPhaseBookFieldsHelp;
+
+  /// The phase matching entities against MusicBrainz.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity'**
+  String get adminEnrichmentPhaseIdentity;
+
+  /// Help under the identity phase.
+  ///
+  /// In en, this message translates to:
+  /// **'Match artists, release groups and books against MusicBrainz'**
+  String get adminEnrichmentPhaseIdentityHelp;
+
+  /// The lyrics phase and capability.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics'**
+  String get adminEnrichmentPhaseLyrics;
+
+  /// Help under the lyrics phase.
+  ///
+  /// In en, this message translates to:
+  /// **'Lyrics for tracks without them'**
+  String get adminEnrichmentPhaseLyricsHelp;
+
+  /// The phase pinning albums to the pressing they are.
+  ///
+  /// In en, this message translates to:
+  /// **'Release match'**
+  String get adminEnrichmentPhaseReleases;
+
+  /// Help under the release match phase.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin albums to the pressing their barcode or catalog number names'**
+  String get adminEnrichmentPhaseReleasesHelp;
+
+  /// The phase filling track fields, and its last-run row.
+  ///
+  /// In en, this message translates to:
+  /// **'Track details'**
+  String get adminEnrichmentPhaseTrackFields;
+
+  /// Help under the track details phase.
+  ///
+  /// In en, this message translates to:
+  /// **'Tempo, ISRC and composer where they are empty'**
+  String get adminEnrichmentPhaseTrackFieldsHelp;
+
+  /// Tile: targets re-asked because their miss expired.
+  ///
+  /// In en, this message translates to:
+  /// **'Asked again'**
+  String get adminEnrichmentRetried;
+
+  /// Button starting an enrichment pass.
+  ///
+  /// In en, this message translates to:
+  /// **'Run the pass'**
+  String get adminEnrichmentRunAction;
+
+  /// Pass mode that re-asks every source about every entity.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask again about everything'**
+  String get adminEnrichmentRunAll;
+
+  /// Help under the ask-again-about-everything mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Every source, about every entity: slow on a large library'**
+  String get adminEnrichmentRunAllHelp;
+
+  /// Said when a run was refused because an enrichment pass is already running.
+  ///
+  /// In en, this message translates to:
+  /// **'A pass is already running.'**
+  String get adminEnrichmentRunBusy;
+
+  /// Heading over the controls that start an enrichment pass.
+  ///
+  /// In en, this message translates to:
+  /// **'Run a pass'**
+  String get adminEnrichmentRunGroup;
+
+  /// Pass mode that asks only about what has not been looked up.
+  ///
+  /// In en, this message translates to:
+  /// **'Fill what is missing'**
+  String get adminEnrichmentRunNormal;
+
+  /// Help under the fill-what-is-missing mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Asks about what has not been looked up, or whose miss has expired'**
+  String get adminEnrichmentRunNormalHelp;
+
+  /// Pass mode that re-asks only the phases switched on below it.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask again in chosen phases'**
+  String get adminEnrichmentRunPhases;
+
+  /// Help under the chosen-phases mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the phases switched on below'**
+  String get adminEnrichmentRunPhasesHelp;
+
+  /// Said when an enrichment pass has started.
+  ///
+  /// In en, this message translates to:
+  /// **'Enrichment pass started'**
+  String get adminEnrichmentRunStarted;
+
+  /// Banner while an enrichment pass runs.
+  ///
+  /// In en, this message translates to:
+  /// **'A pass is running now.'**
+  String get adminEnrichmentRunningNow;
+
+  /// Accessible name of the button moving a source later.
+  ///
+  /// In en, this message translates to:
+  /// **'Move {name} down'**
+  String adminEnrichmentSourceDown(String name);
+
+  /// Accessible name of the switch that has a source asked.
+  ///
+  /// In en, this message translates to:
+  /// **'Ask {name}'**
+  String adminEnrichmentSourceSwitch(String name);
+
+  /// Accessible name of the button moving a source earlier.
+  ///
+  /// In en, this message translates to:
+  /// **'Move {name} up'**
+  String adminEnrichmentSourceUp(String name);
+
+  /// Line under the sources heading.
+  ///
+  /// In en, this message translates to:
+  /// **'Asked in this order, and a source switched off is not asked; switched back on, it is not asked about what a pass already finished unless a run forces its phases. The catalog\'s own sources come last and cannot be moved.'**
+  String get adminEnrichmentSourcesBlurb;
+
+  /// Heading over the table of enrichment sources.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources'**
+  String get adminEnrichmentSourcesGroup;
+
+  /// Button putting back the order the server holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Revert'**
+  String get adminEnrichmentSourcesRevert;
+
+  /// Button saving the source order and switches.
+  ///
+  /// In en, this message translates to:
+  /// **'Save order'**
+  String get adminEnrichmentSourcesSave;
+
+  /// Said when the source order was saved.
+  ///
+  /// In en, this message translates to:
+  /// **'Source order saved'**
+  String get adminEnrichmentSourcesSaved;
+
+  /// Said when the source order was saved while an enrichment pass runs: that pass finishes with the old order, and the saved one applies from the next.
+  ///
+  /// In en, this message translates to:
+  /// **'Source order saved. The pass running now keeps the order it started with.'**
+  String get adminEnrichmentSourcesSavedAfterPass;
+
+  /// Said when a source order save was refused; the screen has read the sources again.
+  ///
+  /// In en, this message translates to:
+  /// **'The sources changed on the server. Look them over and save again.'**
+  String get adminEnrichmentSourcesStale;
+
+  /// Shown over the enrichment screen when a refresh of its status failed and the last one stays on screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the latest status. What is shown is from the last read.'**
+  String get adminEnrichmentStale;
+
+  /// Heading over whether a pass can run and the MusicBrainz switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Standing'**
+  String get adminEnrichmentStandingGroup;
+
+  /// State beside the MusicBrainz row when it cannot run.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get adminEnrichmentStateOff;
+
+  /// State beside the MusicBrainz row when it can run.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get adminEnrichmentStateOn;
+
+  /// Tile: files whose tag write failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag writes failed'**
+  String get adminEnrichmentTagsFailed;
+
+  /// Tile: book parts left unwritten after their primary part failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Book parts skipped'**
+  String get adminEnrichmentTagsSkipped;
+
+  /// Tile: files whose format cannot store a filled key.
+  ///
+  /// In en, this message translates to:
+  /// **'Tags a format cannot hold'**
+  String get adminEnrichmentTagsUnrepresented;
+
+  /// Tile: files enriched values were written back into.
+  ///
+  /// In en, this message translates to:
+  /// **'Tags written'**
+  String get adminEnrichmentTagsWritten;
+
+  /// Name of the admin console section about where artwork, lyrics and details come from, and its screen title.
+  ///
+  /// In en, this message translates to:
+  /// **'Enrichment'**
+  String get adminEnrichmentTitle;
+
+  /// Last-run row for the release match walk over albums.
+  ///
+  /// In en, this message translates to:
+  /// **'Albums'**
+  String get adminEnrichmentWalkAlbums;
+
+  /// Column header naming what a pass walked over.
+  ///
+  /// In en, this message translates to:
+  /// **'Walk'**
+  String get adminEnrichmentWalkColumn;
+
   /// Body of the refusal an account without the role gets at a console location it followed a link to.
   ///
   /// In en, this message translates to:
@@ -1311,6 +1893,12 @@ abstract class AppLocalizations {
   /// **'user'**
   String get adminRoleUser;
 
+  /// Said when a scan was refused because a catalog job is already running.
+  ///
+  /// In en, this message translates to:
+  /// **'A scan or another catalog job is already running.'**
+  String get adminScanBusy;
+
   /// Button that starts a scan of every library root.
   ///
   /// In en, this message translates to:
@@ -1502,6 +2090,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Files the catalog could not read'**
   String get adminSectionDiagnosticsBlurb;
+
+  /// Line under Enrichment in the console's section list.
+  ///
+  /// In en, this message translates to:
+  /// **'Where artwork, lyrics and details come from'**
+  String get adminSectionEnrichmentBlurb;
 
   /// Line under the genre tree in the console's section list.
   ///
@@ -8151,11 +8745,23 @@ abstract class AppLocalizations {
   /// **'{note}, at {time}'**
   String playerBookmarkNoteAt(String note, String time);
 
+  /// Caption under a bookmark made while the server could not be reached; it is sent when the connection comes back.
+  ///
+  /// In en, this message translates to:
+  /// **'Not sent yet'**
+  String get playerBookmarkPending;
+
   /// Accessible name of a bookmark with no note on it. {time} is a timecode.
   ///
   /// In en, this message translates to:
   /// **'Play from {time}'**
   String playerBookmarkPlayFrom(String time);
+
+  /// Caption under a bookmark made offline that the server refused once it was sent. {reason} says why.
+  ///
+  /// In en, this message translates to:
+  /// **'Not saved: {reason}'**
+  String playerBookmarkRefused(String reason);
 
   /// Accessible name of the control that deletes one bookmark. {time} is its timecode.
   ///
@@ -8186,6 +8792,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not load the bookmarks.'**
   String get playerBookmarksError;
+
+  /// Said when a listener marks a place in a book that already holds the most bookmarks it can.
+  ///
+  /// In en, this message translates to:
+  /// **'This book already holds as many bookmarks as it can. Remove one to mark another.'**
+  String get playerBookmarksFull;
 
   /// Stops the running sleep timer.
   ///
@@ -8967,6 +9579,18 @@ abstract class AppLocalizations {
   /// **'Export as NSP'**
   String get playlistExportNsp;
 
+  /// Confirms an NSP export that drops nothing but reads differently.
+  ///
+  /// In en, this message translates to:
+  /// **'Export anyway'**
+  String get playlistExportNspAnyway;
+
+  /// Heading over the chips describing the rule a partial NSP export would still carry, in the NSP loss dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'What the export keeps'**
+  String get playlistExportNspKeeps;
+
   /// Frame above the list of parts of a rule that NSP cannot carry. Says only that they have no NSP form: some of them are dropped by the export and some are losses the format makes either way, and the row under each one says which.
   ///
   /// In en, this message translates to:
@@ -8978,6 +9602,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some of this rule cannot be exported'**
   String get playlistExportNspLossTitle;
+
+  /// Title of the NSP export dialog when nothing is dropped, only read differently.
+  ///
+  /// In en, this message translates to:
+  /// **'This rule exports with a difference'**
+  String get playlistExportNspNotesTitle;
 
   /// Button accepting the loss and exporting the partial NSP document.
   ///
@@ -13288,7 +13918,7 @@ abstract class AppLocalizations {
   /// The line under the Discord application ID field.
   ///
   /// In en, this message translates to:
-  /// **'Empty publishes as WaxDeck. An application ID from discord.com/developers changes the name Discord shows and where its cover art comes from'**
+  /// **'Empty publishes as WaxDeck. An application ID from discord.com/developers changes the name Discord shows and the image for albums with no cover'**
   String get settingsDiscordApplicationHelp;
 
   /// Field for a Discord application ID of the listener's own, instead of WaxDeck's.
@@ -13297,11 +13927,17 @@ abstract class AppLocalizations {
   /// **'Publish as another application (optional)'**
   String get settingsDiscordApplicationLabel;
 
-  /// Note under the Discord application ID field explaining why the cover art cannot be the album's.
+  /// Help under the album covers switch: what it contacts and what shows otherwise.
   ///
   /// In en, this message translates to:
-  /// **'The cover is one image for every track, uploaded to that application rather than taken from your library: Discord fetches art through its own servers, which cannot reach a private one.'**
-  String get settingsDiscordCoverNote;
+  /// **'This device asks the Cover Art Archive for the cover of each album it plays that has a MusicBrainz release ID. Off, or with none found, Discord shows the application\'s own image.'**
+  String get settingsDiscordCoversHelp;
+
+  /// Title of the switch that has Discord presence show album covers.
+  ///
+  /// In en, this message translates to:
+  /// **'Show album covers'**
+  String get settingsDiscordCoversTitle;
 
   /// The line under the Discord presence switch.
   ///
@@ -13312,7 +13948,7 @@ abstract class AppLocalizations {
   /// Comma-separated search keywords for the "Show what I am listening to on Discord" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
   ///
   /// In en, this message translates to:
-  /// **'discord, rich presence, status, listening to'**
+  /// **'discord, rich presence, status, listening to, album cover'**
   String get settingsDiscordPresenceKeywords;
 
   /// The Discord presence switch, under a Discord heading that already names the service. Settings search spells the service out.

@@ -115,6 +115,7 @@ func (l *Library) loadRuntimeToggles(ctx context.Context) {
 		}
 	}
 	l.toggles.Store(t)
+	l.loadEnrichSources(ctx)
 }
 
 // currentToggles never returns nil; before the first load everything is

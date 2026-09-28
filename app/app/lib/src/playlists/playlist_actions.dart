@@ -18,6 +18,7 @@ import 'playlist_create.dart';
 import 'playlist_play.dart';
 import 'playlist_sync_sheet.dart';
 import 'playlists_controller.dart';
+import 'rule_chip_row.dart';
 import 'rule_vocabulary.dart';
 
 /// What a playlist's menus can do. The screen's overflow offers all but
@@ -391,38 +392,44 @@ Future<void> _exportNsp(
   final l10n = context.l10n;
   final repository = ref.read(repositoryProvider);
   final pid = playlist.pid;
-  final NspReport report;
-  try {
-    report = await repository.reportPlaylistNspExport(pid);
-  } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
-    return;
-  }
-  var partial = false;
-  if (!report.isLossless) {
-    if (!context.mounted) return;
-    // Gaps and notes together: the difference between a loss that
-    // refuses and one that does not is the converter's business, and
-    // somebody deciding whether to accept the loss wants the list.
-    final proceed = await _confirmNspLoss(context, report.all);
-    if (proceed != true) return;
-    // Only the gaps need it. A report of notes alone describes a loss
-    // the strict export makes anyway, and asking for the lossy path
-    // to get the same document would say the wrong thing.
-    partial = report.gaps.isNotEmpty;
-  }
-  final Map<String, Object?> document;
-  try {
-    document = await repository.exportPlaylistNsp(pid, partial: partial);
-  } on WaxDeckApiException catch (e) {
-    // The server's sentence: this endpoint's 501 is about the rule,
-    // and the table's general wording would blame the server.
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
-    return;
+  void say(String message) => messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
+  Map<String, Object?>? document;
+  // A rule edited after its report was read refuses the export as a
+  // `conflict`; the new rule is reported and asked about once more.
+  for (var attempt = 0; document == null; attempt++) {
+    final NspReport report;
+    try {
+      report = await repository.reportPlaylistNspExport(pid);
+    } on WaxDeckApiException catch (e) {
+      say(explainError(l10n, e));
+      return;
+    }
+    var partial = false;
+    if (!report.isLossless) {
+      if (!context.mounted) return;
+      final proceed = await _confirmNspLoss(context, report);
+      if (proceed != true) return;
+      // Only the gaps need it: notes alone are a loss the strict export
+      // makes anyway.
+      partial = report.gaps.isNotEmpty;
+    }
+    try {
+      document = await repository.exportPlaylistNsp(
+        pid,
+        partial: partial,
+        ruleHash: report.ruleHash,
+      );
+    } on WaxDeckApiException catch (e) {
+      if (e.code == 'conflict' && attempt == 0) continue;
+      // The server's sentence: this endpoint's 501 is about the rule,
+      // and the table's general wording would blame the server.
+      say(
+        e.code == 'conflict' ? explainError(l10n, e) : explainRefusal(l10n, e),
+      );
+      return;
+    }
   }
   if (!context.mounted) return;
   await _showDocument(
@@ -437,11 +444,14 @@ Future<void> _exportNsp(
   );
 }
 
-/// Lists what the export would drop, in the converter's own sentences,
-/// each under the rule editor's name for the field it is about, and
-/// offers to do it anyway.
-Future<bool?> _confirmNspLoss(BuildContext context, List<NspGap> gaps) {
+/// Lists what the export would drop, each converter sentence under the
+/// rule editor's name for its field, then what a partial export keeps.
+/// Notes alone drop nothing, so they are offered as a difference.
+Future<bool?> _confirmNspLoss(BuildContext context, NspReport report) {
   final l10n = context.l10n;
+  final gaps = report.all;
+  final kept = report.rule;
+  final dropsNothing = report.gaps.isEmpty;
   return showDialog<bool>(
     context: context,
     builder: (context) {
@@ -450,56 +460,95 @@ Future<bool?> _confirmNspLoss(BuildContext context, List<NspGap> gaps) {
       // screen's.
       final colors = WaxColors.of(context);
       return AlertDialog(
-        title: Text(l10n.playlistExportNspLossTitle),
+        title: Text(
+          dropsNothing
+              ? l10n.playlistExportNspNotesTitle
+              : l10n.playlistExportNspLossTitle,
+        ),
         content: SizedBox(
           width: 480,
           child: SingleChildScrollView(
-            // Outside the container, so the rows a spec counts under it
-            // stay the only children it has.
             child: WaxProse.block(
-              child: Semantics(
-                identifier: SemanticsIds.playlistExportNspLoss,
-                container: true,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      l10n.playlistExportNspLossCount(gaps.length),
-                      style: WaxType.body.copyWith(color: colors.textSecondary),
-                    ),
-                    const SizedBox(height: WaxSpace.s12),
-                    for (final (index, gap) in gaps.indexed)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: WaxSpace.s12),
-                        child: Semantics(
-                          identifier: SemanticsIds.playlistExportNspLossRow(
-                            index,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  // Its own container, so the rows a spec counts under
+                  // it stay the only children it has.
+                  Semantics(
+                    identifier: SemanticsIds.playlistExportNspLoss,
+                    container: true,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: <Widget>[
+                        if (!dropsNothing) ...<Widget>[
+                          Text(
+                            l10n.playlistExportNspLossCount(gaps.length),
+                            style: WaxType.body.copyWith(
+                              color: colors.textSecondary,
+                            ),
                           ),
-                          container: true,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: <Widget>[
-                              if (gap.field != null && gap.field!.isNotEmpty)
-                                Text(
-                                  ruleFieldLabel(l10n, gap.field!),
-                                  style: WaxType.label.copyWith(
-                                    color: colors.textPrimary,
-                                  ),
-                                ),
-                              Text(
-                                gap.reason,
-                                style: WaxType.body.copyWith(
-                                  color: colors.textSecondary,
-                                ),
+                          const SizedBox(height: WaxSpace.s12),
+                        ],
+                        for (final (index, gap) in gaps.indexed)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: WaxSpace.s12,
+                            ),
+                            child: Semantics(
+                              identifier: SemanticsIds.playlistExportNspLossRow(
+                                index,
                               ),
-                            ],
+                              container: true,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: <Widget>[
+                                  if (gap.field != null &&
+                                      gap.field!.isNotEmpty)
+                                    Text(
+                                      ruleFieldLabel(l10n, gap.field!),
+                                      style: WaxType.label.copyWith(
+                                        color: colors.textPrimary,
+                                      ),
+                                    ),
+                                  Text(
+                                    gap.reason,
+                                    style: WaxType.body.copyWith(
+                                      color: colors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           ),
-                        ),
+                      ],
+                    ),
+                  ),
+                  if (kept != null)
+                    Semantics(
+                      identifier: SemanticsIds.playlistExportNspKeeps,
+                      container: true,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          const SizedBox(height: WaxSpace.s4),
+                          Text(
+                            l10n.playlistExportNspKeeps,
+                            style: WaxType.label.copyWith(
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: WaxSpace.s8),
+                          // No playlist condition survives an NSP export, so
+                          // there is no playlist name to look up here.
+                          RuleChipRow(describeRule(l10n, kept)),
+                        ],
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -511,7 +560,9 @@ Future<bool?> _confirmNspLoss(BuildContext context, List<NspGap> gaps) {
             onPressed: () => Navigator.of(context).pop(false),
           ),
           WaxButton(
-            label: l10n.playlistExportNspProceed,
+            label: dropsNothing
+                ? l10n.playlistExportNspAnyway
+                : l10n.playlistExportNspProceed,
             semanticsId: SemanticsIds.playlistExportNspProceed,
             onPressed: () => Navigator.of(context).pop(true),
           ),

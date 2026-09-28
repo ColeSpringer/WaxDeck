@@ -295,3 +295,63 @@ func TestPlayInfoDropsForcedFormatMatchingSource(t *testing.T) {
 		t.Fatalf("forced mp3 = %s / %s", info.URL, info.MimeType)
 	}
 }
+
+// windowQuery serves one virtual source through serve and answers the
+// query the sidecar was sent.
+func windowQuery(t *testing.T, from, to int64, serve func(*Bridge, *httptest.ResponseRecorder)) url.Values {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "album.flac")
+	if err := os.WriteFile(path, []byte("cuerip"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := Source{
+		Path: path, Size: 6, MTimeNS: 7,
+		Virtual: true, FromSample: from, ToSample: to,
+		Codec: "flac", Container: "flac",
+	}
+	var got url.Values
+	b := newTestBridge(t, func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query()
+		io.WriteString(w, "windowed")
+	}, src)
+	rec := httptest.NewRecorder()
+	serve(b, rec)
+	if rec.Code != 200 {
+		t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+	}
+	return got
+}
+
+func TestVirtualWindowBoundsReachTheSidecar(t *testing.T) {
+	paths := map[string]func(*testing.T) func(*Bridge, *httptest.ResponseRecorder){
+		"stream": func(t *testing.T) func(*Bridge, *httptest.ResponseRecorder) {
+			return func(b *Bridge, rec *httptest.ResponseRecorder) {
+				b.ServeStream(rec, httptest.NewRequest("GET", tokenURL(t, b, "tr-X"), nil))
+			}
+		},
+		"share": func(*testing.T) func(*Bridge, *httptest.ResponseRecorder) {
+			return func(b *Bridge, rec *httptest.ResponseRecorder) {
+				b.ServeShareStream(rec, httptest.NewRequest("GET", "/share/stream", nil), "tr-X", "us-1")
+			}
+		},
+		"analysis": func(*testing.T) func(*Bridge, *httptest.ResponseRecorder) {
+			return func(b *Bridge, rec *httptest.ResponseRecorder) {
+				b.ServeAnalysisAudio(rec, httptest.NewRequest("GET", "/media/analysis/tr-X?format=flac", nil), "tr-X")
+			}
+		},
+	}
+	for name, serve := range paths {
+		t.Run(name, func(t *testing.T) {
+			closed := windowQuery(t, 44100, 88200, serve(t))
+			if closed.Get("from") != "44100" || closed.Get("to") != "88200" {
+				t.Errorf("closed window sent from=%q to=%q", closed.Get("from"), closed.Get("to"))
+			}
+			// The last track of a rip runs to the end, which the sidecar
+			// reads from an absent to; to=0 is the empty span it refuses.
+			open := windowQuery(t, 88200, 0, serve(t))
+			if open.Get("from") != "88200" || open.Has("to") {
+				t.Errorf("open window sent from=%q to=%q", open.Get("from"), open.Get("to"))
+			}
+		})
+	}
+}

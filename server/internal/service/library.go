@@ -218,6 +218,8 @@ type Library struct {
 	// serverGen names the event_log stream's generation.
 	feed      syncFeed
 	serverGen string
+	// jobs follows the catalog's jobs off the feed.
+	jobs jobWatch
 	// catalogWake and userWake are the lossy wakeup hints the event hub
 	// fans out as invalidation frames.
 	catalogWake chan struct{}
@@ -375,15 +377,21 @@ type Library struct {
 	// for the check a new session runs. A field rather than a direct
 	// call so a test can hand it a full disk; nothing configures it.
 	stagingFree func(string) (int64, bool)
+	// catalogFile reads a file row for the similarity sweep; a field so
+	// a test can hand it a read that fails.
+	catalogFile func(context.Context, model.PID) (*model.File, error)
 	// admitUpload serializes the allowance checks a new session runs
 	// against the insert that spends them.
 	admitUpload sync.Mutex
 	// fpcalcPath is the fingerprint binary, empty when absent (matching
 	// then runs on tag and search evidence only).
 	fpcalcPath string
-	// enrichProviders are the server-registered providers, kept for the
-	// per-item enrichment path and the status surface.
-	enrichProviders []enrich.Provider
+	// sources are the server-registered enrichment providers in the
+	// operator's order, and what the catalog's pass runs on.
+	sources *enrichSources
+	// enrichWatchEvery is how often a pass's watcher polls its job; zero
+	// is enrichArtWatchInterval.
+	enrichWatchEvery time.Duration
 	// matchWake nudges the identify worker; lossy, ticker-backstopped.
 	matchWake chan struct{}
 	// toggles is the hot-path settings cache (read-only flags, transcode
@@ -479,13 +487,14 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		roots = append(roots, config.Root{Path: r.Path, Mode: mode})
 	}
 	socket := filepath.Join(cfg.DataDir, SocketFileName)
+	sources := newEnrichSources(namedEnrichProviders(cfg.EnrichmentProviders, log))
 	opts := waxbin.Options{
 		DBPath:              filepath.Join(cfg.DataDir, "waxbin.db"),
 		Roots:               roots,
 		Logger:              log,
 		IPCSocket:           socket,
 		SourceProviders:     cfg.SourceProviders,
-		EnrichmentProviders: cfg.EnrichmentProviders,
+		EnrichmentProviders: sources.slots(),
 	}
 	if cfg.SecretCipher != nil {
 		opts.SecretCipher = cfg.SecretCipher
@@ -562,7 +571,8 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	}
 
 	l := &Library{
-		lib: lib, paths: paths, db: store, roots: cfg.Roots, log: log, procCtx: ctx,
+		sources: sources,
+		lib:     lib, paths: paths, db: store, roots: cfg.Roots, log: log, procCtx: ctx,
 		catalogWake:              make(chan struct{}, 1),
 		userWake:                 make(chan string, 64),
 		matchWake:                make(chan struct{}, 1),
@@ -637,6 +647,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		return nil, fmt.Errorf("service: staging directory: %w", err)
 	}
 	l.stagingFree = diskspace.Free
+	l.catalogFile = lib.File
 	l.setUploadFormats(cfg.UploadFormats)
 	l.uploadRetention = cfg.UploadRetention
 	if l.uploadRetention == 0 {
@@ -648,7 +659,6 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 			l.fpcalcPath = p
 		}
 	}
-	l.enrichProviders = namedEnrichProviders(cfg.EnrichmentProviders, l.log)
 	l.musicbrainzConfigured = cfg.EnrichmentContact != ""
 	l.enrichmentMatchReleases = cfg.EnrichmentMatchReleases
 	l.sourceProviders = cfg.SourceProviders

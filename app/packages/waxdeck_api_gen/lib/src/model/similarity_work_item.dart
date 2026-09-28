@@ -13,9 +13,9 @@ part 'similarity_work_item.g.dart';
 ///
 /// Properties:
 /// * [pid] - The track to analyze.
-/// * [essence] - The track's audio-essence hash. Echo it back with the vector; embeddings are keyed by essence so identical audio never re-analyzes. 
+/// * [essence] - The analysis key: the audio essence, windowed for a cue-carved track. Opaque to workers; echo it back with the vector. 
 /// * [audioUrl] - Origin-relative URL serving decode-ready audio (16 kHz mono, gain untouched). Append `format=flac` for lossless at roughly half the bytes (remote workers); the default is WAV. Authenticate with the same worker token. 
-/// * [localPath] - Library-relative path of the source file, present only when the server is configured to expose paths to same-host workers (`WAXDECK_WORKER_LOCAL_PATHS`); such workers mount the library read-only and decode locally instead of pulling audio over HTTP. 
+/// * [localPath] - The source file's library-relative path, for a same-host worker (`WAXDECK_WORKER_LOCAL_PATHS`) that mounts the library read-only; never for a cue-carved track, whose file is the whole rip. 
 /// * [durationMs] - Track duration in milliseconds.
 /// * [mediaType] 
 @BuiltValue()
@@ -24,7 +24,7 @@ abstract class SimilarityWorkItem implements Built<SimilarityWorkItem, Similarit
   @BuiltValueField(wireName: r'pid')
   String get pid;
 
-  /// The track's audio-essence hash. Echo it back with the vector; embeddings are keyed by essence so identical audio never re-analyzes. 
+  /// The analysis key: the audio essence, windowed for a cue-carved track. Opaque to workers; echo it back with the vector. 
   @BuiltValueField(wireName: r'essence')
   String get essence;
 
@@ -32,7 +32,7 @@ abstract class SimilarityWorkItem implements Built<SimilarityWorkItem, Similarit
   @BuiltValueField(wireName: r'audioUrl')
   String get audioUrl;
 
-  /// Library-relative path of the source file, present only when the server is configured to expose paths to same-host workers (`WAXDECK_WORKER_LOCAL_PATHS`); such workers mount the library read-only and decode locally instead of pulling audio over HTTP. 
+  /// The source file's library-relative path, for a same-host worker (`WAXDECK_WORKER_LOCAL_PATHS`) that mounts the library read-only; never for a cue-carved track, whose file is the whole rip. 
   @BuiltValueField(wireName: r'localPath')
   String? get localPath;
 

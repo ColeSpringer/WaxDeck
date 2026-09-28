@@ -28,7 +28,7 @@ class BooksApi {
   const BooksApi(this._dio, this._serializers);
 
   /// Mark a place in a book
-  /// Records a bookmark at a book-timeline position, with an optional note. Positions past the book&#39;s own duration are rejected. A book holds at most 200 bookmarks per user; the request is refused rather than silently evicting the oldest, because what would be dropped is something the listener wrote. 
+  /// Records a bookmark at a book-timeline position, with an optional note. Positions past the book&#39;s own duration are rejected. A book holds at most 200 bookmarks per user; the request is refused rather than silently evicting the oldest, because what would be dropped is something the listener wrote.  An offline mark carries the &#x60;id&#x60; its client minted, and is dated by it. A replay answers the stored mark, unchecked; a removed mark&#39;s &#x60;id&#x60; is &#x60;conflict&#x60; with &#x60;params.reason&#x60; &#x60;removed&#x60;. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -136,7 +136,7 @@ class BooksApi {
   }
 
   /// Remove one bookmark
-  /// Deletes one of the caller&#39;s bookmarks. Deleting a bookmark that is already gone answers 204: the outcome the caller asked for holds either way, and an offline client replaying its queue must not stall on one it already removed. 
+  /// Deletes one of the caller&#39;s bookmarks. One already gone answers 204, so a client replaying its queue never stalls on a mark it removed.  One on a book out of the caller&#39;s sight is deleted all the same. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

@@ -18,6 +18,10 @@ const _providerNames = <String, String>{
   'audnexus': 'Audnexus',
   'listenbrainz': 'ListenBrainz',
   'lrclib': 'LRCLIB',
+  'discogs': 'Discogs',
+  'hardcover': 'Hardcover',
+  'googlebooks': 'Google Books',
+  'openlibrary': 'Open Library',
 };
 
 /// How a picture's provenance reads under it.

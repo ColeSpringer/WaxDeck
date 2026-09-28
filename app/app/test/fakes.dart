@@ -245,12 +245,14 @@ class FakeRepository implements WaxDeckRepository {
   /// job is to keep that order when it places a new mark rather than
   /// refetching, which is what `spoken_face_test` presses on.
   final Map<String, List<Bookmark>> bookmarks = {};
-  final List<({String pid, int positionMs, String? note})> createBookmarkCalls =
-      [];
+  final List<({String pid, int positionMs, String? note, String? id})>
+  createBookmarkCalls = [];
   final List<({String pid, String id})> deleteBookmarkCalls = [];
 
-  /// What the next create should throw instead of landing (a full book).
+  /// What each create or delete throws instead of landing (a full book, a
+  /// dropped connection).
   WaxDeckApiException? createBookmarkError;
+  WaxDeckApiException? deleteBookmarkError;
   int _bookmarkCounter = 0;
   final List<({String pid, int? positionMs})> playInfoCalls = [];
 
@@ -1629,8 +1631,23 @@ class FakeRepository implements WaxDeckRepository {
     return settings;
   }
 
+  /// Holds every bookmark read until completed.
+  Completer<void>? listBookmarksGate;
+
+  /// Thrown by every bookmark read while set.
+  WaxDeckApiException? listBookmarksError;
+
+  /// How many bookmark reads were made.
+  int listBookmarksCalls = 0;
+
+  /// Holds every bookmark create until completed, when set.
+  Completer<void>? createBookmarkGate;
+
   @override
   Future<List<Bookmark>> listBookmarks(String pid) async {
+    listBookmarksCalls++;
+    await listBookmarksGate?.future;
+    if (listBookmarksError case final error?) throw error;
     final marks = [...?bookmarks[pid]]
       ..sort((a, b) => a.positionMs.compareTo(b.positionMs));
     return marks;
@@ -1641,12 +1658,23 @@ class FakeRepository implements WaxDeckRepository {
     String pid,
     int positionMs, {
     String? note,
+    String? id,
   }) async {
-    createBookmarkCalls.add((pid: pid, positionMs: positionMs, note: note));
+    createBookmarkCalls.add((
+      pid: pid,
+      positionMs: positionMs,
+      note: note,
+      id: id,
+    ));
+    await createBookmarkGate?.future;
     final error = createBookmarkError;
     if (error != null) throw error;
+    // A replay answers what is stored, as the server does.
+    if (bookmarks[pid]?.where((m) => m.id == id).firstOrNull case final held?) {
+      return held;
+    }
     final mark = Bookmark(
-      id: 'bm-${++_bookmarkCounter}',
+      id: id ?? 'bm-${++_bookmarkCounter}',
       positionMs: positionMs,
       note: note,
       createdAt: DateTime.utc(2026, 8, 1),
@@ -1658,6 +1686,8 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<void> deleteBookmark(String pid, String bookmarkId) async {
     deleteBookmarkCalls.add((pid: pid, id: bookmarkId));
+    final error = deleteBookmarkError;
+    if (error != null) throw error;
     bookmarks[pid]?.removeWhere((mark) => mark.id == bookmarkId);
   }
 
@@ -4701,16 +4731,139 @@ class FakeRepository implements WaxDeckRepository {
     running: false,
   );
 
-  /// The force flags passed to [runEnrichment], in order.
-  final List<bool> runEnrichmentCalls = [];
+  /// What each [runEnrichment] asked for, in order.
+  final List<({bool force, List<String> forcePhases})> runEnrichmentCalls = [];
+
+  /// Each saved source order, in order.
+  final List<List<EnrichmentSource>> putEnrichmentSourcesCalls = [];
+
+  /// The response cache served by [getEnrichmentCache], and each prune.
+  EnrichmentCacheReport enrichmentCache = const EnrichmentCacheReport(
+    rows: 0,
+    bytes: 0,
+  );
+  final List<({int? olderThanSeconds, int? maxBytes})>
+  pruneEnrichmentCacheCalls = [];
+  EnrichmentCachePruneResult pruneEnrichmentCacheResult =
+      const EnrichmentCachePruneResult(removed: 2, freedBytes: 2048);
+
+  /// Holds every status read until completed; the read answers the
+  /// status as it stood when asked, as a read already out does.
+  Completer<void>? enrichmentStatusGate;
+
+  /// Thrown by every status read while set.
+  WaxDeckApiException? enrichmentStatusError;
+  int enrichmentStatusReads = 0;
+
+  /// Thrown by [runEnrichment] and [putEnrichmentSources] while set.
+  WaxDeckApiException? runEnrichmentError;
+  WaxDeckApiException? putEnrichmentSourcesError;
 
   @override
-  Future<EnrichmentStatus> getEnrichmentStatus() async => enrichmentStatus;
+  Future<EnrichmentStatus> getEnrichmentStatus() async {
+    enrichmentStatusReads++;
+    final served = enrichmentStatus;
+    await enrichmentStatusGate?.future;
+    if (enrichmentStatusError case final error?) throw error;
+    return served;
+  }
 
   @override
-  Future<String> runEnrichment({bool force = false}) async {
-    runEnrichmentCalls.add(force);
+  Future<String> runEnrichment({
+    bool force = false,
+    List<String> forcePhases = const [],
+  }) async {
+    runEnrichmentCalls.add((force: force, forcePhases: forcePhases));
+    if (runEnrichmentError case final error?) throw error;
     return 'jb-FAKEENRICH';
+  }
+
+  /// Stores the order the way the server does: every provider that is
+  /// not built in, named once, in that order with those switches, and
+  /// the phases their capabilities open recomputed.
+  @override
+  Future<EnrichmentStatus> putEnrichmentSources(
+    List<EnrichmentSource> sources,
+  ) async {
+    putEnrichmentSourcesCalls.add(sources);
+    if (putEnrichmentSourcesError case final error?) throw error;
+    final current = enrichmentStatus;
+    final byName = {for (final p in current.providers) p.name: p};
+    final named = [for (final s in sources) s.name];
+    final own = [
+      for (final p in current.providers)
+        if (!p.builtin) p.name,
+    ];
+    if (named.any((n) => byName[n]?.builtin != false) ||
+        named.toSet().length != named.length ||
+        !own.every(named.contains)) {
+      throw const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'the order must name every source once',
+        statusCode: 400,
+      );
+    }
+    final providers = <EnrichmentProvider>[
+      for (final s in sources)
+        EnrichmentProvider(
+          name: s.name,
+          capabilities: byName[s.name]!.capabilities,
+          configured: byName[s.name]!.configured,
+          builtin: false,
+          enabled: s.enabled,
+        ),
+      for (final p in current.providers)
+        if (p.builtin) p,
+    ];
+    const opens = <String, List<String>>{
+      'aux-art': ['aux-art'],
+      'artist-art': ['artist-art'],
+      'cover': ['album-art'],
+      'lyrics': ['lyrics'],
+      'fields': ['track-fields', 'album-fields'],
+      'book': ['book-fields'],
+    };
+    final open = {
+      if (current.musicbrainzConfigured) ...['identity', 'releases'],
+      for (final p in providers)
+        if (p.enabled && (!p.builtin || current.musicbrainzConfigured))
+          for (final c in p.capabilities) ...?opens[c],
+    };
+    final phases = [
+      for (final phase in current.phases)
+        if (open.contains(phase)) phase,
+    ];
+    enrichmentStatus = EnrichmentStatus(
+      providers: providers,
+      coverage: current.coverage,
+      running: current.running,
+      runningJob: current.runningJob,
+      configured: phases.isNotEmpty,
+      musicbrainzConfigured: current.musicbrainzConfigured,
+      phases: phases,
+      lastRun: current.lastRun,
+    );
+    return enrichmentStatus;
+  }
+
+  @override
+  Future<EnrichmentCacheReport> getEnrichmentCache() async {
+    enrichmentCacheReads++;
+    return enrichmentCache;
+  }
+
+  int enrichmentCacheReads = 0;
+
+  @override
+  Future<EnrichmentCachePruneResult> pruneEnrichmentCache({
+    int? olderThanSeconds,
+    int? maxBytes,
+  }) async {
+    pruneEnrichmentCacheCalls.add((
+      olderThanSeconds: olderThanSeconds,
+      maxBytes: maxBytes,
+    ));
+    return pruneEnrichmentCacheResult;
   }
 
   /// Accounts by id, served and mutated by the admin user endpoints.
@@ -5527,6 +5680,22 @@ class FakeRepository implements WaxDeckRepository {
     return List.of(jobs);
   }
 
+  /// How many single-job reads were made.
+  int jobByPidReads = 0;
+
+  @override
+  Future<Job> getJob(String pid) async {
+    jobByPidReads++;
+    for (final job in jobs) {
+      if (job.pid == pid) return job;
+    }
+    throw WaxDeckApiException(
+      code: 'not-found',
+      message: 'no job $pid',
+      statusCode: 404,
+    );
+  }
+
   /// Per-library read-only flags; absent means false.
   final Map<String, bool> libraryReadOnlyByPid = {};
 
@@ -6136,11 +6305,13 @@ class FakeRepository implements WaxDeckRepository {
   };
 
   /// Every NSP report and export, and for the export whether it asked
-  /// for the lossy one. The dialog's whole job is to make that last
-  /// field true only after somebody has seen the loss, and to ask about
-  /// the same playlist both times.
+  /// for the lossy one and which report's rule it was pinned to.
   final List<String> nspReports = [];
-  final List<({String pid, bool partial})> nspExports = [];
+  final List<({String pid, bool partial, String? ruleHash})> nspExports = [];
+
+  /// Answered in turn ahead of [nspReport], so a rule can change between
+  /// two reads.
+  final List<NspReport> nspReportQueue = [];
 
   /// Raised by the report and by the export respectively. Two hooks and
   /// not one: the reachable refusal is the export's, after a report that
@@ -6148,11 +6319,15 @@ class FakeRepository implements WaxDeckRepository {
   WaxDeckApiException? nspReportError;
   WaxDeckApiException? nspExportError;
 
+  /// Raised in turn by the export ahead of [nspExportError].
+  final List<WaxDeckApiException> nspExportFailures = [];
+
   @override
   Future<NspReport> reportPlaylistNspExport(String pid) async {
     nspReports.add(pid);
     final error = nspReportError;
     if (error != null) throw error;
+    if (nspReportQueue.isNotEmpty) return nspReportQueue.removeAt(0);
     return nspReport;
   }
 
@@ -6160,8 +6335,10 @@ class FakeRepository implements WaxDeckRepository {
   Future<Map<String, Object?>> exportPlaylistNsp(
     String pid, {
     bool partial = false,
+    String? ruleHash,
   }) async {
-    nspExports.add((pid: pid, partial: partial));
+    nspExports.add((pid: pid, partial: partial, ruleHash: ruleHash));
+    if (nspExportFailures.isNotEmpty) throw nspExportFailures.removeAt(0);
     final error = nspExportError;
     if (error != null) throw error;
     return nspExport;

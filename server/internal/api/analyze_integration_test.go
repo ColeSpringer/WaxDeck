@@ -75,8 +75,8 @@ func TestAnalyzeThenWaveform(t *testing.T) {
 	h := newHarness(t)
 
 	// A cue-carved album beside the whole-file demo tracks: one backing
-	// file, two virtual tracks over it, which is the case that must not
-	// answer the backing file's envelope.
+	// file, two virtual tracks over it, each answering its own window of
+	// the file's envelope.
 	ripDir := filepath.Join(h.library, "Wave Artist", "Wave Album")
 	if _, err := fixtures.Generate(ripDir, fixtures.Spec{
 		Name: "Wave Album", Codec: fixtures.CodecFLAC, Duration: 6 * time.Second,
@@ -107,18 +107,18 @@ func TestAnalyzeThenWaveform(t *testing.T) {
 	if !ok {
 		t.Fatalf("virtual cue track missing from the scan: %v", byTitle)
 	}
+	sibling, ok := byTitle["Wave Two"]
+	if !ok {
+		t.Fatalf("second cue track missing from the scan: %v", byTitle)
+	}
 
 	// A scan does not decode audio, so nothing has peaks until the
 	// analyze pass runs. The whole-file track is the one that changes.
 	if got := waveform(t, h, track.Pid); got.State != "pending" {
 		t.Fatalf("before analyze, waveform state = %q, want pending", got.State)
 	}
-	// The virtual track is unavailable from the start and stays that
-	// way: peaks belong to its backing file, and drawing that file's
-	// envelope under one carved track would be a convincing wrong
-	// answer.
-	if got := waveform(t, h, virtual.Pid); got.State != "unavailable" {
-		t.Fatalf("virtual track waveform state = %q, want unavailable", got.State)
+	if got := waveform(t, h, virtual.Pid); got.State != "pending" {
+		t.Fatalf("before analyze, virtual track waveform state = %q, want pending", got.State)
 	}
 
 	analyzeAndWait(t, h)
@@ -154,11 +154,32 @@ func TestAnalyzeThenWaveform(t *testing.T) {
 		t.Fatal("every peak is zero; the stored waveform did not survive narrowing")
 	}
 
-	// The virtual track is still unavailable now that its backing file
-	// has been analyzed, which is the half of that decision the earlier
-	// assertion could not see.
-	if got := waveform(t, h, virtual.Pid); got.State != "unavailable" {
-		t.Fatalf("analyzed virtual track waveform state = %q, want unavailable", got.State)
+	// Each carved track answers its share of the file's buckets, loud,
+	// under a validator of its own.
+	etags := map[string]bool{}
+	for _, pid := range []string{virtual.Pid, sibling.Pid} {
+		resp := get(t, h.ts, "/api/v1/items/"+pid+"/waveform", h.token)
+		etags[resp.Header.Get("ETag")] = true
+		wf := decode[Waveform](t, resp)
+		if wf.State != "ready" || wf.Resolution == nil || wf.Peaks == nil {
+			t.Fatalf("analyzed carved track %s answers %+v", pid, wf)
+		}
+		if *wf.Resolution <= 0 || *wf.Resolution >= 1000 || len(*wf.Peaks) != *wf.Resolution {
+			t.Fatalf("carved track %s: resolution %d over %d peaks, want a share of 1000", pid, *wf.Resolution, len(*wf.Peaks))
+		}
+		loud := false
+		for _, v := range *wf.Peaks {
+			if v < 0 || v > 255 {
+				t.Fatalf("peak %d is outside 0..255", v)
+			}
+			loud = loud || v > 0
+		}
+		if !loud {
+			t.Fatalf("carved track %s drew silence", pid)
+		}
+	}
+	if len(etags) != 2 || etags[""] {
+		t.Fatalf("sibling ETags = %v, want two distinct validators", etags)
 	}
 }
 

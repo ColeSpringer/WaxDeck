@@ -22,6 +22,27 @@ note.
   per-rung declaration), so the half runs only when one does. Shipped
   workaround: none; the misses cost no requests, only the cap.
 
+- **The enrichment provider list is fixed at open, and the built-ins are
+  out of reach.** WaxDeck lets an operator order and switch its own
+  injected providers, but `enrich.New` takes the slice once, so WaxDeck
+  injects one slot per rank that answers as whichever provider holds
+  that rank (named `slot-N` only while the rank is empty), and holds a
+  new order back while any enrich job runs so a reorder cannot move a
+  provider mid-walk. Done markers are kept per phase and item, not per
+  provider, so a source switched back on is not asked about what others
+  finished while it was off unless a run forces its phases. The key-free built-ins
+  (`coverartarchive`, `listenbrainz`, `lrclib`) are registered after the
+  injected ones and cannot be moved or switched off at all. Wanted: a
+  runtime order hook (or a provider list read per pass), the built-ins
+  exposed to it, and done markers kept per provider. Shipped workaround: the slots; the built-ins
+  are listed pinned last and read-only.
+
+- **The coverage read counts no lyrics.** `EnrichmentCoverage` reports
+  artists, release groups and books, so the Enrichment screen can say how
+  many music tracks there are but not how many carry lyrics. Wanted: a
+  per-track lyrics count on the coverage read. Shipped workaround: the
+  lyrics tile reads "Not counted" over the track total.
+
 - **The facade exports no phase list.** WaxDeck reports the phases a
   run would execute and refuses a forced phase the install does not
   run, so it mirrors the catalog's gating in `enrichPhaseTable` and a
@@ -39,6 +60,33 @@ note.
   again next pass. Shipped workaround: Deezer waits out its own quota
   window once before failing; any other failure waits out the retry
   window (30 days by default).
+
+- **An NSP gap's reason is only an English sentence.** `NSPGap.Reason`
+  names fields in the engine's or the file's spelling (`added`,
+  `dateadded`), so WaxDeck respells the field a sentence ends on and the
+  terms of the dropped-sort sentence, and any other wording passes
+  through untranslated. Wanted: a reason code with its parameters on
+  each gap, so a client can say it in its own words and language.
+  Shipped workaround: that respelling; the dialog heads each sentence
+  with the rule editor's name for its field.
+
+- **NSP's favourite flag is `loved`, and `filepath` and `duration` are
+  unmapped.** The NSP field map has a `starred` key, which Navidrome
+  never writes: its field is `loved`. So a Navidrome rule on favourites
+  is refused on import, and a rule on `starred` exports under a name
+  Navidrome does not know. `filepath` and `duration` (seconds, where the
+  catalog keeps milliseconds) map neither way. Wanted: `loved` both
+  ways, `filepath` to `path`, and `duration` rescaled. Shipped
+  workaround: none; the import description names the fields that map.
+
+- **A waveform does not say how much audio its buckets span.**
+  `PeaksData` carries a bucket count and the data, so WaxDeck places a
+  cue-carved track's window by the file's stated duration, while the
+  buckets cover the audio as decoded. A header that understates its
+  length (a VBR MP3 with no Xing frame) mis-scales every window of that
+  file. Wanted: the sample count or duration the buckets were measured
+  over, on the peaks read. Shipped workaround: windows placed by the
+  stated length; a window it cannot hold answers unavailable.
 
 ## WaxTap
 
@@ -59,7 +107,15 @@ note.
 
 ## WaxFlow
 
-(nothing outstanding)
+- **The in-process analyzer cannot measure a window's bound the way the
+  streaming engine does.** `Slice` bounds a window by the declared
+  length, and the server package measures an advisory or absent length
+  first (`measureLength`, `sliceMeasured`) before slicing, which is not
+  exported. So the built-in sonic analysis refuses a carved window past
+  an understated length that `/media/analysis` serves. Wanted: that
+  measure exported (or a `Slice` that measures an advisory length).
+  Shipped workaround: such a track rests unanalyzed until its audio
+  changes, instead of being queued again.
 
 ## WaxLabel
 

@@ -10,6 +10,7 @@ import 'package:waxdeck/src/health/health_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -338,6 +339,11 @@ void main() {
       reason: 'the refusal proves the job list is stale, so it is re-read',
     );
     expect(_step(FirstRunStep.warming), findsOneWidget);
+    // Said in the app's words, not the server's English.
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'A scan or another catalog job is already running.',
+    );
   });
 
   /// A reload as these two providers see one: both disposed and rebuilt,

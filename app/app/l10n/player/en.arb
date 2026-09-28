@@ -45,6 +45,10 @@
       }
     }
   },
+  "playerBookmarkPending": "Not sent yet",
+  "@playerBookmarkPending": {
+    "description": "Caption under a bookmark made while the server could not be reached; it is sent when the connection comes back."
+  },
   "playerBookmarkPlayFrom": "Play from {time}",
   "@playerBookmarkPlayFrom": {
     "description": "Accessible name of a bookmark with no note on it. {time} is a timecode.",
@@ -52,6 +56,16 @@
       "time": {
         "type": "String",
         "example": "1:12:40"
+      }
+    }
+  },
+  "playerBookmarkRefused": "Not saved: {reason}",
+  "@playerBookmarkRefused": {
+    "description": "Caption under a bookmark made offline that the server refused once it was sent. {reason} says why.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "positionMs is past the end of the book"
       }
     }
   },
@@ -86,6 +100,10 @@
   "playerBookmarksError": "Could not load the bookmarks.",
   "@playerBookmarksError": {
     "description": "Drawn in the bookmarks sheet when the read failed for a reason the error table has no sentence for."
+  },
+  "playerBookmarksFull": "This book already holds as many bookmarks as it can. Remove one to mark another.",
+  "@playerBookmarksFull": {
+    "description": "Said when a listener marks a place in a book that already holds the most bookmarks it can."
   },
   "playerCancelTimer": "Cancel timer",
   "@playerCancelTimer": {

@@ -398,14 +398,15 @@ Future<void> startLibraryScan(WidgetRef ref) async {
     container.invalidate(adminJobsProvider);
     messenger.show(l10n.adminScanStarted);
   } on WaxDeckApiException catch (error) {
-    // A scan already running is the common answer, and the server's own
-    // message says so better than a guess would. It is also proof the
-    // job list this client holds is stale - it shows nothing running -
-    // so the refusal refreshes it too, which is what lets a caller
-    // watching that list (the first-run wizard) move on instead of
-    // offering the same scan again.
+    // A job already running is the common answer, said in the app's
+    // words. It also proves the job list is stale, so it is read again,
+    // which lets the first-run wizard move on instead of re-offering it.
     container.invalidate(adminJobsProvider);
-    messenger.show(explainRefusal(l10n, error));
+    messenger.show(
+      error.code == 'conflict'
+          ? l10n.adminScanBusy
+          : explainRefusal(l10n, error),
+    );
   }
 }
 

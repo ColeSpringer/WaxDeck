@@ -54,11 +54,36 @@ class MirrorPlayStates extends Table {
   Set<Column> get primaryKey => {pid};
 }
 
+/// The caller's audiobook bookmarks, keyed to the account that made
+/// them: those the server holds (`synced`), those made while it could
+/// not be reached (`pending`), and those it refused (`refused`).
+class MirrorBookmarks extends Table {
+  /// The bookmark's pid, minted by the server or, offline, by the client.
+  TextColumn get id => text()();
+  TextColumn get owner => text()();
+  TextColumn get bookPid => text()();
+  IntColumn get positionMs => integer()();
+  TextColumn get note => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  TextColumn get syncState => text()();
+
+  /// The server's sentence and error code, on a refused mark.
+  TextColumn get refusal => text().nullable()();
+  TextColumn get refusalCode => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// The two opaque sync cursors; a single row.
 class SyncCursors extends Table {
   IntColumn get id => integer().withDefault(const Constant(1))();
   TextColumn get catalogSince => text().nullable()();
   TextColumn get serverSince => text().nullable()();
+
+  /// The account [serverSince] was walked for: another's walk skipped
+  /// this account's events.
+  TextColumn get serverAccount => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -70,8 +95,8 @@ class SyncCursors extends Table {
 class OutboxMutations extends Table {
   IntColumn get id => integer().autoIncrement()();
 
-  /// `position`, `star`, `rating`, `entity-star`, `entity-rating`, or
-  /// `prefs`.
+  /// `position`, `star`, `rating`, `entity-star`, `entity-rating`,
+  /// `prefs`, `bookmark-create`, or `bookmark-delete`.
   TextColumn get kind => text()();
   TextColumn get pid => text()();
   IntColumn get positionMs => integer().nullable()();
@@ -81,11 +106,13 @@ class OutboxMutations extends Table {
   IntColumn get rating => integer().nullable()();
   DateTimeColumn get recordedAt => dateTime()();
 
-  /// A mutation with no typed column of its own, as JSON: a `prefs`
-  /// entry's patch, the fields it changed at their new values.
-  ///
-  /// Last on purpose, for the reason [DownloadRecords.durationMs] gives.
+  /// A mutation with no typed column of its own, as JSON: a `prefs` entry's
+  /// patch, or a bookmark write. Last for [DownloadRecords.durationMs]'s reason.
   TextColumn get payload => text().nullable()();
+
+  /// The account that queued it, sent only for that account; null on
+  /// what an older build queued.
+  TextColumn get owner => text().nullable()();
 }
 
 /// Queued listen sessions. The session id is the idempotency key, so a
@@ -101,6 +128,9 @@ class OutboxListens extends Table {
   /// Time the listener did not sit through (silence trimming, speed
   /// above 1x). Null when neither applied, matching the wire field.
   IntColumn get skippedMs => integer().nullable()();
+
+  /// As [OutboxMutations.owner].
+  TextColumn get owner => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {sessionId};
@@ -249,6 +279,7 @@ class ClientSettings extends Table {
   tables: [
     MirrorItems,
     MirrorPlayStates,
+    MirrorBookmarks,
     SyncCursors,
     OutboxMutations,
     OutboxListens,
@@ -285,6 +316,7 @@ class MirrorDatabase extends _$MirrorDatabase {
     for (final table in <TableInfo<Table, Object?>>[
       mirrorItems,
       mirrorPlayStates,
+      mirrorBookmarks,
       syncCursors,
       outboxMutations,
       outboxListens,
@@ -298,7 +330,7 @@ class MirrorDatabase extends _$MirrorDatabase {
   });
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -337,6 +369,14 @@ class MirrorDatabase extends _$MirrorDatabase {
       if (from < 6) {
         // outbox_mutations is a v1 table too.
         await m.addColumn(outboxMutations, outboxMutations.payload);
+      }
+      if (from < 7) {
+        await m.createTable(mirrorBookmarks);
+        // All three are v1 tables. A cursor with no account mints again,
+        // which is what fills the marks already on the server.
+        await m.addColumn(syncCursors, syncCursors.serverAccount);
+        await m.addColumn(outboxMutations, outboxMutations.owner);
+        await m.addColumn(outboxListens, outboxListens.owner);
       }
     },
   );

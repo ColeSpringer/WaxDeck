@@ -328,16 +328,8 @@ func (l *Library) storeDiscoveryCursor(ctx context.Context, from, to int64) erro
 // means the pass runs one tick early, and the next one covers what it
 // wrote.
 func (l *Library) catalogJobRunning(ctx context.Context) (bool, error) {
-	jobs, err := l.lib.Jobs(ctx, 20)
-	if err != nil {
-		return false, classify(err)
-	}
-	for _, job := range jobs {
-		if job.State == model.JobRunning {
-			return true, nil
-		}
-	}
-	return false, nil
+	_, running, err := l.runningJob(ctx, "", 20)
+	return running, err
 }
 
 // uploadedItems asks which of these items an upload session produced.

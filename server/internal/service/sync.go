@@ -165,7 +165,10 @@ type ServerSyncEvent struct {
 	Prefs        *Prefs
 	Subscription *Subscription
 	BookSettings *BookSettings
-	Playlist     *Playlist
+	// Bookmarks is the caller's whole list for the book; empty, not nil,
+	// once none are left.
+	Bookmarks []Bookmark
+	Playlist  *Playlist
 }
 
 // ServerDelta is one page of the caller's server-state changes.
@@ -183,6 +186,7 @@ const (
 	eventPrefs        = "prefs"
 	eventSubscription = "subscription"
 	eventBookSettings = "book-settings"
+	eventBookmarks    = "bookmarks"
 	eventPlaylist     = "playlist"
 	eventReview       = "review"
 	eventUpload       = "upload"
@@ -361,6 +365,9 @@ func (l *Library) advanceFeed(ch model.Change) {
 		l.feed.tailTS = ch.TS
 	}
 	l.feed.mu.Unlock()
+	if ch.EntityType == "job" {
+		l.jobs.saw(ch.EntityPID)
+	}
 	// Items feed summary mirrors; podcast rows feed show lists. Both
 	// travel the catalog stream (a show is not per-user state).
 	if ch.EntityType == "item" || ch.EntityType == "podcast" {
@@ -407,11 +414,11 @@ func (l *Library) CatalogWakeups() <-chan struct{} { return l.catalogWake }
 // or a poll).
 func (l *Library) UserEventWakeups() <-chan string { return l.userWake }
 
-// emitUserEvent appends to the server stream and wakes the hub. Event
-// loss here must never fail the mutation that caused it: the stream is
-// an invalidation signal over authoritative state, not the state.
+// emitUserEvent appends to the server stream and wakes the hub, whether
+// or not the request that made the change is still there. Event loss never
+// fails the mutation: the stream is an invalidation signal, not the state.
 func (l *Library) emitUserEvent(ctx context.Context, userID, kind, itemPID string) {
-	if _, err := l.db.AppendEvent(ctx, userID, kind, itemPID); err != nil {
+	if _, err := l.db.AppendEvent(context.WithoutCancel(ctx), userID, kind, itemPID); err != nil {
 		l.log.Warn("appending server event", "kind", kind, "err", err)
 		return
 	}
@@ -970,6 +977,7 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 	seenState := make(map[string]bool)
 	seenSub := make(map[string]bool)
 	seenBook := make(map[string]bool)
+	seenMarks := make(map[string]bool)
 	seenPlaylist := make(map[string]bool)
 	seenMarker := make(map[string]bool)
 	seenPrefs := false
@@ -1039,6 +1047,18 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 			bs := bookSettingsDTO(row)
 			out.Events = append(out.Events, ServerSyncEvent{
 				Kind: eventBookSettings, PID: apiPID(PrefixBook, model.PID(e.ItemPID)), BookSettings: &bs,
+			})
+		case eventBookmarks:
+			if seenMarks[e.ItemPID] {
+				continue
+			}
+			seenMarks[e.ItemPID] = true
+			rows, err := l.db.BookmarksFor(ctx, uc.ID, e.ItemPID)
+			if err != nil {
+				return ServerDelta{}, &Error{Kind: KindInternal, Err: err}
+			}
+			out.Events = append(out.Events, ServerSyncEvent{
+				Kind: eventBookmarks, PID: apiPID(PrefixBook, model.PID(e.ItemPID)), Bookmarks: bookmarkDTOs(rows),
 			})
 		case eventPlaylist:
 			if seenPlaylist[e.ItemPID] {

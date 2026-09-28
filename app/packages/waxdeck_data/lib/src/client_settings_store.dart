@@ -221,6 +221,7 @@ abstract final class ClientSettingKeys {
   /// from the Discord developer portal, not a credential.
   static const discordPresence = 'waxdeck.integrations.discordPresence';
   static const discordApplicationId = 'waxdeck.integrations.discordAppId';
+  static const discordCovers = 'waxdeck.integrations.discordCovers';
 
   /// The library pid the last upload or acquisition was filed under, so
   /// a server with more than one candidate opens on the same answer

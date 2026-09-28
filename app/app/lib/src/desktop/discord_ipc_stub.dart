@@ -9,3 +9,8 @@ library;
 import 'discord_presence.dart';
 
 DiscordPresencePort createDiscordPresencePort() => const NoDiscordPresence();
+
+/// No cover lookups either: there is no presence to show one in.
+Future<String?> coverArtFront(String mbid, {Uri? archive}) async => null;
+
+Future<String?> Function(String mbid) coverArtLookup() => coverArtFront;

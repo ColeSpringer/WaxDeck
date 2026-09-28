@@ -168,6 +168,18 @@ timeline, so resuming on another device lands in the right chapter of
 the right part. The book screen offers chapter navigation, per-book
 speed memory, and a sleep timer with an end-of-chapter mode.
 
+Bookmarks are places you mark on purpose, with an optional note, up to
+200 a book. They work offline on the native apps: a mark made with no
+connection shows **Not sent yet** and is sent when the server can be
+reached again, under the same identity, so a retry never makes two, and
+one removed on another device meanwhile stays removed, unless the device
+was offline for over a year. A
+mark the server then refuses (past the end of a book whose length was
+corrected meanwhile, say) stays on the device with **Not saved** and the
+reason, for you to remove. The device keeps the marks of the
+books it has downloaded or opened, so the sheet reads them offline, and
+each account's marks are its own even on a shared device.
+
 A series is a name a book's tags carry, in the grouping field, with an
 optional number after it ("Tidewater #2"). Books that name one get a
 **Series** shelf on the hub and an index behind it; a series opens to

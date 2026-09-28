@@ -18,6 +18,24 @@ typedef PrefsFlush = ({
   Map<String, Object?>? waiting,
 });
 
+/// Where a mirrored bookmark stands with the server.
+enum BookmarkSync { synced, pending, refused }
+
+/// One bookmark as this device holds it.
+class LocalBookmark {
+  const LocalBookmark(
+    this.mark, {
+    this.sync = BookmarkSync.synced,
+    this.refusal,
+  });
+
+  final Bookmark mark;
+  final BookmarkSync sync;
+
+  /// What the server answered, on a refused mark.
+  final WaxDeckApiException? refusal;
+}
+
 /// One frame of engine status for the UI.
 class SyncStatus {
   const SyncStatus({required this.connection, this.lastSyncAt});
@@ -124,13 +142,10 @@ class SyncEngine {
 
   final _itemsRemoved = StreamController<String>.broadcast();
 
-  /// The account whose preference patches a flush sends; null sends
-  /// none.
-  ///
-  /// Patches are kept per account because the outbox outlives a session:
-  /// one an account left behind waits for that account rather than going
-  /// out under whoever signs in next. Set by the app as a session begins.
-  String? prefsOwner;
+  /// The signed-in account: whose queued writes a flush sends and whose
+  /// marks a pull mirrors. The outbox outlives a session, so what an
+  /// account queued waits for it. Set by the app as a session begins.
+  String? account;
 
   /// Fires when a queued preference patch reached the server: whose it
   /// was, the document the server stored, and what of the patch still
@@ -144,6 +159,11 @@ class SyncEngine {
 
   final _prefsFlushed = StreamController<PrefsFlush>.broadcast();
   final _prefsRefused = StreamController<String>.broadcast();
+
+  /// Fires with a book whose mirrored bookmarks changed.
+  Stream<String> get bookmarksChanged => _bookmarksChanged.stream;
+
+  final _bookmarksChanged = StreamController<String>.broadcast();
 
   /// Whether the first walk of this session has been made, after which
   /// what arrives is news rather than backlog.
@@ -173,6 +193,7 @@ class SyncEngine {
     _itemsRemoved.close();
     _prefsFlushed.close();
     _prefsRefused.close();
+    _bookmarksChanged.close();
   }
 
   void _setStatus(SyncConnection c) {
@@ -303,9 +324,14 @@ class SyncEngine {
     }
   }
 
-  Future<({String? catalogSince, String? serverSince})> _cursors() async {
+  Future<({String? catalogSince, String? serverSince, String? serverAccount})>
+  _cursors() async {
     final row = await db.select(db.syncCursors).getSingleOrNull();
-    return (catalogSince: row?.catalogSince, serverSince: row?.serverSince);
+    return (
+      catalogSince: row?.catalogSince,
+      serverSince: row?.serverSince,
+      serverAccount: row?.serverAccount,
+    );
   }
 
   Future<void> _saveCatalogCursor(String since) async {
@@ -316,11 +342,15 @@ class SyncEngine {
         );
   }
 
-  Future<void> _saveServerCursor(String since) async {
+  Future<void> _saveServerCursor(String since, String? owner) async {
     await db
         .into(db.syncCursors)
         .insertOnConflictUpdate(
-          SyncCursorsCompanion(id: const Value(1), serverSince: Value(since)),
+          SyncCursorsCompanion(
+            id: const Value(1),
+            serverSince: Value(since),
+            serverAccount: Value(owner),
+          ),
         );
   }
 
@@ -455,8 +485,10 @@ class SyncEngine {
   /// mirror. A sync-reset re-mints and re-hydrates downloaded items.
   Future<void> pullServer() async {
     final cursors = await _cursors();
+    final owner = account;
     var since = cursors.serverSince;
-    if (since == null) {
+    // Another account's walk moved past this one's events.
+    if (since == null || cursors.serverAccount != owner) {
       await _remintServer();
       return;
     }
@@ -468,6 +500,12 @@ class SyncEngine {
           if (ev.kind == 'play-state' && ev.playState != null) {
             await _storePlayState(ev.playState!);
             _playStateChanged.add(ev.playState!.pid);
+          } else if (ev.kind == 'bookmarks' &&
+              ev.pid != null &&
+              ev.bookmarks != null) {
+            if (owner != null) {
+              await storeBookmarks(ev.pid!, ev.bookmarks!, owner: owner);
+            }
           } else if (ev.kind == 'entity-state' && ev.pid != null) {
             // A marker: an artist or album star or rating moved. There
             // is nothing to mirror (entity state is a live read, and the
@@ -476,12 +514,12 @@ class SyncEngine {
             _playStateChanged.add(ev.pid!);
           }
           // Every other kind reaches the app through [serverEvents]; the
-          // mirror keeps play states only.
+          // mirror keeps play states and bookmarks only.
         }
         since = page.nextSince;
         if (!page.more) break;
       }
-      await _saveServerCursor(since);
+      await _saveServerCursor(since, owner);
       _caughtUp = true;
     } on WaxDeckApiException catch (e) {
       if (e.code == 'sync-reset') {
@@ -492,12 +530,12 @@ class SyncEngine {
     }
   }
 
-  /// Mints a fresh server cursor and re-hydrates play states for the
-  /// items this device holds offline (play states only matter for
-  /// items a client keeps).
+  /// Mints a fresh server cursor for the signed-in account and
+  /// re-hydrates what this device holds offline: play states, and the
+  /// marks in its books. Saved last, so one cut short mints again.
   Future<void> _remintServer() async {
+    final owner = account;
     final page = await repository.syncServer();
-    await _saveServerCursor(page.nextSince);
     // A minted cursor has nothing behind it, so everything after this is
     // news: without this the walk *after* a fresh install or a reset
     // would be swallowed as though it were the backlog.
@@ -515,6 +553,13 @@ class SyncEngine {
         _playStateChanged.add(st.pid);
       }
     }
+    if (owner != null) {
+      await _fillBookmarks([
+        for (final pid in held)
+          if (pid.startsWith('bk-')) pid,
+      ], owner);
+    }
+    await _saveServerCursor(page.nextSince, owner);
   }
 
   /// The mirrored play state for one item, or null when never synced.
@@ -579,23 +624,33 @@ class SyncEngine {
   /// Replaces any queued mutation of the same kind for the same item:
   /// the outbox carries final intents, not history, so an hour of
   /// offline checkpoints replays as one write, not seven hundred.
-  Future<void> _coalesce(String kind, String pid) async {
-    await (db.delete(
-      db.outboxMutations,
-    )..where((t) => t.kind.equals(kind) & t.pid.equals(pid))).go();
+  Future<void> _coalesce(String kind, String pid, String? owner) async {
+    await (db.delete(db.outboxMutations)..where(
+          (t) =>
+              t.kind.equals(kind) & t.pid.equals(pid) & _heldBy(t.owner, owner),
+        ))
+        .go();
   }
+
+  /// Whether a queued row is [owner]'s: its own, or one an older build
+  /// queued for nobody in particular.
+  static Expression<bool> _heldBy(
+    GeneratedColumn<String> column,
+    String? owner,
+  ) => owner == null ? column.isNull() : column.isNull() | column.equals(owner);
 
   /// Queues a position checkpoint (also applied to the local mirror so
   /// offline UI reflects it immediately).
   Future<void> queueCheckpoint(String pid, int positionMs) =>
       _outboxWrite(() async {
-        await _coalesce('position', pid);
+        await _coalesce('position', pid, account);
         await db
             .into(db.outboxMutations)
             .insert(
               OutboxMutationsCompanion.insert(
                 kind: 'position',
                 pid: pid,
+                owner: Value(account),
                 positionMs: Value(positionMs),
                 recordedAt: DateTime.now(),
               ),
@@ -608,13 +663,14 @@ class SyncEngine {
       });
 
   Future<void> queueStar(String pid, bool starred) => _outboxWrite(() async {
-    await _coalesce('star', pid);
+    await _coalesce('star', pid, account);
     await db
         .into(db.outboxMutations)
         .insert(
           OutboxMutationsCompanion.insert(
             kind: 'star',
             pid: pid,
+            owner: Value(account),
             starred: Value(starred),
             recordedAt: DateTime.now(),
           ),
@@ -627,13 +683,14 @@ class SyncEngine {
   });
 
   Future<void> queueRating(String pid, int? rating) => _outboxWrite(() async {
-    await _coalesce('rating', pid);
+    await _coalesce('rating', pid, account);
     await db
         .into(db.outboxMutations)
         .insert(
           OutboxMutationsCompanion.insert(
             kind: 'rating',
             pid: pid,
+            owner: Value(account),
             rating: Value(rating),
             recordedAt: DateTime.now(),
           ),
@@ -652,13 +709,14 @@ class SyncEngine {
   /// value comes back through the server stream on reconnect.
   Future<void> queueEntityStar(String pid, bool starred) =>
       _outboxWrite(() async {
-        await _coalesce('entity-star', pid);
+        await _coalesce('entity-star', pid, account);
         await db
             .into(db.outboxMutations)
             .insert(
               OutboxMutationsCompanion.insert(
                 kind: 'entity-star',
                 pid: pid,
+                owner: Value(account),
                 starred: Value(starred),
                 recordedAt: DateTime.now(),
               ),
@@ -668,30 +726,23 @@ class SyncEngine {
   /// Queues a rating on a catalog entity; see [queueEntityStar].
   Future<void> queueEntityRating(String pid, int? rating) =>
       _outboxWrite(() async {
-        await _coalesce('entity-rating', pid);
+        await _coalesce('entity-rating', pid, account);
         await db
             .into(db.outboxMutations)
             .insert(
               OutboxMutationsCompanion.insert(
                 kind: 'entity-rating',
                 pid: pid,
+                owner: Value(account),
                 rating: Value(rating),
                 recordedAt: DateTime.now(),
               ),
             );
       });
 
-  /// Queues a change to the preference document: the fields it changed,
-  /// at their new values, as the wire spells them (see `prefsPatch`).
-  ///
-  /// One entry, merged rather than replaced, so a field named twice keeps
-  /// the later value. Sent as a read with the patch laid over it and a
-  /// write, so a field another device changed meanwhile survives unless
-  /// this one changed it too. Queued while connected it is sent at once:
-  /// nothing else would send it before the next reconnect, and a caller
-  /// keeping its writes in order queues every later one behind it.
-  ///
-  /// Kept for [owner] alone and sent only while it is [prefsOwner].
+  /// Queues [owner]'s changed preference fields, merged into one entry and
+  /// sent (at once while connected, only while [owner] is [account]) as the
+  /// document read with the patch laid over it, so other changes survive.
   Future<void> queuePrefsPatch(
     Map<String, Object?> patch, {
     required String owner,
@@ -700,13 +751,14 @@ class SyncEngine {
     await _outboxWrite(
       () => db.transaction(() async {
         final waiting = await pendingPrefsPatch(owner);
-        await _coalesce(_prefsKind, owner);
+        await _coalesce(_prefsKind, owner, owner);
         await db
             .into(db.outboxMutations)
             .insert(
               OutboxMutationsCompanion.insert(
                 kind: _prefsKind,
                 pid: owner,
+                owner: Value(owner),
                 payload: Value(
                   jsonEncode(
                     waiting == null ? patch : mergePrefsPatches(waiting, patch),
@@ -717,23 +769,28 @@ class SyncEngine {
             );
       }),
     );
-    if (_running && _current.online) {
-      unawaited(
-        _serialized(() async {
-          try {
-            await flushOutbox();
-          } on WaxDeckApiException catch (e) {
-            _handleApiFailure(e);
-          }
-        }),
-      );
-    }
+    _flushWhileConnected();
+  }
+
+  /// Sends what was just queued when there is a connection to send it on:
+  /// nothing else would before the next reconnect.
+  void _flushWhileConnected() {
+    if (!_running || !_current.online) return;
+    unawaited(
+      _serialized(() async {
+        try {
+          await flushOutbox();
+        } on WaxDeckApiException catch (e) {
+          _handleApiFailure(e);
+        }
+      }),
+    );
   }
 
   /// [owner]'s preference patch waiting to be sent, or null when none
   /// is, or when what is stored does not read as one.
   Future<Map<String, Object?>?> pendingPrefsPatch(String owner) async =>
-      _patchOf((await _prefsRow(owner))?.payload);
+      _payloadOf((await _prefsRow(owner))?.payload);
 
   Future<OutboxMutation?> _prefsRow(String owner) =>
       (db.select(db.outboxMutations)
@@ -749,7 +806,7 @@ class SyncEngine {
     if (row != null) await _flushPrefs(row);
   });
 
-  static Map<String, Object?>? _patchOf(String? payload) {
+  static Map<String, Object?>? _payloadOf(String? payload) {
     if (payload == null) return null;
     try {
       final decoded = jsonDecode(payload);
@@ -761,6 +818,315 @@ class SyncEngine {
 
   /// A preference entry, one per account, keyed by the account's id.
   static const _prefsKind = 'prefs';
+
+  /// Bookmark writes, keyed by the book; never coalesced.
+  static const _bookmarkCreate = 'bookmark-create';
+  static const _bookmarkDelete = 'bookmark-delete';
+
+  // --- bookmarks -------------------------------------------------------------
+
+  /// [owner]'s bookmarks in [bookPid] as this device holds them, in
+  /// timeline order.
+  Future<List<LocalBookmark>> localBookmarks(
+    String bookPid, {
+    required String owner,
+  }) async {
+    final rows =
+        await (db.select(db.mirrorBookmarks)
+              ..where((t) => t.bookPid.equals(bookPid) & t.owner.equals(owner))
+              ..orderBy([
+                (t) => OrderingTerm.asc(t.positionMs),
+                (t) => OrderingTerm.asc(t.id),
+              ]))
+            .get();
+    return [
+      for (final r in rows)
+        LocalBookmark(
+          Bookmark(
+            id: r.id,
+            positionMs: r.positionMs,
+            note: r.note,
+            createdAt: r.createdAt,
+          ),
+          sync: BookmarkSync.values.byName(r.syncState),
+          refusal: r.syncState == BookmarkSync.refused.name
+              ? WaxDeckApiException(
+                  code: r.refusalCode ?? 'unknown',
+                  message: r.refusal ?? '',
+                )
+              : null,
+        ),
+    ];
+  }
+
+  /// Mirrors [marks] as [owner]'s whole list for [bookPid] on the server:
+  /// synced marks are replaced, those not yet sent or refused stay, and a
+  /// mark whose delete waits is not brought back. Says so only on a change.
+  Future<void> storeBookmarks(
+    String bookPid,
+    List<Bookmark> marks, {
+    required String owner,
+  }) async {
+    var changed = false;
+    await _outboxWrite(
+      () => db.transaction(() async {
+        final deleting = {
+          for (final w in await _bookmarkWrites(_bookmarkDelete, bookPid))
+            if (w.row.owner == owner) w.payload?['id'],
+        };
+        Expression<bool> synced(MirrorBookmarks t) =>
+            t.bookPid.equals(bookPid) &
+            t.owner.equals(owner) &
+            t.syncState.equals(BookmarkSync.synced.name);
+        final next = [
+          for (final m in marks)
+            if (!deleting.contains(m.id)) m,
+        ];
+        final held = await (db.select(db.mirrorBookmarks)..where(synced)).get();
+        String key(String id, int positionMs, String? note) =>
+            '$id|$positionMs|${note ?? ''}';
+        final before = {for (final r in held) key(r.id, r.positionMs, r.note)};
+        final after = {for (final m in next) key(m.id, m.positionMs, m.note)};
+        if (before.length == after.length && before.containsAll(after)) return;
+        changed = true;
+        await (db.delete(db.mirrorBookmarks)..where(synced)).go();
+        await db.batch(
+          (b) => b.insertAllOnConflictUpdate(db.mirrorBookmarks, [
+            for (final m in next)
+              _bookmarkRow(bookPid, m, owner, BookmarkSync.synced),
+          ]),
+        );
+      }),
+    );
+    if (changed) _announceBookmarks(bookPid);
+  }
+
+  /// Mirrors [bookPid]'s marks now, for a book this device just fetched
+  /// for offline listening: its later changes arrive as bookmarks events.
+  Future<void> fillBookmarks(String bookPid) async {
+    final owner = account;
+    if (owner == null) return;
+    await _serialized(() => _fillBookmarks([bookPid], owner));
+  }
+
+  /// Reads and mirrors [owner]'s marks in [books], a few at a time. A book
+  /// the server refuses has none to hold; any other failure is thrown.
+  Future<void> _fillBookmarks(List<String> books, String owner) async {
+    for (var i = 0; i < books.length; i += 8) {
+      final batch = books.sublist(i, math.min(i + 8, books.length));
+      final lists = await Future.wait([
+        for (final pid in batch) _bookmarksOrNone(pid),
+      ]);
+      for (final (j, marks) in lists.indexed) {
+        if (marks != null) await storeBookmarks(batch[j], marks, owner: owner);
+      }
+    }
+  }
+
+  Future<List<Bookmark>?> _bookmarksOrNone(String bookPid) async {
+    try {
+      return await repository.listBookmarks(bookPid);
+    } on WaxDeckApiException catch (e) {
+      if (_permanent(e) || e.code == 'forbidden') return null;
+      rethrow;
+    }
+  }
+
+  /// Holds [owner]'s [mark] as not yet sent and queues its create under
+  /// the id the client minted; [sendBookmarks] sends it.
+  Future<void> queueBookmarkCreate(
+    String bookPid,
+    Bookmark mark, {
+    required String owner,
+  }) async {
+    await _outboxWrite(
+      () => db.transaction(() async {
+        await db
+            .into(db.mirrorBookmarks)
+            .insertOnConflictUpdate(
+              _bookmarkRow(bookPid, mark, owner, BookmarkSync.pending),
+            );
+        await _queueBookmarkWrite(_bookmarkCreate, bookPid, owner, {
+          'id': mark.id,
+          'positionMs': mark.positionMs,
+          'note': ?mark.note,
+        });
+      }),
+    );
+    _announceBookmarks(bookPid);
+  }
+
+  /// Removes [owner]'s mark [id], taking any create of it still waiting.
+  /// A refused one is only forgotten; any other is queued for deletion too,
+  /// since its create may be out, or have landed.
+  Future<void> queueBookmarkDelete(
+    String bookPid,
+    String id, {
+    required String owner,
+  }) async {
+    await _outboxWrite(
+      () => db.transaction(() async {
+        final mine =
+            db.mirrorBookmarks.id.equals(id) &
+            db.mirrorBookmarks.owner.equals(owner);
+        final row = await (db.select(
+          db.mirrorBookmarks,
+        )..where((_) => mine)).getSingleOrNull();
+        await (db.delete(db.mirrorBookmarks)..where((_) => mine)).go();
+        for (final w in await _bookmarkWrites(_bookmarkCreate, bookPid)) {
+          if (w.payload?['id'] == id && w.row.owner == owner) {
+            await (db.delete(
+              db.outboxMutations,
+            )..where((t) => t.id.equals(w.row.id))).go();
+          }
+        }
+        if (row?.syncState == BookmarkSync.refused.name) return;
+        await _queueBookmarkWrite(_bookmarkDelete, bookPid, owner, {'id': id});
+      }),
+    );
+    _announceBookmarks(bookPid);
+  }
+
+  /// Sends [bookPid]'s waiting bookmark writes now, whether or not the
+  /// socket is up. Refusals settle as a flush settles them; any other
+  /// failure is thrown, the writes still waiting.
+  Future<void> sendBookmarks(String bookPid) => _serialized(() async {
+    final owner = account;
+    if (owner == null) return;
+    final waiting =
+        await (db.select(db.outboxMutations)
+              ..where(
+                (t) =>
+                    t.pid.equals(bookPid) &
+                    t.kind.isIn([_bookmarkCreate, _bookmarkDelete]) &
+                    t.owner.equals(owner),
+              )
+              ..orderBy([(t) => OrderingTerm.asc(t.id)]))
+            .get();
+    try {
+      for (final m in waiting) {
+        await _sendBookmarkWrite(m);
+      }
+    } on WaxDeckApiException catch (e) {
+      _handleApiFailure(e);
+      rethrow;
+    }
+  });
+
+  Future<void> _queueBookmarkWrite(
+    String kind,
+    String bookPid,
+    String owner,
+    Map<String, Object?> write,
+  ) => db
+      .into(db.outboxMutations)
+      .insert(
+        OutboxMutationsCompanion.insert(
+          kind: kind,
+          pid: bookPid,
+          owner: Value(owner),
+          payload: Value(jsonEncode(write)),
+          recordedAt: DateTime.now(),
+        ),
+      );
+
+  /// The waiting bookmark writes of [kind] for [bookPid], decoded.
+  Future<List<({OutboxMutation row, Map<String, Object?>? payload})>>
+  _bookmarkWrites(String kind, String bookPid) async => [
+    for (final row in await (db.select(
+      db.outboxMutations,
+    )..where((t) => t.kind.equals(kind) & t.pid.equals(bookPid))).get())
+      (row: row, payload: _payloadOf(row.payload)),
+  ];
+
+  MirrorBookmarksCompanion _bookmarkRow(
+    String bookPid,
+    Bookmark mark,
+    String owner,
+    BookmarkSync sync,
+  ) => MirrorBookmarksCompanion.insert(
+    id: mark.id,
+    owner: owner,
+    bookPid: bookPid,
+    positionMs: mark.positionMs,
+    note: Value(mark.note),
+    createdAt: mark.createdAt,
+    syncState: sync.name,
+  );
+
+  void _announceBookmarks(String bookPid) {
+    if (!_bookmarksChanged.isClosed) _bookmarksChanged.add(bookPid);
+  }
+
+  /// Sends one waiting bookmark write; one that no longer reads is dropped.
+  Future<void> _sendBookmarkWrite(OutboxMutation m) async {
+    final write = _payloadOf(m.payload);
+    if (write == null) {
+      await (db.delete(
+        db.outboxMutations,
+      )..where((t) => t.id.equals(m.id))).go();
+      return;
+    }
+    await _flushBookmark(m, write);
+  }
+
+  /// Sends one waiting bookmark write. A refused create keeps what the
+  /// listener wrote, marked refused with the server's sentence, unless it
+  /// was removed on another device; any other failure is thrown.
+  Future<void> _flushBookmark(
+    OutboxMutation m,
+    Map<String, Object?> write,
+  ) async {
+    final id = write['id'] as String? ?? '';
+    final owner = m.owner ?? '';
+    try {
+      if (m.kind == _bookmarkCreate) {
+        final stored = await repository.createBookmark(
+          m.pid,
+          (write['positionMs'] as num?)?.toInt() ?? 0,
+          note: write['note'] as String?,
+          id: id,
+        );
+        await _settleBookmark(stored, owner);
+      } else {
+        await repository.deleteBookmark(m.pid, id);
+      }
+    } on WaxDeckApiException catch (e) {
+      if (!_permanent(e) && e.code != 'conflict') rethrow;
+      if (m.kind == _bookmarkCreate) {
+        final mark =
+            db.mirrorBookmarks.id.equals(id) &
+            db.mirrorBookmarks.owner.equals(owner);
+        if (e.params?['reason'] == 'removed') {
+          await (db.delete(db.mirrorBookmarks)..where((_) => mark)).go();
+        } else {
+          await (db.update(db.mirrorBookmarks)..where((_) => mark)).write(
+            MirrorBookmarksCompanion(
+              syncState: Value(BookmarkSync.refused.name),
+              refusal: Value(e.message),
+              refusalCode: Value(e.code),
+            ),
+          );
+        }
+      }
+    }
+    await (db.delete(db.outboxMutations)..where((t) => t.id.equals(m.id))).go();
+    _announceBookmarks(m.pid);
+  }
+
+  /// Marks a landed create synced. One removed while it was out has no
+  /// row left to settle; its removal was queued with it.
+  Future<void> _settleBookmark(Bookmark stored, String owner) =>
+      (db.update(
+        db.mirrorBookmarks,
+      )..where((t) => t.id.equals(stored.id) & t.owner.equals(owner))).write(
+        MirrorBookmarksCompanion(
+          positionMs: Value(stored.positionMs),
+          note: Value(stored.note),
+          createdAt: Value(stored.createdAt),
+          syncState: Value(BookmarkSync.synced.name),
+        ),
+      );
 
   /// Queues a finished listen session; the session id is the
   /// idempotency key, so a duplicate flush can never double-count.
@@ -776,6 +1142,7 @@ class SyncEngine {
             finished: Value(session.finished),
             client: Value(session.client ?? ''),
             skippedMs: Value(session.skippedMs),
+            owner: Value(account),
           ),
           mode: InsertMode.insertOrIgnore,
         );
@@ -790,9 +1157,14 @@ class SyncEngine {
       db.outboxMutations,
     )..orderBy([(t) => OrderingTerm.asc(t.id)])).get();
     for (final m in mutations) {
+      // What an account queued waits for it; see [account].
+      if (m.owner != null && m.owner != account) continue;
       if (m.kind == _prefsKind) {
-        // A patch waits for its own account; see [prefsOwner].
-        if (m.pid == prefsOwner) await _flushPrefs(m);
+        if (m.pid == account) await _flushPrefs(m);
+        continue;
+      }
+      if (m.kind == _bookmarkCreate || m.kind == _bookmarkDelete) {
+        await _sendBookmarkWrite(m);
         continue;
       }
       try {
@@ -838,7 +1210,9 @@ class SyncEngine {
       )..where((t) => t.id.equals(m.id))).go();
     }
 
-    final listens = await db.select(db.outboxListens).get();
+    final listens = await (db.select(
+      db.outboxListens,
+    )..where((t) => _heldBy(t.owner, account))).get();
     if (listens.isNotEmpty) {
       for (var i = 0; i < listens.length; i += 500) {
         final batch = listens.sublist(i, math.min(i + 500, listens.length));
@@ -867,7 +1241,7 @@ class SyncEngine {
   /// patch that no longer reads, drops it and is reported; any other
   /// failure is thrown, the patch still waiting.
   Future<void> _flushPrefs(OutboxMutation m) async {
-    final sent = _patchOf(m.payload);
+    final sent = _payloadOf(m.payload);
     Prefs? stored;
     if (sent != null) {
       try {
@@ -916,7 +1290,7 @@ class SyncEngine {
       return pendingPrefsPatch(m.pid);
     }
     final waiting = await pendingPrefsPatch(m.pid);
-    await _coalesce(_prefsKind, m.pid);
+    await _coalesce(_prefsKind, m.pid, m.pid);
     if (waiting == null) return null;
     final left = unsettledPrefsPatch(waiting, sent);
     if (left.isEmpty) return null;
@@ -926,6 +1300,7 @@ class SyncEngine {
           OutboxMutationsCompanion.insert(
             kind: _prefsKind,
             pid: m.pid,
+            owner: Value(m.pid),
             payload: Value(jsonEncode(left)),
             recordedAt: DateTime.now(),
           ),
@@ -943,8 +1318,12 @@ class SyncEngine {
       stop();
       return;
     }
-    // Transient: drop to offline; the reconnect loop retries.
-    _channel?.close();
+    // Transient: drop to offline; the reconnect loop retries. Said here,
+    // since closing the channel cancels its own done callback.
+    final channel = _channel;
+    if (channel == null) return;
+    unawaited(channel.close());
+    _onChannelDown();
   }
 
   MirrorItemsCompanion _itemRow(ItemSummary item) {

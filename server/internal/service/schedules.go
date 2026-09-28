@@ -170,16 +170,19 @@ func (l *Library) MarkScheduleRun(ctx context.Context, kind string, runErr error
 }
 
 // RunPrune is the scheduled prune pass: event log, mutation stamps,
-// audit log, ended playback sessions, finished tool tasks, and analysis
-// rows that will never come good. Horizons are deliberately
-// server-owned constants; sync consumers whose cursor falls below the
-// surviving event floor get a clean resync by design.
+// bookmark tombstones, audit log, ended playback sessions, finished tool
+// tasks, and analysis rows that will never come good. Horizons are
+// deliberately server-owned constants; sync consumers whose cursor falls
+// below the surviving event floor get a clean resync by design.
 func (l *Library) RunPrune(ctx context.Context) error {
 	const (
-		keepEvents      = 100_000
-		keepAudit       = 50_000
-		stampRetention  = 365 * 24 * time.Hour
-		keepSessionsPer = 5
+		keepEvents     = 100_000
+		keepAudit      = 50_000
+		stampRetention = 365 * 24 * time.Hour
+		// A replay the tombstone refuses comes from a device offline this
+		// long, the same year the stamps guard position replays for.
+		tombstoneRetention = 365 * 24 * time.Hour
+		keepSessionsPer    = 5
 		// A week since the row last tried, because it is a give-up rather
 		// than a receipt and deleting it re-opens the work. Long enough
 		// that a file broken for good costs about five attempts a week
@@ -207,6 +210,11 @@ func (l *Library) RunPrune(ctx context.Context) error {
 	record("play stamps", err)
 	if sn > 0 {
 		l.log.Info("pruned play stamps", "rows", sn)
+	}
+	bn, err := l.db.PruneBookmarkTombstones(ctx, time.Now().Add(-tombstoneRetention).UnixNano())
+	record("bookmark tombstones", err)
+	if bn > 0 {
+		l.log.Info("pruned bookmark tombstones", "rows", bn)
 	}
 	an, err := l.db.PruneAudit(ctx, keepAudit)
 	record("audit log", err)

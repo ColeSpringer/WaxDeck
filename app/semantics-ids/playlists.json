@@ -21,6 +21,7 @@
     "playlistExportCopy": "playlist-export-copy",
     "playlistExportM3u": "playlist-export-m3u",
     "playlistExportNsp": "playlist-export-nsp",
+    "playlistExportNspKeeps": "playlist-export-nsp-keeps",
     "playlistExportNspLoss": "playlist-export-nsp-loss",
     "playlistExportNspLossRow": "playlist-export-nsp-loss-{index}",
     "playlistExportNspProceed": "playlist-export-nsp-proceed",

@@ -201,12 +201,16 @@ test('the book player spans a chapter, and bookmarks keep a place', async ({ app
   await app.player.addBookmark('the riddle');
   await expect(app.player.bookmark(0)).toBeVisible();
 
-  const stored = await app.api.get('/books/{pid}/bookmarks', { path: { pid: book.pid } });
-  expect(
-    stored.bookmarks,
-    'the mark should belong to the account, on the server',
-  ).toHaveLength(1);
-  expect(stored.bookmarks![0].note).toBe('the riddle');
+  // The row is placed before its create is sent, so the server is polled.
+  await expect
+    .poll(
+      async () =>
+        (
+          await app.api.tryGet('/books/{pid}/bookmarks', { path: { pid: book.pid } })
+        )?.bookmarks?.map((mark) => mark.note) ?? [],
+      { timeout: T.fetch, message: 'the mark should belong to the account, on the server' },
+    )
+    .toEqual(['the riddle']);
 
   // And removing it is the listener's, not a side effect of listening
   // past it.

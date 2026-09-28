@@ -476,13 +476,17 @@ abstract interface class WaxDeckRepository {
   Future<BookSettings> putBookSettings(String pid, BookSettings settings);
 
   /// `GET /books/{pid}/bookmarks`: the caller's marks in one book, in
-  /// timeline order. A live read rather than mirrored state: a book
-  /// holds a handful of these and the sheet that shows them fetches on
-  /// open.
+  /// timeline order.
   Future<List<Bookmark>> listBookmarks(String pid);
 
-  /// `POST /books/{pid}/bookmarks`: mark a place on the book timeline.
-  Future<Bookmark> createBookmark(String pid, int positionMs, {String? note});
+  /// `POST /books/{pid}/bookmarks`: mark a place on the book timeline,
+  /// under [id] when the client minted one (a replay answers the mark).
+  Future<Bookmark> createBookmark(
+    String pid,
+    int positionMs, {
+    String? note,
+    String? id,
+  });
 
   /// `DELETE /books/{pid}/bookmarks/{bookmarkId}`: remove one mark.
   Future<void> deleteBookmark(String pid, String bookmarkId);
@@ -669,13 +673,12 @@ abstract interface class WaxDeckRepository {
   Future<NspReport> reportPlaylistNspExport(String pid);
 
   /// `GET /playlists/{pid}/nsp`: the smart playlist's rule as a
-  /// Navidrome document. Refuses when the rule holds anything NSP
-  /// cannot say, naming every offender; [partial] drops those parts
-  /// and writes the rest, which is a choice to make after reading
-  /// [reportPlaylistNspExport].
+  /// Navidrome document. [partial] drops what NSP cannot say instead of
+  /// refusing; [ruleHash] (from the report) refuses a rule edited since.
   Future<Map<String, Object?>> exportPlaylistNsp(
     String pid, {
     bool partial = false,
+    String? ruleHash,
   });
 
   /// `GET /shares`: the caller's share links, newest first. [all] lists
@@ -1522,9 +1525,26 @@ abstract interface class WaxDeckRepository {
   Future<EnrichmentStatus> getEnrichmentStatus();
 
   /// `POST /library/enrichment/run`: starts a library-wide enrichment
-  /// pass, returning the job pid. [force] refetches artifacts that
-  /// already exist.
-  Future<String> runEnrichment({bool force = false});
+  /// pass, returning the job pid. [force] re-asks everything,
+  /// [forcePhases] the named phases alone.
+  Future<String> runEnrichment({
+    bool force = false,
+    List<String> forcePhases = const [],
+  });
+
+  /// `PUT /library/enrichment/sources`: the order this server's own
+  /// providers are asked in, and which are asked at all.
+  Future<EnrichmentStatus> putEnrichmentSources(List<EnrichmentSource> sources);
+
+  /// `GET /admin/enrichment-cache`: what the response cache holds.
+  Future<EnrichmentCacheReport> getEnrichmentCache();
+
+  /// `POST /admin/enrichment-cache/prune`: drops cached answers older
+  /// than [olderThanSeconds], or down to [maxBytes].
+  Future<EnrichmentCachePruneResult> pruneEnrichmentCache({
+    int? olderThanSeconds,
+    int? maxBytes,
+  });
 
   /// `GET /users`: keyset-paginated accounts (administrators).
   Future<UserPage> listUsers({String? cursor, int? limit});
@@ -1822,6 +1842,9 @@ abstract interface class WaxDeckRepository {
 
   /// `GET /jobs`: currently known background jobs (administrators).
   Future<List<Job>> listJobs();
+
+  /// `GET /jobs/{pid}`: one catalog job's state and progress.
+  Future<Job> getJob(String pid);
 
   /// `GET /libraries/{pid}/read-only`: whether one library refuses
   /// content mutations (administrators).
@@ -2800,18 +2823,23 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<Bookmark> createBookmark(String pid, int positionMs, {String? note}) =>
-      _guard(() async {
-        final response = await _gen.getBooksApi().createBookmark(
-          pid: pid,
-          bookmarkCreate: gen.BookmarkCreate(
-            (b) => b
-              ..positionMs = positionMs
-              ..note = note,
-          ),
-        );
-        return bookmarkFromGen(_require(response.data));
-      });
+  Future<Bookmark> createBookmark(
+    String pid,
+    int positionMs, {
+    String? note,
+    String? id,
+  }) => _guard(() async {
+    final response = await _gen.getBooksApi().createBookmark(
+      pid: pid,
+      bookmarkCreate: gen.BookmarkCreate(
+        (b) => b
+          ..id = id
+          ..positionMs = positionMs
+          ..note = note,
+      ),
+    );
+    return bookmarkFromGen(_require(response.data));
+  });
 
   @override
   Future<void> deleteBookmark(String pid, String bookmarkId) => _guard(
@@ -3165,6 +3193,7 @@ class WaxDeckClient implements WaxDeckRepository {
   Future<Map<String, Object?>> exportPlaylistNsp(
     String pid, {
     bool partial = false,
+    String? ruleHash,
   }) => _guard(() async {
     final response = await _gen.getPlaylistsApi().exportPlaylistNsp(
       pid: pid,
@@ -3172,6 +3201,7 @@ class WaxDeckClient implements WaxDeckRepository {
       // wire, and sending it always would put a query string on every
       // strict export for nothing.
       partial: partial ? true : null,
+      ruleHash: ruleHash,
     );
     // The document is another server's grammar, carried verbatim. It
     // stays a map: nothing here reads it, and a model of it would be a
@@ -4718,11 +4748,54 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<String> runEnrichment({bool force = false}) => _guard(() async {
+  Future<String> runEnrichment({
+    bool force = false,
+    List<String> forcePhases = const [],
+  }) => _guard(() async {
     final response = await _gen.getEnrichmentApi().runEnrichment(
-      enrichmentRunRequest: gen.EnrichmentRunRequest((b) => b..force = force),
+      enrichmentRunRequest: gen.EnrichmentRunRequest((b) {
+        b.force = force;
+        if (forcePhases.isNotEmpty) {
+          b.forcePhases.addAll(forcePhases.map(enrichmentPhaseToGen));
+        }
+      }),
     );
     return _require(response.data).jobPid;
+  });
+
+  @override
+  Future<EnrichmentStatus> putEnrichmentSources(
+    List<EnrichmentSource> sources,
+  ) => _guard(() async {
+    final response = await _gen.getEnrichmentApi().putEnrichmentSources(
+      enrichmentSourcesUpdate: enrichmentSourcesToGen(sources),
+    );
+    return enrichmentStatusFromGen(_require(response.data));
+  });
+
+  @override
+  Future<EnrichmentCacheReport> getEnrichmentCache() => _guard(() async {
+    final response = await _gen.getAdminApi().getEnrichmentCache();
+    return enrichmentCacheReportFromGen(_require(response.data));
+  });
+
+  @override
+  Future<EnrichmentCachePruneResult> pruneEnrichmentCache({
+    int? olderThanSeconds,
+    int? maxBytes,
+  }) => _guard(() async {
+    final response = await _gen.getAdminApi().pruneEnrichmentCache(
+      enrichmentCachePruneRequest: gen.EnrichmentCachePruneRequest(
+        (b) => b
+          ..olderThanSeconds = olderThanSeconds
+          ..maxBytes = maxBytes,
+      ),
+    );
+    final result = _require(response.data);
+    return EnrichmentCachePruneResult(
+      removed: result.removed,
+      freedBytes: result.freedBytes,
+    );
   });
 
   @override
@@ -5292,6 +5365,12 @@ class WaxDeckClient implements WaxDeckRepository {
   Future<List<Job>> listJobs() => _guard(() async {
     final response = await _gen.getAdminApi().listJobs();
     return _require(response.data).jobs.map(jobFromGen).toList(growable: false);
+  });
+
+  @override
+  Future<Job> getJob(String pid) => _guard(() async {
+    final response = await _gen.getAdminApi().getJob(pid: pid);
+    return jobFromGen(_require(response.data));
   });
 
   @override

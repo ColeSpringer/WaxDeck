@@ -8,10 +8,9 @@ import (
 	"time"
 )
 
-// Embedding is one stored track embedding. Essence is the key: identical
-// audio bytes carry identical essences across retags and re-rips, so a
-// vector survives everything short of a re-encode. Vector is the packed
-// little-endian float32 form; the similarity engine owns the encoding.
+// Embedding is one stored track embedding. Essence is the analysis key:
+// the audio essence, or essence@window for a cue-carved track, so never a
+// bare catalog essence to join on. Vector is packed little-endian float32.
 type Embedding struct {
 	Essence   string
 	ItemPID   string
@@ -245,10 +244,14 @@ func (d *DB) EnqueueSimilarity(ctx context.Context, essence, itemPID string) err
 // Attempts grow only on a lease, and a re-rip starts fresh.
 const maxAnalysisAttempts = 8
 
+// CarvedKeyMark joins a carved track's frame window to its file's essence
+// in an analysis key (essence@start-end); a whole file's key is bare.
+const CarvedKeyMark = "@"
+
 // LeaseSimilarityWork leases up to limit queue rows for a worker. The
 // lease expires on its own, so a crashed worker's items return to the
-// queue without cleanup.
-func (d *DB) LeaseSimilarityWork(ctx context.Context, limit int, lease time.Duration) ([]SimilarityWork, error) {
+// queue without cleanup. Without windows, carved keys wait.
+func (d *DB) LeaseSimilarityWork(ctx context.Context, limit int, lease time.Duration, windows bool) ([]SimilarityWork, error) {
 	// One clock read for both ends, and expired at now rather than
 	// before it: a zero lease is over when taken, and Windows' clock
 	// need not tick between two reads in one loop.
@@ -260,11 +263,11 @@ func (d *DB) LeaseSimilarityWork(ctx context.Context, limit int, lease time.Dura
 		SET lease_until_ns = ?, attempts = attempts + 1
 		WHERE essence IN (
 			SELECT essence FROM similarity_queue
-			WHERE lease_until_ns <= ? AND attempts < ?
+			WHERE lease_until_ns <= ? AND attempts < ? AND (? OR instr(essence, ?) = 0)
 			ORDER BY enqueued_at_ns
 			LIMIT ?
 		)
-		RETURNING essence, item_pid`, until, nowNS, maxAnalysisAttempts, limit)
+		RETURNING essence, item_pid`, until, nowNS, maxAnalysisAttempts, windows, CarvedKeyMark, limit)
 	if err != nil {
 		return nil, fmt.Errorf("db: leasing analysis work: %w", err)
 	}
@@ -288,6 +291,37 @@ func (d *DB) CompleteSimilarityWork(ctx context.Context, essence string) error {
 		return fmt.Errorf("db: completing analysis work: %w", err)
 	}
 	return nil
+}
+
+// RetireSimilarityWork rests a key whose audio cannot be analyzed: never
+// leased again, and never queued again while the row stands. Changed audio
+// is a new key.
+func (d *DB) RetireSimilarityWork(ctx context.Context, key, reason string) error {
+	_, err := d.w.ExecContext(ctx, `
+		UPDATE similarity_queue SET attempts = ?, lease_until_ns = 0, last_error = ?
+		WHERE essence = ?`, maxAnalysisAttempts, reason, key)
+	if err != nil {
+		return fmt.Errorf("db: retiring analysis work: %w", err)
+	}
+	return nil
+}
+
+// SimilarityWorkKeys lists every queued key, resting ones included.
+func (d *DB) SimilarityWorkKeys(ctx context.Context) ([]string, error) {
+	rows, err := d.r.QueryContext(ctx, `SELECT essence FROM similarity_queue`)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing analysis work: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var key string
+		if err := rows.Scan(&key); err != nil {
+			return nil, fmt.Errorf("db: listing analysis work: %w", err)
+		}
+		out = append(out, key)
+	}
+	return out, rows.Err()
 }
 
 // SimilarityQueueDepth reports how many tracks await analysis.

@@ -16,16 +16,17 @@ part 'enrichment_status.g.dart';
 /// Enrichment providers and coverage.
 ///
 /// Properties:
-/// * [providers] - Registered providers in priority order (this server's own first, then the catalog's key-free built-ins). 
+/// * [providers] - Registered providers in the order they are asked: this server's own in the operator's order, then the catalog's key-free built-ins. 
 /// * [coverage] 
 /// * [running] - Whether a whole-library pass is running now.
-/// * [configured] - Whether a whole-library pass would do anything: some phase can run. That is true on any server carrying a provider that gates a phase of its own, and true on every server with a MusicBrainz contact. Read `phases` for which half.  False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key. 
+/// * [runningJob] - The running pass's job pid, when one runs; `GET /jobs/{pid}` follows it more cheaply than this read. 
+/// * [configured] - Whether a whole-library pass would do anything: some phase can run, which a switched-on provider gating one or a MusicBrainz contact makes true. Read `phases` for which.  False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key. 
 /// * [musicbrainzConfigured] - Whether the MusicBrainz identity phases can run, which needs the `WAXDECK_ENRICHMENT_CONTACT` boot setting. The Cover Art Archive and LRCLIB wait on it too; the provider-gated phases do not. 
-/// * [phases] - The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider, the rest a provider. 
+/// * [phases] - The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider switched on, the rest one. 
 /// * [lastRun] 
 @BuiltValue()
 abstract class EnrichmentStatus implements Built<EnrichmentStatus, EnrichmentStatusBuilder> {
-  /// Registered providers in priority order (this server's own first, then the catalog's key-free built-ins). 
+  /// Registered providers in the order they are asked: this server's own in the operator's order, then the catalog's key-free built-ins. 
   @BuiltValueField(wireName: r'providers')
   BuiltList<EnrichmentProvider> get providers;
 
@@ -36,7 +37,11 @@ abstract class EnrichmentStatus implements Built<EnrichmentStatus, EnrichmentSta
   @BuiltValueField(wireName: r'running')
   bool get running;
 
-  /// Whether a whole-library pass would do anything: some phase can run. That is true on any server carrying a provider that gates a phase of its own, and true on every server with a MusicBrainz contact. Read `phases` for which half.  False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key. 
+  /// The running pass's job pid, when one runs; `GET /jobs/{pid}` follows it more cheaply than this read. 
+  @BuiltValueField(wireName: r'runningJob')
+  String? get runningJob;
+
+  /// Whether a whole-library pass would do anything: some phase can run, which a switched-on provider gating one or a MusicBrainz contact makes true. Read `phases` for which.  False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key. 
   @BuiltValueField(wireName: r'configured')
   bool get configured;
 
@@ -44,7 +49,7 @@ abstract class EnrichmentStatus implements Built<EnrichmentStatus, EnrichmentSta
   @BuiltValueField(wireName: r'musicbrainzConfigured')
   bool get musicbrainzConfigured;
 
-  /// The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider, the rest a provider. 
+  /// The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider switched on, the rest one. 
   @BuiltValueField(wireName: r'phases')
   BuiltList<EnrichmentPhase> get phases;
 
@@ -89,6 +94,13 @@ class _$EnrichmentStatusSerializer implements PrimitiveSerializer<EnrichmentStat
       object.running,
       specifiedType: const FullType(bool),
     );
+    if (object.runningJob != null) {
+      yield r'runningJob';
+      yield serializers.serialize(
+        object.runningJob,
+        specifiedType: const FullType(String),
+      );
+    }
     yield r'configured';
     yield serializers.serialize(
       object.configured,
@@ -154,6 +166,14 @@ class _$EnrichmentStatusSerializer implements PrimitiveSerializer<EnrichmentStat
             specifiedType: const FullType(bool),
           ) as bool;
           result.running = valueDes;
+          break;
+        case r'runningJob':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.runningJob = valueDes;
           break;
         case r'configured':
           final valueDes = serializers.deserialize(

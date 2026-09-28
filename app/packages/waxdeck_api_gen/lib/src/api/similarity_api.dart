@@ -108,7 +108,7 @@ class SimilarityApi {
   }
 
   /// Pull analysis work (worker)
-  /// Leases a batch of tracks awaiting embedding. Each work item names the track and where to pull decode-ready audio; the worker computes an embedding per item and posts the batch back. Leases expire on their own, so a crashed worker&#39;s items return to the queue without cleanup. An empty batch means the library is fully embedded; workers should sleep &#x60;retryAfterSeconds&#x60; before polling again. Requires the worker token. 
+  /// Leases a batch of tracks awaiting embedding, each naming where to pull its decode-ready audio (a cue-carved track&#39;s own window). Leases lapse on their own; an empty batch means sleep &#x60;retryAfterSeconds&#x60;. Worker token.  A server without the streaming engine cannot serve a carved track&#39;s window, so it keeps those tracks for its own analysis. 
   ///
   /// Parameters:
   /// * [limit] - Maximum work items leased.
@@ -194,7 +194,7 @@ class SimilarityApi {
   }
 
   /// Post computed embeddings (worker)
-  /// Records a batch of computed embeddings. Vectors are keyed by the track&#39;s audio essence, so an identical rip re-imported later never needs re-analysis. All vectors in one batch carry the batch&#39;s &#x60;model&#x60; and &#x60;dims&#x60;; a vector whose length differs from &#x60;dims&#x60; is rejected per item. Posting a different &#x60;model&#x60; than the stored vectors replaces coverage model-wide: mixed models never compare, so the server drops stored vectors of other models as new ones arrive. Ingest also maintains the nearest-neighbor graph that powers sonic paths. Requires the worker token. 
+  /// Records a batch of embeddings, keyed by each item&#39;s analysis key, in the batch&#39;s &#x60;model&#x60; and &#x60;dims&#x60; (a vector of another length is refused alone). A new &#x60;model&#x60; replaces coverage, since models never mix. Worker token. 
   ///
   /// Parameters:
   /// * [embeddingReport] 

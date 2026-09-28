@@ -1,4 +1,4 @@
-/// Listen-session idempotency IDs.
+/// Client-minted identifiers: listen-session keys and ULIDs.
 library;
 
 import 'dart:math';
@@ -28,4 +28,20 @@ String newListenSessionId() {
     buffer.write(_crockford[_random.nextInt(_crockford.length)]);
   }
   return buffer.toString();
+}
+
+/// Returns a fresh ULID: a millisecond timestamp and 80 random bits in
+/// Crockford base32, so it sorts by when it was minted and the server's
+/// strict parse takes it (the first character is at most 7).
+String newUlid() {
+  var time = DateTime.now().millisecondsSinceEpoch;
+  final chars = List<String>.filled(26, '0');
+  for (var i = 9; i >= 0; i--) {
+    chars[i] = _crockford[time % 32];
+    time ~/= 32;
+  }
+  for (var i = 10; i < 26; i++) {
+    chars[i] = _crockford[_random.nextInt(32)];
+  }
+  return chars.join();
 }

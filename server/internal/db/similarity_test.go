@@ -88,7 +88,7 @@ func TestLeaseSimilarityWorkExpiry(t *testing.T) {
 		t.Fatal(err)
 	}
 	const lease = 30 * time.Millisecond
-	work, err := d.LeaseSimilarityWork(ctx, 10, lease)
+	work, err := d.LeaseSimilarityWork(ctx, 10, lease, true)
 	if err != nil || len(work) != 1 {
 		t.Fatalf("first lease = (%v, %v), want one item", work, err)
 	}
@@ -96,14 +96,14 @@ func TestLeaseSimilarityWorkExpiry(t *testing.T) {
 		t.Fatalf("leased item = %+v", work[0])
 	}
 	// A live lease hides the row.
-	work, err = d.LeaseSimilarityWork(ctx, 10, lease)
+	work, err = d.LeaseSimilarityWork(ctx, 10, lease, true)
 	if err != nil || len(work) != 0 {
 		t.Fatalf("re-lease inside the window = (%v, %v), want empty", work, err)
 	}
 	// After expiry the item returns on its own; a crashed worker needs
 	// no cleanup.
 	time.Sleep(2 * lease)
-	work, err = d.LeaseSimilarityWork(ctx, 10, lease)
+	work, err = d.LeaseSimilarityWork(ctx, 10, lease, true)
 	if err != nil || len(work) != 1 {
 		t.Fatalf("post-expiry lease = (%v, %v), want one item", work, err)
 	}
@@ -115,7 +115,7 @@ func TestLeaseSimilarityWorkExpiry(t *testing.T) {
 		t.Fatalf("queue depth after completion = %d, want 0", n)
 	}
 	time.Sleep(2 * lease)
-	if work, err := d.LeaseSimilarityWork(ctx, 10, lease); err != nil || len(work) != 0 {
+	if work, err := d.LeaseSimilarityWork(ctx, 10, lease, true); err != nil || len(work) != 0 {
 		t.Fatalf("lease after completion = (%v, %v), want empty", work, err)
 	}
 }
@@ -238,12 +238,12 @@ func TestLeaseSimilarityWorkAttemptCap(t *testing.T) {
 	// forever: past the cap it stops being offered and leaves the
 	// reported queue depth.
 	for i := 0; i < maxAnalysisAttempts; i++ {
-		work, err := d.LeaseSimilarityWork(ctx, 10, 0)
+		work, err := d.LeaseSimilarityWork(ctx, 10, 0, true)
 		if err != nil || len(work) != 1 {
 			t.Fatalf("lease %d = (%v, %v), want the item", i+1, work, err)
 		}
 	}
-	work, err := d.LeaseSimilarityWork(ctx, 10, 0)
+	work, err := d.LeaseSimilarityWork(ctx, 10, 0, true)
 	if err != nil || len(work) != 0 {
 		t.Fatalf("post-cap lease = (%v, %v), want empty", work, err)
 	}
@@ -277,5 +277,50 @@ func TestEmbeddingItemPIDsBatch(t *testing.T) {
 	empty, err := d.EmbeddingItemPIDs(ctx, nil)
 	if err != nil || len(empty) != 0 {
 		t.Fatalf("empty batch = (%v, %v), want empty map", empty, err)
+	}
+}
+
+// A worker that cannot read a window is not leased a carved track's key,
+// and the key waits untouched for one that can.
+func TestALeaseWithoutWindowsPassesCarvedKeysOver(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	carved := "rip" + CarvedKeyMark + "0-225"
+	for _, key := range []string{"whole", carved} {
+		if err := d.EnqueueSimilarity(ctx, key, "it-"+key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	work, err := d.LeaseSimilarityWork(ctx, 10, time.Hour, false)
+	if err != nil || len(work) != 1 || work[0].Essence != "whole" {
+		t.Fatalf("lease without windows = %+v (%v), want the whole file alone", work, err)
+	}
+	work, err = d.LeaseSimilarityWork(ctx, 10, time.Hour, true)
+	if err != nil || len(work) != 1 || work[0].Essence != carved {
+		t.Fatalf("lease with windows = %+v (%v), want the carved key", work, err)
+	}
+}
+
+// A retired key rests: never leased, not counted, and not queued again.
+func TestARetiredKeyRests(t *testing.T) {
+	d := openTest(t)
+	ctx := context.Background()
+	if err := d.EnqueueSimilarity(ctx, "rip@0-225", "it-1"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.RetireSimilarityWork(ctx, "rip@0-225", "too short"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.EnqueueSimilarity(ctx, "rip@0-225", "it-1"); err != nil {
+		t.Fatal(err)
+	}
+	if work, err := d.LeaseSimilarityWork(ctx, 10, 0, true); err != nil || len(work) != 0 {
+		t.Fatalf("a retired key leased as %+v (%v)", work, err)
+	}
+	if n, err := d.SimilarityQueueDepth(ctx); err != nil || n != 0 {
+		t.Fatalf("depth = %d (%v), want the retired key uncounted", n, err)
+	}
+	if keys, err := d.SimilarityWorkKeys(ctx); err != nil || len(keys) != 1 {
+		t.Fatalf("keys = %v (%v), want the resting row listed", keys, err)
 	}
 }

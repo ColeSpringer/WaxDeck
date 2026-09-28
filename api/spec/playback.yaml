@@ -614,15 +614,13 @@ paths:
         everywhere. `POST /library/analyze` and the `analyze` schedule are
         what produce them.
 
-        `peaks` is one value per bucket, `0` silence and `255` full
-        scale, at the fixed `resolution` the catalog stores (1000 buckets
-        per track today, about a kilobyte). There is no `points`
-        parameter: a resizable seek bar has to downsample to its own
-        pixel width anyway, and a server-side width would add a query
-        dimension to the cache key for work the renderer does for free.
-        The stored values are 16-bit and narrowed to a byte here, so the
-        low bits are dropped rather than rounded; that is invisible at
-        any width a seek bar is drawn at.
+        `peaks` is one value per bucket, `0` silence and `255` full scale,
+        at the `resolution` the catalog stores (1000 buckets a file today);
+        downsample to the width drawn. Stored 16-bit, narrowed by truncation.
+
+        A cue-carved track answers its window of its file's envelope:
+        `resolution` is its share of the buckets, `essenceHash` names the
+        file, and the `ETag` carries the window and the length placing it.
 
         Waveforms are per audio file: for a multi-file audiobook, pass
         `partIndex` to get the envelope of one part, in that part's own
@@ -649,18 +647,13 @@ paths:
         silence somebody could seek into, which is a convincing wrong
         answer rather than a partial one.
 
-        `state` is `ready`, `pending` (this item is analyzable and has
-        not been analyzed yet; poll again after an analyze pass), or
-        `unavailable` (there will never be a waveform for this item).
-        Read `unavailable` as final. Three populations answer it: podcast
-        episodes, which are deliberately never analyzed; a track carved
-        out of a shared file by a cue sheet, which has no envelope of
-        its own to report; and a file the pass analyzed but could not
-        measure, which is not retried until its audio changes. A client
-        should draw its plain seek bar for `unavailable` rather than
-        spinning. A book part whose file has simply not been analyzed
-        yet is `pending`, not `unavailable`, so a partly analyzed book
-        can report the two states across its parts.
+        `state` is `ready`, `pending` (not analyzed yet; ask after a pass),
+        or `unavailable`, which is final: an episode, a file the pass could
+        not measure, or a carved track its file's stated length cannot place.
+
+
+        A book part not yet analyzed is `pending`, so a partly analyzed
+        book can report both states across its parts.
 
         A `ready` answer is content-addressed by the audio essence of
         the file being described (so a multi-file book's parts carry
@@ -699,10 +692,9 @@ paths:
           headers:
             ETag:
               description: >
-                Validator derived from the audio essence of the file
-                being described, which for a multi-file book is the
-                requested part. Present on `ready` only; the other two
-                states are not cacheable.
+                The described file's audio essence (a multi-file book's
+                requested part), plus a carved track's window and the length
+                placing it. Present on `ready` only.
               schema:
                 type: string
             Cache-Control:
@@ -1464,9 +1456,9 @@ components:
         resolution:
           type: integer
           description: >
-            How many buckets `peaks` carries (`ready` only). Fixed by the
-            catalog at 1000 today; read it rather than assuming, because
-            an analysis version bump may change it.
+            How many buckets `peaks` carries (`ready` only): 1000 per
+            file today, a carved track's share of its file's; read it
+            rather than assuming.
           example: 1000
         essenceHash:
           type: string

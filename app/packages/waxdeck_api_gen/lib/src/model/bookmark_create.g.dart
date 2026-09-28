@@ -8,6 +8,8 @@ part of 'bookmark_create.dart';
 
 class _$BookmarkCreate extends BookmarkCreate {
   @override
+  final String? id;
+  @override
   final int positionMs;
   @override
   final String? note;
@@ -15,7 +17,8 @@ class _$BookmarkCreate extends BookmarkCreate {
   factory _$BookmarkCreate([void Function(BookmarkCreateBuilder)? updates]) =>
       (BookmarkCreateBuilder()..update(updates))._build();
 
-  _$BookmarkCreate._({required this.positionMs, this.note}) : super._();
+  _$BookmarkCreate._({this.id, required this.positionMs, this.note})
+    : super._();
   @override
   BookmarkCreate rebuild(void Function(BookmarkCreateBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -27,6 +30,7 @@ class _$BookmarkCreate extends BookmarkCreate {
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
     return other is BookmarkCreate &&
+        id == other.id &&
         positionMs == other.positionMs &&
         note == other.note;
   }
@@ -34,6 +38,7 @@ class _$BookmarkCreate extends BookmarkCreate {
   @override
   int get hashCode {
     var _$hash = 0;
+    _$hash = $jc(_$hash, id.hashCode);
     _$hash = $jc(_$hash, positionMs.hashCode);
     _$hash = $jc(_$hash, note.hashCode);
     _$hash = $jf(_$hash);
@@ -43,6 +48,7 @@ class _$BookmarkCreate extends BookmarkCreate {
   @override
   String toString() {
     return (newBuiltValueToStringHelper(r'BookmarkCreate')
+          ..add('id', id)
           ..add('positionMs', positionMs)
           ..add('note', note))
         .toString();
@@ -52,6 +58,10 @@ class _$BookmarkCreate extends BookmarkCreate {
 class BookmarkCreateBuilder
     implements Builder<BookmarkCreate, BookmarkCreateBuilder> {
   _$BookmarkCreate? _$v;
+
+  String? _id;
+  String? get id => _$this._id;
+  set id(String? id) => _$this._id = id;
 
   int? _positionMs;
   int? get positionMs => _$this._positionMs;
@@ -68,6 +78,7 @@ class BookmarkCreateBuilder
   BookmarkCreateBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
+      _id = $v.id;
       _positionMs = $v.positionMs;
       _note = $v.note;
       _$v = null;
@@ -92,6 +103,7 @@ class BookmarkCreateBuilder
     final _$result =
         _$v ??
         _$BookmarkCreate._(
+          id: id,
           positionMs: BuiltValueNullFieldError.checkNotNull(
             positionMs,
             r'BookmarkCreate',

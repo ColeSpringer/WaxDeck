@@ -147,7 +147,9 @@ Conventions:
   defined for `feature` so far is `windowed-track` (a track that is a
   window into a larger file, sent to a device endpoint on a server
   running without the streaming engine), and other refusals under
-  that code carry no params yet. Values are
+  that code carry no params yet. Under `conflict`, a bookmark create
+  replaying the id of a removed bookmark carries `reason: removed`,
+  and a client drops its copy. Values are
   strings even when they read as numbers. Clients must ignore keys
   they do not know, and an absent `params` means the plain code.
 - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
@@ -419,6 +421,7 @@ Class | Method | HTTP request | Description
 [*DiscoveryApi*](doc/DiscoveryApi.md) | [**getSimilarTracks**](doc/DiscoveryApi.md#getsimilartracks) | **GET** /items/{pid}/similar | Similar tracks
 [*DiscoveryApi*](doc/DiscoveryApi.md) | [**getSonicPath**](doc/DiscoveryApi.md#getsonicpath) | **GET** /mixes/path | Sonic path between two tracks
 [*EnrichmentApi*](doc/EnrichmentApi.md) | [**getEnrichmentStatus**](doc/EnrichmentApi.md#getenrichmentstatus) | **GET** /library/enrichment | Enrichment status and coverage
+[*EnrichmentApi*](doc/EnrichmentApi.md) | [**putEnrichmentSources**](doc/EnrichmentApi.md#putenrichmentsources) | **PUT** /library/enrichment/sources | Order and switch the enrichment sources
 [*EnrichmentApi*](doc/EnrichmentApi.md) | [**runEnrichment**](doc/EnrichmentApi.md#runenrichment) | **POST** /library/enrichment/run | Run a whole-library enrichment pass
 [*HealthApi*](doc/HealthApi.md) | [**fixHealthIssues**](doc/HealthApi.md#fixhealthissues) | **POST** /library/health/fix | Bulk-fix a health rule
 [*HealthApi*](doc/HealthApi.md) | [**getDiagnosticSummary**](doc/HealthApi.md#getdiagnosticsummary) | **GET** /library/diagnostics/summary | Summarize per-file diagnostics
@@ -731,6 +734,8 @@ Class | Method | HTTP request | Description
  - [EnrichmentProvider](doc/EnrichmentProvider.md)
  - [EnrichmentRunRequest](doc/EnrichmentRunRequest.md)
  - [EnrichmentRunResult](doc/EnrichmentRunResult.md)
+ - [EnrichmentSource](doc/EnrichmentSource.md)
+ - [EnrichmentSourcesUpdate](doc/EnrichmentSourcesUpdate.md)
  - [EnrichmentStatus](doc/EnrichmentStatus.md)
  - [EntityCard](doc/EntityCard.md)
  - [EntityCardList](doc/EntityCardList.md)

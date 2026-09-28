@@ -8,6 +8,7 @@ library;
 import 'dart:convert';
 
 import 'package:built_collection/built_collection.dart';
+import 'package:built_value/serializer.dart';
 import 'package:waxdeck_api_gen/waxdeck_api_gen.dart' as gen;
 
 import 'models.dart';
@@ -499,6 +500,7 @@ ServerSyncPage serverSyncPageFromGen(gen.ServerSyncPage page) {
             bookSettings: e.bookSettings == null
                 ? null
                 : bookSettingsFromGen(e.bookSettings!),
+            bookmarks: e.bookmarks?.map(bookmarkFromGen).toList(),
           ),
         )
         .toList(),
@@ -1408,8 +1410,6 @@ gen.ReviewBulkDecisionActionEnum reviewBulkActionToGen(String action) =>
       action == 'as-is' ? 'asIs' : action,
     );
 
-/// Bridges the matching mode to its wire name; the generated Dart name
-/// for `false` is `false_`.
 LibraryInfo libraryInfoFromGen(gen.ModelLibrary l) => LibraryInfo(
   pid: l.pid,
   name: l.name,
@@ -2070,6 +2070,7 @@ EnrichmentStatus enrichmentStatusFromGen(gen.EnrichmentStatus status) {
             capabilities: p.capabilities.toList(),
             configured: p.configured,
             builtin: p.builtin,
+            enabled: p.enabled ?? true,
           ),
         )
         .toList(),
@@ -2080,8 +2081,103 @@ EnrichmentStatus enrichmentStatusFromGen(gen.EnrichmentStatus status) {
       lyrics: coverageCountFromGen(status.coverage.lyrics),
     ),
     running: status.running,
+    runningJob: status.runningJob,
+    configured: status.configured,
+    musicbrainzConfigured: status.musicbrainzConfigured,
+    // One this build cannot name could be neither drawn nor sent back.
+    phases: [
+      for (final phase in status.phases)
+        if (phase != gen.EnrichmentPhase.unknownDefaultOpenApi)
+          _enrichmentPhaseWire(phase),
+    ],
+    lastRun: status.lastRun == null
+        ? null
+        : enrichmentLastRunFromGen(status.lastRun!),
   );
 }
+
+/// A phase in the spelling the wire and the status use.
+String _enrichmentPhaseWire(gen.EnrichmentPhase phase) =>
+    gen.standardSerializers.serialize(
+          phase,
+          specifiedType: const FullType(gen.EnrichmentPhase),
+        )
+        as String;
+
+gen.EnrichmentPhase enrichmentPhaseToGen(String wire) =>
+    gen.standardSerializers.deserialize(
+          wire,
+          specifiedType: const FullType(gen.EnrichmentPhase),
+        )
+        as gen.EnrichmentPhase;
+
+EnrichmentLastRun enrichmentLastRunFromGen(gen.EnrichmentLastRun r) =>
+    EnrichmentLastRun(
+      artistsEnriched: r.artistsEnriched,
+      artistsMatched: r.artistsMatched,
+      releaseGroupsEnriched: r.releaseGroupsEnriched,
+      releaseGroupsMatched: r.releaseGroupsMatched,
+      albumsSearched: r.albumsSearched,
+      albumsMatched: r.albumsMatched,
+      booksEnriched: r.booksEnriched,
+      booksMatched: r.booksMatched,
+      lyricsEnriched: r.lyricsEnriched,
+      lyricsMatched: r.lyricsMatched,
+      auxArtEnriched: r.auxArtEnriched,
+      auxArtMatched: r.auxArtMatched,
+      artistArtEnriched: r.artistArtEnriched,
+      artistArtMatched: r.artistArtMatched,
+      albumArtEnriched: r.albumArtEnriched,
+      albumArtMatched: r.albumArtMatched,
+      trackFieldsEnriched: r.trackFieldsEnriched,
+      trackFieldsMatched: r.trackFieldsMatched,
+      bookFieldsEnriched: r.bookFieldsEnriched,
+      bookFieldsMatched: r.bookFieldsMatched,
+      albumFieldsEnriched: r.albumFieldsEnriched,
+      albumFieldsMatched: r.albumFieldsMatched,
+      retried: r.retried,
+      artFetched: r.artFetched,
+      auxArtFetched: r.auxArtFetched,
+      artReused: r.artReused,
+      tagsWritten: r.tagsWritten,
+      tagsFailed: r.tagsFailed,
+      tagsUnrepresented: r.tagsUnrepresented,
+      tagsSkipped: r.tagsSkipped,
+      finishedAt: r.finishedAt,
+    );
+
+gen.EnrichmentSourcesUpdate enrichmentSourcesToGen(
+  List<EnrichmentSource> sources,
+) => gen.EnrichmentSourcesUpdate(
+  (b) => b.sources.addAll([
+    for (final s in sources)
+      gen.EnrichmentSource(
+        (e) => e
+          ..name = s.name
+          ..enabled = s.enabled,
+      ),
+  ]),
+);
+
+EnrichmentCacheReport enrichmentCacheReportFromGen(
+  gen.EnrichmentCacheReport r,
+) => EnrichmentCacheReport(
+  rows: r.rows,
+  bytes: r.bytes,
+  oldestAt: r.oldestAt,
+  newestAt: r.newestAt,
+  kinds: [
+    for (final k in r.kinds)
+      EnrichmentCacheKind(
+        kind: k.kind,
+        rows: k.rows,
+        bytes: k.bytes,
+        exempt: k.exempt,
+      ),
+  ],
+  exemptRows: r.exemptRows,
+  exemptBytes: r.exemptBytes,
+);
 
 /// A mode this build predates lands in [LibraryAccess.mode] as the
 /// generator's sentinel name: fine to show, never to send back. The
@@ -2828,6 +2924,8 @@ NspReport nspReportFromGen(gen.NspReport report) {
     direction: _nspWireName(report.direction.name),
     gaps: _nspGapsFromGen(report.gaps),
     notes: _nspGapsFromGen(report.notes),
+    ruleHash: report.ruleHash,
+    rule: report.rule == null ? null : smartRuleFromGen(report.rule!),
   );
 }
 

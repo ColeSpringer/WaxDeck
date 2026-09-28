@@ -30,6 +30,9 @@ type WaveformResult struct {
 	Version    int
 	Resolution int
 	Peaks      []byte
+	// Window is a carved track's frame window and the file length placing
+	// it, for the validator only: siblings share one essence and version.
+	Window string
 }
 
 const (
@@ -51,16 +54,6 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return WaveformResult{}, err
-	}
-	// A cue-carved track shares one backing file with the rest of its
-	// album, and the peaks row hangs off that file. Serving it would
-	// draw the whole album's envelope under track three's seek bar: a
-	// convincing wrong answer, which is worse than no answer. Windowing
-	// the stored buckets by the track's sample span is the richer fix
-	// and costs effective resolution; it belongs with the standing
-	// "virtual tracks are not sonically analyzed" gap, not here.
-	if it.Virtual {
-		return WaveformResult{State: waveformStateUnavailable}, nil
 	}
 	// Podcast episodes are excluded from analysis upstream, by design:
 	// fingerprinting hours of speech would pollute the duplicate-
@@ -88,6 +81,12 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 	if f.EssenceHash == "" {
 		return WaveformResult{State: waveformStateUnavailable, PartIndex: partOut}, nil
 	}
+	// A carved track draws its window of the file's buckets, placed by
+	// the file's length: without one there is nothing to place it by.
+	fileFrames := f.DurationMS * model.FramesPerSecond / 1000
+	if it.Virtual && fileFrames <= 0 {
+		return WaveformResult{State: waveformStateUnavailable}, nil
+	}
 
 	// A track and a single-file book have one file, so the item read is
 	// the same row and stays the simpler call.
@@ -98,7 +97,7 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 		pk, err = l.lib.Peaks(ctx, it.PID)
 	}
 	if err == nil && pk != nil && pk.Buckets > 0 && len(pk.Data) >= pk.Buckets*2 {
-		return WaveformResult{
+		res := WaveformResult{
 			State: waveformStateReady,
 			// Peaks come back with no essence hash of their own: the
 			// upstream read selects version, bucket count, and data only.
@@ -109,7 +108,19 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 			Resolution:  pk.Buckets,
 			Peaks:       narrowPeaks(pk.Data, pk.Buckets),
 			PartIndex:   partOut,
-		}, nil
+		}
+		if it.Virtual {
+			lo, hi, ok := windowBuckets(pk.Buckets, fileFrames, it.StartFrames, it.EndFrames)
+			if !ok {
+				// The stated length cannot hold the window, so it is wrong
+				// for this file and any envelope placed by it would be too.
+				return WaveformResult{State: waveformStateUnavailable}, nil
+			}
+			res.Resolution = hi - lo
+			res.Peaks = narrowPeaks(pk.Data[lo*2:hi*2], hi-lo)
+			res.Window = waveformWindow(it.StartFrames, it.EndFrames, fileFrames)
+		}
+		return res, nil
 	}
 	if err != nil && kindFromWaxErr(err) != KindNotFound {
 		return WaveformResult{}, classify(err)
@@ -153,10 +164,9 @@ func (l *Library) WaveformForItem(ctx context.Context, uc *UserCtx, apiItemPID s
 	if err != nil {
 		return WaveformResult{}, err
 	}
-	// The two populations with no envelope of their own answer the same
-	// under either span: a window of a shared file, and audio the pass
-	// deliberately never reads.
-	if it.Virtual || it.Kind == model.KindEpisode {
+	// Audio the pass deliberately never reads answers the same under
+	// either span.
+	if it.Kind == model.KindEpisode {
 		return WaveformResult{State: waveformStateUnavailable}, nil
 	}
 	parts, err := l.itemParts(ctx, it)
@@ -382,6 +392,32 @@ func stitchPeaks(parts []model.BookPart, byFile map[string]model.PeaksData, tota
 		wire[i] = byte(v >> 8)
 	}
 	return wire
+}
+
+// windowBuckets is the run of a file's buckets covering the frame window
+// [startFrames, endFrames) of a file fileFrames long (endFrames 0 is the
+// file's end), never empty; not ok when the length cannot hold it, or it
+// ends before it starts.
+func windowBuckets(buckets int, fileFrames, startFrames, endFrames int64) (lo, hi int, ok bool) {
+	if startFrames >= fileFrames || endFrames > fileFrames || (endFrames > 0 && endFrames < startFrames) {
+		return 0, 0, false
+	}
+	n := int64(buckets)
+	lo64, hi64 := startFrames*n/fileFrames, n
+	if endFrames > 0 {
+		hi64 = (endFrames*n + fileFrames - 1) / fileFrames
+	}
+	lo, hi = int(min(max(lo64, 0), n-1)), int(min(hi64, n))
+	if hi <= lo {
+		hi = lo + 1
+	}
+	return lo, hi, true
+}
+
+// waveformWindow is a carved track's part of its validator: the window,
+// and the file length it was placed by, which a rescan may correct.
+func waveformWindow(startFrames, endFrames, fileFrames int64) string {
+	return fmt.Sprintf("%d-%d-of-%d", startFrames, endFrames, fileFrames)
 }
 
 // narrowPeaks converts the stored little-endian uint16 buckets to the

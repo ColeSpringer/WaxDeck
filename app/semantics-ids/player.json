@@ -19,6 +19,7 @@
     "playerBookmarkDelete": "player-bookmark-delete-{index}",
     "playerBookmarkNote": "player-bookmark-note",
     "playerBookmarkSheet": "player-bookmark-sheet",
+    "playerBookmarkState": "player-bookmark-state-{index}",
     "playerBookmarks": "player-bookmarks",
     "playerCarMode": "player-car-mode",
     "playerChapter": "player-chapter-{index}",

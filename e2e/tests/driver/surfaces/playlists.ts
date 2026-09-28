@@ -128,6 +128,11 @@ export class Playlists extends Surface {
     );
   }
 
+  /// What a partial NSP export would keep, under the loss list.
+  exportNspKeeps(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistExportNspKeeps));
+  }
+
   exportNspProceed(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.playlistExportNspProceed));
   }
