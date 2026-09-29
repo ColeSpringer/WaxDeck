@@ -1,9 +1,0 @@
-# Deliberately accepted breaking changes, matched by `make oasdiff`.
-# Temporary by construction: this file rides the change that makes the
-# break and is deleted once the base ref contains it.
-#
-# The release-group art phase takes the catalog's name for the walk,
-# which now fills a group's front as well as its other slots.
-GET /library/enrichment added the new `group-art` enum value to the `phases/items/` response property for the response status `200`
-POST /library/enrichment/run removed the enum value `aux-art` of the request property `forcePhases/items/`
-PUT /library/enrichment/sources added the new `group-art` enum value to the `phases/items/` response property for the response status `200`

@@ -3,6 +3,12 @@
   "ids": {
     "addToPlaylistNew": "add-to-playlist-new",
     "addToPlaylistTarget": "add-to-playlist-target-{pid}",
+    "nspImportConfirm": "nsp-import-confirm",
+    "nspImportKeeps": "nsp-import-keeps",
+    "nspImportLoss": "nsp-import-loss",
+    "nspImportLossRow": "nsp-import-loss-{index}",
+    "nspImportPartial": "nsp-import-partial",
+    "nspImportShared": "nsp-import-shared",
     "playlist": "playlist-{pid}",
     "playlistAdd": "playlist-add",
     "playlistAddField": "playlist-add-field",

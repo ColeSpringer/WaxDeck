@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -1230,6 +1231,12 @@ class _Picker<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Semantics(
     identifier: semanticsId,
+    // On the web the menu drops its field from the semantics tree, and the
+    // picker's name and choice with it; elsewhere the field says both.
+    label: kIsWeb ? label : null,
+    value: kIsWeb
+        ? entries.where((entry) => entry.value == value).firstOrNull?.label
+        : null,
     child: DropdownMenu<T>(
       // The locale is part of the key: DropdownMenu rewrites its own
       // field only when `initialSelection` changes, so new entry labels

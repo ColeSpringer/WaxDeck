@@ -589,6 +589,12 @@ export const SemanticsIds = {
   // playlists: Playlists, their entries, and the smart-rule editor.
   addToPlaylistNew: 'add-to-playlist-new',
   addToPlaylistTarget: (pid: string | number) => `add-to-playlist-target-${pid}`,
+  nspImportConfirm: 'nsp-import-confirm',
+  nspImportKeeps: 'nsp-import-keeps',
+  nspImportLoss: 'nsp-import-loss',
+  nspImportLossRow: (index: string | number) => `nsp-import-loss-${index}`,
+  nspImportPartial: 'nsp-import-partial',
+  nspImportShared: 'nsp-import-shared',
   playlist: (pid: string | number) => `playlist-${pid}`,
   playlistAdd: 'playlist-add',
   playlistAddField: 'playlist-add-field',
@@ -1088,6 +1094,7 @@ export const SemanticsIdPrefixes = {
 
   // playlists: Playlists, their entries, and the smart-rule editor.
   addToPlaylistTarget: 'add-to-playlist-target-',
+  nspImportLossRow: 'nsp-import-loss-',
   playlist: 'playlist-',
   playlistAddResult: 'playlist-add-result-',
   playlistCreateKind: 'playlist-create-kind-',

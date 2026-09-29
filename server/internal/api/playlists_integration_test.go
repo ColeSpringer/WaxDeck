@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/url"
 	"slices"
@@ -576,14 +577,13 @@ func TestPlaylistPreviewAndRuleFields(t *testing.T) {
 		t.Fatalf("title field = %+v, want catalog text", title)
 	}
 
-	// The album release-identity fields: catalog text, never sortable
-	// (they are identifiers, not orderings), and each has to actually
-	// evaluate. A vocabulary row naming an engine field the query
-	// grammar does not know would advertise a rule the editor can build
-	// and the server then refuses.
+	// The release-identity fields and the MusicBrainz ids: catalog text,
+	// never sortable (identifiers, not orderings), and each has to
+	// evaluate, or the editor offers a rule the server refuses.
 	for _, name := range []string{
 		"albumBarcode", "albumLabel", "albumCatalogNumber",
 		"albumMedia", "albumCountry",
+		"recordingMbid", "albumMbid", "releaseGroupMbid",
 	} {
 		f, ok := byName[name]
 		if !ok {
@@ -899,12 +899,10 @@ func TestPlaylistNspExportRefusesWhatItCannotSay(t *testing.T) {
 	if resp.StatusCode != 501 {
 		t.Fatalf("export status = %d, want 501", resp.StatusCode)
 	}
-	refusal := decode[Error](t, resp)
-	if !strings.Contains(refusal.Message, "unsupported field: mediaType") {
+	// The rule's own word for the field, beside the converter's sentence.
+	if refusal := decode[Error](t, resp); !strings.Contains(refusal.Message, "unsupported field") ||
+		!strings.Contains(refusal.Message, "mediaType") {
 		t.Fatalf("refusal does not name the offender as the rule does: %q", refusal.Message)
-	}
-	if strings.Contains(refusal.Message, "field: kind") {
-		t.Fatalf("refusal names the engine's spelling: %q", refusal.Message)
 	}
 }
 
@@ -1147,12 +1145,19 @@ func TestPlaylistNspExportReportThenPartial(t *testing.T) {
 	if !slices.Contains(fields, "title") {
 		t.Errorf("report fields = %v, want the dropped sort term named", fields)
 	}
-	var reasons []string
+	type coded struct{ code, field, mode string }
+	var codes []coded
 	for _, g := range *rep.Gaps {
-		reasons = append(reasons, g.Reason)
+		codes = append(codes, coded{g.Code, deref(g.Field), deref(g.Mode)})
 	}
-	if !slices.Contains(reasons, "nsp: unsupported field: mediaType") {
-		t.Errorf("report reasons = %q, want the field in the rule's spelling", reasons)
+	for _, want := range []coded{
+		{"unsupported_field", "mediaType", ""},
+		{"extra_sort_term", "title", ""},
+		{"limit_budget", "", "minutes"},
+	} {
+		if !slices.Contains(codes, want) {
+			t.Errorf("report gaps = %v, want %v", codes, want)
+		}
 	}
 	if rep.RuleHash == nil || len(*rep.RuleHash) != 16 {
 		t.Errorf("export report ruleHash = %v, want 16 hex characters", rep.RuleHash)
@@ -1223,8 +1228,13 @@ func TestPlaylistNspImportReportThenPartial(t *testing.T) {
 	if rep.Direction != "import" {
 		t.Errorf("report direction = %q, want import", rep.Direction)
 	}
-	if rep.RuleHash != nil || rep.Rule != nil {
-		t.Errorf("an import report carries export fields: %+v", rep)
+	if rep.RuleHash != nil {
+		t.Errorf("an import report carries a rule hash: %+v", rep)
+	}
+	// What the partial import keeps, as the rule it would create.
+	if rep.Rule == nil || rep.Rule.Root.Nodes == nil || len(*rep.Rule.Root.Nodes) != 1 ||
+		deref((*rep.Rule.Root.Nodes)[0].Field) != "genre" {
+		t.Errorf("kept rule = %+v, want the genre condition alone", rep.Rule)
 	}
 	if rep.Gaps == nil || len(*rep.Gaps) != 1 {
 		t.Fatalf("report names %v gaps, want the one unmappable field", rep.Gaps)
@@ -1257,6 +1267,212 @@ func TestPlaylistNspImportReportThenPartial(t *testing.T) {
 	}
 	if strings.Contains(string(rule), "bitrate") {
 		t.Errorf("partial import kept a condition it has no field for: %s", rule)
+	}
+}
+
+// The fields .nsp brings in read back as rule fields, so an imported rule
+// is one the editor can draw and save unchanged.
+func TestPlaylistNspFieldsReadBackAsRuleFields(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	resp := h.postJSON(t, "/api/v1/playlists/nsp", map[string]any{
+		"name": "Carried", "all": []any{
+			map[string]any{"is": map[string]any{"filepath": "alpha.flac"}},
+			map[string]any{"isMissing": map[string]any{"composer": true}},
+			map[string]any{"isMissing": map[string]any{"mbz_recording_id": true}},
+			map[string]any{"isNot": map[string]any{"mbz_album_id": "x"}},
+			map[string]any{"isNot": map[string]any{"mbz_release_group_id": "y"}},
+		},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("import status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+	var fields []string
+	for _, n := range *pl.Rule.Root.Nodes {
+		fields = append(fields, deref(n.Field))
+	}
+	if want := []string{"relPath", "composer", "recordingMbid", "albumMbid", "releaseGroupMbid"}; !slices.Equal(fields, want) {
+		t.Fatalf("imported fields = %v, want %v", fields, want)
+	}
+
+	resp = h.patchJSON(t, "/api/v1/playlists/"+pl.Pid, map[string]any{"rule": pl.Rule})
+	wantStatus(t, resp, 200, "saving the imported rule unchanged")
+	resp.Body.Close()
+
+	// The path under the library root, not the absolute one.
+	resp = h.postJSON(t, "/api/v1/playlists/preview", pl.Rule)
+	if resp.StatusCode != 200 {
+		t.Fatalf("preview status = %d", resp.StatusCode)
+	}
+	if prev := decode[PlaylistPreview](t, resp); prev.Total != 1 || prev.Items[0].Title != "Alpha Song" {
+		t.Errorf("preview = %d items, want Alpha Song alone", prev.Total)
+	}
+}
+
+// What the converter carries but a rule's own save would refuse or rewrite
+// is a gap: an operator the field does not take, a window past the rule's
+// bound, a value of the wrong type, an offset the rule cannot hold.
+func TestPlaylistNspImportHoldsOnlyWhatARuleSaves(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	doc := map[string]any{"name": "Held", "offset": 5, "all": []any{
+		map[string]any{"contains": map[string]any{"year": 199}},
+		map[string]any{"gt": map[string]any{"title": "M"}},
+		map[string]any{"inTheLast": map[string]any{"dateAdded": 105000}},
+		map[string]any{"gt": map[string]any{"year": "1990"}},
+		map[string]any{"contains": map[string]any{"genre": "Rock"}},
+	}}
+	resp := h.postJSON(t, "/api/v1/playlists/nsp/report", doc)
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d, want 200", resp.StatusCode)
+	}
+	rep := decode[NspReport](t, resp)
+	type row struct{ code, field, op, key, path string }
+	var rows []row
+	for _, g := range deref2(rep.Gaps) {
+		rows = append(rows, row{g.Code, deref(g.Field), deref(g.Op), deref(g.Key), g.Path})
+	}
+	for _, want := range []row{
+		{"unsupported_operator", "year", "contains", "", "/all/0"},
+		{"unsupported_operator", "title", "gt", "", "/all/1"},
+		{"window_too_large", "dateAdded", "inTheLast", "", "/all/2"},
+		{"value_not_numeric", "year", "gt", "", "/all/3"},
+		{"unsupported_key", "", "", "offset", "/offset"},
+	} {
+		if !slices.Contains(rows, want) {
+			t.Errorf("report gaps = %v, want %v", rows, want)
+		}
+	}
+	if len(rows) != 5 {
+		t.Errorf("report gaps = %v, want the five and nothing on genre", rows)
+	}
+
+	resp = h.postJSON(t, "/api/v1/playlists/nsp", doc)
+	wantStatus(t, resp, 400, "a strict import holding what a rule cannot")
+	resp.Body.Close()
+
+	resp = h.postJSON(t, "/api/v1/playlists/nsp?partial=true", doc)
+	if resp.StatusCode != 201 {
+		t.Fatalf("partial import status = %d, want 201", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+	if nodes := deref2(pl.Rule.Root.Nodes); len(nodes) != 1 || deref(nodes[0].Field) != "genre" {
+		t.Fatalf("kept rule = %+v, want the genre condition alone", pl.Rule)
+	}
+	resp = h.patchJSON(t, "/api/v1/playlists/"+pl.Pid, map[string]any{"rule": pl.Rule})
+	wantStatus(t, resp, 200, "saving the imported rule unchanged")
+	resp.Body.Close()
+}
+
+// A document from an older WaxDeck export names the star `starred`, which
+// .nsp calls `loved`, so the report names it as a field it cannot read.
+func TestPlaylistNspImportReportNamesStarredAsUnsupported(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	resp := h.postJSON(t, "/api/v1/playlists/nsp/report", map[string]any{
+		"name": "Old export", "all": []any{
+			map[string]any{"is": map[string]any{"starred": true}},
+			map[string]any{"contains": map[string]any{"genre": "Rock"}},
+		},
+	})
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d, want 200", resp.StatusCode)
+	}
+	rep := decode[NspReport](t, resp)
+	if rep.Gaps == nil || len(*rep.Gaps) != 1 {
+		t.Fatalf("report gaps = %v, want the one field", rep.Gaps)
+	}
+	gap := (*rep.Gaps)[0]
+	if gap.Code != "unsupported_field" || deref(gap.Field) != "starred" || gap.Kind != "field" {
+		t.Errorf("gap = %+v, want unsupported_field naming starred", gap)
+	}
+
+	// Alone, nothing survives: no kept rule, so no partial to offer.
+	resp = h.postJSON(t, "/api/v1/playlists/nsp/report", map[string]any{
+		"name": "Starred", "all": []any{
+			map[string]any{"is": map[string]any{"starred": true}},
+		},
+	})
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d, want 200", resp.StatusCode)
+	}
+	if rep = decode[NspReport](t, resp); rep.Rule != nil || rep.Gaps == nil || len(*rep.Gaps) != 2 {
+		t.Errorf("report = %+v, want the field and the emptied group, and no kept rule", rep)
+	}
+}
+
+// A playlist key of the wrong type is named as such, not as broken JSON
+// in the parser's own words.
+func TestPlaylistNspRefusesAMistypedPlaylistKey(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	for key, doc := range map[string]map[string]any{
+		"`name`":   {"name": 5, "all": []any{}},
+		"`public`": {"name": "x", "public": "yes", "all": []any{}},
+	} {
+		resp := h.postJSON(t, "/api/v1/playlists/nsp/report", doc)
+		if resp.StatusCode != 400 {
+			t.Fatalf("report status = %d, want 400", resp.StatusCode)
+		}
+		msg := decode[Error](t, resp).Message
+		if strings.Contains(msg, "valid JSON") || strings.Contains(msg, "Go struct") {
+			t.Errorf("refusal = %q, want the key named rather than the parse", msg)
+		}
+		if !strings.Contains(msg, key) {
+			t.Errorf("refusal = %q, want %s named", msg, key)
+		}
+	}
+}
+
+// A key spelled in another case is the converter's to report, and has no
+// effect: a `Public` does not share the playlist it reports.
+func TestPlaylistNspCaseVariantKeysDoNotTakeEffect(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	doc := map[string]any{"name": "Quiet", "Public": true, "all": []any{
+		map[string]any{"contains": map[string]any{"genre": "Rock"}},
+	}}
+	resp := h.postJSON(t, "/api/v1/playlists/nsp/report", doc)
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d, want 200", resp.StatusCode)
+	}
+	if rep := decode[NspReport](t, resp); rep.Gaps == nil || deref((*rep.Gaps)[0].Key) != "Public" {
+		t.Errorf("report = %+v, want Public named as a key it cannot read", rep)
+	}
+	resp = h.postJSON(t, "/api/v1/playlists/nsp?partial=true", doc)
+	if resp.StatusCode != 201 {
+		t.Fatalf("partial import status = %d, want 201", resp.StatusCode)
+	}
+	if pl := decode[Playlist](t, resp); pl.Visibility != "private" {
+		t.Errorf("visibility = %q, want private: the key it reported took effect", pl.Visibility)
+	}
+}
+
+// A gap about a top-level key names the key, not a field.
+func TestPlaylistNspImportReportNamesAnUnsupportedKey(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	resp := h.postJSON(t, "/api/v1/playlists/nsp/report", map[string]any{
+		"name": "Ten percent", "limitPercent": 10, "all": []any{
+			map[string]any{"contains": map[string]any{"genre": "Rock"}},
+		},
+	})
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d, want 200", resp.StatusCode)
+	}
+	rep := decode[NspReport](t, resp)
+	if rep.Gaps == nil || len(*rep.Gaps) != 1 {
+		t.Fatalf("report gaps = %v, want the one key", rep.Gaps)
+	}
+	if gap := (*rep.Gaps)[0]; gap.Code != "unsupported_key" || deref(gap.Key) != "limitPercent" || gap.Field != nil {
+		t.Errorf("gap = %+v, want unsupported_key naming limitPercent", gap)
 	}
 }
 
@@ -1524,14 +1740,30 @@ func TestPlaylistNspImportReportDedupesAndBounds(t *testing.T) {
 	if n := countGapsNaming(*rep.Gaps, "bpm"); n != 0 {
 		t.Errorf("bpm reported as a gap %d times; it imports now", n)
 	}
+	if rep.Truncated != nil {
+		t.Errorf("a report of %d gaps says it was truncated", len(*rep.Gaps))
+	}
+
+	// Past the cap, the report says there is more than it lists.
+	nodes = nodes[:0]
+	for i := range 15 {
+		nodes = append(nodes, map[string]any{"is": map[string]any{fmt.Sprintf("field%d", i): 1}})
+	}
+	resp = h.postJSON(t, "/api/v1/playlists/nsp/report", map[string]any{"name": "x", "all": nodes})
+	if resp.StatusCode != 200 {
+		t.Fatalf("report status = %d", resp.StatusCode)
+	}
+	if rep = decode[NspReport](t, resp); len(deref2(rep.Gaps)) != 12 || rep.Truncated == nil || !*rep.Truncated {
+		t.Errorf("report = %d gaps, truncated %v; want 12 and truncated", len(deref2(rep.Gaps)), rep.Truncated)
+	}
 }
 
-// countGapsNaming counts the gaps whose sentence names one field, which
-// is what a dedupe is about: the same problem twice is one row.
+// countGapsNaming counts the gaps naming one field, which is what a
+// dedupe is about: the same problem twice is one row.
 func countGapsNaming(gaps []NspGap, field string) int {
 	n := 0
 	for _, g := range gaps {
-		if strings.Contains(g.Reason, field) {
+		if deref(g.Field) == field {
 			n++
 		}
 	}
@@ -1637,4 +1869,12 @@ func TestPlaylistNspCarriesStarredIsNot(t *testing.T) {
 	if string(imported) != string(authored) {
 		t.Fatalf("round trip changed the rule:\n authored %s\n imported %s", authored, imported)
 	}
+}
+
+// deref2 reads an optional list, empty when absent.
+func deref2[T any](p *[]T) []T {
+	if p == nil {
+		return nil
+	}
+	return *p
 }

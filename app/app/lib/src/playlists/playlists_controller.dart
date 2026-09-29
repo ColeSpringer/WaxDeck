@@ -65,6 +65,19 @@ class PlaylistsController extends AsyncNotifier<List<Playlist>> {
     return result;
   }
 
+  /// Imports a Navidrome smart playlist document as a smart playlist.
+  Future<Playlist> importNsp(
+    Map<String, Object?> document, {
+    bool partial = false,
+    String? name,
+  }) async {
+    final created = await ref
+        .read(repositoryProvider)
+        .importNsp(document, partial: partial, name: name);
+    ref.invalidateSelf();
+    return created;
+  }
+
   /// Imports a pasted playlist export (Spotify, Apple Music, YouTube
   /// Music, generic CSV, or a plain text list) as a static playlist.
   Future<PlaylistImportResult> importExport({

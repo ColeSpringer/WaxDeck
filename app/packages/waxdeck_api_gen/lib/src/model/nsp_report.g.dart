@@ -79,6 +79,8 @@ class _$NspReport extends NspReport {
   @override
   final BuiltList<NspGap>? notes;
   @override
+  final bool? truncated;
+  @override
   final String? ruleHash;
   @override
   final SmartRule? rule;
@@ -90,6 +92,7 @@ class _$NspReport extends NspReport {
     required this.direction,
     this.gaps,
     this.notes,
+    this.truncated,
     this.ruleHash,
     this.rule,
   }) : super._();
@@ -107,6 +110,7 @@ class _$NspReport extends NspReport {
         direction == other.direction &&
         gaps == other.gaps &&
         notes == other.notes &&
+        truncated == other.truncated &&
         ruleHash == other.ruleHash &&
         rule == other.rule;
   }
@@ -117,6 +121,7 @@ class _$NspReport extends NspReport {
     _$hash = $jc(_$hash, direction.hashCode);
     _$hash = $jc(_$hash, gaps.hashCode);
     _$hash = $jc(_$hash, notes.hashCode);
+    _$hash = $jc(_$hash, truncated.hashCode);
     _$hash = $jc(_$hash, ruleHash.hashCode);
     _$hash = $jc(_$hash, rule.hashCode);
     _$hash = $jf(_$hash);
@@ -129,6 +134,7 @@ class _$NspReport extends NspReport {
           ..add('direction', direction)
           ..add('gaps', gaps)
           ..add('notes', notes)
+          ..add('truncated', truncated)
           ..add('ruleHash', ruleHash)
           ..add('rule', rule))
         .toString();
@@ -151,6 +157,10 @@ class NspReportBuilder implements Builder<NspReport, NspReportBuilder> {
   ListBuilder<NspGap> get notes => _$this._notes ??= ListBuilder<NspGap>();
   set notes(ListBuilder<NspGap>? notes) => _$this._notes = notes;
 
+  bool? _truncated;
+  bool? get truncated => _$this._truncated;
+  set truncated(bool? truncated) => _$this._truncated = truncated;
+
   String? _ruleHash;
   String? get ruleHash => _$this._ruleHash;
   set ruleHash(String? ruleHash) => _$this._ruleHash = ruleHash;
@@ -169,6 +179,7 @@ class NspReportBuilder implements Builder<NspReport, NspReportBuilder> {
       _direction = $v.direction;
       _gaps = $v.gaps?.toBuilder();
       _notes = $v.notes?.toBuilder();
+      _truncated = $v.truncated;
       _ruleHash = $v.ruleHash;
       _rule = $v.rule?.toBuilder();
       _$v = null;
@@ -202,6 +213,7 @@ class NspReportBuilder implements Builder<NspReport, NspReportBuilder> {
             ),
             gaps: _gaps?.build(),
             notes: _notes?.build(),
+            truncated: truncated,
             ruleHash: ruleHash,
             rule: _rule?.build(),
           );

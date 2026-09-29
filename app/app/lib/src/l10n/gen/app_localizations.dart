@@ -9633,6 +9633,12 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{One part of this rule has no NSP form.} other{{count} parts of this rule have no NSP form.}}'**
   String playlistExportNspLossCount(num count);
 
+  /// Frame above the parts of a rule NSP cannot carry, when the server listed only the first of them.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{More than one part of this rule has no NSP form.} other{More than {count} parts of this rule have no NSP form.}}'**
+  String playlistExportNspLossCountMore(num count);
+
   /// Title of the dialog listing what an NSP export would drop.
   ///
   /// In en, this message translates to:
@@ -9644,6 +9650,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This rule exports with a difference'**
   String get playlistExportNspNotesTitle;
+
+  /// Shown in the NSP export dialog when a partial export would keep nothing; nothing is offered to export.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing in this rule has an NSP form, so there is nothing to export.'**
+  String get playlistExportNspNothing;
 
   /// Button accepting the loss and exporting the partial NSP document.
   ///
@@ -9693,6 +9705,12 @@ abstract class AppLocalizations {
   /// **'Kept matched to this export. Re-match it whenever you like from the playlist\'s sync settings.'**
   String get playlistImportBound;
 
+  /// Button in the NSP import sheet that asks the server what the pasted document would lose, before anything is imported.
+  ///
+  /// In en, this message translates to:
+  /// **'Check'**
+  String get playlistImportCheck;
+
   /// Title of the report after an import that made a playlist.
   ///
   /// In en, this message translates to:
@@ -9716,6 +9734,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Paste the playlist file here'**
   String get playlistImportHintM3u;
+
+  /// Hint in the paste box when importing a Navidrome smart playlist (.nsp) file.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the .nsp file here'**
+  String get playlistImportHintNsp;
 
   /// What the paste box wants for a portable import. The quoted action is the menu row on the other server, so it matches that row's own words.
   ///
@@ -9783,6 +9807,12 @@ abstract class AppLocalizations {
   /// **'This is not the copied portable JSON'**
   String get playlistImportNotJson;
 
+  /// Shown in the import sheet when the pasted text is not a JSON object, which every .nsp file is.
+  ///
+  /// In en, this message translates to:
+  /// **'This is not an NSP document (expected a JSON object)'**
+  String get playlistImportNotNsp;
+
   /// Refusal when the pasted JSON parses but is not the shape the exporter writes. The word in the parenthesis is a key of that JSON and stays as it is.
   ///
   /// In en, this message translates to:
@@ -9794,6 +9824,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nothing imported'**
   String get playlistImportNothing;
+
+  /// Shown under the problems of a pasted .nsp document that is broken rather than merely holding parts WaxDeck cannot read; nothing is offered to import.
+  ///
+  /// In en, this message translates to:
+  /// **'The document is damaged, so it cannot be imported until it is fixed.'**
+  String get playlistImportNspBroken;
+
+  /// Shown after checking a pasted .nsp document that WaxDeck can read in full.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything in this document carries over.'**
+  String get playlistImportNspClean;
+
+  /// Heading above the rule a partial import of a pasted .nsp document would create.
+  ///
+  /// In en, this message translates to:
+  /// **'What the import keeps'**
+  String get playlistImportNspKeeps;
+
+  /// Frame above the list of parts of a pasted .nsp document that WaxDeck cannot read.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{One part of this document cannot be read.} other{{count} parts of this document cannot be read.}}'**
+  String playlistImportNspLossCount(num count);
+
+  /// Frame above the parts of a pasted .nsp document WaxDeck cannot read, when the server listed only the first of them.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{More than one part of this document cannot be read.} other{More than {count} parts of this document cannot be read.}}'**
+  String playlistImportNspLossCountMore(num count);
+
+  /// Shown in the NSP import sheet when neither the pasted document nor the name field names the playlist.
+  ///
+  /// In en, this message translates to:
+  /// **'This document has no name, so give the playlist one.'**
+  String get playlistImportNspNeedsName;
+
+  /// Shown under the problems of a pasted .nsp document when a partial import would keep nothing; nothing is offered to import.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing in this document can be read, so there is nothing to import.'**
+  String get playlistImportNspNothing;
+
+  /// Button that imports a pasted .nsp document, dropping the parts listed above it that WaxDeck cannot read.
+  ///
+  /// In en, this message translates to:
+  /// **'Import without them'**
+  String get playlistImportNspPartial;
 
   /// Refusal when the import dialog is confirmed with an empty paste box.
   ///
@@ -9830,6 +9908,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'M3U file'**
   String get playlistImportSourceM3u;
+
+  /// Import menu entry and sheet title part for a Navidrome .nsp smart playlist file.
+  ///
+  /// In en, this message translates to:
+  /// **'Navidrome smart playlist'**
+  String get playlistImportSourceNsp;
 
   /// Import source: what another WaxDeck server's portable export copied.
   ///
@@ -9950,6 +10034,320 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No manual playlists yet. Make one below and this goes straight into it.'**
   String get playlistNoManualLists;
+
+  /// NSP gap sentence, import: the document's limit is not an integer.
+  ///
+  /// In en, this message translates to:
+  /// **'The limit is not a whole number.'**
+  String get playlistNspGapBadLimit;
+
+  /// NSP gap sentence, import: the document's offset is not an integer.
+  ///
+  /// In en, this message translates to:
+  /// **'The offset is not a whole number.'**
+  String get playlistNspGapBadOffset;
+
+  /// NSP gap sentence, import: the document's order is not a string.
+  ///
+  /// In en, this message translates to:
+  /// **'The order cannot be read; it should be asc or desc.'**
+  String get playlistNspGapBadOrder;
+
+  /// NSP gap sentence, import: the document's sort is not a string.
+  ///
+  /// In en, this message translates to:
+  /// **'The sort is not a field name.'**
+  String get playlistNspGapBadSort;
+
+  /// NSP gap sentence, import: a condition's value is not readable JSON. Both are quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'The value of {op} on {field} cannot be read.'**
+  String playlistNspGapBadValue(String op, String field);
+
+  /// NSP gap sentence, either way: an ordering or text comparison on a yes-or-no field. {opIs} and {opIsNot} are the two operators it takes, quoted, as the side being read spells them.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} is yes or no, so it takes only {opIs} and {opIsNot}.'**
+  String playlistNspGapBooleanOperator(
+    String field,
+    String opIs,
+    String opIsNot,
+  );
+
+  /// NSP gap sentence, export: a date compared other than by a window of days back. {field} is the rule editor's label.
+  ///
+  /// In en, this message translates to:
+  /// **'Only a number of days back carries {field} into NSP, so this comparison has no form there.'**
+  String playlistNspGapDateOperatorExport(String field);
+
+  /// NSP gap sentence, import: a date compared other than by a window of days back, which has no faithful reading. Both are quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'{op} on {field} cannot carry over, since only \"inTheLast\" and \"notInTheLast\" do on a date.'**
+  String playlistNspGapDateOperatorImport(String op, String field);
+
+  /// NSP gap sentence, import: a relative date operator holds no number. Both are quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'{op} on {field} needs a number of days.'**
+  String playlistNspGapDaysNotNumber(String op, String field);
+
+  /// NSP gap sentence, export: a duration with a fraction of a millisecond. {field} is the rule editor's label.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} of {value} is not a whole number of milliseconds, so it cannot carry over.'**
+  String playlistNspGapDurationNotWholeMsExport(String field, String value);
+
+  /// NSP gap sentence, import: a duration with a fraction of a millisecond.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} seconds is not a whole number of milliseconds, so it cannot carry over.'**
+  String playlistNspGapDurationNotWholeMsImport(String value);
+
+  /// NSP gap sentence, export: a rule over file rows.
+  ///
+  /// In en, this message translates to:
+  /// **'A rule over files rather than items has no NSP form.'**
+  String get playlistNspGapEntityFiles;
+
+  /// NSP gap sentence, export note: a rule over tracks re-imports over every item.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP does not tell tracks from books and episodes, so imported back, this rule covers every kind of item.'**
+  String get playlistNspGapEntityWidens;
+
+  /// NSP gap sentence, export: a second or later sort term. {field} is the rule editor's label.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP sorts by one field only, so the later sort by {field} goes.'**
+  String playlistNspGapExtraSortTerm(String field);
+
+  /// NSP gap sentence, export: every condition in a group was dropped.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing in this group has an NSP form, so the group goes too.'**
+  String get playlistNspGapGroupEmptiedExport;
+
+  /// NSP gap sentence, import: every rule in a group was dropped.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing in this group can be read, so the group goes too.'**
+  String get playlistNspGapGroupEmptiedImport;
+
+  /// NSP gap sentence, import: a group key does not hold a list. {key} is quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'{key} has to be a list of rules.'**
+  String playlistNspGapGroupNotArray(String key);
+
+  /// NSP gap sentence, export: the number a minutes or megabytes limit rode on. {mode} is the unit's name.
+  ///
+  /// In en, this message translates to:
+  /// **'The limit of {value} {mode} goes too: NSP would read it as {value} items.'**
+  String playlistNspGapLimitBudget(String value, String mode);
+
+  /// NSP gap sentence, export: a limit counted in minutes or megabytes. {mode} is the unit's name.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP limits only by number of items, so the limit by {mode} goes.'**
+  String playlistNspGapLimitMode(String mode);
+
+  /// NSP gap sentence, export: a pinned shuffle seed.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP cannot pin a shuffle, so the saved order of the shuffle goes.'**
+  String get playlistNspGapLimitSeed;
+
+  /// NSP gap sentence, import: the document has no root group.
+  ///
+  /// In en, this message translates to:
+  /// **'The document has no \"all\" or \"any\" group at its top.'**
+  String get playlistNspGapMissingRoot;
+
+  /// NSP gap sentence, import: the document has two root groups.
+  ///
+  /// In en, this message translates to:
+  /// **'The document has both an \"all\" and an \"any\" group at its top; it may have only one.'**
+  String get playlistNspGapMultipleRoots;
+
+  /// NSP gap sentence, export: a negation other than of one contains condition.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP negates only a single contains (notContains), so this negation has no NSP form.'**
+  String get playlistNspGapNegation;
+
+  /// NSP gap sentence, import: an operator names no field or several. {op} is quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'{op} has to name exactly one field.'**
+  String playlistNspGapOperatorShape(String op);
+
+  /// NSP gap sentence, export: a presence check on a field NSP never leaves empty. {field} is the rule editor's label, {op} its quoted phrase.
+  ///
+  /// In en, this message translates to:
+  /// **'In NSP, {field} always holds a value, so {op} has no form there.'**
+  String playlistNspGapPresenceOperatorExport(String field, String op);
+
+  /// NSP gap sentence, import: a presence check on a field that is never empty. Both are quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'Navidrome allows {op} only on a field that can be empty, not on {field}.'**
+  String playlistNspGapPresenceOperatorImport(String op, String field);
+
+  /// Wraps a word quoted from an NSP document (a field, operator, key or value) inside a gap sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{token}\"'**
+  String playlistNspGapQuoted(String token);
+
+  /// NSP gap sentence, export: a shuffle with no limit.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP shuffles only a limited number of items, and this rule sets no limit.'**
+  String get playlistNspGapRandomNeedsLimitExport;
+
+  /// NSP gap sentence, import: sort random with no positive limit.
+  ///
+  /// In en, this message translates to:
+  /// **'A random sort needs a limit above zero.'**
+  String get playlistNspGapRandomNeedsLimitImport;
+
+  /// NSP gap sentence, export: a shuffled rule that also sorts.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP cannot shuffle and sort at once, so the sort goes and the shuffle stays.'**
+  String get playlistNspGapRandomWithSorts;
+
+  /// NSP gap sentence, import: a range operator does not hold a pair. Both are quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'{op} on {field} needs two values, a low one and a high one.'**
+  String playlistNspGapRangeShape(String op, String field);
+
+  /// NSP gap sentence, export: a rating between two stars.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP rates in whole stars, and {value} out of 100 is not one.'**
+  String playlistNspGapRatingNotWholeStar(String value);
+
+  /// NSP gap sentence, import: a rule is neither one operator nor one group.
+  ///
+  /// In en, this message translates to:
+  /// **'A rule has to hold exactly one operator or one group.'**
+  String get playlistNspGapRuleShape;
+
+  /// NSP gap sentence, export: a substring match on a rating or a duration. {field} is the rule editor's label, {op} its quoted phrase.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP counts {field} in other units, so a text match like {op} has no form there.'**
+  String playlistNspGapScaledTextOperatorExport(String field, String op);
+
+  /// NSP gap sentence, import: a substring match on a rating or a duration. Both are quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'WaxDeck counts {field} in other units, so a text match like {op} cannot carry over.'**
+  String playlistNspGapScaledTextOperatorImport(String field, String op);
+
+  /// NSP gap sentence, import: the star under the name an older WaxDeck export used. {field} is quoted as the document spells it.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} is not an NSP field; NSP calls the star \"loved\".'**
+  String playlistNspGapStarredImport(String field);
+
+  /// NSP gap sentence, export: a rule field NSP cannot carry. {field} is the rule editor's label.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP has no field for {field}.'**
+  String playlistNspGapUnsupportedFieldExport(String field);
+
+  /// NSP gap sentence, import: the document names a field WaxDeck has no counterpart for. {field} is quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} is not a field WaxDeck can read.'**
+  String playlistNspGapUnsupportedFieldImport(String field);
+
+  /// NSP gap sentence, import: a top-level document setting has no WaxDeck form. {key} is quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'WaxDeck cannot read the {key} setting.'**
+  String playlistNspGapUnsupportedKey(String key);
+
+  /// NSP gap sentence, export: a rule node NSP cannot express.
+  ///
+  /// In en, this message translates to:
+  /// **'This part of the rule has no NSP form.'**
+  String get playlistNspGapUnsupportedNode;
+
+  /// NSP gap sentence, export: a comparison NSP cannot express. {op} is the rule editor's quoted phrase.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP has no {op} comparison.'**
+  String playlistNspGapUnsupportedOperatorExport(String op);
+
+  /// NSP gap sentence, import: an operator that does not carry over on that field. Both are quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'{op} on {field} has no WaxDeck form.'**
+  String playlistNspGapUnsupportedOperatorImport(String op, String field);
+
+  /// NSP gap sentence, export: a sort field NSP cannot carry. {field} is the rule editor's label.
+  ///
+  /// In en, this message translates to:
+  /// **'NSP cannot order by {field}.'**
+  String playlistNspGapUnsupportedSortFieldExport(String field);
+
+  /// NSP gap sentence, import: a sort field WaxDeck has no counterpart for. {field} is quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'WaxDeck cannot order by {field}.'**
+  String playlistNspGapUnsupportedSortFieldImport(String field);
+
+  /// NSP gap sentence, export: a stored yes-or-no value is neither. {field} is the rule editor's label.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} holds {value}, which NSP cannot say as yes or no.'**
+  String playlistNspGapValueNotBooleanExport(String field, String value);
+
+  /// NSP gap sentence, import: a condition that takes true or false holds something else, a loved value or a presence check's flag. All three are quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'{op} on {field} takes true or false, not {value}.'**
+  String playlistNspGapValueNotBooleanImport(
+    String op,
+    String field,
+    String value,
+  );
+
+  /// NSP gap sentence, either way: a value that should be a number is not. {field} is the rule editor's label on export, quoted on import.
+  ///
+  /// In en, this message translates to:
+  /// **'{field} takes a number, and {value} is not one.'**
+  String playlistNspGapValueNotNumeric(String field, String value);
+
+  /// NSP gap sentence, either way: a number too large to convert exactly. {field} is the rule editor's label on export, quoted on import.
+  ///
+  /// In en, this message translates to:
+  /// **'{value} for {field} is too large to carry over.'**
+  String playlistNspGapValueTooLarge(String value, String field);
+
+  /// NSP gap sentence, export: a relative date window that is not whole days.
+  ///
+  /// In en, this message translates to:
+  /// **'The window is not a whole number of days, which NSP cannot say.'**
+  String get playlistNspGapWindowNotWholeDaysExport;
+
+  /// NSP gap sentence, import: a relative date window that is fractional or not positive. {op} is quoted.
+  ///
+  /// In en, this message translates to:
+  /// **'{op} needs a whole number of days above zero, not {value}.'**
+  String playlistNspGapWindowNotWholeDaysImport(String op, String value);
+
+  /// NSP gap sentence, import: a relative date window too large to hold.
+  ///
+  /// In en, this message translates to:
+  /// **'A window of {value} days is too long.'**
+  String playlistNspGapWindowTooLarge(String value);
 
   /// Button on a playlist's header that plays it from the start.
   ///
@@ -10118,6 +10516,12 @@ abstract class AppLocalizations {
   /// **'Album label'**
   String get playlistRuleFieldAlbumLabel;
 
+  /// Smart-rule field: the MusicBrainz release id of an album or book.
+  ///
+  /// In en, this message translates to:
+  /// **'Album MBID'**
+  String get playlistRuleFieldAlbumMbid;
+
   /// Smart-rule field: what the release was pressed on.
   ///
   /// In en, this message translates to:
@@ -10141,6 +10545,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Codec'**
   String get playlistRuleFieldCodec;
+
+  /// Smart-rule field: a track's composer.
+  ///
+  /// In en, this message translates to:
+  /// **'Composer'**
+  String get playlistRuleFieldComposer;
 
   /// Smart-rule field: the file format holding the audio.
   ///
@@ -10231,6 +10641,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Rating'**
   String get playlistRuleFieldRating;
+
+  /// Smart-rule field: the MusicBrainz recording id of a track.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording MBID'**
+  String get playlistRuleFieldRecordingMbid;
+
+  /// Smart-rule field: a file's path under its library folder, as opposed to the full path.
+  ///
+  /// In en, this message translates to:
+  /// **'Path in library'**
+  String get playlistRuleFieldRelPath;
+
+  /// Smart-rule field: the MusicBrainz release group id an album belongs to.
+  ///
+  /// In en, this message translates to:
+  /// **'Release group MBID'**
+  String get playlistRuleFieldReleaseGroupMbid;
 
   /// Smart-rule field: an episode's season number.
   ///

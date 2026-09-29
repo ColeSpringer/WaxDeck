@@ -107,6 +107,54 @@ export class Playlists extends Surface {
     return this.ctx.page.getByRole('banner', { name });
   }
 
+  /// A condition row's field picker in the rule editor.
+  ruleField(index: number): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.ruleField(index)));
+  }
+
+  /// The list's import menu and the paste sheet one of its sources opens.
+  importMenu(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistImport));
+  }
+
+  importPayload(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistImportPayload));
+  }
+
+  importRun(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playlistImportRun));
+  }
+
+  async openImport(source: string): Promise<void> {
+    await chooseFromMenu(
+      this.importMenu(),
+      this.ctx.page.locator(sem(SemanticsIds.playlistImportSource(source))),
+      { settled: this.importPayload() },
+    );
+  }
+
+  /// What checking a pasted NSP document found, one row of it, and the
+  /// two ways to import it.
+  nspImportLoss(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.nspImportLoss));
+  }
+
+  nspImportLossRow(index: number): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.nspImportLossRow(index)));
+  }
+
+  nspImportKeeps(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.nspImportKeeps));
+  }
+
+  nspImportConfirm(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.nspImportConfirm));
+  }
+
+  nspImportPartial(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.nspImportPartial));
+  }
+
   /// The playlist screen's one overflow, and the export verbs behind it.
   overflow(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.playlistOverflow));

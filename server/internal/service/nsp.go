@@ -7,7 +7,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/colespringer/waxbin/model"
@@ -90,38 +93,34 @@ func nspRefused(err error, kind ErrorKind) error {
 // library, so `public` has to be lifted out here rather than left for
 // it to trip over.
 type nspMeta struct {
-	Name   string `json:"name"`
-	Public bool   `json:"public"`
+	Name   string
+	Public bool
 }
 
-// nspPlaylistKeys are the top-level keys that describe the playlist
-// rather than the rule, and so are read here and withheld from the
-// converter. Only `public`: WaxBin already ignores `name` and
-// `comment`, and withholding a key it would have accepted would be a
-// second place to keep that list in step.
-var nspPlaylistKeys = []string{"public"}
-
 // splitNSP reads the playlist half of a document and returns the rest
-// for the converter.
+// for the converter. Keys match exactly, as the converter's do, so a
+// `Public` is a key it reports rather than a switch that takes effect.
 func splitNSP(doc []byte) (nspMeta, []byte, error) {
-	var meta nspMeta
-	if err := json.Unmarshal(doc, &meta); err != nil {
-		return nspMeta{}, nil, errInvalid("the NSP document is not valid JSON: " + err.Error())
-	}
 	var top map[string]json.RawMessage
-	if err := json.Unmarshal(doc, &top); err != nil {
+	if err := json.Unmarshal(doc, &top); err != nil || top == nil {
+		var syntax *json.SyntaxError
+		if errors.As(err, &syntax) {
+			return nspMeta{}, nil, errInvalid("the NSP document is not valid JSON: " + err.Error())
+		}
 		return nspMeta{}, nil, errInvalid("the NSP document is not a JSON object")
 	}
-	held := false
-	for _, key := range nspPlaylistKeys {
-		if _, ok := top[key]; ok {
-			delete(top, key)
-			held = true
-		}
+	var meta nspMeta
+	if raw, ok := top["name"]; ok && json.Unmarshal(raw, &meta.Name) != nil {
+		return nspMeta{}, nil, errInvalid("an NSP document's `name` is text")
 	}
-	if !held {
+	raw, ok := top["public"]
+	if !ok {
 		return meta, doc, nil
 	}
+	if json.Unmarshal(raw, &meta.Public) != nil {
+		return nspMeta{}, nil, errInvalid("an NSP document's `public` is true or false")
+	}
+	delete(top, "public")
 	rule, err := json.Marshal(top)
 	if err != nil {
 		return nspMeta{}, nil, errInvalid("the NSP document could not be read")
@@ -150,22 +149,24 @@ func (l *Library) ImportPlaylistNSP(ctx context.Context, uc *UserCtx, doc []byte
 	}
 	var q query.Query
 	if partial {
-		// Still refuses two things: a malformed document, which is a
-		// broken file rather than an unmappable one, and a document
-		// where nothing survives, since a rule with every condition
-		// dropped matches the whole library.
-		res, perr := playlist.ImportNSPPartial(rule)
+		// Still refuses a malformed document, a broken file rather than
+		// an unmappable one, and one where nothing survives, since a rule
+		// with every condition dropped matches the whole library.
+		held, _ := nspHold(rule)
+		res, perr := playlist.ImportNSPPartial(held)
 		if perr != nil {
 			return Playlist{}, nspRefused(perr, KindInvalid)
 		}
 		q = res.Rule
-	} else if q, err = playlist.ImportNSP(rule); err != nil {
-		// WaxBin's refusals name the offending field, operator, or key,
-		// which is the whole value of an all-or-nothing import. The
-		// sentences are kept and answered as invalid-request rather than
-		// as the unsupported code they carry: what the caller sent is
-		// what has to change.
-		return Playlist{}, errInvalid(nspImportRefusal(rule, err))
+	} else {
+		// Every offender named rather than the first the strict walk
+		// stops at, as invalid-request: what was sent has to change.
+		if rep, _, cerr := nspImportCheck(rule); cerr == nil && !rep.OK() {
+			return Playlist{}, errInvalid(nspReasons(nspReport(rep), nil))
+		}
+		if q, err = playlist.ImportNSP(rule); err != nil {
+			return Playlist{}, nspRefused(err, KindInvalid)
+		}
 	}
 	vis := model.VisibilityPrivate
 	if meta.Public {
@@ -181,48 +182,58 @@ func (l *Library) ImportPlaylistNSP(ctx context.Context, uc *UserCtx, doc []byte
 // converter's would be a second answer about the same conversion.
 type NSPGap struct {
 	Kind   string
+	Code   string
 	Field  string
 	Op     string
 	Value  any
+	Key    string
+	Mode   string
 	Path   string
 	Reason string
 }
 
 // NSPReport is what one mapping could not carry: gaps refuse the strict
-// conversion and are what a partial one drops, notes refuse nothing. An
-// export's also names the rule read and what a partial export keeps.
+// conversion and are what a partial one drops, notes refuse nothing. Rule
+// is what a partial conversion keeps; an export's also names the rule read.
 type NSPReport struct {
 	Direction string
 	Gaps      []NSPGap
 	Notes     []NSPGap
+	Truncated bool
 	RuleHash  string
 	Rule      *SmartRule
 }
 
 func nspReport(rep playlist.NSPReport) NSPReport {
 	export := rep.Direction == playlist.NSPDirExport
+	gaps, gapsCut := nspGaps(rep.Gaps, export)
+	notes, notesCut := nspGaps(rep.Notes, export)
 	return NSPReport{
 		Direction: string(rep.Direction),
-		Gaps:      nspGaps(rep.Gaps, export),
-		Notes:     nspGaps(rep.Notes, export),
+		Gaps:      gaps,
+		Notes:     notes,
+		Truncated: gapsCut || notesCut,
 	}
 }
 
 // nspGaps re-shapes the converter's gaps for WaxDeck's callers: on an
 // export, field names and pointers in the rule's own vocabulary; either
-// way, deduped by sentence and capped.
-func nspGaps(gaps []playlist.NSPGap, export bool) []NSPGap {
+// way, deduped by what each names and capped, saying whether it was.
+func nspGaps(gaps []playlist.NSPGap, export bool) ([]NSPGap, bool) {
 	if len(gaps) == 0 {
-		return nil
+		return nil, false
 	}
 	seen := make(map[string]bool, len(gaps))
 	out := make([]NSPGap, 0, min(len(gaps), maxNSPGaps))
 	for _, g := range gaps {
 		row := NSPGap{
 			Kind:   string(g.Kind),
+			Code:   string(g.Code),
 			Field:  g.Field,
 			Op:     g.Op,
 			Value:  g.Value,
+			Key:    g.Key,
+			Mode:   g.Mode,
 			Path:   g.Path,
 			Reason: g.Reason,
 		}
@@ -237,61 +248,19 @@ func nspGaps(gaps []playlist.NSPGap, export bool) []NSPGap {
 			if term, ok := g.Value.(query.Sort); ok {
 				row.Value = map[string]any{"field": row.Field, "desc": term.Desc}
 			}
-			row.Reason = nspRuleReason(g)
 			row.Path = nspRulePointer(row.Path)
 		}
-		if seen[row.Reason] {
+		key := fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s\x00%#v", row.Code, row.Field, row.Op, row.Key, row.Mode, row.Value)
+		if seen[key] {
 			continue
 		}
-		seen[row.Reason] = true
+		seen[key] = true
 		if len(out) == maxNSPGaps {
-			break
+			return out, true
 		}
 		out = append(out, row)
 	}
-	return out
-}
-
-// nspDateFields are the file's own names for the dates it carries, which
-// an export sentence can end on.
-var nspDateFields = map[string]string{
-	"dateadded":  "added",
-	"lastplayed": "last_played",
-	"dateloved":  "starred_at",
-}
-
-// nspFieldAfter are the words an export sentence names its gap's field
-// after, when the field does not end the sentence.
-var nspFieldAfter = []string{" on ", " term ", "nsp: ", "WaxBin "}
-
-// nspRuleReason respells the field an export sentence ends on, in the
-// engine's or the file's name, or the gap's field where the sentence
-// names it mid-way. Nothing else in the sentence is touched.
-func nspRuleReason(g playlist.NSPGap) string {
-	reason := g.Reason
-	cut := strings.LastIndexByte(reason, ' ') + 1
-	last := reason[cut:]
-	if engine, ok := nspDateFields[last]; ok {
-		last = engine
-	}
-	if spec, ok := ruleFieldsByEngine[last]; ok {
-		return reason[:cut] + spec.api
-	}
-	spec, ok := ruleFieldsByEngine[g.Field]
-	if !ok {
-		return reason
-	}
-	for _, after := range nspFieldAfter {
-		i := strings.Index(reason, after+g.Field)
-		if i < 0 {
-			continue
-		}
-		end := i + len(after) + len(g.Field)
-		if end == len(reason) || reason[end] == ' ' || reason[end] == ',' {
-			return reason[:i+len(after)] + spec.api + reason[end:]
-		}
-	}
-	return reason
+	return out, false
 }
 
 // ruleHashForm is what ruleHash answers.
@@ -323,9 +292,8 @@ func nspRulePointer(path string) string {
 }
 
 // ReportPlaylistNSPImport says what importing a document would drop,
-// without importing it. Never refuses on expressiveness - that is the
-// whole point of asking - so its only failure is a document that is not
-// readable JSON.
+// and what a partial import would keep, without importing it. It never
+// refuses on expressiveness, only a document that is not one.
 func (l *Library) ReportPlaylistNSPImport(doc []byte) (NSPReport, error) {
 	if len(doc) > maxNSPBytes {
 		return NSPReport{}, errInvalid(fmt.Sprintf("an NSP document may be at most %d bytes", maxNSPBytes))
@@ -334,28 +302,191 @@ func (l *Library) ReportPlaylistNSPImport(doc []byte) (NSPReport, error) {
 	if err != nil {
 		return NSPReport{}, err
 	}
-	rep, err := playlist.CheckNSPImport(rule)
+	rep, held, err := nspImportCheck(rule)
 	if err != nil {
 		return NSPReport{}, errInvalid("the NSP document could not be read: " + err.Error())
 	}
-	return nspReport(rep), nil
+	out := nspReport(rep)
+	// The partial import's own walk, which refuses a malformed document
+	// or one where nothing survives, so it keeps no rule for either.
+	broken := slices.ContainsFunc(rep.Gaps, func(g playlist.NSPGap) bool { return g.Kind == playlist.NSPGapMalformed })
+	if len(out.Gaps) > 0 && !broken {
+		if res, perr := playlist.ImportNSPPartial(held); perr == nil {
+			kept := queryToRule(res.Rule)
+			out.Rule = &kept
+		}
+	}
+	return out, nil
 }
 
-// nspImportRefusal composes the sentence an all-or-nothing import refuses
-// with. The strict parse stops at the first gap, so a document with a typo
-// for `all` is refused for the missing root group the typo caused and never
-// names the typo; the check walks the whole document, so the refusal names
-// every offender the caller has to fix instead of one round trip each.
-//
-// The strict sentence stands when the two disagree: an unparseable document
-// is the check's only failure, and a check that found nothing has nothing
-// to say about a refusal that happened anyway.
-func nspImportRefusal(rule []byte, strict error) string {
+// nspDroppedLeaf is a condition the converter drops, standing in for one
+// a rule cannot hold so a partial import prunes what that empties.
+var nspDroppedLeaf = json.RawMessage(`{"is":{"":0}}`)
+
+// nspImportCheck is everything an import of rule would lose: the
+// converter's report plus what a WaxDeck rule cannot hold, and the
+// document a partial import reads.
+func nspImportCheck(rule []byte) (playlist.NSPReport, []byte, error) {
 	rep, err := playlist.CheckNSPImport(rule)
 	if err != nil {
-		return nspMessage(strict)
+		return rep, nil, err
 	}
-	return nspReasons(nspReport(rep), strict)
+	held, gaps := nspHold(rule)
+	rep.Gaps = append(rep.Gaps, gaps...)
+	return rep, held, nil
+}
+
+// nspHold finds what the converter carries but a rule's next save would
+// refuse or rewrite, swapping each condition for nspDroppedLeaf. A
+// non-zero offset is one: a rule has no offset to keep it in.
+func nspHold(rule []byte) ([]byte, []playlist.NSPGap) {
+	var top map[string]json.RawMessage
+	if json.Unmarshal(rule, &top) != nil {
+		return rule, nil
+	}
+	var gaps []playlist.NSPGap
+	if raw, ok := top["offset"]; ok {
+		var n int
+		if json.Unmarshal(raw, &n) == nil && n != 0 {
+			gaps = append(gaps, playlist.NSPGap{Kind: playlist.NSPGapShape, Code: playlist.NSPReasonUnsupportedKey,
+				Key: "offset", Path: "/offset", Reason: "nsp: unsupported top-level key: offset"})
+			delete(top, "offset")
+		}
+	}
+	// The converter reads `all`, or failing that `any`.
+	for _, key := range []string{"all", "any"} {
+		if raw, ok := top[key]; ok {
+			held, heldGaps := nspHoldGroup(raw, "/"+key)
+			top[key], gaps = held, append(gaps, heldGaps...)
+			break
+		}
+	}
+	if len(gaps) == 0 {
+		return rule, nil
+	}
+	out, err := json.Marshal(top)
+	if err != nil {
+		return rule, gaps
+	}
+	return out, gaps
+}
+
+// nspHoldGroup is nspHold for one group's rules, at path.
+func nspHoldGroup(raw json.RawMessage, path string) (json.RawMessage, []playlist.NSPGap) {
+	var rules []json.RawMessage
+	if json.Unmarshal(raw, &rules) != nil {
+		return raw, nil
+	}
+	var gaps []playlist.NSPGap
+	for i, r := range rules {
+		var one map[string]json.RawMessage
+		if json.Unmarshal(r, &one) != nil || len(one) != 1 {
+			continue
+		}
+		at := path + "/" + strconv.Itoa(i)
+		for op, val := range one {
+			if op == "all" || op == "any" {
+				if held, heldGaps := nspHoldGroup(val, at+"/"+op); len(heldGaps) > 0 {
+					rules[i], _ = json.Marshal(map[string]json.RawMessage{op: held})
+					gaps = append(gaps, heldGaps...)
+				}
+			} else if g, ok := nspHeldLeaf(r, op, val, at); ok {
+				rules[i] = nspDroppedLeaf
+				gaps = append(gaps, g)
+			}
+		}
+	}
+	if len(gaps) == 0 {
+		return raw, nil
+	}
+	out, err := json.Marshal(rules)
+	if err != nil {
+		return raw, gaps
+	}
+	return out, gaps
+}
+
+// nspHeldLeaf answers the gap for one condition the converter reads but
+// a rule's save would refuse or rewrite, judged by that save's own
+// round trip; the converter's own gaps are left to it.
+func nspHeldLeaf(leaf json.RawMessage, op string, val json.RawMessage, path string) (playlist.NSPGap, bool) {
+	q, err := playlist.ImportNSP(slices.Concat([]byte(`{"all":[`), leaf, []byte(`]}`)))
+	and, ok := q.Where.(query.And)
+	if err != nil || !ok || len(and.Nodes) != 1 {
+		return playlist.NSPGap{}, false
+	}
+	node := and.Nodes[0]
+	if back, err := ruleNodeToEngine(engineNodeToRule(node), 1, new(int)); err == nil && sameRuleNode(node, back) {
+		return playlist.NSPGap{}, false
+	}
+	var fieldValue map[string]any
+	_ = json.Unmarshal(val, &fieldValue)
+	g := playlist.NSPGap{Kind: playlist.NSPGapValue, Op: op, Path: path}
+	for field, value := range fieldValue {
+		g.Field, g.Value = field, value
+	}
+	cond, _ := node.(query.Cond)
+	if not, ok := node.(query.Not); ok {
+		cond, _ = not.Node.(query.Cond)
+	}
+	kind := ruleFieldsByEngine[cond.Field].kind
+	switch {
+	case !opAllowed(kind, string(cond.Op)):
+		g.Kind, g.Code, g.Value = playlist.NSPGapOperator, playlist.NSPReasonUnsupportedOperator, nil
+		g.Reason = "nsp: unsupported operator: " + op
+	case relativeOps[string(cond.Op)]:
+		g.Code = playlist.NSPReasonWindowTooLarge
+		g.Reason = fmt.Sprintf("nsp: %s window of %v days is too large", op, g.Value)
+	case kind == ruleKindNumber:
+		g.Code = playlist.NSPReasonValueNotNumeric
+		g.Reason = "nsp: " + g.Field + " value must be numeric"
+	default:
+		g.Code = playlist.NSPReasonBadValue
+		g.Reason = "nsp: bad value for " + op
+	}
+	return g, true
+}
+
+// sameRuleNode reports whether a save's round trip gave a condition back
+// unchanged, comparing numbers as numbers.
+func sameRuleNode(a, b query.Node) bool {
+	switch x := a.(type) {
+	case query.Not:
+		y, ok := b.(query.Not)
+		return ok && sameRuleNode(x.Node, y.Node)
+	case query.Cond:
+		y, ok := b.(query.Cond)
+		if !ok || model.CanonicalQueryField(x.Field) != model.CanonicalQueryField(y.Field) || x.Op != y.Op ||
+			!sameRuleValue(x.Value, y.Value) || len(x.Values) != len(y.Values) {
+			return false
+		}
+		for i := range x.Values {
+			if !sameRuleValue(x.Values[i], y.Values[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func sameRuleValue(a, b any) bool {
+	number := func(v any) (float64, bool) {
+		switch n := v.(type) {
+		case int64:
+			return float64(n), true
+		case int:
+			return float64(n), true
+		case float64:
+			return n, true
+		}
+		return 0, false
+	}
+	if x, ok := number(a); ok {
+		y, ok := number(b)
+		return ok && x == y
+	}
+	return reflect.DeepEqual(a, b)
 }
 
 // nspExportRefusal composes the sentence an all-or-nothing export refuses
@@ -379,7 +510,15 @@ func nspReasons(rep NSPReport, strict error) string {
 	}
 	reasons := make([]string, 0, len(rep.Gaps))
 	for _, g := range rep.Gaps {
-		reasons = append(reasons, g.Reason)
+		// The field in the rule's words where the converter's sentence
+		// leaves it out or spells it as the catalog does.
+		reason := g.Reason
+		if g.Field != "" && !strings.Contains(reason, g.Field) {
+			reason += " (" + g.Field + ")"
+		}
+		if !slices.Contains(reasons, reason) {
+			reasons = append(reasons, reason)
+		}
 	}
 	return strings.Join(reasons, "; ")
 }

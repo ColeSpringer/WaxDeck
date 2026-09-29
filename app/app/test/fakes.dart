@@ -6367,6 +6367,42 @@ class FakeRepository implements WaxDeckRepository {
     return nspExport;
   }
 
+  /// What [checkNspImport] answers, and what [importNsp] raises.
+  NspReport nspImportReport = const NspReport(direction: 'import');
+  WaxDeckApiException? nspImportError;
+
+  /// Every NSP document checked, and every import with its choices.
+  final List<Map<String, Object?>> nspImportChecks = [];
+  final List<({Map<String, Object?> document, bool partial, String? name})>
+  nspImports = [];
+
+  /// Held open until completed, so a test can act mid-check.
+  Completer<void>? nspImportCheckGate;
+
+  @override
+  Future<NspReport> checkNspImport(Map<String, Object?> document) async {
+    nspImportChecks.add(document);
+    await nspImportCheckGate?.future;
+    return nspImportReport;
+  }
+
+  @override
+  Future<Playlist> importNsp(
+    Map<String, Object?> document, {
+    bool partial = false,
+    String? name,
+  }) async {
+    nspImports.add((document: document, partial: partial, name: name));
+    final error = nspImportError;
+    if (error != null) throw error;
+    final named = document['name'];
+    return createPlaylist(
+      name: name ?? (named is String ? named : 'Imported'),
+      kind: 'smart',
+      rule: const SmartRule(root: RuleNode.all([])),
+    );
+  }
+
   /// Similarity coverage served by [getSimilarityStatus].
   SimilarityStatus similarityStatus = const SimilarityStatus(
     enabled: false,

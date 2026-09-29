@@ -354,6 +354,9 @@ func nspReportJSON(rep service.NSPReport) NspReport {
 	if notes := nspGapsJSON(rep.Notes); notes != nil {
 		out.Notes = &notes
 	}
+	if rep.Truncated {
+		out.Truncated = ptr(true)
+	}
 	if rep.RuleHash != "" {
 		out.RuleHash = ptr(rep.RuleHash)
 	}
@@ -372,6 +375,7 @@ func nspGapsJSON(gaps []service.NSPGap) []NspGap {
 	for _, g := range gaps {
 		row := NspGap{
 			Kind:   NspGapKind(g.Kind),
+			Code:   g.Code,
 			Path:   g.Path,
 			Reason: g.Reason,
 		}
@@ -380,6 +384,12 @@ func nspGapsJSON(gaps []service.NSPGap) []NspGap {
 		}
 		if g.Op != "" {
 			row.Op = ptr(g.Op)
+		}
+		if g.Key != "" {
+			row.Key = ptr(g.Key)
+		}
+		if g.Mode != "" {
+			row.Mode = ptr(g.Mode)
 		}
 		// The generated field is a bare `interface{}`, not a pointer:
 		// taking an address here would hand every in-process reader a

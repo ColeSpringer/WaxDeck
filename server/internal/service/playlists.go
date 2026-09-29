@@ -164,11 +164,8 @@ var ruleOpsByKind = map[string][]string{
 	ruleKindText:   {"is", "isNot", "contains", "startsWith", "endsWith", "isPresent", "isMissing"},
 	ruleKindNumber: {"is", "isNot", "gt", "lt", "gte", "lte", "inTheRange", "isPresent", "isMissing"},
 	ruleKindDate:   {"before", "after", "inTheRange", "inTheLast", "notInTheLast", "isPresent", "isMissing"},
-	// `isNot` alongside `is`, which says the same thing on a two-valued
-	// column but is what a rule arriving through the .nsp converter can
-	// hold: the importer accepts both on `starred`, and an editor that
-	// offers only `is` renders such a rule and refuses it on the next
-	// save. The engine compiles OpIsNot on all three of these columns.
+	// `isNot` alongside `is`: the .nsp importer accepts both on `loved`,
+	// and an editor offering only `is` would refuse such a rule on save.
 	ruleKindBoolean:   {"is", "isNot"},
 	ruleKindMediaType: {"is", "isNot"},
 	// Two operators, and the exclusions are deliberate. `in`/`notIn`
@@ -223,6 +220,7 @@ var ruleFieldSpecs = []ruleFieldSpec{
 	{api: "title", engine: "title", kind: ruleKindText, sortable: true, desc: "item title"},
 	{api: "artist", engine: "artist", kind: ruleKindText, sortable: true, desc: "artist, author, or show"},
 	{api: "albumArtist", engine: "album_artist", kind: ruleKindText, sortable: true, desc: "album artist"},
+	{api: "composer", engine: "composer", kind: ruleKindText, sortable: true, desc: "composer (music)"},
 	{api: "album", engine: "album", kind: ruleKindText, sortable: true, desc: "album, series, or show"},
 	{api: "podcast", engine: "podcast", kind: ruleKindText, sortable: true, desc: "show title (episodes)"},
 	{api: "genre", engine: "genre", kind: ruleKindText, sortable: true, desc: "genre"},
@@ -249,10 +247,14 @@ var ruleFieldSpecs = []ruleFieldSpec{
 	{api: "albumCatalogNumber", engine: "album_catalog_number", kind: ruleKindText, sortable: false, desc: "label catalog number"},
 	{api: "albumMedia", engine: "album_media", kind: ruleKindText, sortable: false, desc: "release medium (CD, vinyl, digital)"},
 	{api: "albumCountry", engine: "album_country", kind: ruleKindText, sortable: false, desc: "release country"},
+	{api: "recordingMbid", engine: "recording_mbid", kind: ruleKindText, sortable: false, desc: "MusicBrainz recording id (music)"},
+	{api: "albumMbid", engine: "album_mbid", kind: ruleKindText, sortable: false, desc: "MusicBrainz release id of the album or book"},
+	{api: "releaseGroupMbid", engine: "release_group_mbid", kind: ruleKindText, sortable: false, desc: "MusicBrainz release group id"},
 	{api: "source", engine: "source", kind: ruleKindText, sortable: true, desc: "origin: local, rss, youtube, manual"},
 	{api: "codec", engine: "codec", kind: ruleKindText, sortable: true, desc: "audio codec"},
 	{api: "container", engine: "container", kind: ruleKindText, sortable: true, desc: "file container"},
 	{api: "path", engine: "path", kind: ruleKindText, sortable: true, desc: "file path"},
+	{api: "relPath", engine: "rel_path", kind: ruleKindText, sortable: true, desc: "file path under the library root, with forward slashes"},
 	{api: "state", engine: "state", kind: ruleKindText, sortable: false, desc: "present, archived, remote, or missing"},
 	{api: "addedAt", engine: "added", kind: ruleKindDate, sortable: true, desc: "when the item entered the library"},
 	{api: "updatedAt", engine: "updated_at", kind: ruleKindDate, sortable: true, desc: "when the item last changed"},

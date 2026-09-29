@@ -41,11 +41,12 @@ the playlist while the record of the offer survives.
 Rules are groups of conditions. A group matches ALL of its children or
 ANY of them, and groups nest, so "music AND (rating at least 80 OR
 starred)" is three rows and one nested group. Fields cover the catalog
-(title, artist, album, genre, year, duration, codec, added date), the
-spoken-word dimensions (show, season, published date), your own
-listening state (starred, rating, play count, played, finished, last
-played), and every custom tag as `tag.KEY`. Because listening state is
-per user, the same smart playlist gives each user their own results.
+(title, artist, composer, album, genre, year, duration, codec, added
+date, the file's path, MusicBrainz ids), the spoken-word dimensions
+(show, season, published date), your own listening state (starred,
+rating, play count, played, finished, last played), and every custom
+tag as `tag.KEY`. Because listening state is per user, the same smart
+playlist gives each user their own results.
 
 Sort keys and a member limit turn rules into charts: "my 25 most
 played this collection" is one condition, one sort, one limit. The
@@ -73,26 +74,40 @@ writes one back out. The conversion is the catalog's own, so the two
 servers agree about what a field means rather than drifting apart as
 either gains one.
 
-`rating` is rescaled rather than copied: Navidrome rates 0 to 5 where
-the catalog rates 0 to 100. An unscaled `rating gt 3` would mean
-"rated above 3 out of 100", which is every rated track - a playlist
-that looks imported and is not the one you had. On the way out, a
-rating that is not a whole number of stars is refused rather than
-written as a fraction Navidrome cannot mean.
+Most fields keep their name. The rest map onto the rule's own: `loved`
+is `starred`, `duration` is `durationMs`, `filepath` is `relPath` (the
+path under the library's root, which is what Navidrome keeps),
+`catalognumber` is `albumCatalogNumber`, the three `mbz_*` ids for a
+recording, an album and a release group are `recordingMbid`,
+`albumMbid` and `releaseGroupMbid`, and the dates `dateadded`,
+`lastplayed` and `dateloved` are `addedAt`, `lastPlayedAt` and
+`starredAt`. A document an older WaxDeck exported calls the star
+`starred`, which is not NSP's name for it, so the import reports it as
+a field it cannot read: rename it to `loved`.
+
+`rating` and `duration` are rescaled rather than copied: Navidrome rates
+0 to 5 where the catalog rates 0 to 100, and counts seconds where a rule
+counts milliseconds. An unscaled `rating gt 3` would mean "rated above 3
+out of 100", which is every rated track: a playlist that looks imported
+and is not the one you had. On the way out, a rating that is not a
+whole number of stars, or a duration with a fraction of a millisecond,
+is refused rather than written as a value Navidrome cannot mean.
 
 That is the rule for both directions by default: **anything that cannot
 be said exactly refuses the whole document, naming every part that
 stopped it.** Half a rule is a different playlist, so nothing is
 quietly dropped. On import that covers fields the catalog has no answer
-for (`bitrate`, `size`, the `mbz_*` identifiers, and the rest),
-`limitPercent` and any other unrecognised top-level key - including a
+for (`bitrate`, `size`, the artist `mbz_*` ids, and the rest),
+`limitPercent` and any other unrecognised top-level key (including a
 typo for `all`, which would otherwise import as a rule over your whole
-library - `inPlaylist`, and the absolute date operators, whose naive
-local dates have no faithful reading against stored instants. On export
-it covers what the catalog can say and NSP cannot, which is more: every
-negation but `notContains`, `gte` and `lte`, `isPresent` and
-`isMissing`, custom `tag.KEY` fields, the budget limit modes, and the
-fields NSP does not carry at all.
+library), `inPlaylist`, and every date comparison but a window of days
+back (`inTheLast`, `notInTheLast`), since NSP's naive local dates have
+no faithful reading against stored instants. On export it covers what
+the catalog can say and NSP cannot, which is more: every negation but
+`notContains`, `gte` and `lte`, `isPresent` and `isMissing` on a field
+Navidrome never leaves empty, a date compared other than by a window of
+days, custom `tag.KEY` fields, the budget limit modes, and the fields
+NSP does not carry at all.
 
 **A rule sorted on more than one term is one of them.** NSP orders on a
 single `sort`, so a playlist ordered by play count and then by title
@@ -102,18 +117,33 @@ a playlist without saying so was worse than either answer.
 
 You can accept the loss instead. **Export as NSP** asks first: a rule
 that maps exactly hands back the document, and one that does not lists
-every part that would go, in the converter's own words (with fields
-spelled as the rule editor spells them), then shows what the export
-keeps as the same chips the playlist header draws, before offering to
-export without them. The report carries a `ruleHash` the export takes
+every part that would go, each under the rule editor's name for its
+field and in the app's language, then shows what the export keeps as
+the same chips the playlist header draws, before offering to export
+without them. The report carries a `ruleHash` the export takes
 back, so a rule edited while the dialog is open (a shared playlist's
 owner saving a change, say) is refused with `conflict` rather than
 exported against a list that no longer describes it; the app reads the
-new report and asks once more. Import works the same way -
-`POST /playlists/nsp/report` says what a document would lose, and
-`?partial=true` on either operation takes it. Both still refuse when
-nothing survives, since a rule with every condition dropped selects the
-whole library rather than a smaller version of what was asked for.
+new report and asks once more.
+
+Import works the same way. On the playlists screen, **Import playlist**
+then **Navidrome smart playlist** takes the pasted `.nsp` file, and
+**Check** lists every part WaxDeck cannot read before anything is made:
+**Import** when nothing is lost, **Import without them** (with what that
+keeps) when something is. A damaged document (both an `all` and an
+`any` group, a rule that is not one operator) is refused outright, since
+a partial import of it would drop what somebody wrote without saying so.
+A condition the rule editor would not save as written counts as a part
+WaxDeck cannot read too: an operator its field does not take
+(`contains` on `year`, `gt` on `title`), a value of the wrong type, a
+window past 100000 days, or an `offset`, which a rule does not hold.
+The document's `public` sets the **Shared with everyone** switch, which
+decides; the new playlist opens when it is made. Through the API,
+`POST /playlists/nsp/report` says what a document would lose and what a
+partial import would keep, and `?partial=true` on either operation takes
+it. Both still refuse when nothing survives, since a rule with every
+condition dropped selects the whole library rather than a smaller
+version of what was asked for.
 
 The report is its own request rather than something a successful export
 carries back: the export's body is the document *another server reads*,

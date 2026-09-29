@@ -672,6 +672,19 @@ abstract interface class WaxDeckRepository {
   /// exporting it. Refuses only for a playlist with no rule.
   Future<NspReport> reportPlaylistNspExport(String pid);
 
+  /// `POST /playlists/nsp/report`: what importing a Navidrome smart
+  /// playlist [document] would drop, without importing it.
+  Future<NspReport> checkNspImport(Map<String, Object?> document);
+
+  /// `POST /playlists/nsp`: a smart playlist from [document]. [partial]
+  /// drops what WaxDeck cannot read instead of refusing; [name] wins over
+  /// the document's own.
+  Future<Playlist> importNsp(
+    Map<String, Object?> document, {
+    bool partial = false,
+    String? name,
+  });
+
   /// `GET /playlists/{pid}/nsp`: the smart playlist's rule as a
   /// Navidrome document. [partial] drops what NSP cannot say instead of
   /// refusing; [ruleHash] (from the report) refuses a rule edited since.
@@ -3187,6 +3200,50 @@ class WaxDeckClient implements WaxDeckRepository {
       pid: pid,
     );
     return nspReportFromGen(_require(response.data));
+  });
+
+  // The two NSP calls post the document as pasted: the generated body is
+  // a map of JsonObject, which has no form for a top-level null.
+  @override
+  Future<NspReport> checkNspImport(Map<String, Object?> document) =>
+      _guard(() async {
+        final response = await _gen.dio.post<Object?>(
+          '/playlists/nsp/report',
+          data: document,
+        );
+        return nspReportFromGen(
+          _require(
+            gen.standardSerializers.deserializeWith(
+              gen.NspReport.serializer,
+              response.data,
+            ),
+          ),
+        );
+      });
+
+  @override
+  Future<Playlist> importNsp(
+    Map<String, Object?> document, {
+    bool partial = false,
+    String? name,
+  }) => _guard(() async {
+    final response = await _gen.dio.post<Object?>(
+      '/playlists/nsp',
+      data: document,
+      queryParameters: <String, Object?>{
+        if (name != null) 'name': name,
+        if (partial) 'partial': true,
+      },
+    );
+    return playlistFromGen(
+      _require(
+        gen.standardSerializers.deserializeWith(
+          gen.Playlist.serializer,
+          response.data,
+        ),
+      ),
+      baseUrl: _baseUrl,
+    );
   });
 
   @override

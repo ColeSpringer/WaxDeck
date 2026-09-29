@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 import { subsonic } from './driver/subsonic';
-import { clickThrough } from './driver/gestures';
+import { clickThrough, typeInto } from './driver/gestures';
 import { SemanticsIds } from './semantics-ids';
 
 // The playlists slice over the real stack: the rule editor building a
@@ -359,8 +359,8 @@ test('an NSP export reports every gap, and offers the partial', async ({ app }) 
     expect(gap.path).toBeTruthy();
     expect(gap.reason).toBeTruthy();
   }
-  // Sentences name fields as the rule does, not as the query engine does.
-  expect(gaps.map((g) => g.reason)).toContain('nsp: unsupported field: mediaType');
+  // A code names each gap, on a field spelled as the rule spells it.
+  expect(gaps.map((g) => [g.code, g.field])).toContainEqual(['unsupported_field', 'mediaType']);
   expect(report.rule?.root.nodes?.map((n) => n.field)).toEqual(['genre']);
   expect(report.ruleHash).toMatch(/^[0-9a-f]{16}$/);
 
@@ -384,8 +384,8 @@ test('an NSP export reports every gap, and offers the partial', async ({ app }) 
   expect(partial).not.toContain('mediaType');
 
   // And through the UI, which is where the choice actually gets made:
-  // the loss is listed in the converter's own words, and only somebody
-  // who has read it reaches the document.
+  // the loss is listed in the app's own words, and only somebody who has
+  // read it reaches the document.
   await app.nav.enter('playlists');
   await app.playlists.openShowing(lossy.pid, app.playlists.ruleSummary());
   await app.playlists.fromOverflow(
@@ -396,7 +396,7 @@ test('an NSP export reports every gap, and offers the partial', async ({ app }) 
   // ties the sentence to a row somebody actually built.
   await expect(app.playlists.exportNspLossRow(0)).toContainText('Media type');
   await expect(app.playlists.exportNspLossRow(1)).toContainText('Title');
-  await expect(app.playlists.exportNspLoss()).toContainText('single sort term');
+  await expect(app.playlists.exportNspLoss()).toContainText('by one field only');
   await expect(app.playlists.exportNspKeeps()).toContainText('Genre is Rock');
 
   // Proceeding lands on the same document dialog the other exports use.
@@ -409,6 +409,61 @@ test('an NSP export reports every gap, and offers the partial', async ({ app }) 
   await app.seed.clearPlaylistsNamed('Two Sorts');
 });
 
+
+test('a pasted NSP document is checked, then imports as a rule', async ({ app }) => {
+  await app.seed.clearPlaylistsNamed('Loved and long');
+  await app.seed.clearPlaylistsNamed('Old WaxDeck export');
+  await app.nav.enter('playlists');
+
+  // loved and duration arrive under the rule's own names, the duration
+  // rescaled from seconds.
+  await app.playlists.openImport('nsp');
+  await typeInto(
+    app.page,
+    app.playlists.importPayload(),
+    JSON.stringify({
+      name: 'Loved and long',
+      all: [{ is: { loved: true } }, { gt: { duration: 180 } }],
+    }),
+  );
+  await clickThrough(app.playlists.importRun(), app.playlists.nspImportConfirm());
+  // One line, so it is the container's name rather than a text node.
+  await expect(app.playlists.nspImportLoss()).toHaveAccessibleName(
+    'Everything in this document carries over.',
+  );
+  await clickThrough(app.playlists.nspImportConfirm(), app.playlists.ruleSummary());
+  await expect(app.playlists.ruleSummary()).toContainText('Starred is yes');
+  await expect(app.playlists.ruleSummary()).toContainText('Duration ms is more than 180000');
+
+  // And the editor draws both, which it cannot for a field it does not know.
+  await clickThrough(app.playlists.control(SemanticsIds.playlistEditRule), app.playlists.ruleSave());
+  // Exact, so a Flutter that stops dropping the field's own semantics
+  // on the web, and so names the picker twice, fails here.
+  await expect(app.playlists.ruleField(0)).toHaveAccessibleName('Field Starred');
+  await expect(app.playlists.ruleField(1)).toHaveAccessibleName('Field Duration ms');
+
+  // An older WaxDeck export named the star `starred`, which NSP does not.
+  await app.nav.enter('playlists');
+  await app.playlists.openImport('nsp');
+  await typeInto(
+    app.page,
+    app.playlists.importPayload(),
+    JSON.stringify({
+      name: 'Old WaxDeck export',
+      all: [{ is: { starred: true } }, { contains: { genre: 'Rock' } }],
+    }),
+  );
+  await clickThrough(app.playlists.importRun(), app.playlists.nspImportPartial());
+  await expect(app.playlists.nspImportLossRow(0)).toContainText(
+    '"starred" is not an NSP field; NSP calls the star "loved".',
+  );
+  await expect(app.playlists.nspImportKeeps()).toContainText('Genre contains Rock');
+  await clickThrough(app.playlists.nspImportPartial(), app.playlists.ruleSummary());
+  await expect(app.playlists.ruleSummary()).toContainText('Genre contains Rock');
+
+  await app.seed.clearPlaylistsNamed('Loved and long');
+  await app.seed.clearPlaylistsNamed('Old WaxDeck export');
+});
 
 test('a fresh account is seeded with Most played', async ({ app, otherAccount }) => {
   // An account of this test's own, minted through the production API

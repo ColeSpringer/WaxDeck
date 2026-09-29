@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/playlist"
 )
 
 // A stored rule may hold either spelling of a field the query engine
@@ -56,6 +57,18 @@ func TestRuleFieldsByEngineNamesTheKnownAliases(t *testing.T) {
 		}
 		if spec.api != wantAPI {
 			t.Errorf("engine alias %q resolves to %q, want %q", alias, spec.api, wantAPI)
+		}
+	}
+}
+
+// A field .nsp carries imports onto an engine field, so a rule field has
+// to answer for it or the imported rule reads back as a name the editor
+// cannot draw and a later PATCH refuses.
+func TestEveryFieldNSPCarriesIsARuleField(t *testing.T) {
+	t.Parallel()
+	for _, engine := range playlist.NSPExportableFields() {
+		if _, ok := ruleFieldsByEngine[engine]; !ok {
+			t.Errorf(".nsp carries %s, which no rule field names", engine)
 		}
 	}
 }

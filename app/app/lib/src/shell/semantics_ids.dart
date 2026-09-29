@@ -611,6 +611,12 @@ abstract final class SemanticsIds {
   static const String addToPlaylistNew = 'add-to-playlist-new';
   static String addToPlaylistTarget(Object pid) =>
       'add-to-playlist-target-$pid';
+  static const String nspImportConfirm = 'nsp-import-confirm';
+  static const String nspImportKeeps = 'nsp-import-keeps';
+  static const String nspImportLoss = 'nsp-import-loss';
+  static String nspImportLossRow(Object index) => 'nsp-import-loss-$index';
+  static const String nspImportPartial = 'nsp-import-partial';
+  static const String nspImportShared = 'nsp-import-shared';
   static String playlist(Object pid) => 'playlist-$pid';
   static const String playlistAdd = 'playlist-add';
   static const String playlistAddField = 'playlist-add-field';

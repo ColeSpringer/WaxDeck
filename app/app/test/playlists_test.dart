@@ -1217,19 +1217,33 @@ void main() {
         gaps: [
           NspGap(
             kind: 'field',
-            path: '/all/1',
-            reason: 'nsp: no .nsp field for mediaType',
+            code: 'unsupported_field',
+            path: '/root/nodes/0',
+            reason: 'nsp: unsupported field: kind',
             field: 'mediaType',
+          ),
+          NspGap(
+            kind: 'sort',
+            code: 'extra_sort_term',
+            path: '/sorts/1',
+            reason: 'nsp: the sort term title has no .nsp representation',
+            field: 'title',
           ),
         ],
         notes: [
           NspGap(
-            kind: 'sort',
-            path: '/sort',
-            reason: 'nsp: .nsp sorts on one term, so title is dropped',
-            field: 'title',
+            kind: 'entity',
+            code: 'entity_widens',
+            path: '/entity',
+            reason: 'nsp: .nsp has no track/book distinction',
+            value: 'tracks',
           ),
         ],
+        rule: SmartRule(
+          root: RuleNode.all([
+            RuleNode.condition(field: 'genre', op: 'is', value: 'Rock'),
+          ]),
+        ),
       );
     final created = await repo.createPlaylist(
       name: 'Music only',
@@ -1256,25 +1270,28 @@ void main() {
 
     await openMenu();
 
-    // Both a gap and a note, each in the converter's own words rather
-    // than a phrase of ours - under the name the rule editor gives the
-    // field, which is what ties the sentence to a row somebody built.
-    expect(find.text('nsp: no .nsp field for mediaType'), findsOneWidget);
+    // Gaps and a note in the app's words, worded from their codes, each
+    // under the rule editor's name for its field.
+    expect(find.text('NSP has no field for Media type.'), findsOneWidget);
     expect(
-      find.text('nsp: .nsp sorts on one term, so title is dropped'),
+      find.text(
+        'NSP sorts by one field only, so the later sort by Title goes.',
+      ),
       findsOneWidget,
     );
+    expect(find.textContaining('does not tell tracks from'), findsOneWidget);
+    expect(find.textContaining('nsp:'), findsNothing);
     expect(find.text('Media type'), findsOneWidget);
     expect(find.text('Title'), findsOneWidget);
     // One row per gap rather than one paragraph of all of them.
     expect(
-      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspLossRow(1)),
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspLossRow(2)),
       findsOneWidget,
     );
     // Counts what has no NSP form, not what the export drops: one of
-    // the two is a note, which is a loss the format makes either way and
-    // that a partial export does not drop.
-    expect(find.text('2 parts of this rule have no NSP form.'), findsOneWidget);
+    // the three is a note, which is a loss the format makes either way
+    // and that a partial export does not drop.
+    expect(find.text('3 parts of this rule have no NSP form.'), findsOneWidget);
 
     // Cancel exports nothing at all.
     await tester.tap(find.text('Cancel'));
@@ -1311,11 +1328,17 @@ void main() {
         gaps: [
           NspGap(
             kind: 'field',
+            code: 'unsupported_field',
             path: '/root/nodes/0',
             reason: 'nsp: unsupported field: mediaType',
             field: 'mediaType',
           ),
         ],
+        rule: SmartRule(
+          root: RuleNode.all([
+            RuleNode.condition(field: 'genre', op: 'is', value: 'Rock'),
+          ]),
+        ),
       )
       ..nspExportError = const WaxDeckApiException(
         code: 'feature-unavailable',
@@ -1358,6 +1381,7 @@ void main() {
     gaps: const [
       NspGap(
         kind: 'field',
+        code: 'unsupported_field',
         path: '/root/nodes/1',
         reason: 'nsp: unsupported field: mediaType',
         field: 'mediaType',
@@ -1401,6 +1425,7 @@ void main() {
         notes: [
           NspGap(
             kind: 'entity',
+            code: 'entity_widens',
             path: '/entity',
             reason:
                 'nsp: .nsp has no track/book distinction, so this rule '
@@ -1468,6 +1493,21 @@ void main() {
     ]);
   });
 
+  testWidgets('an NSP loss past the cap says there is more', (tester) async {
+    final repo = FakeRepository(items: const [_track])
+      ..nspReport = lossyReport('00000000000000aa', 'Rock').copyTruncated();
+    final created = await lossyPlaylist(repo);
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    await exportAsNsp(tester);
+
+    expect(
+      find.text('More than one part of this rule has no NSP form.'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a loss with nothing kept draws no keeps section', (
     tester,
   ) async {
@@ -1478,6 +1518,7 @@ void main() {
         gaps: [
           NspGap(
             kind: 'field',
+            code: 'unsupported_field',
             path: '/root/nodes/0',
             reason: 'nsp: unsupported field: mediaType',
             field: 'mediaType',
@@ -1496,6 +1537,17 @@ void main() {
     );
     expect(
       find.bySemanticsIdentifier(SemanticsIds.playlistExportNspKeeps),
+      findsNothing,
+    );
+    // A partial export would refuse, so it is not offered.
+    expect(
+      find.text(
+        'Nothing in this rule has an NSP form, so there is nothing to export.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistExportNspProceed),
       findsNothing,
     );
   });
@@ -1876,6 +1928,37 @@ void main() {
       );
     });
 
+    test('the fields an NSP import brings have names of their own', () async {
+      final es = await AppLocalizations.delegate.load(const Locale('es'));
+      const fields = <String>[
+        'relPath',
+        'composer',
+        'recordingMbid',
+        'albumMbid',
+        'releaseGroupMbid',
+      ];
+      expect(
+        [for (final f in fields) ruleFieldLabel(l10n, f)],
+        <String>[
+          'Path in library',
+          'Composer',
+          'Recording MBID',
+          'Album MBID',
+          'Release group MBID',
+        ],
+      );
+      expect(
+        [for (final f in fields) ruleFieldLabel(es, f)],
+        <String>[
+          'Ruta en la biblioteca',
+          'Compositor',
+          'MBID de grabación',
+          'MBID del álbum',
+          'MBID del grupo de lanzamiento',
+        ],
+      );
+    });
+
     test('a date value reads as a day, not as an instant', () {
       expect(
         describeCondition(
@@ -2035,4 +2118,16 @@ Future<void> _pick(
   await tester.pumpAndSettle();
   await tester.tap(find.text(label).last);
   await tester.pumpAndSettle();
+}
+
+extension on NspReport {
+  /// This report as one that stopped at the server's cap.
+  NspReport copyTruncated() => NspReport(
+    direction: direction,
+    gaps: gaps,
+    notes: notes,
+    truncated: true,
+    ruleHash: ruleHash,
+    rule: rule,
+  );
 }

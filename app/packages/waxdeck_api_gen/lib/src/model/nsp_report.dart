@@ -11,12 +11,13 @@ import 'package:built_value/serializer.dart';
 
 part 'nsp_report.g.dart';
 
-/// What one NSP mapping could not carry: `gaps` block a strict conversion and are what `partial=true` drops; `notes` block nothing. An export report carries `ruleHash`, and `rule` when a partial export keeps some. 
+/// What one NSP mapping could not carry: `gaps` block a strict conversion and are what `partial=true` drops; `notes` block nothing. `rule` is what a partial conversion keeps, present only when there are `gaps` and it would keep something; an export report also carries `ruleHash`. 
 ///
 /// Properties:
 /// * [direction] - Which way the mapping ran, and so whose vocabulary the gaps' `field` and `op` are written in. 
-/// * [gaps] - Losses that refuse the strict conversion.  Deduplicated by `reason` and capped: a rule or a document repeating one problem is one problem, and the row a client draws per entry says nothing new the second time. `path` names the first place the problem was found. The strict refusal's message is composed from this same list, so a refusal and a report never disagree about what is wrong. 
+/// * [gaps] - Losses that refuse the strict conversion.  Deduplicated by what a gap names (its `code`, `field`, `op`, `key`, `mode` and `value`) and capped: a rule or a document repeating one problem is one problem, and `path` names the first place it was found. The strict refusal's message is composed from this same list, each sentence once, so a refusal and a report never disagree about what is wrong. 
 /// * [notes] - Losses that refuse nothing. Deduplicated and capped the same way. 
+/// * [truncated] - Present and true when `gaps` or `notes` stopped at the cap, so there is more than they list. 
 /// * [ruleHash] - Export only: names the rule this report was read from, to pass back as the export's `ruleHash`. 
 /// * [rule] 
 @BuiltValue()
@@ -26,13 +27,17 @@ abstract class NspReport implements Built<NspReport, NspReportBuilder> {
   NspReportDirectionEnum get direction;
   // enum directionEnum {  export,  import,  };
 
-  /// Losses that refuse the strict conversion.  Deduplicated by `reason` and capped: a rule or a document repeating one problem is one problem, and the row a client draws per entry says nothing new the second time. `path` names the first place the problem was found. The strict refusal's message is composed from this same list, so a refusal and a report never disagree about what is wrong. 
+  /// Losses that refuse the strict conversion.  Deduplicated by what a gap names (its `code`, `field`, `op`, `key`, `mode` and `value`) and capped: a rule or a document repeating one problem is one problem, and `path` names the first place it was found. The strict refusal's message is composed from this same list, each sentence once, so a refusal and a report never disagree about what is wrong. 
   @BuiltValueField(wireName: r'gaps')
   BuiltList<NspGap>? get gaps;
 
   /// Losses that refuse nothing. Deduplicated and capped the same way. 
   @BuiltValueField(wireName: r'notes')
   BuiltList<NspGap>? get notes;
+
+  /// Present and true when `gaps` or `notes` stopped at the cap, so there is more than they list. 
+  @BuiltValueField(wireName: r'truncated')
+  bool? get truncated;
 
   /// Export only: names the rule this report was read from, to pass back as the export's `ruleHash`. 
   @BuiltValueField(wireName: r'ruleHash')
@@ -81,6 +86,13 @@ class _$NspReportSerializer implements PrimitiveSerializer<NspReport> {
       yield serializers.serialize(
         object.notes,
         specifiedType: const FullType(BuiltList, [FullType(NspGap)]),
+      );
+    }
+    if (object.truncated != null) {
+      yield r'truncated';
+      yield serializers.serialize(
+        object.truncated,
+        specifiedType: const FullType(bool),
       );
     }
     if (object.ruleHash != null) {
@@ -142,6 +154,14 @@ class _$NspReportSerializer implements PrimitiveSerializer<NspReport> {
           ) as BuiltList<NspGap>?;
           if (valueDes == null) continue;
           result.notes.replace(valueDes);
+          break;
+        case r'truncated':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.truncated = valueDes;
           break;
         case r'ruleHash':
           final valueDes = serializers.deserialize(

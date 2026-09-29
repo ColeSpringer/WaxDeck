@@ -113,11 +113,17 @@ class _$NspGap extends NspGap {
   @override
   final NspGapKindEnum kind;
   @override
+  final String code;
+  @override
   final String? field;
   @override
   final String? op;
   @override
   final JsonObject? value;
+  @override
+  final String? key;
+  @override
+  final String? mode;
   @override
   final String path;
   @override
@@ -128,9 +134,12 @@ class _$NspGap extends NspGap {
 
   _$NspGap._({
     required this.kind,
+    required this.code,
     this.field,
     this.op,
     this.value,
+    this.key,
+    this.mode,
     required this.path,
     required this.reason,
   }) : super._();
@@ -146,9 +155,12 @@ class _$NspGap extends NspGap {
     if (identical(other, this)) return true;
     return other is NspGap &&
         kind == other.kind &&
+        code == other.code &&
         field == other.field &&
         op == other.op &&
         value == other.value &&
+        key == other.key &&
+        mode == other.mode &&
         path == other.path &&
         reason == other.reason;
   }
@@ -157,9 +169,12 @@ class _$NspGap extends NspGap {
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, kind.hashCode);
+    _$hash = $jc(_$hash, code.hashCode);
     _$hash = $jc(_$hash, field.hashCode);
     _$hash = $jc(_$hash, op.hashCode);
     _$hash = $jc(_$hash, value.hashCode);
+    _$hash = $jc(_$hash, key.hashCode);
+    _$hash = $jc(_$hash, mode.hashCode);
     _$hash = $jc(_$hash, path.hashCode);
     _$hash = $jc(_$hash, reason.hashCode);
     _$hash = $jf(_$hash);
@@ -170,9 +185,12 @@ class _$NspGap extends NspGap {
   String toString() {
     return (newBuiltValueToStringHelper(r'NspGap')
           ..add('kind', kind)
+          ..add('code', code)
           ..add('field', field)
           ..add('op', op)
           ..add('value', value)
+          ..add('key', key)
+          ..add('mode', mode)
           ..add('path', path)
           ..add('reason', reason))
         .toString();
@@ -186,6 +204,10 @@ class NspGapBuilder implements Builder<NspGap, NspGapBuilder> {
   NspGapKindEnum? get kind => _$this._kind;
   set kind(NspGapKindEnum? kind) => _$this._kind = kind;
 
+  String? _code;
+  String? get code => _$this._code;
+  set code(String? code) => _$this._code = code;
+
   String? _field;
   String? get field => _$this._field;
   set field(String? field) => _$this._field = field;
@@ -197,6 +219,14 @@ class NspGapBuilder implements Builder<NspGap, NspGapBuilder> {
   JsonObject? _value;
   JsonObject? get value => _$this._value;
   set value(JsonObject? value) => _$this._value = value;
+
+  String? _key;
+  String? get key => _$this._key;
+  set key(String? key) => _$this._key = key;
+
+  String? _mode;
+  String? get mode => _$this._mode;
+  set mode(String? mode) => _$this._mode = mode;
 
   String? _path;
   String? get path => _$this._path;
@@ -214,9 +244,12 @@ class NspGapBuilder implements Builder<NspGap, NspGapBuilder> {
     final $v = _$v;
     if ($v != null) {
       _kind = $v.kind;
+      _code = $v.code;
       _field = $v.field;
       _op = $v.op;
       _value = $v.value;
+      _key = $v.key;
+      _mode = $v.mode;
       _path = $v.path;
       _reason = $v.reason;
       _$v = null;
@@ -242,9 +275,12 @@ class NspGapBuilder implements Builder<NspGap, NspGapBuilder> {
         _$v ??
         _$NspGap._(
           kind: BuiltValueNullFieldError.checkNotNull(kind, r'NspGap', 'kind'),
+          code: BuiltValueNullFieldError.checkNotNull(code, r'NspGap', 'code'),
           field: field,
           op: op,
           value: value,
+          key: key,
+          mode: mode,
           path: BuiltValueNullFieldError.checkNotNull(path, r'NspGap', 'path'),
           reason: BuiltValueNullFieldError.checkNotNull(
             reason,

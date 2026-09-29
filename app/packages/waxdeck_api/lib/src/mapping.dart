@@ -2930,6 +2930,7 @@ NspReport nspReportFromGen(gen.NspReport report) {
     direction: _nspWireName(report.direction.name),
     gaps: _nspGapsFromGen(report.gaps),
     notes: _nspGapsFromGen(report.notes),
+    truncated: report.truncated ?? false,
     ruleHash: report.ruleHash,
     rule: report.rule == null ? null : smartRuleFromGen(report.rule!),
   );
@@ -2940,14 +2941,15 @@ List<NspGap> _nspGapsFromGen(BuiltList<gen.NspGap>? gaps) {
   return gaps
       .map(
         (g) => NspGap(
-          // The wire name rather than a switch: the kinds are open, and
-          // a screen renders the gap's own sentence whatever this says.
           kind: _nspWireName(g.kind.name),
+          code: g.code,
           path: g.path,
           reason: g.reason,
           field: g.field,
           op: g.op,
           value: g.value?.value,
+          key: g.key,
+          mode: g.mode,
         ),
       )
       .toList(growable: false);

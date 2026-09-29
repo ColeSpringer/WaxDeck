@@ -14,6 +14,7 @@ import '../providers.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/semantics_ids.dart';
 import '../uploads/file_picker_port.dart';
+import 'nsp_gap_copy.dart';
 import 'playlist_create.dart';
 import 'playlist_play.dart';
 import 'playlist_sync_sheet.dart';
@@ -444,14 +445,16 @@ Future<void> _exportNsp(
   );
 }
 
-/// Lists what the export would drop, each converter sentence under the
-/// rule editor's name for its field, then what a partial export keeps.
-/// Notes alone drop nothing, so they are offered as a difference.
+/// Lists what the export would drop, each gap under the rule editor's
+/// name for its field, then what a partial export keeps. Notes alone drop
+/// nothing, so they are offered as a difference.
 Future<bool?> _confirmNspLoss(BuildContext context, NspReport report) {
   final l10n = context.l10n;
   final gaps = report.all;
   final kept = report.rule;
   final dropsNothing = report.gaps.isEmpty;
+  // A partial export that would keep nothing refuses, so it is not offered.
+  final keepsNothing = !dropsNothing && kept == null;
   return showDialog<bool>(
     context: context,
     builder: (context) {
@@ -484,7 +487,11 @@ Future<bool?> _confirmNspLoss(BuildContext context, NspReport report) {
                       children: <Widget>[
                         if (!dropsNothing) ...<Widget>[
                           Text(
-                            l10n.playlistExportNspLossCount(gaps.length),
+                            report.truncated
+                                ? l10n.playlistExportNspLossCountMore(
+                                    gaps.length,
+                                  )
+                                : l10n.playlistExportNspLossCount(gaps.length),
                             style: WaxType.body.copyWith(
                               color: colors.textSecondary,
                             ),
@@ -514,7 +521,7 @@ Future<bool?> _confirmNspLoss(BuildContext context, NspReport report) {
                                       ),
                                     ),
                                   Text(
-                                    gap.reason,
+                                    nspGapSentence(l10n, gap, export: true),
                                     style: WaxType.body.copyWith(
                                       color: colors.textSecondary,
                                     ),
@@ -547,6 +554,11 @@ Future<bool?> _confirmNspLoss(BuildContext context, NspReport report) {
                           RuleChipRow(describeRule(l10n, kept)),
                         ],
                       ),
+                    )
+                  else if (keepsNothing)
+                    Text(
+                      l10n.playlistExportNspNothing,
+                      style: WaxType.body.copyWith(color: colors.error),
                     ),
                 ],
               ),
@@ -559,13 +571,14 @@ Future<bool?> _confirmNspLoss(BuildContext context, NspReport report) {
             kind: WaxButtonKind.text,
             onPressed: () => Navigator.of(context).pop(false),
           ),
-          WaxButton(
-            label: dropsNothing
-                ? l10n.playlistExportNspAnyway
-                : l10n.playlistExportNspProceed,
-            semanticsId: SemanticsIds.playlistExportNspProceed,
-            onPressed: () => Navigator.of(context).pop(true),
-          ),
+          if (!keepsNothing)
+            WaxButton(
+              label: dropsNothing
+                  ? l10n.playlistExportNspAnyway
+                  : l10n.playlistExportNspProceed,
+              semanticsId: SemanticsIds.playlistExportNspProceed,
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
         ],
       );
     },

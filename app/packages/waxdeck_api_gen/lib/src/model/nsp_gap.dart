@@ -14,17 +14,24 @@ part 'nsp_gap.g.dart';
 ///
 /// Properties:
 /// * [kind] - Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
+/// * [code] - Why this part has no counterpart, for a client to word in its own language. The catalog's codes are `multiple_roots`, `missing_root`, `group_not_array`, `rule_shape`, `operator_shape`, `days_not_number`, `range_shape`, `bad_value`, `bad_limit`, `bad_offset`, `bad_sort`, `bad_order`, `value_not_numeric`, `value_not_boolean`, `unsupported_key`, `group_emptied`, `unsupported_node`, `negation`, `unsupported_field`, `date_operator`, `scaled_text_operator`, `unsupported_operator`, `boolean_operator`, `presence_operator`, `window_too_large`, `window_not_whole_days`, `rating_not_whole_star`, `duration_not_whole_ms`, `value_too_large`, `unsupported_sort_field`, `random_with_sorts`, `extra_sort_term`, `random_needs_limit`, `limit_mode`, `limit_seed`, `limit_budget`, `entity_widens` and `entity_files`. A client that does not know a code shows `reason`. 
 /// * [field] - The field this gap is about, where one is named.
 /// * [op] - The operator this gap is about, where one is named.
-/// * [value] - The offending value on a `value` gap, so a client can render it without picking `reason` apart. Any JSON type, since it is whatever the rule or the document held. On a `sort` gap that drops a term, the term as a rule's sort writes it: `field` and `desc`. 
+/// * [value] - The value this gap is about, where one is named, of whatever JSON type the rule or the document held. On a `sort` gap that drops a term, the term as a rule's sort writes it: `field` and `desc`. 
+/// * [key] - The document key this gap is about, where one is named.
+/// * [mode] - The limit mode a dropped budget limit counted in, `minutes` or `megabytes`. 
 /// * [path] - An RFC 6901 JSON Pointer to the offending part, so an editor can point at it rather than describe it. On an export it dereferences against the playlist's `SmartRule` (`/root/...`, `/sorts/0`, `/limitMode`); on an import, against the document that was sent. The empty pointer is RFC 6901's whole document, which is what an import answers for a fault that has no one place - a document with no `all`/`any` root group, or with two. 
-/// * [reason] - The sentence the strict conversion would refuse with for this gap. Written by the converter about what the caller built, so a client renders it as-is rather than mapping it to a phrase of its own. 
+/// * [reason] - The converter's English sentence for this gap, which the strict conversion refuses with. It names fields as the catalog does, which on an export is not always the rule's spelling. 
 @BuiltValue()
 abstract class NspGap implements Built<NspGap, NspGapBuilder> {
   /// Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
   @BuiltValueField(wireName: r'kind')
   NspGapKindEnum get kind;
   // enum kindEnum {  field,  operator,  value,  shape,  sort,  limit,  entity,  malformed,  };
+
+  /// Why this part has no counterpart, for a client to word in its own language. The catalog's codes are `multiple_roots`, `missing_root`, `group_not_array`, `rule_shape`, `operator_shape`, `days_not_number`, `range_shape`, `bad_value`, `bad_limit`, `bad_offset`, `bad_sort`, `bad_order`, `value_not_numeric`, `value_not_boolean`, `unsupported_key`, `group_emptied`, `unsupported_node`, `negation`, `unsupported_field`, `date_operator`, `scaled_text_operator`, `unsupported_operator`, `boolean_operator`, `presence_operator`, `window_too_large`, `window_not_whole_days`, `rating_not_whole_star`, `duration_not_whole_ms`, `value_too_large`, `unsupported_sort_field`, `random_with_sorts`, `extra_sort_term`, `random_needs_limit`, `limit_mode`, `limit_seed`, `limit_budget`, `entity_widens` and `entity_files`. A client that does not know a code shows `reason`. 
+  @BuiltValueField(wireName: r'code')
+  String get code;
 
   /// The field this gap is about, where one is named.
   @BuiltValueField(wireName: r'field')
@@ -34,15 +41,23 @@ abstract class NspGap implements Built<NspGap, NspGapBuilder> {
   @BuiltValueField(wireName: r'op')
   String? get op;
 
-  /// The offending value on a `value` gap, so a client can render it without picking `reason` apart. Any JSON type, since it is whatever the rule or the document held. On a `sort` gap that drops a term, the term as a rule's sort writes it: `field` and `desc`. 
+  /// The value this gap is about, where one is named, of whatever JSON type the rule or the document held. On a `sort` gap that drops a term, the term as a rule's sort writes it: `field` and `desc`. 
   @BuiltValueField(wireName: r'value')
   JsonObject? get value;
+
+  /// The document key this gap is about, where one is named.
+  @BuiltValueField(wireName: r'key')
+  String? get key;
+
+  /// The limit mode a dropped budget limit counted in, `minutes` or `megabytes`. 
+  @BuiltValueField(wireName: r'mode')
+  String? get mode;
 
   /// An RFC 6901 JSON Pointer to the offending part, so an editor can point at it rather than describe it. On an export it dereferences against the playlist's `SmartRule` (`/root/...`, `/sorts/0`, `/limitMode`); on an import, against the document that was sent. The empty pointer is RFC 6901's whole document, which is what an import answers for a fault that has no one place - a document with no `all`/`any` root group, or with two. 
   @BuiltValueField(wireName: r'path')
   String get path;
 
-  /// The sentence the strict conversion would refuse with for this gap. Written by the converter about what the caller built, so a client renders it as-is rather than mapping it to a phrase of its own. 
+  /// The converter's English sentence for this gap, which the strict conversion refuses with. It names fields as the catalog does, which on an export is not always the rule's spelling. 
   @BuiltValueField(wireName: r'reason')
   String get reason;
 
@@ -74,6 +89,11 @@ class _$NspGapSerializer implements PrimitiveSerializer<NspGap> {
       object.kind,
       specifiedType: const FullType(NspGapKindEnum),
     );
+    yield r'code';
+    yield serializers.serialize(
+      object.code,
+      specifiedType: const FullType(String),
+    );
     if (object.field != null) {
       yield r'field';
       yield serializers.serialize(
@@ -93,6 +113,20 @@ class _$NspGapSerializer implements PrimitiveSerializer<NspGap> {
       yield serializers.serialize(
         object.value,
         specifiedType: const FullType.nullable(JsonObject),
+      );
+    }
+    if (object.key != null) {
+      yield r'key';
+      yield serializers.serialize(
+        object.key,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.mode != null) {
+      yield r'mode';
+      yield serializers.serialize(
+        object.mode,
+        specifiedType: const FullType(String),
       );
     }
     yield r'path';
@@ -135,6 +169,13 @@ class _$NspGapSerializer implements PrimitiveSerializer<NspGap> {
           ) as NspGapKindEnum;
           result.kind = valueDes;
           break;
+        case r'code':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.code = valueDes;
+          break;
         case r'field':
           final valueDes = serializers.deserialize(
             value,
@@ -158,6 +199,22 @@ class _$NspGapSerializer implements PrimitiveSerializer<NspGap> {
           ) as JsonObject?;
           if (valueDes == null) continue;
           result.value = valueDes;
+          break;
+        case r'key':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.key = valueDes;
+          break;
+        case r'mode':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.mode = valueDes;
           break;
         case r'path':
           final valueDes = serializers.deserialize(

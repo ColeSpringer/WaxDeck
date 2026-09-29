@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -518,6 +520,459 @@ void main() {
 
     expect(repo.setPlaylistSourceCalls, isEmpty);
     expect(find.textContaining('Kept matched'), findsNothing);
+  });
+
+  group('an NSP document', () {
+    const document =
+        '{"name": "Loved and long", "all": ['
+        '{"is": {"loved": true}}, {"gt": {"duration": 180}}]}';
+
+    Future<void> check(WidgetTester tester, FakeRepository repo) async {
+      await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+      await tester.pumpAndSettle();
+      await _openImport(tester, PlaylistImportSource.nsp);
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+        document,
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('that carries over is checked, imported and opened', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: const [_track]);
+      await check(tester, repo);
+
+      expect(repo.nspImportChecks.single['name'], 'Loved and long');
+      expect(repo.nspImports, isEmpty);
+      expect(
+        find.text('Everything in this document carries over.'),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportKeepMatched),
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.nspImports.single.partial, isFalse);
+      expect(find.byType(PlaylistScreen), findsOneWidget);
+    });
+
+    testWidgets('with parts WaxDeck cannot read offers to drop them', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: const [_track])
+        ..nspImportReport = const NspReport(
+          direction: 'import',
+          gaps: [
+            NspGap(
+              kind: 'field',
+              code: 'unsupported_field',
+              path: '/all/0',
+              reason: 'nsp: unsupported field: starred',
+              field: 'starred',
+            ),
+          ],
+          rule: SmartRule(
+            root: RuleNode.all([
+              RuleNode.condition(field: 'genre', op: 'contains', value: 'Rock'),
+            ]),
+          ),
+        );
+      await check(tester, repo);
+
+      expect(
+        find.text('"starred" is not an NSP field; NSP calls the star "loved".'),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.bySemanticsIdentifier(SemanticsIds.nspImportKeeps),
+          matching: find.text('Genre contains Rock'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.text('One part of this document cannot be read.'),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportLossRow(0)),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+        findsNothing,
+      );
+
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportPartial),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.nspImports.single.partial, isTrue);
+      expect(find.byType(PlaylistScreen), findsOneWidget);
+    });
+
+    testWidgets('that is damaged is refused with nothing to import', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: const [_track])
+        ..nspImportReport = const NspReport(
+          direction: 'import',
+          gaps: [
+            NspGap(
+              kind: 'field',
+              code: 'unsupported_field',
+              path: '/all/0',
+              reason: 'nsp: unsupported field: bitrate',
+              field: 'bitrate',
+            ),
+            NspGap(
+              kind: 'malformed',
+              code: 'rule_shape',
+              path: '/all/1',
+              reason: 'nsp: each rule needs exactly one operator or group',
+            ),
+          ],
+        );
+      await check(tester, repo);
+
+      expect(
+        find.text('A rule has to hold exactly one operator or one group.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text(
+          'The document is damaged, so it cannot be imported until it is '
+          'fixed.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+        findsNothing,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportPartial),
+        findsNothing,
+      );
+      expect(repo.nspImports, isEmpty);
+    });
+
+    testWidgets('where nothing survives offers nothing to import', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: const [_track])
+        ..nspImportReport = const NspReport(
+          direction: 'import',
+          gaps: [
+            NspGap(
+              kind: 'field',
+              code: 'unsupported_field',
+              path: '/all/0',
+              reason: 'nsp: unsupported field: bitrate',
+              field: 'bitrate',
+            ),
+            NspGap(
+              kind: 'shape',
+              code: 'group_emptied',
+              path: '/all',
+              reason: 'nsp: every rule in this group has no WaxBin form',
+            ),
+          ],
+        );
+      await check(tester, repo);
+
+      expect(
+        find.text(
+          'Nothing in this document can be read, so there is nothing to '
+          'import.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportPartial),
+        findsNothing,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+        findsNothing,
+      );
+    });
+
+    testWidgets('refused by the server keeps the sheet and its sentence', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: const [_track])
+        ..nspImportError = const WaxDeckApiException(
+          code: 'invalid-request',
+          message: 'a rule holds at most 200 conditions',
+          statusCode: 400,
+        );
+      await check(tester, repo);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('a rule holds at most 200 conditions'), findsOneWidget);
+      expect(find.byType(PlaylistScreen), findsNothing);
+      final confirm = tester.widget<WaxButton>(
+        find.ancestor(
+          of: find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+          matching: find.byType(WaxButton),
+        ),
+      );
+      expect(confirm.onPressed, isNotNull);
+    });
+
+    testWidgets('edited while being checked drops the late answer', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = FakeRepository(items: const [_track])
+        ..nspImportCheckGate = gate;
+      await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+      await tester.pumpAndSettle();
+      await _openImport(tester, PlaylistImportSource.nsp);
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+        document,
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+      );
+      await tester.pump();
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+        '{"name": "Other", "all": []}',
+      );
+      gate.complete();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+        findsNothing,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+        findsOneWidget,
+      );
+    });
+
+    Future<void> checkText(
+      WidgetTester tester,
+      FakeRepository repo,
+      String text,
+    ) async {
+      await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+      await tester.pumpAndSettle();
+      await _openImport(tester, PlaylistImportSource.nsp);
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+        text,
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    WaxSwitch sharedSwitch(WidgetTester tester) => tester.widget<WaxSwitch>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.nspImportShared),
+        matching: find.byType(WaxSwitch),
+      ),
+    );
+
+    testWidgets('marked public is shared only while the switch says so', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: const [_track]);
+      await checkText(
+        tester,
+        repo,
+        '{"name": "Ours", "public": true, "all": []}',
+      );
+
+      expect(sharedSwitch(tester).value, isTrue);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportShared),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.nspImports.single.document['public'], isFalse);
+    });
+
+    testWidgets('not marked public is private unless switched', (tester) async {
+      final repo = FakeRepository(items: const [_track]);
+      await checkText(tester, repo, document);
+
+      expect(sharedSwitch(tester).value, isFalse);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.nspImports.single.document['public'], isFalse);
+    });
+
+    testWidgets('edited after a refusal drops what was said about it', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: const [_track])
+        ..nspImportError = const WaxDeckApiException(
+          code: 'invalid-request',
+          message: 'a rule holds at most 200 conditions',
+          statusCode: 400,
+        );
+      await check(tester, repo);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('a rule holds at most 200 conditions'), findsOneWidget);
+
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+        '{"name": "Other", "all": []}',
+      );
+      await tester.pump();
+
+      expect(find.text('a rule holds at most 200 conditions'), findsNothing);
+    });
+
+    testWidgets('past the cap says there is more than it lists', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: const [_track])
+        ..nspImportReport = NspReport(
+          direction: 'import',
+          truncated: true,
+          gaps: [
+            for (var i = 0; i < 12; i++)
+              NspGap(
+                kind: 'field',
+                code: 'unsupported_field',
+                path: '/all/$i',
+                reason: 'nsp: unsupported field: field$i',
+                field: 'field$i',
+              ),
+          ],
+          rule: const SmartRule(
+            root: RuleNode.all([
+              RuleNode.condition(field: 'genre', op: 'is', value: 'Rock'),
+            ]),
+          ),
+        );
+      await check(tester, repo);
+
+      expect(
+        find.text('More than 12 parts of this document cannot be read.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('that is not JSON is refused before the server is asked', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: const [_track]);
+      await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+      await tester.pumpAndSettle();
+      await _openImport(tester, PlaylistImportSource.nsp);
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+        '[1, 2]',
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('This is not an NSP document (expected a JSON object)'),
+        findsOneWidget,
+      );
+      expect(repo.nspImportChecks, isEmpty);
+    });
+
+    testWidgets('edited after its check is checked again', (tester) async {
+      final repo = FakeRepository(items: const [_track]);
+      await check(tester, repo);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+        findsOneWidget,
+      );
+
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+        '{"name": "Other", "all": []}',
+      );
+      await tester.pump();
+
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+        findsNothing,
+      );
+      expect(
+        find.text('Everything in this document carries over.'),
+        findsNothing,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('with no name asks for one before importing', (tester) async {
+      final repo = FakeRepository(items: const [_track]);
+      await tester.pumpWidget(_host(repo, const PlaylistsScreen()));
+      await tester.pumpAndSettle();
+      await _openImport(tester, PlaylistImportSource.nsp);
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportPayload),
+        '{"all": [{"contains": {"genre": "Rock"}}]}',
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportRun),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('This document has no name, so give the playlist one.'),
+        findsOneWidget,
+      );
+      expect(repo.nspImports, isEmpty);
+
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.playlistImportName),
+        'Rock',
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.nspImportConfirm),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repo.nspImports.single.name, 'Rock');
+    });
   });
 
   group('the portable parser', () {

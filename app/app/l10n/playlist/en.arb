@@ -155,6 +155,16 @@
       }
     }
   },
+  "playlistExportNspLossCountMore": "{count, plural, =1{More than one part of this rule has no NSP form.} other{More than {count} parts of this rule have no NSP form.}}",
+  "@playlistExportNspLossCountMore": {
+    "description": "Frame above the parts of a rule NSP cannot carry, when the server listed only the first of them.",
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
   "playlistExportNspLossTitle": "Some of this rule cannot be exported",
   "@playlistExportNspLossTitle": {
     "description": "Title of the dialog listing what an NSP export would drop."
@@ -162,6 +172,10 @@
   "playlistExportNspNotesTitle": "This rule exports with a difference",
   "@playlistExportNspNotesTitle": {
     "description": "Title of the NSP export dialog when nothing is dropped, only read differently."
+  },
+  "playlistExportNspNothing": "Nothing in this rule has an NSP form, so there is nothing to export.",
+  "@playlistExportNspNothing": {
+    "description": "Shown in the NSP export dialog when a partial export would keep nothing; nothing is offered to export."
   },
   "playlistExportNspProceed": "Export without them",
   "@playlistExportNspProceed": {
@@ -201,6 +215,10 @@
   "@playlistImportBound": {
     "description": "Line in the import report when the created playlist was also bound to the pasted export."
   },
+  "playlistImportCheck": "Check",
+  "@playlistImportCheck": {
+    "description": "Button in the NSP import sheet that asks the server what the pasted document would lose, before anything is imported."
+  },
   "playlistImportComplete": "Import complete",
   "@playlistImportComplete": {
     "description": "Title of the report after an import that made a playlist."
@@ -228,6 +246,10 @@
   "playlistImportHintM3u": "Paste the playlist file here",
   "@playlistImportHintM3u": {
     "description": "What the paste box wants for an M3U import."
+  },
+  "playlistImportHintNsp": "Paste the .nsp file here",
+  "@playlistImportHintNsp": {
+    "description": "Hint in the paste box when importing a Navidrome smart playlist (.nsp) file."
   },
   "playlistImportHintPortable": "Paste what Export portable copied",
   "@playlistImportHintPortable": {
@@ -283,6 +305,10 @@
   "@playlistImportNotJson": {
     "description": "Refusal when the pasted portable import is not JSON at all."
   },
+  "playlistImportNotNsp": "This is not an NSP document (expected a JSON object)",
+  "@playlistImportNotNsp": {
+    "description": "Shown in the import sheet when the pasted text is not a JSON object, which every .nsp file is."
+  },
   "playlistImportNotPortable": "This is not a portable playlist (expected a name and a refs list)",
   "@playlistImportNotPortable": {
     "description": "Refusal when the pasted JSON parses but is not the shape the exporter writes. The word in the parenthesis is a key of that JSON and stays as it is."
@@ -290,6 +316,50 @@
   "playlistImportNothing": "Nothing imported",
   "@playlistImportNothing": {
     "description": "Title of the report after an import where nothing resolved, so no playlist was made."
+  },
+  "playlistImportNspBroken": "The document is damaged, so it cannot be imported until it is fixed.",
+  "@playlistImportNspBroken": {
+    "description": "Shown under the problems of a pasted .nsp document that is broken rather than merely holding parts WaxDeck cannot read; nothing is offered to import."
+  },
+  "playlistImportNspClean": "Everything in this document carries over.",
+  "@playlistImportNspClean": {
+    "description": "Shown after checking a pasted .nsp document that WaxDeck can read in full."
+  },
+  "playlistImportNspKeeps": "What the import keeps",
+  "@playlistImportNspKeeps": {
+    "description": "Heading above the rule a partial import of a pasted .nsp document would create."
+  },
+  "playlistImportNspLossCount": "{count, plural, =1{One part of this document cannot be read.} other{{count} parts of this document cannot be read.}}",
+  "@playlistImportNspLossCount": {
+    "description": "Frame above the list of parts of a pasted .nsp document that WaxDeck cannot read.",
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "playlistImportNspLossCountMore": "{count, plural, =1{More than one part of this document cannot be read.} other{More than {count} parts of this document cannot be read.}}",
+  "@playlistImportNspLossCountMore": {
+    "description": "Frame above the parts of a pasted .nsp document WaxDeck cannot read, when the server listed only the first of them.",
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "playlistImportNspNeedsName": "This document has no name, so give the playlist one.",
+  "@playlistImportNspNeedsName": {
+    "description": "Shown in the NSP import sheet when neither the pasted document nor the name field names the playlist."
+  },
+  "playlistImportNspNothing": "Nothing in this document can be read, so there is nothing to import.",
+  "@playlistImportNspNothing": {
+    "description": "Shown under the problems of a pasted .nsp document when a partial import would keep nothing; nothing is offered to import."
+  },
+  "playlistImportNspPartial": "Import without them",
+  "@playlistImportNspPartial": {
+    "description": "Button that imports a pasted .nsp document, dropping the parts listed above it that WaxDeck cannot read."
   },
   "playlistImportPasteFirst": "Paste the playlist first.",
   "@playlistImportPasteFirst": {
@@ -320,6 +390,10 @@
   "playlistImportSourceM3u": "M3U file",
   "@playlistImportSourceM3u": {
     "description": "Import source: the plain playlist file format. M3U is the format's name and stays as it is."
+  },
+  "playlistImportSourceNsp": "Navidrome smart playlist",
+  "@playlistImportSourceNsp": {
+    "description": "Import menu entry and sheet title part for a Navidrome .nsp smart playlist file."
   },
   "playlistImportSourcePortable": "Portable JSON",
   "@playlistImportSourcePortable": {
@@ -432,6 +506,432 @@
   "playlistNoManualLists": "No manual playlists yet. Make one below and this goes straight into it.",
   "@playlistNoManualLists": {
     "description": "Said in the add-to-playlist sheet when the account owns no list an item could join."
+  },
+  "playlistNspGapBadLimit": "The limit is not a whole number.",
+  "@playlistNspGapBadLimit": {
+    "description": "NSP gap sentence, import: the document's limit is not an integer."
+  },
+  "playlistNspGapBadOffset": "The offset is not a whole number.",
+  "@playlistNspGapBadOffset": {
+    "description": "NSP gap sentence, import: the document's offset is not an integer."
+  },
+  "playlistNspGapBadOrder": "The order cannot be read; it should be asc or desc.",
+  "@playlistNspGapBadOrder": {
+    "description": "NSP gap sentence, import: the document's order is not a string."
+  },
+  "playlistNspGapBadSort": "The sort is not a field name.",
+  "@playlistNspGapBadSort": {
+    "description": "NSP gap sentence, import: the document's sort is not a string."
+  },
+  "playlistNspGapBadValue": "The value of {op} on {field} cannot be read.",
+  "@playlistNspGapBadValue": {
+    "description": "NSP gap sentence, import: a condition's value is not readable JSON. Both are quoted.",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      },
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapBooleanOperator": "{field} is yes or no, so it takes only {opIs} and {opIsNot}.",
+  "@playlistNspGapBooleanOperator": {
+    "description": "NSP gap sentence, either way: an ordering or text comparison on a yes-or-no field. {opIs} and {opIsNot} are the two operators it takes, quoted, as the side being read spells them.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "opIs": {
+        "type": "String"
+      },
+      "opIsNot": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapDateOperatorExport": "Only a number of days back carries {field} into NSP, so this comparison has no form there.",
+  "@playlistNspGapDateOperatorExport": {
+    "description": "NSP gap sentence, export: a date compared other than by a window of days back. {field} is the rule editor's label.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapDateOperatorImport": "{op} on {field} cannot carry over, since only \"inTheLast\" and \"notInTheLast\" do on a date.",
+  "@playlistNspGapDateOperatorImport": {
+    "description": "NSP gap sentence, import: a date compared other than by a window of days back, which has no faithful reading. Both are quoted.",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      },
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapDaysNotNumber": "{op} on {field} needs a number of days.",
+  "@playlistNspGapDaysNotNumber": {
+    "description": "NSP gap sentence, import: a relative date operator holds no number. Both are quoted.",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      },
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapDurationNotWholeMsExport": "{field} of {value} is not a whole number of milliseconds, so it cannot carry over.",
+  "@playlistNspGapDurationNotWholeMsExport": {
+    "description": "NSP gap sentence, export: a duration with a fraction of a millisecond. {field} is the rule editor's label.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapDurationNotWholeMsImport": "{value} seconds is not a whole number of milliseconds, so it cannot carry over.",
+  "@playlistNspGapDurationNotWholeMsImport": {
+    "description": "NSP gap sentence, import: a duration with a fraction of a millisecond.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapEntityFiles": "A rule over files rather than items has no NSP form.",
+  "@playlistNspGapEntityFiles": {
+    "description": "NSP gap sentence, export: a rule over file rows."
+  },
+  "playlistNspGapEntityWidens": "NSP does not tell tracks from books and episodes, so imported back, this rule covers every kind of item.",
+  "@playlistNspGapEntityWidens": {
+    "description": "NSP gap sentence, export note: a rule over tracks re-imports over every item."
+  },
+  "playlistNspGapExtraSortTerm": "NSP sorts by one field only, so the later sort by {field} goes.",
+  "@playlistNspGapExtraSortTerm": {
+    "description": "NSP gap sentence, export: a second or later sort term. {field} is the rule editor's label.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapGroupEmptiedExport": "Nothing in this group has an NSP form, so the group goes too.",
+  "@playlistNspGapGroupEmptiedExport": {
+    "description": "NSP gap sentence, export: every condition in a group was dropped."
+  },
+  "playlistNspGapGroupEmptiedImport": "Nothing in this group can be read, so the group goes too.",
+  "@playlistNspGapGroupEmptiedImport": {
+    "description": "NSP gap sentence, import: every rule in a group was dropped."
+  },
+  "playlistNspGapGroupNotArray": "{key} has to be a list of rules.",
+  "@playlistNspGapGroupNotArray": {
+    "description": "NSP gap sentence, import: a group key does not hold a list. {key} is quoted.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapLimitBudget": "The limit of {value} {mode} goes too: NSP would read it as {value} items.",
+  "@playlistNspGapLimitBudget": {
+    "description": "NSP gap sentence, export: the number a minutes or megabytes limit rode on. {mode} is the unit's name.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      },
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapLimitMode": "NSP limits only by number of items, so the limit by {mode} goes.",
+  "@playlistNspGapLimitMode": {
+    "description": "NSP gap sentence, export: a limit counted in minutes or megabytes. {mode} is the unit's name.",
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapLimitSeed": "NSP cannot pin a shuffle, so the saved order of the shuffle goes.",
+  "@playlistNspGapLimitSeed": {
+    "description": "NSP gap sentence, export: a pinned shuffle seed."
+  },
+  "playlistNspGapMissingRoot": "The document has no \"all\" or \"any\" group at its top.",
+  "@playlistNspGapMissingRoot": {
+    "description": "NSP gap sentence, import: the document has no root group."
+  },
+  "playlistNspGapMultipleRoots": "The document has both an \"all\" and an \"any\" group at its top; it may have only one.",
+  "@playlistNspGapMultipleRoots": {
+    "description": "NSP gap sentence, import: the document has two root groups."
+  },
+  "playlistNspGapNegation": "NSP negates only a single contains (notContains), so this negation has no NSP form.",
+  "@playlistNspGapNegation": {
+    "description": "NSP gap sentence, export: a negation other than of one contains condition."
+  },
+  "playlistNspGapOperatorShape": "{op} has to name exactly one field.",
+  "@playlistNspGapOperatorShape": {
+    "description": "NSP gap sentence, import: an operator names no field or several. {op} is quoted.",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapPresenceOperatorExport": "In NSP, {field} always holds a value, so {op} has no form there.",
+  "@playlistNspGapPresenceOperatorExport": {
+    "description": "NSP gap sentence, export: a presence check on a field NSP never leaves empty. {field} is the rule editor's label, {op} its quoted phrase.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "op": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapPresenceOperatorImport": "Navidrome allows {op} only on a field that can be empty, not on {field}.",
+  "@playlistNspGapPresenceOperatorImport": {
+    "description": "NSP gap sentence, import: a presence check on a field that is never empty. Both are quoted.",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      },
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapQuoted": "\"{token}\"",
+  "@playlistNspGapQuoted": {
+    "description": "Wraps a word quoted from an NSP document (a field, operator, key or value) inside a gap sentence.",
+    "placeholders": {
+      "token": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapRandomNeedsLimitExport": "NSP shuffles only a limited number of items, and this rule sets no limit.",
+  "@playlistNspGapRandomNeedsLimitExport": {
+    "description": "NSP gap sentence, export: a shuffle with no limit."
+  },
+  "playlistNspGapRandomNeedsLimitImport": "A random sort needs a limit above zero.",
+  "@playlistNspGapRandomNeedsLimitImport": {
+    "description": "NSP gap sentence, import: sort random with no positive limit."
+  },
+  "playlistNspGapRandomWithSorts": "NSP cannot shuffle and sort at once, so the sort goes and the shuffle stays.",
+  "@playlistNspGapRandomWithSorts": {
+    "description": "NSP gap sentence, export: a shuffled rule that also sorts."
+  },
+  "playlistNspGapRangeShape": "{op} on {field} needs two values, a low one and a high one.",
+  "@playlistNspGapRangeShape": {
+    "description": "NSP gap sentence, import: a range operator does not hold a pair. Both are quoted.",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      },
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapRatingNotWholeStar": "NSP rates in whole stars, and {value} out of 100 is not one.",
+  "@playlistNspGapRatingNotWholeStar": {
+    "description": "NSP gap sentence, export: a rating between two stars.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapRuleShape": "A rule has to hold exactly one operator or one group.",
+  "@playlistNspGapRuleShape": {
+    "description": "NSP gap sentence, import: a rule is neither one operator nor one group."
+  },
+  "playlistNspGapScaledTextOperatorExport": "NSP counts {field} in other units, so a text match like {op} has no form there.",
+  "@playlistNspGapScaledTextOperatorExport": {
+    "description": "NSP gap sentence, export: a substring match on a rating or a duration. {field} is the rule editor's label, {op} its quoted phrase.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "op": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapScaledTextOperatorImport": "WaxDeck counts {field} in other units, so a text match like {op} cannot carry over.",
+  "@playlistNspGapScaledTextOperatorImport": {
+    "description": "NSP gap sentence, import: a substring match on a rating or a duration. Both are quoted.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "op": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapStarredImport": "{field} is not an NSP field; NSP calls the star \"loved\".",
+  "@playlistNspGapStarredImport": {
+    "description": "NSP gap sentence, import: the star under the name an older WaxDeck export used. {field} is quoted as the document spells it.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapUnsupportedFieldExport": "NSP has no field for {field}.",
+  "@playlistNspGapUnsupportedFieldExport": {
+    "description": "NSP gap sentence, export: a rule field NSP cannot carry. {field} is the rule editor's label.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapUnsupportedFieldImport": "{field} is not a field WaxDeck can read.",
+  "@playlistNspGapUnsupportedFieldImport": {
+    "description": "NSP gap sentence, import: the document names a field WaxDeck has no counterpart for. {field} is quoted.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapUnsupportedKey": "WaxDeck cannot read the {key} setting.",
+  "@playlistNspGapUnsupportedKey": {
+    "description": "NSP gap sentence, import: a top-level document setting has no WaxDeck form. {key} is quoted.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapUnsupportedNode": "This part of the rule has no NSP form.",
+  "@playlistNspGapUnsupportedNode": {
+    "description": "NSP gap sentence, export: a rule node NSP cannot express."
+  },
+  "playlistNspGapUnsupportedOperatorExport": "NSP has no {op} comparison.",
+  "@playlistNspGapUnsupportedOperatorExport": {
+    "description": "NSP gap sentence, export: a comparison NSP cannot express. {op} is the rule editor's quoted phrase.",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapUnsupportedOperatorImport": "{op} on {field} has no WaxDeck form.",
+  "@playlistNspGapUnsupportedOperatorImport": {
+    "description": "NSP gap sentence, import: an operator that does not carry over on that field. Both are quoted.",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      },
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapUnsupportedSortFieldExport": "NSP cannot order by {field}.",
+  "@playlistNspGapUnsupportedSortFieldExport": {
+    "description": "NSP gap sentence, export: a sort field NSP cannot carry. {field} is the rule editor's label.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapUnsupportedSortFieldImport": "WaxDeck cannot order by {field}.",
+  "@playlistNspGapUnsupportedSortFieldImport": {
+    "description": "NSP gap sentence, import: a sort field WaxDeck has no counterpart for. {field} is quoted.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapValueNotBooleanExport": "{field} holds {value}, which NSP cannot say as yes or no.",
+  "@playlistNspGapValueNotBooleanExport": {
+    "description": "NSP gap sentence, export: a stored yes-or-no value is neither. {field} is the rule editor's label.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapValueNotBooleanImport": "{op} on {field} takes true or false, not {value}.",
+  "@playlistNspGapValueNotBooleanImport": {
+    "description": "NSP gap sentence, import: a condition that takes true or false holds something else, a loved value or a presence check's flag. All three are quoted.",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      },
+      "field": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapValueNotNumeric": "{field} takes a number, and {value} is not one.",
+  "@playlistNspGapValueNotNumeric": {
+    "description": "NSP gap sentence, either way: a value that should be a number is not. {field} is the rule editor's label on export, quoted on import.",
+    "placeholders": {
+      "field": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapValueTooLarge": "{value} for {field} is too large to carry over.",
+  "@playlistNspGapValueTooLarge": {
+    "description": "NSP gap sentence, either way: a number too large to convert exactly. {field} is the rule editor's label on export, quoted on import.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      },
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapWindowNotWholeDaysExport": "The window is not a whole number of days, which NSP cannot say.",
+  "@playlistNspGapWindowNotWholeDaysExport": {
+    "description": "NSP gap sentence, export: a relative date window that is not whole days."
+  },
+  "playlistNspGapWindowNotWholeDaysImport": "{op} needs a whole number of days above zero, not {value}.",
+  "@playlistNspGapWindowNotWholeDaysImport": {
+    "description": "NSP gap sentence, import: a relative date window that is fractional or not positive. {op} is quoted.",
+    "placeholders": {
+      "op": {
+        "type": "String"
+      },
+      "value": {
+        "type": "String"
+      }
+    }
+  },
+  "playlistNspGapWindowTooLarge": "A window of {value} days is too long.",
+  "@playlistNspGapWindowTooLarge": {
+    "description": "NSP gap sentence, import: a relative date window too large to hold.",
+    "placeholders": {
+      "value": {
+        "type": "String"
+      }
+    }
   },
   "playlistPlay": "Play",
   "@playlistPlay": {
@@ -608,6 +1108,10 @@
   "@playlistRuleFieldAlbumLabel": {
     "description": "Smart-rule field: the record label that issued the release."
   },
+  "playlistRuleFieldAlbumMbid": "Album MBID",
+  "@playlistRuleFieldAlbumMbid": {
+    "description": "Smart-rule field: the MusicBrainz release id of an album or book."
+  },
   "playlistRuleFieldAlbumMedia": "Album media",
   "@playlistRuleFieldAlbumMedia": {
     "description": "Smart-rule field: what the release was pressed on."
@@ -623,6 +1127,10 @@
   "playlistRuleFieldCodec": "Codec",
   "@playlistRuleFieldCodec": {
     "description": "Smart-rule field: the audio codec a file is encoded with."
+  },
+  "playlistRuleFieldComposer": "Composer",
+  "@playlistRuleFieldComposer": {
+    "description": "Smart-rule field: a track's composer."
   },
   "playlistRuleFieldContainer": "Container",
   "@playlistRuleFieldContainer": {
@@ -683,6 +1191,18 @@
   "playlistRuleFieldRating": "Rating",
   "@playlistRuleFieldRating": {
     "description": "Smart-rule field: this account's rating, from 0 to 100."
+  },
+  "playlistRuleFieldRecordingMbid": "Recording MBID",
+  "@playlistRuleFieldRecordingMbid": {
+    "description": "Smart-rule field: the MusicBrainz recording id of a track."
+  },
+  "playlistRuleFieldRelPath": "Path in library",
+  "@playlistRuleFieldRelPath": {
+    "description": "Smart-rule field: a file's path under its library folder, as opposed to the full path."
+  },
+  "playlistRuleFieldReleaseGroupMbid": "Release group MBID",
+  "@playlistRuleFieldReleaseGroupMbid": {
+    "description": "Smart-rule field: the MusicBrainz release group id an album belongs to."
   },
   "playlistRuleFieldSeason": "Season",
   "@playlistRuleFieldSeason": {

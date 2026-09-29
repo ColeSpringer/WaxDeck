@@ -195,35 +195,47 @@ paths:
         (the `name` parameter overrides it, and is what lets a nameless
         document be imported) and `public` sets its visibility;
         `comment` is read and discarded, since a WaxDeck playlist has
-        no comment.
+        no comment. Keys match exactly, so `Public` is an unrecognised
+        key rather than the visibility.
 
 
-        Fields map onto the rule vocabulary (`GET /playlists/rule-fields`):
-        `title`, `album`, `artist`, `albumartist`, `genre`, `year`, `bpm`,
-        `trackNumber`, `discNumber`, `playCount`, `starred` and `rating`.
+        Fields map onto the rule vocabulary (`GET /playlists/rule-fields`)
+        whatever their case: `title`, `album`, `artist`, `albumartist`,
+        `composer`, `genre`, `year`, `bpm`, `tracknumber`, `discnumber`,
+        `rating` and `playcount` to the fields of the same name; `loved`
+        to `starred`, `duration` to `durationMs`, `filepath` to `relPath`,
+        `catalognumber` to `albumCatalogNumber`, and `mbz_recording_id`,
+        `mbz_album_id` and `mbz_release_group_id` to `recordingMbid`,
+        `albumMbid` and `releaseGroupMbid`; the dates `dateadded`,
+        `lastplayed` and `dateloved` to `addedAt`, `lastPlayedAt` and
+        `starredAt`.
 
 
-        `dateAdded` maps to `addedAt` and `lastPlayed` to `lastPlayedAt`.
-        `rating` is **rescaled**: NSP rates 0 to 5 where WaxDeck rates 0 to
-        100, so an unscaled `rating gt 3` would match every rated track.
+        `rating` is **rescaled** from NSP's 0 to 5 stars onto WaxDeck's 0
+        to 100, and `duration` from seconds onto milliseconds. `loved` is
+        a boolean, compared with `is` and `isNot` only.
 
 
-        `notContains` imports as a `not` node wrapping `contains`;
-        every other operator has a WaxDeck spelling of the same name.
+        `notContains` imports as a `not` node wrapping `contains`.
+        `isMissing` and `isPresent` take a boolean (`isMissing: false` is
+        `isPresent`) and cross only on `album`, `artist`, `albumartist`,
+        `composer`, `genre`, `bpm`, `catalognumber` and the three `mbz_*`
+        ids. Every other operator has a WaxDeck spelling of the same name.
 
 
         Mapping is **all-or-nothing** by default. A field, an operator,
         or a top-level key with no faithful counterpart rejects the
         whole document, naming **every** offender, rather than
-        importing a rule that means something else - a document that
-        imported as a quietly different playlist is worse than one that
-        did not import. That covers fields the catalog has no answer
-        for (`bitrate`, `size`, the `mbz_*` identifiers, and the
-        rest), `limitPercent` and any other unrecognised top-level key,
-        `inPlaylist`/`notInPlaylist`, and the absolute date operators
-        (`before`, `after`, `is`) on `dateAdded` and `lastPlayed`,
-        whose naive local dates have no faithful reading against the
-        catalog's stored instants. `sort: random` maps to the random
+        importing a rule that means something else. That covers fields
+        the catalog has no answer for (`bitrate`, `size`, the artist
+        `mbz_*` ids, and the rest), `limitPercent` and any other
+        unrecognised top-level key, `inPlaylist`/`notInPlaylist`, and every
+        operator but `inTheLast` and `notInTheLast` on the dates, whose
+        naive local dates have no faithful reading against the catalog's
+        stored instants. It also covers what a rule would not save as
+        written: an `offset`, an operator the field does not take
+        (`contains` on `year`, `gt` on `title`), a value of the wrong type,
+        and a window past 100000 days. `sort: random` maps to the random
         limit mode and needs a positive `limit`.
 
 
@@ -232,7 +244,8 @@ paths:
         when nothing survives, since a rule with every condition
         dropped matches the whole library, and when the document is
         malformed rather than merely unmappable. Ask
-        `POST /playlists/nsp/report` first to see what would go.
+        `POST /playlists/nsp/report` first to see what would go, and
+        what would be kept.
       tags: [playlists]
       parameters:
         - name: name
@@ -283,15 +296,17 @@ paths:
       operationId: reportPlaylistNspImport
       summary: Report what an NSP import would lose
       description: >
-        What importing this document would drop, without importing it.
-        Nothing is created and nothing is changed.
+        What importing this document would drop, and what a partial
+        import would keep, without importing it. Nothing is created and
+        nothing is changed.
 
 
         Answers a report rather than refusing: the point is to see the
         loss before choosing between the strict import and
-        `partial=true`. Its only failure is a document that is not
-        readable JSON at all, which is not a gap in the mapping but a
-        broken file.
+        `partial=true`. It fails only for a document that is not a
+        readable JSON object, or whose `name` is not text or `public`
+        not a boolean, which is a broken file rather than a gap in the
+        mapping.
       tags: [playlists]
       requestBody:
         required: true
@@ -595,17 +610,25 @@ paths:
 
 
         NSP cannot say a `not` other than `notContains`, `gte`, `lte`,
-        `isPresent`, `isMissing`, the `minutes` and `megabytes` limit modes,
-        a pinned random seed, a rating in part stars, or a second sort term.
+        `isPresent` and `isMissing` beyond `album`, `artist`, `albumArtist`,
+        `composer`, `genre`, `bpm`, `albumCatalogNumber` and the MusicBrainz
+        ids, a date compared other than by `inTheLast` or `notInTheLast`, the
+        `minutes` and `megabytes` limit modes, a pinned random seed, a rating
+        in part stars, a `durationMs` in part milliseconds, or a second sort
+        term.
 
 
         Nor the fields `mediaType`, `state`, `source`, `container`, `codec`,
-        `path`, `durationMs`, `podcast`, `season`, `publishedAt`, `updatedAt`,
-        `starredAt`, `played`, `finished`, `tag.KEY` and `playlist`,
+        `path`, `podcast`, `season`, `publishedAt`, `updatedAt`, `played`,
+        `finished`, `playlist`, `albumBarcode`, `albumLabel`, `albumMedia`,
+        `albumCountry` and `tag.KEY`.
 
 
-        nor `albumBarcode`, `albumLabel`, `albumCatalogNumber`, `albumMedia`
-        and `albumCountry`. `albumArtist` it carries, and it round-trips.
+        `rating` is written in stars and `durationMs` in seconds; `starred`
+        travels as `loved`, `addedAt` as `dateadded`, `lastPlayedAt` as
+        `lastplayed`, `starredAt` as `dateloved`, `relPath` as `filepath`,
+        `albumCatalogNumber` as `catalognumber` and the three MusicBrainz ids
+        as `mbz_*`.
 
 
         `partial=true` drops what NSP cannot say and writes the rest; still
@@ -1810,7 +1833,7 @@ components:
         checked field first, then operator, then value - so a `field`
         gap carries no `op` because the operator was never reached,
         while an `operator` gap carries the field it was used on.
-      required: [kind, path, reason]
+      required: [kind, code, path, reason]
       properties:
         kind:
           type: string
@@ -1823,6 +1846,27 @@ components:
             document's other clauses; `malformed` is import-only and
             means the document is broken rather than unmappable.
           enum: [field, operator, value, shape, sort, limit, entity, malformed]
+        code:
+          type: string
+          description: >
+            Why this part has no counterpart, for a client to word in
+            its own language. The catalog's codes are
+            `multiple_roots`, `missing_root`, `group_not_array`,
+            `rule_shape`, `operator_shape`, `days_not_number`,
+            `range_shape`, `bad_value`, `bad_limit`, `bad_offset`,
+            `bad_sort`, `bad_order`, `value_not_numeric`,
+            `value_not_boolean`, `unsupported_key`, `group_emptied`,
+            `unsupported_node`, `negation`, `unsupported_field`,
+            `date_operator`, `scaled_text_operator`,
+            `unsupported_operator`, `boolean_operator`,
+            `presence_operator`, `window_too_large`,
+            `window_not_whole_days`, `rating_not_whole_star`,
+            `duration_not_whole_ms`, `value_too_large`,
+            `unsupported_sort_field`, `random_with_sorts`,
+            `extra_sort_term`, `random_needs_limit`, `limit_mode`,
+            `limit_seed`, `limit_budget`, `entity_widens` and
+            `entity_files`. A client that does not know a code shows
+            `reason`.
         field:
           type: string
           description: The field this gap is about, where one is named.
@@ -1831,11 +1875,18 @@ components:
           description: The operator this gap is about, where one is named.
         value:
           description: >
-            The offending value on a `value` gap, so a client can
-            render it without picking `reason` apart. Any JSON type,
-            since it is whatever the rule or the document held. On a
-            `sort` gap that drops a term, the term as a rule's sort
-            writes it: `field` and `desc`.
+            The value this gap is about, where one is named, of whatever
+            JSON type the rule or the document held. On a `sort` gap that
+            drops a term, the term as a rule's sort writes it: `field` and
+            `desc`.
+        key:
+          type: string
+          description: The document key this gap is about, where one is named.
+        mode:
+          type: string
+          description: >
+            The limit mode a dropped budget limit counted in, `minutes` or
+            `megabytes`.
         path:
           type: string
           description: >
@@ -1850,17 +1901,18 @@ components:
         reason:
           type: string
           description: >
-            The sentence the strict conversion would refuse with for
-            this gap. Written by the converter about what the caller
-            built, so a client renders it as-is rather than mapping it
-            to a phrase of its own.
+            The converter's English sentence for this gap, which the strict
+            conversion refuses with. It names fields as the catalog does,
+            which on an export is not always the rule's spelling.
 
     NspReport:
       type: object
       description: >
         What one NSP mapping could not carry: `gaps` block a strict conversion
-        and are what `partial=true` drops; `notes` block nothing. An export
-        report carries `ruleHash`, and `rule` when a partial export keeps some.
+        and are what `partial=true` drops; `notes` block nothing. `rule` is
+        what a partial conversion keeps, present only when there are `gaps`
+        and it would keep something; an export report also carries
+        `ruleHash`.
       required: [direction]
       properties:
         direction:
@@ -1875,11 +1927,11 @@ components:
             Losses that refuse the strict conversion.
 
 
-            Deduplicated by `reason` and capped: a rule or a document
-            repeating one problem is one problem, and the row a client
-            draws per entry says nothing new the second time. `path`
-            names the first place the problem was found. The strict
-            refusal's message is composed from this same list, so a
+            Deduplicated by what a gap names (its `code`, `field`, `op`,
+            `key`, `mode` and `value`) and capped: a rule or a document
+            repeating one problem is one problem, and `path` names the
+            first place it was found. The strict refusal's message is
+            composed from this same list, each sentence once, so a
             refusal and a report never disagree about what is wrong.
           maxItems: 12
           items:
@@ -1892,6 +1944,11 @@ components:
           maxItems: 12
           items:
             $ref: "#/components/schemas/NspGap"
+        truncated:
+          type: boolean
+          description: >
+            Present and true when `gaps` or `notes` stopped at the cap, so
+            there is more than they list.
         ruleHash:
           type: string
           description: >

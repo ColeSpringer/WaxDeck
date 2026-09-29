@@ -5873,27 +5873,40 @@ class PortablePlaylist {
 class NspGap {
   const NspGap({
     required this.kind,
+    required this.code,
     required this.path,
     required this.reason,
     this.field,
     this.op,
     this.value,
+    this.key,
+    this.mode,
   });
 
   /// `field`, `operator`, `value`, `shape`, `sort`, `limit`, `entity`,
-  /// or `malformed`. Open by construction: a kind this build has no
-  /// wording for still carries a [reason], which is what a screen shows.
+  /// or `malformed`.
   final String kind;
+
+  /// The catalog's reason code, which a screen words; open, so a code
+  /// this build does not know falls back to [reason].
+  final String code;
 
   /// An RFC 6901 JSON Pointer to the offending part.
   final String path;
 
+  /// The converter's English sentence.
   final String reason;
   final String? field;
   final String? op;
 
-  /// The offending value on a `value` gap, whatever JSON type it was.
+  /// The value the gap is about, whatever JSON type it was.
   final Object? value;
+
+  /// The document key the gap is about.
+  final String? key;
+
+  /// The limit mode a dropped budget limit counted in.
+  final String? mode;
 }
 
 /// What one NSP conversion could not carry.
@@ -5906,6 +5919,7 @@ class NspReport {
     required this.direction,
     this.gaps = const [],
     this.notes = const [],
+    this.truncated = false,
     this.ruleHash,
     this.rule,
   });
@@ -5916,12 +5930,16 @@ class NspReport {
   final List<NspGap> gaps;
   final List<NspGap> notes;
 
+  /// Whether [gaps] or [notes] stopped at the server's cap, so there is
+  /// more than they list.
+  final bool truncated;
+
   /// Export only: the rule this report was read from, to pass back to
   /// the export so a rule edited in between is refused.
   final String? ruleHash;
 
-  /// Export only: what a partial export keeps, when it drops something
-  /// and keeps something.
+  /// What a partial conversion keeps, when it drops something and keeps
+  /// something; null when it would keep nothing.
   final SmartRule? rule;
 
   /// Everything worth showing, in one list: the losses that refuse and

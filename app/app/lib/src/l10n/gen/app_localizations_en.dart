@@ -6064,12 +6064,32 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String playlistExportNspLossCountMore(num count) {
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'More than $countString parts of this rule have no NSP form.',
+      one: 'More than one part of this rule has no NSP form.',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get playlistExportNspLossTitle =>
       'Some of this rule cannot be exported';
 
   @override
   String get playlistExportNspNotesTitle =>
       'This rule exports with a difference';
+
+  @override
+  String get playlistExportNspNothing =>
+      'Nothing in this rule has an NSP form, so there is nothing to export.';
 
   @override
   String get playlistExportNspProceed => 'Export without them';
@@ -6100,6 +6120,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Kept matched to this export. Re-match it whenever you like from the playlist\'s sync settings.';
 
   @override
+  String get playlistImportCheck => 'Check';
+
+  @override
   String get playlistImportComplete => 'Import complete';
 
   @override
@@ -6112,6 +6135,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistImportHintM3u => 'Paste the playlist file here';
+
+  @override
+  String get playlistImportHintNsp => 'Paste the .nsp file here';
 
   @override
   String get playlistImportHintPortable => 'Paste what Export portable copied';
@@ -6153,11 +6179,69 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistImportNotJson => 'This is not the copied portable JSON';
 
   @override
+  String get playlistImportNotNsp =>
+      'This is not an NSP document (expected a JSON object)';
+
+  @override
   String get playlistImportNotPortable =>
       'This is not a portable playlist (expected a name and a refs list)';
 
   @override
   String get playlistImportNothing => 'Nothing imported';
+
+  @override
+  String get playlistImportNspBroken =>
+      'The document is damaged, so it cannot be imported until it is fixed.';
+
+  @override
+  String get playlistImportNspClean =>
+      'Everything in this document carries over.';
+
+  @override
+  String get playlistImportNspKeeps => 'What the import keeps';
+
+  @override
+  String playlistImportNspLossCount(num count) {
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countString parts of this document cannot be read.',
+      one: 'One part of this document cannot be read.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String playlistImportNspLossCountMore(num count) {
+    final intl.NumberFormat countNumberFormat = intl.NumberFormat.compact(
+      locale: localeName,
+    );
+    final String countString = countNumberFormat.format(count);
+
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'More than $countString parts of this document cannot be read.',
+      one: 'More than one part of this document cannot be read.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get playlistImportNspNeedsName =>
+      'This document has no name, so give the playlist one.';
+
+  @override
+  String get playlistImportNspNothing =>
+      'Nothing in this document can be read, so there is nothing to import.';
+
+  @override
+  String get playlistImportNspPartial => 'Import without them';
 
   @override
   String get playlistImportPasteFirst => 'Paste the playlist first.';
@@ -6178,6 +6262,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistImportSourceM3u => 'M3U file';
+
+  @override
+  String get playlistImportSourceNsp => 'Navidrome smart playlist';
 
   @override
   String get playlistImportSourcePortable => 'Portable JSON';
@@ -6261,6 +6348,248 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get playlistNoManualLists =>
       'No manual playlists yet. Make one below and this goes straight into it.';
+
+  @override
+  String get playlistNspGapBadLimit => 'The limit is not a whole number.';
+
+  @override
+  String get playlistNspGapBadOffset => 'The offset is not a whole number.';
+
+  @override
+  String get playlistNspGapBadOrder =>
+      'The order cannot be read; it should be asc or desc.';
+
+  @override
+  String get playlistNspGapBadSort => 'The sort is not a field name.';
+
+  @override
+  String playlistNspGapBadValue(String op, String field) {
+    return 'The value of $op on $field cannot be read.';
+  }
+
+  @override
+  String playlistNspGapBooleanOperator(
+    String field,
+    String opIs,
+    String opIsNot,
+  ) {
+    return '$field is yes or no, so it takes only $opIs and $opIsNot.';
+  }
+
+  @override
+  String playlistNspGapDateOperatorExport(String field) {
+    return 'Only a number of days back carries $field into NSP, so this comparison has no form there.';
+  }
+
+  @override
+  String playlistNspGapDateOperatorImport(String op, String field) {
+    return '$op on $field cannot carry over, since only \"inTheLast\" and \"notInTheLast\" do on a date.';
+  }
+
+  @override
+  String playlistNspGapDaysNotNumber(String op, String field) {
+    return '$op on $field needs a number of days.';
+  }
+
+  @override
+  String playlistNspGapDurationNotWholeMsExport(String field, String value) {
+    return '$field of $value is not a whole number of milliseconds, so it cannot carry over.';
+  }
+
+  @override
+  String playlistNspGapDurationNotWholeMsImport(String value) {
+    return '$value seconds is not a whole number of milliseconds, so it cannot carry over.';
+  }
+
+  @override
+  String get playlistNspGapEntityFiles =>
+      'A rule over files rather than items has no NSP form.';
+
+  @override
+  String get playlistNspGapEntityWidens =>
+      'NSP does not tell tracks from books and episodes, so imported back, this rule covers every kind of item.';
+
+  @override
+  String playlistNspGapExtraSortTerm(String field) {
+    return 'NSP sorts by one field only, so the later sort by $field goes.';
+  }
+
+  @override
+  String get playlistNspGapGroupEmptiedExport =>
+      'Nothing in this group has an NSP form, so the group goes too.';
+
+  @override
+  String get playlistNspGapGroupEmptiedImport =>
+      'Nothing in this group can be read, so the group goes too.';
+
+  @override
+  String playlistNspGapGroupNotArray(String key) {
+    return '$key has to be a list of rules.';
+  }
+
+  @override
+  String playlistNspGapLimitBudget(String value, String mode) {
+    return 'The limit of $value $mode goes too: NSP would read it as $value items.';
+  }
+
+  @override
+  String playlistNspGapLimitMode(String mode) {
+    return 'NSP limits only by number of items, so the limit by $mode goes.';
+  }
+
+  @override
+  String get playlistNspGapLimitSeed =>
+      'NSP cannot pin a shuffle, so the saved order of the shuffle goes.';
+
+  @override
+  String get playlistNspGapMissingRoot =>
+      'The document has no \"all\" or \"any\" group at its top.';
+
+  @override
+  String get playlistNspGapMultipleRoots =>
+      'The document has both an \"all\" and an \"any\" group at its top; it may have only one.';
+
+  @override
+  String get playlistNspGapNegation =>
+      'NSP negates only a single contains (notContains), so this negation has no NSP form.';
+
+  @override
+  String playlistNspGapOperatorShape(String op) {
+    return '$op has to name exactly one field.';
+  }
+
+  @override
+  String playlistNspGapPresenceOperatorExport(String field, String op) {
+    return 'In NSP, $field always holds a value, so $op has no form there.';
+  }
+
+  @override
+  String playlistNspGapPresenceOperatorImport(String op, String field) {
+    return 'Navidrome allows $op only on a field that can be empty, not on $field.';
+  }
+
+  @override
+  String playlistNspGapQuoted(String token) {
+    return '\"$token\"';
+  }
+
+  @override
+  String get playlistNspGapRandomNeedsLimitExport =>
+      'NSP shuffles only a limited number of items, and this rule sets no limit.';
+
+  @override
+  String get playlistNspGapRandomNeedsLimitImport =>
+      'A random sort needs a limit above zero.';
+
+  @override
+  String get playlistNspGapRandomWithSorts =>
+      'NSP cannot shuffle and sort at once, so the sort goes and the shuffle stays.';
+
+  @override
+  String playlistNspGapRangeShape(String op, String field) {
+    return '$op on $field needs two values, a low one and a high one.';
+  }
+
+  @override
+  String playlistNspGapRatingNotWholeStar(String value) {
+    return 'NSP rates in whole stars, and $value out of 100 is not one.';
+  }
+
+  @override
+  String get playlistNspGapRuleShape =>
+      'A rule has to hold exactly one operator or one group.';
+
+  @override
+  String playlistNspGapScaledTextOperatorExport(String field, String op) {
+    return 'NSP counts $field in other units, so a text match like $op has no form there.';
+  }
+
+  @override
+  String playlistNspGapScaledTextOperatorImport(String field, String op) {
+    return 'WaxDeck counts $field in other units, so a text match like $op cannot carry over.';
+  }
+
+  @override
+  String playlistNspGapStarredImport(String field) {
+    return '$field is not an NSP field; NSP calls the star \"loved\".';
+  }
+
+  @override
+  String playlistNspGapUnsupportedFieldExport(String field) {
+    return 'NSP has no field for $field.';
+  }
+
+  @override
+  String playlistNspGapUnsupportedFieldImport(String field) {
+    return '$field is not a field WaxDeck can read.';
+  }
+
+  @override
+  String playlistNspGapUnsupportedKey(String key) {
+    return 'WaxDeck cannot read the $key setting.';
+  }
+
+  @override
+  String get playlistNspGapUnsupportedNode =>
+      'This part of the rule has no NSP form.';
+
+  @override
+  String playlistNspGapUnsupportedOperatorExport(String op) {
+    return 'NSP has no $op comparison.';
+  }
+
+  @override
+  String playlistNspGapUnsupportedOperatorImport(String op, String field) {
+    return '$op on $field has no WaxDeck form.';
+  }
+
+  @override
+  String playlistNspGapUnsupportedSortFieldExport(String field) {
+    return 'NSP cannot order by $field.';
+  }
+
+  @override
+  String playlistNspGapUnsupportedSortFieldImport(String field) {
+    return 'WaxDeck cannot order by $field.';
+  }
+
+  @override
+  String playlistNspGapValueNotBooleanExport(String field, String value) {
+    return '$field holds $value, which NSP cannot say as yes or no.';
+  }
+
+  @override
+  String playlistNspGapValueNotBooleanImport(
+    String op,
+    String field,
+    String value,
+  ) {
+    return '$op on $field takes true or false, not $value.';
+  }
+
+  @override
+  String playlistNspGapValueNotNumeric(String field, String value) {
+    return '$field takes a number, and $value is not one.';
+  }
+
+  @override
+  String playlistNspGapValueTooLarge(String value, String field) {
+    return '$value for $field is too large to carry over.';
+  }
+
+  @override
+  String get playlistNspGapWindowNotWholeDaysExport =>
+      'The window is not a whole number of days, which NSP cannot say.';
+
+  @override
+  String playlistNspGapWindowNotWholeDaysImport(String op, String value) {
+    return '$op needs a whole number of days above zero, not $value.';
+  }
+
+  @override
+  String playlistNspGapWindowTooLarge(String value) {
+    return 'A window of $value days is too long.';
+  }
 
   @override
   String get playlistPlay => 'Play';
@@ -6367,6 +6696,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playlistRuleFieldAlbumLabel => 'Album label';
 
   @override
+  String get playlistRuleFieldAlbumMbid => 'Album MBID';
+
+  @override
   String get playlistRuleFieldAlbumMedia => 'Album media';
 
   @override
@@ -6377,6 +6709,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistRuleFieldCodec => 'Codec';
+
+  @override
+  String get playlistRuleFieldComposer => 'Composer';
 
   @override
   String get playlistRuleFieldContainer => 'Container';
@@ -6422,6 +6757,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playlistRuleFieldRating => 'Rating';
+
+  @override
+  String get playlistRuleFieldRecordingMbid => 'Recording MBID';
+
+  @override
+  String get playlistRuleFieldRelPath => 'Path in library';
+
+  @override
+  String get playlistRuleFieldReleaseGroupMbid => 'Release group MBID';
 
   @override
   String get playlistRuleFieldSeason => 'Season';

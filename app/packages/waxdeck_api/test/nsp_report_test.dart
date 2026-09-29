@@ -40,6 +40,7 @@ void main() {
             'gaps': <Object?>[
               <String, Object?>{
                 'kind': wire,
+                'code': 'unsupported_field',
                 'path': '/root/nodes/0',
                 'reason': 'nsp: something',
               },
@@ -50,7 +51,7 @@ void main() {
       }
     });
 
-    test('a gap carries its optional halves, and the value it held', () {
+    test('a gap carries its code, its optional halves, and its value', () {
       final report = gen.standardSerializers.deserializeWith(
         gen.NspReport.serializer,
         <String, Object?>{
@@ -58,31 +59,45 @@ void main() {
           'gaps': <Object?>[
             <String, Object?>{
               'kind': 'value',
+              'code': 'rating_not_whole_star',
               'field': 'rating',
               'op': 'gt',
               'value': 85,
               'path': '/root/nodes/0',
               'reason': 'nsp: rating 85 is not a whole number of stars',
             },
+            <String, Object?>{
+              'kind': 'limit',
+              'code': 'limit_budget',
+              'value': 60,
+              'mode': 'minutes',
+              'path': '/limit',
+              'reason': 'nsp: limit 60 is a minutes budget',
+            },
           ],
           'notes': <Object?>[
             <String, Object?>{
-              'kind': 'entity',
-              'path': '/entity',
-              'reason': 'nsp: tracks only',
+              'kind': 'shape',
+              'code': 'unsupported_key',
+              'key': 'limitPercent',
+              'path': '/limitPercent',
+              'reason': 'nsp: unsupported top-level key: limitPercent',
             },
           ],
         },
       )!;
       final mapped = nspReportFromGen(report);
-      final gap = mapped.gaps.single;
+      final gap = mapped.gaps.first;
+      expect(gap.code, 'rating_not_whole_star');
       expect(gap.field, 'rating');
       expect(gap.op, 'gt');
       expect(gap.value, 85);
       expect(gap.path, '/root/nodes/0');
+      expect(mapped.gaps.last.mode, 'minutes');
+      expect(mapped.notes.single.key, 'limitPercent');
       // Both lists reach the caller: the dialog renders their union, so
       // a note dropped here is a loss nobody is told about.
-      expect(mapped.all, hasLength(2));
+      expect(mapped.all, hasLength(3));
       expect(mapped.isLossless, isFalse);
     });
 
@@ -107,6 +122,7 @@ void main() {
           'gaps': <Object?>[
             <String, Object?>{
               'kind': 'field',
+              'code': 'unsupported_field',
               'field': 'mediaType',
               'path': '/root/nodes/1',
               'reason': 'nsp: unsupported field: mediaType',

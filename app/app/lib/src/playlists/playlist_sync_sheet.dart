@@ -48,9 +48,8 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
 
   static const _intervals = [1, 3, 6, 12, 24];
 
-  /// The exports a binding can name. M3U is absent from the binding's
-  /// source enum, because a file of paths is not something to re-match
-  /// against.
+  /// The exports a binding can name, which leaves out M3U and NSP (see
+  /// [PlaylistImportSource.canBind]).
   static final _sources = PlaylistImportSource.values
       .where((s) => s.canBind)
       .toList(growable: false);
