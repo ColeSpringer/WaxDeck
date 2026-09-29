@@ -1,20 +1,34 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
+// Override lives here rather than in the root library.
+import 'package:flutter_riverpod/flutter_riverpod.dart'
+    show UncontrolledProviderScope;
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:waxdeck/src/app.dart';
+import 'package:waxdeck/src/artwork/artwork_palette.dart';
+import 'package:waxdeck/src/artwork/artwork_providers.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
+import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
+import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/shell/commands.dart';
+import 'package:waxdeck/src/shell/router.dart';
+import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
 
@@ -24,6 +38,88 @@ const _bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 
 ItemSummary _track(String pid, String title) =>
     testItem(pid, title: title, artist: 'Nightjar');
+
+const _albumPid = 'al-01JZX5N8QW3F4V9T2B7KDALBUM1';
+
+ItemSummary _albumTrack(String pid, String title) => ItemSummary(
+  pid: pid,
+  mediaType: MediaType.music,
+  title: title,
+  artist: 'Nightjar',
+  albumPid: _albumPid,
+  durationMs: 214000,
+  artUrl: '/api/v1/items/$pid/art',
+);
+
+/// The tracks hold no art of their own; their album holds a front, which
+/// the track's own URL already resolves to, a back cover and a booklet.
+FakeRepository _albumRepo(List<ItemSummary> tracks) =>
+    FakeRepository(items: tracks)
+      ..artSource = const ArtSource(
+        source: 'enrichment',
+        provider: 'coverartarchive',
+        level: 'album',
+      )
+      ..artRolesByPid[_albumPid] = const [
+        ArtRoleInfo(
+          role: 'front',
+          format: 'jpeg',
+          source: 'enrichment',
+          provider: 'coverartarchive',
+        ),
+        ArtRoleInfo(role: 'back', format: 'jpeg', source: 'sidecar'),
+        ArtRoleInfo(role: 'booklet', format: 'png', source: 'user'),
+      ];
+
+Finder get _artwork => find.bySemanticsIdentifier(SemanticsIds.playerArtwork);
+
+String _caption(WidgetTester tester) =>
+    tester.widget<ArtworkCaption>(find.byType(ArtworkCaption)).text;
+
+/// Plays [track] and opens the player over it with [extra] overrides.
+Future<PlayerHarness> _pumpAlbumTrack(
+  WidgetTester tester, {
+  FakeRepository? repo,
+  List<Override> extra = const <Override>[],
+  bool cycle = true,
+  bool reducedMotion = false,
+  ValueListenable<bool>? ticking,
+}) {
+  final track = _albumTrack(_first, 'Salt Harbour');
+  final fakes = repo ?? _albumRepo([track]);
+  final container = playbackContainer(
+    repo: fakes,
+    engine: FakeEngine(),
+    extra: extra,
+  );
+  if (!cycle) container.read(playerArtworkCycleProvider.notifier).set(false);
+  return pumpPlayer(
+    tester,
+    repo: fakes,
+    engine: FakeEngine(),
+    item: track,
+    container: container,
+    host: reducedMotion || ticking != null
+        ? (player) => localizedHost(
+            Builder(
+              builder: (context) => MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(disableAnimations: reducedMotion),
+                child: ticking == null
+                    ? player
+                    : ValueListenableBuilder<bool>(
+                        valueListenable: ticking,
+                        builder: (context, on, child) =>
+                            TickerMode(enabled: on, child: child!),
+                        child: player,
+                      ),
+              ),
+            ),
+          )
+        : null,
+  );
+}
 
 /// The player over a router arranged the way the app arranges it, which
 /// the plain [routedHost] cannot be: the key map has to sit *inside* the
@@ -610,6 +706,469 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.playerChapters),
         findsOneWidget,
       );
+      await harness.endPlayback(tester);
+    });
+  });
+
+  group('the artwork', () {
+    testWidgets('a tap turns to the next picture and the last wraps', (
+      tester,
+    ) async {
+      final harness = await _pumpAlbumTrack(tester);
+
+      expect(_caption(tester), 'Front cover: From Cover Art Archive');
+      expect(tester.getSemantics(_artwork).label, 'Artwork 1 of 3');
+      for (final (caption, label) in <(String, String)>[
+        ('Back cover: From a folder image', 'Artwork 2 of 3'),
+        ('Booklet: Set by hand', 'Artwork 3 of 3'),
+        ('Front cover: From Cover Art Archive', 'Artwork 1 of 3'),
+      ]) {
+        await tester.tap(_artwork);
+        await tester.pumpAndSettle();
+        expect(_caption(tester), caption);
+        expect(tester.getSemantics(_artwork).label, label);
+      }
+      // A turn is not a way out, and the accent stays the front's.
+      expect(find.byType(PlayerFace), findsOneWidget);
+      expect(
+        tester.widget<ArtworkAccent>(find.byType(ArtworkAccent)).artUrl,
+        '/api/v1/items/$_first/art',
+      );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('the next picture is fetched before it is shown', (
+      tester,
+    ) async {
+      final store = FakeArtworkStore();
+      final harness = await _pumpAlbumTrack(
+        tester,
+        extra: [
+          artworkStoreProvider.overrideWithValue(store),
+          desktopProvider.overrideWithValue(true),
+        ],
+      );
+      // At the size the hero draws, so the warm lands on its rung.
+      final hero = tester.getSize(
+        find.descendant(of: _artwork, matching: find.byType(ArtworkImage)),
+      );
+      final px = (hero.width * tester.view.devicePixelRatio).ceil();
+      const back = '/api/v1/items/$_albumPid/art?role=back';
+      expect(store.warmed, contains((url: back, px: px)));
+
+      await tester.tap(_artwork);
+      await tester.pumpAndSettle();
+      expect(store.requested, contains(back));
+      expect(store.warmed.last, (
+        url: '/api/v1/items/$_albumPid/art?role=booklet',
+        px: px,
+      ));
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('an album front beside the track\'s own is the album\'s', (
+      tester,
+    ) async {
+      final repo = _albumRepo([_albumTrack(_first, 'Salt Harbour')])
+        ..artRolesByPid[_first] = const [
+          ArtRoleInfo(role: 'front', format: 'jpeg', source: 'tag'),
+        ]
+        ..artRolesByPid[_albumPid] = const [
+          ArtRoleInfo(role: 'front', format: 'jpeg', source: 'user'),
+        ];
+      final harness = await _pumpAlbumTrack(tester, repo: repo);
+
+      expect(_caption(tester), startsWith('Front cover'));
+      await tester.tap(_artwork);
+      await tester.pumpAndSettle();
+      expect(_caption(tester), 'Album cover: Set by hand');
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('an album the server refuses is asked about once', (
+      tester,
+    ) async {
+      final repo = _albumRepo([_albumTrack(_first, 'Salt Harbour')])
+        ..artRolesErrors[_albumPid] = const WaxDeckApiException(
+          code: 'not-found',
+          message: 'no such album',
+          statusCode: 404,
+        );
+      final harness = await _pumpAlbumTrack(tester, repo: repo);
+
+      await tester.pump(const Duration(seconds: 15));
+      expect(repo.artRolesReads.where((pid) => pid == _albumPid), hasLength(1));
+      expect(_artwork, findsNothing);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a phone fetches the next picture only once one is turned', (
+      tester,
+    ) async {
+      final store = FakeArtworkStore();
+      final harness = await _pumpAlbumTrack(
+        tester,
+        extra: [artworkStoreProvider.overrideWithValue(store)],
+      );
+      expect(store.warmed, isEmpty);
+
+      await tester.tap(_artwork);
+      await tester.pumpAndSettle();
+      expect(
+        store.warmed.map((w) => w.url),
+        contains('/api/v1/items/$_albumPid/art?role=booklet'),
+      );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a narrow caption keeps where the picture came from', (
+      tester,
+    ) async {
+      final harness = await _pumpAlbumTrack(tester);
+      ArtworkCaption caption() =>
+          tester.widget<ArtworkCaption>(find.byType(ArtworkCaption));
+
+      expect(caption().fallback, 'From Cover Art Archive');
+      await tester.tap(_artwork);
+      await tester.pumpAndSettle();
+      expect(caption().fallback, 'From a folder image');
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a track with no cover opens on the picture it has', (
+      tester,
+    ) async {
+      final repo = _albumRepo([_albumTrack(_first, 'Salt Harbour')])
+        ..artSource = null
+        ..artRolesByPid[_albumPid] = const [
+          ArtRoleInfo(role: 'back', format: 'jpeg', source: 'user'),
+        ];
+      final store = FakeArtworkStore();
+      final harness = await _pumpAlbumTrack(
+        tester,
+        repo: repo,
+        extra: [artworkStoreProvider.overrideWithValue(store)],
+      );
+
+      expect(_artwork, findsNothing);
+      expect(_caption(tester), 'Back cover: Set by hand');
+      expect(
+        store.requested,
+        contains('/api/v1/items/$_albumPid/art?role=back'),
+      );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('one picture is a picture, not a control', (tester) async {
+      final repo = _albumRepo([_albumTrack(_first, 'Salt Harbour')])
+        ..artRolesByPid[_albumPid] = const [
+          ArtRoleInfo(
+            role: 'front',
+            format: 'jpeg',
+            source: 'enrichment',
+            provider: 'coverartarchive',
+          ),
+        ];
+      final harness = await _pumpAlbumTrack(
+        tester,
+        repo: repo,
+        extra: [desktopProvider.overrideWithValue(true)],
+      );
+
+      expect(_artwork, findsNothing);
+      // The line it always drew, with no slot named.
+      expect(_caption(tester), 'From Cover Art Archive');
+      await tester.pump(const Duration(seconds: 30));
+      expect(_caption(tester), 'From Cover Art Archive');
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a desktop turns them itself, and a tap restarts the wait', (
+      tester,
+    ) async {
+      final harness = await _pumpAlbumTrack(
+        tester,
+        extra: [desktopProvider.overrideWithValue(true)],
+      );
+
+      await tester.pump(const Duration(seconds: 15));
+      expect(_caption(tester), startsWith('Back cover'));
+
+      await tester.pump(const Duration(seconds: 10));
+      await tester.tap(_artwork);
+      await tester.pump();
+      expect(_caption(tester), startsWith('Booklet'));
+      await tester.pump(const Duration(seconds: 14));
+      expect(_caption(tester), startsWith('Booklet'));
+      await tester.pump(const Duration(seconds: 1));
+      expect(_caption(tester), startsWith('Front cover'));
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('switched off, it waits for a tap', (tester) async {
+      final harness = await _pumpAlbumTrack(
+        tester,
+        extra: [desktopProvider.overrideWithValue(true)],
+        cycle: false,
+      );
+
+      await tester.pump(const Duration(seconds: 30));
+      expect(_caption(tester), startsWith('Front cover'));
+      await tester.tap(_artwork);
+      await tester.pump();
+      expect(_caption(tester), startsWith('Back cover'));
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('under reduced motion, it waits for a tap', (tester) async {
+      final harness = await _pumpAlbumTrack(
+        tester,
+        extra: [desktopProvider.overrideWithValue(true)],
+        reducedMotion: true,
+      );
+
+      await tester.pump(const Duration(seconds: 30));
+      expect(_caption(tester), startsWith('Front cover'));
+      await tester.tap(_artwork);
+      await tester.pump();
+      expect(_caption(tester), startsWith('Back cover'));
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a player nobody can see holds its picture', (tester) async {
+      final ticking = ValueNotifier(true);
+      addTearDown(ticking.dispose);
+      final harness = await _pumpAlbumTrack(
+        tester,
+        extra: [desktopProvider.overrideWithValue(true)],
+        ticking: ticking,
+      );
+
+      // How the mini window keeps the stack behind it.
+      ticking.value = false;
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 30));
+      expect(_caption(tester), startsWith('Front cover'));
+
+      ticking.value = true;
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 15));
+      expect(_caption(tester), startsWith('Back cover'));
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a phone never turns them itself', (tester) async {
+      final harness = await _pumpAlbumTrack(tester);
+
+      await tester.pump(const Duration(seconds: 30));
+      expect(_caption(tester), startsWith('Front cover'));
+      await harness.endPlayback(tester);
+    });
+
+    // Through the app's own navigators: the player is pushed onto the
+    // signed-in one, a sheet opens over it there, and a dialog (the
+    // command palette, a confirm) opens on the root above both.
+    testWidgets('nothing turns under a dialog or a sheet', (tester) async {
+      final track = _albumTrack(_first, 'Salt Harbour');
+      final repo = _albumRepo([track])
+        ..sessionState = const SessionState(
+          authenticated: true,
+          user: WaxDeckUser(
+            id: 'us-01JZX5N8QW3F4V9T2B7KDLISTEN',
+            username: 'listener',
+          ),
+        );
+      final container = playbackContainer(
+        repo: repo,
+        engine: FakeEngine(),
+        extra: [
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+          desktopProvider.overrideWithValue(true),
+        ],
+      );
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: const WaxDeckApp(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final harness = PlayerHarness(container)..play([track]);
+      unawaited(container.read(routerProvider).push(WaxRoute.nowPlaying));
+      await tester.pumpAndSettle();
+      expect(_caption(tester), startsWith('Front cover'));
+
+      for (final open in <Future<void> Function(BuildContext)>[
+        (context) => showDialog<void>(
+          context: context,
+          builder: (_) => const Text('over the player'),
+        ),
+        (context) => showWaxSheet<void>(
+          context: context,
+          builder: (_) => const Text('over the player'),
+        ),
+      ]) {
+        unawaited(open(tester.element(find.byType(PlayerFace))));
+        await tester.pumpAndSettle();
+        await tester.pump(const Duration(seconds: 30));
+        Navigator.of(tester.element(find.text('over the player'))).pop();
+        await tester.pumpAndSettle();
+        expect(_caption(tester), startsWith('Front cover'));
+      }
+
+      await tester.pump(const Duration(seconds: 15));
+      expect(_caption(tester), startsWith('Back cover'));
+      await harness.endPlayback(tester);
+      // The app's own queue-save debounce, which the test outlives.
+      await tester.pump(const Duration(seconds: 1));
+    });
+
+    testWidgets('the control stays put while the next track answers', (
+      tester,
+    ) async {
+      final first = _albumTrack(_first, 'Salt Harbour');
+      final second = _albumTrack(_second, 'Gullwing');
+      final repo = _albumRepo([first, second]);
+      final held = Completer<void>();
+      repo.artRolesGates[_second] = held;
+      final harness = PlayerHarness(
+        playbackContainer(repo: repo, engine: FakeEngine()),
+      );
+      harness.play([first, second]);
+      await pumpPlayerInto(tester, harness);
+      final control = find.byWidgetPredicate(
+        (w) => w is WaxTappable && w.semanticsId == SemanticsIds.playerArtwork,
+      );
+      final before = tester.state(control);
+
+      await harness.playback.next();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 200));
+      expect(find.text('Gullwing'), findsWidgets);
+      expect(tester.state(control), same(before));
+
+      held.complete();
+      await tester.pumpAndSettle();
+      expect(tester.state(control), same(before));
+      expect(tester.getSemantics(_artwork).label, 'Artwork 1 of 3');
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('nothing turns while the next set is unknown', (tester) async {
+      final first = _albumTrack(_first, 'Salt Harbour');
+      final second = _albumTrack(_second, 'Gullwing');
+      final repo = _albumRepo([first, second]);
+      final held = Completer<void>();
+      repo.artRolesGates[_second] = held;
+      final harness = PlayerHarness(
+        playbackContainer(
+          repo: repo,
+          engine: FakeEngine(),
+          extra: [desktopProvider.overrideWithValue(true)],
+        ),
+      );
+      harness.play([first, second]);
+      await pumpPlayerInto(tester, harness);
+
+      await harness.playback.next();
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 20));
+      held.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(_caption(tester), startsWith('Front cover'));
+      expect(tester.getSemantics(_artwork).label, 'Artwork 1 of 3');
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a tap before the next set answers is not kept', (
+      tester,
+    ) async {
+      final first = _albumTrack(_first, 'Salt Harbour');
+      final second = _albumTrack(_second, 'Gullwing');
+      final repo = _albumRepo([first, second]);
+      final held = Completer<void>();
+      repo.artRolesGates[_second] = held;
+      final harness = PlayerHarness(
+        playbackContainer(repo: repo, engine: FakeEngine()),
+      );
+      harness.play([first, second]);
+      await pumpPlayerInto(tester, harness);
+
+      await harness.playback.next();
+      await tester.pump();
+      await tester.tap(_artwork);
+      await tester.pump();
+      expect(tester.getSemantics(_artwork).label, 'Artwork 1 of 3');
+      held.complete();
+      await tester.pumpAndSettle();
+      expect(_caption(tester), startsWith('Front cover'));
+      expect(tester.getSemantics(_artwork).label, 'Artwork 1 of 3');
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a new album starts its pictures again at the front', (
+      tester,
+    ) async {
+      const otherAlbum = 'al-01JZX5N8QW3F4V9T2B7KDALBUM2';
+      final onFirst = _albumTrack(_first, 'Salt Harbour');
+      final onOther = ItemSummary(
+        pid: _first,
+        mediaType: MediaType.music,
+        title: 'Salt Harbour',
+        artist: 'Nightjar',
+        albumPid: otherAlbum,
+        durationMs: 214000,
+        artUrl: '/api/v1/items/$_first/art',
+      );
+      final repo = _albumRepo([onFirst])
+        ..artRolesByPid[otherAlbum] = const [
+          ArtRoleInfo(role: 'back', format: 'jpeg', source: 'user'),
+          ArtRoleInfo(role: 'disc', format: 'png', source: 'user'),
+        ];
+      final container = playbackContainer(repo: repo, engine: FakeEngine());
+      Future<void> show(ItemSummary item) async {
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: localizedHost(PlayerFace(session: null, item: item)),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      await show(onFirst);
+      await tester.tap(_artwork);
+      await tester.pump();
+      await tester.tap(_artwork);
+      await tester.pumpAndSettle();
+      expect(_caption(tester), startsWith('Booklet'));
+
+      await show(onOther);
+      expect(_caption(tester), startsWith('Front cover'));
+    });
+
+    testWidgets('the next track starts at its front cover', (tester) async {
+      final first = _albumTrack(_first, 'Salt Harbour');
+      final second = _albumTrack(_second, 'Gullwing');
+      final harness = PlayerHarness(
+        playbackContainer(
+          repo: _albumRepo([first, second]),
+          engine: FakeEngine(),
+        ),
+      );
+      harness.play([first, second]);
+      await pumpPlayerInto(tester, harness);
+
+      await tester.tap(_artwork);
+      await tester.pumpAndSettle();
+      expect(_caption(tester), startsWith('Back cover'));
+
+      await harness.playback.next();
+      await tester.pumpAndSettle();
+      expect(find.text('Gullwing'), findsWidgets);
+      expect(_caption(tester), startsWith('Front cover'));
+      expect(tester.getSemantics(_artwork).label, 'Artwork 1 of 3');
       await harness.endPlayback(tester);
     });
   });

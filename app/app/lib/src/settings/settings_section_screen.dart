@@ -294,6 +294,23 @@ class _PlaybackBody extends ConsumerWidget {
                   ),
                 ),
               ),
+            // A screen left on the player; a phone locks its own instead.
+            if (kIsWeb || ref.watch(desktopProvider))
+              SettingAnchor(
+                id: 'artwork-cycle',
+                child: WaxSettingRow(
+                  title: l10n.settingsArtworkCycleTitle,
+                  help: l10n.settingsArtworkCycleHelp,
+                  control: WaxSwitch(
+                    value: ref.watch(playerArtworkCycleProvider),
+                    label: l10n.settingsArtworkCycleTitle,
+                    semanticsId: SemanticsIds.setting('artwork-cycle'),
+                    onChanged: ref
+                        .read(playerArtworkCycleProvider.notifier)
+                        .set,
+                  ),
+                ),
+              ),
           ],
         ),
         _Group(

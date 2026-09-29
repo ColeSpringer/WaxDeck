@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+// Override lives here rather than in the root library.
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/connect/connect_providers.dart';
@@ -43,6 +45,7 @@ Future<ProviderContainer> _pumpTuned(
   WidgetTester tester, {
   required FakeRepository repo,
   required FakeEngine engine,
+  List<Override> extra = const <Override>[],
 }) async {
   final container = ProviderContainer(
     overrides: [
@@ -52,6 +55,7 @@ Future<ProviderContainer> _pumpTuned(
       clientSettingsStoreProvider.overrideWithValue(
         MemoryClientSettingsStore(),
       ),
+      ...extra,
     ],
   );
   addTearDown(container.dispose);
@@ -110,6 +114,24 @@ void main() {
     expect(
       find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen),
       findsOneWidget,
+    );
+    await _stop(container);
+  });
+
+  testWidgets('the station shows one picture and never turns it', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
+    final container = await _pumpTuned(
+      tester,
+      repo: repo,
+      engine: FakeEngine(),
+      extra: [desktopProvider.overrideWithValue(true)],
+    );
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playerArtwork),
+      findsNothing,
     );
     await _stop(container);
   });

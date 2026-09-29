@@ -80,6 +80,7 @@ class PlayerIds {
     this.shuffle,
     this.repeat,
     this.seek,
+    this.artwork,
   });
 
   final String? surface;
@@ -92,4 +93,7 @@ class PlayerIds {
   final String? shuffle;
   final String? repeat;
   final String? seek;
+
+  /// The hero, while a tap on it turns to the next picture.
+  final String? artwork;
 }

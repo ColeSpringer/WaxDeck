@@ -20,6 +20,7 @@ import 'artwork_store_io.dart'
 final itemArtRolesProvider = FutureProvider.autoDispose
     .family<ArtRoles, String>(
       (ref, pid) => ref.watch(repositoryProvider).getItemArtRoles(pid),
+      retry: retryUnlessRefused,
     );
 
 /// Where offline artwork is recorded. Native only: the web build has no

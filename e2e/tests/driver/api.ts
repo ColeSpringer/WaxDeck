@@ -156,8 +156,22 @@ export class RawApi {
   /// a string, which a Buffer is not, so the bytes are handed over
   /// here rather than cast at every call site.
   upload<P extends PathOf<'post'>>(path: P, bytes: Buffer) {
-    return this.send('post', path as string, {
-      data: bytes as never,
+    return this.sendBytes('post', path as string, bytes);
+  }
+
+  /// The same for a file stored in place, at a slot the path and query name.
+  replace<P extends PathOf<'put'>>(
+    path: P,
+    bytes: Buffer,
+    options: Omit<Options<Operation<P, 'put'>>, 'data' | 'headers'> = {},
+  ) {
+    return this.sendBytes('put', path as string, bytes, options as object);
+  }
+
+  private sendBytes(method: 'post' | 'put', path: string, bytes: Buffer, options: object = {}) {
+    return this.send(method, path, {
+      ...options,
+      data: bytes,
       headers: { 'Content-Type': 'application/octet-stream' },
     });
   }

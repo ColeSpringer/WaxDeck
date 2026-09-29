@@ -95,6 +95,7 @@ import '../uploads/uploads_screen.dart';
 import 'adaptive_shell.dart';
 import 'commands.dart';
 import 'routes.dart';
+import 'signed_in_cover.dart';
 
 /// The app's router, built once per provider container.
 ///
@@ -948,7 +949,7 @@ class _SignedInScope extends ConsumerWidget {
     // Here rather than in the shell: the overlays are pushed onto this
     // navigator, so a map inside the shell would be their sibling and
     // dead on the player, the queue, and car mode.
-    return CommandShortcuts(child: watched);
+    return SignedInCover(child: CommandShortcuts(child: watched));
   }
 }
 

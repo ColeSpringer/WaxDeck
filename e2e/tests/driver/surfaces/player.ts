@@ -24,6 +24,11 @@ export class Player extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.playerSpeed));
   }
 
+  /// The hero, while it has more than one picture to turn through.
+  artwork(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playerArtwork));
+  }
+
   /// The star, which announces its action rather than its state - so
   /// what it is called is how a spec reads the state.
   star(): Locator {

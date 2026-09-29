@@ -104,6 +104,7 @@ class SettingEntry {
     this.desktopOnly = false,
     this.mobileOnly = false,
     this.webOnly = false,
+    this.webOrDesktop = false,
   });
 
   /// A stable handle, also this setting's e2e identifier suffix. Renaming
@@ -159,6 +160,10 @@ class SettingEntry {
   /// without a gap. Offering it elsewhere would be a switch between two
   /// identical outcomes.
   final bool webOnly;
+
+  /// Present in a browser and on a desktop, whose screens stay on the
+  /// player; absent on a phone, which locks instead.
+  final bool webOrDesktop;
 }
 
 /// The search words for one setting, out of the comma-separated string
@@ -342,6 +347,13 @@ List<SettingEntry> settingsEntries(AppLocalizations l10n) => <SettingEntry>[
     section: SettingsSection.playback,
     keywords: _words(l10n.settingsVisualizerIdleKeywords),
     desktopOnly: true,
+  ),
+  SettingEntry(
+    id: 'artwork-cycle',
+    title: l10n.settingsArtworkCycleTitle,
+    section: SettingsSection.playback,
+    keywords: _words(l10n.settingsArtworkCycleKeywords),
+    webOrDesktop: true,
   ),
 
   // Library and metadata
@@ -548,6 +560,7 @@ List<SettingEntry> searchSettings(
     if (entry.desktopOnly && !isDesktop) continue;
     if (entry.mobileOnly && !isMobile) continue;
     if (entry.webOnly && isNative) continue;
+    if (entry.webOrDesktop && isNative && !isDesktop) continue;
     final title = foldForSearch(entry.title);
     if (title.startsWith(needle)) {
       starts.add(entry);

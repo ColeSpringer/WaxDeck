@@ -512,6 +512,20 @@ final carModeButtonProvider = NotifierProvider<CarModeButton, bool>(
   CarModeButton.new,
 );
 
+/// Whether the full-screen player turns to a track's next picture every
+/// few seconds on web and desktop. A tap turns it everywhere.
+class PlayerArtworkCycle extends BoolSetting {
+  @override
+  String get settingKey => ClientSettingKeys.playerArtworkCycle;
+
+  @override
+  bool get defaultValue => true;
+}
+
+final playerArtworkCycleProvider = NotifierProvider<PlayerArtworkCycle, bool>(
+  PlayerArtworkCycle.new,
+);
+
 // --- library and metadata ----------------------------------------------------
 
 /// Whether codec, bitrate, and provenance chips are drawn.

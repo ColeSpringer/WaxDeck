@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart' show ValueListenable, kIsWeb;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +15,7 @@ import '../discovery/discovery_actions.dart';
 import '../l10n/l10n.dart';
 import '../library/item_delete.dart';
 import '../media_view.dart';
+import '../metadata/artwork_manager.dart' show ArtSlot;
 import '../metadata/metadata_controller.dart';
 import '../player/play_progress.dart';
 import '../playlists/add_to_playlist_sheet.dart';
@@ -31,6 +32,7 @@ import '../sharing/share_dialog.dart';
 import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/signed_in_cover.dart';
 import 'deck_bar_host.dart';
 import 'download_action.dart';
 import 'item_star_rating_row.dart';
@@ -38,6 +40,7 @@ import 'lyrics.dart';
 import 'now_playing_controller.dart';
 import 'output_volume.dart';
 import 'playback_session.dart';
+import 'player_artwork_set.dart';
 import 'radio_face.dart';
 import 'sleep_timer.dart';
 import 'spoken_face.dart';
@@ -71,6 +74,7 @@ const _ids = PlayerIds(
   shuffle: SemanticsIds.playerShuffle,
   repeat: SemanticsIds.playerRepeat,
   seek: SemanticsIds.playerSeek,
+  artwork: SemanticsIds.playerArtwork,
 );
 
 /// The full player: one scaffold, four faces.
@@ -405,6 +409,25 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
   /// drawing while the next one resolves.
   ItemSummary? _shown;
 
+  /// Which of the item's pictures the hero shows, and for which set.
+  int _artIndex = 0;
+  PlayerArtworkKey? _artFor;
+
+  /// Whether the set is still being read; a turn then is not kept.
+  bool _artPending = true;
+
+  /// How many pictures the last answered set held, which keeps the
+  /// control in place while the next item's set is read.
+  int _artCount = 1;
+
+  /// The next turn on web and desktop; null while nothing turns.
+  Timer? _turning;
+  static const Duration _turnEvery = Duration(seconds: 15);
+
+  /// The size the hero last drew at, and the picture last warmed there.
+  int? _heroPx;
+  String? _warmed;
+
   @override
   void initState() {
     super.initState();
@@ -434,8 +457,83 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
   @override
   void dispose() {
     unawaited(_feed?.cancel());
+    _turning?.cancel();
     _position.dispose();
     super.dispose();
+  }
+
+  void _turn() {
+    _turning?.cancel();
+    _turning = null;
+    if (_artPending) return;
+    setState(() => _artIndex++);
+  }
+
+  /// Keeps a turn pending while [on], so each picture stands its full
+  /// time; a tap cancels it and the rebuild sets a fresh one.
+  void _keepTurning(bool on) {
+    if (!on) {
+      _turning?.cancel();
+      _turning = null;
+    } else {
+      _turning ??= Timer(_turnEvery, () {
+        if (mounted) _turn();
+      });
+    }
+  }
+
+  /// Fetches [url] at the size the hero draws, once it has drawn.
+  void _warm(String? url) {
+    if (url == null || url == _warmed) return;
+    _warmed = url;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final px = _heroPx;
+      if (!mounted || px == null) {
+        _warmed = null;
+        return;
+      }
+      unawaited(ref.read(artworkStoreProvider).warm(url, px));
+    });
+  }
+
+  /// The item's own cover under its own URL, everything else by slot.
+  String? _urlOf(PlayerArtwork artwork) => _isCover(artwork)
+      ? _item.artUrl
+      : ref
+            .read(repositoryProvider)
+            .artUrlFor(artwork.pid, role: artwork.slot.role);
+
+  /// The picture at [url], noting the size the hero asks for it at.
+  WaxArtwork? _heroArtwork(String? url) {
+    final source = waxArtwork(ref.read(artworkStoreProvider), url);
+    if (source == null) return null;
+    return (px) {
+      _heroPx = px;
+      return source(px);
+    };
+  }
+
+  bool _isCover(PlayerArtwork artwork) =>
+      artwork.pid == _item.pid && artwork.slot == ArtSlot.front;
+
+  /// Where the shown picture came from, for the mark under the hero.
+  String? _artSource(PlayerArtwork shown, ArtSource? artSource) {
+    final l10n = context.l10n;
+    final info = shown.info;
+    if (_isCover(shown)) return artSourceLabelWithBorrow(l10n, artSource);
+    return info == null ? null : artRoleSourceLabel(l10n, info);
+  }
+
+  /// The mark under the hero, naming the picture once it is not simply
+  /// the item's one cover.
+  String? _artCaption(PlayerArtwork shown, String? source) {
+    final l10n = context.l10n;
+    if (_artCount == 1 && _isCover(shown)) return source;
+    // The album's front is in the set only beside the item's own.
+    final slot = shown.pid != _item.pid && shown.slot == ArtSlot.front
+        ? l10n.playerArtworkAlbumCover
+        : shown.slot.labelOf(l10n);
+    return source == null ? slot : l10n.playerArtworkCaption(slot, source);
   }
 
   ItemSummary get _item => _shown!;
@@ -468,6 +566,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     required bool shuffled,
     required QueueRepeat repeat,
     required QueueSource source,
+    required String? artUrl,
   }) {
     return NowPlayingData(
       title: _item.title,
@@ -475,7 +574,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
       // tappable overline. Books and tracks name theirs nowhere else.
       subtitle: _episode == null ? _item.artist : null,
       provenance: queueProvenance(context.l10n, source),
-      artwork: waxArtwork(ref.read(artworkStoreProvider), _item.artUrl),
+      artwork: _heroArtwork(artUrl),
       domain: waxDomainOf(_item.mediaType),
       shape: waxShapeOf(_item.mediaType),
       position: _position.value,
@@ -540,6 +639,35 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
         .watch(itemArtRolesProvider(_item.pid))
         .value
         ?.artSource;
+    final artKey = (pid: _item.pid, albumPid: _item.albumPid);
+    final answered = ref.watch(playerArtworkSetProvider(artKey));
+    if (_artFor != artKey) {
+      _artFor = artKey;
+      _artIndex = 0;
+      _keepTurning(false);
+    }
+    _artPending = answered == null;
+    if (answered != null) _artCount = answered.length;
+    final artworks =
+        answered ??
+        <PlayerArtwork>[PlayerArtwork(pid: _item.pid, slot: ArtSlot.front)];
+    final artIndex = _artIndex % artworks.length;
+    final turns = _artCount > 1;
+    // Web and desktop only, and only while nothing covers the player.
+    _keepTurning(
+      turns &&
+          answered != null &&
+          (kIsWeb || ref.watch(desktopProvider)) &&
+          ref.watch(playerArtworkCycleProvider) &&
+          WaxMotion.of(context).animationsEnabled &&
+          SignedInCover.showing(context),
+    );
+    // Ahead of a turn that is coming: a scheduled one, or more by hand.
+    if (artworks.length > 1 && (_turning != null || _artIndex > 0)) {
+      _warm(_urlOf(artworks[(artIndex + 1) % artworks.length]));
+    }
+    final source = _artSource(artworks[artIndex], artSource);
+    final caption = _artCaption(artworks[artIndex], source);
     final playback = ref.read(nowPlayingProvider.notifier);
     final queue = ref.read(queueControllerProvider.notifier);
 
@@ -559,6 +687,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
             shuffled: modes.$1,
             repeat: modes.$2,
             source: modes.$3,
+            artUrl: _urlOf(artworks[artIndex]),
           ),
           ids: _ids,
           onCollapse: () => leavePlayer(context),
@@ -573,7 +702,8 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           // one size in the app where the picture is the whole screen.
           // Nothing gates it: the mark is the same sentence the album
           // header and the artwork manager draw, from the same wording.
-          artworkCaption: artSourceLabelWithBorrow(context.l10n, artSource),
+          artworkCaption: caption,
+          artworkCaptionFallback: caption == source ? null : source,
           // Held for the session rather than only while the read above is
           // in flight. That read lands after the first frame, and it
           // answers null for a library nothing has enriched and for
@@ -581,6 +711,13 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           // reserved by the request alone is a cover drawn small and
           // then grown, which is the resize this is here to stop.
           artworkCaptionReserved: true,
+          onArtworkTap: turns ? _turn : null,
+          artworkLabel: turns
+              ? context.l10n.playerArtworkPosition(
+                  _artIndex % _artCount + 1,
+                  _artCount,
+                )
+              : null,
           // The show an episode is from, above its title and tappable
           // (5.3). Books and tracks name their maker under the title
           // instead, which is what the subtitle already is.

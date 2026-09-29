@@ -256,6 +256,18 @@ station's own announcement or a provider's answer for the title it
 announced, and the caption names which; the station logo underneath
 is the station's and carries no mark.
 
+### Every picture on the player
+
+A cover is often not the only picture: an album may also hold a back
+cover, a disc and booklet pages. The full-screen player shows them all,
+the track's own first and then its album's; a book shows its own, and a
+radio station only the one. Tapping the artwork turns to the next, and
+the caption under it names which picture it is and where it came from.
+On the web and desktop the player also turns them itself every 15
+seconds while nothing is open over it and reduced motion is off;
+Settings, Playback, Cycle through artwork turns that off for the
+device.
+
 ### Pinned covers
 
 Setting a cover pins it, which is what keeps it through an enrichment

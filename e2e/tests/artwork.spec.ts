@@ -1,5 +1,7 @@
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { test, expect } from './fixtures';
+import { clickThrough } from './driver/gestures';
 
 // Setting a cover by hand, in the one format that separates the two
 // recognizers.
@@ -93,6 +95,43 @@ test('a cover the standard library cannot sniff is set, measured, and served as 
       path: { pid },
       query: { role: 'front' },
     });
+  }
+});
+
+// Bravo Song's own front and back make a second picture on its
+// full-screen player, which no other spec opens.
+test('the full-screen artwork turns to the back cover', async ({ app }) => {
+  const { pid } = await app.seed.item('Bravo Song');
+  const set: ('front' | 'back')[] = [];
+  try {
+    for (const role of ['front', 'back'] as const) {
+      const put = await app.api.raw.replace('/items/{pid}/artwork', readFileSync(coverSrc), {
+        path: { pid },
+        query: { role },
+      });
+      expect(put.status()).toBe(200);
+      set.push(role);
+    }
+
+    await app.nav.to('tracks');
+    await app.music.play(pid);
+    await app.player.ready();
+    await expect(app.player.artwork()).toHaveAccessibleName('Artwork 1 of 2');
+
+    await clickThrough(app.player.artwork(), app.player.text('Back cover: Set by hand'));
+    await expect(app.player.artwork()).toHaveAccessibleName('Artwork 2 of 2');
+  } finally {
+    // Unpinned and cleared, the track is as the scan left it. Raw, so a
+    // failure above stays the one the run reports.
+    if (set.length > 0) {
+      await app.api.raw.put('/items/{pid}/locks', {
+        path: { pid },
+        data: { fields: set.map((role) => (role === 'front' ? 'art' : `art.${role}`)), locked: false },
+      });
+      for (const role of set) {
+        await app.api.raw.delete('/items/{pid}/artwork', { path: { pid }, query: { role } });
+      }
+    }
   }
 });
 

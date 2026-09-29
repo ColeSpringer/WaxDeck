@@ -5555,6 +5555,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playerAllStations => 'All stations';
 
   @override
+  String get playerArtworkAlbumCover => 'Album cover';
+
+  @override
+  String playerArtworkCaption(String slot, String source) {
+    return '$slot: $source';
+  }
+
+  @override
+  String playerArtworkPosition(int index, int count) {
+    return 'Artwork $index of $count';
+  }
+
+  @override
   String playerBookmarkAdd(String time) {
     return 'Mark $time';
   }
@@ -9080,6 +9093,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsArtworkCacheTitle => 'Artwork cache';
+
+  @override
+  String get settingsArtworkCycleHelp =>
+      'Moves the full-screen player on to the next picture by itself, when a track or book has more than one';
+
+  @override
+  String get settingsArtworkCycleKeywords =>
+      'slideshow, rotate, covers, back cover, booklet, player';
+
+  @override
+  String get settingsArtworkCycleTitle => 'Cycle through artwork';
 
   @override
   String get settingsArtworkGlowHelp =>

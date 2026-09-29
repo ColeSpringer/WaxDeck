@@ -520,6 +520,7 @@ export const SemanticsIds = {
   lyricsFollow: 'lyrics-follow',
   lyricsLine: (index: string | number) => `lyrics-line-${index}`,
   lyricsSurface: 'lyrics-surface',
+  playerArtwork: 'player-artwork',
   playerBack: 'player-back',
   playerBookmark: (index: string | number) => `player-bookmark-${index}`,
   playerBookmarkAdd: 'player-bookmark-add',

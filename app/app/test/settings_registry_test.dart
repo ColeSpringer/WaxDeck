@@ -9,6 +9,7 @@ import 'package:waxdeck/src/settings/settings_registry.dart';
 import 'package:waxdeck/src/settings/settings_section_screen.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
+import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -174,6 +175,25 @@ void main() {
       );
     });
 
+    test('a phone is not offered turning the artwork, a window is', () {
+      Iterable<String> found({required bool native, required bool desktop}) =>
+          searchSettings(
+            'artwork',
+            l10n: en,
+            isAdmin: true,
+            isNative: native,
+            isDesktop: desktop,
+            isMobile: native && !desktop,
+          ).map((e) => e.id);
+
+      expect(
+        found(native: true, desktop: false),
+        isNot(contains('artwork-cycle')),
+      );
+      expect(found(native: true, desktop: true), contains('artwork-cycle'));
+      expect(found(native: false, desktop: false), contains('artwork-cycle'));
+    });
+
     test('an accent is not something the listener has to type', () {
       // The Spanish copy spells it "pódcast", and the accent is the
       // language's rather than the searcher's: a settings search that
@@ -269,6 +289,43 @@ void main() {
         );
       }
     }
+  });
+
+  testWidgets('a phone draws no switch for turning the artwork', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1000, 4000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(
+            FakeRepository(
+              sessionState: const SessionState(
+                authenticated: true,
+                user: _admin,
+              ),
+            ),
+          ),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+        ],
+        child: routedHost(
+          const SettingsSectionScreen(section: SettingsSection.playback),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.setting('artwork-cycle')),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.setting('car-button')),
+      findsWidgets,
+    );
   });
 
   // Drawn is not the same as reachable. A search result names the setting

@@ -210,9 +210,9 @@ class _WaxTappableState extends State<WaxTappable> {
         // One stop, as it is one node to a reader: the ink a control
         // draws with is focusable too, and was a second press of Tab.
         descendantsAreTraversable: false,
-        mouseCursor: widget.busy
-            ? SystemMouseCursors.basic
-            : SystemMouseCursors.click,
+        mouseCursor: enabled
+            ? SystemMouseCursors.click
+            : SystemMouseCursors.basic,
         onShowFocusHighlight: (value) => setState(() => _focused = value),
         // Both: the web binds Enter to the button intent, Space to the other.
         actions: <Type, Action<Intent>>{

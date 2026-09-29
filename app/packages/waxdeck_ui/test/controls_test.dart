@@ -1,4 +1,4 @@
-import 'dart:ui' show Tristate;
+import 'dart:ui' show PointerDeviceKind, Tristate;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
@@ -65,6 +65,36 @@ void main() {
       findsOneWidget,
     );
   });
+
+  for (final (name, busy) in <(String, bool)>[
+    ('disabled', false),
+    ('busy', true),
+  ]) {
+    testWidgets('a $name tappable shows no hand', (tester) async {
+      await _pump(
+        tester,
+        WaxTappable(
+          label: 'Artwork',
+          onPressed: busy ? () {} : null,
+          busy: busy,
+          child: const SizedBox.square(dimension: 48),
+        ),
+      );
+      final mouse = await tester.createGesture(
+        kind: PointerDeviceKind.mouse,
+        pointer: 1,
+      );
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(
+        location: tester.getCenter(find.byType(WaxTappable)),
+      );
+      await tester.pump();
+      expect(
+        RendererBinding.instance.mouseTracker.debugDeviceActiveCursor(1),
+        SystemMouseCursors.basic,
+      );
+    });
+  }
 
   group('busy', () {
     for (final icon in <WaxGlyph?>[WaxIcons.refresh, null]) {

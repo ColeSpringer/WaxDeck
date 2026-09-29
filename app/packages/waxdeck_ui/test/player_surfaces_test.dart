@@ -813,6 +813,46 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a caption too long for its line gives way to its fallback', (
+      tester,
+    ) async {
+      const whole = 'Back cover: Set by hand';
+      const part = 'Set by hand';
+      double widthOf(String text) {
+        final painter = TextPainter(
+          text: TextSpan(text: text, style: WaxType.caption),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        final width = painter.width;
+        painter.dispose();
+        return width;
+      }
+
+      for (final (width, shown) in <(double, String)>[
+        (widthOf(whole) + 8, whole),
+        ((widthOf(whole) + widthOf(part)) / 2, part),
+      ]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildWaxTheme(),
+            home: Center(
+              child: SizedBox(
+                width: width,
+                child: const ArtworkCaption(whole, fallback: part),
+              ),
+            ),
+          ),
+        );
+        final text = tester.widget<Text>(
+          find.descendant(
+            of: find.byType(ArtworkCaption),
+            matching: find.byType(Text),
+          ),
+        );
+        expect(text.data, shown, reason: 'at $width px');
+      }
+    });
+
     testWidgets('a source caption sits under the hero and still fits', (
       tester,
     ) async {
@@ -1421,6 +1461,126 @@ void main() {
       await tester.drag(find.text('Nightjar'), const Offset(0, 400));
       await tester.pumpAndSettle();
       expect(collapsed, 1);
+    });
+
+    group('a hero that turns', () {
+      var turned = 0;
+      var collapsed = 0;
+
+      Future<void> pumpTurning(
+        WidgetTester tester,
+        Size size, {
+        bool turns = true,
+      }) async {
+        turned = 0;
+        collapsed = 0;
+        await _pumpAt(
+          tester,
+          SizedBox(
+            width: size.width,
+            height: size.height,
+            child: PlayerScaffold(
+              now: _music,
+              onCollapse: () => collapsed++,
+              onArtworkTap: turns ? () => turned++ : null,
+              artworkLabel: turns ? 'Artwork 1 of 3' : null,
+              ids: const PlayerIds(artwork: 'player-artwork'),
+              transport: TransportCluster(playing: true, onPlayPause: () {}),
+              seek: SeekCluster(now: _music, onSeek: (_) {}),
+            ),
+          ),
+          size: size,
+        );
+      }
+
+      testWidgets('a tap turns it rather than leaving', (tester) async {
+        await pumpTurning(tester, const Size(420, 880));
+        await tester.tap(find.byType(ArtworkImage));
+        await tester.pump();
+        expect((turned, collapsed), (1, 0));
+      });
+
+      for (final (name, size) in <(String, Size)>[
+        ('portrait', const Size(420, 880)),
+        ('landscape', const Size(740, 360)),
+      ]) {
+        testWidgets('a pull from the art still takes it down ($name)', (
+          tester,
+        ) async {
+          await pumpTurning(tester, size);
+          await tester.drag(find.byType(ArtworkImage), const Offset(0, 400));
+          await tester.pumpAndSettle();
+          expect((turned, collapsed), (0, 1));
+        });
+      }
+
+      testWidgets('a reader and a keyboard reach it', (tester) async {
+        final handle = tester.ensureSemantics();
+        await pumpTurning(tester, const Size(420, 880));
+        final data = tester
+            .getSemantics(find.bySemanticsIdentifier('player-artwork'))
+            .getSemanticsData();
+        expect(data.label, 'Artwork 1 of 3');
+        expect(data.hasAction(SemanticsAction.tap), isTrue);
+        expect(data.flagsCollection.isButton, isTrue);
+        expect(data.flagsCollection.isFocused, isNot(Tristate.none));
+        handle.dispose();
+      });
+
+      testWidgets('Enter and Space turn it from the keyboard', (tester) async {
+        await pumpTurning(tester, const Size(420, 880));
+        Focus.of(tester.element(find.byType(ArtworkImage))).requestFocus();
+        await tester.pump();
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.sendKeyEvent(LogicalKeyboardKey.space);
+        await tester.pump();
+        expect((turned, collapsed), (2, 0));
+      });
+
+      testWidgets('the art stays one element as it starts turning', (
+        tester,
+      ) async {
+        Widget face({required bool turns}) => SizedBox(
+          width: 420,
+          height: 880,
+          child: PlayerScaffold(
+            now: _music,
+            onArtworkTap: turns ? () {} : null,
+            artworkLabel: turns ? 'Artwork 1 of 2' : null,
+            transport: TransportCluster(playing: true, onPlayPause: () {}),
+            seek: SeekCluster(now: _music, onSeek: (_) {}),
+          ),
+        );
+        await _pumpAt(tester, face(turns: false), size: const Size(420, 880));
+        final hero = tester.state(find.byType(Hero));
+        await _pumpAt(tester, face(turns: true), size: const Size(420, 880));
+        expect(tester.state(find.byType(Hero)), same(hero));
+        await _pumpAt(tester, face(turns: false), size: const Size(420, 880));
+        expect(tester.state(find.byType(Hero)), same(hero));
+      });
+
+      testWidgets('the art moves with a turn to landscape and back', (
+        tester,
+      ) async {
+        await pumpTurning(tester, const Size(420, 880));
+        final hero = tester.state(find.byType(Hero));
+        for (final size in <Size>[const Size(740, 360), const Size(420, 880)]) {
+          await pumpTurning(tester, size);
+          await tester.pumpAndSettle();
+          expect(tester.takeException(), isNull);
+          expect(tester.state(find.byType(Hero)), same(hero));
+        }
+      });
+
+      testWidgets('one picture is no control at all', (tester) async {
+        final handle = tester.ensureSemantics();
+        await pumpTurning(tester, const Size(420, 880), turns: false);
+        expect(find.bySemanticsIdentifier('player-artwork'), findsNothing);
+        await tester.tap(find.byType(ArtworkImage));
+        await tester.pump();
+        expect((turned, collapsed), (0, 0));
+        handle.dispose();
+      });
     });
 
     testWidgets('a mouse drag over the caption selects rather than dismisses', (

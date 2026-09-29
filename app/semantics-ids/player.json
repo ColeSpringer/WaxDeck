@@ -13,6 +13,7 @@
     "lyricsFollow": "lyrics-follow",
     "lyricsLine": "lyrics-line-{index}",
     "lyricsSurface": "lyrics-surface",
+    "playerArtwork": "player-artwork",
     "playerBack": "player-back",
     "playerBookmark": "player-bookmark-{index}",
     "playerBookmarkAdd": "player-bookmark-add",

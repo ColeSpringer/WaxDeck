@@ -8817,6 +8817,24 @@ abstract class AppLocalizations {
   /// **'All stations'**
   String get playerAllStations;
 
+  /// Names an album's front cover under the full-screen artwork, shown beside a track's own front cover.
+  ///
+  /// In en, this message translates to:
+  /// **'Album cover'**
+  String get playerArtworkAlbumCover;
+
+  /// Line under the full-screen artwork when a track has several pictures: which one is shown and where it came from.
+  ///
+  /// In en, this message translates to:
+  /// **'{slot}: {source}'**
+  String playerArtworkCaption(String slot, String source);
+
+  /// Spoken name of the full-screen artwork when a track has several pictures; tapping it shows the next.
+  ///
+  /// In en, this message translates to:
+  /// **'Artwork {index} of {count}'**
+  String playerArtworkPosition(int index, int count);
+
   /// Button that bookmarks the position it names. {time} is a timecode.
   ///
   /// In en, this message translates to:
@@ -14084,6 +14102,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Artwork cache'**
   String get settingsArtworkCacheTitle;
+
+  /// The line under the artwork cycling switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Moves the full-screen player on to the next picture by itself, when a track or book has more than one'**
+  String get settingsArtworkCycleHelp;
+
+  /// Comma-separated search keywords for the "Cycle through artwork" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas.
+  ///
+  /// In en, this message translates to:
+  /// **'slideshow, rotate, covers, back cover, booklet, player'**
+  String get settingsArtworkCycleKeywords;
+
+  /// Name of the "Cycle through artwork" setting, drawn on its own row and in settings search.
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle through artwork'**
+  String get settingsArtworkCycleTitle;
 
   /// The line under the artwork glow switch.
   ///

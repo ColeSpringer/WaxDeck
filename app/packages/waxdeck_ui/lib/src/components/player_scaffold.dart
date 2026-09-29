@@ -253,7 +253,10 @@ class PlayerScaffold extends StatefulWidget {
     this.onCollapse,
     this.actionRow,
     this.artworkCaption,
+    this.artworkCaptionFallback,
     this.artworkCaptionReserved = false,
+    this.onArtworkTap,
+    this.artworkLabel,
     this.heroOverlay,
     this.titleOverline,
     this.subtitleOverride,
@@ -263,7 +266,7 @@ class PlayerScaffold extends StatefulWidget {
     this.trailingHeaderActions,
     this.ids = const PlayerIds(),
     super.key,
-  });
+  }) : assert(onArtworkTap == null || artworkLabel != null);
 
   final NowPlayingData now;
   final Widget transport;
@@ -284,6 +287,10 @@ class PlayerScaffold extends StatefulWidget {
   /// belongs to a third party while the title belongs to the station.
   final String? artworkCaption;
 
+  /// What the caption line draws instead where [artworkCaption] does not
+  /// fit it: the part that has to survive a narrow hero.
+  final String? artworkCaptionFallback;
+
   /// That this face keeps the caption line whether or not it has one.
   ///
   /// The hero is sized against the room a caption needs, so a face whose
@@ -295,6 +302,13 @@ class PlayerScaffold extends StatefulWidget {
   /// every song. Set, the slot is held and left blank when there is
   /// nothing to put in it, so the cover has one size for the session.
   final bool artworkCaptionReserved;
+
+  /// Turns the hero to the face's next picture. Null leaves the artwork a
+  /// picture, with no gesture and no control of its own.
+  final VoidCallback? onArtworkTap;
+
+  /// The hero's spoken name while [onArtworkTap] is set.
+  final String? artworkLabel;
 
   /// Drawn over the artwork at its own extent: radio's platter ring.
   /// Decoration rather than a control, so it is expected to ignore
@@ -377,6 +391,10 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
   Timer? _settling;
   bool _downWhileSettling = false;
   final Set<int> _pointers = <int>{};
+
+  /// Moves the art rather than rebuilding it as the hero starts or stops
+  /// turning, so a cover mid-fade does not start over.
+  final GlobalKey _art = GlobalKey(debugLabel: 'player-hero-art');
 
   @override
   void initState() {
@@ -799,13 +817,35 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
     // ring around the cover, and a stack that filled the extent would
     // draw it around the gutter on a podcast, whose art is smaller than
     // the room it is given.
-    final hero = widget.heroOverlay == null
-        ? art
-        : SizedBox.square(
-            dimension: size,
-            child: Stack(
-              fit: StackFit.expand,
-              children: <Widget>[art, widget.heroOverlay!],
+    final framed = KeyedSubtree(
+      key: _art,
+      child: widget.heroOverlay == null
+          ? art
+          : SizedBox.square(
+              dimension: size,
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[art, widget.heroOverlay!],
+              ),
+            ),
+    );
+    final onTap = widget.onArtworkTap;
+    final hero = onTap == null
+        ? framed
+        : WaxTappable(
+            label: widget.artworkLabel!,
+            onPressed: onTap,
+            semanticsId: widget.ids.artwork,
+            borderRadius: BorderRadius.circular(
+              ArtworkImage.cornerRadius(widget.now.shape, size),
+            ),
+            // A tap and no drag, so a pull that starts on the art still
+            // reaches the surface's dismissal.
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              excludeFromSemantics: true,
+              onTap: onTap,
+              child: framed,
             ),
           );
     if (!reserved) return hero;
@@ -821,7 +861,11 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
           // either way, so a flip is a new string, not a new area.
           ExcludeSemantics(
             excluding: caption == null,
-            child: ArtworkCaption(caption ?? '\u200b', align: TextAlign.center),
+            child: ArtworkCaption(
+              caption ?? '\u200b',
+              align: TextAlign.center,
+              fallback: caption == null ? null : widget.artworkCaptionFallback,
+            ),
           ),
         ],
       ),

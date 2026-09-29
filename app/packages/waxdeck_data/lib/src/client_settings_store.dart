@@ -212,6 +212,11 @@ abstract final class ClientSettingKeys {
   /// never does.
   static const carModeButton = 'waxdeck.player.carModeButton';
 
+  /// Whether the full-screen player turns through a track's pictures on
+  /// its own. Per device: a desktop left playing wants it, a laptop in a
+  /// meeting may not.
+  static const playerArtworkCycle = 'waxdeck.player.artworkCycle';
+
   /// Whether this desktop publishes "Listening to WaxDeck" to Discord,
   /// and which registered application it publishes as.
   ///

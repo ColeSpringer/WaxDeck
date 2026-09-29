@@ -119,6 +119,18 @@
   "@settingsArtworkCacheTitle": {
     "description": "Name of the \"Artwork cache\" setting, drawn on its own row and in settings search."
   },
+  "settingsArtworkCycleHelp": "Moves the full-screen player on to the next picture by itself, when a track or book has more than one",
+  "@settingsArtworkCycleHelp": {
+    "description": "The line under the artwork cycling switch."
+  },
+  "settingsArtworkCycleKeywords": "slideshow, rotate, covers, back cover, booklet, player",
+  "@settingsArtworkCycleKeywords": {
+    "description": "Comma-separated search keywords for the \"Cycle through artwork\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsArtworkCycleTitle": "Cycle through artwork",
+  "@settingsArtworkCycleTitle": {
+    "description": "Name of the \"Cycle through artwork\" setting, drawn on its own row and in settings search."
+  },
   "settingsArtworkGlowHelp": "The colour a cover casts behind the player",
   "@settingsArtworkGlowHelp": {
     "description": "The line under the artwork glow switch."

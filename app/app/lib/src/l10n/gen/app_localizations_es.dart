@@ -5623,6 +5623,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerAllStations => 'Todas las emisoras';
 
   @override
+  String get playerArtworkAlbumCover => 'Portada del álbum';
+
+  @override
+  String playerArtworkCaption(String slot, String source) {
+    return '$slot: $source';
+  }
+
+  @override
+  String playerArtworkPosition(int index, int count) {
+    return 'Ilustración $index de $count';
+  }
+
+  @override
   String playerBookmarkAdd(String time) {
     return 'Marcar $time';
   }
@@ -9186,6 +9199,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsArtworkCacheTitle => 'Caché de carátulas';
+
+  @override
+  String get settingsArtworkCycleHelp =>
+      'El reproductor a pantalla completa pasa solo a la siguiente imagen cuando una pista o un libro tiene más de una';
+
+  @override
+  String get settingsArtworkCycleKeywords =>
+      'presentación, rotar, portadas, contraportada, libreto, reproductor';
+
+  @override
+  String get settingsArtworkCycleTitle => 'Alternar las ilustraciones';
 
   @override
   String get settingsArtworkGlowHelp =>

@@ -80,15 +80,19 @@ class ArtworkImage extends StatelessWidget {
   /// component knows the picture, not what it is a picture of.
   final String? playLabel;
 
+  /// The corner a picture of [size] is drawn with, for what outlines one.
+  static double cornerRadius(ArtworkShape shape, double size) =>
+      switch (shape) {
+        ArtworkShape.circle => WaxRadius.full,
+        ArtworkShape.portrait ||
+        ArtworkShape.square => size >= 160 ? WaxRadius.artHero : WaxRadius.r10,
+      };
+
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     final motion = WaxMotion.of(context);
-    final radius = switch (shape) {
-      ArtworkShape.circle => WaxRadius.full,
-      ArtworkShape.portrait ||
-      ArtworkShape.square => size >= 160 ? WaxRadius.artHero : WaxRadius.r10,
-    };
+    final radius = cornerRadius(shape, size);
 
     // The size the caller is asked for is the size that will be painted:
     // logical extent times this display's pixel ratio, rounded up so a
@@ -473,10 +477,15 @@ class ArtworkCaption extends StatelessWidget {
     this.align = TextAlign.start,
     this.maxLines = 1,
     this.emphasis = false,
+    this.fallback,
     super.key,
   });
 
   final String text;
+
+  /// Drawn instead of [text] where that does not fit on one line: the
+  /// part of it that has to survive a narrow picture.
+  final String? fallback;
   final TextAlign align;
   final int maxLines;
 
@@ -488,14 +497,34 @@ class ArtworkCaption extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
-    return WaxProse(
-      text,
+    final style = WaxType.caption.copyWith(
+      color: emphasis ? colors.textSecondary : colors.textTertiary,
+    );
+    Widget prose(String line) => WaxProse(
+      line,
       textAlign: align,
-      style: WaxType.caption.copyWith(
-        color: emphasis ? colors.textSecondary : colors.textTertiary,
-      ),
+      style: style,
       maxLines: maxLines,
       overflow: TextOverflow.ellipsis,
+    );
+    final fallback = this.fallback;
+    if (fallback == null) return prose(text);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final painter = TextPainter(
+          text: TextSpan(
+            text: text,
+            style: DefaultTextStyle.of(context).style.merge(style),
+          ),
+          textDirection: Directionality.of(context),
+          textScaler: MediaQuery.textScalerOf(context),
+          locale: Localizations.maybeLocaleOf(context),
+          maxLines: maxLines,
+        )..layout(maxWidth: constraints.maxWidth);
+        final fits = !painter.didExceedMaxLines;
+        painter.dispose();
+        return prose(fits ? text : fallback);
+      },
     );
   }
 }

@@ -3992,6 +3992,17 @@ class FakeRepository implements WaxDeckRepository {
 
   final List<ArtRoleInfo> artRoles = [];
 
+  /// Slots per pid, for a read that asks about more than one entity (a
+  /// track and its album); a pid with no entry answers [artRoles].
+  final Map<String, List<ArtRoleInfo>> artRolesByPid = {};
+
+  /// Per pid: a read held until its gate completes, and one that throws.
+  final Map<String, Completer<void>> artRolesGates = {};
+  final Map<String, Object> artRolesErrors = {};
+
+  /// Every pid a roles read asked about, in order.
+  final List<String> artRolesReads = [];
+
   /// Where the cover the entity resolves came from, which the roles
   /// read reports beside the slots it holds.
   ArtSource? artSource;
@@ -4031,8 +4042,15 @@ class FakeRepository implements WaxDeckRepository {
   final List<({String pid, String role})> clearItemArtworkCalls = [];
 
   @override
-  Future<ArtRoles> getItemArtRoles(String pid) async =>
-      ArtRoles(roles: List.unmodifiable(artRoles), artSource: artSource);
+  Future<ArtRoles> getItemArtRoles(String pid) async {
+    artRolesReads.add(pid);
+    await artRolesGates[pid]?.future;
+    if (artRolesErrors[pid] case final error?) throw error;
+    return ArtRoles(
+      roles: List.unmodifiable(artRolesByPid[pid] ?? artRoles),
+      artSource: artSource,
+    );
+  }
 
   @override
   Future<MetadataEditResult> setItemArtwork(

@@ -539,6 +539,7 @@ abstract final class SemanticsIds {
   static const String lyricsFollow = 'lyrics-follow';
   static String lyricsLine(Object index) => 'lyrics-line-$index';
   static const String lyricsSurface = 'lyrics-surface';
+  static const String playerArtwork = 'player-artwork';
   static const String playerBack = 'player-back';
   static String playerBookmark(Object index) => 'player-bookmark-$index';
   static const String playerBookmarkAdd = 'player-bookmark-add';

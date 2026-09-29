@@ -7265,6 +7265,38 @@
   "@playerAllStations": {
     "description": "Menu item that opens the list of saved radio stations."
   },
+  "playerArtworkAlbumCover": "Album cover",
+  "@playerArtworkAlbumCover": {
+    "description": "Names an album's front cover under the full-screen artwork, shown beside a track's own front cover."
+  },
+  "playerArtworkCaption": "{slot}: {source}",
+  "@playerArtworkCaption": {
+    "description": "Line under the full-screen artwork when a track has several pictures: which one is shown and where it came from.",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Back cover"
+      },
+      "source": {
+        "type": "String",
+        "example": "From a folder image"
+      }
+    }
+  },
+  "playerArtworkPosition": "Artwork {index} of {count}",
+  "@playerArtworkPosition": {
+    "description": "Spoken name of the full-screen artwork when a track has several pictures; tapping it shows the next.",
+    "placeholders": {
+      "index": {
+        "type": "int",
+        "example": "2"
+      },
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "playerBookmarkAdd": "Mark {time}",
   "@playerBookmarkAdd": {
     "description": "Button that bookmarks the position it names. {time} is a timecode.",
@@ -12185,6 +12217,18 @@
   "settingsArtworkCacheTitle": "Artwork cache",
   "@settingsArtworkCacheTitle": {
     "description": "Name of the \"Artwork cache\" setting, drawn on its own row and in settings search."
+  },
+  "settingsArtworkCycleHelp": "Moves the full-screen player on to the next picture by itself, when a track or book has more than one",
+  "@settingsArtworkCycleHelp": {
+    "description": "The line under the artwork cycling switch."
+  },
+  "settingsArtworkCycleKeywords": "slideshow, rotate, covers, back cover, booklet, player",
+  "@settingsArtworkCycleKeywords": {
+    "description": "Comma-separated search keywords for the \"Cycle through artwork\" setting - the words somebody would search by that are not in its name. Translate each word and keep the commas."
+  },
+  "settingsArtworkCycleTitle": "Cycle through artwork",
+  "@settingsArtworkCycleTitle": {
+    "description": "Name of the \"Cycle through artwork\" setting, drawn on its own row and in settings search."
   },
   "settingsArtworkGlowHelp": "The colour a cover casts behind the player",
   "@settingsArtworkGlowHelp": {
