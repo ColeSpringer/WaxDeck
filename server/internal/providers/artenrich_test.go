@@ -172,12 +172,14 @@ func TestDeezerEnrichesAnArtistByName(t *testing.T) {
 		BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
 	})
 
-	if !d.Capabilities().Has(enrich.CapArtistArt) {
-		t.Errorf("capabilities %v do not include artist art", d.Capabilities())
+	if !d.Capabilities().Has(enrich.CapArtistFront) {
+		t.Errorf("capabilities %v do not include the artist portrait", d.Capabilities())
 	}
 	// Not aux art: Deezer serves one picture per album, so it has
-	// nothing to put in a back, disc, or booklet slot.
-	if d.Capabilities().Has(enrich.CapAuxArt) {
+	// nothing to put in a back, disc, or booklet slot, and one per
+	// artist, so nothing for the background either. Claiming it would
+	// walk every artist without one for a certain miss.
+	if d.Capabilities().Has(enrich.CapAuxArt | enrich.CapArtistAuxArt) {
 		t.Errorf("capabilities %v claim auxiliary roles Deezer cannot fill", d.Capabilities())
 	}
 
@@ -207,37 +209,38 @@ func TestDeezerEnrichesAnArtistByName(t *testing.T) {
 		t.Errorf("a placeholder name reached the search %d times", n-before)
 	}
 
-	// A cover-shaped want still answers: that is how the identity phase
-	// asks about an artist, and reading only the backfill's own bit
-	// here is what left a stock install with no portraits.
+	// The artist backfill's front half asks under the portrait's own bit.
 	cand, err = d.Enrich(context.Background(), enrich.Request{
-		Type: enrich.TargetArtist, Artist: "Daft Punk", Want: enrich.CapCover,
+		Type: enrich.TargetArtist, Artist: "Daft Punk", Want: enrich.CapArtistFront,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cand == nil || cand.Art[model.ArtRoleFront] == nil {
-		t.Fatalf("cover-want artist ask = %+v, want the portrait", cand)
+		t.Fatalf("front-want artist ask = %+v, want the portrait", cand)
 	}
 
-	// A want no role on this target can answer never reaches the wire.
-	before = searches.Load()
-	if cand, err := d.Enrich(context.Background(), enrich.Request{
-		Type: enrich.TargetArtist, Artist: "Daft Punk", Want: enrich.CapGenres,
-	}); err != nil || cand != nil {
-		t.Fatalf("genres-want artist ask = %+v, %v; want a clean miss", cand, err)
-	}
-	if n := searches.Load(); n != before {
-		t.Errorf("an unanswerable want reached the artist search %d times", n-before)
+	// A want no role on this target can answer never reaches the wire:
+	// the background half, and a release rung's cover, which the engine
+	// never asks an artist about.
+	for _, want := range []enrich.Capability{enrich.CapGenres, enrich.CapArtistAuxArt, enrich.CapCover} {
+		before = searches.Load()
+		if cand, err := d.Enrich(context.Background(), enrich.Request{
+			Type: enrich.TargetArtist, Artist: "Daft Punk", Want: want,
+		}); err != nil || cand != nil {
+			t.Fatalf("artist ask under want %v = %+v, %v; want a clean miss", want, cand, err)
+		}
+		if n := searches.Load(); n != before {
+			t.Errorf("want %v reached the artist search %d times", want, n-before)
+		}
 	}
 }
 
 // WithoutArtistArt is what WAXDECK_ARTIST_ART=false rides on: the
-// provider stays registered for the covers it still supplies, and both
-// halves have to hold. Clearing the capability keeps it out of the
-// artist backfill's queue; refusing the artist target covers the other
-// path, where the identity phase asks about an artist under CapCover
-// and no capability mask can tell that from a real cover ask.
+// provider stays registered for the covers it still supplies. Clearing
+// the capability keeps it out of the artist backfill, the one pass that
+// asks about an artist; refusing the artist target keeps any other ask,
+// a zero want included, from reaching the network.
 func TestWithoutArtistArtHidesAndRefusesBothPaths(t *testing.T) {
 	t.Parallel()
 	srv, fetched := fanartArtStub(t)
@@ -250,10 +253,10 @@ func TestWithoutArtistArtHidesAndRefusesBothPaths(t *testing.T) {
 		t.Errorf("capabilities %v dropped a bit that was not hidden", masked.Capabilities())
 	}
 
-	// Both wants an artist can arrive under, including the cover-shaped
-	// one the identity phase stamps - the case a capability mask alone
-	// let straight through.
-	for _, want := range []enrich.Capability{enrich.CapArtistArt, enrich.CapCover, enrich.CapAuxArt, 0} {
+	// Every want an artist ask can carry, and the release rung's.
+	for _, want := range []enrich.Capability{
+		enrich.CapArtistFront, enrich.CapArtistAuxArt, enrich.CapArtistArt, enrich.CapCover, enrich.CapAuxArt, 0,
+	} {
 		before := fetched["thumb"].Load() + fetched["background"].Load()
 		cand, err := masked.Enrich(context.Background(), enrich.Request{
 			Type: enrich.TargetArtist, MBID: "ar-1", Want: want,
@@ -278,50 +281,53 @@ func TestWithoutArtistArtHidesAndRefusesBothPaths(t *testing.T) {
 	}
 }
 
-// The identity phase asks about an artist through the release-group
-// passes - CapCover for the front, CapAuxArt for the rest - and never
-// through the artist backfill's own bit. A provider reading only
-// CapArtistArt there answers nothing while still paying for the keyed
-// lookup, which is one wasted request per matched artist per pass.
-func TestFanartTVAnswersAnArtistOnTheIdentityPassesWants(t *testing.T) {
+// The artist backfill asks about an artist's two halves apart, the
+// portrait under CapArtistFront and the background under
+// CapArtistAuxArt, and only about a half that is open. An ask for one
+// half must not download the other's image, which the store would
+// refuse for a slot already held.
+func TestFanartTVAnswersEachArtistHalfAlone(t *testing.T) {
 	t.Parallel()
 	srv, fetched := fanartArtStub(t)
 	f := newFanartFor(t, srv)
 
 	cand, err := f.Enrich(context.Background(), enrich.Request{
-		Type: enrich.TargetArtist, MBID: "ar-1", Want: enrich.CapCover,
+		Type: enrich.TargetArtist, MBID: "ar-1", Want: enrich.CapArtistFront,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cand == nil || cand.Art[model.ArtRoleFront] == nil {
-		t.Fatalf("cover-want artist ask = %+v, want the portrait", cand)
+		t.Fatalf("front-want artist ask = %+v, want the portrait", cand)
 	}
-	if cand.Art[model.ArtRoleBackground] != nil {
-		t.Error("a cover-want ask carried the background")
+	if cand.Art[model.ArtRoleBackground] != nil || fetched["background"].Load() != 0 {
+		t.Error("a front-want ask fetched the background")
 	}
 
 	cand, err = f.Enrich(context.Background(), enrich.Request{
-		Type: enrich.TargetArtist, MBID: "ar-1", Want: enrich.CapAuxArt,
+		Type: enrich.TargetArtist, MBID: "ar-1", Want: enrich.CapArtistAuxArt,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cand == nil || cand.Art[model.ArtRoleBackground] == nil {
-		t.Fatalf("aux-want artist ask = %+v, want the background", cand)
+		t.Fatalf("background-want artist ask = %+v, want the background", cand)
 	}
-	if cand.Art[model.ArtRoleFront] != nil {
-		t.Error("an aux-want ask carried the portrait")
+	if cand.Art[model.ArtRoleFront] != nil || fetched["thumb"].Load() != 1 {
+		t.Error("a background-want ask fetched the portrait")
 	}
 
 	// A want no role on this target can answer never reaches the wire:
 	// the endpoint read happens before the roles are filtered, so the
-	// gate has to be ahead of it.
+	// gate has to be ahead of it. The release rung's wants are among
+	// them, since the engine never asks an artist under those.
 	before := fetched["thumb"].Load() + fetched["background"].Load()
-	if cand, err := f.Enrich(context.Background(), enrich.Request{
-		Type: enrich.TargetArtist, MBID: "ar-1", Want: enrich.CapGenres,
-	}); err != nil || cand != nil {
-		t.Fatalf("genres-want artist ask = %+v, %v; want a clean miss", cand, err)
+	for _, want := range []enrich.Capability{enrich.CapGenres, enrich.CapCover, enrich.CapAuxArt} {
+		if cand, err := f.Enrich(context.Background(), enrich.Request{
+			Type: enrich.TargetArtist, MBID: "ar-1", Want: want,
+		}); err != nil || cand != nil {
+			t.Fatalf("artist ask under want %v = %+v, %v; want a clean miss", want, cand, err)
+		}
 	}
 	if n := fetched["thumb"].Load() + fetched["background"].Load(); n != before {
 		t.Error("an unanswerable want still downloaded an image")

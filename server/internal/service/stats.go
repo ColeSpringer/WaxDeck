@@ -793,31 +793,23 @@ func (l *Library) ServerWideYearInReview(ctx context.Context, year int) (ServerY
 		optedOut bool
 	}
 	members := map[string]member{}
-	after := ""
-	for {
-		users, err := l.db.ListUsers(ctx, after, 500)
-		if err != nil {
-			return ServerYearInReview{}, &Error{Kind: KindInternal, Err: err}
-		}
-		if len(users) == 0 {
-			break
-		}
-		for _, u := range users {
-			m := member{loc: time.UTC}
-			if doc, err := l.db.PrefsJSON(ctx, u.ID); err == nil && doc != "" {
-				var p Prefs
-				if jsonErr := json.Unmarshal([]byte(doc), &p); jsonErr == nil {
-					m.optedOut = p.SharedStatsOptOut
-					if p.Timezone != "" {
-						if loc, locErr := time.LoadLocation(p.Timezone); locErr == nil {
-							m.loc = loc
-						}
+	if err := l.db.EachUser(ctx, func(u *wdb.User) error {
+		m := member{loc: time.UTC}
+		if doc, err := l.db.PrefsJSON(ctx, u.ID); err == nil && doc != "" {
+			var p Prefs
+			if jsonErr := json.Unmarshal([]byte(doc), &p); jsonErr == nil {
+				m.optedOut = p.SharedStatsOptOut
+				if p.Timezone != "" {
+					if loc, locErr := time.LoadLocation(p.Timezone); locErr == nil {
+						m.loc = loc
 					}
 				}
 			}
-			members[u.ID] = m
 		}
-		after = strings.ToLower(users[len(users)-1].Username)
+		members[u.ID] = m
+		return nil
+	}); err != nil {
+		return ServerYearInReview{}, &Error{Kind: KindInternal, Err: err}
 	}
 	// The widest instants any zone maps into this calendar year.
 	from := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC).Add(-14 * time.Hour)

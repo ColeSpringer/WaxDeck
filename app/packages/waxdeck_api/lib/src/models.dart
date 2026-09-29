@@ -4469,8 +4469,8 @@ class EnrichmentLastRun {
     this.booksMatched = 0,
     this.lyricsEnriched = 0,
     this.lyricsMatched = 0,
-    this.auxArtEnriched = 0,
-    this.auxArtMatched = 0,
+    this.groupArtEnriched = 0,
+    this.groupArtMatched = 0,
     this.artistArtEnriched = 0,
     this.artistArtMatched = 0,
     this.albumArtEnriched = 0,
@@ -4482,6 +4482,7 @@ class EnrichmentLastRun {
     this.albumFieldsEnriched = 0,
     this.albumFieldsMatched = 0,
     this.retried = 0,
+    this.deferred = 0,
     this.artFetched = 0,
     this.auxArtFetched = 0,
     this.artReused = 0,
@@ -4502,8 +4503,8 @@ class EnrichmentLastRun {
   final int booksMatched;
   final int lyricsEnriched;
   final int lyricsMatched;
-  final int auxArtEnriched;
-  final int auxArtMatched;
+  final int groupArtEnriched;
+  final int groupArtMatched;
   final int artistArtEnriched;
   final int artistArtMatched;
   final int albumArtEnriched;
@@ -4515,6 +4516,7 @@ class EnrichmentLastRun {
   final int albumFieldsEnriched;
   final int albumFieldsMatched;
   final int retried;
+  final int deferred;
   final int artFetched;
   final int auxArtFetched;
   final int artReused;

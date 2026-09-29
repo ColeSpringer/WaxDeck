@@ -170,9 +170,10 @@ restart, take it out.
 What a reset discards is everything the catalog holds that is not on
 disk: play positions, ratings, stars, playlists, curation edits,
 podcast subscriptions, and trash. Media files are untouched, and the
-startup scan re-indexes them. Library roots added at runtime rather
-than through configuration are the part startup will not put back -
-the reset report names them.
+startup scan re-indexes them. Accounts live in WaxDeck's own database
+and carry over, each given a user in the new catalog at startup.
+Library roots added at runtime rather than through configuration are
+the part startup will not put back - the reset report names them.
 
 Two things worth knowing before you take the upgrade this note is
 attached to:

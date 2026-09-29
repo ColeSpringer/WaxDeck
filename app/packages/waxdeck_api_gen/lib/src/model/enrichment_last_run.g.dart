@@ -28,9 +28,9 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
   @override
   final int lyricsMatched;
   @override
-  final int auxArtEnriched;
+  final int groupArtEnriched;
   @override
-  final int auxArtMatched;
+  final int groupArtMatched;
   @override
   final int artistArtEnriched;
   @override
@@ -53,6 +53,8 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
   final int albumFieldsMatched;
   @override
   final int retried;
+  @override
+  final int deferred_;
   @override
   final int artFetched;
   @override
@@ -85,8 +87,8 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
     required this.booksMatched,
     required this.lyricsEnriched,
     required this.lyricsMatched,
-    required this.auxArtEnriched,
-    required this.auxArtMatched,
+    required this.groupArtEnriched,
+    required this.groupArtMatched,
     required this.artistArtEnriched,
     required this.artistArtMatched,
     required this.albumArtEnriched,
@@ -98,6 +100,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
     required this.albumFieldsEnriched,
     required this.albumFieldsMatched,
     required this.retried,
+    required this.deferred_,
     required this.artFetched,
     required this.auxArtFetched,
     required this.artReused,
@@ -129,8 +132,8 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
         booksMatched == other.booksMatched &&
         lyricsEnriched == other.lyricsEnriched &&
         lyricsMatched == other.lyricsMatched &&
-        auxArtEnriched == other.auxArtEnriched &&
-        auxArtMatched == other.auxArtMatched &&
+        groupArtEnriched == other.groupArtEnriched &&
+        groupArtMatched == other.groupArtMatched &&
         artistArtEnriched == other.artistArtEnriched &&
         artistArtMatched == other.artistArtMatched &&
         albumArtEnriched == other.albumArtEnriched &&
@@ -142,6 +145,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
         albumFieldsEnriched == other.albumFieldsEnriched &&
         albumFieldsMatched == other.albumFieldsMatched &&
         retried == other.retried &&
+        deferred_ == other.deferred_ &&
         artFetched == other.artFetched &&
         auxArtFetched == other.auxArtFetched &&
         artReused == other.artReused &&
@@ -165,8 +169,8 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
     _$hash = $jc(_$hash, booksMatched.hashCode);
     _$hash = $jc(_$hash, lyricsEnriched.hashCode);
     _$hash = $jc(_$hash, lyricsMatched.hashCode);
-    _$hash = $jc(_$hash, auxArtEnriched.hashCode);
-    _$hash = $jc(_$hash, auxArtMatched.hashCode);
+    _$hash = $jc(_$hash, groupArtEnriched.hashCode);
+    _$hash = $jc(_$hash, groupArtMatched.hashCode);
     _$hash = $jc(_$hash, artistArtEnriched.hashCode);
     _$hash = $jc(_$hash, artistArtMatched.hashCode);
     _$hash = $jc(_$hash, albumArtEnriched.hashCode);
@@ -178,6 +182,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
     _$hash = $jc(_$hash, albumFieldsEnriched.hashCode);
     _$hash = $jc(_$hash, albumFieldsMatched.hashCode);
     _$hash = $jc(_$hash, retried.hashCode);
+    _$hash = $jc(_$hash, deferred_.hashCode);
     _$hash = $jc(_$hash, artFetched.hashCode);
     _$hash = $jc(_$hash, auxArtFetched.hashCode);
     _$hash = $jc(_$hash, artReused.hashCode);
@@ -203,8 +208,8 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
           ..add('booksMatched', booksMatched)
           ..add('lyricsEnriched', lyricsEnriched)
           ..add('lyricsMatched', lyricsMatched)
-          ..add('auxArtEnriched', auxArtEnriched)
-          ..add('auxArtMatched', auxArtMatched)
+          ..add('groupArtEnriched', groupArtEnriched)
+          ..add('groupArtMatched', groupArtMatched)
           ..add('artistArtEnriched', artistArtEnriched)
           ..add('artistArtMatched', artistArtMatched)
           ..add('albumArtEnriched', albumArtEnriched)
@@ -216,6 +221,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
           ..add('albumFieldsEnriched', albumFieldsEnriched)
           ..add('albumFieldsMatched', albumFieldsMatched)
           ..add('retried', retried)
+          ..add('deferred_', deferred_)
           ..add('artFetched', artFetched)
           ..add('auxArtFetched', auxArtFetched)
           ..add('artReused', artReused)
@@ -281,15 +287,15 @@ class EnrichmentLastRunBuilder
   set lyricsMatched(int? lyricsMatched) =>
       _$this._lyricsMatched = lyricsMatched;
 
-  int? _auxArtEnriched;
-  int? get auxArtEnriched => _$this._auxArtEnriched;
-  set auxArtEnriched(int? auxArtEnriched) =>
-      _$this._auxArtEnriched = auxArtEnriched;
+  int? _groupArtEnriched;
+  int? get groupArtEnriched => _$this._groupArtEnriched;
+  set groupArtEnriched(int? groupArtEnriched) =>
+      _$this._groupArtEnriched = groupArtEnriched;
 
-  int? _auxArtMatched;
-  int? get auxArtMatched => _$this._auxArtMatched;
-  set auxArtMatched(int? auxArtMatched) =>
-      _$this._auxArtMatched = auxArtMatched;
+  int? _groupArtMatched;
+  int? get groupArtMatched => _$this._groupArtMatched;
+  set groupArtMatched(int? groupArtMatched) =>
+      _$this._groupArtMatched = groupArtMatched;
 
   int? _artistArtEnriched;
   int? get artistArtEnriched => _$this._artistArtEnriched;
@@ -345,6 +351,10 @@ class EnrichmentLastRunBuilder
   int? get retried => _$this._retried;
   set retried(int? retried) => _$this._retried = retried;
 
+  int? _deferred_;
+  int? get deferred_ => _$this._deferred_;
+  set deferred_(int? deferred_) => _$this._deferred_ = deferred_;
+
   int? _artFetched;
   int? get artFetched => _$this._artFetched;
   set artFetched(int? artFetched) => _$this._artFetched = artFetched;
@@ -396,8 +406,8 @@ class EnrichmentLastRunBuilder
       _booksMatched = $v.booksMatched;
       _lyricsEnriched = $v.lyricsEnriched;
       _lyricsMatched = $v.lyricsMatched;
-      _auxArtEnriched = $v.auxArtEnriched;
-      _auxArtMatched = $v.auxArtMatched;
+      _groupArtEnriched = $v.groupArtEnriched;
+      _groupArtMatched = $v.groupArtMatched;
       _artistArtEnriched = $v.artistArtEnriched;
       _artistArtMatched = $v.artistArtMatched;
       _albumArtEnriched = $v.albumArtEnriched;
@@ -409,6 +419,7 @@ class EnrichmentLastRunBuilder
       _albumFieldsEnriched = $v.albumFieldsEnriched;
       _albumFieldsMatched = $v.albumFieldsMatched;
       _retried = $v.retried;
+      _deferred_ = $v.deferred_;
       _artFetched = $v.artFetched;
       _auxArtFetched = $v.auxArtFetched;
       _artReused = $v.artReused;
@@ -489,15 +500,15 @@ class EnrichmentLastRunBuilder
             r'EnrichmentLastRun',
             'lyricsMatched',
           ),
-          auxArtEnriched: BuiltValueNullFieldError.checkNotNull(
-            auxArtEnriched,
+          groupArtEnriched: BuiltValueNullFieldError.checkNotNull(
+            groupArtEnriched,
             r'EnrichmentLastRun',
-            'auxArtEnriched',
+            'groupArtEnriched',
           ),
-          auxArtMatched: BuiltValueNullFieldError.checkNotNull(
-            auxArtMatched,
+          groupArtMatched: BuiltValueNullFieldError.checkNotNull(
+            groupArtMatched,
             r'EnrichmentLastRun',
-            'auxArtMatched',
+            'groupArtMatched',
           ),
           artistArtEnriched: BuiltValueNullFieldError.checkNotNull(
             artistArtEnriched,
@@ -553,6 +564,11 @@ class EnrichmentLastRunBuilder
             retried,
             r'EnrichmentLastRun',
             'retried',
+          ),
+          deferred_: BuiltValueNullFieldError.checkNotNull(
+            deferred_,
+            r'EnrichmentLastRun',
+            'deferred_',
           ),
           artFetched: BuiltValueNullFieldError.checkNotNull(
             artFetched,

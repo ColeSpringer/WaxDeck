@@ -74,10 +74,13 @@ const deezerQuotaWindow = 5 * time.Second
 // Name is the stable provenance id.
 func (d *Deezer) Name() string { return "deezer" }
 
-// Capabilities reports the front cover, artist art, and scalar fields.
+// Capabilities reports the front cover, the artist portrait, and scalar
+// fields.
 //
-// Not CapAuxArt: Deezer serves one picture per album and one per
-// artist, so it has nothing to put in a back, disc, or booklet slot.
+// Not CapAuxArt or CapArtistAuxArt: Deezer serves one picture per album
+// and one per artist, so it has nothing to put in a back, disc, booklet
+// or background slot, and claiming one would walk every artist without
+// a background for a certain miss.
 //
 // Not CapGenres either, and that is a decision rather than a gap.
 // Deezer's genre names live behind a request per genre group, so
@@ -85,7 +88,7 @@ func (d *Deezer) Name() string { return "deezer" }
 // album fetch, and Discogs already owns genres in the chain ahead of
 // the built-ins.
 func (d *Deezer) Capabilities() enrich.Capability {
-	return enrich.CapCover | enrich.CapArtistArt | enrich.CapFields
+	return enrich.CapCover | enrich.CapArtistFront | enrich.CapFields
 }
 
 // Enrich answers a release-group cover, an artist portrait, or the
@@ -99,10 +102,6 @@ func (d *Deezer) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candid
 		}
 		return d.enrichReleaseGroup(ctx, req)
 	case enrich.TargetArtist:
-		// The front mask, not CapArtistArt alone: the identity phase
-		// asks about an artist through the cover pass, so reading only
-		// the backfill's own bit would answer nothing on the path a
-		// stock install actually runs.
 		if !req.Wants(capabilityForArtRole(req.Type, model.ArtRoleFront)) {
 			return nil, nil
 		}

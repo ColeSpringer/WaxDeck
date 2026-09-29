@@ -297,11 +297,13 @@ Integrations) sets your Discord status through the Discord app running
 on the same machine: the track, the artist, the album, and a progress
 bar. The image beside it is the album's cover from the Cover Art
 Archive when the album carries a MusicBrainz release ID and **Show
-album covers** is on: this device asks the archive for it, so the
-archive sees the release ID and this machine's address, and Discord
-fetches the image. Otherwise it is the image uploaded to the
-application presence publishes as, and so it is when Discord refuses an
-image URL (the app stops sending them until Discord is dialled again).
+album covers** is on. It is the archive's 250 px thumbnail, the
+smallest the archive serves, which is plenty for the size Discord
+draws it at. This device asks the archive for it, so the archive sees
+the release ID and this machine's address, and Discord fetches the
+image. Otherwise it is the image uploaded to the application presence
+publishes as, and so it is when Discord refuses an image URL (the app
+stops sending them until Discord is dialled again).
 Presence describes this machine's own playback, so a session you drive
 on another device through Connect is not published.
 

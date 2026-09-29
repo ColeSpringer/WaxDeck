@@ -307,6 +307,18 @@ here waits on upstream.
 
 ## Infrastructure
 
+- `[upstream]` **Accounts are mapped to catalog users only at start.** A
+  CLI restore or rebuild through the running server can replace the
+  catalog's users without a restart, and an account whose user the new
+  catalog lacks then fails every read it scopes until the next start.
+  Re-run `reconcileCatalogUsers` when the catalog says it reopened; waits
+  on the reopen-notification ask in upstream-requests.md.
+
+- `[upstream]` **Two reserved provider names are copied from the
+  catalog.** `service.ReservedEnrichNames` spells out
+  `musicbrainz:edition` and `none`, which WaxBin does not export; take
+  them from WaxBin once the reserved-names ask lands.
+
 - `[in-repo]` **The Android build turns Kotlin's incremental compiler
   off on Windows, and should stop having to.** Kotlin 2.3.20 opens a
   cache file it already holds open while closing it, and every module

@@ -137,7 +137,8 @@ Read by compose itself, not the server.
   place rather than migrated), move it aside and start on a fresh one
   instead of refusing to start. Discards play positions, ratings,
   stars, playlists, curation edits, podcast subscriptions and trash;
-  media on disk is untouched and re-indexed by the startup scan.
+  accounts carry over, and media on disk is untouched and re-indexed
+  by the startup scan.
 
 ## Streaming engine
 

@@ -34,12 +34,17 @@ users see is the one the service advertises.
 
 WaxDeck validates each provider at startup: the capabilities document
 must answer (a short retry ladder absorbs a compose boot race) and
-advertise a non-empty name, or the server refuses to start, naming the
-provider. A downed sidecar is therefore a visible refusal rather than a
-silently absent provider; under compose, `depends_on` avoids even the
-retries. A provider that answers but advertises only capabilities this
-WaxDeck build does not understand is skipped with a log line instead -
-that is version skew, not misconfiguration.
+advertise a non-empty name no other provider stamps its values with,
+or the server refuses to start, naming the provider. A downed sidecar
+is therefore a visible refusal rather than a silently absent provider;
+under compose, `depends_on` avoids even the retries. A provider that
+answers but advertises only capabilities this WaxDeck build does not
+understand is skipped with a log line instead - that is version skew,
+not misconfiguration.
+
+The catalog's own names are taken: its built-ins' `musicbrainz`,
+`coverartarchive`, `listenbrainz` and `lrclib`, and the marker labels
+`musicbrainz:edition` and `none`.
 
 ## Semantics worth knowing
 

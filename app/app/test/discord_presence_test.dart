@@ -363,7 +363,7 @@ void main() {
           covers: resolver(
             front: (mbid) async {
               await Future<void>.delayed(interval * 2);
-              return 'https://coverartarchive.org/release/$mbid/front-500';
+              return 'https://coverartarchive.org/release/$mbid/front-250';
             },
           ),
         );
@@ -375,7 +375,7 @@ void main() {
         expect(discord.published, hasLength(1));
         expect(
           discord.published.single!.largeImageUrl,
-          'https://coverartarchive.org/release/m1/front-500',
+          'https://coverartarchive.org/release/m1/front-250',
         );
       },
     );
@@ -416,7 +416,7 @@ void main() {
         clock: () => now,
         front: (mbid) async {
           if (++fronts == 1) throw const HttpException('503');
-          return 'https://coverartarchive.org/release/$mbid/front-500';
+          return 'https://coverartarchive.org/release/$mbid/front-250';
         },
       );
       await covers.lookUp('al-1');
@@ -567,7 +567,7 @@ void main() {
         methods.add(request.method);
         final response = request.response;
         switch (request.uri.path) {
-          case '/release/m1/front-500':
+          case '/release/m1/front-250':
             response.statusCode = HttpStatus.temporaryRedirect;
             response.headers.set('location', '/download/m1.jpg');
           case '/download/m1.jpg':
@@ -578,13 +578,13 @@ void main() {
             );
           case '/items/m1.jpg':
             response.headers.contentType = ContentType('image', 'jpeg');
-          case '/release/down/front-500':
+          case '/release/down/front-250':
             response.statusCode = HttpStatus.serviceUnavailable;
-          case '/release/slow/front-500':
+          case '/release/slow/front-250':
             response.statusCode = HttpStatus.requestTimeout;
-          case '/release/busy/front-500':
+          case '/release/busy/front-250':
             response.statusCode = HttpStatus.tooManyRequests;
-          case '/release/denied/front-500':
+          case '/release/denied/front-250':
             response.statusCode = HttpStatus.forbidden;
           default:
             response.statusCode = HttpStatus.notFound;
@@ -601,7 +601,7 @@ void main() {
       // The storage node a redirect lands on is chosen per request.
       expect(
         await coverArtFront('m1', archive: archive()),
-        'http://127.0.0.1:${server.port}/release/m1/front-500',
+        'http://127.0.0.1:${server.port}/release/m1/front-250',
       );
       expect(methods, everyElement('HEAD'));
     });
@@ -972,7 +972,7 @@ void main() {
     binder.show(
       const DiscordActivity(
         title: 'Track',
-        largeImageUrl: 'https://coverartarchive.org/release/m1/front-500',
+        largeImageUrl: 'https://coverartarchive.org/release/m1/front-250',
       ),
     );
     await Future<void>.delayed(Duration.zero);

@@ -15,8 +15,8 @@ Map<String, Object?> _lastRun() => <String, Object?>{
     'booksMatched',
     'lyricsEnriched',
     'lyricsMatched',
-    'auxArtEnriched',
-    'auxArtMatched',
+    'groupArtEnriched',
+    'groupArtMatched',
     'artistArtEnriched',
     'artistArtMatched',
     'albumArtEnriched',
@@ -28,6 +28,7 @@ Map<String, Object?> _lastRun() => <String, Object?>{
     'albumFieldsEnriched',
     'albumFieldsMatched',
     'retried',
+    'deferred',
     'artFetched',
     'auxArtFetched',
     'artReused',
@@ -39,6 +40,8 @@ Map<String, Object?> _lastRun() => <String, Object?>{
     key: 0,
   'artistsEnriched': 12,
   'lyricsMatched': 7,
+  'groupArtEnriched': 9,
+  'deferred': 4,
   'tagsSkipped': 3,
   'finishedAt': '2026-09-27T03:45:00Z',
 };
@@ -94,6 +97,8 @@ void main() {
     final run = status.lastRun!;
     expect(run.artistsEnriched, 12);
     expect(run.lyricsMatched, 7);
+    expect(run.groupArtEnriched, 9);
+    expect(run.deferred, 4);
     expect(run.tagsSkipped, 3);
     expect(run.finishedAt, DateTime.utc(2026, 9, 27, 3, 45));
   });

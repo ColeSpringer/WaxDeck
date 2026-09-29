@@ -262,6 +262,29 @@ func (d *DB) ListUsers(ctx context.Context, afterUsernameCI string, limit int) (
 	return out, rows.Err()
 }
 
+// eachUserPage is how many accounts EachUser reads at a time.
+const eachUserPage = 200
+
+// EachUser calls fn for every account in username order, a page at a
+// time, and stops at the first error either returns.
+func (d *DB) EachUser(ctx context.Context, fn func(*User) error) error {
+	for after := ""; ; {
+		users, err := d.ListUsers(ctx, after, eachUserPage)
+		if err != nil {
+			return err
+		}
+		for _, u := range users {
+			if err := fn(u); err != nil {
+				return err
+			}
+		}
+		if len(users) < eachUserPage {
+			return nil
+		}
+		after = strings.ToLower(users[len(users)-1].Username)
+	}
+}
+
 // ListPendingUsers pages pending registrations oldest first, so the
 // approval queue drains in arrival order. The cursor is the previous
 // page's last (created_at_ns, id); zero values start at the head.

@@ -6,8 +6,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/port"
 	"github.com/colespringer/waxbin/waxerr"
+
+	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // The stale-baseline recovery, WaxDeck's side of it.
@@ -79,6 +82,59 @@ func resetStaleCatalog(ctx context.Context, dbPath string, configuredRoots []Roo
 		rep.UnconfiguredRoots = rootsNotConfigured(census.Roots, configuredRoots)
 	}
 	return rep, nil
+}
+
+// reconcileCatalogUsers gives every account a user the catalog knows. The
+// catalog mints its users' pids, and a reset or rebuild starts it over while
+// the accounts keep the pids the old one gave them, so an account the
+// catalog no longer knows takes the user named after it, or a new one. The
+// account's row keeps the old pid, which is what lets the older server
+// undo a reset on the old catalog; catalogPID answers the live one.
+func (l *Library) reconcileCatalogUsers(ctx context.Context) error {
+	users, err := l.lib.Users(ctx)
+	if err != nil {
+		return err
+	}
+	known := make(map[model.PID]bool, len(users))
+	byName := make(map[string]model.PID, len(users))
+	for _, u := range users {
+		known[u.PID] = true
+		byName[u.Name] = u.PID
+	}
+	l.catalogUsers = map[string]model.PID{}
+	created := 0
+	err = l.db.EachUser(ctx, func(a *wdb.User) error {
+		if known[model.PID(a.WaxbinUserPID)] {
+			return nil
+		}
+		pid, ok := byName[a.ID]
+		if !ok {
+			u, err := l.lib.CreateUser(ctx, a.ID)
+			if err != nil {
+				return err
+			}
+			pid = u.PID
+			created++
+		}
+		l.catalogUsers[a.ID] = pid
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	if created > 0 {
+		l.log.Info("gave accounts a user in the new catalog", "accounts", created)
+	}
+	return nil
+}
+
+// catalogPID names the catalog user an account acts as: its stored one,
+// unless a reset dropped that and the account now has another.
+func (l *Library) catalogPID(u *wdb.User) string {
+	if pid, ok := l.catalogUsers[u.ID]; ok {
+		return string(pid)
+	}
+	return u.WaxbinUserPID
 }
 
 // moveCatalogAside renames the catalog to a timestamped .stale-<ts>.bak set,

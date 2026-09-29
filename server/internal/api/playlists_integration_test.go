@@ -1614,16 +1614,16 @@ func TestPlaylistNspCarriesStarredIsNot(t *testing.T) {
 	pl := decode[Playlist](t, resp)
 	authored, _ := json.Marshal(pl.Rule)
 
-	// Out as a document, with the boolean .nsp spells rather than the 0/1
-	// the column holds.
+	// Out as a document, under the name .nsp gives the flag and with the
+	// boolean .nsp spells rather than the 0/1 the column holds.
 	resp = get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/nsp", h.token)
 	if resp.StatusCode != 200 {
 		t.Fatalf("export status = %d, want 200", resp.StatusCode)
 	}
 	doc := decode[map[string]any](t, resp)
 	raw, _ := json.Marshal(doc)
-	if !strings.Contains(string(raw), `"isNot":{"starred":true}`) {
-		t.Fatalf("export did not carry starred isNot as a boolean: %s", raw)
+	if !strings.Contains(string(raw), `"isNot":{"loved":true}`) {
+		t.Fatalf("export did not carry starred isNot as loved, a boolean: %s", raw)
 	}
 
 	// And back, to the same rule. Not just the same shape: the same

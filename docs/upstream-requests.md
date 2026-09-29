@@ -100,6 +100,29 @@ note.
   call to the provider once a sync's writes commit. Shipped workaround:
   the receipt, relying on today's single transaction.
 
+- **A maintenance hand-off reopens the catalog without telling the
+  host.** A CLI restore or rebuild proxied through the host's socket ends
+  in `EndMaintenance`, which reopens the store and runs its post-open
+  reconciliation, and the embedder hears nothing of it. State a host
+  derives from the catalog at open goes stale: WaxDeck maps each account
+  to its catalog user at start, so a restore that replaces the catalog's
+  users leaves an account whose user it lacks failing every read it
+  scopes with "no such user" until the next start. Wanted: a reopen
+  notification, as an `Options` callback or a row on the change feed
+  the host already follows. Shipped workaround: the mapping is rebuilt
+  at every start.
+
+- **The names the catalog reserves are not all exported.** `enrich.New`
+  drops an injected provider named after a built-in or a marker label.
+  The built-ins' names are exported (`enrich.ProviderMusicBrainz` and
+  the rest) but the marker labels `musicbrainz:edition` and `none` are
+  not, so WaxDeck copies them to refuse a custom provider under one at
+  startup, and a label added upstream would let one through to be
+  dropped without a word. Wanted: the labels exported, or the reserved
+  list itself. Shipped workaround: the copy in
+  `service.ReservedEnrichNames`, tested against the catalog's drops and
+  its registered built-ins.
+
 ## WaxTap
 
 - **A chunked download has no stall timeout.** `Timeouts.ChunkRetry`

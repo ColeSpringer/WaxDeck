@@ -111,13 +111,6 @@ func (f *FanartTV) Enrich(ctx context.Context, req enrich.Request) (*enrich.Cand
 // network. The gate belongs here rather than in candidate(): the
 // endpoint read happens first, and an ask that can keep nothing is one
 // keyed request per entity per pass, paced at half a second a host.
-//
-// The engine's identity phase is what makes this matter. It asks about
-// an artist through the same passes it asks about a release group -
-// Want CapCover for the front, CapAuxArt for the rest - and never
-// through the artist backfill's own CapArtistArt, so a provider that
-// reads only CapArtistArt for an artist answers nothing while paying
-// for the lookup.
 func (f *FanartTV) wantsAny(req enrich.Request, roles []model.ArtRole) bool {
 	for _, role := range roles {
 		if req.Wants(capabilityForArtRole(req.Type, role)) {
@@ -262,26 +255,22 @@ func (f *FanartTV) candidate(ctx context.Context, req enrich.Request, order []mo
 	return cand, nil
 }
 
-// capabilityForArtRole names the bits that gate one role on one target,
-// as a mask: Wants is any-overlap, so a role answerable under either of
-// two passes names both.
-//
+// capabilityForArtRole names the bit that gates one role on one target.
 // A release group splits the front cover from its auxiliary slots,
 // which is what keeps a cover pass from downloading disc art. An artist
-// is asked about twice over: the artist backfill stamps CapArtistArt
-// for every role, while the identity phase reuses the release-group
-// passes and stamps CapCover for the front and CapAuxArt for the rest.
-// Reading only CapArtistArt there is why this provider answered nothing
-// on the path that actually runs on a stock install.
+// splits them under bits of its own, one per half of the artist
+// backfill, the one pass that asks about an artist; it stamps a half
+// only while that half is due, so reading the other would download an
+// image the pass did not ask for.
 func capabilityForArtRole(target enrich.TargetType, role model.ArtRole) enrich.Capability {
 	if role == model.ArtRoleFront {
 		if target == enrich.TargetArtist {
-			return enrich.CapCover | enrich.CapArtistArt
+			return enrich.CapArtistFront
 		}
 		return enrich.CapCover
 	}
 	if target == enrich.TargetArtist {
-		return enrich.CapAuxArt | enrich.CapArtistArt
+		return enrich.CapArtistAuxArt
 	}
 	return enrich.CapAuxArt
 }

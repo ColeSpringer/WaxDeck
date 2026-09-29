@@ -264,7 +264,11 @@ moving in from Navidrome or Audiobookshelf - is covered in
 The server owns the catalog's write lock for its whole lifetime, and it
 serves a local IPC socket (`waxbin.sock` in the data directory) that
 the standalone `waxbin` CLI discovers automatically: CLI mutations and
-long jobs proxy through the running server. Operations that need the
+long jobs proxy through the running server. A data directory whose path
+is too long for a unix socket gets it in a private directory under
+`$XDG_RUNTIME_DIR` or the temp directory instead, named in the startup
+log; the CLI finds it there the same way, through the catalog's
+lockfile. Operations that need the
 lock itself (rebuild, restore) put the server into a maintenance mode:
 already-playing streams keep flowing, authentication and settings stay
 live, and catalog reads answer with a typed `catalog-maintenance`

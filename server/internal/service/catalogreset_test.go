@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -25,6 +26,13 @@ import (
 // produce it: the guard compares PRAGMA user_version against this build's
 // fingerprint and nothing else. Returns the data dir and the library root.
 func newStaleCatalog(t *testing.T) (dataDir, libDir string) {
+	t.Helper()
+	return newStaleCatalogWith(t, nil)
+}
+
+// newStaleCatalogWith is newStaleCatalog with setup run on the service before
+// the baseline goes stale.
+func newStaleCatalogWith(t *testing.T, setup func(context.Context, *Library)) (dataDir, libDir string) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -55,6 +63,9 @@ func newStaleCatalog(t *testing.T) (dataDir, libDir string) {
 	}
 	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
 		t.Fatalf("scanning fixture library: %v", err)
+	}
+	if setup != nil {
+		setup(ctx, svc)
 	}
 	cancel()
 	svc.Close()
@@ -171,6 +182,101 @@ func TestResetCatalogMovesTheStaleCatalogAsideAndStarts(t *testing.T) {
 	}
 	if !census.Partial && census.Items != 1 {
 		t.Errorf("saved catalog holds %d items, want the 1 that was scanned", census.Items)
+	}
+}
+
+// An account outlives a reset but its catalog user does not, since the catalog
+// mints it, so startup gives every account one the fresh catalog knows. Without
+// that an account signs in and then finds nothing: every read it scopes
+// answers "no such user". The account's own row is left as it was, so putting
+// the old catalog back under the older server still undoes the reset.
+func TestResetCatalogKeepsEveryAccountWorking(t *testing.T) {
+	t.Parallel()
+	var stored string
+	dataDir, libDir := newStaleCatalogWith(t, func(ctx context.Context, svc *Library) {
+		acct, err := svc.CreateAccount(ctx, AccountCreate{
+			Username: "listener", Password: "correct-horse",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		stored = acct.User.WaxbinUserPID
+	})
+
+	pids := map[string]bool{}
+	for range 2 {
+		svc, stop, err := openCatalog(t, dataDir, libDir, true)
+		if err != nil {
+			stop()
+			t.Fatalf("opening with -reset-catalog: %v", err)
+		}
+		ctx := context.Background()
+		u, err := svc.UserByName(ctx, "listener")
+		if err != nil {
+			stop()
+			t.Fatal(err)
+		}
+		if u.WaxbinUserPID != stored {
+			t.Errorf("the account's stored catalog user = %s, want the %s it had", u.WaxbinUserPID, stored)
+		}
+		uc, err := svc.UserCtx(ctx, u)
+		if err != nil {
+			stop()
+			t.Fatal(err)
+		}
+		if _, err := svc.Playlists(ctx, uc, "", "", 10); err != nil {
+			t.Errorf("the account's playlists after the reset: %v", err)
+		}
+		pids[uc.CatalogPID] = true
+		stop()
+	}
+	// A restart on the healthy catalog finds the user the reset gave it.
+	if len(pids) != 1 {
+		t.Errorf("the account's catalog user moved across a restart: %v", pids)
+	}
+}
+
+// Every read of an account's catalog user goes through catalogPID: after a
+// reset the stored one names a user only the old catalog holds. The whole
+// server is walked, since any package holding an account row could read it.
+func TestAccountCatalogUsersAreReadThroughCatalogPID(t *testing.T) {
+	t.Parallel()
+	root := filepath.Join("..", "..")
+	sawAPI := false
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		sawAPI = sawAPI || strings.HasPrefix(rel, "internal/api/")
+		// The column's own package, and the helper every read goes through.
+		if strings.HasPrefix(rel, "internal/db/") || rel == "internal/service/catalogreset.go" {
+			return nil
+		}
+		src, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for i, line := range strings.Split(string(src), "\n") {
+			// The one write: an account's first catalog user.
+			if strings.Contains(line, "WaxbinUserPID: string(catalogUser.PID)") {
+				continue
+			}
+			if strings.Contains(line, "WaxbinUserPID") {
+				t.Errorf("%s:%d reads WaxbinUserPID; use catalogPID", rel, i+1)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sawAPI {
+		t.Fatal("the walk never reached internal/api")
 	}
 }
 

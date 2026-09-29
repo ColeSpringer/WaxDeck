@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -51,11 +52,40 @@ func TestNSPExportReasonsSpeakTheRuleVocabulary(t *testing.T) {
 	var reasons []string
 	for _, g := range nspReport(playlist.CheckNSPExport(q)).Gaps {
 		reasons = append(reasons, g.Reason)
+		// The term a sort gap drops is the rule's, not the engine's.
+		if g.Kind == string(playlist.NSPGapSort) && g.Value != nil {
+			want := map[string]any{"field": "trackNumber", "desc": true}
+			if !reflect.DeepEqual(g.Value, want) {
+				t.Errorf("dropped sort term = %#v, want %v", g.Value, want)
+			}
+		}
 	}
 	for _, want := range []string{
 		"nsp: unsupported field: mediaType",
 		"nsp: unsupported sort field: publishedAt",
-		"nsp: .nsp holds a single sort term, so the rest of the sort (trackNumber desc) has no .nsp representation",
+		"nsp: .nsp holds a single sort term, so the sort term trackNumber desc has no .nsp representation",
+	} {
+		if !slices.Contains(reasons, want) {
+			t.Errorf("reasons %q lack %q", reasons, want)
+		}
+	}
+
+	// A field a sentence names mid-way is respelled the same.
+	mid := query.Query{
+		Entity: query.EntityItems,
+		Where: query.And{Nodes: []query.Node{
+			query.Cond{Field: "track_no", Op: query.OpIsMissing},
+			query.Cond{Field: "duration_ms", Op: query.OpGt, Value: 180000.5},
+			query.Cond{Field: "genre", Op: query.OpIs, Value: "Rock"},
+		}},
+	}
+	reasons = nil
+	for _, g := range nspReport(playlist.CheckNSPExport(mid)).Gaps {
+		reasons = append(reasons, g.Reason)
+	}
+	for _, want := range []string{
+		"nsp: isMissing on trackNumber has no .nsp form, since Navidrome allows it only on a field that can be empty",
+		"nsp: gt on durationMs needs a whole number of milliseconds to export, got 180000.5",
 	} {
 		if !slices.Contains(reasons, want) {
 			t.Errorf("reasons %q lack %q", reasons, want)

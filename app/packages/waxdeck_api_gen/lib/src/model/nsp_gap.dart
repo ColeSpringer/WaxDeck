@@ -16,7 +16,7 @@ part 'nsp_gap.g.dart';
 /// * [kind] - Why this part has no counterpart. `field` and `operator` are the common two; `value` is a value outside the other side's domain (a rating that is not a whole number of stars); `shape` is a rule shape such as a negation that is not `notContains`; `sort`, `limit` and `entity` are the document's other clauses; `malformed` is import-only and means the document is broken rather than unmappable. 
 /// * [field] - The field this gap is about, where one is named.
 /// * [op] - The operator this gap is about, where one is named.
-/// * [value] - The offending value on a `value` gap, so a client can render it without picking `reason` apart. Any JSON type, since it is whatever the rule or the document held. 
+/// * [value] - The offending value on a `value` gap, so a client can render it without picking `reason` apart. Any JSON type, since it is whatever the rule or the document held. On a `sort` gap that drops a term, the term as a rule's sort writes it: `field` and `desc`. 
 /// * [path] - An RFC 6901 JSON Pointer to the offending part, so an editor can point at it rather than describe it. On an export it dereferences against the playlist's `SmartRule` (`/root/...`, `/sorts/0`, `/limitMode`); on an import, against the document that was sent. The empty pointer is RFC 6901's whole document, which is what an import answers for a fault that has no one place - a document with no `all`/`any` root group, or with two. 
 /// * [reason] - The sentence the strict conversion would refuse with for this gap. Written by the converter about what the caller built, so a client renders it as-is rather than mapping it to a phrase of its own. 
 @BuiltValue()
@@ -34,7 +34,7 @@ abstract class NspGap implements Built<NspGap, NspGapBuilder> {
   @BuiltValueField(wireName: r'op')
   String? get op;
 
-  /// The offending value on a `value` gap, so a client can render it without picking `reason` apart. Any JSON type, since it is whatever the rule or the document held. 
+  /// The offending value on a `value` gap, so a client can render it without picking `reason` apart. Any JSON type, since it is whatever the rule or the document held. On a `sort` gap that drops a term, the term as a rule's sort writes it: `field` and `desc`. 
   @BuiltValueField(wireName: r'value')
   JsonObject? get value;
 

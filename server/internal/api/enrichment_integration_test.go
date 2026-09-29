@@ -173,9 +173,11 @@ func TestEnrichCommitRefusesAnIdentifierlessBook(t *testing.T) {
 // seam that keeps a multi-capability provider (Discogs) from
 // downloading a cover on every genre ask. A zero want is the
 // everything contract, so an unstamped ask is the failure to catch.
+// The catalog's own item pass forces its asks, which keeps them apart.
 type scopedGenreProvider struct {
-	mu    sync.Mutex
-	wants []enrich.Capability
+	mu     sync.Mutex
+	wants  []enrich.Capability
+	passes []enrich.Capability
 }
 
 func (s *scopedGenreProvider) Name() string { return "scopey" }
@@ -184,7 +186,11 @@ func (s *scopedGenreProvider) Capabilities() enrich.Capability {
 }
 func (s *scopedGenreProvider) Enrich(_ context.Context, req enrich.Request) (*enrich.Candidate, error) {
 	s.mu.Lock()
-	s.wants = append(s.wants, req.Want)
+	if req.Force {
+		s.passes = append(s.passes, req.Want)
+	} else {
+		s.wants = append(s.wants, req.Want)
+	}
 	s.mu.Unlock()
 	return &enrich.Candidate{Genres: []string{"House"}}, nil
 }
@@ -208,6 +214,11 @@ func TestEnrichStampsTheWantOnTheRequest(t *testing.T) {
 	defer p.mu.Unlock()
 	if len(p.wants) != 1 || p.wants[0] != enrich.CapGenres {
 		t.Errorf("stamped wants = %v, want one CapGenres ask", p.wants)
+	}
+	// The ask met the want, so no catalog pass followed it: that pass
+	// would walk the item's release group and ask for its front too.
+	if len(p.passes) != 0 {
+		t.Errorf("a catalog pass asked %v after the want was met", p.passes)
 	}
 }
 
@@ -353,16 +364,22 @@ func TestEnrichCoverSkipsEpisodesWithoutFetching(t *testing.T) {
 	}
 }
 
-// countingCoverProvider records whether the cover loop reached it.
+// countingCoverProvider records whether the cover loop reached it. With
+// forced set, the catalog's item pass, which forces, is counted there.
 type countingCoverProvider struct {
-	name  string
-	calls *int
+	name   string
+	calls  *int
+	forced *int
 }
 
 func (f countingCoverProvider) Name() string                    { return f.name }
 func (f countingCoverProvider) Capabilities() enrich.Capability { return enrich.CapCover }
-func (f countingCoverProvider) Enrich(context.Context, enrich.Request) (*enrich.Candidate, error) {
-	*f.calls++
+func (f countingCoverProvider) Enrich(_ context.Context, req enrich.Request) (*enrich.Candidate, error) {
+	if req.Force && f.forced != nil {
+		*f.forced++
+	} else {
+		*f.calls++
+	}
 	return nil, nil
 }
 
@@ -418,14 +435,14 @@ func TestEnrichPreviewWritesNothingAndItsProposalApplies(t *testing.T) {
 	}
 }
 
-// An apply that carries a proposal commits it verbatim and consults no
-// provider: a fresh fetch could answer differently than the preview the
-// user approved. The injected provider counts its calls, and the stored
-// cover names the proposal's provider - one no live provider has.
+// An apply that carries a proposal commits it verbatim and fetches
+// nothing for it: a fresh fetch could answer differently than the
+// preview the user approved. The injected provider counts its calls, and
+// the stored cover names the proposal's provider.
 func TestEnrichApplyCommitsTheProposalWithoutRefetching(t *testing.T) {
 	t.Parallel()
-	var called int
-	p := countingCoverProvider{name: "livecovers", calls: &called}
+	var called, passAsks int
+	p := countingCoverProvider{name: "livecovers", calls: &called, forced: &passAsks}
 	h := newHarnessWith(t, func(c *service.Config) {
 		c.EnrichmentProviders = []enrich.Provider{p}
 	})
@@ -456,6 +473,12 @@ func TestEnrichApplyCommitsTheProposalWithoutRefetching(t *testing.T) {
 	}
 	if called != 0 {
 		t.Fatalf("cover provider called %d times on an apply-with-proposal; the commit must not fetch", called)
+	}
+	// Nor does a catalog pass: the approved cover met the want, and a
+	// pass would fill the release group's front with a picture nobody
+	// previewed, which the album and its other tracks show.
+	if passAsks != 0 {
+		t.Errorf("a catalog pass asked the cover provider %d times after the approval", passAsks)
 	}
 	art := getArt(t, h, "/api/v1/items/"+pid+"/art", "")
 	art.Body.Close()

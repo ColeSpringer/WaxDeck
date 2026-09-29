@@ -159,12 +159,10 @@ func foldCoverName(s string) string {
 // portraits" setting needs: a provider that also answers release-group
 // covers cannot be dropped outright without losing those.
 //
-// Both halves are necessary, and neither alone is enough. Clearing the
-// capability keeps the provider out of the artist backfill's queue,
-// which is the pass that walks every artist. Refusing the artist target
-// covers the other path: the identity phase asks about an artist
-// through the release-group passes, stamping CapCover, which no
-// capability mask can distinguish from a real cover ask.
+// Clearing the capability keeps the provider out of the artist
+// backfill, the one pass that asks about an artist. Refusing the artist
+// target as well keeps any other ask, a zero want included, off the
+// network.
 func WithoutArtistArt(p enrich.Provider) enrich.Provider {
 	return noArtistArt{Provider: p}
 }

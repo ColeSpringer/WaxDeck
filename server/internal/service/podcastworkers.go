@@ -475,7 +475,7 @@ func (l *Library) userCatalogPID(ctx context.Context, userID string) (model.PID,
 	if err != nil {
 		return "", err
 	}
-	return model.PID(u.WaxbinUserPID), nil
+	return model.PID(l.catalogPID(u)), nil
 }
 
 // setEpisodePinned re-upserts the episode with only the pinned flag

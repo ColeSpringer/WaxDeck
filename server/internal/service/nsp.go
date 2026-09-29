@@ -233,6 +233,10 @@ func nspGaps(gaps []playlist.NSPGap, export bool) []NSPGap {
 			if spec, ok := ruleFieldsByEngine[row.Field]; ok {
 				row.Field = spec.api
 			}
+			// A dropped sort term, as the rule's sort writes one.
+			if term, ok := g.Value.(query.Sort); ok {
+				row.Value = map[string]any{"field": row.Field, "desc": term.Desc}
+			}
 			row.Reason = nspRuleReason(g)
 			row.Path = nspRulePointer(row.Path)
 		}
@@ -250,11 +254,19 @@ func nspGaps(gaps []playlist.NSPGap, export bool) []NSPGap {
 
 // nspDateFields are the file's own names for the dates it carries, which
 // an export sentence can end on.
-var nspDateFields = map[string]string{"dateadded": "added", "lastplayed": "last_played"}
+var nspDateFields = map[string]string{
+	"dateadded":  "added",
+	"lastplayed": "last_played",
+	"dateloved":  "starred_at",
+}
+
+// nspFieldAfter are the words an export sentence names its gap's field
+// after, when the field does not end the sentence.
+var nspFieldAfter = []string{" on ", " term ", "nsp: ", "WaxBin "}
 
 // nspRuleReason respells the field an export sentence ends on, in the
-// engine's or the file's name, or the terms in its trailing parentheses
-// (the dropped sort terms). Nothing else in the sentence is touched.
+// engine's or the file's name, or the gap's field where the sentence
+// names it mid-way. Nothing else in the sentence is touched.
 func nspRuleReason(g playlist.NSPGap) string {
 	reason := g.Reason
 	cut := strings.LastIndexByte(reason, ' ') + 1
@@ -265,24 +277,21 @@ func nspRuleReason(g playlist.NSPGap) string {
 	if spec, ok := ruleFieldsByEngine[last]; ok {
 		return reason[:cut] + spec.api
 	}
-	if g.Kind != playlist.NSPGapSort || g.Path != "/sorts/1" {
+	spec, ok := ruleFieldsByEngine[g.Field]
+	if !ok {
 		return reason
 	}
-	open, end := strings.LastIndexByte(reason, '('), strings.LastIndexByte(reason, ')')
-	if open < 0 || end < open {
-		return reason
-	}
-	terms := strings.Split(reason[open+1:end], ", ")
-	for i, term := range terms {
-		field, dir, desc := strings.Cut(term, " ")
-		if spec, ok := ruleFieldsByEngine[field]; ok {
-			terms[i] = spec.api
-			if desc {
-				terms[i] += " " + dir
-			}
+	for _, after := range nspFieldAfter {
+		i := strings.Index(reason, after+g.Field)
+		if i < 0 {
+			continue
+		}
+		end := i + len(after) + len(g.Field)
+		if end == len(reason) || reason[end] == ' ' || reason[end] == ',' {
+			return reason[:i+len(after)] + spec.api + reason[end:]
 		}
 	}
-	return reason[:open+1] + strings.Join(terms, ", ") + reason[end:]
+	return reason
 }
 
 // ruleHashForm is what ruleHash answers.

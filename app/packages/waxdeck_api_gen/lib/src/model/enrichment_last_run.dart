@@ -21,8 +21,8 @@ part 'enrichment_last_run.g.dart';
 /// * [booksMatched] - Audiobooks it resolved.
 /// * [lyricsEnriched] - Tracks the lyrics walk looked up.
 /// * [lyricsMatched] - Tracks some provider answered lyrics for.
-/// * [auxArtEnriched] - Release groups the auxiliary-art backfill looked at: a front settled, a back, disc, booklet or background slot empty. 
-/// * [auxArtMatched] - Release groups some provider answered for.
+/// * [groupArtEnriched] - Release groups the release-group art backfill looked at: a front, back, disc, booklet or background slot empty. 
+/// * [groupArtMatched] - Release groups some provider answered for.
 /// * [artistArtEnriched] - Artists the artwork walk looked at. It reaches every artist by name, so this counts the ones still missing a portrait rather than the ones MusicBrainz matched. 
 /// * [artistArtMatched] - Artists some provider answered a picture for.
 /// * [albumArtEnriched] - Albums the album-art backfill looked at: ones that resolve no front cover at all, asked about by their own identifiers. 
@@ -34,6 +34,7 @@ part 'enrichment_last_run.g.dart';
 /// * [albumFieldsEnriched] - Albums the fields walk looked up, filling label and year. A year fans out to every track on the album, and is refused where the tracks already disagree. 
 /// * [albumFieldsMatched] - Albums some provider answered for.
 /// * [retried] - Targets re-asked because their earlier miss had outlived the retry window. The walks above count them too. 
+/// * [deferred_] - Targets whose lookup was left owed: a source failed, or could not be asked, with a slot it serves still open. What the others answered was applied, and a later pass asks again. The walks above count them too. 
 /// * [artFetched] - Front covers downloaded and handed to the catalog, across every walk. The catalog still fills only empty, unlocked slots. 
 /// * [auxArtFetched] - Back, disc, booklet and background images, counted the same way.
 /// * [artReused] - Album fronts taken from the release group's picture, on a provider's word that it is that pressing's own; nothing was downloaded for them. 
@@ -84,13 +85,13 @@ abstract class EnrichmentLastRun implements Built<EnrichmentLastRun, EnrichmentL
   @BuiltValueField(wireName: r'lyricsMatched')
   int get lyricsMatched;
 
-  /// Release groups the auxiliary-art backfill looked at: a front settled, a back, disc, booklet or background slot empty. 
-  @BuiltValueField(wireName: r'auxArtEnriched')
-  int get auxArtEnriched;
+  /// Release groups the release-group art backfill looked at: a front, back, disc, booklet or background slot empty. 
+  @BuiltValueField(wireName: r'groupArtEnriched')
+  int get groupArtEnriched;
 
   /// Release groups some provider answered for.
-  @BuiltValueField(wireName: r'auxArtMatched')
-  int get auxArtMatched;
+  @BuiltValueField(wireName: r'groupArtMatched')
+  int get groupArtMatched;
 
   /// Artists the artwork walk looked at. It reaches every artist by name, so this counts the ones still missing a portrait rather than the ones MusicBrainz matched. 
   @BuiltValueField(wireName: r'artistArtEnriched')
@@ -135,6 +136,10 @@ abstract class EnrichmentLastRun implements Built<EnrichmentLastRun, EnrichmentL
   /// Targets re-asked because their earlier miss had outlived the retry window. The walks above count them too. 
   @BuiltValueField(wireName: r'retried')
   int get retried;
+
+  /// Targets whose lookup was left owed: a source failed, or could not be asked, with a slot it serves still open. What the others answered was applied, and a later pass asks again. The walks above count them too. 
+  @BuiltValueField(wireName: r'deferred')
+  int get deferred_;
 
   /// Front covers downloaded and handed to the catalog, across every walk. The catalog still fills only empty, unlocked slots. 
   @BuiltValueField(wireName: r'artFetched')
@@ -241,14 +246,14 @@ class _$EnrichmentLastRunSerializer implements PrimitiveSerializer<EnrichmentLas
       object.lyricsMatched,
       specifiedType: const FullType(int),
     );
-    yield r'auxArtEnriched';
+    yield r'groupArtEnriched';
     yield serializers.serialize(
-      object.auxArtEnriched,
+      object.groupArtEnriched,
       specifiedType: const FullType(int),
     );
-    yield r'auxArtMatched';
+    yield r'groupArtMatched';
     yield serializers.serialize(
-      object.auxArtMatched,
+      object.groupArtMatched,
       specifiedType: const FullType(int),
     );
     yield r'artistArtEnriched';
@@ -304,6 +309,11 @@ class _$EnrichmentLastRunSerializer implements PrimitiveSerializer<EnrichmentLas
     yield r'retried';
     yield serializers.serialize(
       object.retried,
+      specifiedType: const FullType(int),
+    );
+    yield r'deferred';
+    yield serializers.serialize(
+      object.deferred_,
       specifiedType: const FullType(int),
     );
     yield r'artFetched';
@@ -441,19 +451,19 @@ class _$EnrichmentLastRunSerializer implements PrimitiveSerializer<EnrichmentLas
           ) as int;
           result.lyricsMatched = valueDes;
           break;
-        case r'auxArtEnriched':
+        case r'groupArtEnriched':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(int),
           ) as int;
-          result.auxArtEnriched = valueDes;
+          result.groupArtEnriched = valueDes;
           break;
-        case r'auxArtMatched':
+        case r'groupArtMatched':
           final valueDes = serializers.deserialize(
             value,
             specifiedType: const FullType(int),
           ) as int;
-          result.auxArtMatched = valueDes;
+          result.groupArtMatched = valueDes;
           break;
         case r'artistArtEnriched':
           final valueDes = serializers.deserialize(
@@ -531,6 +541,13 @@ class _$EnrichmentLastRunSerializer implements PrimitiveSerializer<EnrichmentLas
             specifiedType: const FullType(int),
           ) as int;
           result.retried = valueDes;
+          break;
+        case r'deferred':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.deferred_ = valueDes;
           break;
         case r'artFetched':
           final valueDes = serializers.deserialize(

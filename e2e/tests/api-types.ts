@@ -6424,10 +6424,10 @@ export interface components {
             lyricsEnriched: number;
             /** @description Tracks some provider answered lyrics for. */
             lyricsMatched: number;
-            /** @description Release groups the auxiliary-art backfill looked at: a front settled, a back, disc, booklet or background slot empty. */
-            auxArtEnriched: number;
+            /** @description Release groups the release-group art backfill looked at: a front, back, disc, booklet or background slot empty. */
+            groupArtEnriched: number;
             /** @description Release groups some provider answered for. */
-            auxArtMatched: number;
+            groupArtMatched: number;
             /** @description Artists the artwork walk looked at. It reaches every artist by name, so this counts the ones still missing a portrait rather than the ones MusicBrainz matched. */
             artistArtEnriched: number;
             /** @description Artists some provider answered a picture for. */
@@ -6450,6 +6450,8 @@ export interface components {
             albumFieldsMatched: number;
             /** @description Targets re-asked because their earlier miss had outlived the retry window. The walks above count them too. */
             retried: number;
+            /** @description Targets whose lookup was left owed: a source failed, or could not be asked, with a slot it serves still open. What the others answered was applied, and a later pass asks again. The walks above count them too. */
+            deferred: number;
             /** @description Front covers downloaded and handed to the catalog, across every walk. The catalog still fills only empty, unlocked slots. */
             artFetched: number;
             /** @description Back, disc, booklet and background images, counted the same way. */
@@ -9408,7 +9410,7 @@ export interface components {
             field?: string;
             /** @description The operator this gap is about, where one is named. */
             op?: string;
-            /** @description The offending value on a `value` gap, so a client can render it without picking `reason` apart. Any JSON type, since it is whatever the rule or the document held. */
+            /** @description The offending value on a `value` gap, so a client can render it without picking `reason` apart. Any JSON type, since it is whatever the rule or the document held. On a `sort` gap that drops a term, the term as a rule's sort writes it: `field` and `desc`. */
             value?: unknown;
             /** @description An RFC 6901 JSON Pointer to the offending part, so an editor can point at it rather than describe it. On an export it dereferences against the playlist's `SmartRule` (`/root/...`, `/sorts/0`, `/limitMode`); on an import, against the document that was sent. The empty pointer is RFC 6901's whole document, which is what an import answers for a fault that has no one place - a document with no `all`/`any` root group, or with two. */
             path: string;

@@ -1,0 +1,12 @@
+# Deliberately accepted breaking changes, matched by `make oasdiff`.
+# Temporary by construction: this file rides the change that makes the
+# break and is deleted once the base ref contains it.
+#
+# The last run's release-group art counters take the catalog's name for
+# the walk they count, which now fills a group's front as well as its
+# other slots. No count was withdrawn: the same two ride groupArtEnriched
+# and groupArtMatched.
+GET /library/enrichment removed the required property `lastRun/auxArtEnriched` from the response with the `200` status
+GET /library/enrichment removed the required property `lastRun/auxArtMatched` from the response with the `200` status
+PUT /library/enrichment/sources removed the required property `lastRun/auxArtEnriched` from the response with the `200` status
+PUT /library/enrichment/sources removed the required property `lastRun/auxArtMatched` from the response with the `200` status

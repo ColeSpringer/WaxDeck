@@ -73,7 +73,7 @@ func (l *Library) UserByName(ctx context.Context, username string) (*wdb.User, e
 func (l *Library) UserCtx(ctx context.Context, u *wdb.User) (*UserCtx, error) {
 	uc := &UserCtx{
 		ID:               u.ID,
-		CatalogPID:       u.WaxbinUserPID,
+		CatalogPID:       l.catalogPID(u),
 		Admin:            hasRole(u.Roles, "admin"),
 		UploadEnabled:    u.UploadEnabled,
 		UploadQuotaBytes: u.UploadQuotaBytes,

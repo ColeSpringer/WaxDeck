@@ -273,9 +273,16 @@ func TestLoginSession(t *testing.T) {
 		t.Fatalf("cross-user cookie devices status = %d, want 401", resp.StatusCode)
 	}
 
-	// A tampered cookie never authenticates.
+	// A tampered cookie never authenticates. The tag's first character is
+	// the one changed: its last carries padding bits the decoder ignores,
+	// so an edit there can decode to the very same tag.
 	forged := *session
-	forged.Value = forged.Value[:len(forged.Value)-2] + "xx"
+	at := strings.LastIndexByte(forged.Value, '.') + 1
+	swap := "A"
+	if forged.Value[at] == 'A' {
+		swap = "B"
+	}
+	forged.Value = forged.Value[:at] + swap + forged.Value[at+1:]
 	req, _ = http.NewRequest("GET", e.ts.URL+"/api/2/devices/alice.json", nil)
 	req.AddCookie(&forged)
 	resp, err = http.DefaultClient.Do(req)

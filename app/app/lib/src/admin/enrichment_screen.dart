@@ -572,7 +572,11 @@ class _LastRun extends StatelessWidget {
         run.lyricsEnriched,
         run.lyricsMatched,
       ),
-      (l10n.adminEnrichmentPhaseAuxArt, run.auxArtEnriched, run.auxArtMatched),
+      (
+        l10n.adminEnrichmentPhaseAuxArt,
+        run.groupArtEnriched,
+        run.groupArtMatched,
+      ),
       (
         l10n.adminEnrichmentPhaseArtistArt,
         run.artistArtEnriched,

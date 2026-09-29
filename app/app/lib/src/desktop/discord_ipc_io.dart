@@ -455,7 +455,8 @@ HttpClient _archiveClient() => HttpClient()
 
 /// The Cover Art Archive's own address for release [mbid]'s front image,
 /// once its redirects end on one, or null when it has none. Throws when
-/// the archive cannot answer, so a miss is only ever its 404.
+/// the archive cannot answer, so a miss is only ever its 404. Asks for
+/// the 250 px thumbnail, the smallest the archive serves.
 Future<String?> coverArtFront(
   String mbid, {
   Uri? archive,
@@ -465,7 +466,7 @@ Future<String?> coverArtFront(
   final http = client ?? _archiveClient();
   try {
     final front = base.replace(
-      path: '/release/${Uri.encodeComponent(mbid)}/front-500',
+      path: '/release/${Uri.encodeComponent(mbid)}/front-250',
     );
     final request = await http.headUrl(front);
     final response = await request.close().timeout(const Duration(seconds: 10));

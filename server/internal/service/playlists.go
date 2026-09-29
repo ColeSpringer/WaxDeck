@@ -13,6 +13,8 @@ import (
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
+
+	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // Playlist is the API-facing playlist shape. ItemCount is the members
@@ -1578,15 +1580,14 @@ func (l *Library) emitPlaylistEvent(ctx context.Context, uc *UserCtx, shared boo
 	if !shared {
 		return
 	}
-	users, err := l.db.ListUsers(ctx, "", 10000)
-	if err != nil {
-		l.log.Warn("fanning out playlist event", "err", err)
-		return
-	}
-	for _, u := range users {
+	err := l.db.EachUser(ctx, func(u *wdb.User) error {
 		if u.ID != uc.ID {
 			l.emitUserEvent(ctx, u.ID, eventPlaylist, barePID)
 		}
+		return nil
+	})
+	if err != nil {
+		l.log.Warn("fanning out playlist event", "err", err)
 	}
 }
 

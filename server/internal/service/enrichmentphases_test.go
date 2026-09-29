@@ -104,13 +104,13 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			// has an identifying agent to dial with.
 			name:       "contact alone",
 			contact:    "waxdeck@example.test",
-			wantPhases: []string{"identity", "album-art", "lyrics"},
+			wantPhases: []string{"identity", "aux-art", "album-art", "lyrics"},
 		},
 		{
 			name:       "contact with the release match",
 			contact:    "waxdeck@example.test",
 			match:      true,
-			wantPhases: []string{"identity", "releases", "album-art", "lyrics"},
+			wantPhases: []string{"identity", "releases", "aux-art", "album-art", "lyrics"},
 		},
 		{
 			// And an injected lyrics provider opens the phase without
@@ -125,6 +125,12 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			wantPhases: []string{"artist-art"},
 		},
 		{
+			// Deezer's shape: a portrait and no background.
+			name:       "an artist portrait alone opens artist art",
+			providers:  []enrich.Provider{fakeCapProvider{name: "portraits", caps: enrich.CapArtistFront}},
+			wantPhases: []string{"artist-art"},
+		},
+		{
 			name: "the fields bit opens two rungs",
 			providers: []enrich.Provider{
 				fakeCapProvider{name: "facts", caps: enrich.CapFields | enrich.CapBookMeta},
@@ -133,10 +139,10 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 		},
 		{
 			// Genres ride the identity walk and open nothing; a cover
-			// opens the album-art backfill.
-			name:       "cover and genres open the album-art backfill",
+			// opens the front half of both art backfills.
+			name:       "cover and genres open both art backfills",
 			providers:  []enrich.Provider{fakeCapProvider{name: "art", caps: enrich.CapCover | enrich.CapGenres}},
-			wantPhases: []string{"album-art"},
+			wantPhases: []string{"aux-art", "album-art"},
 		},
 		{
 			name:       "aux art opens both art backfills",
@@ -271,11 +277,14 @@ func TestRunEnrichmentForcePhases(t *testing.T) {
 			t.Errorf("refusal %q carries the catalog's %s", err, leak)
 		}
 	}
-	// Album art opens on covers or auxiliary art, and the refusal says both.
-	_, err = svc.RunEnrichment(ctx, uc, false, []string{"album-art"})
-	if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), "WAXDECK_ENRICHMENT_CONTACT") ||
-		!strings.Contains(err.Error(), "auxiliary art") {
-		t.Errorf("album-art refusal = %v", err)
+	// Both art backfills open on covers or auxiliary art, and the
+	// refusal says both.
+	for _, phase := range []string{"aux-art", "album-art"} {
+		_, err = svc.RunEnrichment(ctx, uc, false, []string{phase})
+		if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), "WAXDECK_ENRICHMENT_CONTACT") ||
+			!strings.Contains(err.Error(), "auxiliary art") {
+			t.Errorf("%s refusal = %v", phase, err)
+		}
 	}
 	pid, err := svc.RunEnrichment(ctx, uc, false, []string{"artist-art"})
 	if err != nil || !strings.HasPrefix(pid, PrefixJob+"-") {

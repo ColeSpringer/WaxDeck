@@ -49,7 +49,8 @@ type Root struct {
 
 // Config configures the library service.
 type Config struct {
-	// DataDir holds waxbin.db (and its lockfile and IPC socket).
+	// DataDir holds waxbin.db and its lockfile, and the IPC socket unless
+	// its path would be too long for one.
 	DataDir string
 	// Roots are the library roots, indexed in place (never moved).
 	Roots []Root
@@ -202,6 +203,13 @@ type Library struct {
 	lib   *waxbin.Library
 	paths *pidpath.Cache
 	db    *wdb.DB
+	// socketDir is the private directory the IPC socket lives in when the
+	// data dir's path is too long for one; Close removes it.
+	socketDir string
+	// catalogUsers maps an account whose stored catalog user a reset
+	// dropped to the one the catalog holds for it. Written only by Open;
+	// read through catalogPID.
+	catalogUsers map[string]model.PID
 	// roots is the service's own root table (name, path, managed policy),
 	// seeded from config and grown at runtime by AddLibrary. rootsMu guards
 	// it; AddLibrary replaces the slice copy-on-write so a reader holding an
@@ -466,8 +474,9 @@ type Library struct {
 	watchReadyOnce sync.Once
 }
 
-// SocketFileName is the IPC socket beside the catalog DB. It is a local
-// admin plane: 0600, same user, full catalog access.
+// SocketFileName names the IPC socket, beside the catalog DB unless that
+// path is too long for one (ipcSocket). It is a local admin plane: 0600,
+// same user, full catalog access.
 const SocketFileName = "waxbin.sock"
 
 // Open opens the catalog read-write, wires the pidpath cache, starts
@@ -486,7 +495,17 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		}
 		roots = append(roots, config.Root{Path: r.Path, Mode: mode})
 	}
-	socket := filepath.Join(cfg.DataDir, SocketFileName)
+	socket, socketDir, madeDir := ipcSocket(cfg.DataDir)
+	opened := false
+	defer func() {
+		if !opened && madeDir {
+			os.RemoveAll(socketDir)
+		}
+	}()
+	if socketDir != "" {
+		log.Info("the waxbin CLI's socket is outside the data directory, whose path is too long for one",
+			"socket", socket)
+	}
 	sources := newEnrichSources(namedEnrichProviders(cfg.EnrichmentProviders, log))
 	opts := waxbin.Options{
 		DBPath:              filepath.Join(cfg.DataDir, "waxbin.db"),
@@ -573,6 +592,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	l := &Library{
 		sources: sources,
 		lib:     lib, paths: paths, db: store, roots: cfg.Roots, log: log, procCtx: ctx,
+		socketDir:                socketDir,
 		catalogWake:              make(chan struct{}, 1),
 		userWake:                 make(chan string, 64),
 		matchWake:                make(chan struct{}, 1),
@@ -608,6 +628,13 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	}
 	if reset != nil {
 		l.logCatalogReset(reset)
+	}
+	// Before anything reads as an account: a reset drops the catalog user
+	// each one is mapped to.
+	if err := l.reconcileCatalogUsers(ctx); err != nil {
+		paths.Close()
+		lib.Close()
+		return nil, fmt.Errorf("service: catalog users: %w", err)
 	}
 	// The ListenBrainz API base is caller-supplied, so its deliveries
 	// ride a dial-guarded client like every other user-pointed fetch;
@@ -741,11 +768,12 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		group.Go(ctx, "library-watch", l.watchLibraries)
 		group.Go(ctx, "library-watch-scan", l.watchScanWorker)
 	}
+	opened = true
 	return l, nil
 }
 
-// Close releases the catalog (flushing playback state) and the path
-// cache.
+// Close releases the catalog (flushing playback state), the path cache,
+// and a socket directory Open made.
 func (l *Library) Close() error {
 	// The radio queue's last word, and this is the only place it can be
 	// had. A tune-in writes its closing checkpoint as the relay unwinds,
@@ -757,7 +785,11 @@ func (l *Library) Close() error {
 	if err := l.paths.Close(); err != nil {
 		l.log.Warn("closing pid path cache", "err", err)
 	}
-	return l.lib.Close()
+	err := l.lib.Close()
+	if l.socketDir != "" {
+		os.RemoveAll(l.socketDir)
+	}
+	return err
 }
 
 // Rescan starts an asynchronous scan of every root and returns the

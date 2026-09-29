@@ -1086,25 +1086,14 @@ func (p toolPosition) asOf() *int64 {
 // forEachCatalogUser pages every WaxDeck account and hands the catalog
 // user pid of each to fn.
 func (l *Library) forEachCatalogUser(ctx context.Context, fn func(model.PID)) {
-	after := ""
-	for {
-		users, err := l.db.ListUsers(ctx, after, 200)
-		if err != nil {
-			l.log.Warn("listing users for position carry-over", "err", err)
-			return
+	err := l.db.EachUser(ctx, func(u *wdb.User) error {
+		if pid := l.catalogPID(u); pid != "" {
+			fn(model.PID(pid))
 		}
-		if len(users) == 0 {
-			return
-		}
-		for _, u := range users {
-			after = strings.ToLower(u.Username)
-			if u.WaxbinUserPID != "" {
-				fn(model.PID(u.WaxbinUserPID))
-			}
-		}
-		if len(users) < 200 {
-			return
-		}
+		return nil
+	})
+	if err != nil {
+		l.log.Warn("listing users for position carry-over", "err", err)
 	}
 }
 

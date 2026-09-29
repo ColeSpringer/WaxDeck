@@ -1833,7 +1833,9 @@ components:
           description: >
             The offending value on a `value` gap, so a client can
             render it without picking `reason` apart. Any JSON type,
-            since it is whatever the rule or the document held.
+            since it is whatever the rule or the document held. On a
+            `sort` gap that drops a term, the term as a rule's sort
+            writes it: `field` and `desc`.
         path:
           type: string
           description: >

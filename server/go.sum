@@ -11,8 +11,8 @@ github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e/go.mod h1:nSuG5e5P
 github.com/chzyer/test v0.0.0-20180213035817-a1ea475d72b1/go.mod h1:Q3SI9o4m/ZMnBNeIyt5eFwwo7qiLfzFZmjNmxjkiQlU=
 github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
-github.com/colespringer/waxbin v0.0.0-20260923090012-5ad87af6ba30 h1:jw7FIF1SjbOg4cXUjtjSQglqjXeMZiliRZrxkZuZboE=
-github.com/colespringer/waxbin v0.0.0-20260923090012-5ad87af6ba30/go.mod h1:hzcuWjS9xss57CZWCSeNBRga+WWvA8ltU8bMLM6tOcQ=
+github.com/colespringer/waxbin v0.0.0-20260929043845-36282cb02ad2 h1:5eQVVJLuiplWFbX4baM8XrCG2m7wJQfW5SenaWCUOQo=
+github.com/colespringer/waxbin v0.0.0-20260929043845-36282cb02ad2/go.mod h1:hzcuWjS9xss57CZWCSeNBRga+WWvA8ltU8bMLM6tOcQ=
 github.com/colespringer/waxflow v0.0.0-20260923050513-446ca3124d89 h1:pD0CakDUOX6xI4f6SadJnRZWP22D5kkLEJDD5rJGl08=
 github.com/colespringer/waxflow v0.0.0-20260923050513-446ca3124d89/go.mod h1:8mAo9F494kAckHAdJRd6xQa3xJsjOYhy+6C096s1ans=
 github.com/colespringer/waxflow/cli v0.0.0-20260923050513-446ca3124d89 h1:g163+c6QWANysFc9WrwEjV1oKhD9CgWQUjLHOavDHJY=

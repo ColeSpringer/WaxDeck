@@ -401,9 +401,9 @@ func run() error {
 		// name a registered provider (or the catalog's own built-ins)
 		// already stamps values with would make every conflict
 		// unattributable.
-		takenNames := map[string]bool{
-			"musicbrainz": true, "musicbrainz:edition": true,
-			"coverartarchive": true, "listenbrainz": true, "lrclib": true,
+		takenNames := map[string]bool{}
+		for _, name := range service.ReservedEnrichNames {
+			takenNames[name] = true
 		}
 		for _, p := range enrichProviders {
 			takenNames[p.Name()] = true

@@ -90,7 +90,7 @@ type EnrichmentLastRunDTO struct {
 	AlbumsSearched, AlbumsMatched               int
 	BooksEnriched, BooksMatched                 int
 	LyricsEnriched, LyricsMatched               int
-	AuxArtEnriched, AuxArtMatched               int
+	GroupArtEnriched, GroupArtMatched           int
 	ArtistArtEnriched, ArtistArtMatched         int
 	AlbumArtEnriched, AlbumArtMatched           int
 	TrackFieldsEnriched, TrackFieldsMatched     int
@@ -98,6 +98,9 @@ type EnrichmentLastRunDTO struct {
 	AlbumFieldsEnriched, AlbumFieldsMatched     int
 	// Retried counts re-asks of expired misses, which the walks count too.
 	Retried int
+	// Deferred counts lookups left owed for a later pass to ask again,
+	// which the walks count too.
+	Deferred int
 	// Images handed to the catalog, and album fronts reused from the group's.
 	ArtFetched, AuxArtFetched, ArtReused int
 	// Zero unless the run wrote tags.
@@ -114,13 +117,13 @@ func lastRunFrom(r enrich.Result, finishedAtNS int64) *EnrichmentLastRunDTO {
 		AlbumsSearched: r.AlbumsSearched, AlbumsMatched: r.AlbumsMatched,
 		BooksEnriched: r.BooksEnriched, BooksMatched: r.BooksMatched,
 		LyricsEnriched: r.LyricsEnriched, LyricsMatched: r.LyricsMatched,
-		AuxArtEnriched: r.AuxArtEnriched, AuxArtMatched: r.AuxArtMatched,
+		GroupArtEnriched: r.GroupArtEnriched, GroupArtMatched: r.GroupArtMatched,
 		ArtistArtEnriched: r.ArtistArtEnriched, ArtistArtMatched: r.ArtistArtMatched,
 		AlbumArtEnriched: r.AlbumArtEnriched, AlbumArtMatched: r.AlbumArtMatched,
 		TrackFieldsEnriched: r.TrackFieldsEnriched, TrackFieldsMatched: r.TrackFieldsMatched,
 		BookFieldsEnriched: r.BookFieldsEnriched, BookFieldsMatched: r.BookFieldsMatched,
 		AlbumFieldsEnriched: r.AlbumFieldsEnriched, AlbumFieldsMatched: r.AlbumFieldsMatched,
-		Retried:    r.Retried,
+		Retried: r.Retried, Deferred: r.Deferred,
 		ArtFetched: r.ArtFetched, AuxArtFetched: r.AuxArtFetched, ArtReused: r.ArtReused,
 		TagsWritten: r.TagsWritten, TagsFailed: r.TagsFailed,
 		TagsUnrepresented: r.TagsUnrepresented, TagsSkipped: r.TagsSkipped,
@@ -168,8 +171,8 @@ var enrichPhaseTable = []enrichPhaseSpec{
 		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT)"},
 	{name: "releases", match: true, catalog: []model.EnrichPhase{model.EnrichPhaseAlbumRelease},
 		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) and -enrichment-match-releases (WAXDECK_ENRICHMENT_MATCH_RELEASES)"},
-	{name: "aux-art", gate: enrich.CapAuxArt, catalog: []model.EnrichPhase{model.EnrichPhaseAuxArt},
-		needs: "it needs a provider of back, disc, booklet or background art, such as fanart.tv (WAXDECK_FANARTTV_KEY)"},
+	{name: "aux-art", gate: enrich.CapCover | enrich.CapAuxArt, catalog: []model.EnrichPhase{model.EnrichPhaseGroupArt},
+		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) or a provider of covers or auxiliary art"},
 	{name: "artist-art", gate: enrich.CapArtistArt, catalog: []model.EnrichPhase{model.EnrichPhaseArtistArt},
 		needs: "artist art is off (WAXDECK_ARTIST_ART=false)"},
 	{name: "album-art", gate: enrich.CapCover | enrich.CapAuxArt, catalog: []model.EnrichPhase{model.EnrichPhaseAlbumArt},
@@ -196,6 +199,15 @@ var catalogBuiltins = []catalogBuiltin{
 	{"coverartarchive", enrich.CapCover, enrichWantCover},
 	{"listenbrainz", enrich.CapGenres, enrichWantGenres},
 	{"lrclib", enrich.CapLyrics, enrichWantLyrics},
+}
+
+// ReservedEnrichNames are the names the catalog stamps values or labels
+// markers with and drops an injected provider for taking, so startup
+// refuses a custom provider under one rather than list it here and lose it
+// there.
+var ReservedEnrichNames = []string{
+	enrich.ProviderMusicBrainz, "musicbrainz:edition", enrich.ProviderCoverArt,
+	enrich.ProviderListenBrainz, enrich.ProviderLRCLIB, "none",
 }
 
 // builtinFor names the built-in that fills a per-item want, if any.
@@ -577,29 +589,28 @@ func (l *Library) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID str
 	// per item, which the injected-provider port cannot reach; the health
 	// fixer calls EnrichItemNow one want at a time, so it stays on the
 	// injected path rather than re-running the whole item-scoped pass.
-	// They run on the proposal path too: fill-when-empty means they can
-	// never contradict what was approved, and dropping them would regress
-	// every install whose only sources are the built-ins.
+	// They run on the proposal path too, for a want the proposal left
+	// unmet, or every install whose only sources are the built-ins would
+	// regress.
 	l.enrichItemCatalogPass(ctx, it, wants, &applied, &skipped)
 	return applied, skipped, nil
 }
 
-// enrichItemCatalogPass runs the catalog's own pass over the item for the wants a
-// built-in serves, which reaches the built-ins the injected port cannot. That pass
-// asks every provider, so who filled an artifact is read back from provenance.
+// enrichItemCatalogPass runs the catalog's own pass over the item for the unmet
+// wants a built-in serves, which reaches the built-ins the injected port cannot.
+// That pass asks every provider about every entity the item belongs to, so it
+// runs only while a want is still unmet: a met one would buy nothing but the
+// pass's other fills, such as the release group's front, a picture its album
+// and every sibling show. Who filled an artifact is read back from provenance.
 func (l *Library) enrichItemCatalogPass(ctx context.Context, it *model.ItemView, wants []string, applied, skipped *[]string) {
 	var builtinWants []string
 	for _, w := range wants {
-		if _, ok := builtinFor(w); ok {
+		if _, ok := builtinFor(w); ok && !l.artifactPresent(ctx, it, w) {
 			builtinWants = append(builtinWants, w)
 		}
 	}
 	if len(builtinWants) == 0 {
 		return
-	}
-	before := make(map[string]bool, len(builtinWants))
-	for _, w := range builtinWants {
-		before[w] = l.artifactPresent(ctx, it, w)
 	}
 	// Item-scoped, fill-when-empty: the engine enriches this item's own
 	// entities and never overwrites, so a provider only fills real gaps. It
@@ -609,12 +620,10 @@ func (l *Library) enrichItemCatalogPass(ctx context.Context, it *model.ItemView,
 	if err != nil {
 		if KindOf(classify(err)) == KindConflict {
 			// A concurrent enrich (a whole-catalog pass, or another fetch)
-			// holds the lease: the still-missing wants read as deferred, not
-			// a false success, so the user knows to retry them.
+			// holds the lease: the unmet wants read as deferred, not a false
+			// success, so the user knows to retry them.
 			for _, w := range builtinWants {
-				if !before[w] {
-					*skipped = append(*skipped, w+": enrichment is busy; try again")
-				}
+				*skipped = append(*skipped, w+": enrichment is busy; try again")
 			}
 			return
 		}
@@ -622,7 +631,7 @@ func (l *Library) enrichItemCatalogPass(ctx context.Context, it *model.ItemView,
 		return
 	}
 	for _, w := range builtinWants {
-		if before[w] || !l.artifactPresent(ctx, it, w) {
+		if !l.artifactPresent(ctx, it, w) {
 			continue
 		}
 		name, _ := builtinFor(w)

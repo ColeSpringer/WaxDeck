@@ -223,8 +223,8 @@ components:
           booksMatched,
           lyricsEnriched,
           lyricsMatched,
-          auxArtEnriched,
-          auxArtMatched,
+          groupArtEnriched,
+          groupArtMatched,
           artistArtEnriched,
           artistArtMatched,
           albumArtEnriched,
@@ -236,6 +236,7 @@ components:
           albumFieldsEnriched,
           albumFieldsMatched,
           retried,
+          deferred,
           artFetched,
           auxArtFetched,
           artReused,
@@ -281,12 +282,12 @@ components:
         lyricsMatched:
           type: integer
           description: Tracks some provider answered lyrics for.
-        auxArtEnriched:
+        groupArtEnriched:
           type: integer
           description: >
-            Release groups the auxiliary-art backfill looked at: a front
-            settled, a back, disc, booklet or background slot empty.
-        auxArtMatched:
+            Release groups the release-group art backfill looked at: a
+            front, back, disc, booklet or background slot empty.
+        groupArtMatched:
           type: integer
           description: Release groups some provider answered for.
         artistArtEnriched:
@@ -337,6 +338,13 @@ components:
           description: >
             Targets re-asked because their earlier miss had outlived the
             retry window. The walks above count them too.
+        deferred:
+          type: integer
+          description: >
+            Targets whose lookup was left owed: a source failed, or could
+            not be asked, with a slot it serves still open. What the others
+            answered was applied, and a later pass asks again. The walks
+            above count them too.
         artFetched:
           type: integer
           description: >
