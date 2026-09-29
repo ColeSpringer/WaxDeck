@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -83,15 +84,17 @@ func (d *Discogs) Capabilities() enrich.Capability {
 	return enrich.CapCover | enrich.CapGenres
 }
 
-// Enrich answers a release-group lookup: search Discogs masters by
-// artist and title, take the first hit whose names match, and return
-// its genres and styles as one provider-ordered list plus its primary
-// image. Requests without a token or a title are clean misses.
-//
-// The work is restricted to what the request says the pass will read: a
-// genres ask skips the image download entirely, which on a genre-less
-// library is one saved cover-sized fetch per item. A zero Want means
-// everything, which is the whole-library pass's shape.
+// CapabilitiesAt narrows Capabilities to the release-group rung.
+func (d *Discogs) CapabilitiesAt(t enrich.TargetType) enrich.Capability {
+	if t == enrich.TargetReleaseGroup {
+		return d.Capabilities()
+	}
+	return 0
+}
+
+// Enrich answers a release-group lookup: the first Discogs master whose
+// names match, its genres and styles, and its image when the want asks.
+// Only a direct caller sends a zero Want, which asks for both.
 func (d *Discogs) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
 	if d.token == "" {
 		return nil, nil
@@ -148,11 +151,7 @@ func (d *Discogs) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candi
 			switch {
 			case err == nil:
 				cand.Cover = coverImage(data, mediaType, hit.CoverImage)
-			case len(cand.Genres) > 0:
-				// An unreachable or hotlink-refused image is not the
-				// matched genres' problem; the cover want just gets
-				// nothing from this provider.
-			default:
+			case !errors.Is(err, errImageGone) && len(cand.Genres) == 0:
 				return nil, err
 			}
 		}

@@ -107,7 +107,7 @@ class EnrichmentApi {
   }
 
   /// Order and switch the enrichment sources
-  /// Saves the order this server&#39;s own providers are asked in and which are asked at all, naming each once; one not wired now keeps its switch. A running pass keeps its order until it ends. Administrators only. 
+  /// Saves the order the sources are asked in and which are asked at all. One not wired now keeps its switch. A pass already running keeps the order it started with. Administrators only. 
   ///
   /// Parameters:
   /// * [enrichmentSourcesUpdate] 

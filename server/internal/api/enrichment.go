@@ -42,6 +42,7 @@ func enrichmentStatusJSON(st service.EnrichmentStatusDTO) EnrichmentStatus {
 			ReleaseGroups: CoverageCount{Enriched: st.Coverage.ReleaseGroups.Enriched, Total: st.Coverage.ReleaseGroups.Total},
 			Books:         CoverageCount{Enriched: st.Coverage.Books.Enriched, Total: st.Coverage.Books.Total},
 			Lyrics:        CoverageCount{Enriched: st.Coverage.Lyrics.Enriched, Total: st.Coverage.Lyrics.Total},
+			LyricsAsked:   st.Coverage.LyricsAsked,
 		},
 	}
 	setOpt(&out.RunningJob, st.RunningJob)
@@ -82,6 +83,10 @@ func enrichmentLastRun(r *service.EnrichmentLastRunDTO) *EnrichmentLastRun {
 		ArtFetched: r.ArtFetched, AuxArtFetched: r.AuxArtFetched, ArtReused: r.ArtReused,
 		TagsWritten: r.TagsWritten, TagsFailed: r.TagsFailed,
 		TagsUnrepresented: r.TagsUnrepresented, TagsSkipped: r.TagsSkipped,
+		Stalled: make([]EnrichmentPhase, 0, len(r.Stalled)),
+	}
+	for _, ph := range r.Stalled {
+		out.Stalled = append(out.Stalled, EnrichmentPhase(ph))
 	}
 	if r.FinishedAtNS > 0 {
 		out.FinishedAt = ptr(time.Unix(0, r.FinishedAtNS).UTC())

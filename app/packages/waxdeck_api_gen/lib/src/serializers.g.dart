@@ -568,6 +568,10 @@ Serializers _$serializers =
             () => ListBuilder<EnrichmentPhase>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(EnrichmentPhase)]),
+            () => ListBuilder<EnrichmentPhase>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [
               const FullType(EnrichmentProvider),
             ]),

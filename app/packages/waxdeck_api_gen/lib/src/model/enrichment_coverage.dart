@@ -9,13 +9,14 @@ import 'package:built_value/serializer.dart';
 
 part 'enrichment_coverage.g.dart';
 
-/// How much of the catalog has enriched. Lyrics carries its total alone, the music tracks: the catalog does not count lyrics per track, so its enriched reads zero.
+/// How much of the catalog has enriched. `lyrics` counts the music tracks holding lyrics, whatever supplied them, over every music track.
 ///
 /// Properties:
 /// * [artists] 
 /// * [releaseGroups] 
 /// * [books] 
 /// * [lyrics] 
+/// * [lyricsAsked] - Music tracks without lyrics whose lookup answered that there are none, instrumentals included. 
 @BuiltValue()
 abstract class EnrichmentCoverage implements Built<EnrichmentCoverage, EnrichmentCoverageBuilder> {
   @BuiltValueField(wireName: r'artists')
@@ -29,6 +30,10 @@ abstract class EnrichmentCoverage implements Built<EnrichmentCoverage, Enrichmen
 
   @BuiltValueField(wireName: r'lyrics')
   CoverageCount get lyrics;
+
+  /// Music tracks without lyrics whose lookup answered that there are none, instrumentals included. 
+  @BuiltValueField(wireName: r'lyricsAsked')
+  int get lyricsAsked;
 
   EnrichmentCoverage._();
 
@@ -72,6 +77,11 @@ class _$EnrichmentCoverageSerializer implements PrimitiveSerializer<EnrichmentCo
     yield serializers.serialize(
       object.lyrics,
       specifiedType: const FullType(CoverageCount),
+    );
+    yield r'lyricsAsked';
+    yield serializers.serialize(
+      object.lyricsAsked,
+      specifiedType: const FullType(int),
     );
   }
 
@@ -123,6 +133,13 @@ class _$EnrichmentCoverageSerializer implements PrimitiveSerializer<EnrichmentCo
             specifiedType: const FullType(CoverageCount),
           ) as CoverageCount;
           result.lyrics.replace(valueDes);
+          break;
+        case r'lyricsAsked':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.lyricsAsked = valueDes;
           break;
         default:
           unhandled.add(key);

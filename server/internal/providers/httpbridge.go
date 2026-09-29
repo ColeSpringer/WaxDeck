@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -56,8 +57,10 @@ type HTTPBridge struct {
 	base string
 	name string
 	caps enrich.Capability
-	core *core
-	log  *slog.Logger
+	// rungs is the remote's per-target declaration; nil serves every rung.
+	rungs map[enrich.TargetType]enrich.Capability
+	core  *core
+	log   *slog.Logger
 }
 
 const (
@@ -127,8 +130,9 @@ func NewHTTPBridge(ctx context.Context, cfg HTTPBridgeConfig) (*HTTPBridge, erro
 		return nil, fmt.Errorf("providers: enrich provider %q: capabilities: status %d", cfg.Label, status)
 	}
 	var caps struct {
-		Name         string   `json:"name"`
-		Capabilities []string `json:"capabilities"`
+		Name           string              `json:"name"`
+		Capabilities   []string            `json:"capabilities"`
+		CapabilitiesAt map[string][]string `json:"capabilitiesAt"`
 	}
 	if err := json.Unmarshal(body, &caps); err != nil {
 		return nil, fmt.Errorf("providers: enrich provider %q: decode capabilities: %w", cfg.Label, err)
@@ -136,11 +140,40 @@ func NewHTTPBridge(ctx context.Context, cfg HTTPBridgeConfig) (*HTTPBridge, erro
 	if strings.TrimSpace(caps.Name) == "" {
 		return nil, fmt.Errorf("providers: enrich provider %q advertises no name; the name is the provenance mark its values are stored under", cfg.Label)
 	}
-	for _, c := range caps.Capabilities {
-		b.caps |= parseCapability(strings.ToLower(strings.TrimSpace(c)))
-	}
+	b.caps = parseCapabilities(caps.Capabilities)
 	b.name = strings.TrimSpace(caps.Name)
+	if caps.CapabilitiesAt != nil {
+		// What no known rung lists is not served, so it is not advertised
+		// either; a declaration that lists nothing leaves nothing to ask.
+		b.rungs = map[enrich.TargetType]enrich.Capability{}
+		var served enrich.Capability
+		for target, names := range caps.CapabilitiesAt {
+			t := enrich.TargetType(target)
+			if !slices.Contains(bridgeRungs, t) {
+				b.log.Warn("custom enrichment provider declares a rung this server does not know; ignoring it",
+					"provider", b.name, "rung", target)
+				continue
+			}
+			b.rungs[t] = parseCapabilities(names) & b.caps
+			served |= b.rungs[t]
+		}
+		b.caps = served
+	}
 	return b, nil
+}
+
+// bridgeRungs are the target types a remote may declare.
+var bridgeRungs = []enrich.TargetType{
+	enrich.TargetArtist, enrich.TargetReleaseGroup, enrich.TargetRelease,
+	enrich.TargetBook, enrich.TargetRecording,
+}
+
+func parseCapabilities(names []string) enrich.Capability {
+	var out enrich.Capability
+	for _, c := range names {
+		out |= parseCapability(strings.ToLower(strings.TrimSpace(c)))
+	}
+	return out
 }
 
 // Name is the remote's advertised provenance id.
@@ -148,6 +181,15 @@ func (b *HTTPBridge) Name() string { return b.name }
 
 // Capabilities reports what the remote advertised at startup.
 func (b *HTTPBridge) Capabilities() enrich.Capability { return b.caps }
+
+// CapabilitiesAt is the remote's declaration for one rung; one that
+// declared none serves every capability at every rung.
+func (b *HTTPBridge) CapabilitiesAt(t enrich.TargetType) enrich.Capability {
+	if b.rungs == nil {
+		return b.caps
+	}
+	return b.rungs[t]
+}
 
 // bridgeRequest is the contract's enrich body, the port's Request
 // spelled onto the wire.

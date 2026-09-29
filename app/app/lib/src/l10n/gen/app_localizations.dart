@@ -465,6 +465,18 @@ abstract class AppLocalizations {
   /// **'Built into the catalog'**
   String get adminEnrichmentBuiltin;
 
+  /// Caption under the MusicBrainz genres entry, which ranks MusicBrainz's genres among the sources.
+  ///
+  /// In en, this message translates to:
+  /// **'Built into the catalog. Switched off, its genres are left out; the identity lookups still run.'**
+  String get adminEnrichmentBuiltinMusicbrainz;
+
+  /// Caption under a source the catalog registers itself once a MusicBrainz contact is set, shown while none is.
+  ///
+  /// In en, this message translates to:
+  /// **'Built into the catalog. Waits on a MusicBrainz contact.'**
+  String get adminEnrichmentBuiltinNeedsContact;
+
   /// Tile: how many answers the cache holds.
   ///
   /// In en, this message translates to:
@@ -573,6 +585,24 @@ abstract class AppLocalizations {
   /// **'Size'**
   String get adminEnrichmentCacheSize;
 
+  /// What a source supplies: an artist's background image alone.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist backgrounds'**
+  String get adminEnrichmentCapArtistBackground;
+
+  /// What a source supplies: an artist's portrait alone.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist portraits'**
+  String get adminEnrichmentCapArtistFront;
+
+  /// What a source supplies: backs, discs, booklets and backgrounds.
+  ///
+  /// In en, this message translates to:
+  /// **'Other artwork'**
+  String get adminEnrichmentCapAuxArt;
+
   /// What a source supplies: audiobook metadata.
   ///
   /// In en, this message translates to:
@@ -627,6 +657,12 @@ abstract class AppLocalizations {
   /// **'Lyrics'**
   String get adminEnrichmentCoverageLyrics;
 
+  /// Caption of the lyrics coverage tile: tracks whose lookup found no lyrics.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} looked up, none found'**
+  String adminEnrichmentCoverageLyricsAsked(int count);
+
   /// Value of a coverage tile: how many are enriched out of how many there are.
   ///
   /// In en, this message translates to:
@@ -639,17 +675,11 @@ abstract class AppLocalizations {
   /// **'Release groups'**
   String get adminEnrichmentCoverageReleaseGroups;
 
-  /// Caption of a coverage tile the catalog cannot count: how many tracks there are.
+  /// Tile: lookups a source failed, asked again next pass.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 track} other{{count} tracks}}'**
-  String adminEnrichmentCoverageTracks(int count);
-
-  /// Value of a coverage tile whose enriched count the server does not report.
-  ///
-  /// In en, this message translates to:
-  /// **'Not counted'**
-  String get adminEnrichmentCoverageUncounted;
+  /// **'Left owed'**
+  String get adminEnrichmentDeferred;
 
   /// When the last pass finished. {when} is a relative time.
   ///
@@ -684,13 +714,13 @@ abstract class AppLocalizations {
   /// Help under the MusicBrainz row when no contact is set.
   ///
   /// In en, this message translates to:
-  /// **'Off until WAXDECK_ENRICHMENT_CONTACT is set, which also keeps the Cover Art Archive and LRCLIB closed'**
+  /// **'Off until WAXDECK_ENRICHMENT_CONTACT is set, which also keeps the sources built into the catalog closed'**
   String get adminEnrichmentMusicbrainzOffHelp;
 
   /// Help under the MusicBrainz row when its contact is set.
   ///
   /// In en, this message translates to:
-  /// **'Identifies artists, albums and books, and opens the Cover Art Archive and LRCLIB'**
+  /// **'Identifies artists, albums and books, and opens the sources built into the catalog'**
   String get adminEnrichmentMusicbrainzOnHelp;
 
   /// Row naming the MusicBrainz identity service.
@@ -705,7 +735,7 @@ abstract class AppLocalizations {
   /// **'A pass has nothing to do: no source can run. Set a MusicBrainz contact or configure a provider, then restart.'**
   String get adminEnrichmentNothingToDo;
 
-  /// Banner when no pass can run and some of this server's own sources are switched off.
+  /// Banner when no pass can run and some sources are switched off.
   ///
   /// In en, this message translates to:
   /// **'A pass has nothing to do: the sources that could run are switched off. Switch one on below, or set a MusicBrainz contact and restart.'**
@@ -747,18 +777,6 @@ abstract class AppLocalizations {
   /// **'Pictures for artists missing one'**
   String get adminEnrichmentPhaseArtistArtHelp;
 
-  /// Backs, discs, booklets and backgrounds: a phase, a capability, and a last-run row.
-  ///
-  /// In en, this message translates to:
-  /// **'Other artwork'**
-  String get adminEnrichmentPhaseAuxArt;
-
-  /// Help under the other-artwork phase.
-  ///
-  /// In en, this message translates to:
-  /// **'Backs, discs, booklets and backgrounds for albums that have a front'**
-  String get adminEnrichmentPhaseAuxArtHelp;
-
   /// The phase filling audiobook fields, and its last-run row.
   ///
   /// In en, this message translates to:
@@ -770,6 +788,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Publisher, narrator, description and more for books'**
   String get adminEnrichmentPhaseBookFieldsHelp;
+
+  /// The release-group art backfill: a phase and a last-run row.
+  ///
+  /// In en, this message translates to:
+  /// **'Release-group artwork'**
+  String get adminEnrichmentPhaseGroupArt;
+
+  /// Help under the release-group artwork phase.
+  ///
+  /// In en, this message translates to:
+  /// **'Covers, backs, discs, booklets and backgrounds for release groups missing them'**
+  String get adminEnrichmentPhaseGroupArtHelp;
 
   /// The phase matching entities against MusicBrainz.
   ///
@@ -912,7 +942,7 @@ abstract class AppLocalizations {
   /// Line under the sources heading.
   ///
   /// In en, this message translates to:
-  /// **'Asked in this order, and a source switched off is not asked; switched back on, it is not asked about what a pass already finished unless a run forces its phases. The catalog\'s own sources come last and cannot be moved.'**
+  /// **'Asked in this order, and a source switched off is not asked; switched back on, it is not asked about what a pass already settled until a run forces its phases or, for a miss, the retry window passes.'**
   String get adminEnrichmentSourcesBlurb;
 
   /// Heading over the table of enrichment sources.
@@ -956,6 +986,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not read the latest status. What is shown is from the last read.'**
   String get adminEnrichmentStale;
+
+  /// Under the last run, when phases ended early because every source serving them kept failing.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped early: {phases}. Every source serving them failed three times in a row and sat out the pass; the lookups they owe are asked once more on the next pass.'**
+  String adminEnrichmentStalled(String phases);
 
   /// Heading over whether a pass can run and the MusicBrainz switch.
   ///

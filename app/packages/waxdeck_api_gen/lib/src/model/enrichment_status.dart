@@ -16,17 +16,17 @@ part 'enrichment_status.g.dart';
 /// Enrichment providers and coverage.
 ///
 /// Properties:
-/// * [providers] - Registered providers in the order they are asked: this server's own in the operator's order, then the catalog's key-free built-ins. 
+/// * [providers] - Every source in the order a pass asks them: the operator's order, then any it does not name, this server's own before the catalog's built-ins. 
 /// * [coverage] 
 /// * [running] - Whether a whole-library pass is running now.
 /// * [runningJob] - The running pass's job pid, when one runs; `GET /jobs/{pid}` follows it more cheaply than this read. 
 /// * [configured] - Whether a whole-library pass would do anything: some phase can run, which a switched-on provider gating one or a MusicBrainz contact makes true. Read `phases` for which.  False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key. 
-/// * [musicbrainzConfigured] - Whether the MusicBrainz identity phases can run, which needs the `WAXDECK_ENRICHMENT_CONTACT` boot setting. The Cover Art Archive and LRCLIB wait on it too; the provider-gated phases do not. 
-/// * [phases] - The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider switched on, the rest one. 
+/// * [musicbrainzConfigured] - Whether the MusicBrainz identity phases can run, which needs the `WAXDECK_ENRICHMENT_CONTACT` boot setting. The catalog's built-in sources wait on it too; the provider-gated phases do not. 
+/// * [phases] - The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact; the rest need a source switched on that serves them. 
 /// * [lastRun] 
 @BuiltValue()
 abstract class EnrichmentStatus implements Built<EnrichmentStatus, EnrichmentStatusBuilder> {
-  /// Registered providers in the order they are asked: this server's own in the operator's order, then the catalog's key-free built-ins. 
+  /// Every source in the order a pass asks them: the operator's order, then any it does not name, this server's own before the catalog's built-ins. 
   @BuiltValueField(wireName: r'providers')
   BuiltList<EnrichmentProvider> get providers;
 
@@ -45,11 +45,11 @@ abstract class EnrichmentStatus implements Built<EnrichmentStatus, EnrichmentSta
   @BuiltValueField(wireName: r'configured')
   bool get configured;
 
-  /// Whether the MusicBrainz identity phases can run, which needs the `WAXDECK_ENRICHMENT_CONTACT` boot setting. The Cover Art Archive and LRCLIB wait on it too; the provider-gated phases do not. 
+  /// Whether the MusicBrainz identity phases can run, which needs the `WAXDECK_ENRICHMENT_CONTACT` boot setting. The catalog's built-in sources wait on it too; the provider-gated phases do not. 
   @BuiltValueField(wireName: r'musicbrainzConfigured')
   bool get musicbrainzConfigured;
 
-  /// The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider switched on, the rest one. 
+  /// The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact; the rest need a source switched on that serves them. 
   @BuiltValueField(wireName: r'phases')
   BuiltList<EnrichmentPhase> get phases;
 

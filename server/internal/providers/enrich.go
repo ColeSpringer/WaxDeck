@@ -173,6 +173,24 @@ func (n noArtistArt) Capabilities() enrich.Capability {
 	return n.Provider.Capabilities() &^ enrich.CapArtistArt
 }
 
+// CapabilitiesAt forwards the wrapped provider's rungs, masked the same way.
+func (n noArtistArt) CapabilitiesAt(t enrich.TargetType) enrich.Capability {
+	if t == enrich.TargetArtist {
+		return 0
+	}
+	return CapabilitiesAt(n.Provider, t) &^ enrich.CapArtistArt
+}
+
+// CapabilitiesAt is what p serves at one rung, as the catalog reads it: its
+// capabilities, narrowed by its own declaration when it makes one.
+func CapabilitiesAt(p enrich.Provider, t enrich.TargetType) enrich.Capability {
+	caps := p.Capabilities()
+	if tc, ok := p.(enrich.TargetCapabilities); ok {
+		caps &= tc.CapabilitiesAt(t)
+	}
+	return caps
+}
+
 func (n noArtistArt) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
 	if req.Type == enrich.TargetArtist {
 		return nil, nil
@@ -193,14 +211,18 @@ var capabilityVocab = []struct {
 	{"book", enrich.CapBookMeta},
 	{"aux-art", enrich.CapAuxArt},
 	{"artist-art", enrich.CapArtistArt},
+	{"artist-front", enrich.CapArtistFront},
+	{"artist-background", enrich.CapArtistAuxArt},
 	{"fields", enrich.CapFields},
 }
 
-// CapabilityNames renders a capability set in the contract's tokens.
+// CapabilityNames renders a capability set in the contract's tokens, both
+// artist halves as the one artist-art.
 func CapabilityNames(c enrich.Capability) []string {
 	var out []string
 	for _, v := range capabilityVocab {
-		if c.Has(v.cap) {
+		half := v.cap != enrich.CapArtistArt && enrich.CapArtistArt.Has(v.cap)
+		if c&v.cap == v.cap && !(half && c&enrich.CapArtistArt == enrich.CapArtistArt) {
 			out = append(out, v.name)
 		}
 	}

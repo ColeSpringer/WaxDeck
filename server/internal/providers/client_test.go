@@ -134,9 +134,20 @@ func TestFetchImageSizeCap(t *testing.T) {
 	defer srv.Close()
 
 	c := newCore(srv.Client(), "test-agent", time.Nanosecond)
+	// Too large now is too large next pass: a miss, not a failure.
 	if _, _, err := fetchImage(context.Background(), c, srv.URL+"/big.jpg"); err == nil ||
-		!strings.Contains(err.Error(), "exceeds") {
+		!strings.Contains(err.Error(), "exceeds") || !errors.Is(err, errImageGone) {
 		t.Fatalf("want size cap error, got %v", err)
+	}
+}
+
+// A URL that does not parse keeps its parse error for the log, and is a
+// miss: it comes back the same.
+func TestFetchImageKeepsTheParseError(t *testing.T) {
+	c := newCore(http.DefaultClient, "test-agent", time.Nanosecond)
+	_, _, err := fetchImage(context.Background(), c, "https://bad host/cover.jpg")
+	if err == nil || !errors.Is(err, errImageGone) || !strings.Contains(err.Error(), "invalid character") {
+		t.Fatalf("want the parse error kept beside the miss, got %v", err)
 	}
 }
 
@@ -147,8 +158,9 @@ func TestFetchImageRefusesNonHTTPSRedirect(t *testing.T) {
 	defer srv.Close()
 
 	c := newCore(srv.Client(), "test-agent", time.Nanosecond)
+	// The same redirect comes back next pass: a miss, not a failure.
 	if _, _, err := fetchImage(context.Background(), c, srv.URL+"/redir"); err == nil ||
-		!strings.Contains(err.Error(), "non-https") {
+		!strings.Contains(err.Error(), "non-https") || !errors.Is(err, errImageGone) {
 		t.Fatalf("want non-https redirect error, got %v", err)
 	}
 }

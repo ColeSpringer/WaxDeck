@@ -66,7 +66,9 @@ func (d *Deezer) ArtistImage(ctx context.Context, name string) (TitleCoverResult
 		}
 		data, mediaType, err := fetchImage(ctx, d.core, hit.PictureXL)
 		if err != nil {
-			reachErr = err
+			if !errors.Is(err, errImageGone) {
+				reachErr = err
+			}
 			continue
 		}
 		return TitleCoverResult{

@@ -70,6 +70,8 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
   @override
   final int tagsSkipped;
   @override
+  final BuiltList<EnrichmentPhase> stalled;
+  @override
   final DateTime? finishedAt;
 
   factory _$EnrichmentLastRun([
@@ -108,6 +110,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
     required this.tagsFailed,
     required this.tagsUnrepresented,
     required this.tagsSkipped,
+    required this.stalled,
     this.finishedAt,
   }) : super._();
   @override
@@ -153,6 +156,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
         tagsFailed == other.tagsFailed &&
         tagsUnrepresented == other.tagsUnrepresented &&
         tagsSkipped == other.tagsSkipped &&
+        stalled == other.stalled &&
         finishedAt == other.finishedAt;
   }
 
@@ -190,6 +194,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
     _$hash = $jc(_$hash, tagsFailed.hashCode);
     _$hash = $jc(_$hash, tagsUnrepresented.hashCode);
     _$hash = $jc(_$hash, tagsSkipped.hashCode);
+    _$hash = $jc(_$hash, stalled.hashCode);
     _$hash = $jc(_$hash, finishedAt.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -229,6 +234,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
           ..add('tagsFailed', tagsFailed)
           ..add('tagsUnrepresented', tagsUnrepresented)
           ..add('tagsSkipped', tagsSkipped)
+          ..add('stalled', stalled)
           ..add('finishedAt', finishedAt))
         .toString();
   }
@@ -385,6 +391,12 @@ class EnrichmentLastRunBuilder
   int? get tagsSkipped => _$this._tagsSkipped;
   set tagsSkipped(int? tagsSkipped) => _$this._tagsSkipped = tagsSkipped;
 
+  ListBuilder<EnrichmentPhase>? _stalled;
+  ListBuilder<EnrichmentPhase> get stalled =>
+      _$this._stalled ??= ListBuilder<EnrichmentPhase>();
+  set stalled(ListBuilder<EnrichmentPhase>? stalled) =>
+      _$this._stalled = stalled;
+
   DateTime? _finishedAt;
   DateTime? get finishedAt => _$this._finishedAt;
   set finishedAt(DateTime? finishedAt) => _$this._finishedAt = finishedAt;
@@ -427,6 +439,7 @@ class EnrichmentLastRunBuilder
       _tagsFailed = $v.tagsFailed;
       _tagsUnrepresented = $v.tagsUnrepresented;
       _tagsSkipped = $v.tagsSkipped;
+      _stalled = $v.stalled.toBuilder();
       _finishedAt = $v.finishedAt;
       _$v = null;
     }
@@ -447,166 +460,183 @@ class EnrichmentLastRunBuilder
   EnrichmentLastRun build() => _build();
 
   _$EnrichmentLastRun _build() {
-    final _$result =
-        _$v ??
-        _$EnrichmentLastRun._(
-          artistsEnriched: BuiltValueNullFieldError.checkNotNull(
-            artistsEnriched,
-            r'EnrichmentLastRun',
-            'artistsEnriched',
-          ),
-          artistsMatched: BuiltValueNullFieldError.checkNotNull(
-            artistsMatched,
-            r'EnrichmentLastRun',
-            'artistsMatched',
-          ),
-          releaseGroupsEnriched: BuiltValueNullFieldError.checkNotNull(
-            releaseGroupsEnriched,
-            r'EnrichmentLastRun',
-            'releaseGroupsEnriched',
-          ),
-          releaseGroupsMatched: BuiltValueNullFieldError.checkNotNull(
-            releaseGroupsMatched,
-            r'EnrichmentLastRun',
-            'releaseGroupsMatched',
-          ),
-          albumsSearched: BuiltValueNullFieldError.checkNotNull(
-            albumsSearched,
-            r'EnrichmentLastRun',
-            'albumsSearched',
-          ),
-          albumsMatched: BuiltValueNullFieldError.checkNotNull(
-            albumsMatched,
-            r'EnrichmentLastRun',
-            'albumsMatched',
-          ),
-          booksEnriched: BuiltValueNullFieldError.checkNotNull(
-            booksEnriched,
-            r'EnrichmentLastRun',
-            'booksEnriched',
-          ),
-          booksMatched: BuiltValueNullFieldError.checkNotNull(
-            booksMatched,
-            r'EnrichmentLastRun',
-            'booksMatched',
-          ),
-          lyricsEnriched: BuiltValueNullFieldError.checkNotNull(
-            lyricsEnriched,
-            r'EnrichmentLastRun',
-            'lyricsEnriched',
-          ),
-          lyricsMatched: BuiltValueNullFieldError.checkNotNull(
-            lyricsMatched,
-            r'EnrichmentLastRun',
-            'lyricsMatched',
-          ),
-          groupArtEnriched: BuiltValueNullFieldError.checkNotNull(
-            groupArtEnriched,
-            r'EnrichmentLastRun',
-            'groupArtEnriched',
-          ),
-          groupArtMatched: BuiltValueNullFieldError.checkNotNull(
-            groupArtMatched,
-            r'EnrichmentLastRun',
-            'groupArtMatched',
-          ),
-          artistArtEnriched: BuiltValueNullFieldError.checkNotNull(
-            artistArtEnriched,
-            r'EnrichmentLastRun',
-            'artistArtEnriched',
-          ),
-          artistArtMatched: BuiltValueNullFieldError.checkNotNull(
-            artistArtMatched,
-            r'EnrichmentLastRun',
-            'artistArtMatched',
-          ),
-          albumArtEnriched: BuiltValueNullFieldError.checkNotNull(
-            albumArtEnriched,
-            r'EnrichmentLastRun',
-            'albumArtEnriched',
-          ),
-          albumArtMatched: BuiltValueNullFieldError.checkNotNull(
-            albumArtMatched,
-            r'EnrichmentLastRun',
-            'albumArtMatched',
-          ),
-          trackFieldsEnriched: BuiltValueNullFieldError.checkNotNull(
-            trackFieldsEnriched,
-            r'EnrichmentLastRun',
-            'trackFieldsEnriched',
-          ),
-          trackFieldsMatched: BuiltValueNullFieldError.checkNotNull(
-            trackFieldsMatched,
-            r'EnrichmentLastRun',
-            'trackFieldsMatched',
-          ),
-          bookFieldsEnriched: BuiltValueNullFieldError.checkNotNull(
-            bookFieldsEnriched,
-            r'EnrichmentLastRun',
-            'bookFieldsEnriched',
-          ),
-          bookFieldsMatched: BuiltValueNullFieldError.checkNotNull(
-            bookFieldsMatched,
-            r'EnrichmentLastRun',
-            'bookFieldsMatched',
-          ),
-          albumFieldsEnriched: BuiltValueNullFieldError.checkNotNull(
-            albumFieldsEnriched,
-            r'EnrichmentLastRun',
-            'albumFieldsEnriched',
-          ),
-          albumFieldsMatched: BuiltValueNullFieldError.checkNotNull(
-            albumFieldsMatched,
-            r'EnrichmentLastRun',
-            'albumFieldsMatched',
-          ),
-          retried: BuiltValueNullFieldError.checkNotNull(
-            retried,
-            r'EnrichmentLastRun',
-            'retried',
-          ),
-          deferred_: BuiltValueNullFieldError.checkNotNull(
-            deferred_,
-            r'EnrichmentLastRun',
-            'deferred_',
-          ),
-          artFetched: BuiltValueNullFieldError.checkNotNull(
-            artFetched,
-            r'EnrichmentLastRun',
-            'artFetched',
-          ),
-          auxArtFetched: BuiltValueNullFieldError.checkNotNull(
-            auxArtFetched,
-            r'EnrichmentLastRun',
-            'auxArtFetched',
-          ),
-          artReused: BuiltValueNullFieldError.checkNotNull(
-            artReused,
-            r'EnrichmentLastRun',
-            'artReused',
-          ),
-          tagsWritten: BuiltValueNullFieldError.checkNotNull(
-            tagsWritten,
-            r'EnrichmentLastRun',
-            'tagsWritten',
-          ),
-          tagsFailed: BuiltValueNullFieldError.checkNotNull(
-            tagsFailed,
-            r'EnrichmentLastRun',
-            'tagsFailed',
-          ),
-          tagsUnrepresented: BuiltValueNullFieldError.checkNotNull(
-            tagsUnrepresented,
-            r'EnrichmentLastRun',
-            'tagsUnrepresented',
-          ),
-          tagsSkipped: BuiltValueNullFieldError.checkNotNull(
-            tagsSkipped,
-            r'EnrichmentLastRun',
-            'tagsSkipped',
-          ),
-          finishedAt: finishedAt,
+    _$EnrichmentLastRun _$result;
+    try {
+      _$result =
+          _$v ??
+          _$EnrichmentLastRun._(
+            artistsEnriched: BuiltValueNullFieldError.checkNotNull(
+              artistsEnriched,
+              r'EnrichmentLastRun',
+              'artistsEnriched',
+            ),
+            artistsMatched: BuiltValueNullFieldError.checkNotNull(
+              artistsMatched,
+              r'EnrichmentLastRun',
+              'artistsMatched',
+            ),
+            releaseGroupsEnriched: BuiltValueNullFieldError.checkNotNull(
+              releaseGroupsEnriched,
+              r'EnrichmentLastRun',
+              'releaseGroupsEnriched',
+            ),
+            releaseGroupsMatched: BuiltValueNullFieldError.checkNotNull(
+              releaseGroupsMatched,
+              r'EnrichmentLastRun',
+              'releaseGroupsMatched',
+            ),
+            albumsSearched: BuiltValueNullFieldError.checkNotNull(
+              albumsSearched,
+              r'EnrichmentLastRun',
+              'albumsSearched',
+            ),
+            albumsMatched: BuiltValueNullFieldError.checkNotNull(
+              albumsMatched,
+              r'EnrichmentLastRun',
+              'albumsMatched',
+            ),
+            booksEnriched: BuiltValueNullFieldError.checkNotNull(
+              booksEnriched,
+              r'EnrichmentLastRun',
+              'booksEnriched',
+            ),
+            booksMatched: BuiltValueNullFieldError.checkNotNull(
+              booksMatched,
+              r'EnrichmentLastRun',
+              'booksMatched',
+            ),
+            lyricsEnriched: BuiltValueNullFieldError.checkNotNull(
+              lyricsEnriched,
+              r'EnrichmentLastRun',
+              'lyricsEnriched',
+            ),
+            lyricsMatched: BuiltValueNullFieldError.checkNotNull(
+              lyricsMatched,
+              r'EnrichmentLastRun',
+              'lyricsMatched',
+            ),
+            groupArtEnriched: BuiltValueNullFieldError.checkNotNull(
+              groupArtEnriched,
+              r'EnrichmentLastRun',
+              'groupArtEnriched',
+            ),
+            groupArtMatched: BuiltValueNullFieldError.checkNotNull(
+              groupArtMatched,
+              r'EnrichmentLastRun',
+              'groupArtMatched',
+            ),
+            artistArtEnriched: BuiltValueNullFieldError.checkNotNull(
+              artistArtEnriched,
+              r'EnrichmentLastRun',
+              'artistArtEnriched',
+            ),
+            artistArtMatched: BuiltValueNullFieldError.checkNotNull(
+              artistArtMatched,
+              r'EnrichmentLastRun',
+              'artistArtMatched',
+            ),
+            albumArtEnriched: BuiltValueNullFieldError.checkNotNull(
+              albumArtEnriched,
+              r'EnrichmentLastRun',
+              'albumArtEnriched',
+            ),
+            albumArtMatched: BuiltValueNullFieldError.checkNotNull(
+              albumArtMatched,
+              r'EnrichmentLastRun',
+              'albumArtMatched',
+            ),
+            trackFieldsEnriched: BuiltValueNullFieldError.checkNotNull(
+              trackFieldsEnriched,
+              r'EnrichmentLastRun',
+              'trackFieldsEnriched',
+            ),
+            trackFieldsMatched: BuiltValueNullFieldError.checkNotNull(
+              trackFieldsMatched,
+              r'EnrichmentLastRun',
+              'trackFieldsMatched',
+            ),
+            bookFieldsEnriched: BuiltValueNullFieldError.checkNotNull(
+              bookFieldsEnriched,
+              r'EnrichmentLastRun',
+              'bookFieldsEnriched',
+            ),
+            bookFieldsMatched: BuiltValueNullFieldError.checkNotNull(
+              bookFieldsMatched,
+              r'EnrichmentLastRun',
+              'bookFieldsMatched',
+            ),
+            albumFieldsEnriched: BuiltValueNullFieldError.checkNotNull(
+              albumFieldsEnriched,
+              r'EnrichmentLastRun',
+              'albumFieldsEnriched',
+            ),
+            albumFieldsMatched: BuiltValueNullFieldError.checkNotNull(
+              albumFieldsMatched,
+              r'EnrichmentLastRun',
+              'albumFieldsMatched',
+            ),
+            retried: BuiltValueNullFieldError.checkNotNull(
+              retried,
+              r'EnrichmentLastRun',
+              'retried',
+            ),
+            deferred_: BuiltValueNullFieldError.checkNotNull(
+              deferred_,
+              r'EnrichmentLastRun',
+              'deferred_',
+            ),
+            artFetched: BuiltValueNullFieldError.checkNotNull(
+              artFetched,
+              r'EnrichmentLastRun',
+              'artFetched',
+            ),
+            auxArtFetched: BuiltValueNullFieldError.checkNotNull(
+              auxArtFetched,
+              r'EnrichmentLastRun',
+              'auxArtFetched',
+            ),
+            artReused: BuiltValueNullFieldError.checkNotNull(
+              artReused,
+              r'EnrichmentLastRun',
+              'artReused',
+            ),
+            tagsWritten: BuiltValueNullFieldError.checkNotNull(
+              tagsWritten,
+              r'EnrichmentLastRun',
+              'tagsWritten',
+            ),
+            tagsFailed: BuiltValueNullFieldError.checkNotNull(
+              tagsFailed,
+              r'EnrichmentLastRun',
+              'tagsFailed',
+            ),
+            tagsUnrepresented: BuiltValueNullFieldError.checkNotNull(
+              tagsUnrepresented,
+              r'EnrichmentLastRun',
+              'tagsUnrepresented',
+            ),
+            tagsSkipped: BuiltValueNullFieldError.checkNotNull(
+              tagsSkipped,
+              r'EnrichmentLastRun',
+              'tagsSkipped',
+            ),
+            stalled: stalled.build(),
+            finishedAt: finishedAt,
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'stalled';
+        stalled.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'EnrichmentLastRun',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

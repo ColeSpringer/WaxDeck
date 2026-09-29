@@ -102,7 +102,7 @@ class _Standing extends StatelessWidget {
           WaxBanner(message: l10n.adminEnrichmentRunningNow)
         else if (!status.configured)
           WaxBanner(
-            message: status.providers.any((p) => !p.builtin && !p.enabled)
+            message: status.providers.any((p) => p.configured && !p.enabled)
                 ? l10n.adminEnrichmentNothingToDoSwitchedOff
                 : l10n.adminEnrichmentNothingToDo,
             tone: WaxBannerTone.notice,
@@ -130,13 +130,14 @@ class _Coverage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    Widget tile(String label, CoverageCount count) => _Tile(
+    Widget tile(String label, CoverageCount count, {String? caption}) => _Tile(
       label: label,
       // A total of zero is one the server could not count, not an empty
       // library, so it is left unsaid.
       value: count.total > 0
           ? l10n.adminEnrichmentCoverageOf(count.enriched, count.total)
           : '${count.enriched}',
+      caption: caption,
     );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -152,13 +153,14 @@ class _Coverage extends StatelessWidget {
               coverage.releaseGroups,
             ),
             tile(l10n.adminEnrichmentCoverageBooks, coverage.books),
-            // The catalog reports no per-track lyrics, only the tracks.
-            _Tile(
-              label: l10n.adminEnrichmentCoverageLyrics,
-              value: l10n.adminEnrichmentCoverageUncounted,
-              caption: l10n.adminEnrichmentCoverageTracks(
-                coverage.lyrics.total,
-              ),
+            tile(
+              l10n.adminEnrichmentCoverageLyrics,
+              coverage.lyrics,
+              caption: coverage.lyricsAsked > 0
+                  ? l10n.adminEnrichmentCoverageLyricsAsked(
+                      coverage.lyricsAsked,
+                    )
+                  : null,
             ),
           ],
         ),
@@ -193,9 +195,9 @@ class _Tile extends StatelessWidget {
         title: l10n.adminEnrichmentPhaseReleases,
         help: l10n.adminEnrichmentPhaseReleasesHelp,
       ),
-      'aux-art' => (
-        title: l10n.adminEnrichmentPhaseAuxArt,
-        help: l10n.adminEnrichmentPhaseAuxArtHelp,
+      'group-art' => (
+        title: l10n.adminEnrichmentPhaseGroupArt,
+        help: l10n.adminEnrichmentPhaseGroupArtHelp,
       ),
       'artist-art' => (
         title: l10n.adminEnrichmentPhaseArtistArt,
@@ -331,8 +333,10 @@ String _capability(AppLocalizations l10n, String cap) => switch (cap) {
   'identity' => l10n.adminEnrichmentCapIdentity,
   'genres' => l10n.adminEnrichmentCapGenres,
   'cover' => l10n.adminEnrichmentCapCover,
-  'aux-art' => l10n.adminEnrichmentPhaseAuxArt,
+  'aux-art' => l10n.adminEnrichmentCapAuxArt,
   'artist-art' => l10n.adminEnrichmentPhaseArtistArt,
+  'artist-front' => l10n.adminEnrichmentCapArtistFront,
+  'artist-background' => l10n.adminEnrichmentCapArtistBackground,
   'lyrics' => l10n.adminEnrichmentPhaseLyrics,
   'book' => l10n.adminEnrichmentCapBook,
   'fields' => l10n.adminEnrichmentCapFields,
@@ -356,7 +360,7 @@ class _SourcesState extends ConsumerState<_Sources> {
 
   List<EnrichmentSource> get _served => [
     for (final p in widget.status.providers)
-      if (!p.builtin) EnrichmentSource(name: p.name, enabled: p.enabled),
+      EnrichmentSource(name: p.name, enabled: p.enabled),
   ];
 
   static bool _same(List<EnrichmentSource> a, List<EnrichmentSource> b) =>
@@ -388,18 +392,13 @@ class _SourcesState extends ConsumerState<_Sources> {
             key: ValueKey(source.name),
             name: source.name,
             capabilities: providers[source.name]?.capabilities ?? const [],
+            builtin: providers[source.name]?.builtin ?? false,
+            configured: providers[source.name]?.configured ?? true,
             source: source,
             onEnabled: (on) => _set(source.name, on),
             onUp: i > 0 ? () => _move(i, i - 1) : null,
             onDown: i < order.length - 1 ? () => _move(i, i + 1) : null,
           ),
-        for (final p in widget.status.providers)
-          if (p.builtin)
-            _SourceRow(
-              key: ValueKey(p.name),
-              name: p.name,
-              capabilities: p.capabilities,
-            ),
         const SizedBox(height: WaxSpace.s12),
         Wrap(
           spacing: WaxSpace.s8,
@@ -465,13 +464,14 @@ class _SourcesState extends ConsumerState<_Sources> {
   }
 }
 
-/// One source: its name and what it supplies, and for this server's own,
-/// its switch and its place.
+/// One source: its name, what it supplies, its switch and its place.
 class _SourceRow extends StatelessWidget {
   const _SourceRow({
     required this.name,
     required this.capabilities,
-    this.source,
+    required this.builtin,
+    required this.configured,
+    required this.source,
     this.onEnabled,
     this.onUp,
     this.onDown,
@@ -480,9 +480,9 @@ class _SourceRow extends StatelessWidget {
 
   final String name;
   final List<String> capabilities;
-
-  /// Null for one of the catalog's built-ins, which cannot be moved.
-  final EnrichmentSource? source;
+  final bool builtin;
+  final bool configured;
+  final EnrichmentSource source;
   final ValueChanged<bool>? onEnabled;
   final VoidCallback? onUp;
   final VoidCallback? onDown;
@@ -492,41 +492,45 @@ class _SourceRow extends StatelessWidget {
     final l10n = context.l10n;
     final named = provenanceProducerName(l10n, name);
     final supplies = capabilities.map((c) => _capability(l10n, c)).join(', ');
-    final source = this.source;
+    // The MusicBrainz entry ranks only its genres; the identity walk stays.
+    final genresOnly = name == 'musicbrainz';
     return Semantics(
       identifier: SemanticsIds.enrichmentSource(name),
       container: true,
       explicitChildNodes: true,
       child: WaxSettingRow(
         title: named,
-        help: source == null
-            ? '$supplies. ${l10n.adminEnrichmentBuiltin}'
-            : supplies,
-        control: source == null
-            ? const SizedBox.shrink()
-            : Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  WaxSwitch(
-                    label: l10n.adminEnrichmentSourceSwitch(named),
-                    value: source.enabled,
-                    semanticsId: SemanticsIds.enrichmentSourceEnabled(name),
-                    onChanged: onEnabled,
-                  ),
-                  WaxIconButton(
-                    glyph: WaxIcons.expand,
-                    label: l10n.adminEnrichmentSourceUp(named),
-                    semanticsId: SemanticsIds.enrichmentSourceUp(name),
-                    onPressed: onUp,
-                  ),
-                  WaxIconButton(
-                    glyph: WaxIcons.collapse,
-                    label: l10n.adminEnrichmentSourceDown(named),
-                    semanticsId: SemanticsIds.enrichmentSourceDown(name),
-                    onPressed: onDown,
-                  ),
-                ],
-              ),
+        help: switch ((builtin, configured, genresOnly)) {
+          (false, _, _) => supplies,
+          (true, false, _) =>
+            '$supplies. ${l10n.adminEnrichmentBuiltinNeedsContact}',
+          (true, true, true) =>
+            '$supplies. ${l10n.adminEnrichmentBuiltinMusicbrainz}',
+          (true, true, false) => '$supplies. ${l10n.adminEnrichmentBuiltin}',
+        },
+        control: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            WaxSwitch(
+              label: l10n.adminEnrichmentSourceSwitch(named),
+              value: source.enabled,
+              semanticsId: SemanticsIds.enrichmentSourceEnabled(name),
+              onChanged: onEnabled,
+            ),
+            WaxIconButton(
+              glyph: WaxIcons.expand,
+              label: l10n.adminEnrichmentSourceUp(named),
+              semanticsId: SemanticsIds.enrichmentSourceUp(name),
+              onPressed: onUp,
+            ),
+            WaxIconButton(
+              glyph: WaxIcons.collapse,
+              label: l10n.adminEnrichmentSourceDown(named),
+              semanticsId: SemanticsIds.enrichmentSourceDown(name),
+              onPressed: onDown,
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -573,7 +577,7 @@ class _LastRun extends StatelessWidget {
         run.lyricsMatched,
       ),
       (
-        l10n.adminEnrichmentPhaseAuxArt,
+        l10n.adminEnrichmentPhaseGroupArt,
         run.groupArtEnriched,
         run.groupArtMatched,
       ),
@@ -605,6 +609,7 @@ class _LastRun extends StatelessWidget {
     ];
     final tallies = <(String, int)>[
       (l10n.adminEnrichmentRetried, run.retried),
+      (l10n.adminEnrichmentDeferred, run.deferred),
       (l10n.adminEnrichmentArtFetched, run.artFetched),
       (l10n.adminEnrichmentAuxArtFetched, run.auxArtFetched),
       (l10n.adminEnrichmentArtReused, run.artReused),
@@ -623,6 +628,15 @@ class _LastRun extends StatelessWidget {
             l10n.adminEnrichmentLastRunFinished(l10n.relativeSpaced(finished)),
             style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
           ),
+        if (run.stalled.isNotEmpty) ...<Widget>[
+          const SizedBox(height: WaxSpace.s12),
+          WaxBanner(
+            message: l10n.adminEnrichmentStalled(
+              run.stalled.map((p) => _phase(l10n, p).title).join(', '),
+            ),
+            tone: WaxBannerTone.notice,
+          ),
+        ],
         const SizedBox(height: WaxSpace.s12),
         WaxTable<(String, int, int)>(
           rows: walks,

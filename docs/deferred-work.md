@@ -117,15 +117,16 @@ here waits on upstream.
   the account the way the queue is.
 
 - `[in-repo]` **The enrichment source set has never been reviewed as a
-  set.** Operators order and switch the providers now, but the
-  confidence numbers (Deezer 0.7, and friends) were picked one at a time
-  and never compared, nothing says which provider a self-hoster with no
-  keys ends up on, and iTunes sits awkwardly: its terms restrict artwork
-  use to promoting store content, and it shares a per-IP budget with the
-  radio path if both ever ask it. Radio's cover chain (`CoverChain` in
+  set.** Operators order and switch the providers now, the catalog's
+  built-ins among them, but the confidence numbers (Deezer 0.7, and
+  friends) were picked one at a time and never compared, nothing says
+  which provider a self-hoster with no keys ends up on, and iTunes sits
+  awkwardly: its terms restrict artwork use to promoting store content,
+  and it shares a per-IP budget with the radio path if both ever ask it.
+  Radio's cover chain (`CoverChain` in
   `server/internal/providers/coverart.go`) deliberately does not follow
-  the operator's order: it is built once at boot, Deezer first for
-  speed and the archive behind it for coverage and licensing.
+  the operator's order: it is built once at boot, Deezer first for speed
+  and the archive behind it for coverage and licensing.
 
 - `[hardware]` **Android UnifiedPush distributor integration.** The server, API,
   and settings surface shipped; the client still needs the

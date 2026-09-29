@@ -91,6 +91,21 @@ func (d *Deezer) Capabilities() enrich.Capability {
 	return enrich.CapCover | enrich.CapArtistFront | enrich.CapFields
 }
 
+// CapabilitiesAt narrows Capabilities to what Enrich answers per rung.
+func (d *Deezer) CapabilitiesAt(t enrich.TargetType) enrich.Capability {
+	switch t {
+	case enrich.TargetReleaseGroup:
+		return enrich.CapCover
+	case enrich.TargetRelease:
+		return enrich.CapCover | enrich.CapFields
+	case enrich.TargetRecording:
+		return enrich.CapFields
+	case enrich.TargetArtist:
+		return enrich.CapArtistFront
+	}
+	return 0
+}
+
 // Enrich answers a release-group cover, an artist portrait, or the
 // scalar fields of one album or one track - each from its own lookup
 // and each gated on an identifier or a name match.
@@ -134,12 +149,12 @@ func (d *Deezer) enrichRelease(ctx context.Context, req enrich.Request, art, fie
 	cand := &enrich.Candidate{Confidence: 0.7}
 	var coverErr error
 	if art && album != nil && deezerPicture(album.CoverXL) {
-		// A picture that will not load is not the fields' problem.
 		data, mediaType, err := fetchImage(ctx, d.core, album.CoverXL)
-		if err != nil {
-			coverErr = err
-		} else {
+		switch {
+		case err == nil:
 			cand.Cover = coverImage(data, mediaType, album.CoverXL)
+		case !errors.Is(err, errImageGone):
+			coverErr = err
 		}
 	}
 	if fields {
@@ -158,6 +173,7 @@ func (d *Deezer) enrichRelease(ctx context.Context, req enrich.Request, art, fie
 			}
 		}
 	}
+	// A cover that could not be fetched is the answer only without fields.
 	if cand.Cover == nil && len(cand.Fields) == 0 {
 		return nil, coverErr
 	}
@@ -360,9 +376,9 @@ func (d *Deezer) getJSON(ctx context.Context, u string, out any) error {
 	return nil
 }
 
-// deezerRead refuses the failure Deezer answers with a 200. The catalog records
-// any failure as a miss for its retry window, so a quota window is waited out
-// once, and a failure is dropped from the cache rather than replayed.
+// deezerRead refuses the failure Deezer answers with a 200. Three failures in a
+// row sit Deezer out of the pass, so a quota window is waited out once, and a
+// failure is dropped from the cache rather than replayed.
 func (d *Deezer) deezerRead(ctx context.Context, u string) ([]byte, error) {
 	for waited := false; ; waited = true {
 		body, status, err := d.core.get(ctx, u, d.ttl)
@@ -453,6 +469,9 @@ func (d *Deezer) enrichReleaseGroup(ctx context.Context, req enrich.Request) (*e
 			continue
 		}
 		data, mediaType, err := fetchImage(ctx, d.core, hit.CoverXL)
+		if errors.Is(err, errImageGone) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -589,6 +608,9 @@ func (d *Deezer) FrontCover(ctx context.Context, artist, title string) (TitleCov
 // hostFailed reports a fetch that failed on the host rather than on the
 // picture: a refusal, a timeout, a connection that never opened.
 func hostFailed(err error) bool {
+	if errors.Is(err, errImageGone) {
+		return false
+	}
 	var uerr *url.Error
 	return errors.Is(err, ErrThrottled) || errors.As(err, &uerr) ||
 		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)

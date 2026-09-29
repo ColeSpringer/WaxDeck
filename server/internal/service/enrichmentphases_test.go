@@ -14,6 +14,7 @@ import (
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/enrich"
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/waxerr"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/supervise"
@@ -73,10 +74,9 @@ func openEnrichFixture(t *testing.T, mutate func(*Config)) (context.Context, *Li
 	return ctx, svc, uc
 }
 
-// TestEnrichmentPhasesFollowTheCatalogsOwnRule pins the copy. The phase
-// list here restates the gating upstream's Run applies, because the
-// facade exports no phase list; what the catalog itself will refuse is
-// Doctor().EnrichmentEnabled, so the two must agree on every shape.
+// The status names the catalog's own phases in the API's words: each one
+// listed is a force the catalog accepts, and each one not listed is
+// refused here, naming the phase.
 func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -104,13 +104,13 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			// has an identifying agent to dial with.
 			name:       "contact alone",
 			contact:    "waxdeck@example.test",
-			wantPhases: []string{"identity", "aux-art", "album-art", "lyrics"},
+			wantPhases: []string{"identity", "group-art", "album-art", "lyrics"},
 		},
 		{
 			name:       "contact with the release match",
 			contact:    "waxdeck@example.test",
 			match:      true,
-			wantPhases: []string{"identity", "releases", "aux-art", "album-art", "lyrics"},
+			wantPhases: []string{"identity", "releases", "group-art", "album-art", "lyrics"},
 		},
 		{
 			// And an injected lyrics provider opens the phase without
@@ -142,12 +142,12 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			// opens the front half of both art backfills.
 			name:       "cover and genres open both art backfills",
 			providers:  []enrich.Provider{fakeCapProvider{name: "art", caps: enrich.CapCover | enrich.CapGenres}},
-			wantPhases: []string{"aux-art", "album-art"},
+			wantPhases: []string{"group-art", "album-art"},
 		},
 		{
 			name:       "aux art opens both art backfills",
 			providers:  []enrich.Provider{fakeCapProvider{name: "backs", caps: enrich.CapAuxArt}},
-			wantPhases: []string{"aux-art", "album-art"},
+			wantPhases: []string{"group-art", "album-art"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -168,8 +168,6 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			if got, want := st.MusicbrainzConfigured, tc.contact != ""; got != want {
 				t.Errorf("musicbrainzConfigured = %v, want %v", got, want)
 			}
-			// The pin: configured must mean what the catalog will
-			// actually accept, not what this file believes.
 			rep, err := svc.lib.Doctor(ctx)
 			if err != nil {
 				t.Fatal(err)
@@ -181,19 +179,29 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			if st.Configured != (len(st.Phases) > 0) {
 				t.Errorf("configured = %v with phases %v", st.Configured, st.Phases)
 			}
-			// And phase by phase: the catalog forces exactly what the mirror
-			// lists. The library is empty, so an accepted pass walks nothing.
-			for _, spec := range enrichPhaseTable {
-				pid, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{ForcePhases: spec.catalog})
-				if listed := slices.Contains(st.Phases, spec.name); (err == nil) != listed {
-					t.Errorf("%s: catalog accepted = %v (%v), mirror lists it = %v", spec.name, err == nil, err, listed)
+			// The library is empty, so an accepted force walks nothing.
+			for _, name := range apiPhases() {
+				if !slices.Contains(st.Phases, name) {
+					_, err := svc.RunEnrichment(ctx, uc, false, []string{name})
+					if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), "the "+name+" phase") {
+						t.Errorf("forcing %s, not listed = %v, want it refused by name", name, err)
+					}
+					continue
 				}
-				if err == nil {
-					waitForJob(t, ctx, svc, pid)
+				pid, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{ForcePhases: phasesNamed(svc.lib.EnrichmentPhases(), name)})
+				if err != nil {
+					t.Errorf("forcing %s, listed: the catalog refused %v", name, err)
+					continue
 				}
+				waitForJob(t, ctx, svc, pid)
 			}
 		})
 	}
+}
+
+// apiPhases is every API phase name in run order.
+func apiPhases() []string {
+	return apiNames(model.EnrichPhases())
 }
 
 // waitForJob waits out a catalog job, so the next start is not a conflict.
@@ -279,7 +287,7 @@ func TestRunEnrichmentForcePhases(t *testing.T) {
 	}
 	// Both art backfills open on covers or auxiliary art, and the
 	// refusal says both.
-	for _, phase := range []string{"aux-art", "album-art"} {
+	for _, phase := range []string{"group-art", "album-art"} {
 		_, err = svc.RunEnrichment(ctx, uc, false, []string{phase})
 		if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), "WAXDECK_ENRICHMENT_CONTACT") ||
 			!strings.Contains(err.Error(), "auxiliary art") {
@@ -292,20 +300,39 @@ func TestRunEnrichmentForcePhases(t *testing.T) {
 	}
 }
 
-// The catalog's own check is the backstop for a mirror that drifted:
-// its refusal of a phase the mirror admitted is still a 501, in WaxDeck's words.
+// A switch saved between this server's read of the phases and the start
+// leaves the catalog to refuse the force: still a 501, in WaxDeck's words.
 func TestRunEnrichmentForcePhasesBackstop(t *testing.T) {
 	t.Parallel()
-	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
-		c.EnrichmentContact = "waxdeck@example.test"
-	})
-	svc.enrichmentMatchReleases = true // the catalog opened without it
-	_, err := svc.RunEnrichment(ctx, uc, false, []string{"releases"})
+	_, svc, _ := openEnrichFixture(t, func(*Config) {})
+	refusal := waxerr.New(waxerr.CodeUnsupported, "waxbin.StartEnrich",
+		"phase album-release does not run on this install: it needs a MusicBrainz contact and enrichment.match_releases")
+	err := svc.explainEnrichRefusal(refusal, []string{"releases"})
 	if KindOf(err) != KindUnsupported {
-		t.Fatalf("a drifted phase = %v, want unsupported", err)
+		t.Fatalf("a refused force = %v, want unsupported", err)
 	}
 	if strings.Contains(err.Error(), "enrichment.match_releases") || !strings.Contains(err.Error(), "releases") {
 		t.Errorf("refusal %q carries the catalog's sentence or names no phase", err)
+	}
+}
+
+// Every phase the catalog can build has an API name the spec lists.
+func TestEveryCatalogPhaseHasAnAPIName(t *testing.T) {
+	t.Parallel()
+	for _, p := range model.EnrichPhases() {
+		if !slices.Contains(apiPhases(), apiPhaseOf(p)) {
+			t.Errorf("%s maps to %q, which the API does not list", p, apiPhaseOf(p))
+		}
+	}
+	want := []string{"identity", "releases", "group-art", "artist-art", "album-art", "lyrics", "track-fields", "book-fields", "album-fields"}
+	if got := apiPhases(); !slices.Equal(got, want) {
+		t.Errorf("API phases = %v, want %v", got, want)
+	}
+	_, svc, _ := openEnrichFixture(t, func(*Config) {})
+	for _, name := range want {
+		if _, ok := svc.phaseNeed(name); !ok {
+			t.Errorf("no requirement worded for %s", name)
+		}
 	}
 }
 
@@ -355,5 +382,116 @@ func TestEnrichCacheFromCarriesTheCensus(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("census = %+v\nwant     %+v", got, want)
+	}
+}
+
+// A stalled phase reaches the status under its API name, once.
+func TestLastRunNamesTheStalledPhases(t *testing.T) {
+	t.Parallel()
+	r := enrich.Result{Stalled: []model.EnrichPhase{model.EnrichPhaseArtist, model.EnrichPhaseLyrics, model.EnrichPhaseBook}}
+	if got := lastRunFrom(r, 0).Stalled; !slices.Equal(got, []string{"identity", "lyrics"}) {
+		t.Fatalf("stalled = %v, want identity and lyrics", got)
+	}
+	if got := lastRunFrom(enrich.Result{}, 0).Stalled; got == nil || len(got) != 0 {
+		t.Fatalf("stalled with none = %#v, want an empty list", got)
+	}
+}
+
+// Lyrics coverage is the catalog's own count: tracks holding lyrics over
+// every track, and the ones asked that no source could answer.
+func TestCoverageCountsLyrics(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name          string
+		provider      enrich.Provider
+		enriched, ask int
+	}{
+		{"answered", &lyricist{name: "words"}, 1, 0},
+		{"none found", fakeCapProvider{name: "silence", caps: enrich.CapLyrics}, 0, 1},
+	} {
+		ctx, svc, uc, _ := openLyricsFixture(t, tc.provider)
+		pid, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitForJob(t, ctx, svc, pid)
+		st, err := svc.EnrichmentStatusFor(ctx, uc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := st.Coverage.Lyrics; got.Enriched != tc.enriched || got.Total != 1 || st.Coverage.LyricsAsked != tc.ask {
+			t.Errorf("%s: lyrics %d/%d, asked %d; want %d/1, asked %d",
+				tc.name, got.Enriched, got.Total, st.Coverage.LyricsAsked, tc.enriched, tc.ask)
+		}
+	}
+}
+
+// With the contact set, a refusal names what is missing and does not ask
+// for the contact again.
+func TestAPhaseRefusalWithTheContactSetDoesNotAskForIt(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
+		c.EnrichmentContact = "waxdeck@example.test"
+	})
+	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"lrclib", false}}); err != nil {
+		t.Fatal(err)
+	}
+	for phase, want := range map[string]string{
+		"lyrics":   "switched off",
+		"releases": "WAXDECK_ENRICHMENT_MATCH_RELEASES",
+	} {
+		_, err := svc.RunEnrichment(ctx, uc, false, []string{phase})
+		if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), want) ||
+			strings.Contains(err.Error(), "WAXDECK_ENRICHMENT_CONTACT") {
+			t.Errorf("forcing %s = %v; want it to say %s and not ask for the contact", phase, err, want)
+		}
+	}
+}
+
+// rungFake serves caps at one rung only.
+type rungFake struct {
+	caps enrich.Capability
+	rung enrich.TargetType
+}
+
+func (f rungFake) Name() string                    { return "rung" }
+func (f rungFake) Capabilities() enrich.Capability { return f.caps }
+func (f rungFake) CapabilitiesAt(t enrich.TargetType) enrich.Capability {
+	if t == f.rung {
+		return f.caps
+	}
+	return 0
+}
+func (f rungFake) Enrich(context.Context, enrich.Request) (*enrich.Candidate, error) { return nil, nil }
+
+// The rung each provider phase opens at, which words a refusal, is the
+// catalog's: a provider serving exactly that opens the phase.
+func TestPhaseRungsAreTheCatalogs(t *testing.T) {
+	t.Parallel()
+	for phase, g := range phaseRungs {
+		ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
+			c.EnrichmentProviders = []enrich.Provider{rungFake{caps: g.cap, rung: g.rung}}
+		})
+		st, err := svc.EnrichmentStatusFor(ctx, uc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(st.Phases, phase) {
+			t.Errorf("%v at %s opens %v, not %s", g.cap, g.rung, st.Phases, phase)
+		}
+	}
+}
+
+// A refusal blames the switches only when a source switched off could
+// open the phase.
+func TestARefusalBlamesOnlySwitchesThatMatter(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := openSourcesFixture(t)
+	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", false}, {"b", true}, {"fanart", true}}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := svc.RunEnrichment(ctx, uc, false, []string{"book-fields"})
+	if KindOf(err) != KindUnsupported || strings.Contains(err.Error(), "switched off") {
+		t.Errorf("forcing book-fields with a lyrics source off = %v, want no blame on the switch", err)
 	}
 }

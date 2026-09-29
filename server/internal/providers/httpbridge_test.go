@@ -211,6 +211,90 @@ func TestHTTPBridgeCarriesTheReleaseRung(t *testing.T) {
 	}
 }
 
+// A remote may declare which rungs it serves; without that, it serves
+// every capability at every rung.
+func TestHTTPBridgeReadsItsRungs(t *testing.T) {
+	t.Parallel()
+	declared := scriptedBridge(t, `{"name":"sleeves","capabilities":["cover","aux-art","artist-front"],
+		"capabilitiesAt":{"release_group":["cover","aux-art"],"artist":["artist-front","lyrics"],"galaxy":["cover"]}}`, nil)
+	for target, want := range map[enrich.TargetType]enrich.Capability{
+		enrich.TargetReleaseGroup: enrich.CapCover | enrich.CapAuxArt,
+		enrich.TargetArtist:       enrich.CapArtistFront,
+		enrich.TargetRelease:      0,
+		enrich.TargetRecording:    0,
+	} {
+		if got := declared.CapabilitiesAt(target); got != want {
+			t.Errorf("declared, at %s = %v, want %v", target, got, want)
+		}
+	}
+	open := scriptedBridge(t, `{"name":"sleeves","capabilities":["cover","lyrics"]}`, nil)
+	for _, target := range allTargets {
+		if got := open.CapabilitiesAt(target); got != enrich.CapCover|enrich.CapLyrics {
+			t.Errorf("undeclared, at %s = %v, want everything it advertises", target, got)
+		}
+	}
+}
+
+// A rung declaration narrows what the provider serves: what no known rung
+// lists is not offered, so one listing nothing serves nothing and startup
+// skips it; an unknown target type is logged.
+func TestHTTPBridgeServesOnlyWhatItsRungsDeclare(t *testing.T) {
+	t.Parallel()
+	for doc, want := range map[string]enrich.Capability{
+		`{"name":"sleeves","capabilities":["cover","lyrics"],"capabilitiesAt":{"release_group":["cover"]}}`: enrich.CapCover,
+		`{"name":"sleeves","capabilities":["cover"],"capabilitiesAt":{}}`:                                   0,
+		`{"name":"sleeves","capabilities":["cover"],"capabilitiesAt":{"releaseGroup":["cover"]}}`:           0,
+		`{"name":"sleeves","capabilities":["cover"],"capabilitiesAt":{"release_group":["lyrics"]}}`:         0,
+	} {
+		var logged bytes.Buffer
+		bridge := scriptedBridgeLogging(t, doc, nil, slog.New(slog.NewTextHandler(&logged, nil)))
+		if got := bridge.Capabilities(); got != want {
+			t.Errorf("%s serves %v, want %v", doc, got, want)
+		}
+		if strings.Contains(doc, "releaseGroup") && !strings.Contains(logged.String(), "releaseGroup") {
+			t.Errorf("an unknown rung went unlogged: %q", logged.String())
+		}
+	}
+}
+
+// A want for one artist half reaches the remote under that half's name,
+// so it fetches only the image the walk will keep.
+func TestHTTPBridgeNamesTheArtistHalf(t *testing.T) {
+	t.Parallel()
+	var got atomic.Value
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/capabilities" {
+			fmt.Fprint(w, `{"name":"faces","capabilities":["artist-art"]}`)
+			return
+		}
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			t.Errorf("decoding enrich body: %v", err)
+		}
+		got.Store(body)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+	bridge, err := NewHTTPBridge(context.Background(), HTTPBridgeConfig{
+		Label: "faces", BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for want, name := range map[enrich.Capability]string{
+		enrich.CapArtistFront:  "artist-front",
+		enrich.CapArtistAuxArt: "artist-background",
+		enrich.CapArtistArt:    "artist-art",
+	} {
+		if _, err := bridge.Enrich(context.Background(), enrich.Request{Type: enrich.TargetArtist, Want: want, Artist: "Daft Punk"}); err != nil {
+			t.Fatal(err)
+		}
+		if wants, _ := got.Load().(map[string]any)["wants"].([]any); len(wants) != 1 || wants[0] != name {
+			t.Errorf("want %v reached the remote as %v, want [%s]", want, wants, name)
+		}
+	}
+}
+
 // scriptedBridge serves the capabilities document and answers every
 // enrich call with body, for the tests about how an answer maps back.
 func scriptedBridge(t *testing.T, caps string, body any) *HTTPBridge {

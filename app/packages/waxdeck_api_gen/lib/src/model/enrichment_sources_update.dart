@@ -13,10 +13,10 @@ part 'enrichment_sources_update.g.dart';
 /// The operator's order over the orderable providers.
 ///
 /// Properties:
-/// * [sources] - Every provider the status lists that is not `builtin`, in the order they are to be asked. 
+/// * [sources] - Every provider the status lists that is not `builtin`, and any built-ins, in the order they are to be asked. A built-in left out follows the rest, switched on. 
 @BuiltValue()
 abstract class EnrichmentSourcesUpdate implements Built<EnrichmentSourcesUpdate, EnrichmentSourcesUpdateBuilder> {
-  /// Every provider the status lists that is not `builtin`, in the order they are to be asked. 
+  /// Every provider the status lists that is not `builtin`, and any built-ins, in the order they are to be asked. A built-in left out follows the rest, switched on. 
   @BuiltValueField(wireName: r'sources')
   BuiltList<EnrichmentSource> get sources;
 

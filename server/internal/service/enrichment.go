@@ -79,6 +79,8 @@ type EnrichmentCoverageDTO struct {
 	ReleaseGroups CoverageCountDTO
 	Books         CoverageCountDTO
 	Lyrics        CoverageCountDTO
+	// LyricsAsked counts tracks whose lookup found no lyrics.
+	LyricsAsked int
 }
 
 // EnrichmentLastRunDTO is what the most recent finished pass did: the
@@ -105,6 +107,8 @@ type EnrichmentLastRunDTO struct {
 	ArtFetched, AuxArtFetched, ArtReused int
 	// Zero unless the run wrote tags.
 	TagsWritten, TagsFailed, TagsUnrepresented, TagsSkipped int
+	// Stalled names, by API phase, what ended early for want of a source.
+	Stalled []string
 	// 0 means no pass has finished, so the zeros above mean "not yet".
 	FinishedAtNS int64
 }
@@ -127,6 +131,7 @@ func lastRunFrom(r enrich.Result, finishedAtNS int64) *EnrichmentLastRunDTO {
 		ArtFetched: r.ArtFetched, AuxArtFetched: r.AuxArtFetched, ArtReused: r.ArtReused,
 		TagsWritten: r.TagsWritten, TagsFailed: r.TagsFailed,
 		TagsUnrepresented: r.TagsUnrepresented, TagsSkipped: r.TagsSkipped,
+		Stalled:      apiNames(r.Stalled),
 		FinishedAtNS: finishedAtNS,
 	}
 }
@@ -152,43 +157,125 @@ type EnrichmentStatusDTO struct {
 	LastRun *EnrichmentLastRunDTO
 }
 
-// enrichPhaseSpec is one phase as the status surface names it: what opens
-// it (the contact when gate is zero), the catalog phases a force of it
-// names, and what it needs, in this server's knobs.
-type enrichPhaseSpec struct {
-	name    string
-	gate    enrich.Capability
-	match   bool // needs the release match too
-	catalog []model.EnrichPhase
-	needs   string
+// apiPhaseOf names a catalog phase as the API does, where the identity
+// walks are one phase.
+func apiPhaseOf(p model.EnrichPhase) string {
+	switch p {
+	case model.EnrichPhaseArtist, model.EnrichPhaseReleaseGroup, model.EnrichPhaseBook:
+		return "identity"
+	case model.EnrichPhaseAlbumRelease:
+		return "releases"
+	}
+	return string(p)
 }
 
-// enrichPhaseTable is every phase in run order. It copies the gating
-// upstream's Run applies, since the facade exports no phase list; the
-// phases test pins it phase by phase against the catalog's own check.
-var enrichPhaseTable = []enrichPhaseSpec{
-	{name: "identity", catalog: []model.EnrichPhase{model.EnrichPhaseArtist, model.EnrichPhaseReleaseGroup, model.EnrichPhaseBook},
-		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT)"},
-	{name: "releases", match: true, catalog: []model.EnrichPhase{model.EnrichPhaseAlbumRelease},
-		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) and -enrichment-match-releases (WAXDECK_ENRICHMENT_MATCH_RELEASES)"},
-	{name: "aux-art", gate: enrich.CapCover | enrich.CapAuxArt, catalog: []model.EnrichPhase{model.EnrichPhaseGroupArt},
-		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) or a provider of covers or auxiliary art"},
-	{name: "artist-art", gate: enrich.CapArtistArt, catalog: []model.EnrichPhase{model.EnrichPhaseArtistArt},
-		needs: "artist art is off (WAXDECK_ARTIST_ART=false)"},
-	{name: "album-art", gate: enrich.CapCover | enrich.CapAuxArt, catalog: []model.EnrichPhase{model.EnrichPhaseAlbumArt},
-		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) or a provider of covers or auxiliary art"},
-	{name: "lyrics", gate: enrich.CapLyrics, catalog: []model.EnrichPhase{model.EnrichPhaseLyrics},
-		needs: "it needs -enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) or a lyrics provider"},
-	{name: "track-fields", gate: enrich.CapFields, catalog: []model.EnrichPhase{model.EnrichPhaseTrackFields},
-		needs: "no registered provider supplies fields"},
-	{name: "book-fields", gate: enrich.CapBookMeta, catalog: []model.EnrichPhase{model.EnrichPhaseBookFields},
-		needs: "no registered provider supplies book metadata"},
-	{name: "album-fields", gate: enrich.CapFields, catalog: []model.EnrichPhase{model.EnrichPhaseAlbumFields},
-		needs: "no registered provider supplies fields"},
+func apiNames(phases []model.EnrichPhase) []string {
+	out := []string{}
+	for _, p := range phases {
+		if name := apiPhaseOf(p); !slices.Contains(out, name) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
-// catalogBuiltins are the catalog's key-free providers, registered only
-// with the contact: what each supplies, and the per-item want it fills.
+// phasesNamed is the phases of built an API name stands for.
+func phasesNamed(built []model.EnrichPhase, api string) []model.EnrichPhase {
+	var out []model.EnrichPhase
+	for _, p := range built {
+		if apiPhaseOf(p) == api {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// phaseRungs is what opens each provider phase, read only to word a refusal:
+// the catalog decides what runs, and a test pins this against it.
+var phaseRungs = map[string]struct {
+	cap  enrich.Capability
+	rung enrich.TargetType
+}{
+	"group-art":    {enrich.CapCover | enrich.CapAuxArt, enrich.TargetReleaseGroup},
+	"artist-art":   {enrich.CapArtistArt, enrich.TargetArtist},
+	"album-art":    {enrich.CapCover | enrich.CapAuxArt, enrich.TargetRelease},
+	"lyrics":       {enrich.CapLyrics, enrich.TargetRecording},
+	"track-fields": {enrich.CapFields, enrich.TargetRecording},
+	"book-fields":  {enrich.CapBookMeta, enrich.TargetBook},
+	"album-fields": {enrich.CapFields, enrich.TargetRelease},
+}
+
+// switchedOffOpens reports a registered source switched off that serves the
+// phase at its rung, so switching it back on would open the phase.
+func (l *Library) switchedOffOpens(phase string) bool {
+	g, ok := phaseRungs[phase]
+	if !ok {
+		return false
+	}
+	for _, src := range l.sources.resolved() {
+		if src.Enabled {
+			continue
+		}
+		p := l.sources.provider(src.Name)
+		if p == nil {
+			p = l.sources.builtin(src.Name)
+		}
+		if p != nil && providers.CapabilitiesAt(p, g.rung).Has(g.cap) {
+			return true
+		}
+	}
+	return false
+}
+
+func (l *Library) switchedOffOpensAny() bool {
+	for phase := range phaseRungs {
+		if l.switchedOffOpens(phase) {
+			return true
+		}
+	}
+	return false
+}
+
+const contactKnob = "-enrichment-contact (WAXDECK_ENRICHMENT_CONTACT)"
+
+// phaseNeed words what a phase waits on, in this server's knobs, leaving
+// out the contact once it is set; false for a name that is no phase.
+func (l *Library) phaseNeed(name string) (string, bool) {
+	orContact := func(provider string) string {
+		if l.musicbrainzConfigured {
+			return "it needs " + provider + " switched on"
+		}
+		return "it needs " + contactKnob + " or " + provider
+	}
+	switch name {
+	case "identity":
+		return "it needs " + contactKnob, true
+	case "releases":
+		if l.musicbrainzConfigured {
+			return "it needs -enrichment-match-releases (WAXDECK_ENRICHMENT_MATCH_RELEASES)", true
+		}
+		return "it needs " + contactKnob + " and -enrichment-match-releases (WAXDECK_ENRICHMENT_MATCH_RELEASES)", true
+	case "group-art":
+		return orContact("a provider of covers or auxiliary art for release groups"), true
+	case "album-art":
+		return orContact("a provider of covers or auxiliary art for releases"), true
+	case "lyrics":
+		return orContact("a lyrics provider"), true
+	case "artist-art":
+		return "it needs a provider of artist art, and artist art on (WAXDECK_ARTIST_ART)", true
+	case "track-fields":
+		return "no registered provider supplies fields for tracks", true
+	case "book-fields":
+		return "no registered provider supplies book metadata", true
+	case "album-fields":
+		return "no registered provider supplies fields for albums", true
+	}
+	return "", false
+}
+
+// catalogBuiltins are the catalog's key-free providers in its order,
+// registered only with the contact: what each supplies, and the per-item
+// want it fills. The musicbrainz entry ranks the identity walk's genres.
 type catalogBuiltin struct {
 	name string
 	cap  enrich.Capability
@@ -196,9 +283,10 @@ type catalogBuiltin struct {
 }
 
 var catalogBuiltins = []catalogBuiltin{
-	{"coverartarchive", enrich.CapCover, enrichWantCover},
-	{"listenbrainz", enrich.CapGenres, enrichWantGenres},
-	{"lrclib", enrich.CapLyrics, enrichWantLyrics},
+	{enrich.ProviderCoverArt, enrich.CapCover, enrichWantCover},
+	{enrich.ProviderMusicBrainz, enrich.CapGenres, enrichWantGenres},
+	{enrich.ProviderListenBrainz, enrich.CapGenres, enrichWantGenres},
+	{enrich.ProviderLRCLIB, enrich.CapLyrics, enrichWantLyrics},
 }
 
 // ReservedEnrichNames are the names the catalog stamps values or labels
@@ -220,33 +308,26 @@ func builtinFor(want string) (string, bool) {
 	return "", false
 }
 
-// enrichmentPhases names the phases a run started now would execute.
-func (l *Library) enrichmentPhases() []string {
-	return l.phasesWith(l.sources.live())
+// builtinServes reports a registered, switched-on built-in serving want.
+func (l *Library) builtinServes(want string) bool {
+	for _, src := range l.sources.resolved() {
+		if src.Enabled && l.sources.builtinWired(src.Name) && builtinWantOf(src.Name) == want {
+			return true
+		}
+	}
+	return false
 }
 
-// phasesWith names the phases a run over providers would execute.
-func (l *Library) phasesWith(providers []enrich.Provider) []string {
-	var caps enrich.Capability
-	for _, p := range providers {
-		caps |= p.Capabilities()
+func builtinWantOf(name string) string {
+	if i := slices.IndexFunc(catalogBuiltins, func(b catalogBuiltin) bool { return b.name == name }); i >= 0 {
+		return catalogBuiltins[i].want
 	}
-	if l.musicbrainzConfigured {
-		for _, b := range catalogBuiltins {
-			caps |= b.cap
-		}
-	}
-	phases := []string{}
-	for _, p := range enrichPhaseTable {
-		runs := caps.Has(p.gate)
-		if p.gate == 0 {
-			runs = l.musicbrainzConfigured && (!p.match || l.enrichmentMatchReleases)
-		}
-		if runs {
-			phases = append(phases, p.name)
-		}
-	}
-	return phases
+	return ""
+}
+
+// enrichmentPhases names the phases a run started now would execute.
+func (l *Library) enrichmentPhases() []string {
+	return apiNames(l.lib.EnrichmentPhases())
 }
 
 // fillEnrichmentRoster sets the parts of the status the source order
@@ -257,30 +338,27 @@ func (l *Library) fillEnrichmentRoster(out *EnrichmentStatusDTO) {
 	// the same rule the catalog refuses on.
 	out.Configured = len(out.Phases) > 0
 	out.Providers = []EnrichmentProviderDTO{}
-	// This server's own providers first, in the operator's order. They
-	// are configured by construction: an injected provider is only wired
-	// when its key is set.
+	// An injected provider is configured by construction, wired only once
+	// its key is set; a built-in once the catalog registered it, which
+	// takes the contact.
 	for _, src := range l.sources.resolved() {
-		p := l.sources.provider(src.Name)
-		out.Providers = append(out.Providers, EnrichmentProviderDTO{
-			Name:         p.Name(),
-			Capabilities: providers.CapabilityNames(p.Capabilities()),
-			Configured:   true,
-			Enabled:      src.Enabled,
-		})
-	}
-	// The catalog's key-free built-ins, listed statically: the facade
-	// does not enumerate them. The MusicBrainz identity spine is not a
-	// port provider and is not listed.
-	//
-	// Key-free is not the same as unconfigured: they are public
-	// services that want an identifying agent, and the catalog does not
-	// register them at all without the contact - so that is what
-	// decides whether they can run.
-	for _, b := range catalogBuiltins {
+		if p := l.sources.provider(src.Name); p != nil {
+			out.Providers = append(out.Providers, EnrichmentProviderDTO{
+				Name:         p.Name(),
+				Capabilities: providers.CapabilityNames(p.Capabilities()),
+				Configured:   true,
+				Enabled:      src.Enabled,
+			})
+			continue
+		}
+		i := slices.IndexFunc(catalogBuiltins, func(b catalogBuiltin) bool { return b.name == src.Name })
+		if i < 0 {
+			continue
+		}
+		b := catalogBuiltins[i]
 		out.Providers = append(out.Providers, EnrichmentProviderDTO{
 			Name: b.name, Capabilities: providers.CapabilityNames(b.cap),
-			Configured: l.musicbrainzConfigured, Builtin: true, Enabled: true,
+			Configured: l.sources.builtinWired(b.name), Builtin: true, Enabled: src.Enabled,
 		})
 	}
 }
@@ -291,9 +369,18 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	if !uc.Admin {
 		return EnrichmentStatusDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	out := EnrichmentStatusDTO{MusicbrainzConfigured: l.musicbrainzConfigured}
+	out, err := l.enrichmentProgress(ctx)
+	if err != nil {
+		return EnrichmentStatusDTO{}, err
+	}
 	l.fillEnrichmentRoster(&out)
+	return out, nil
+}
 
+// enrichmentProgress is the status less its roster: coverage, the running
+// pass and the newest finished one.
+func (l *Library) enrichmentProgress(ctx context.Context) (EnrichmentStatusDTO, error) {
+	out := EnrichmentStatusDTO{MusicbrainzConfigured: l.musicbrainzConfigured}
 	cov, err := l.lib.EnrichmentCoverage(ctx)
 	if err != nil {
 		return EnrichmentStatusDTO{}, classify(err)
@@ -301,14 +388,11 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	out.Coverage.Artists.Enriched = cov.Artists
 	out.Coverage.ReleaseGroups.Enriched = cov.ReleaseGroups
 	out.Coverage.Books.Enriched = cov.Books
-	// Totals are best-effort from the read side: the coverage read
-	// reports enriched rows only. Artists come from the facet bucket
-	// count and books from a kind count. The facade exposes no
-	// release-group count (that total stays zero, meaning unknown), and
-	// per-track lyrics coverage is not reported upstream, so lyrics
-	// shows zero enriched over the music track count.
-	// Order does not matter to a count of buckets, and no top-N: the
-	// whole enumeration is the answer.
+	out.Coverage.Lyrics = CoverageCountDTO{Enriched: cov.TracksWithLyrics, Total: cov.Tracks}
+	out.Coverage.LyricsAsked = cov.TracksLyricsAsked
+	// The other totals come from the read side, best effort: artists from
+	// the facet's buckets, books from a kind count. No release-group count
+	// is exposed, so that total stays zero, meaning unknown.
 	if fr, ferr := l.lib.Facet(ctx, query.New(query.EntityItems).Build(), read.GroupArtist, "", 0, ""); ferr == nil {
 		n := 0
 		for _, b := range fr.Buckets {
@@ -321,9 +405,6 @@ func (l *Library) EnrichmentStatusFor(ctx context.Context, uc *UserCtx) (Enrichm
 	if n, cerr := l.lib.Count(ctx, query.New(query.EntityItems).
 		Where("kind", query.OpIs, string(model.KindBook)).Build(), ""); cerr == nil {
 		out.Coverage.Books.Total = n
-	}
-	if n, cerr := l.lib.Count(ctx, query.New(query.EntityTracks).Build(), ""); cerr == nil {
-		out.Coverage.Lyrics.Total = n
 	}
 
 	// One job read answers both: whether a pass is in flight, and what the
@@ -366,22 +447,23 @@ func (l *Library) forcedPhases(force bool, names []string) ([]model.EnrichPhase,
 	if force {
 		return nil, errInvalid("force already re-asks every phase; send it or forcePhases, not both")
 	}
-	runs := l.enrichmentPhases()
+	// One read, so every name is checked against the same order.
+	catalog := l.lib.EnrichmentPhases()
 	var out []model.EnrichPhase
 	for _, name := range names {
-		i := slices.IndexFunc(enrichPhaseTable, func(p enrichPhaseSpec) bool { return p.name == name })
-		if i < 0 {
+		needs, known := l.phaseNeed(name)
+		if !known {
 			return nil, errInvalid("unknown enrichment phase " + strconv.Quote(name))
 		}
-		if !slices.Contains(runs, name) {
-			needs := enrichPhaseTable[i].needs
-			if slices.Contains(l.phasesWith(l.sources.registered), name) {
+		built := phasesNamed(catalog, name)
+		if len(built) == 0 {
+			if l.switchedOffOpens(name) {
 				needs = "the sources that supply it are switched off"
 			}
 			return nil, &Error{Kind: KindUnsupported,
 				Msg: "the " + name + " phase does not run on this server: " + needs}
 		}
-		out = append(out, enrichPhaseTable[i].catalog...)
+		out = append(out, built...)
 	}
 	return out, nil
 }
@@ -392,11 +474,6 @@ func (l *Library) forcedPhases(force bool, names []string) ([]model.EnrichPhase,
 func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool, forcePhases []string) (string, error) {
 	if !uc.Admin {
 		return "", &Error{Kind: KindForbidden, Msg: "administrators only"}
-	}
-	// The saved order goes in first, unless a walk holds the one it
-	// started with: then this run meets the conflict a second pass does.
-	if !l.sources.apply(l.enrichPassRunning(ctx)) {
-		return "", &Error{Kind: KindConflict, Msg: "an enrichment pass is already running"}
 	}
 	phases, err := l.forcedPhases(force, forcePhases)
 	if err != nil {
@@ -427,10 +504,10 @@ func (l *Library) explainEnrichRefusal(err error, forcePhases []string) error {
 	var msg string
 	switch {
 	case len(forcePhases) > 0:
-		// Every phase passed the mirror above, so the mirror drifted.
-		l.log.Warn("enrichment: the catalog refused a forced phase this server lists", "phases", forcePhases, "err", err)
-		msg = "the catalog does not run " + strings.Join(forcePhases, ", ") + ", though this server lists it; its phase list is out of date"
-	case l.sources.anyOff():
+		// Each phase was built when checked, so a switch saved since took it.
+		msg = "the catalog does not run " + strings.Join(forcePhases, ", ") +
+			" now; the enrichment status lists the phases that run"
+	case l.switchedOffOpensAny():
 		msg = "this server has nothing for an enrichment pass to do: the " +
 			"sources that could run are switched off. Switch one on, or set " +
 			"-enrichment-contact (WAXDECK_ENRICHMENT_CONTACT) and restart"
@@ -455,8 +532,6 @@ const scheduledEnrichLimit = 2000
 // so entities already enriched are left alone, and capped; the job row
 // carries the outcome the status surface reads.
 func (l *Library) RunScheduledEnrichment(ctx context.Context) error {
-	// A walk still running keeps its order, and the catalog refuses this.
-	l.sources.apply(l.enrichPassRunning(ctx))
 	pid, err := l.lib.StartEnrich(l.procCtx, waxbin.EnrichOptions{
 		WriteTags: l.currentToggles().enrichWriteTags,
 		Limit:     scheduledEnrichLimit,
@@ -580,7 +655,7 @@ func (l *Library) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID str
 	if proposal != nil {
 		applied, skipped, err = l.enrichCommitProposal(ctx, it.PID, wants, *proposal)
 	} else {
-		applied, skipped, err = l.EnrichItemNow(ctx, it.PID, wants)
+		applied, skipped, err = l.enrichItemNow(ctx, it.PID, wants, true)
 	}
 	if err != nil {
 		return applied, skipped, err
@@ -605,7 +680,7 @@ func (l *Library) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID str
 func (l *Library) enrichItemCatalogPass(ctx context.Context, it *model.ItemView, wants []string, applied, skipped *[]string) {
 	var builtinWants []string
 	for _, w := range wants {
-		if _, ok := builtinFor(w); ok && !l.artifactPresent(ctx, it, w) {
+		if l.builtinServes(w) && !l.artifactPresent(ctx, it, w) {
 			builtinWants = append(builtinWants, w)
 		}
 	}
@@ -615,7 +690,6 @@ func (l *Library) enrichItemCatalogPass(ctx context.Context, it *model.ItemView,
 	// Item-scoped, fill-when-empty: the engine enriches this item's own
 	// entities and never overwrites, so a provider only fills real gaps. It
 	// runs synchronously under the engine's shared enrich lease.
-	l.sources.apply(l.enrichPassRunning(ctx))
 	_, err := l.lib.Enrich(ctx, waxbin.EnrichOptions{ItemPID: it.PID})
 	if err != nil {
 		if KindOf(classify(err)) == KindConflict {
@@ -631,12 +705,13 @@ func (l *Library) enrichItemCatalogPass(ctx context.Context, it *model.ItemView,
 		return
 	}
 	for _, w := range builtinWants {
+		*skipped = dropEntriesWithPrefix(*skipped, w+":")
 		if !l.artifactPresent(ctx, it, w) {
+			*skipped = append(*skipped, w+": no provider hit")
 			continue
 		}
 		name, _ := builtinFor(w)
 		*applied = append(*applied, w+": "+cmp.Or(l.artifactProvider(ctx, it, w), name))
-		*skipped = dropEntriesWithPrefix(*skipped, w+":")
 	}
 }
 
@@ -716,6 +791,11 @@ func dropEntriesWithPrefix(entries []string, prefix string) []string {
 // this per want across whole-library passes, where re-reading would
 // double every facade round trip.
 func (l *Library) EnrichItemNow(ctx context.Context, pid model.PID, wants []string) (applied, skipped []string, err error) {
+	return l.enrichItemNow(ctx, pid, wants, false)
+}
+
+// enrichItemNow is EnrichItemNow, told whether the catalog's pass follows.
+func (l *Library) enrichItemNow(ctx context.Context, pid model.PID, wants []string, catalogAfter bool) (applied, skipped []string, err error) {
 	if err := validateEnrichWants(wants); err != nil {
 		return nil, nil, err
 	}
@@ -723,6 +803,7 @@ func (l *Library) EnrichItemNow(ctx context.Context, pid model.PID, wants []stri
 	if err != nil {
 		return nil, nil, err
 	}
+	st.catalogAfter = catalogAfter
 	preview := l.enrichPropose(ctx, st, wants)
 	if st.unofficial {
 		// The propose half already skipped every want; the commit would
@@ -755,6 +836,8 @@ type enrichItemState struct {
 	it         *model.ItemView
 	unofficial bool
 	locked     map[string]bool
+	// catalogAfter says the catalog's own pass follows for what is unmet.
+	catalogAfter bool
 }
 
 // loadEnrichItemState reads the item, its release status, and - for
@@ -803,6 +886,7 @@ func (l *Library) enrichProposeNow(ctx context.Context, pid model.PID, wants []s
 	if err != nil {
 		return EnrichPreviewDTO{}, err
 	}
+	st.catalogAfter = true
 	return l.enrichPropose(ctx, st, wants), nil
 }
 
@@ -818,26 +902,26 @@ func (l *Library) enrichPropose(ctx context.Context, st enrichItemState, wants [
 		var s string
 		switch w {
 		case enrichWantCover:
-			out.Cover, s = l.proposeCover(ctx, st.it, st.locked)
+			out.Cover, s = l.proposeCover(ctx, st)
 		case enrichWantGenres:
 			var p *EnrichFieldProposalDTO
-			p, s = l.proposeGenres(ctx, st.it, st.locked)
+			p, s = l.proposeGenres(ctx, st)
 			if p != nil {
 				out.Fields = append(out.Fields, *p)
 			}
 		case enrichWantLyrics:
 			var p *EnrichFieldProposalDTO
-			p, s = l.proposeLyrics(ctx, st.it, st.locked)
+			p, s = l.proposeLyrics(ctx, st)
 			if p != nil {
 				out.Fields = append(out.Fields, *p)
 			}
 		case enrichWantBook:
 			var ps []EnrichFieldProposalDTO
-			ps, s = l.proposeBook(ctx, st.it, st.locked)
+			ps, s = l.proposeBook(ctx, st)
 			out.Fields = append(out.Fields, ps...)
 		case enrichWantFields:
 			var ps []EnrichFieldProposalDTO
-			ps, s = l.proposeFields(ctx, st.it, st.locked)
+			ps, s = l.proposeFields(ctx, st)
 			out.Fields = append(out.Fields, ps...)
 		}
 		if s != "" {
@@ -1014,12 +1098,35 @@ func namedEnrichProviders(providers []enrich.Provider, log *slog.Logger) []enric
 	return out
 }
 
-// enrichProvidersWith returns the enabled providers advertising the
-// wanted capability, in the operator's order.
-func (l *Library) enrichProvidersWith(want enrich.Capability) []enrich.Provider {
+// itemProviders is what an item's fetch asks for want. When the catalog's
+// pass follows, the list stops at the first switched-on built-in serving
+// it, which that pass asks before the rest; true says it left nothing.
+func (l *Library) itemProviders(st enrichItemState, want string, c enrich.Capability, t enrich.TargetType) ([]enrich.Provider, bool) {
+	all := l.enrichProvidersWith(c, t)
+	if !st.catalogAfter {
+		return all, false
+	}
+	var out []enrich.Provider
+	for _, src := range l.sources.resolved() {
+		if !src.Enabled {
+			continue
+		}
+		if l.sources.builtinWired(src.Name) && builtinWantOf(src.Name) == want {
+			return out, len(out) == 0
+		}
+		if i := slices.IndexFunc(all, func(p enrich.Provider) bool { return p.Name() == src.Name }); i >= 0 {
+			out = append(out, all[i])
+		}
+	}
+	return out, false
+}
+
+// enrichProvidersWith returns the enabled providers serving the wanted
+// capability at the target's rung, in the operator's order.
+func (l *Library) enrichProvidersWith(want enrich.Capability, target enrich.TargetType) []enrich.Provider {
 	var out []enrich.Provider
 	for _, p := range l.sources.live() {
-		if p.Capabilities().Has(want) {
+		if providers.CapabilitiesAt(p, target).Has(want) {
 			out = append(out, p)
 		}
 	}
@@ -1053,11 +1160,15 @@ func (l *Library) coverGuard(ctx context.Context, it *model.ItemView, locked map
 
 // proposeCover asks the cover providers for one item's front cover and
 // returns the first answer as a proposal, writing nothing.
-func (l *Library) proposeCover(ctx context.Context, it *model.ItemView, locked map[string]bool) (proposal *EnrichCoverProposalDTO, skippedEntry string) {
+func (l *Library) proposeCover(ctx context.Context, st enrichItemState) (proposal *EnrichCoverProposalDTO, skippedEntry string) {
+	it, locked := st.it, st.locked
 	if s := l.coverGuard(ctx, it, locked); s != "" {
 		return nil, s
 	}
-	providers := l.enrichProvidersWith(enrich.CapCover)
+	providers, viaCatalog := l.itemProviders(st, enrichWantCover, enrich.CapCover, enrich.TargetReleaseGroup)
+	if viaCatalog {
+		return nil, "cover: asked through the catalog"
+	}
 	if len(providers) == 0 {
 		return nil, "cover: no provider"
 	}
@@ -1129,11 +1240,15 @@ func genresGuard(it *model.ItemView, locked map[string]bool) (skippedEntry strin
 
 // proposeGenres asks the genre providers and returns the first
 // answer's normalized, capped join as a proposal, writing nothing.
-func (l *Library) proposeGenres(ctx context.Context, it *model.ItemView, locked map[string]bool) (proposal *EnrichFieldProposalDTO, skippedEntry string) {
+func (l *Library) proposeGenres(ctx context.Context, st enrichItemState) (proposal *EnrichFieldProposalDTO, skippedEntry string) {
+	it, locked := st.it, st.locked
 	if s := genresGuard(it, locked); s != "" {
 		return nil, s
 	}
-	providers := l.enrichProvidersWith(enrich.CapGenres)
+	providers, viaCatalog := l.itemProviders(st, enrichWantGenres, enrich.CapGenres, enrich.TargetReleaseGroup)
+	if viaCatalog {
+		return nil, "genres: asked through the catalog"
+	}
 	if len(providers) == 0 {
 		return nil, "genres: no provider"
 	}
@@ -1211,11 +1326,15 @@ func (l *Library) lyricsGuard(ctx context.Context, it *model.ItemView, locked ma
 // lrclib built-in is not on the injected-provider port, so with no
 // registered lyrics provider the want reports "no provider" and the
 // whole-library pass remains the way to fetch lyrics.
-func (l *Library) proposeLyrics(ctx context.Context, it *model.ItemView, locked map[string]bool) (proposal *EnrichFieldProposalDTO, skippedEntry string) {
+func (l *Library) proposeLyrics(ctx context.Context, st enrichItemState) (proposal *EnrichFieldProposalDTO, skippedEntry string) {
+	it, locked := st.it, st.locked
 	if s := l.lyricsGuard(ctx, it, locked); s != "" {
 		return nil, s
 	}
-	providers := l.enrichProvidersWith(enrich.CapLyrics)
+	providers, viaCatalog := l.itemProviders(st, enrichWantLyrics, enrich.CapLyrics, enrich.TargetRecording)
+	if viaCatalog {
+		return nil, "lyrics: asked through the catalog"
+	}
 	if len(providers) == 0 {
 		return nil, "lyrics: no provider"
 	}
@@ -1345,11 +1464,15 @@ func trackValueValid(name, value string) bool {
 // would leave the second's field for the nightly pass to find later.
 // The walk stops early for the same reason upstream's does: once every
 // fillable key is answered there is nothing left to ask about.
-func (l *Library) proposeFields(ctx context.Context, it *model.ItemView, locked map[string]bool) (proposals []EnrichFieldProposalDTO, skippedEntry string) {
+func (l *Library) proposeFields(ctx context.Context, st enrichItemState) (proposals []EnrichFieldProposalDTO, skippedEntry string) {
+	it, locked := st.it, st.locked
 	if s := fieldsGuard(it); s != "" {
 		return nil, s
 	}
-	providers := l.enrichProvidersWith(enrich.CapFields)
+	providers, viaCatalog := l.itemProviders(st, enrichWantFields, enrich.CapFields, enrich.TargetRecording)
+	if viaCatalog {
+		return nil, "fields: asked through the catalog"
+	}
 	if len(providers) == 0 {
 		return nil, "fields: no provider"
 	}
@@ -1478,11 +1601,15 @@ func bookGuard(it *model.ItemView) (skippedEntry string) {
 // (narrator, publisher, description, identifiers) and returns the
 // first useful answer's fill-when-empty edits as one proposal row per
 // field, writing nothing.
-func (l *Library) proposeBook(ctx context.Context, it *model.ItemView, locked map[string]bool) (proposals []EnrichFieldProposalDTO, skippedEntry string) {
+func (l *Library) proposeBook(ctx context.Context, st enrichItemState) (proposals []EnrichFieldProposalDTO, skippedEntry string) {
+	it, locked := st.it, st.locked
 	if s := bookGuard(it); s != "" {
 		return nil, s
 	}
-	providers := l.enrichProvidersWith(enrich.CapBookMeta)
+	providers, viaCatalog := l.itemProviders(st, enrichWantBook, enrich.CapBookMeta, enrich.TargetBook)
+	if viaCatalog {
+		return nil, "book: asked through the catalog"
+	}
 	if len(providers) == 0 {
 		return nil, "book: no provider"
 	}

@@ -9,15 +9,15 @@ import 'package:built_value/serializer.dart';
 
 part 'enrichment_phase.g.dart';
 
-/// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name. 
+/// One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, `group-art` the release-group art backfill (a group's front cover and its back, disc, booklet and background slots), and the rest the backfills and fields walks they name. 
 class EnrichmentPhase extends EnumClass {
 
   @BuiltValueEnumConst(wireName: r'identity')
   static const EnrichmentPhase identity = _$identity;
   @BuiltValueEnumConst(wireName: r'releases')
   static const EnrichmentPhase releases = _$releases;
-  @BuiltValueEnumConst(wireName: r'aux-art')
-  static const EnrichmentPhase auxArt = _$auxArt;
+  @BuiltValueEnumConst(wireName: r'group-art')
+  static const EnrichmentPhase groupArt = _$groupArt;
   @BuiltValueEnumConst(wireName: r'artist-art')
   static const EnrichmentPhase artistArt = _$artistArt;
   @BuiltValueEnumConst(wireName: r'album-art')

@@ -13,17 +13,17 @@ part 'enrichment_provider.g.dart';
 ///
 /// Properties:
 /// * [name] - Stable provider id.
-/// * [capabilities] - What it supplies, as open strings: `identity`, `genres`, `cover` (a front), `aux-art` (the other slots), `artist-art`, `lyrics`, `book` and `fields`, each gating its own pass. 
+/// * [capabilities] - What it supplies, as open strings: `identity`, `genres`, `cover` (a front), `aux-art` (the other slots), `artist-art` (both artist images; one alone is `artist-front` or `artist-background`), `lyrics`, `book` and `fields`. 
 /// * [configured] - Whether the provider can run: a keyed one once its key is set, a built-in once the MusicBrainz contact is, since the catalog registers none of the key-free public services without one. 
-/// * [builtin] - True for the catalog's built-ins.
-/// * [enabled] - Whether it is asked at all. Switched back on, it is not asked about what a pass finished while it was off unless a run forces its phases. 
+/// * [builtin] - True for the catalog's own sources, which need no key and take part in the order like the rest. 
+/// * [enabled] - Whether it is asked at all. Nothing records that a source was off: switched back on, it is not asked about what a pass settled meanwhile until a run forces those phases or, for a miss, the retry window passes. 
 @BuiltValue()
 abstract class EnrichmentProvider implements Built<EnrichmentProvider, EnrichmentProviderBuilder> {
   /// Stable provider id.
   @BuiltValueField(wireName: r'name')
   String get name;
 
-  /// What it supplies, as open strings: `identity`, `genres`, `cover` (a front), `aux-art` (the other slots), `artist-art`, `lyrics`, `book` and `fields`, each gating its own pass. 
+  /// What it supplies, as open strings: `identity`, `genres`, `cover` (a front), `aux-art` (the other slots), `artist-art` (both artist images; one alone is `artist-front` or `artist-background`), `lyrics`, `book` and `fields`. 
   @BuiltValueField(wireName: r'capabilities')
   BuiltList<String> get capabilities;
 
@@ -31,11 +31,11 @@ abstract class EnrichmentProvider implements Built<EnrichmentProvider, Enrichmen
   @BuiltValueField(wireName: r'configured')
   bool get configured;
 
-  /// True for the catalog's built-ins.
+  /// True for the catalog's own sources, which need no key and take part in the order like the rest. 
   @BuiltValueField(wireName: r'builtin')
   bool get builtin;
 
-  /// Whether it is asked at all. Switched back on, it is not asked about what a pass finished while it was off unless a run forces its phases. 
+  /// Whether it is asked at all. Nothing records that a source was off: switched back on, it is not asked about what a pass settled meanwhile until a run forces those phases or, for a miss, the retry window passes. 
   @BuiltValueField(wireName: r'enabled')
   bool? get enabled;
 

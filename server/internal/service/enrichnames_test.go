@@ -56,3 +56,20 @@ func TestReservedEnrichNamesAreTheCatalogs(t *testing.T) {
 		}
 	}
 }
+
+// The roster lists the built-ins from its own table, so the table is the
+// catalog's list: same names, same order, same capabilities.
+func TestCatalogBuiltinsAreTheCatalogs(t *testing.T) {
+	t.Parallel()
+	var opts waxbin.Options
+	opts.Enrichment.Contact = "waxdeck@example.test"
+	registered := openBareCatalog(t, opts).EnrichmentBuiltins()
+	if len(registered) != len(catalogBuiltins) {
+		t.Fatalf("the catalog registers %d built-ins, the table lists %d", len(registered), len(catalogBuiltins))
+	}
+	for i, p := range registered {
+		if b := catalogBuiltins[i]; b.name != p.Name() || b.cap != p.Capabilities() {
+			t.Errorf("built-in %d = %s/%v, the table says %s/%v", i, p.Name(), p.Capabilities(), b.name, b.cap)
+		}
+	}
+}

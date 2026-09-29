@@ -2,11 +2,8 @@
 # Temporary by construction: this file rides the change that makes the
 # break and is deleted once the base ref contains it.
 #
-# The last run's release-group art counters take the catalog's name for
-# the walk they count, which now fills a group's front as well as its
-# other slots. No count was withdrawn: the same two ride groupArtEnriched
-# and groupArtMatched.
-GET /library/enrichment removed the required property `lastRun/auxArtEnriched` from the response with the `200` status
-GET /library/enrichment removed the required property `lastRun/auxArtMatched` from the response with the `200` status
-PUT /library/enrichment/sources removed the required property `lastRun/auxArtEnriched` from the response with the `200` status
-PUT /library/enrichment/sources removed the required property `lastRun/auxArtMatched` from the response with the `200` status
+# The release-group art phase takes the catalog's name for the walk,
+# which now fills a group's front as well as its other slots.
+GET /library/enrichment added the new `group-art` enum value to the `phases/items/` response property for the response status `200`
+POST /library/enrichment/run removed the enum value `aux-art` of the request property `forcePhases/items/`
+PUT /library/enrichment/sources added the new `group-art` enum value to the `phases/items/` response property for the response status `200`

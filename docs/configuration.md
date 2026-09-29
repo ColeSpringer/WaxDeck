@@ -228,10 +228,10 @@ provider.
 - `WAXDECK_ACOUSTID_KEY`: AcoustID API key; empty disables fingerprint
   evidence in matching.
 - `WAXDECK_FANARTTV_KEY`: fanart.tv API key; empty leaves that artwork
-  provider unconfigured. It is the only provider that answers art by
-  role, so it supplies disc art and artist backgrounds as well as front
-  covers, and it is registered ahead of the others because the
-  enrichment engine stops asking once every slot is held.
+  provider unconfigured. It answers art by role, so it supplies disc art
+  and artist backgrounds as well as front covers. It knows release
+  groups and artists, not single pressings, so it is asked at those two
+  rungs only.
 - `WAXDECK_ARTIST_ART` (default `true`): fill missing artist portraits
   during the catalog's enrichment pass, which walks every artist by
   name - the ones MusicBrainz matched and the ones it did not. fanart.tv
@@ -261,14 +261,15 @@ provider.
   URL) the whole-library enrichment pass identifies itself with.
   MusicBrainz requires an identifying agent, so empty leaves the
   identity phases disabled - matching artists, release groups and books
-  against MusicBrainz, and the release match below. It also gates
-  the Cover Art Archive's album art and LRCLIB's lyrics: neither needs a
-  key, but the catalog registers them only when it has an identifying
-  agent to dial with. The phases that answer to WaxDeck's own providers
-  run without a contact: artist art, auxiliary artwork, and the fields
-  walks, plus album art where a provider supplies covers or auxiliary
-  art and lyrics where one supplies them. The enrichment status surface
-  reports both halves and names the phases a run would execute.
+  against MusicBrainz, and the release match below. It also gates the
+  catalog's built-ins (the Cover Art Archive's album art, MusicBrainz's
+  and ListenBrainz's genres, LRCLIB's lyrics): none needs a key, but the
+  catalog registers them only when it has an identifying agent to dial
+  with. The phases that answer to WaxDeck's own providers
+  run without a contact: artist art, release-group artwork, album art
+  and lyrics where a provider supplies them, and the fields walks. The
+  enrichment status surface reports both halves and names the phases a
+  run would execute.
 - `WAXDECK_ENRICHMENT_MATCH_RELEASES` (default `true`): during
   enrichment, resolve which pressing of a record the library holds
   from its barcode or catalog number, deciding ties on medium and
@@ -279,16 +280,19 @@ provider.
   never asks again, and a negative value is refused at startup. A match
   is never re-asked.
 
-The providers are asked custom ones first, then fanart.tv, Deezer,
-iTunes, Discogs, Audnexus, Hardcover, Google Books and Open Library,
-unless an administrator sets another order: **Enrichment** in the admin
-console moves each one up or down and switches it off, without a
-restart. A provider switched off opens no phase and fills nothing.
-Switched back on, it is not asked about what a pass finished while it
-was off, unless a run forces its phases. A pass already running keeps
-its order until it ends. The catalog's key-free built-ins (the Cover Art
-Archive, ListenBrainz, LRCLIB) are always asked after them and cannot
-be moved from WaxDeck.
+The sources are asked custom ones first, then fanart.tv, Deezer, iTunes,
+Discogs, Audnexus, Hardcover, Google Books and Open Library, then the
+catalog's key-free built-ins (the Cover Art Archive, MusicBrainz's
+genres, ListenBrainz, LRCLIB), unless an administrator sets another
+order: **Enrichment** in the admin console moves each one up or down and
+switches it off, built-ins included, without a restart. A pass keeps
+the list it started with; the next one takes the new order. A source
+switched off opens no phase and fills nothing, and nothing records that
+it was off: switched back on, it is not asked about what a pass settled
+meanwhile until a run forces those phases or, for a miss, the retry
+window passes. Switching off the
+MusicBrainz entry leaves its genres out; the identity lookups still
+run.
 
 ## YouTube
 

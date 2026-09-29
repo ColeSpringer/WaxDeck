@@ -76,6 +76,14 @@ func (h *Hardcover) Name() string { return "hardcover" }
 // Capabilities reports audiobook metadata.
 func (h *Hardcover) Capabilities() enrich.Capability { return enrich.CapBookMeta }
 
+// CapabilitiesAt narrows Capabilities to the book rung.
+func (h *Hardcover) CapabilitiesAt(t enrich.TargetType) enrich.Capability {
+	if t == enrich.TargetBook {
+		return enrich.CapBookMeta
+	}
+	return 0
+}
+
 // hardcoverQuery is the one GraphQL document this provider sends: the
 // edition matching an ASIN, with the identifiers and publisher.
 const hardcoverQuery = `query ($asin: String!) {

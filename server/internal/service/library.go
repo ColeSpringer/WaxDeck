@@ -508,12 +508,13 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	}
 	sources := newEnrichSources(namedEnrichProviders(cfg.EnrichmentProviders, log))
 	opts := waxbin.Options{
-		DBPath:              filepath.Join(cfg.DataDir, "waxbin.db"),
-		Roots:               roots,
-		Logger:              log,
-		IPCSocket:           socket,
-		SourceProviders:     cfg.SourceProviders,
-		EnrichmentProviders: sources.slots(),
+		DBPath:                 filepath.Join(cfg.DataDir, "waxbin.db"),
+		Roots:                  roots,
+		Logger:                 log,
+		IPCSocket:              socket,
+		SourceProviders:        cfg.SourceProviders,
+		EnrichmentProviders:    sources.injected(),
+		EnrichmentProviderList: sources.providerList,
 	}
 	if cfg.SecretCipher != nil {
 		opts.SecretCipher = cfg.SecretCipher
@@ -582,6 +583,8 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 			return nil, fmt.Errorf("service: opening catalog: %w", err)
 		}
 	}
+
+	sources.builtins = lib.EnrichmentBuiltins()
 
 	paths, err := pidpath.New(ctx, lib, pidpath.Options{Logger: log})
 	if err != nil {

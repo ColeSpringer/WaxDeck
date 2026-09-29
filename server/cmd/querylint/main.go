@@ -63,7 +63,7 @@ var allowed = map[string]map[string]bool{
 	"matching.go": {"albumUnit": true},
 	// Coverage counts answer "of everything in the catalog, how much is
 	// enriched"; filtering would flatter the number.
-	"enrichment.go": {"EnrichmentStatusFor": true},
+	"enrichment.go": {"enrichmentProgress": true},
 	// Book re-scan and cue-sibling discovery both work on files, and a
 	// cue split's whole job is retiring the carvings it finds.
 	"tools.go": {"scanToolBookDir": true, "cueSiblings": true},

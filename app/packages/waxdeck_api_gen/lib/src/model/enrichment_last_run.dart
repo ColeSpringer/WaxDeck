@@ -3,6 +3,8 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/enrichment_phase.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -42,6 +44,7 @@ part 'enrichment_last_run.g.dart';
 /// * [tagsFailed] - Files whose write failed. The catalog kept the values either way.
 /// * [tagsUnrepresented] - Files whose format cannot store a key that was filled. Not a failure: the bytes are unchanged and correct. 
 /// * [tagsSkipped] - Book parts left unwritten because their book's primary part failed. 
+/// * [stalled] - Phases that ended early because every source serving them failed three times in a row and sat out the pass. The lookups they owe are asked once more on the next pass. 
 /// * [finishedAt] - When the pass finished.
 @BuiltValue()
 abstract class EnrichmentLastRun implements Built<EnrichmentLastRun, EnrichmentLastRunBuilder> {
@@ -168,6 +171,10 @@ abstract class EnrichmentLastRun implements Built<EnrichmentLastRun, EnrichmentL
   /// Book parts left unwritten because their book's primary part failed. 
   @BuiltValueField(wireName: r'tagsSkipped')
   int get tagsSkipped;
+
+  /// Phases that ended early because every source serving them failed three times in a row and sat out the pass. The lookups they owe are asked once more on the next pass. 
+  @BuiltValueField(wireName: r'stalled')
+  BuiltList<EnrichmentPhase> get stalled;
 
   /// When the pass finished.
   @BuiltValueField(wireName: r'finishedAt')
@@ -350,6 +357,11 @@ class _$EnrichmentLastRunSerializer implements PrimitiveSerializer<EnrichmentLas
     yield serializers.serialize(
       object.tagsSkipped,
       specifiedType: const FullType(int),
+    );
+    yield r'stalled';
+    yield serializers.serialize(
+      object.stalled,
+      specifiedType: const FullType(BuiltList, [FullType(EnrichmentPhase)]),
     );
     if (object.finishedAt != null) {
       yield r'finishedAt';
@@ -597,6 +609,13 @@ class _$EnrichmentLastRunSerializer implements PrimitiveSerializer<EnrichmentLas
             specifiedType: const FullType(int),
           ) as int;
           result.tagsSkipped = valueDes;
+          break;
+        case r'stalled':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(BuiltList, [FullType(EnrichmentPhase)]),
+          ) as BuiltList<EnrichmentPhase>;
+          result.stalled.replace(valueDes);
           break;
         case r'finishedAt':
           final valueDes = serializers.deserialize(

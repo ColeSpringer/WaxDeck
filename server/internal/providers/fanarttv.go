@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -81,6 +82,18 @@ func (f *FanartTV) Capabilities() enrich.Capability {
 	return enrich.CapCover | enrich.CapAuxArt | enrich.CapArtistArt
 }
 
+// CapabilitiesAt narrows Capabilities per rung: a group's art, an
+// artist's, and nothing for one pressing, which fanart.tv does not know.
+func (f *FanartTV) CapabilitiesAt(t enrich.TargetType) enrich.Capability {
+	switch t {
+	case enrich.TargetReleaseGroup:
+		return enrich.CapCover | enrich.CapAuxArt
+	case enrich.TargetArtist:
+		return enrich.CapArtistArt
+	}
+	return 0
+}
+
 // Enrich answers a release-group or artist art lookup by MusicBrainz
 // id; requests without an MBID (or without an API key) are clean
 // misses. Only the roles the request asks for are downloaded: an
@@ -120,11 +133,8 @@ func (f *FanartTV) wantsAny(req enrich.Request, roles []model.ArtRole) bool {
 	return false
 }
 
-// The roles each endpoint can fill, in the order candidate() gathers
-// them. Front first, deliberately: the error rule below keeps the
-// answer when a later role fails and returns the failure when nothing
-// was gathered, and a map range would decide which of those happened by
-// iteration order.
+// The roles each endpoint can fill, in the order candidate() gathers them:
+// front first, since a failure is the answer only before anything landed.
 var (
 	releaseGroupArtRoles = []model.ArtRole{model.ArtRoleFront, model.ArtRoleDisc}
 	artistArtRoles       = []model.ArtRole{model.ArtRoleFront, model.ArtRoleBackground}
@@ -204,16 +214,10 @@ func (f *FanartTV) fetch(ctx context.Context, path, what string) ([]byte, bool, 
 	}
 }
 
-// candidate downloads the first asset of each role the request asks
-// for and assembles the candidate. Roles are downloaded independently,
-// so one unreachable image costs its own slot rather than the answer.
-//
-// order is walked rather than the map, front first: the error rule
-// below - keep what was gathered, return the failure when nothing was -
-// only means something when which role is tried first is fixed. Under a
-// map range the same upstream state persisted two different outcomes at
-// random, one of them a backfill marker over a portrait that never
-// arrived.
+// candidate downloads the first asset of each role the request asks for.
+// A gone image costs its own slot. Any other failure is the answer while
+// nothing has landed, and costs only its slot after: the catalog drops an
+// answer that comes with an error, so failing it would lose the front too.
 func (f *FanartTV) candidate(ctx context.Context, req enrich.Request, order []model.ArtRole, byRole map[model.ArtRole][]fanartImage) (*enrich.Candidate, error) {
 	cand := &enrich.Candidate{Confidence: 0.8}
 	for _, role := range order {
@@ -225,11 +229,10 @@ func (f *FanartTV) candidate(ctx context.Context, req enrich.Request, order []mo
 			continue
 		}
 		data, mediaType, err := fetchImage(ctx, f.core, assets[0].URL)
+		if errors.Is(err, errImageGone) {
+			continue
+		}
 		if err != nil {
-			// A role whose image will not come costs that role, not
-			// the ones already gathered. With nothing gathered the
-			// error is the answer, so a broken host is not silently a
-			// miss.
 			if len(cand.Art) == 0 {
 				return nil, err
 			}

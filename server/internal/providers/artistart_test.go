@@ -122,19 +122,22 @@ func TestDeezerArtistImageWalksPastAnUnusablePicture(t *testing.T) {
 		t.Fatal("the walk ended on the first dead picture")
 	}
 
-	// Every match dead: a reachability error, never ErrNoArtistImage,
-	// so the catalog logs a failure rather than reading a clean no.
-	srv2 := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/search/artist" {
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"data":[{"name":"Daft Punk","picture_xl":"https://%s/gone.png"}]}`, r.Host)
-			return
+	// Every match gone is a clean no; one the host could not serve is a
+	// failure the catalog asks again.
+	for status, wantMiss := range map[int]bool{http.StatusNotFound: true, http.StatusBadGateway: false} {
+		srv2 := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/search/artist" {
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprintf(w, `{"data":[{"name":"Daft Punk","picture_xl":"https://%s/face.png"}]}`, r.Host)
+				return
+			}
+			w.WriteHeader(status)
+		}))
+		d2 := NewDeezer(DeezerConfig{BaseURL: srv2.URL, HTTPClient: srv2.Client(), MinInterval: time.Nanosecond})
+		_, err := d2.ArtistImage(context.Background(), "Daft Punk")
+		srv2.Close()
+		if miss := errors.Is(err, ErrNoArtistImage); err == nil || miss != wantMiss {
+			t.Errorf("every picture %d = %v, want a miss %v", status, err, wantMiss)
 		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv2.Close()
-	d2 := NewDeezer(DeezerConfig{BaseURL: srv2.URL, HTTPClient: srv2.Client(), MinInterval: time.Nanosecond})
-	if _, err := d2.ArtistImage(context.Background(), "Daft Punk"); err == nil || errors.Is(err, ErrNoArtistImage) {
-		t.Errorf("all-dead pictures = %v, want a retriable reachability error", err)
 	}
 }

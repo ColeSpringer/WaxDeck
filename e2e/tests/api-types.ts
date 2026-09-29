@@ -1192,7 +1192,7 @@ export interface paths {
         get?: never;
         /**
          * Order and switch the enrichment sources
-         * @description Saves the order this server's own providers are asked in and which are asked at all, naming each once; one not wired now keeps its switch. A running pass keeps its order until it ends. Administrators only.
+         * @description Saves the order the sources are asked in and which are asked at all. One not wired now keeps its switch. A pass already running keeps the order it started with. Administrators only.
          */
         put: operations["putEnrichmentSources"];
         post?: never;
@@ -6346,7 +6346,7 @@ export interface components {
         };
         /** @description Enrichment providers and coverage. */
         EnrichmentStatus: {
-            /** @description Registered providers in the order they are asked: this server's own in the operator's order, then the catalog's key-free built-ins. */
+            /** @description Every source in the order a pass asks them: the operator's order, then any it does not name, this server's own before the catalog's built-ins. */
             providers: components["schemas"]["EnrichmentProvider"][];
             coverage: components["schemas"]["EnrichmentCoverage"];
             /** @description Whether a whole-library pass is running now. */
@@ -6362,9 +6362,9 @@ export interface components {
              *     False means every run refuses with `source-unavailable`, so a console should say so rather than offer a button that errors. Distinct from a provider's own `configured`, which is about that provider's key.
              */
             configured: boolean;
-            /** @description Whether the MusicBrainz identity phases can run, which needs the `WAXDECK_ENRICHMENT_CONTACT` boot setting. The Cover Art Archive and LRCLIB wait on it too; the provider-gated phases do not. */
+            /** @description Whether the MusicBrainz identity phases can run, which needs the `WAXDECK_ENRICHMENT_CONTACT` boot setting. The catalog's built-in sources wait on it too; the provider-gated phases do not. */
             musicbrainzConfigured: boolean;
-            /** @description The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact, `album-art` and `lyrics` it or a provider switched on, the rest one. */
+            /** @description The phases a run started now would execute; empty exactly when `configured` is false. `identity` and `releases` need the contact; the rest need a source switched on that serves them. */
             phases: components["schemas"]["EnrichmentPhase"][];
             lastRun?: components["schemas"]["EnrichmentLastRun"];
         };
@@ -6375,21 +6375,21 @@ export interface components {
              * @example fanarttv
              */
             name: string;
-            /** @description What it supplies, as open strings: `identity`, `genres`, `cover` (a front), `aux-art` (the other slots), `artist-art`, `lyrics`, `book` and `fields`, each gating its own pass. */
+            /** @description What it supplies, as open strings: `identity`, `genres`, `cover` (a front), `aux-art` (the other slots), `artist-art` (both artist images; one alone is `artist-front` or `artist-background`), `lyrics`, `book` and `fields`. */
             capabilities: string[];
             /** @description Whether the provider can run: a keyed one once its key is set, a built-in once the MusicBrainz contact is, since the catalog registers none of the key-free public services without one. */
             configured: boolean;
-            /** @description True for the catalog's built-ins. */
+            /** @description True for the catalog's own sources, which need no key and take part in the order like the rest. */
             builtin: boolean;
             /**
-             * @description Whether it is asked at all. Switched back on, it is not asked about what a pass finished while it was off unless a run forces its phases.
+             * @description Whether it is asked at all. Nothing records that a source was off: switched back on, it is not asked about what a pass settled meanwhile until a run forces those phases or, for a miss, the retry window passes.
              * @default true
              */
             enabled: boolean;
         };
         /** @description The operator's order over the orderable providers. */
         EnrichmentSourcesUpdate: {
-            /** @description Every provider the status lists that is not `builtin`, in the order they are to be asked. */
+            /** @description Every provider the status lists that is not `builtin`, and any built-ins, in the order they are to be asked. A built-in left out follows the rest, switched on. */
             sources: components["schemas"]["EnrichmentSource"][];
         };
         /** @description One provider's place in the order, and its switch. */
@@ -6466,18 +6466,22 @@ export interface components {
             tagsUnrepresented: number;
             /** @description Book parts left unwritten because their book's primary part failed. */
             tagsSkipped: number;
+            /** @description Phases that ended early because every source serving them failed three times in a row and sat out the pass. The lookups they owe are asked once more on the next pass. */
+            stalled: components["schemas"]["EnrichmentPhase"][];
             /**
              * Format: date-time
              * @description When the pass finished.
              */
             finishedAt?: string;
         };
-        /** @description How much of the catalog has enriched. Lyrics carries its total alone, the music tracks: the catalog does not count lyrics per track, so its enriched reads zero. */
+        /** @description How much of the catalog has enriched. `lyrics` counts the music tracks holding lyrics, whatever supplied them, over every music track. */
         EnrichmentCoverage: {
             artists: components["schemas"]["CoverageCount"];
             releaseGroups: components["schemas"]["CoverageCount"];
             books: components["schemas"]["CoverageCount"];
             lyrics: components["schemas"]["CoverageCount"];
+            /** @description Music tracks without lyrics whose lookup answered that there are none, instrumentals included. */
+            lyricsAsked: number;
         };
         /** @description Enriched versus total for one entity class. */
         CoverageCount: {
@@ -6497,10 +6501,10 @@ export interface components {
             forcePhases?: components["schemas"]["EnrichmentPhase"][];
         };
         /**
-         * @description One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, and the rest the backfills and fields walks they name.
+         * @description One phase of the whole-library pass: `identity` is the MusicBrainz walks (artists, release groups, audiobooks), `releases` the release match, `group-art` the release-group art backfill (a group's front cover and its back, disc, booklet and background slots), and the rest the backfills and fields walks they name.
          * @enum {string}
          */
-        EnrichmentPhase: "identity" | "releases" | "aux-art" | "artist-art" | "album-art" | "lyrics" | "track-fields" | "book-fields" | "album-fields";
+        EnrichmentPhase: "identity" | "releases" | "group-art" | "artist-art" | "album-art" | "lyrics" | "track-fields" | "book-fields" | "album-fields";
         /** @description The started pass. */
         EnrichmentRunResult: {
             /** @description The catalog job to follow. */

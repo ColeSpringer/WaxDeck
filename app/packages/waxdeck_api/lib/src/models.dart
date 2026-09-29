@@ -4442,8 +4442,7 @@ class EnrichmentProvider {
   final bool configured;
   final bool builtin;
 
-  /// Whether it is asked at all. Only a provider that is not [builtin]
-  /// can be moved or switched.
+  /// Whether it is asked at all.
   final bool enabled;
 }
 
@@ -4490,6 +4489,7 @@ class EnrichmentLastRun {
     this.tagsFailed = 0,
     this.tagsUnrepresented = 0,
     this.tagsSkipped = 0,
+    this.stalled = const [],
     this.finishedAt,
   });
 
@@ -4524,6 +4524,10 @@ class EnrichmentLastRun {
   final int tagsFailed;
   final int tagsUnrepresented;
   final int tagsSkipped;
+
+  /// Phases, in wire spelling, that ended early because every source
+  /// serving them sat out the pass.
+  final List<String> stalled;
   final DateTime? finishedAt;
 }
 
@@ -4591,12 +4595,16 @@ class EnrichmentCoverage {
     required this.releaseGroups,
     required this.books,
     required this.lyrics,
+    this.lyricsAsked = 0,
   });
 
   final CoverageCount artists;
   final CoverageCount releaseGroups;
   final CoverageCount books;
   final CoverageCount lyrics;
+
+  /// Tracks without lyrics whose lookup found none.
+  final int lyricsAsked;
 }
 
 /// The enrichment subsystem's provider roster and coverage.
@@ -4612,7 +4620,7 @@ class EnrichmentStatus {
     this.lastRun,
   });
 
-  /// In the order they are asked: this server's own, then the built-ins.
+  /// In the order they are asked.
   final List<EnrichmentProvider> providers;
   final EnrichmentCoverage coverage;
 

@@ -213,6 +213,14 @@
   "@adminEnrichmentBuiltin": {
     "description": "Caption under a source the catalog registers itself."
   },
+  "adminEnrichmentBuiltinMusicbrainz": "Built into the catalog. Switched off, its genres are left out; the identity lookups still run.",
+  "@adminEnrichmentBuiltinMusicbrainz": {
+    "description": "Caption under the MusicBrainz genres entry, which ranks MusicBrainz's genres among the sources."
+  },
+  "adminEnrichmentBuiltinNeedsContact": "Built into the catalog. Waits on a MusicBrainz contact.",
+  "@adminEnrichmentBuiltinNeedsContact": {
+    "description": "Caption under a source the catalog registers itself once a MusicBrainz contact is set, shown while none is."
+  },
   "adminEnrichmentCacheAnswers": "Answers kept",
   "@adminEnrichmentCacheAnswers": {
     "description": "Tile: how many answers the cache holds."
@@ -305,6 +313,18 @@
   "@adminEnrichmentCacheSize": {
     "description": "Tile: how much room the cache takes."
   },
+  "adminEnrichmentCapArtistBackground": "Artist backgrounds",
+  "@adminEnrichmentCapArtistBackground": {
+    "description": "What a source supplies: an artist's background image alone."
+  },
+  "adminEnrichmentCapArtistFront": "Artist portraits",
+  "@adminEnrichmentCapArtistFront": {
+    "description": "What a source supplies: an artist's portrait alone."
+  },
+  "adminEnrichmentCapAuxArt": "Other artwork",
+  "@adminEnrichmentCapAuxArt": {
+    "description": "What a source supplies: backs, discs, booklets and backgrounds."
+  },
   "adminEnrichmentCapBook": "Book details",
   "@adminEnrichmentCapBook": {
     "description": "What a source supplies: audiobook metadata."
@@ -341,6 +361,16 @@
   "@adminEnrichmentCoverageLyrics": {
     "description": "Coverage tile and last-run row for lyrics."
   },
+  "adminEnrichmentCoverageLyricsAsked": "{count} looked up, none found",
+  "@adminEnrichmentCoverageLyricsAsked": {
+    "description": "Caption of the lyrics coverage tile: tracks whose lookup found no lyrics.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "7"
+      }
+    }
+  },
   "adminEnrichmentCoverageOf": "{enriched} of {total}",
   "@adminEnrichmentCoverageOf": {
     "description": "Value of a coverage tile: how many are enriched out of how many there are.",
@@ -359,19 +389,9 @@
   "@adminEnrichmentCoverageReleaseGroups": {
     "description": "Coverage tile and last-run row for release groups (an album across all its pressings)."
   },
-  "adminEnrichmentCoverageTracks": "{count, plural, =1{1 track} other{{count} tracks}}",
-  "@adminEnrichmentCoverageTracks": {
-    "description": "Caption of a coverage tile the catalog cannot count: how many tracks there are.",
-    "placeholders": {
-      "count": {
-        "type": "int",
-        "example": "90"
-      }
-    }
-  },
-  "adminEnrichmentCoverageUncounted": "Not counted",
-  "@adminEnrichmentCoverageUncounted": {
-    "description": "Value of a coverage tile whose enriched count the server does not report."
+  "adminEnrichmentDeferred": "Left owed",
+  "@adminEnrichmentDeferred": {
+    "description": "Tile: lookups a source failed, asked again next pass."
   },
   "adminEnrichmentLastRunFinished": "Finished {when}",
   "@adminEnrichmentLastRunFinished": {
@@ -399,11 +419,11 @@
   "@adminEnrichmentLookedUpColumn": {
     "description": "Column header: how many a walk asked about."
   },
-  "adminEnrichmentMusicbrainzOffHelp": "Off until WAXDECK_ENRICHMENT_CONTACT is set, which also keeps the Cover Art Archive and LRCLIB closed",
+  "adminEnrichmentMusicbrainzOffHelp": "Off until WAXDECK_ENRICHMENT_CONTACT is set, which also keeps the sources built into the catalog closed",
   "@adminEnrichmentMusicbrainzOffHelp": {
     "description": "Help under the MusicBrainz row when no contact is set."
   },
-  "adminEnrichmentMusicbrainzOnHelp": "Identifies artists, albums and books, and opens the Cover Art Archive and LRCLIB",
+  "adminEnrichmentMusicbrainzOnHelp": "Identifies artists, albums and books, and opens the sources built into the catalog",
   "@adminEnrichmentMusicbrainzOnHelp": {
     "description": "Help under the MusicBrainz row when its contact is set."
   },
@@ -417,7 +437,7 @@
   },
   "adminEnrichmentNothingToDoSwitchedOff": "A pass has nothing to do: the sources that could run are switched off. Switch one on below, or set a MusicBrainz contact and restart.",
   "@adminEnrichmentNothingToDoSwitchedOff": {
-    "description": "Banner when no pass can run and some of this server's own sources are switched off."
+    "description": "Banner when no pass can run and some sources are switched off."
   },
   "adminEnrichmentPhaseAlbumArt": "Album covers",
   "@adminEnrichmentPhaseAlbumArt": {
@@ -443,14 +463,6 @@
   "@adminEnrichmentPhaseArtistArtHelp": {
     "description": "Help under the artist-pictures phase."
   },
-  "adminEnrichmentPhaseAuxArt": "Other artwork",
-  "@adminEnrichmentPhaseAuxArt": {
-    "description": "Backs, discs, booklets and backgrounds: a phase, a capability, and a last-run row."
-  },
-  "adminEnrichmentPhaseAuxArtHelp": "Backs, discs, booklets and backgrounds for albums that have a front",
-  "@adminEnrichmentPhaseAuxArtHelp": {
-    "description": "Help under the other-artwork phase."
-  },
   "adminEnrichmentPhaseBookFields": "Book details",
   "@adminEnrichmentPhaseBookFields": {
     "description": "The phase filling audiobook fields, and its last-run row."
@@ -458,6 +470,14 @@
   "adminEnrichmentPhaseBookFieldsHelp": "Publisher, narrator, description and more for books",
   "@adminEnrichmentPhaseBookFieldsHelp": {
     "description": "Help under the book details phase."
+  },
+  "adminEnrichmentPhaseGroupArt": "Release-group artwork",
+  "@adminEnrichmentPhaseGroupArt": {
+    "description": "The release-group art backfill: a phase and a last-run row."
+  },
+  "adminEnrichmentPhaseGroupArtHelp": "Covers, backs, discs, booklets and backgrounds for release groups missing them",
+  "@adminEnrichmentPhaseGroupArtHelp": {
+    "description": "Help under the release-group artwork phase."
   },
   "adminEnrichmentPhaseIdentity": "Identity",
   "@adminEnrichmentPhaseIdentity": {
@@ -569,7 +589,7 @@
       }
     }
   },
-  "adminEnrichmentSourcesBlurb": "Asked in this order, and a source switched off is not asked; switched back on, it is not asked about what a pass already finished unless a run forces its phases. The catalog's own sources come last and cannot be moved.",
+  "adminEnrichmentSourcesBlurb": "Asked in this order, and a source switched off is not asked; switched back on, it is not asked about what a pass already settled until a run forces its phases or, for a miss, the retry window passes.",
   "@adminEnrichmentSourcesBlurb": {
     "description": "Line under the sources heading."
   },
@@ -600,6 +620,16 @@
   "adminEnrichmentStale": "Could not read the latest status. What is shown is from the last read.",
   "@adminEnrichmentStale": {
     "description": "Shown over the enrichment screen when a refresh of its status failed and the last one stays on screen."
+  },
+  "adminEnrichmentStalled": "Stopped early: {phases}. Every source serving them failed three times in a row and sat out the pass; the lookups they owe are asked once more on the next pass.",
+  "@adminEnrichmentStalled": {
+    "description": "Under the last run, when phases ended early because every source serving them kept failing.",
+    "placeholders": {
+      "phases": {
+        "type": "String",
+        "example": "Lyrics, Release-group artwork"
+      }
+    }
   },
   "adminEnrichmentStandingGroup": "Standing",
   "@adminEnrichmentStandingGroup": {

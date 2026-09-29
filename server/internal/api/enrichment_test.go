@@ -23,6 +23,7 @@ func TestEnrichmentLastRunNamesEveryCounter(t *testing.T) {
 			want[strings.ToLower(name[:1])+name[1:]] = float64(i + 1)
 		}
 	}
+	dto.Stalled = []string{"lyrics"}
 	raw, err := json.Marshal(enrichmentLastRun(&dto))
 	if err != nil {
 		t.Fatal(err)
@@ -31,8 +32,11 @@ func TestEnrichmentLastRunNamesEveryCounter(t *testing.T) {
 	if err := json.Unmarshal(raw, &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != len(want) {
-		t.Errorf("last run carries %d keys, want %d: %s", len(got), len(want), raw)
+	if stalled, _ := got["stalled"].([]any); len(stalled) != 1 || stalled[0] != "lyrics" {
+		t.Errorf("stalled = %v, want [lyrics]", got["stalled"])
+	}
+	if len(got) != len(want)+1 {
+		t.Errorf("last run carries %d keys, want %d: %s", len(got), len(want)+1, raw)
 	}
 	for key, n := range want {
 		if got[key] != n {

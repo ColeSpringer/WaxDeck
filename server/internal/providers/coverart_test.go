@@ -569,6 +569,9 @@ func deezerFixture(t *testing.T, hits string) (*Deezer, *atomic.Int64, *atomic.V
 			covers.Add(1)
 			w.Header().Set("Content-Type", "image/jpeg")
 			w.Write(pngBytes())
+		case "/insecure.jpg":
+			covers.Add(1)
+			http.Redirect(w, r, "http://insecure.example/cover.jpg", http.StatusFound)
 		default:
 			covers.Add(1)
 			if strings.HasPrefix(r.URL.Path, "/busy") {
@@ -582,6 +585,22 @@ func deezerFixture(t *testing.T, hits string) (*Deezer, *atomic.Int64, *atomic.V
 	return NewDeezer(DeezerConfig{
 		BaseURL: srv.URL, HTTPClient: srv.Client(), MinInterval: time.Nanosecond,
 	}), &covers, &gotQuery
+}
+
+// A picture that redirects off https is that listing's fault, not the
+// host's, so the walk goes on to the next listing.
+func TestDeezerFrontCoverWalksPastAnInsecureRedirect(t *testing.T) {
+	t.Parallel()
+	d, _, _ := deezerFixture(t, `{"data": [
+		{"title": "Hello, Goodbye", "artist": {"name": "The Beatles"},
+		 "album": {"cover_big": "https://%s/insecure.jpg"}},
+		{"title": "Hello, Goodbye", "artist": {"name": "The Beatles"},
+		 "album": {"cover_big": "https://%s/cover.jpg"}}
+	]}`)
+	got, err := d.FrontCover(context.Background(), "the beatles", "hello goodbye")
+	if err != nil || !strings.HasSuffix(got.SourceURL, "/cover.jpg") {
+		t.Fatalf("cover = %q, %v; want the second listing's", got.SourceURL, err)
+	}
 }
 
 // A station announces a song, so the query is a track search and the

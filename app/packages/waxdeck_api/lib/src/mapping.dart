@@ -2079,22 +2079,26 @@ EnrichmentStatus enrichmentStatusFromGen(gen.EnrichmentStatus status) {
       releaseGroups: coverageCountFromGen(status.coverage.releaseGroups),
       books: coverageCountFromGen(status.coverage.books),
       lyrics: coverageCountFromGen(status.coverage.lyrics),
+      lyricsAsked: status.coverage.lyricsAsked,
     ),
     running: status.running,
     runningJob: status.runningJob,
     configured: status.configured,
     musicbrainzConfigured: status.musicbrainzConfigured,
-    // One this build cannot name could be neither drawn nor sent back.
-    phases: [
-      for (final phase in status.phases)
-        if (phase != gen.EnrichmentPhase.unknownDefaultOpenApi)
-          _enrichmentPhaseWire(phase),
-    ],
+    phases: _enrichmentPhasesWire(status.phases),
     lastRun: status.lastRun == null
         ? null
         : enrichmentLastRunFromGen(status.lastRun!),
   );
 }
+
+/// Phases in wire spelling; one this build cannot name could be neither
+/// drawn nor sent back.
+List<String> _enrichmentPhasesWire(Iterable<gen.EnrichmentPhase> phases) => [
+  for (final phase in phases)
+    if (phase != gen.EnrichmentPhase.unknownDefaultOpenApi)
+      _enrichmentPhaseWire(phase),
+];
 
 /// A phase in the spelling the wire and the status use.
 String _enrichmentPhaseWire(gen.EnrichmentPhase phase) =>
@@ -2144,6 +2148,7 @@ EnrichmentLastRun enrichmentLastRunFromGen(gen.EnrichmentLastRun r) =>
       tagsFailed: r.tagsFailed,
       tagsUnrepresented: r.tagsUnrepresented,
       tagsSkipped: r.tagsSkipped,
+      stalled: _enrichmentPhasesWire(r.stalled),
       finishedAt: r.finishedAt,
     );
 

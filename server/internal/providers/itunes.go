@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -72,6 +73,17 @@ func (t *ITunes) Capabilities() enrich.Capability {
 	return enrich.CapCover | enrich.CapFields
 }
 
+// CapabilitiesAt narrows Capabilities to what Enrich answers per rung.
+func (t *ITunes) CapabilitiesAt(target enrich.TargetType) enrich.Capability {
+	switch target {
+	case enrich.TargetReleaseGroup:
+		return enrich.CapCover
+	case enrich.TargetRelease:
+		return enrich.CapFields
+	}
+	return 0
+}
+
 // Enrich answers a release-group cover lookup, or the album rung of the
 // fields walk. Both go through the same album search; only what is read
 // off the hit differs.
@@ -139,6 +151,9 @@ func (t *ITunes) enrichCover(ctx context.Context, req enrich.Request) (*enrich.C
 		}
 		artURL := strings.Replace(hit.ArtworkURL100, "100x100", "1200x1200", 1)
 		data, mediaType, err := fetchImage(ctx, t.core, artURL)
+		if errors.Is(err, errImageGone) {
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}

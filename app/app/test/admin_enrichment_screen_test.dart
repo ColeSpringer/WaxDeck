@@ -18,13 +18,14 @@ const _coverage = EnrichmentCoverage(
   releaseGroups: CoverageCount(enriched: 3, total: 0),
   books: CoverageCount(enriched: 1, total: 2),
   lyrics: CoverageCount(enriched: 0, total: 90),
+  lyricsAsked: 7,
 );
 
 EnrichmentStatus _status({
   bool configured = true,
   bool running = false,
   String? runningJob,
-  List<String> phases = const ['aux-art', 'lyrics', 'track-fields'],
+  List<String> phases = const ['group-art', 'lyrics', 'track-fields'],
   EnrichmentLastRun? lastRun,
 }) => EnrichmentStatus(
   providers: const [
@@ -160,6 +161,7 @@ void main() {
     // Only the phases this server runs can be forced.
     await _tap(tester, SemanticsIds.enrichmentRunMode('phases'));
     expect(_id(SemanticsIds.enrichmentPhase('identity')), findsNothing);
+    expect(find.text('Release-group artwork'), findsWidgets);
     await _tap(tester, SemanticsIds.enrichmentPhase('lyrics'));
     await _tap(tester, SemanticsIds.enrichmentRun);
     expect(repo.runEnrichmentCalls.last.forcePhases, ['lyrics']);
@@ -173,18 +175,23 @@ void main() {
     tester,
   ) async {
     final repo = await _pump(tester);
-    // The catalog's built-in is listed and cannot be moved or switched.
-    expect(_id(SemanticsIds.enrichmentSource('lrclib')), findsOneWidget);
-    expect(_id(SemanticsIds.enrichmentSourceUp('lrclib')), findsNothing);
-    expect(_id(SemanticsIds.enrichmentSourceEnabled('lrclib')), findsNothing);
-
+    // The catalog's built-in moves and switches like the rest, and says
+    // what it waits on.
+    expect(
+      find.text(
+        'Lyrics. Built into the catalog. Waits on a MusicBrainz contact.',
+      ),
+      findsOneWidget,
+    );
+    await _tap(tester, SemanticsIds.enrichmentSourceUp('lrclib'));
+    await _tap(tester, SemanticsIds.enrichmentSourceEnabled('lrclib'));
     await _tap(tester, SemanticsIds.enrichmentSourceDown('fanarttv'));
     await _tap(tester, SemanticsIds.enrichmentSourceEnabled('fanarttv'));
     await _tap(tester, SemanticsIds.enrichmentSourcesSave);
 
     final saved = repo.putEnrichmentSourcesCalls.single;
-    expect(saved.map((s) => s.name), ['deezer', 'fanarttv']);
-    expect(saved.map((s) => s.enabled), [true, false]);
+    expect(saved.map((s) => s.name), ['lrclib', 'fanarttv', 'deezer']);
+    expect(saved.map((s) => s.enabled), [false, false, true]);
     // Saved is saved: nothing is left to revert.
     await _tap(tester, SemanticsIds.enrichmentSourcesSave);
     expect(repo.putEnrichmentSourcesCalls, hasLength(1));
@@ -198,7 +205,9 @@ void main() {
     await _tap(tester, SemanticsIds.enrichmentRunMode('phases'));
     await _tap(tester, SemanticsIds.enrichmentPhase('lyrics'));
 
-    repo.enrichmentStatus = _status(phases: const ['aux-art', 'track-fields']);
+    repo.enrichmentStatus = _status(
+      phases: const ['group-art', 'track-fields'],
+    );
     container.invalidate(enrichmentStatusProvider);
     await tester.pumpAndSettle();
     await _tap(tester, SemanticsIds.enrichmentRun);
@@ -315,10 +324,105 @@ void main() {
     // An unknown total is not a total of zero.
     expect(find.text('3'), findsWidgets);
     expect(find.text('3 of 0'), findsNothing);
-    // Nor is a count the catalog does not report a count of zero.
-    expect(find.text('0 of 90'), findsNothing);
-    expect(find.text('Not counted'), findsOneWidget);
-    expect(find.text('90 tracks'), findsOneWidget);
+    expect(find.text('0 of 90'), findsOneWidget);
+    expect(find.text('7 looked up, none found'), findsOneWidget);
+  });
+
+  testWidgets('lyrics nobody has looked up yet carry no caption', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      status: EnrichmentStatus(
+        coverage: const EnrichmentCoverage(
+          artists: CoverageCount(enriched: 0, total: 0),
+          releaseGroups: CoverageCount(enriched: 0, total: 0),
+          books: CoverageCount(enriched: 0, total: 0),
+          lyrics: CoverageCount(enriched: 0, total: 12),
+        ),
+        running: false,
+      ),
+    );
+    expect(find.text('0 of 12'), findsOneWidget);
+    expect(find.textContaining('none found'), findsNothing);
+  });
+
+  testWidgets('a pass that owed lookups or stopped early says so', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      status: _status(
+        lastRun: EnrichmentLastRun(
+          deferred: 17,
+          stalled: const ['lyrics', 'group-art'],
+          finishedAt: DateTime.utc(2026, 9, 27, 3, 45),
+        ),
+      ),
+    );
+    expect(find.text('17'), findsOneWidget);
+    expect(find.text('Left owed'), findsOneWidget);
+    expect(
+      find.text(
+        'Stopped early: Lyrics, Release-group artwork. Every source serving '
+        'them failed three times in a row and sat out the pass; the lookups '
+        'they owe are asked once more on the next pass.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a pass that walked to the end says nothing of stalls', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      status: _status(
+        lastRun: EnrichmentLastRun(finishedAt: DateTime.utc(2026, 9, 27)),
+      ),
+    );
+    expect(find.textContaining('Stopped early'), findsNothing);
+  });
+
+  testWidgets('the MusicBrainz genres entry and one artist half read as such', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      status: const EnrichmentStatus(
+        providers: [
+          EnrichmentProvider(
+            name: 'deezer',
+            capabilities: ['cover', 'artist-front', 'fields'],
+            configured: true,
+            builtin: false,
+          ),
+          EnrichmentProvider(
+            name: 'musicbrainz',
+            capabilities: ['genres'],
+            configured: true,
+            builtin: true,
+          ),
+          EnrichmentProvider(
+            name: 'lrclib',
+            capabilities: ['lyrics'],
+            configured: true,
+            builtin: true,
+          ),
+        ],
+        coverage: _coverage,
+        running: false,
+      ),
+    );
+    expect(find.text('Covers, Artist portraits, Details'), findsOneWidget);
+    expect(find.text('Lyrics. Built into the catalog'), findsOneWidget);
+    expect(
+      find.text(
+        'Genres. Built into the catalog. Switched off, its genres are left '
+        'out; the identity lookups still run.',
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a status read that fails keeps the page and the edits', (
@@ -542,7 +646,8 @@ void main() {
     await _tap(tester, SemanticsIds.enrichmentSourceDown('fanarttv'));
     repo.putEnrichmentSourcesError = const WaxDeckApiException(
       code: 'invalid-request',
-      message: 'the order must name every source; missing itunes',
+      message:
+          'the order must name every provider this server adds; missing itunes',
       statusCode: 400,
     );
     final reads = repo.enrichmentStatusReads;
@@ -597,6 +702,7 @@ void main() {
     expect(repo.putEnrichmentSourcesCalls.last.map((s) => s.name), [
       'deezer',
       'fanarttv',
+      'lrclib',
     ]);
   });
 

@@ -15,6 +15,8 @@ class _$EnrichmentCoverage extends EnrichmentCoverage {
   final CoverageCount books;
   @override
   final CoverageCount lyrics;
+  @override
+  final int lyricsAsked;
 
   factory _$EnrichmentCoverage([
     void Function(EnrichmentCoverageBuilder)? updates,
@@ -25,6 +27,7 @@ class _$EnrichmentCoverage extends EnrichmentCoverage {
     required this.releaseGroups,
     required this.books,
     required this.lyrics,
+    required this.lyricsAsked,
   }) : super._();
   @override
   EnrichmentCoverage rebuild(
@@ -42,7 +45,8 @@ class _$EnrichmentCoverage extends EnrichmentCoverage {
         artists == other.artists &&
         releaseGroups == other.releaseGroups &&
         books == other.books &&
-        lyrics == other.lyrics;
+        lyrics == other.lyrics &&
+        lyricsAsked == other.lyricsAsked;
   }
 
   @override
@@ -52,6 +56,7 @@ class _$EnrichmentCoverage extends EnrichmentCoverage {
     _$hash = $jc(_$hash, releaseGroups.hashCode);
     _$hash = $jc(_$hash, books.hashCode);
     _$hash = $jc(_$hash, lyrics.hashCode);
+    _$hash = $jc(_$hash, lyricsAsked.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -62,7 +67,8 @@ class _$EnrichmentCoverage extends EnrichmentCoverage {
           ..add('artists', artists)
           ..add('releaseGroups', releaseGroups)
           ..add('books', books)
-          ..add('lyrics', lyrics))
+          ..add('lyrics', lyrics)
+          ..add('lyricsAsked', lyricsAsked))
         .toString();
   }
 }
@@ -90,6 +96,10 @@ class EnrichmentCoverageBuilder
   CoverageCountBuilder get lyrics => _$this._lyrics ??= CoverageCountBuilder();
   set lyrics(CoverageCountBuilder? lyrics) => _$this._lyrics = lyrics;
 
+  int? _lyricsAsked;
+  int? get lyricsAsked => _$this._lyricsAsked;
+  set lyricsAsked(int? lyricsAsked) => _$this._lyricsAsked = lyricsAsked;
+
   EnrichmentCoverageBuilder() {
     EnrichmentCoverage._defaults(this);
   }
@@ -101,6 +111,7 @@ class EnrichmentCoverageBuilder
       _releaseGroups = $v.releaseGroups.toBuilder();
       _books = $v.books.toBuilder();
       _lyrics = $v.lyrics.toBuilder();
+      _lyricsAsked = $v.lyricsAsked;
       _$v = null;
     }
     return this;
@@ -129,6 +140,11 @@ class EnrichmentCoverageBuilder
             releaseGroups: releaseGroups.build(),
             books: books.build(),
             lyrics: lyrics.build(),
+            lyricsAsked: BuiltValueNullFieldError.checkNotNull(
+              lyricsAsked,
+              r'EnrichmentCoverage',
+              'lyricsAsked',
+            ),
           );
     } catch (_) {
       late String _$failedField;

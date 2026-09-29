@@ -8,7 +8,7 @@ part of 'enrichment_phase.dart';
 
 const EnrichmentPhase _$identity = const EnrichmentPhase._('identity');
 const EnrichmentPhase _$releases = const EnrichmentPhase._('releases');
-const EnrichmentPhase _$auxArt = const EnrichmentPhase._('auxArt');
+const EnrichmentPhase _$groupArt = const EnrichmentPhase._('groupArt');
 const EnrichmentPhase _$artistArt = const EnrichmentPhase._('artistArt');
 const EnrichmentPhase _$albumArt = const EnrichmentPhase._('albumArt');
 const EnrichmentPhase _$lyrics = const EnrichmentPhase._('lyrics');
@@ -25,8 +25,8 @@ EnrichmentPhase _$valueOf(String name) {
       return _$identity;
     case 'releases':
       return _$releases;
-    case 'auxArt':
-      return _$auxArt;
+    case 'groupArt':
+      return _$groupArt;
     case 'artistArt':
       return _$artistArt;
     case 'albumArt':
@@ -50,7 +50,7 @@ final BuiltSet<EnrichmentPhase> _$values =
     BuiltSet<EnrichmentPhase>(const <EnrichmentPhase>[
       _$identity,
       _$releases,
-      _$auxArt,
+      _$groupArt,
       _$artistArt,
       _$albumArt,
       _$lyrics,
@@ -64,7 +64,7 @@ class _$EnrichmentPhaseMeta {
   const _$EnrichmentPhaseMeta();
   EnrichmentPhase get identity => _$identity;
   EnrichmentPhase get releases => _$releases;
-  EnrichmentPhase get auxArt => _$auxArt;
+  EnrichmentPhase get groupArt => _$groupArt;
   EnrichmentPhase get artistArt => _$artistArt;
   EnrichmentPhase get albumArt => _$albumArt;
   EnrichmentPhase get lyrics => _$lyrics;
@@ -89,7 +89,7 @@ class _$EnrichmentPhaseSerializer
   static const Map<String, Object> _toWire = const <String, Object>{
     'identity': 'identity',
     'releases': 'releases',
-    'auxArt': 'aux-art',
+    'groupArt': 'group-art',
     'artistArt': 'artist-art',
     'albumArt': 'album-art',
     'lyrics': 'lyrics',
@@ -101,7 +101,7 @@ class _$EnrichmentPhaseSerializer
   static const Map<Object, String> _fromWire = const <Object, String>{
     'identity': 'identity',
     'releases': 'releases',
-    'aux-art': 'auxArt',
+    'group-art': 'groupArt',
     'artist-art': 'artistArt',
     'album-art': 'albumArt',
     'lyrics': 'lyrics',

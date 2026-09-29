@@ -3,6 +3,7 @@ package providers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -70,14 +71,17 @@ func (a *Audnexus) Capabilities() enrich.Capability {
 	return enrich.CapBookMeta | enrich.CapCover
 }
 
-// Enrich answers a book lookup by ASIN: narrators, publisher, release
-// year, a tag-stripped description, genre names, and the cover image.
-// Requests without an ASIN are clean misses.
-//
-// The work is restricted to what the request says the pass will read: a
-// book-metadata ask skips the cover download, which no current consumer
-// of a TargetBook candidate reads anyway. A zero Want means everything,
-// which is the whole-library pass's shape.
+// CapabilitiesAt narrows Capabilities to the book rung.
+func (a *Audnexus) CapabilitiesAt(t enrich.TargetType) enrich.Capability {
+	if t == enrich.TargetBook {
+		return a.Capabilities()
+	}
+	return 0
+}
+
+// Enrich answers a book lookup by ASIN: narrators, publisher, year, a
+// tag-stripped description, genres, and the cover when the want asks.
+// Only a direct caller sends a zero Want, which asks for everything.
 func (a *Audnexus) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
 	if req.Type != enrich.TargetBook || req.ASIN == "" {
 		return nil, nil
@@ -140,10 +144,12 @@ func (a *Audnexus) Enrich(ctx context.Context, req enrich.Request) (*enrich.Cand
 	}
 	if req.Wants(enrich.CapCover) && book.Image != "" {
 		data, mediaType, err := fetchImage(ctx, a.core, book.Image)
-		if err != nil {
+		switch {
+		case err == nil:
+			cand.Cover = coverImage(data, mediaType, book.Image)
+		case !errors.Is(err, errImageGone) && cand.Publisher == "" && len(cand.Fields) == 0 && len(cand.Genres) == 0:
 			return nil, err
 		}
-		cand.Cover = coverImage(data, mediaType, book.Image)
 	}
 	if len(cand.Fields) == 0 {
 		cand.Fields = nil

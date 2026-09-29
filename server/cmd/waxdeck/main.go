@@ -132,7 +132,7 @@ func run() error {
 		hardcoverKey   = flag.String("hardcover-key", envOr("WAXDECK_HARDCOVER_KEY", ""), "Hardcover API token; empty leaves that audiobook provider unconfigured")
 		googleBooksKey = flag.String("google-books-key", envOr("WAXDECK_GOOGLE_BOOKS_KEY", ""), "Google Books API key; optional - the provider works keyless and a key only raises the quota")
 
-		enrichURLs = flag.String("enrich-provider-urls", envOr("WAXDECK_ENRICH_PROVIDER_URLS", ""), "custom enrichment providers as name=url pairs, comma separated, each implementing the contract in docs/custom-provider-api/. Validated at startup (the capabilities document must answer and advertise a name) and registered ahead of every built-in provider")
+		enrichURLs = flag.String("enrich-provider-urls", envOr("WAXDECK_ENRICH_PROVIDER_URLS", ""), "custom enrichment providers as name=url pairs, comma separated, each implementing the contract in docs/custom-provider-api/. Validated at startup (the capabilities document must answer and advertise a name) and asked first unless an administrator reorders the sources")
 		enrichAuth = flag.String("enrich-provider-auth", envOr("WAXDECK_ENRICH_PROVIDER_AUTH", ""), "bearer tokens for custom enrichment providers as name=token pairs, comma separated; names must match -enrich-provider-urls")
 
 		artistArtOn = env.Bool("artist-art", "WAXDECK_ARTIST_ART", true, "fill missing artist portraits during enrichment. The catalog's artist walk asks fanart.tv by MusicBrainz id where its key is set, and Deezer by name for every artist including the ones MusicBrainz never matched. On by default; set WAXDECK_ARTIST_ART=false and the providers stop advertising artist art, so the walk never asks either service for one")
@@ -416,13 +416,11 @@ func run() error {
 			if err != nil {
 				return err
 			}
-			// A remote advertising only capabilities this build does not
-			// understand is version skew, not misconfiguration: the URL
-			// answered and named itself. Skipping with a log line beats
-			// refusing to start over a provider that could never be
-			// called anyway.
+			// A remote serving nothing this build can ask for is version
+			// skew, not misconfiguration: the URL answered and named itself.
+			// Skipping it with a log line beats refusing to start.
 			if bridge.Capabilities() == 0 {
-				log.Warn("custom enrichment provider advertises no capability this build understands; skipping it",
+				log.Warn("custom enrichment provider serves nothing this build can ask for, at any target type it knows; skipping it",
 					"name", bridge.Name(), "label", p[0])
 				continue
 			}

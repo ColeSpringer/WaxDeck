@@ -43,6 +43,7 @@ Map<String, Object?> _lastRun() => <String, Object?>{
   'groupArtEnriched': 9,
   'deferred': 4,
   'tagsSkipped': 3,
+  'stalled': <Object?>['lyrics', 'identity'],
   'finishedAt': '2026-09-27T03:45:00Z',
 };
 
@@ -75,12 +76,13 @@ void main() {
               'lyrics',
             ])
               k: <String, Object?>{'enriched': 1, 'total': 2},
+            'lyricsAsked': 5,
           },
           'running': true,
           'runningJob': 'jb-01JZX5N8QW3F4V9T2B7KD3M9R6',
           'configured': true,
           'musicbrainzConfigured': false,
-          'phases': <Object?>['aux-art', 'track-fields'],
+          'phases': <Object?>['group-art', 'track-fields'],
           'lastRun': _lastRun(),
         },
       )!,
@@ -93,13 +95,16 @@ void main() {
     expect(status.runningJob, 'jb-01JZX5N8QW3F4V9T2B7KD3M9R6');
     expect(status.configured, isTrue);
     expect(status.musicbrainzConfigured, isFalse);
-    expect(status.phases, ['aux-art', 'track-fields']);
+    expect(status.phases, ['group-art', 'track-fields']);
+    expect(status.coverage.lyrics.enriched, 1);
+    expect(status.coverage.lyricsAsked, 5);
     final run = status.lastRun!;
     expect(run.artistsEnriched, 12);
     expect(run.lyricsMatched, 7);
     expect(run.groupArtEnriched, 9);
     expect(run.deferred, 4);
     expect(run.tagsSkipped, 3);
+    expect(run.stalled, ['lyrics', 'identity']);
     expect(run.finishedAt, DateTime.utc(2026, 9, 27, 3, 45));
   });
 
@@ -117,6 +122,7 @@ void main() {
               'lyrics',
             ])
               k: <String, Object?>{'enriched': 0, 'total': 0},
+            'lyricsAsked': 0,
           },
           'running': true,
           'configured': false,
@@ -145,6 +151,7 @@ void main() {
               'lyrics',
             ])
               k: <String, Object?>{'enriched': 0, 'total': 0},
+            'lyricsAsked': 0,
           },
           'running': false,
           'configured': true,
@@ -157,7 +164,7 @@ void main() {
   });
 
   test('a phase goes back to the wire as the wire spells it', () {
-    for (final wire in const ['identity', 'aux-art', 'album-fields']) {
+    for (final wire in const ['identity', 'group-art', 'album-fields']) {
       expect(
         gen.standardSerializers.serialize(
           enrichmentPhaseToGen(wire),

@@ -211,6 +211,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminEnrichmentBuiltin => 'Built into the catalog';
 
   @override
+  String get adminEnrichmentBuiltinMusicbrainz =>
+      'Built into the catalog. Switched off, its genres are left out; the identity lookups still run.';
+
+  @override
+  String get adminEnrichmentBuiltinNeedsContact =>
+      'Built into the catalog. Waits on a MusicBrainz contact.';
+
+  @override
   String get adminEnrichmentCacheAnswers => 'Answers kept';
 
   @override
@@ -285,6 +293,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminEnrichmentCacheSize => 'Size';
 
   @override
+  String get adminEnrichmentCapArtistBackground => 'Artist backgrounds';
+
+  @override
+  String get adminEnrichmentCapArtistFront => 'Artist portraits';
+
+  @override
+  String get adminEnrichmentCapAuxArt => 'Other artwork';
+
+  @override
   String get adminEnrichmentCapBook => 'Book details';
 
   @override
@@ -312,6 +329,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminEnrichmentCoverageLyrics => 'Lyrics';
 
   @override
+  String adminEnrichmentCoverageLyricsAsked(int count) {
+    return '$count looked up, none found';
+  }
+
+  @override
   String adminEnrichmentCoverageOf(int enriched, int total) {
     return '$enriched of $total';
   }
@@ -320,18 +342,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminEnrichmentCoverageReleaseGroups => 'Release groups';
 
   @override
-  String adminEnrichmentCoverageTracks(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count tracks',
-      one: '1 track',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get adminEnrichmentCoverageUncounted => 'Not counted';
+  String get adminEnrichmentDeferred => 'Left owed';
 
   @override
   String adminEnrichmentLastRunFinished(String when) {
@@ -353,11 +364,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminEnrichmentMusicbrainzOffHelp =>
-      'Off until WAXDECK_ENRICHMENT_CONTACT is set, which also keeps the Cover Art Archive and LRCLIB closed';
+      'Off until WAXDECK_ENRICHMENT_CONTACT is set, which also keeps the sources built into the catalog closed';
 
   @override
   String get adminEnrichmentMusicbrainzOnHelp =>
-      'Identifies artists, albums and books, and opens the Cover Art Archive and LRCLIB';
+      'Identifies artists, albums and books, and opens the sources built into the catalog';
 
   @override
   String get adminEnrichmentMusicbrainzTitle => 'MusicBrainz';
@@ -391,18 +402,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'Pictures for artists missing one';
 
   @override
-  String get adminEnrichmentPhaseAuxArt => 'Other artwork';
-
-  @override
-  String get adminEnrichmentPhaseAuxArtHelp =>
-      'Backs, discs, booklets and backgrounds for albums that have a front';
-
-  @override
   String get adminEnrichmentPhaseBookFields => 'Book details';
 
   @override
   String get adminEnrichmentPhaseBookFieldsHelp =>
       'Publisher, narrator, description and more for books';
+
+  @override
+  String get adminEnrichmentPhaseGroupArt => 'Release-group artwork';
+
+  @override
+  String get adminEnrichmentPhaseGroupArtHelp =>
+      'Covers, backs, discs, booklets and backgrounds for release groups missing them';
 
   @override
   String get adminEnrichmentPhaseIdentity => 'Identity';
@@ -487,7 +498,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminEnrichmentSourcesBlurb =>
-      'Asked in this order, and a source switched off is not asked; switched back on, it is not asked about what a pass already finished unless a run forces its phases. The catalog\'s own sources come last and cannot be moved.';
+      'Asked in this order, and a source switched off is not asked; switched back on, it is not asked about what a pass already settled until a run forces its phases or, for a miss, the retry window passes.';
 
   @override
   String get adminEnrichmentSourcesGroup => 'Sources';
@@ -512,6 +523,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get adminEnrichmentStale =>
       'Could not read the latest status. What is shown is from the last read.';
+
+  @override
+  String adminEnrichmentStalled(String phases) {
+    return 'Stopped early: $phases. Every source serving them failed three times in a row and sat out the pass; the lookups they owe are asked once more on the next pass.';
+  }
 
   @override
   String get adminEnrichmentStandingGroup => 'Standing';

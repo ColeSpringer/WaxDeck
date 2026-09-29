@@ -4778,9 +4778,19 @@ class FakeRepository implements WaxDeckRepository {
     return 'jb-FAKEENRICH';
   }
 
+  /// The catalog's built-ins in its own order, which is where one left
+  /// out of a save goes.
+  static const _catalogOrder = [
+    'coverartarchive',
+    'musicbrainz',
+    'listenbrainz',
+    'lrclib',
+  ];
+
   /// Stores the order the way the server does: every provider that is
-  /// not built in, named once, in that order with those switches, and
-  /// the phases their capabilities open recomputed.
+  /// not built in named once, a built-in where named and after the rest,
+  /// switched on, where not; and the phases their capabilities open
+  /// recomputed.
   @override
   Future<EnrichmentStatus> putEnrichmentSources(
     List<EnrichmentSource> sources,
@@ -4794,12 +4804,12 @@ class FakeRepository implements WaxDeckRepository {
       for (final p in current.providers)
         if (!p.builtin) p.name,
     ];
-    if (named.any((n) => byName[n]?.builtin != false) ||
+    if (named.any((n) => !byName.containsKey(n)) ||
         named.toSet().length != named.length ||
         !own.every(named.contains)) {
       throw const WaxDeckApiException(
         code: 'invalid-request',
-        message: 'the order must name every source once',
+        message: 'the order must name every provider this server adds once',
         statusCode: 400,
       );
     }
@@ -4809,16 +4819,24 @@ class FakeRepository implements WaxDeckRepository {
           name: s.name,
           capabilities: byName[s.name]!.capabilities,
           configured: byName[s.name]!.configured,
-          builtin: false,
+          builtin: byName[s.name]!.builtin,
           enabled: s.enabled,
         ),
-      for (final p in current.providers)
-        if (p.builtin) p,
+      for (final name in _catalogOrder)
+        if (byName[name] case final p? when !named.contains(name))
+          EnrichmentProvider(
+            name: p.name,
+            capabilities: p.capabilities,
+            configured: p.configured,
+            builtin: true,
+          ),
     ];
     const opens = <String, List<String>>{
-      'aux-art': ['aux-art'],
+      'aux-art': ['group-art', 'album-art'],
       'artist-art': ['artist-art'],
-      'cover': ['album-art'],
+      'artist-front': ['artist-art'],
+      'artist-background': ['artist-art'],
+      'cover': ['group-art', 'album-art'],
       'lyrics': ['lyrics'],
       'fields': ['track-fields', 'album-fields'],
       'book': ['book-fields'],

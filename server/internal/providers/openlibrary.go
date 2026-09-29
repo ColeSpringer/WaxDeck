@@ -69,6 +69,14 @@ func (o *OpenLibrary) Name() string { return "openlibrary" }
 // Capabilities reports audiobook metadata.
 func (o *OpenLibrary) Capabilities() enrich.Capability { return enrich.CapBookMeta }
 
+// CapabilitiesAt narrows Capabilities to the book rung.
+func (o *OpenLibrary) CapabilitiesAt(t enrich.TargetType) enrich.Capability {
+	if t == enrich.TargetBook {
+		return enrich.CapBookMeta
+	}
+	return 0
+}
+
 // Enrich answers a book lookup. An ISBN reads the edition directly;
 // without one, the search endpoint answers under a both-names gate.
 func (o *OpenLibrary) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {

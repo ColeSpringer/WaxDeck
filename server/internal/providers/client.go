@@ -28,6 +28,14 @@ import (
 // it as transient and retry on a later pass rather than failing the run.
 var ErrThrottled = errors.New("throttled")
 
+// errImageGone marks an image fetch that would fail the same way again:
+// the picture is gone, too large, or not one a URL can serve. A caller
+// drops that image as a miss; any other fetch failure is the lookup's.
+var errImageGone = errors.New("providers: the image will not come")
+
+// errBodyTooLarge is readCapped's refusal.
+var errBodyTooLarge = errors.New("body exceeds the size cap")
+
 const (
 	defaultUserAgent = "WaxDeck/1.0 (+https://github.com/colespringer/waxdeck)"
 	defaultTimeout   = 15 * time.Second
@@ -252,10 +260,10 @@ func (c *core) forgetPrefix(prefix string) {
 func fetchImage(ctx context.Context, c *core, rawURL string) ([]byte, string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return nil, "", fmt.Errorf("providers: parse image url %q: %w", rawURL, err)
+		return nil, "", fmt.Errorf("providers: parse image url %q: %w: %w", rawURL, err, errImageGone)
 	}
 	if u.Scheme != "https" {
-		return nil, "", fmt.Errorf("providers: image url %q: https required", rawURL)
+		return nil, "", fmt.Errorf("providers: image url %q: https required: %w", rawURL, errImageGone)
 	}
 	if err := c.pace(ctx, u.Host); err != nil {
 		return nil, "", fmt.Errorf("providers: wait for %s: %w", u.Host, err)
@@ -270,10 +278,10 @@ func fetchImage(ctx context.Context, c *core, rawURL string) ([]byte, string, er
 	client := *c.httpClient
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if req.URL.Scheme != "https" {
-			return errors.New("redirect to non-https url")
+			return fmt.Errorf("redirect to non-https url: %w", errImageGone)
 		}
 		if len(via) >= 5 {
-			return errors.New("too many redirects")
+			return fmt.Errorf("too many redirects: %w", errImageGone)
 		}
 		return nil
 	}
@@ -286,14 +294,21 @@ func fetchImage(ctx context.Context, c *core, rawURL string) ([]byte, string, er
 		return nil, "", fmt.Errorf("providers: %s: %w", u.Host, ErrThrottled)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("providers: fetch image %s: status %d", rawURL, resp.StatusCode)
+		err := fmt.Errorf("providers: fetch image %s: status %d", rawURL, resp.StatusCode)
+		// A refusal of the request itself comes back the same next time.
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 && resp.StatusCode != http.StatusRequestTimeout {
+			err = fmt.Errorf("%w: %w", err, errImageGone)
+		}
+		return nil, "", err
 	}
 	mediaType := strings.TrimSpace(resp.Header.Get("Content-Type"))
 	if mt, _, err := mime.ParseMediaType(mediaType); err == nil {
 		mediaType = mt
 	}
 	mediaType = strings.ToLower(mediaType)
-	if !strings.HasPrefix(mediaType, "image/") {
+	// Bytes of no stated type are judged by what they are.
+	sniff := mediaType == "" || mediaType == "application/octet-stream" || mediaType == "binary/octet-stream"
+	if !sniff && !strings.HasPrefix(mediaType, "image/") {
 		return nil, "", fmt.Errorf("providers: fetch image %s: content type %q is not an image", rawURL, mediaType)
 	}
 	// SVG is the one image type a browser runs rather than paints, and
@@ -302,11 +317,20 @@ func fetchImage(ctx context.Context, c *core, rawURL string) ([]byte, string, er
 	// origin. Nothing here can draw one either, so refusing at the door
 	// costs no picture anybody would have seen.
 	if strings.HasSuffix(mediaType, "/svg+xml") || strings.HasSuffix(mediaType, "/svg") {
-		return nil, "", fmt.Errorf("providers: fetch image %s: content type %q is markup", rawURL, mediaType)
+		return nil, "", fmt.Errorf("providers: fetch image %s: content type %q is markup: %w", rawURL, mediaType, errImageGone)
 	}
 	body, err := readCapped(resp.Body, maxImageBytes)
+	if errors.Is(err, errBodyTooLarge) {
+		return nil, "", fmt.Errorf("providers: read image %s: %w: %w", rawURL, err, errImageGone)
+	}
 	if err != nil {
 		return nil, "", fmt.Errorf("providers: read image %s: %w", rawURL, err)
+	}
+	if sniff {
+		mediaType = http.DetectContentType(body)
+		if !strings.HasPrefix(mediaType, "image/") || strings.Contains(mediaType, "svg") {
+			return nil, "", fmt.Errorf("providers: fetch image %s: its bytes are %q: %w", rawURL, mediaType, errImageGone)
+		}
 	}
 	return body, mediaType, nil
 }
@@ -330,7 +354,7 @@ func readCapped(r io.Reader, limit int64) ([]byte, error) {
 		return nil, err
 	}
 	if int64(len(b)) > limit {
-		return nil, fmt.Errorf("body exceeds %d bytes", limit)
+		return nil, fmt.Errorf("%w of %d bytes", errBodyTooLarge, limit)
 	}
 	return b, nil
 }

@@ -222,37 +222,6 @@ func TestEnrichStampsTheWantOnTheRequest(t *testing.T) {
 	}
 }
 
-// forcedLyricsProvider answers only the catalog's own item pass, which
-// forces; the server's per-item ask does not, so the lyrics land in the pass.
-type forcedLyricsProvider struct{}
-
-func (forcedLyricsProvider) Name() string                    { return "passlyrics" }
-func (forcedLyricsProvider) Capabilities() enrich.Capability { return enrich.CapLyrics }
-func (forcedLyricsProvider) Enrich(_ context.Context, req enrich.Request) (*enrich.Candidate, error) {
-	if !req.Force || req.Type != enrich.TargetRecording {
-		return nil, nil
-	}
-	return &enrich.Candidate{Lyrics: &model.Lyrics{Unsynced: "la la la"}}, nil
-}
-
-// What the catalog's pass filled is credited to whoever filled it, which is
-// not the built-in the want is named after.
-func TestEnrichCreditsThePassToItsProvider(t *testing.T) {
-	t.Parallel()
-	h := newHarnessWith(t, func(c *service.Config) {
-		c.EnrichmentProviders = []enrich.Provider{forcedLyricsProvider{}}
-		c.EnrichmentContact = ""
-	})
-	pid := h.items(t, "?mediaType=music").Items[0].Pid
-	resp := h.postJSON(t, "/api/v1/items/"+pid+"/enrich", map[string]any{"want": []string{"lyrics"}})
-	if resp.StatusCode != 200 {
-		t.Fatalf("enrich status = %d", resp.StatusCode)
-	}
-	if res := decode[EnrichItemResult](t, resp); !slices.Contains(res.Applied, "lyrics: passlyrics") {
-		t.Errorf("applied = %v, want the lyrics credited to passlyrics", res.Applied)
-	}
-}
-
 // fakeCoverProvider is a cover-art enrich provider returning a fixed image,
 // for driving the enrichCover provider loop from a test.
 type fakeCoverProvider struct {
@@ -917,8 +886,8 @@ func (c capProvider) Enrich(context.Context, enrich.Request) (*enrich.Candidate,
 	return nil, nil
 }
 
-// An administrator orders and switches this server's own sources; the
-// catalog's built-ins stay pinned after them.
+// An administrator orders and switches the sources, the catalog's
+// built-ins among them.
 func TestEnrichmentSourcesOrderAndSwitch(t *testing.T) {
 	t.Parallel()
 	h := newHarnessWith(t, func(c *service.Config) {
@@ -957,32 +926,50 @@ func TestEnrichmentSourcesOrderAndSwitch(t *testing.T) {
 		t.Fatalf("order after the reorder = %v", got)
 	}
 
-	// Switching off aux-art's only provider takes the phase with it, and
+	// Switching off group-art's only provider takes the phase with it, and
 	// with nothing else configured, the whole pass.
 	resp = h.putJSON(t, sources, map[string]any{"sources": []any{
 		map[string]any{"name": "fanart", "enabled": false},
 		map[string]any{"name": "lyrics-a", "enabled": false},
 	}})
 	st = decode[EnrichmentStatus](t, resp)
-	if slices.Contains(st.Phases, "aux-art") || slices.Contains(st.Phases, "lyrics") || st.Configured {
+	if slices.Contains(st.Phases, "group-art") || slices.Contains(st.Phases, "lyrics") || st.Configured {
 		t.Fatalf("with both off: phases %v, configured %v", st.Phases, st.Configured)
 	}
 	resp = h.postJSON(t, "/api/v1/library/enrichment/run", map[string]any{})
 	wantStatus(t, resp, 501, "a run with every source off")
 
+	// A built-in takes a place of its own; the rest follow it.
+	resp = h.putJSON(t, sources, map[string]any{"sources": []any{
+		map[string]any{"name": "lrclib", "enabled": false},
+		map[string]any{"name": "fanart", "enabled": true},
+		map[string]any{"name": "lyrics-a", "enabled": true},
+	}})
+	if resp.StatusCode != 200 {
+		resp.Body.Close()
+		t.Fatalf("a save naming a built-in = %d", resp.StatusCode)
+	}
+	st = decode[EnrichmentStatus](t, resp)
+	if got := order(st); len(got) != 6 || got[0] != "lrclib" || got[1] != "fanart" {
+		t.Fatalf("order with lrclib placed = %v", got)
+	}
+	if first := st.Providers[0]; !first.Builtin || first.Enabled == nil || *first.Enabled {
+		t.Fatalf("lrclib listed as %+v, want a built-in switched off", first)
+	}
+
 	for name, list := range map[string][]any{
-		"empty":     {},
-		"partial":   {map[string]any{"name": "fanart", "enabled": true}},
-		"unknown":   {map[string]any{"name": "nobody", "enabled": true}},
-		"duplicate": {map[string]any{"name": "fanart", "enabled": true}, map[string]any{"name": "fanart", "enabled": false}},
-		"built-in":  {map[string]any{"name": "lrclib", "enabled": false}},
+		"empty":           {},
+		"partial":         {map[string]any{"name": "fanart", "enabled": true}},
+		"unknown":         {map[string]any{"name": "nobody", "enabled": true}},
+		"duplicate":       {map[string]any{"name": "fanart", "enabled": true}, map[string]any{"name": "fanart", "enabled": false}},
+		"built-ins alone": {map[string]any{"name": "lrclib", "enabled": false}},
 	} {
 		wantStatus(t, h.putJSON(t, sources, map[string]any{"sources": list}), 400, name)
 	}
 
 	audit := decode[AuditEventPage](t, get(t, h.ts, "/api/v1/admin/audit?action=enrichment.sources", h.token))
-	if len(audit.Events) != 2 {
-		t.Fatalf("audit = %+v, want the two saves", audit.Events)
+	if len(audit.Events) != 3 {
+		t.Fatalf("audit = %+v, want the three saves", audit.Events)
 	}
 
 	resp = h.postJSON(t, "/api/v1/users", map[string]any{"username": "listener", "password": "long-enough-pw"})

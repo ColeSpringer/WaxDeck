@@ -407,6 +407,11 @@ func deezerFieldsServer(t *testing.T, seen *[]string) *httptest.Server {
 		case "/album/upc:5901234123457":
 			fmt.Fprintf(w, `{"id": 5, "label": "Virgin", "release_date": "2001-03-12",
 				"cover_xl": "https://%s/images/gone-xl.jpg"}`, r.Host)
+		case "/album/upc:5901234123464":
+			fmt.Fprintf(w, `{"id": 7, "label": "Virgin", "release_date": "2001-03-12",
+				"cover_xl": "https://%s/images/busy-xl.jpg"}`, r.Host)
+		case "/images/busy-xl.jpg":
+			w.WriteHeader(http.StatusInternalServerError)
 		case "/album/upc:4012345678901":
 			// No picture: Deezer names its stand-in, a path with no hash.
 			fmt.Fprintf(w, `{"id": 6, "label": "Virgin", "release_date": "2001-03-12",
@@ -588,7 +593,7 @@ func TestDeezerAnswersAPressingWhoseGroupHasAPicture(t *testing.T) {
 
 // A picture that will not load is no reason to drop the label and year the
 // same lookup answered.
-func TestDeezerKeepsTheFieldsWhenTheCoverWillNotLoad(t *testing.T) {
+func TestDeezerKeepsTheFieldsWhenTheCoverIsGone(t *testing.T) {
 	t.Parallel()
 	var seen []string
 	d := newFieldsDeezer(t, deezerFieldsServer(t, &seen))
@@ -601,11 +606,22 @@ func TestDeezerKeepsTheFieldsWhenTheCoverWillNotLoad(t *testing.T) {
 	if cand.Cover != nil {
 		t.Errorf("cover = %+v, want none", cand.Cover)
 	}
-	// Asked for the cover alone, the failure is still the answer.
-	if _, err := d.Enrich(context.Background(), enrich.Request{
+	if cand, err := d.Enrich(context.Background(), enrich.Request{
 		Type: enrich.TargetRelease, Want: enrich.CapCover, Barcode: "5901234123457",
+	}); cand != nil || err != nil {
+		t.Errorf("a gone cover alone = %+v, %v; want a miss", cand, err)
+	}
+	// A cover the host could not serve now is owed when it is all there is.
+	if _, err := d.Enrich(context.Background(), enrich.Request{
+		Type: enrich.TargetRelease, Want: enrich.CapCover, Barcode: "5901234123464",
 	}); err == nil {
-		t.Error("a cover that would not load read as a clean no-match")
+		t.Error("an unserved cover alone read as an answer")
+	}
+	cand, err = d.Enrich(context.Background(), enrich.Request{
+		Type: enrich.TargetRelease, Title: "Discovery", Artist: "Daft Punk", Barcode: "5901234123464",
+	})
+	if err != nil || cand == nil || cand.Fields["label"] != "Virgin" || cand.Cover != nil {
+		t.Errorf("an unserved cover beside fields = %+v, %v; want the fields", cand, err)
 	}
 }
 

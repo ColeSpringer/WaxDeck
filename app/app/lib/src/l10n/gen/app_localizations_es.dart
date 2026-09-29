@@ -213,6 +213,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminEnrichmentBuiltin => 'Integrada en el catálogo';
 
   @override
+  String get adminEnrichmentBuiltinMusicbrainz =>
+      'Integrada en el catálogo. Si se desactiva, sus géneros quedan fuera; las búsquedas de identidad siguen funcionando.';
+
+  @override
+  String get adminEnrichmentBuiltinNeedsContact =>
+      'Integrada en el catálogo. Espera un contacto de MusicBrainz.';
+
+  @override
   String get adminEnrichmentCacheAnswers => 'Respuestas guardadas';
 
   @override
@@ -287,6 +295,15 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminEnrichmentCacheSize => 'Tamaño';
 
   @override
+  String get adminEnrichmentCapArtistBackground => 'Fondos de artistas';
+
+  @override
+  String get adminEnrichmentCapArtistFront => 'Retratos de artistas';
+
+  @override
+  String get adminEnrichmentCapAuxArt => 'Otras imágenes';
+
+  @override
   String get adminEnrichmentCapBook => 'Datos de libros';
 
   @override
@@ -314,6 +331,17 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminEnrichmentCoverageLyrics => 'Letras';
 
   @override
+  String adminEnrichmentCoverageLyricsAsked(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count buscadas, sin letra',
+      one: '1 buscada, sin letra',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String adminEnrichmentCoverageOf(int enriched, int total) {
     return '$enriched de $total';
   }
@@ -322,18 +350,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminEnrichmentCoverageReleaseGroups => 'Grupos de lanzamientos';
 
   @override
-  String adminEnrichmentCoverageTracks(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count pistas',
-      one: '1 pista',
-    );
-    return '$_temp0';
-  }
-
-  @override
-  String get adminEnrichmentCoverageUncounted => 'Sin contar';
+  String get adminEnrichmentDeferred => 'Pendientes';
 
   @override
   String adminEnrichmentLastRunFinished(String when) {
@@ -356,11 +373,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminEnrichmentMusicbrainzOffHelp =>
-      'Apagado hasta que se configure WAXDECK_ENRICHMENT_CONTACT, que también mantiene cerrados el Cover Art Archive y LRCLIB';
+      'Apagado hasta que se configure WAXDECK_ENRICHMENT_CONTACT, que también mantiene cerradas las fuentes integradas en el catálogo';
 
   @override
   String get adminEnrichmentMusicbrainzOnHelp =>
-      'Identifica artistas, álbumes y libros, y abre el Cover Art Archive y LRCLIB';
+      'Identifica artistas, álbumes y libros, y abre las fuentes integradas en el catálogo';
 
   @override
   String get adminEnrichmentMusicbrainzTitle => 'MusicBrainz';
@@ -395,18 +412,19 @@ class AppLocalizationsEs extends AppLocalizations {
       'Fotos para los artistas que no tienen';
 
   @override
-  String get adminEnrichmentPhaseAuxArt => 'Otras imágenes';
-
-  @override
-  String get adminEnrichmentPhaseAuxArtHelp =>
-      'Traseras, discos, libretos y fondos para los álbumes que tienen portada';
-
-  @override
   String get adminEnrichmentPhaseBookFields => 'Datos de libros';
 
   @override
   String get adminEnrichmentPhaseBookFieldsHelp =>
       'Editorial, narrador, descripción y más para los libros';
+
+  @override
+  String get adminEnrichmentPhaseGroupArt =>
+      'Imágenes de grupos de lanzamientos';
+
+  @override
+  String get adminEnrichmentPhaseGroupArtHelp =>
+      'Portadas, traseras, discos, libretos y fondos para los grupos de lanzamientos que no los tienen';
 
   @override
   String get adminEnrichmentPhaseIdentity => 'Identidad';
@@ -492,7 +510,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminEnrichmentSourcesBlurb =>
-      'Se consultan en este orden, y una fuente desactivada no se consulta; al reactivarla, no se le pregunta por lo que una pasada ya terminó salvo que una ejecución fuerce sus fases. Las fuentes propias del catálogo van al final y no se pueden mover.';
+      'Se consultan en este orden, y una fuente desactivada no se consulta; al reactivarla, no se le pregunta por lo que una pasada ya resolvió hasta que una ejecución fuerce sus fases o, si no hubo respuesta, pase el plazo de reintento.';
 
   @override
   String get adminEnrichmentSourcesGroup => 'Fuentes';
@@ -517,6 +535,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get adminEnrichmentStale =>
       'No se pudo leer el estado más reciente. Lo que se ve es de la última lectura.';
+
+  @override
+  String adminEnrichmentStalled(String phases) {
+    return 'Se detuvo antes de tiempo: $phases. Todas las fuentes que las atienden fallaron tres veces seguidas y quedaron fuera de la pasada; lo que tienen pendiente se pregunta una vez más en la siguiente.';
+  }
 
   @override
   String get adminEnrichmentStandingGroup => 'Situación';

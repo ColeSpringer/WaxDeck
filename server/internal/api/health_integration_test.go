@@ -437,20 +437,19 @@ func TestEnrichmentStatusAndItemEnrich(t *testing.T) {
 		t.Fatal("running with no pass started")
 	}
 	// No injected providers in the harness: only the catalog built-ins.
-	if len(st.Providers) != 3 {
-		t.Fatalf("providers = %+v, want the three built-ins", st.Providers)
+	if len(st.Providers) != 4 {
+		t.Fatalf("providers = %+v, want the four built-ins", st.Providers)
 	}
-	// The harness configures no MusicBrainz contact, and the catalog
-	// does not register its built-ins without one: key-free is not the
-	// same as configured, and reporting them ready here would promise a
-	// lyrics or cover fill this server cannot make.
+	// No contact, so the catalog registered none of them: listed in the
+	// order with their switches, not configured.
 	for _, p := range st.Providers {
-		if !p.Builtin || p.Configured {
-			t.Fatalf("built-in %q reported builtin=%v configured=%v", p.Name, p.Builtin, p.Configured)
+		if !p.Builtin || p.Configured || p.Enabled == nil || !*p.Enabled {
+			t.Fatalf("built-in %q reported builtin=%v configured=%v enabled=%v", p.Name, p.Builtin, p.Configured, p.Enabled)
 		}
 	}
-	if st.Coverage.Lyrics.Total != 4 {
-		t.Fatalf("lyrics total = %d, want the 4 music tracks", st.Coverage.Lyrics.Total)
+	if st.Coverage.Lyrics.Total != 4 || st.Coverage.Lyrics.Enriched != 0 || st.Coverage.LyricsAsked != 0 {
+		t.Fatalf("lyrics = %+v, asked %d; want none of the 4 music tracks, none asked",
+			st.Coverage.Lyrics, st.Coverage.LyricsAsked)
 	}
 
 	// Per-item enrich with no injected providers: nothing applies and

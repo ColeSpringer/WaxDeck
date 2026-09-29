@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: WaxDeck custom enrichment provider
-  version: 1.1.0
+  version: 2.0.0
   description: >
     The contract a self-hosted metadata service implements to plug into
     WaxDeck's enrichment as a provider: a regional lyrics database, a
@@ -17,7 +17,7 @@ info:
     (`name=url` pairs, comma separated) and, if it wants auth,
     `WAXDECK_ENRICH_PROVIDER_AUTH` (`name=token` pairs; the token rides
     every request as `Authorization: Bearer <token>`). Custom providers
-    are asked ahead of every built-in one.
+    are asked first unless an administrator reorders the sources.
 paths:
   /capabilities:
     get:
@@ -34,8 +34,9 @@ paths:
         with a log line. Capability tokens this contract version does
         not define are ignored, so a newer provider still serves an
         older WaxDeck; a provider advertising nothing the running
-        WaxDeck understands is skipped with a log line rather than
-        refused, since it could never have been called.
+        WaxDeck understands, or declaring it for no target type it
+        knows, is skipped with a log line rather than refused, since it
+        could never have been called.
       responses:
         "200":
           description: The provider's identity and capability set.
@@ -54,10 +55,13 @@ paths:
         WaxDeck applies it fill-when-empty and lock-respecting, so
         returning more than was asked for costs nothing; an all-empty
         `200` body counts as a no-match - or `204` for a clean no-match
-        (looked up, nothing there). A `404` is read as a no-match too,
-        defensively; `204` is the form that says it. Any other status
-        is logged and read as a miss, asked about again once the retry
-        window has passed (30 days by default) or on a forced run.
+        (looked up, nothing there), asked about again once the retry
+        window has passed (30 days by default) or on a forced run. A
+        `404` is read as a no-match too; `204` is the form that says it.
+        Anything else is a failure: another status, a timeout, a refused
+        connection, a body that is not a candidate. The lookup stays
+        owed and is asked once more on the next pass, and three failures
+        in a row sit the provider out for the rest of the pass.
 
 
         Rate limiting toward whatever your service calls out to is the
@@ -101,9 +105,10 @@ components:
             front cover, a release group's or, on a `release` request,
             one pressing's; `aux-art` is the other slots (back, disc,
             booklet, background), and `artist-art` an artist's own
-            images. The three are separate because each gates a separate
-            pass, and a provider that only knows front covers must not be
-            walked over every artist in a library.
+            images, `artist-front` and `artist-background` for a provider
+            serving one of the two. They are separate because each gates
+            a separate pass, and a provider that only knows front covers
+            must not be walked over every artist in a library.
 
 
             `fields` is scalar metadata returned in `candidate.fields`
@@ -114,11 +119,26 @@ components:
             same idea for audiobooks and gates the book walk.
           items:
             $ref: "#/components/schemas/Capability"
+        capabilitiesAt:
+          type: object
+          description: >
+            Optional: the capabilities served per target type (`artist`,
+            `release_group`, `release`, `recording`, `book`). A provider
+            is asked only at the target types it lists, for what it lists
+            there that `capabilities` also names; absent, every capability
+            is served for every type.
+          additionalProperties:
+            type: array
+            items:
+              $ref: "#/components/schemas/Capability"
+          example:
+            release_group: [cover, aux-art]
+            artist: [artist-art]
 
     Capability:
       type: string
       description: One kind of enrichment a provider supplies.
-      enum: [identity, genres, cover, lyrics, book, aux-art, artist-art, fields]
+      enum: [identity, genres, cover, lyrics, book, aux-art, artist-art, artist-front, artist-background, fields]
 
     EnrichRequest:
       type: object
@@ -141,7 +161,9 @@ components:
           description: >
             What this answer will be used for; absent means everything. A
             `release` is asked separately for `cover`, `aux-art` and
-            `fields`, so skip what the others need.
+            `fields`, and an `artist` for `artist-front`,
+            `artist-background` or both as `artist-art`, so skip what the
+            others need.
           items:
             $ref: "#/components/schemas/Capability"
         title:

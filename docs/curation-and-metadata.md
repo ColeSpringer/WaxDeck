@@ -493,19 +493,20 @@ matching is authoritative for identity fields and locks what it writes,
 so nothing below it can move those values. Every injected provider
 writes fill-when-empty and lock-respecting: it fills a field nothing has
 claimed, and never replaces a value a person, a tag, or the match put
-there. Genres are the one place the order is inverted on purpose - the
-injected providers are asked first, because they answer where
-MusicBrainz has no genre at all - and even there a MusicBrainz genre is
-never evicted.
+there. Genres merge in the sources' order - the injected providers
+first by default, because they answer where MusicBrainz has no genre at
+all, and MusicBrainz's own where its entry sits - and a MusicBrainz genre
+is never evicted.
 
-Among the injected providers, the order they are asked in is the
-administrator's: the **Enrichment** screen in the admin console moves
-each one up or down and switches it off. Order decides which provider
-fills an empty field first, since the next one finds it filled; a
-provider switched off opens no phase and fills nothing, and switched back
-on it is not asked about what a pass finished while it was off unless a
-run forces its phases. The catalog's key-free built-ins come after them
-in every order.
+The order the sources are asked in is the administrator's, the
+catalog's key-free built-ins included: the **Enrichment** screen in the
+admin console moves each one up or down and switches it off. Order
+decides which provider fills an empty field first, since the next one
+finds it filled. A pass keeps the list it started with. A source
+switched off opens no phase and fills nothing, and nothing records that
+it was off, so switched back on it is not asked about what a pass
+settled meanwhile until a run forces those phases or, for a miss, the
+retry window passes.
 
 Artist portraits come from one pass. The catalog's enrichment walk
 reaches every artist by name, whether or not MusicBrainz matched one,
@@ -522,14 +523,15 @@ providers entirely, so the walk never asks.
 Album art has a backfill of its own. An album that resolves no front
 cover at all (a picture embedded in any member counts) is asked about by
 its own identifiers, so the cover is that pressing's: Deezer answers by
-barcode, the Cover Art Archive by the album's MusicBrainz release id.
-Deezer is asked first, as every WaxDeck provider is, at two requests a
-second to the archive's one, and the archive only where Deezer holds no
-picture for the barcode. The same walk asks auxiliary-art providers for
-an album's back, disc, booklet and background slots, which only a
-custom provider answers today. iTunes has no per-pressing lookup and
-answers nothing here. The write is fill-when-empty and lock-respecting
-like every other.
+barcode, the Cover Art Archive by the album's MusicBrainz release id. In
+the default order Deezer is asked first, at two requests a second to the
+archive's one, and the archive only where Deezer holds no picture for
+the barcode. The same walk asks auxiliary-art providers for an album's
+back, disc, booklet and background slots. fanart.tv answers those for a
+release group, not for one pressing, so at this rung only a custom
+provider that declares it answers today. iTunes has no per-pressing
+lookup and is not asked here. The write is fill-when-empty and
+lock-respecting like every other.
 
 Two more walks fill scalar metadata with no artwork in it. The track
 walk asks about a track's tempo, ISRC and composer; the album walk about
@@ -549,16 +551,23 @@ twenty-thousand-track library's first full pass is most of a day of
 Deezer time. Later passes touch only what is new. That is why the
 nightly schedule is capped and an administrator's own run is not.
 
-One thing to know about the walks' memory: a target nothing could
-answer for is marked - an artist, a release group, an album's cover, a
-book, a track's lyrics or fields - and a marked miss is asked about
-again only once the retry window has passed: 30 days by default,
+One thing to know about the walks' memory: a target nothing could answer
+for is marked - an artist, a release group, an album's cover, a book, a
+track's lyrics or fields - and a marked miss is asked about again only
+once the retry window has passed: 30 days by default,
 `WAXDECK_ENRICHMENT_RETRY_MISSES_DAYS`, `0` for never. A match is
-durable. To ask sooner, `forcePhases` on the enrichment run re-asks the
-named phases alone, which is how a provider added after the markers
-settled is asked about them, and `force` re-asks everything. The nightly
-schedule above therefore reaches what is new and, once a window passes,
-what stayed missing.
+durable. A lookup a source failed (a timeout, a server error, a page
+where an answer was promised) is not a miss: it stays owed and is asked
+once more on the next pass, after that pass's new targets, which settles
+it even if it fails again, or as it stands if a week goes by with no
+pass asking. A source that fails three times in a row sits out the rest
+of the pass, the slots it serves marked as misses on the targets after
+it, and a phase left with no source still answering stops early; the
+last run reports both. To ask sooner, `forcePhases` on the enrichment
+run re-asks the named phases alone, which is how a provider added after
+the markers settled is asked about them, and `force` re-asks everything.
+The nightly schedule above therefore reaches what is new and, once a
+window passes, what stayed missing.
 
 That fetch previews before it applies. The editor's Fetch button asks
 `POST /items/{pid}/enrich/preview` what the providers would change -
@@ -568,9 +577,11 @@ Applying passes the previewed proposal back, and the server commits
 exactly those values rather than fetching fresh ones a moment later:
 what was approved is what lands, with the local guards re-run so a
 field locked or filled since the preview is skipped, never
-overwritten. The catalog's key-free built-ins (Cover Art Archive,
-ListenBrainz, LRCLIB) cannot be previewed - their fetch and write are
-one engine pass - so they still run fill-when-empty when the apply
-lands, and the sheet says so; an empty preview offers the fetch for
-exactly that reason. The bodyless `enrichItem` stays as the blind
+overwritten. The catalog's key-free built-ins cannot be previewed -
+their fetch and write are one engine pass - so they run fill-when-empty
+when the apply lands, and the sheet says so; an empty preview offers the
+fetch for exactly that reason. The fetch keeps the source order: a want
+that a switched-on built-in ranks ahead of this server's providers for
+is left to that pass, which asks the built-in first and the rest after
+it. The bodyless `enrichItem` stays as the blind
 one-shot for older clients.

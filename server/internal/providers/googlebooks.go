@@ -73,6 +73,14 @@ func (g *GoogleBooks) Name() string { return "googlebooks" }
 // Capabilities reports audiobook metadata.
 func (g *GoogleBooks) Capabilities() enrich.Capability { return enrich.CapBookMeta }
 
+// CapabilitiesAt narrows Capabilities to the book rung.
+func (g *GoogleBooks) CapabilitiesAt(t enrich.TargetType) enrich.Capability {
+	if t == enrich.TargetBook {
+		return enrich.CapBookMeta
+	}
+	return 0
+}
+
 // Enrich answers a book lookup: by ISBN when the request carries one
 // (an identifier hit needs no second guessing), otherwise by title and
 // author with both names matched before anything is believed.
