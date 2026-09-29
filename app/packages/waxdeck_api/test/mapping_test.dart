@@ -777,6 +777,56 @@ void main() {
     });
   });
 
+  group('portable ref mapping', () {
+    test('a ref keeps where its fingerprint was stored, both ways', () {
+      final ref = portableRefFromGen(
+        gen.PortableRef(
+          (b) => b
+            ..kind = gen.PortableRefKindEnum.track
+            ..title = 'One'
+            ..fingerprintBucket = 4,
+        ),
+      );
+      expect(ref.fingerprintBucket, 4);
+      expect(portableRefToGen(ref).fingerprintBucket, 4);
+    });
+  });
+
+  group('health mapping', () {
+    test('an issue carries the lengths a rule measured', () {
+      final issue = healthIssueFromGen(
+        gen.HealthIssue(
+          (b) => b
+            ..pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPL'
+            ..title = 'Half Song'
+            ..mediaType = gen.MediaType.music
+            ..rules.add('duration-mismatch')
+            ..detail.headerMs = 4000
+            ..detail.decodedMs = 8000
+            ..detail.partIndex = 2
+            ..detail.wholeFile = true,
+        ),
+      );
+      expect(issue.detail?.headerMs, 4000);
+      expect(issue.detail?.decodedMs, 8000);
+      expect(issue.detail?.partIndex, 2);
+      expect(issue.detail?.wholeFile, isTrue);
+    });
+
+    test('an issue that measured nothing carries no detail', () {
+      final issue = healthIssueFromGen(
+        gen.HealthIssue(
+          (b) => b
+            ..pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPL'
+            ..title = 'Plain Song'
+            ..mediaType = gen.MediaType.music
+            ..rules.add('missing-art'),
+        ),
+      );
+      expect(issue.detail, isNull);
+    });
+  });
+
   group('facet pages', () {
     gen.FacetPage genPage(void Function(gen.FacetBucketBuilder) bucket) {
       return gen.FacetPage(

@@ -767,6 +767,7 @@ Class | Method | HTTP request | Description
  - [HealthFixRequest](doc/HealthFixRequest.md)
  - [HealthFixResult](doc/HealthFixResult.md)
  - [HealthIssue](doc/HealthIssue.md)
+ - [HealthIssueDetail](doc/HealthIssueDetail.md)
  - [HealthIssuePage](doc/HealthIssuePage.md)
  - [HealthRuleCount](doc/HealthRuleCount.md)
  - [HealthSummary](doc/HealthSummary.md)

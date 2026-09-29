@@ -34,6 +34,27 @@ note.
   `service.ReservedEnrichNames`, tested against the catalog's drops and
   its registered built-ins.
 
+- **A failed sync does not say whether the feed or the catalog failed.**
+  `Podcasts().Sync` returns a provider's error as the provider raised
+  it, and the store classes its own failures (a full disk, a busy or
+  broken database) `CodeIO`, the class a feed host's network failure
+  carries. WaxDeck disables a feed after ten failures of its own, so it
+  has to tell the two apart or a catalog outage switches every feed
+  off. Wanted: the provider's failures marked on the error Sync returns
+  (a class, or an op of their own). Shipped workaround: a failure whose
+  chain names a `store.*` op is read as the catalog's.
+
+- **The duration-mismatch check's rows are not exported.** The audit
+  reports `CheckDurationMismatch` as a sentence carrying both lengths
+  as m:ss, and the rows behind it (`FileDurationMismatch`, with the
+  file pid and exact lengths) are reachable only through the store.
+  WaxDeck shows both lengths on a health issue, so it reads each flagged
+  file's header length and waveform span itself and applies a copy of
+  the check's margin (two seconds and two percent), which drifts if the
+  check's does. Wanted: the rows on the facade, or the lengths and file
+  pid on the finding. Shipped workaround: the copy, in
+  `service.mismatchOf`.
+
 ## WaxTap
 
 - **A chunked download has no stall timeout.** `Timeouts.ChunkRetry`

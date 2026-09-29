@@ -165,6 +165,93 @@ void main() {
     expect(find.text('Track 0'), findsOneWidget);
   });
 
+  testWidgets('a duration mismatch names both lengths', (tester) async {
+    final repo = _repo()
+      ..healthSummary = const HealthSummary(
+        score: 99,
+        totalItems: 120,
+        evaluatedItems: 120,
+        rules: [
+          HealthRuleCount(
+            rule: 'duration-mismatch',
+            label: 'Header duration disagrees with the audio',
+            failing: 1,
+            fixable: false,
+          ),
+        ],
+      )
+      ..healthIssues = const [
+        HealthIssue(
+          pid: 'tr-9',
+          title: 'Half Song',
+          mediaType: MediaType.music,
+          rules: ['duration-mismatch'],
+          detail: HealthIssueDetail(headerMs: 221000, decodedMs: 192000),
+        ),
+      ];
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.health('duration-mismatch')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Header 3:41, audio 3:12'), findsOneWidget);
+  });
+
+  testWidgets('a mismatch names the file its lengths are of', (tester) async {
+    final repo = _repo()
+      ..healthSummary = const HealthSummary(
+        score: 99,
+        totalItems: 120,
+        evaluatedItems: 120,
+        rules: [
+          HealthRuleCount(
+            rule: 'duration-mismatch',
+            label: 'Header duration disagrees with the audio',
+            failing: 2,
+            fixable: false,
+          ),
+        ],
+      )
+      ..healthIssues = const [
+        HealthIssue(
+          pid: 'ab-1',
+          title: 'Long Book',
+          mediaType: MediaType.audiobook,
+          rules: ['duration-mismatch'],
+          detail: HealthIssueDetail(
+            headerMs: 3000,
+            decodedMs: 6000,
+            partIndex: 2,
+          ),
+        ),
+        HealthIssue(
+          pid: 'tr-7',
+          title: 'Carved Track',
+          mediaType: MediaType.music,
+          rules: ['duration-mismatch'],
+          detail: HealthIssueDetail(
+            headerMs: 3240000,
+            decodedMs: 3600000,
+            wholeFile: true,
+          ),
+        ),
+      ];
+    await _pump(tester, _host(_container(repo)));
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.health('duration-mismatch')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Part 3: header 0:03, audio 0:06'), findsOneWidget);
+    expect(
+      find.text('Whole file: header 54:00, audio 1:00:00'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('merging duplicates confirms and calls the repository', (
     tester,
   ) async {

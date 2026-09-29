@@ -730,6 +730,8 @@ String portableJson(PortablePlaylist portable) => jsonEncode(<String, Object?>{
         if (ref.essence != null) 'essence': ref.essence,
         if (ref.fingerprint != null) 'fingerprint': ref.fingerprint,
         if (ref.fingerprintAlgo != null) 'fingerprintAlgo': ref.fingerprintAlgo,
+        if (ref.fingerprintBucket != null)
+          'fingerprintBucket': ref.fingerprintBucket,
         if (ref.mbid != null) 'mbid': ref.mbid,
         if (ref.asin != null) 'asin': ref.asin,
         if (ref.isbn != null) 'isbn': ref.isbn,

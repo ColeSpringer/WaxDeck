@@ -113,4 +113,41 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('names each writer in the reader\'s words', (tester) async {
+    Future<void> show(Locale locale) async {
+      final repo = FakeRepository();
+      repo.fileDiagnostics.addAll([
+        FileDiagnostic(
+          path: '/music/damaged.flac',
+          origin: 'analyze',
+          code: 'corrupt_audio',
+          severity: 'warn',
+          seenAt: DateTime.utc(2026, 9, 29),
+        ),
+        FileDiagnostic(
+          path: '/music/future.flac',
+          origin: 'holograph',
+          code: 'corrupt_audio',
+          severity: 'warn',
+          seenAt: DateTime.utc(2026, 9, 29),
+        ),
+      ]);
+      await _pump(
+        tester,
+        ProviderScope(
+          overrides: [repositoryProvider.overrideWithValue(repo)],
+          child: localizedHost(const DiagnosticsScreen(), locale: locale),
+        ),
+      );
+    }
+
+    await show(const Locale('en'));
+    expect(find.text('Analysis'), findsOneWidget);
+    // A writer this build has not heard of shows as the server named it.
+    expect(find.text('holograph'), findsOneWidget);
+
+    await show(const Locale('es'));
+    expect(find.text('Análisis'), findsOneWidget);
+  });
 }

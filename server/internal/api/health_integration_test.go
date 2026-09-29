@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -149,6 +151,134 @@ func TestHealthSweepAndIssues(t *testing.T) {
 	}
 	if worked != 4 {
 		t.Fatalf("drained %d fixes, want 4", worked)
+	}
+}
+
+// An analyzed file whose header states half its audio fails
+// duration-mismatch, and its issue row carries both lengths; the honest
+// demo files do not.
+func TestHealthFlagsAHeaderThatMisstatesTheAudio(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := context.Background()
+	paths, err := fixtures.Generate(filepath.Join(h.library, "Half Artist", "Half Album"), fixtures.Spec{
+		Name: "Half Song", Codec: fixtures.CodecFLAC, Duration: 8 * time.Second,
+		Tags: map[string]string{"TITLE": "Half Song", "ARTIST": "Half Artist", "ALBUM": "Half Album"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	understateFLAC(t, paths[0], 1, 2)
+	h.rescanAndWait(t)
+	analyzeAndWait(t, h)
+	if err := h.svc.SweepHealth(ctx); err != nil {
+		t.Fatalf("sweeping: %v", err)
+	}
+
+	sum := decode[HealthSummary](t, get(t, h.ts, "/api/v1/library/health", h.token))
+	var rule *HealthRuleCount
+	for i := range sum.Rules {
+		if sum.Rules[i].Rule == "duration-mismatch" {
+			rule = &sum.Rules[i]
+		}
+	}
+	if rule == nil || rule.Failing != 1 || rule.Fixable {
+		t.Fatalf("duration-mismatch in the summary = %+v, want one failing, not fixable", rule)
+	}
+	page := decode[HealthIssuePage](t, get(t, h.ts, "/api/v1/library/health/issues?rule=duration-mismatch", h.token))
+	if len(page.Items) != 1 || page.Items[0].Title != "Half Song" {
+		t.Fatalf("duration-mismatch issues = %+v, want Half Song alone", page.Items)
+	}
+	d := page.Items[0].Detail
+	if d == nil || d.HeaderMs == nil || d.DecodedMs == nil || *d.HeaderMs != 4000 || *d.DecodedMs != 8000 {
+		t.Fatalf("issue detail = %+v, want header 4000 ms and audio 8000 ms", d)
+	}
+	if d.PartIndex != nil || (d.WholeFile != nil && *d.WholeFile) {
+		t.Errorf("a track's own file named part %v, whole file %v", d.PartIndex, d.WholeFile)
+	}
+
+	// A header fixed since the sweep: the row stands until the next one,
+	// but no longer shows lengths that now agree.
+	understateFLAC(t, paths[0], 2, 1)
+	h.rescanAndWait(t)
+	page = decode[HealthIssuePage](t, get(t, h.ts, "/api/v1/library/health/issues?rule=duration-mismatch", h.token))
+	if len(page.Items) != 1 || page.Items[0].Detail != nil {
+		t.Fatalf("after the fix, issues = %+v, want the stale row without a detail", page.Items)
+	}
+}
+
+// A multi-file book answers for every part, not only the one its path
+// names: its third part's header states half of its 6 s.
+func TestHealthFindsAMisstatedPartOfABook(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := context.Background()
+	staged := t.TempDir()
+	bookDir, err := fixtures.GenerateBook(staged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	understateMP4(t, filepath.Join(bookDir, "03 - Part Three.m4b"), 1, 2)
+	if err := os.CopyFS(filepath.Join(h.library, "book"), os.DirFS(staged)); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	analyzeAndWait(t, h)
+	if err := h.svc.SweepHealth(ctx); err != nil {
+		t.Fatalf("sweeping: %v", err)
+	}
+
+	page := decode[HealthIssuePage](t, get(t, h.ts, "/api/v1/library/health/issues?rule=duration-mismatch", h.token))
+	if len(page.Items) != 1 || page.Items[0].MediaType != "audiobook" {
+		t.Fatalf("duration-mismatch issues = %+v, want the book", page.Items)
+	}
+	d := page.Items[0].Detail
+	if d == nil || d.HeaderMs == nil || d.DecodedMs == nil ||
+		*d.HeaderMs < 2900 || *d.HeaderMs > 3100 || *d.DecodedMs < 5900 || *d.DecodedMs > 6100 {
+		t.Fatalf("issue detail = %+v, want part three's 3 s header over 6 s of audio", d)
+	}
+	if d.PartIndex == nil || *d.PartIndex != 2 {
+		t.Errorf("issue detail names part %v, want 2", d.PartIndex)
+	}
+}
+
+// A cue-carved track is flagged for the file it is cut from, and says the
+// lengths are that whole file's rather than its own.
+func TestHealthNamesTheWholeFileACarvedTrackIsCutFrom(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := context.Background()
+	ripDir := filepath.Join(h.library, "Rip Artist", "Rip Album")
+	paths, err := fixtures.Generate(ripDir, fixtures.Spec{
+		Name: "Rip Album", Codec: fixtures.CodecFLAC, Duration: 8 * time.Second,
+		Tags: map[string]string{"TITLE": "Rip Album", "ALBUM": "Rip Album", "ARTIST": "Rip Artist", "ALBUMARTIST": "Rip Artist"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	understateFLAC(t, paths[0], 1, 2)
+	sheet := "PERFORMER \"Rip Artist\"\nTITLE \"Rip Album\"\nFILE \"Rip Album.flac\" WAVE\n" +
+		"  TRACK 01 AUDIO\n    TITLE \"Rip One\"\n    INDEX 01 00:00:00\n" +
+		"  TRACK 02 AUDIO\n    TITLE \"Rip Two\"\n    INDEX 01 00:02:00\n"
+	if err := os.WriteFile(filepath.Join(ripDir, "Rip Album.cue"), []byte(sheet), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	analyzeAndWait(t, h)
+	if err := h.svc.SweepHealth(ctx); err != nil {
+		t.Fatalf("sweeping: %v", err)
+	}
+
+	page := decode[HealthIssuePage](t, get(t, h.ts, "/api/v1/library/health/issues?rule=duration-mismatch", h.token))
+	if len(page.Items) != 2 {
+		t.Fatalf("duration-mismatch issues = %+v, want both carved tracks", page.Items)
+	}
+	for _, it := range page.Items {
+		d := it.Detail
+		if d == nil || d.HeaderMs == nil || *d.HeaderMs != 4000 || d.DecodedMs == nil || *d.DecodedMs != 8000 ||
+			d.WholeFile == nil || !*d.WholeFile {
+			t.Errorf("%s detail = %+v, want the whole file's 4 s header over 8 s", it.Title, d)
+		}
 	}
 }
 

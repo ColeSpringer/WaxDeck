@@ -618,9 +618,10 @@ paths:
         at the `resolution` the catalog stores (1000 buckets a file today);
         downsample to the width drawn. Stored 16-bit, narrowed by truncation.
 
-        A cue-carved track answers its window of its file's envelope:
-        `resolution` is its share of the buckets, `essenceHash` names the
-        file, and the `ETag` carries the window and the length placing it.
+        A cue-carved track answers its window of its file's envelope,
+        placed by the audio the buckets were measured over: `resolution`
+        is its share of the buckets, `essenceHash` names the file, and the
+        `ETag` carries the window and the decoded length placing it.
 
         Waveforms are per audio file: for a multi-file audiobook, pass
         `partIndex` to get the envelope of one part, in that part's own
@@ -649,7 +650,8 @@ paths:
 
         `state` is `ready`, `pending` (not analyzed yet; ask after a pass),
         or `unavailable`, which is final: an episode, a file the pass could
-        not measure, or a carved track its file's stated length cannot place.
+        not measure, or a carved track whose window reaches past its file's
+        decoded audio.
 
 
         A book part not yet analyzed is `pending`, so a partly analyzed
@@ -693,8 +695,8 @@ paths:
             ETag:
               description: >
                 The described file's audio essence (a multi-file book's
-                requested part), plus a carved track's window and the length
-                placing it. Present on `ready` only.
+                requested part), plus a carved track's window and the decoded
+                length placing it. Present on `ready` only.
               schema:
                 type: string
             Cache-Control:

@@ -624,6 +624,17 @@ class HealthIssuesScreen extends ConsumerWidget {
   }
 }
 
+/// Both lengths, saying whose they are when not the item's own file.
+String _durationDetail(AppLocalizations l10n, HealthIssueDetail detail) {
+  final header = formatTimecode(Duration(milliseconds: detail.headerMs!));
+  final audio = formatTimecode(Duration(milliseconds: detail.decodedMs!));
+  if (detail.partIndex case final int part) {
+    return l10n.healthDurationDetailPart(part + 1, header, audio);
+  }
+  if (detail.wholeFile) return l10n.healthDurationDetailFile(header, audio);
+  return l10n.healthDurationDetail(header, audio);
+}
+
 class _IssueRow extends StatelessWidget {
   const _IssueRow({required this.issue});
 
@@ -666,6 +677,16 @@ class _IssueRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (issue.detail case final HealthIssueDetail detail?
+                      when detail.headerMs != null && detail.decodedMs != null)
+                    Text(
+                      _durationDetail(l10n, detail),
+                      style: WaxType.caption.copyWith(
+                        color: colors.textTertiary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                 ],
               ),
             ),

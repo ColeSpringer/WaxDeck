@@ -88,6 +88,8 @@ class _$PortableRef extends PortableRef {
   @override
   final int? fingerprintAlgo;
   @override
+  final int? fingerprintBucket;
+  @override
   final String? mbid;
   @override
   final String? asin;
@@ -112,6 +114,7 @@ class _$PortableRef extends PortableRef {
     this.essence,
     this.fingerprint,
     this.fingerprintAlgo,
+    this.fingerprintBucket,
     this.mbid,
     this.asin,
     this.isbn,
@@ -136,6 +139,7 @@ class _$PortableRef extends PortableRef {
         essence == other.essence &&
         fingerprint == other.fingerprint &&
         fingerprintAlgo == other.fingerprintAlgo &&
+        fingerprintBucket == other.fingerprintBucket &&
         mbid == other.mbid &&
         asin == other.asin &&
         isbn == other.isbn &&
@@ -153,6 +157,7 @@ class _$PortableRef extends PortableRef {
     _$hash = $jc(_$hash, essence.hashCode);
     _$hash = $jc(_$hash, fingerprint.hashCode);
     _$hash = $jc(_$hash, fingerprintAlgo.hashCode);
+    _$hash = $jc(_$hash, fingerprintBucket.hashCode);
     _$hash = $jc(_$hash, mbid.hashCode);
     _$hash = $jc(_$hash, asin.hashCode);
     _$hash = $jc(_$hash, isbn.hashCode);
@@ -172,6 +177,7 @@ class _$PortableRef extends PortableRef {
           ..add('essence', essence)
           ..add('fingerprint', fingerprint)
           ..add('fingerprintAlgo', fingerprintAlgo)
+          ..add('fingerprintBucket', fingerprintBucket)
           ..add('mbid', mbid)
           ..add('asin', asin)
           ..add('isbn', isbn)
@@ -203,6 +209,11 @@ class PortableRefBuilder implements Builder<PortableRef, PortableRefBuilder> {
   int? get fingerprintAlgo => _$this._fingerprintAlgo;
   set fingerprintAlgo(int? fingerprintAlgo) =>
       _$this._fingerprintAlgo = fingerprintAlgo;
+
+  int? _fingerprintBucket;
+  int? get fingerprintBucket => _$this._fingerprintBucket;
+  set fingerprintBucket(int? fingerprintBucket) =>
+      _$this._fingerprintBucket = fingerprintBucket;
 
   String? _mbid;
   String? get mbid => _$this._mbid;
@@ -247,6 +258,7 @@ class PortableRefBuilder implements Builder<PortableRef, PortableRefBuilder> {
       _essence = $v.essence;
       _fingerprint = $v.fingerprint;
       _fingerprintAlgo = $v.fingerprintAlgo;
+      _fingerprintBucket = $v.fingerprintBucket;
       _mbid = $v.mbid;
       _asin = $v.asin;
       _isbn = $v.isbn;
@@ -285,6 +297,7 @@ class PortableRefBuilder implements Builder<PortableRef, PortableRefBuilder> {
           essence: essence,
           fingerprint: fingerprint,
           fingerprintAlgo: fingerprintAlgo,
+          fingerprintBucket: fingerprintBucket,
           mbid: mbid,
           asin: asin,
           isbn: isbn,

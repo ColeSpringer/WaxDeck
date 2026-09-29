@@ -1459,13 +1459,18 @@ func (l *Library) episodeSummary(ctx context.Context, ep *model.Episode) Episode
 }
 
 // classifyFeedErr maps a subscribe or sync failure onto the API error
-// model, scrubbing feed URLs out of upstream detail for private shows.
+// model: a document that is not a feed is invalid, the feed's own failure
+// unreachable (URLs scrubbed for private shows), the rest by kind.
 func (l *Library) classifyFeedErr(ctx context.Context, err error, feedURL string, private bool) error {
-	kind := KindOf(classify(err))
-	switch kind {
-	case KindInvalid, KindUnsupported, KindConflict, KindMaintenance:
+	if !feedAtFault(ctx, err) || KindOf(classify(err)) == KindInvalid {
 		return classify(err)
 	}
+	return l.feedUnreachable(err, feedURL, private)
+}
+
+// feedUnreachable reports a feed's own failure, its URL scrubbed from the
+// detail and all of the detail withheld for a private show.
+func (l *Library) feedUnreachable(err error, feedURL string, private bool) error {
 	msg := err.Error()
 	if private {
 		msg = "the feed could not be fetched; detail withheld for a private feed (see the server log)"

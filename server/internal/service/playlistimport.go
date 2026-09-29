@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/csv"
 	"errors"
+	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -26,14 +28,17 @@ type PortableRefDTO struct {
 	Essence         string
 	Fingerprint     []byte
 	FingerprintAlgo int
-	MBID            string
-	ASIN            string
-	ISBN            string
-	ISRC            string
-	Artist          string
-	Title           string
-	Album           string
-	DurationMs      int64
+	// FingerprintBucket is where the fingerprint was stored; zero probes at
+	// DurationMs's bucket.
+	FingerprintBucket int64
+	MBID              string
+	ASIN              string
+	ISBN              string
+	ISRC              string
+	Artist            string
+	Title             string
+	Album             string
+	DurationMs        int64
 }
 
 // PlaylistImportInput is one import request.
@@ -106,6 +111,11 @@ func parsePlaylistExport(src, payload string, portableRefs []PortableRefDTO) ([]
 		}
 		if payload != "" {
 			return nil, "", errInvalid("the portable source takes refs, not payload")
+		}
+		for i, r := range portableRefs {
+			if r.FingerprintBucket < 0 || r.FingerprintBucket > math.MaxInt32 {
+				return nil, "", errInvalid(fmt.Sprintf("refs[%d]: fingerprintBucket must be between 0 and %d", i, math.MaxInt32))
+			}
 		}
 		refs = portableRefs
 	case "spotify", "ytmusic", "csv":
@@ -291,17 +301,18 @@ func (l *Library) ExportPlaylistPortable(ctx context.Context, uc *UserCtx, apiPl
 	out := make([]PortableRefDTO, len(refs))
 	for i, r := range refs {
 		out[i] = PortableRefDTO{
-			Kind:            string(r.Kind),
-			Essence:         r.Essence,
-			Fingerprint:     r.Fingerprint,
-			FingerprintAlgo: r.FingerprintAlgo,
-			MBID:            r.MBID,
-			ASIN:            r.ASIN,
-			ISBN:            r.ISBN,
-			Artist:          r.Artist,
-			Title:           r.Title,
-			Album:           r.Album,
-			DurationMs:      r.DurationMS,
+			Kind:              string(r.Kind),
+			Essence:           r.Essence,
+			Fingerprint:       r.Fingerprint,
+			FingerprintAlgo:   r.FingerprintAlgo,
+			FingerprintBucket: r.FingerprintBucket,
+			MBID:              r.MBID,
+			ASIN:              r.ASIN,
+			ISBN:              r.ISBN,
+			Artist:            r.Artist,
+			Title:             r.Title,
+			Album:             r.Album,
+			DurationMs:        r.DurationMS,
 		}
 	}
 	return pl.Name, out, nil
@@ -315,17 +326,18 @@ func toModelRef(r PortableRefDTO) model.PortableRef {
 		kind = model.KindTrack
 	}
 	return model.PortableRef{
-		Kind:            kind,
-		Essence:         r.Essence,
-		Fingerprint:     r.Fingerprint,
-		FingerprintAlgo: r.FingerprintAlgo,
-		MBID:            r.MBID,
-		ASIN:            r.ASIN,
-		ISBN:            r.ISBN,
-		Artist:          r.Artist,
-		Title:           r.Title,
-		Album:           r.Album,
-		DurationMS:      r.DurationMs,
+		Kind:              kind,
+		Essence:           r.Essence,
+		Fingerprint:       r.Fingerprint,
+		FingerprintAlgo:   r.FingerprintAlgo,
+		FingerprintBucket: r.FingerprintBucket,
+		MBID:              r.MBID,
+		ASIN:              r.ASIN,
+		ISBN:              r.ISBN,
+		Artist:            r.Artist,
+		Title:             r.Title,
+		Album:             r.Album,
+		DurationMS:        r.DurationMs,
 	}
 }
 

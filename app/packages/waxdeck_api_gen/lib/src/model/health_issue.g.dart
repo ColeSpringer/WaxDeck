@@ -17,6 +17,8 @@ class _$HealthIssue extends HealthIssue {
   final MediaType mediaType;
   @override
   final BuiltList<String> rules;
+  @override
+  final HealthIssueDetail? detail;
 
   factory _$HealthIssue([void Function(HealthIssueBuilder)? updates]) =>
       (HealthIssueBuilder()..update(updates))._build();
@@ -27,6 +29,7 @@ class _$HealthIssue extends HealthIssue {
     this.artist,
     required this.mediaType,
     required this.rules,
+    this.detail,
   }) : super._();
   @override
   HealthIssue rebuild(void Function(HealthIssueBuilder) updates) =>
@@ -43,7 +46,8 @@ class _$HealthIssue extends HealthIssue {
         title == other.title &&
         artist == other.artist &&
         mediaType == other.mediaType &&
-        rules == other.rules;
+        rules == other.rules &&
+        detail == other.detail;
   }
 
   @override
@@ -54,6 +58,7 @@ class _$HealthIssue extends HealthIssue {
     _$hash = $jc(_$hash, artist.hashCode);
     _$hash = $jc(_$hash, mediaType.hashCode);
     _$hash = $jc(_$hash, rules.hashCode);
+    _$hash = $jc(_$hash, detail.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -65,7 +70,8 @@ class _$HealthIssue extends HealthIssue {
           ..add('title', title)
           ..add('artist', artist)
           ..add('mediaType', mediaType)
-          ..add('rules', rules))
+          ..add('rules', rules)
+          ..add('detail', detail))
         .toString();
   }
 }
@@ -93,6 +99,11 @@ class HealthIssueBuilder implements Builder<HealthIssue, HealthIssueBuilder> {
   ListBuilder<String> get rules => _$this._rules ??= ListBuilder<String>();
   set rules(ListBuilder<String>? rules) => _$this._rules = rules;
 
+  HealthIssueDetailBuilder? _detail;
+  HealthIssueDetailBuilder get detail =>
+      _$this._detail ??= HealthIssueDetailBuilder();
+  set detail(HealthIssueDetailBuilder? detail) => _$this._detail = detail;
+
   HealthIssueBuilder() {
     HealthIssue._defaults(this);
   }
@@ -105,6 +116,7 @@ class HealthIssueBuilder implements Builder<HealthIssue, HealthIssueBuilder> {
       _artist = $v.artist;
       _mediaType = $v.mediaType;
       _rules = $v.rules.toBuilder();
+      _detail = $v.detail?.toBuilder();
       _$v = null;
     }
     return this;
@@ -146,12 +158,15 @@ class HealthIssueBuilder implements Builder<HealthIssue, HealthIssueBuilder> {
               'mediaType',
             ),
             rules: rules.build(),
+            detail: _detail?.build(),
           );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'rules';
         rules.build();
+        _$failedField = 'detail';
+        _detail?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'HealthIssue',

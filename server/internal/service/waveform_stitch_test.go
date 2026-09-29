@@ -47,14 +47,19 @@ func TestWholeItemBuckets(t *testing.T) {
 }
 
 // The property the whole feature rests on: a part occupies bucket-space
-// in proportion to how long it is, not to how many buckets it stored.
-// Both parts here store 1000 buckets; one is three times the other.
+// in proportion to its length on the book's timeline, which is what the
+// player places it by, not to how many buckets it stored or how long its
+// audio decoded to. One part's header says three times the other's.
 func TestStitchWeightsPartsByDuration(t *testing.T) {
 	t.Parallel()
 	parts := []model.BookPart{part("fl-1", 90_000), part("fl-2", 30_000)}
 	stored := map[string]model.PeaksData{
 		"fl-1": peaksOf(1000, 0x4000),
 		"fl-2": peaksOf(1000, 0xC000),
+	}
+	for pid, pk := range stored {
+		pk.Frames, pk.SampleRate = 30_000, 1000
+		stored[pid] = pk
 	}
 
 	out := stitchPeaks(parts, stored, 120_000, 100)
@@ -174,24 +179,30 @@ func TestStitchLeavesNoGapBetweenParts(t *testing.T) {
 func TestWholeItemValidatorFollowsEveryDependency(t *testing.T) {
 	parts := []model.BookPart{part("fl-1", 60_000), part("fl-2", 60_000)}
 	essence := []string{"aaaa", "bbbb"}
-	base := wholeItemValidator(parts, essence, 1000)
+	versions := []int{1, 1}
+	base := wholeItemValidator(parts, essence, versions, 1000)
 
 	// A re-analysed part.
-	if got := wholeItemValidator(parts, []string{"aaaa", "cccc"}, 1000); got == base {
+	if got := wholeItemValidator(parts, []string{"aaaa", "cccc"}, versions, 1000); got == base {
 		t.Fatal("a part's new essence left the validator unchanged")
 	}
 	// The same parts in the other order.
-	if got := wholeItemValidator(parts, []string{"bbbb", "aaaa"}, 1000); got == base {
+	if got := wholeItemValidator(parts, []string{"bbbb", "aaaa"}, versions, 1000); got == base {
 		t.Fatal("re-ordering the book left the validator unchanged")
 	}
 	// A rescan that corrects a lying header: same essence, same
 	// analysis, every bucket redrawn.
 	longer := []model.BookPart{part("fl-1", 60_000), part("fl-2", 90_000)}
-	if got := wholeItemValidator(longer, essence, 1000); got == base {
+	if got := wholeItemValidator(longer, essence, versions, 1000); got == base {
 		t.Fatal("a corrected part duration left the validator unchanged")
 	}
+	// One part re-analysed under a newer version while another already
+	// held it, so the highest version is the same.
+	if wholeItemValidator(parts, essence, []int{2, 1}, 1000) == wholeItemValidator(parts, essence, []int{2, 2}, 1000) {
+		t.Fatal("a part's new analysis version left the validator unchanged")
+	}
 	// A different resolution over the same audio.
-	if got := wholeItemValidator(parts, essence, 1200); got == base {
+	if got := wholeItemValidator(parts, essence, versions, 1200); got == base {
 		t.Fatal("a different bucket count left the validator unchanged")
 	}
 
@@ -199,11 +210,13 @@ func TestWholeItemValidatorFollowsEveryDependency(t *testing.T) {
 	// keeps a conditional request inside a proxy's header buffers.
 	many := make([]model.BookPart, 0, 200)
 	longEssence := make([]string, 0, 200)
+	manyVersions := make([]int, 0, 200)
 	for i := range 200 {
 		many = append(many, part("fl-"+string(rune('a'+i%26)), 60_000))
 		longEssence = append(longEssence, "sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+		manyVersions = append(manyVersions, 1)
 	}
-	if got := wholeItemValidator(many, longEssence, 4000); len(got) != 32 {
+	if got := wholeItemValidator(many, longEssence, manyVersions, 4000); len(got) != 32 {
 		t.Fatalf("a 200-part validator is %d chars, want a fixed 32", len(got))
 	}
 }

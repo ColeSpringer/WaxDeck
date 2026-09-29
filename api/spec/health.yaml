@@ -15,7 +15,13 @@ paths:
         `small-art`, `missing-mbid`, `missing-year`, `missing-genre`,
         `genre-whitelist`, `missing-lyrics`, `missing-narrator`,
         `missing-asin`, `path-mismatch`, `write-unsynced`,
-        `legacy-tags`, and `corrupt-audio`. `genre-whitelist` flags an
+        `legacy-tags`, `corrupt-audio`, and `duration-mismatch`.
+        `duration-mismatch` flags an analyzed file whose header states a
+        length its decoded audio does not have, off by more than two
+        seconds and two percent; it has no bulk fix. A multi-file book
+        fails a file's rule (`corrupt-audio`, `write-unsynced`,
+        `legacy-tags`, `duration-mismatch`) when any of its parts does.
+        `genre-whitelist` flags an
         item carrying a genre the server's genre tree does not know; it
         is deliberately not bulk-fixable, because the background
         normalizer already rewrites everything the tree does know, so
@@ -141,7 +147,8 @@ paths:
       summary: Query per-file diagnostics
       description: >
         Persisted per-file diagnostics (what scan, organize, replaygain,
-        enrichment, and tag write-back recorded about individual files) across the library
+        enrichment, tag write-back, and the analyze pass recorded about
+        individual files) across the library
         in a stable path order, optionally narrowed by origin, code,
         severity, or library. This is the query surface a diagnostics
         dashboard reads instead of auditing item by item. Administrators
@@ -348,7 +355,7 @@ components:
       description: Restrict to one writer.
       schema:
         type: string
-        enum: [scan, organize, replaygain, edit, enrichment]
+        enum: [scan, organize, replaygain, edit, enrichment, analyze]
     DiagnosticCodeFilter:
       name: code
       in: query
@@ -466,6 +473,32 @@ components:
           description: The rules the item currently fails.
           items:
             type: string
+        detail:
+          $ref: "#/components/schemas/HealthIssueDetail"
+
+    HealthIssueDetail:
+      type: object
+      description: >
+        What a failing rule measured, present when one did:
+        `duration-mismatch` carries both lengths of the file that fails
+        it, which for a book may be one part and for a cue-carved track
+        is the whole file it is cut from.
+      properties:
+        headerMs:
+          type: integer
+          format: int64
+          description: The length the file's header states.
+        decodedMs:
+          type: integer
+          format: int64
+          description: The length its audio decodes to.
+        partIndex:
+          type: integer
+          minimum: 0
+          description: The multi-file book part the lengths are of, zero-based.
+        wholeFile:
+          type: boolean
+          description: The lengths are of the whole file a cue-carved track is cut from.
 
     HealthFixRequest:
       type: object
@@ -672,7 +705,9 @@ components:
           type: string
           description: >
             The writer that recorded it (`scan`, `organize`, `replaygain`,
-            `edit`, or `enrichment`); new writers may appear.
+            `edit`, `enrichment`, or `analyze`); new writers may appear.
+            `analyze` records the decode damage the analyze pass found or
+            worked around, replaced each time the pass reads the file.
         code:
           type: string
           description: >

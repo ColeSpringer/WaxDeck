@@ -16,6 +16,7 @@ part 'portable_ref.g.dart';
 /// * [essence] - Exact-rip audio-essence hash.
 /// * [fingerprint] - Packed acoustic fingerprint, base64.
 /// * [fingerprintAlgo] - Fingerprint algorithm: 1 pure-Go, 100 Chromaprint.
+/// * [fingerprintBucket] - The duration bucket the fingerprint was stored under, taken from the decoded length when the header misstates it. Absent, the import probes at `durationMs`'s bucket. 
 /// * [mbid] - Recording MBID (track) or release MBID (book).
 /// * [asin] - Audiobook ASIN.
 /// * [isbn] - Audiobook ISBN.
@@ -42,6 +43,10 @@ abstract class PortableRef implements Built<PortableRef, PortableRefBuilder> {
   /// Fingerprint algorithm: 1 pure-Go, 100 Chromaprint.
   @BuiltValueField(wireName: r'fingerprintAlgo')
   int? get fingerprintAlgo;
+
+  /// The duration bucket the fingerprint was stored under, taken from the decoded length when the header misstates it. Absent, the import probes at `durationMs`'s bucket. 
+  @BuiltValueField(wireName: r'fingerprintBucket')
+  int? get fingerprintBucket;
 
   /// Recording MBID (track) or release MBID (book).
   @BuiltValueField(wireName: r'mbid')
@@ -121,6 +126,13 @@ class _$PortableRefSerializer implements PrimitiveSerializer<PortableRef> {
       yield r'fingerprintAlgo';
       yield serializers.serialize(
         object.fingerprintAlgo,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.fingerprintBucket != null) {
+      yield r'fingerprintBucket';
+      yield serializers.serialize(
+        object.fingerprintBucket,
         specifiedType: const FullType(int),
       );
     }
@@ -231,6 +243,14 @@ class _$PortableRefSerializer implements PrimitiveSerializer<PortableRef> {
           ) as int?;
           if (valueDes == null) continue;
           result.fingerprintAlgo = valueDes;
+          break;
+        case r'fingerprintBucket':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.fingerprintBucket = valueDes;
           break;
         case r'mbid':
           final valueDes = serializers.deserialize(

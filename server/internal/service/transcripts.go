@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/waxerr"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -86,7 +87,7 @@ func (l *Library) Transcript(ctx context.Context, uc *UserCtx, apiEpisodePID str
 		}
 		pod, podErr := l.lib.Podcasts().Get(ctx, ep.PodcastPID)
 		private := podErr != nil || l.showIsPrivate(ctx, pod)
-		return Transcript{}, l.classifyFeedErr(ctx, err, ep.TranscriptURL, private)
+		return Transcript{}, l.classifyFeedErr(ctx, hostFailure(ctx, "service.fetchTranscript", err), ep.TranscriptURL, private)
 	}
 
 	encoded, err := encodeTranscriptCues(tx.Cues)
@@ -173,6 +174,15 @@ func (l *Library) fetchTranscript(ctx context.Context, showPID model.PID, rawURL
 		return Transcript{}, errors.New("transcript document exceeds the size cap")
 	}
 	return parseTranscript(body, declaredType, resp.Header.Get("Content-Type"), rawURL)
+}
+
+// hostFailure classes a failure to read a feed-side host as that host's,
+// the class a provider gives its own, or canceled once the caller is.
+func hostFailure(ctx context.Context, op string, err error) error {
+	if ctx.Err() != nil {
+		return waxerr.FromContext(op, err, waxerr.CodeCanceled)
+	}
+	return waxerr.Wrap(waxerr.CodeIO, op, err)
 }
 
 // transcriptClient builds the guarded HTTP client once: redirects

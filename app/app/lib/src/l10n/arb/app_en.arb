@@ -4809,6 +4809,56 @@
   "@healthDuplicatesTitle": {
     "description": "Heading over the duplicate findings."
   },
+  "healthDurationDetail": "Header {header}, audio {audio}",
+  "@healthDurationDetail": {
+    "description": "Under an issue failing `duration-mismatch`: the length the file's header states, then the length its audio decodes to.",
+    "placeholders": {
+      "header": {
+        "type": "String",
+        "example": "3:41"
+      },
+      "audio": {
+        "type": "String",
+        "example": "3:12"
+      }
+    }
+  },
+  "healthDurationDetailFile": "Whole file: header {header}, audio {audio}",
+  "@healthDurationDetailFile": {
+    "description": "Under a cue-carved track failing `duration-mismatch`: the lengths are of the whole file the track is cut from.",
+    "placeholders": {
+      "header": {
+        "type": "String",
+        "example": "54:00"
+      },
+      "audio": {
+        "type": "String",
+        "example": "1:00:00"
+      }
+    }
+  },
+  "healthDurationDetailPart": "Part {part}: header {header}, audio {audio}",
+  "@healthDurationDetailPart": {
+    "description": "Under a multi-file audiobook failing `duration-mismatch`: which part, counted from one, and its two lengths.",
+    "placeholders": {
+      "part": {
+        "type": "int",
+        "example": "3"
+      },
+      "header": {
+        "type": "String",
+        "example": "0:03"
+      },
+      "audio": {
+        "type": "String",
+        "example": "0:06"
+      }
+    }
+  },
+  "healthDurationMismatch": "Header duration disagrees with the audio",
+  "@healthDurationMismatch": {
+    "description": "Name of the health rule `duration-mismatch`, which counts analyzed files whose header states a length more than two seconds and two percent off their decoded audio."
+  },
   "healthEntityAlbum": "album",
   "@healthEntityAlbum": {
     "description": "Kind of a duplicate finding about two albums. Lower case: it fills a small chip."
@@ -4966,6 +5016,30 @@
   "healthNamesMatch": "Names match",
   "@healthNamesMatch": {
     "description": "Stands in for the audit's explanation when it gave none: the finding is a plain name collision."
+  },
+  "healthOriginAnalyze": "Analysis",
+  "@healthOriginAnalyze": {
+    "description": "In the diagnostics table's Origin column: which writer recorded the row. The analyze pass, which decodes every file end to end."
+  },
+  "healthOriginEdit": "Tag write-back",
+  "@healthOriginEdit": {
+    "description": "In the diagnostics table's Origin column: which writer recorded the row. Writing edited tags back into the files."
+  },
+  "healthOriginEnrichment": "Enrichment",
+  "@healthOriginEnrichment": {
+    "description": "In the diagnostics table's Origin column: which writer recorded the row. The metadata and artwork enrichment pass."
+  },
+  "healthOriginOrganize": "Organize",
+  "@healthOriginOrganize": {
+    "description": "In the diagnostics table's Origin column: which writer recorded the row. Renaming and moving files into the organize profile."
+  },
+  "healthOriginReplayGain": "ReplayGain",
+  "@healthOriginReplayGain": {
+    "description": "In the diagnostics table's Origin column: which writer recorded the row. The ReplayGain loudness pass."
+  },
+  "healthOriginScan": "Scan",
+  "@healthOriginScan": {
+    "description": "In the diagnostics table's Origin column: which writer recorded the row. The library scan."
   },
   "healthPathMismatch": "File path does not match the organize profile",
   "@healthPathMismatch": {

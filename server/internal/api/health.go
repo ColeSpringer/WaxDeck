@@ -66,6 +66,12 @@ func (s *Server) ListHealthIssues(ctx context.Context, req ListHealthIssuesReque
 		if it.Artist != "" {
 			hi.Artist = ptr(it.Artist)
 		}
+		if d := it.Duration; d != nil {
+			hi.Detail = &HealthIssueDetail{HeaderMs: ptr(d.HeaderMS), DecodedMs: ptr(d.DecodedMS), PartIndex: d.PartIndex}
+			if d.WholeFile {
+				hi.Detail.WholeFile = ptr(true)
+			}
+		}
 		page.Items = append(page.Items, hi)
 	}
 	if next != "" {

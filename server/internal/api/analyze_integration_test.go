@@ -1,6 +1,8 @@
 package api
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"net/http"
 	"os"
@@ -180,6 +182,82 @@ func TestAnalyzeThenWaveform(t *testing.T) {
 	}
 	if len(etags) != 2 || etags[""] {
 		t.Fatalf("sibling ETags = %v, want two distinct validators", etags)
+	}
+}
+
+// understateFLAC rewrites a FLAC's STREAMINFO sample total to num/den of
+// itself, leaving every frame in place: a header that understates the audio.
+func understateFLAC(t *testing.T, path string, num, den uint64) {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "fLaC", the block header, then STREAMINFO; the total is the low 36
+	// bits of its bytes 10-17.
+	if string(b[:4]) != "fLaC" || b[4]&0x7f != 0 {
+		t.Fatalf("%s does not open on STREAMINFO", path)
+	}
+	packed := binary.BigEndian.Uint64(b[18:26])
+	total := packed & (1<<36 - 1)
+	binary.BigEndian.PutUint64(b[18:26], packed&^(1<<36-1)|total*num/den)
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A header that states nine tenths of the audio moves no window: each is
+// placed by the frames the analyze pass decoded, and one reaching past
+// them answers unavailable rather than a mis-scaled envelope.
+func TestCarvedWaveformsFollowTheDecodedFrames(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+
+	ripDir := filepath.Join(h.library, "Short Artist", "Short Album")
+	paths, err := fixtures.Generate(ripDir, fixtures.Spec{
+		Name: "Short Album", Codec: fixtures.CodecFLAC, Duration: 8 * time.Second,
+		Tags: map[string]string{
+			"TITLE": "Short Album", "ALBUM": "Short Album",
+			"ARTIST": "Short Artist", "ALBUMARTIST": "Short Artist",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	understateFLAC(t, paths[0], 9, 10)
+	// Two starts past the stated 7.2 s: 7.4 s, inside the audio, and 8.4 s,
+	// past it.
+	sheet := "PERFORMER \"Short Artist\"\nTITLE \"Short Album\"\nFILE \"Short Album.flac\" WAVE\n" +
+		"  TRACK 01 AUDIO\n    TITLE \"Short One\"\n    INDEX 01 00:00:00\n" +
+		"  TRACK 02 AUDIO\n    TITLE \"Short Two\"\n    INDEX 01 00:03:00\n" +
+		"  TRACK 03 AUDIO\n    TITLE \"Short Three\"\n    INDEX 01 00:07:30\n" +
+		"  TRACK 04 AUDIO\n    TITLE \"Short Four\"\n    INDEX 01 00:08:30\n"
+	if err := os.WriteFile(filepath.Join(ripDir, "Short Album.cue"), []byte(sheet), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	analyzeAndWait(t, h)
+
+	byTitle := map[string]ItemSummary{}
+	for _, it := range h.items(t, "?mediaType=music").Items {
+		byTitle[it.Title] = it
+	}
+	// 1000 buckets over 8 s of audio, 125 a second.
+	for title, want := range map[string]int{"Short One": 375, "Short Two": 550, "Short Three": 0, "Short Four": 0} {
+		it, ok := byTitle[title]
+		if !ok {
+			t.Fatalf("%s missing from the scan: %v", title, byTitle)
+		}
+		wf := waveform(t, h, it.Pid)
+		if want == 0 {
+			if wf.State != "unavailable" {
+				t.Errorf("%s reaches past the audio but answers %s", title, wf.State)
+			}
+			continue
+		}
+		if wf.State != "ready" || wf.Resolution == nil || *wf.Resolution != want {
+			t.Errorf("%s answers %s over %v buckets, want ready over %d", title, wf.State, derefIntOr(wf.Resolution), want)
+		}
 	}
 }
 
@@ -555,6 +633,88 @@ func TestWaveformWholeBook(t *testing.T) {
 		if (*one.Peaks)[i] != (*byPart.Peaks)[i] {
 			t.Fatalf("single file: the two spans differ at bucket %d", i)
 		}
+	}
+}
+
+// understateMP4 rewrites the first media header's duration to num/den of
+// itself, leaving the samples in place.
+func understateMP4(t *testing.T, path string, num, den uint64) {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	i := bytes.Index(b, []byte("mdhd"))
+	if i < 4 {
+		t.Fatalf("%s has no media header", path)
+	}
+	switch size := binary.BigEndian.Uint32(b[i-4:]); {
+	case size == 32 && b[i+4] == 0:
+		d := uint64(binary.BigEndian.Uint32(b[i+20:]))
+		binary.BigEndian.PutUint32(b[i+20:], uint32(d*num/den))
+	case size == 44 && b[i+4] == 1:
+		binary.BigEndian.PutUint64(b[i+28:], binary.BigEndian.Uint64(b[i+28:])*num/den)
+	default:
+		t.Fatalf("%s: unexpected media header (size %d, version %d)", path, size, b[i+4])
+	}
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// The stitch lays each part over its span on the book's timeline, the
+// header's, which is where the player puts it: part one's header states
+// half of its 4 s, and part two's silence must land where it plays.
+func TestWholeBookWaveformFollowsTheBookTimeline(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	bookDir := filepath.Join(h.library, "Lying Author", "The Lying Book")
+	for _, p := range []struct {
+		name, track   string
+		tone, silence time.Duration
+	}{
+		{"01 - One", "1", 4 * time.Second, 0},
+		{"02 - Two", "2", 3 * time.Second, 2 * time.Second},
+		{"03 - Three", "3", 6 * time.Second, 0},
+	} {
+		path, err := fixtures.GenerateM4B(bookDir, fixtures.Spec{
+			Name: p.name, Duration: p.tone, TrailSilence: p.silence,
+			Tags: map[string]string{
+				"TITLE": p.name, "ALBUM": "The Lying Book", "ARTIST": "Lying Author",
+				"ALBUMARTIST": "Lying Author", "TRACKNUMBER": p.track,
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p.track == "1" {
+			understateMP4(t, path, 1, 2)
+		}
+	}
+	h.rescanAndWait(t)
+	analyzeAndWait(t, h)
+	books := h.items(t, "?mediaType=audiobook").Items
+	if len(books) != 1 {
+		t.Fatalf("audiobooks = %d, want 1", len(books))
+	}
+
+	whole := waveformWhole(t, h, books[0].Pid)
+	if whole.State != "ready" || whole.Peaks == nil || len(*whole.Peaks) != 1000 {
+		t.Fatalf("whole book answers %s over %d peaks, want ready over 1000", whole.State, len(deref2(whole.Peaks)))
+	}
+	// 13 ms a bucket over the 13 s timeline: part two plays from 2 s, its
+	// silence 5 s to 7 s, buckets 384 to 537. By decoded spans, 467 to 599.
+	first, last := -1, -1
+	for i, v := range *whole.Peaks {
+		if v == 0 {
+			if first < 0 {
+				first = i
+			}
+			last = i
+		}
+	}
+	if first < 382 || first > 386 || last < 535 || last > 539 {
+		t.Fatalf("silence spans buckets %d to %d, want 384 to 537", first, last)
 	}
 }
 

@@ -1231,7 +1231,7 @@ export interface paths {
         };
         /**
          * Metadata health summary
-         * @description The library completeness score with its per-rule breakdown. Health is computed by a background sweep; `warmingUp` is true until the first sweep covers the library (a fresh install shows honest progress instead of a wall of red), and `sweptAt` dates the numbers. Items marked unofficial are exempt from rules that assume a canonical release. Rule names are server-defined strings; the current set is `missing-art`, `small-art`, `missing-mbid`, `missing-year`, `missing-genre`, `genre-whitelist`, `missing-lyrics`, `missing-narrator`, `missing-asin`, `path-mismatch`, `write-unsynced`, `legacy-tags`, and `corrupt-audio`. `genre-whitelist` flags an item carrying a genre the server's genre tree does not know; it is deliberately not bulk-fixable, because the background normalizer already rewrites everything the tree does know, so what remains is answered by editing the tree (`/admin/genre-tree`), not the item.
+         * @description The library completeness score with its per-rule breakdown. Health is computed by a background sweep; `warmingUp` is true until the first sweep covers the library (a fresh install shows honest progress instead of a wall of red), and `sweptAt` dates the numbers. Items marked unofficial are exempt from rules that assume a canonical release. Rule names are server-defined strings; the current set is `missing-art`, `small-art`, `missing-mbid`, `missing-year`, `missing-genre`, `genre-whitelist`, `missing-lyrics`, `missing-narrator`, `missing-asin`, `path-mismatch`, `write-unsynced`, `legacy-tags`, `corrupt-audio`, and `duration-mismatch`. `duration-mismatch` flags an analyzed file whose header states a length its decoded audio does not have, off by more than two seconds and two percent; it has no bulk fix. A multi-file book fails a file's rule (`corrupt-audio`, `write-unsynced`, `legacy-tags`, `duration-mismatch`) when any of its parts does. `genre-whitelist` flags an item carrying a genre the server's genre tree does not know; it is deliberately not bulk-fixable, because the background normalizer already rewrites everything the tree does know, so what remains is answered by editing the tree (`/admin/genre-tree`), not the item.
          */
         get: operations["getLibraryHealth"];
         put?: never;
@@ -1311,7 +1311,7 @@ export interface paths {
         };
         /**
          * Query per-file diagnostics
-         * @description Persisted per-file diagnostics (what scan, organize, replaygain, enrichment, and tag write-back recorded about individual files) across the library in a stable path order, optionally narrowed by origin, code, severity, or library. This is the query surface a diagnostics dashboard reads instead of auditing item by item. Administrators only.
+         * @description Persisted per-file diagnostics (what scan, organize, replaygain, enrichment, tag write-back, and the analyze pass recorded about individual files) across the library in a stable path order, optionally narrowed by origin, code, severity, or library. This is the query surface a diagnostics dashboard reads instead of auditing item by item. Administrators only.
          */
         get: operations["listFileDiagnostics"];
         put?: never;
@@ -2865,11 +2865,11 @@ export interface paths {
          * Get an item's waveform overview
          * @description The item's amplitude envelope, for painting a waveform behind a seek bar. A pure read: the values come from the catalog's analyze pass and this endpoint computes nothing and queues nothing, so a server whose analyze pass has never run answers `pending` everywhere. `POST /library/analyze` and the `analyze` schedule are what produce them.
          *     `peaks` is one value per bucket, `0` silence and `255` full scale, at the `resolution` the catalog stores (1000 buckets a file today); downsample to the width drawn. Stored 16-bit, narrowed by truncation.
-         *     A cue-carved track answers its window of its file's envelope: `resolution` is its share of the buckets, `essenceHash` names the file, and the `ETag` carries the window and the length placing it.
+         *     A cue-carved track answers its window of its file's envelope, placed by the audio the buckets were measured over: `resolution` is its share of the buckets, `essenceHash` names the file, and the `ETag` carries the window and the decoded length placing it.
          *     Waveforms are per audio file: for a multi-file audiobook, pass `partIndex` to get the envelope of one part, in that part's own timeline, and the answer echoes the `partIndex` it describes. An omitted `partIndex` is part zero, so a client that does not know about parts gets the first one rather than nothing.
          *     `span=item` answers one envelope over the whole item instead: the parts stitched in reading order into the same `Waveform` shape, with the buckets spread evenly across the total duration and each part given bucket-space in proportion to how long it is. That is what a book scrubber draws, because a book's timeline is the book rather than the file the reader happens to be in; `partIndex` is ignored under it, and a single-file item answers exactly what `span=part` would. `resolution` is not fixed under `span=item` - a long book gets more buckets than a short one, so a chapter is still a shape rather than three bars - so read it rather than assuming it.
          *     A stitched answer is `ready` only when every part has an envelope. A book with one unanalyzed part is `pending`, and one with a part that can never be measured is `unavailable`: half a book's envelope drawn across a whole book's timeline would be silence somebody could seek into, which is a convincing wrong answer rather than a partial one.
-         *     `state` is `ready`, `pending` (not analyzed yet; ask after a pass), or `unavailable`, which is final: an episode, a file the pass could not measure, or a carved track its file's stated length cannot place.
+         *     `state` is `ready`, `pending` (not analyzed yet; ask after a pass), or `unavailable`, which is final: an episode, a file the pass could not measure, or a carved track whose window reaches past its file's decoded audio.
          *
          *     A book part not yet analyzed is `pending`, so a partly analyzed book can report both states across its parts.
          *     A `ready` answer is content-addressed by the audio essence of the file being described (so a multi-file book's parts carry different validators) and cacheable for a day; revalidate with `If-None-Match`. `pending` and `unavailable` are `no-store`, since both are expected to change.
@@ -6858,6 +6858,24 @@ export interface components {
             mediaType: components["schemas"]["MediaType"];
             /** @description The rules the item currently fails. */
             rules: string[];
+            detail?: components["schemas"]["HealthIssueDetail"];
+        };
+        /** @description What a failing rule measured, present when one did: `duration-mismatch` carries both lengths of the file that fails it, which for a book may be one part and for a cue-carved track is the whole file it is cut from. */
+        HealthIssueDetail: {
+            /**
+             * Format: int64
+             * @description The length the file's header states.
+             */
+            headerMs?: number;
+            /**
+             * Format: int64
+             * @description The length its audio decodes to.
+             */
+            decodedMs?: number;
+            /** @description The multi-file book part the lengths are of, zero-based. */
+            partIndex?: number;
+            /** @description The lengths are of the whole file a cue-carved track is cut from. */
+            wholeFile?: boolean;
         };
         /** @description A bulk fix for one rule. */
         HealthFixRequest: {
@@ -6964,7 +6982,7 @@ export interface components {
         FileDiagnostic: {
             /** @description The file's display path. */
             path: string;
-            /** @description The writer that recorded it (`scan`, `organize`, `replaygain`, `edit`, or `enrichment`); new writers may appear. */
+            /** @description The writer that recorded it (`scan`, `organize`, `replaygain`, `edit`, `enrichment`, or `analyze`); new writers may appear. `analyze` records the decode damage the analyze pass found or worked around, replaced each time the pass reads the file. */
             origin: string;
             /** @description What was observed (`unsupported_format`, `legacy_only_tags`, `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`, `tag_write_lost`, `tag_write_unsynced`, or `corrupt_audio`); new codes may appear, so treat an unknown value as a generic finding. */
             code: string;
@@ -9059,6 +9077,11 @@ export interface components {
             fingerprint?: string;
             /** @description Fingerprint algorithm: 1 pure-Go, 100 Chromaprint. */
             fingerprintAlgo?: number;
+            /**
+             * Format: int64
+             * @description The duration bucket the fingerprint was stored under, taken from the decoded length when the header misstates it. Absent, the import probes at `durationMs`'s bucket.
+             */
+            fingerprintBucket?: number;
             /** @description Recording MBID (track) or release MBID (book). */
             mbid?: string;
             /** @description Audiobook ASIN. */
@@ -11640,7 +11663,7 @@ export interface components {
         /** @description Session PID (e.g. `se-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
         SessionId: string;
         /** @description Restrict to one writer. */
-        DiagnosticOriginFilter: "scan" | "organize" | "replaygain" | "edit" | "enrichment";
+        DiagnosticOriginFilter: "scan" | "organize" | "replaygain" | "edit" | "enrichment" | "analyze";
         /** @description Restrict to one diagnostic code. */
         DiagnosticCodeFilter: "unsupported_format" | "legacy_only_tags" | "lyrics_partial" | "sidecar_skipped" | "cue_track_dropped" | "tag_write_lost" | "tag_write_unsynced" | "corrupt_audio";
         /** @description Restrict to one severity. */
@@ -16160,7 +16183,7 @@ export interface operations {
             /** @description The waveform, or its pending or unavailable state. */
             200: {
                 headers: {
-                    /** @description The described file's audio essence (a multi-file book's requested part), plus a carved track's window and the length placing it. Present on `ready` only. */
+                    /** @description The described file's audio essence (a multi-file book's requested part), plus a carved track's window and the decoded length placing it. Present on `ready` only. */
                     ETag?: string;
                     /** @description `private, max-age=86400, stale-while-revalidate=604800` for `ready`, `no-store` otherwise. Not `immutable`: the URL names a pid, not the bytes, so re-analysis under the same pid has to be able to invalidate it. */
                     "Cache-Control"?: string;

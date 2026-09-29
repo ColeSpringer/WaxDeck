@@ -184,7 +184,10 @@ per-kind role vocabularies, lyrics (timed LRC or plain text),
 chapters on single-file audiobooks, front-cover artwork for items and
 entities, custom tags (which are full browse dimensions), and entity
 edits (sort names, identifiers, release group types) with their own
-provenance.
+provenance. Changing an artist's, album's or release group's
+MusicBrainz id drops the artwork the enrichment pass fetched for the
+old identity, in every role no pin holds, so the next pass fetches the
+new one's; artwork you set or pinned stays.
 
 Each field is edited with the control its type wants rather than a
 bare text box: counts (year, track and disc numbers, seasons) take
@@ -397,8 +400,15 @@ The health sweep scores the library for completeness: missing or
 small artwork, missing identifiers, years, genres, lyrics, narrators
 and ASINs on books, genres outside the canonical tree, files whose
 paths disagree with the organize template, files whose tags lag the
-catalog, legacy-only tag values, and corrupt audio. Items marked
-unofficial are exempt from the rules that assume a canonical release.
+catalog, legacy-only tag values, and corrupt audio. Files whose
+header states a length the audio does not have (off by more than two
+seconds and two percent) are listed with both lengths, naming the part
+of a book or, for a cue-carved track, the whole file; the check reads
+the analyze pass's measurements, so it covers analyzed files only. The
+file rules (corrupt audio, tags lagging the catalog, legacy-only tags,
+a misstated length) look at every part of a multi-file book, so one
+damaged part flags the book. Items marked unofficial are exempt from
+the rules that assume a canonical release.
 Rules with an automated fix can be fixed in bulk; fixes run in the
 background at provider-etiquette pace. A fresh install shows a
 warming-up state with honest progress instead of a wall of red.

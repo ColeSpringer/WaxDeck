@@ -1146,6 +1146,15 @@ components:
         fingerprintAlgo:
           type: integer
           description: "Fingerprint algorithm: 1 pure-Go, 100 Chromaprint."
+        fingerprintBucket:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 2147483647
+          description: >
+            The duration bucket the fingerprint was stored under, taken from
+            the decoded length when the header misstates it. Absent, the
+            import probes at `durationMs`'s bucket.
         mbid:
           type: string
           description: Recording MBID (track) or release MBID (book).

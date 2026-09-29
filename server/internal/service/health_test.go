@@ -68,7 +68,7 @@ func TestHealthFixableRulesAreImplemented(t *testing.T) {
 			t.Fatalf("fixable rule %q is not in the implemented rule set", r)
 		}
 	}
-	for _, r := range []string{ruleCorruptAudio, ruleLegacyTags, ruleSmallArt, ruleMissingYear} {
+	for _, r := range []string{ruleCorruptAudio, ruleLegacyTags, ruleSmallArt, ruleMissingYear, ruleDurationMismatch} {
 		if healthFixable[r] {
 			t.Fatalf("rule %q must not be fixable", r)
 		}

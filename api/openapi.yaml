@@ -2696,7 +2696,13 @@ paths:
         `small-art`, `missing-mbid`, `missing-year`, `missing-genre`,
         `genre-whitelist`, `missing-lyrics`, `missing-narrator`,
         `missing-asin`, `path-mismatch`, `write-unsynced`,
-        `legacy-tags`, and `corrupt-audio`. `genre-whitelist` flags an
+        `legacy-tags`, `corrupt-audio`, and `duration-mismatch`.
+        `duration-mismatch` flags an analyzed file whose header states a
+        length its decoded audio does not have, off by more than two
+        seconds and two percent; it has no bulk fix. A multi-file book
+        fails a file's rule (`corrupt-audio`, `write-unsynced`,
+        `legacy-tags`, `duration-mismatch`) when any of its parts does.
+        `genre-whitelist` flags an
         item carrying a genre the server's genre tree does not know; it
         is deliberately not bulk-fixable, because the background
         normalizer already rewrites everything the tree does know, so
@@ -2822,7 +2828,8 @@ paths:
       summary: Query per-file diagnostics
       description: >
         Persisted per-file diagnostics (what scan, organize, replaygain,
-        enrichment, and tag write-back recorded about individual files) across the library
+        enrichment, tag write-back, and the analyze pass recorded about
+        individual files) across the library
         in a stable path order, optionally narrowed by origin, code,
         severity, or library. This is the query surface a diagnostics
         dashboard reads instead of auditing item by item. Administrators
@@ -6425,9 +6432,10 @@ paths:
         at the `resolution` the catalog stores (1000 buckets a file today);
         downsample to the width drawn. Stored 16-bit, narrowed by truncation.
 
-        A cue-carved track answers its window of its file's envelope:
-        `resolution` is its share of the buckets, `essenceHash` names the
-        file, and the `ETag` carries the window and the length placing it.
+        A cue-carved track answers its window of its file's envelope,
+        placed by the audio the buckets were measured over: `resolution`
+        is its share of the buckets, `essenceHash` names the file, and the
+        `ETag` carries the window and the decoded length placing it.
 
         Waveforms are per audio file: for a multi-file audiobook, pass
         `partIndex` to get the envelope of one part, in that part's own
@@ -6456,7 +6464,8 @@ paths:
 
         `state` is `ready`, `pending` (not analyzed yet; ask after a pass),
         or `unavailable`, which is final: an episode, a file the pass could
-        not measure, or a carved track its file's stated length cannot place.
+        not measure, or a carved track whose window reaches past its file's
+        decoded audio.
 
 
         A book part not yet analyzed is `pending`, so a partly analyzed
@@ -6500,8 +6509,8 @@ paths:
             ETag:
               description: >
                 The described file's audio essence (a multi-file book's
-                requested part), plus a carved track's window and the length
-                placing it. Present on `ready` only.
+                requested part), plus a carved track's window and the decoded
+                length placing it. Present on `ready` only.
               schema:
                 type: string
             Cache-Control:
@@ -11795,7 +11804,7 @@ components:
       description: Restrict to one writer.
       schema:
         type: string
-        enum: [scan, organize, replaygain, edit, enrichment]
+        enum: [scan, organize, replaygain, edit, enrichment, analyze]
     DiagnosticCodeFilter:
       name: code
       in: query
@@ -15082,6 +15091,32 @@ components:
           description: The rules the item currently fails.
           items:
             type: string
+        detail:
+          $ref: "#/components/schemas/HealthIssueDetail"
+
+    HealthIssueDetail:
+      type: object
+      description: >
+        What a failing rule measured, present when one did:
+        `duration-mismatch` carries both lengths of the file that fails
+        it, which for a book may be one part and for a cue-carved track
+        is the whole file it is cut from.
+      properties:
+        headerMs:
+          type: integer
+          format: int64
+          description: The length the file's header states.
+        decodedMs:
+          type: integer
+          format: int64
+          description: The length its audio decodes to.
+        partIndex:
+          type: integer
+          minimum: 0
+          description: The multi-file book part the lengths are of, zero-based.
+        wholeFile:
+          type: boolean
+          description: The lengths are of the whole file a cue-carved track is cut from.
 
     HealthFixRequest:
       type: object
@@ -15288,7 +15323,9 @@ components:
           type: string
           description: >
             The writer that recorded it (`scan`, `organize`, `replaygain`,
-            `edit`, or `enrichment`); new writers may appear.
+            `edit`, `enrichment`, or `analyze`); new writers may appear.
+            `analyze` records the decode damage the analyze pass found or
+            worked around, replaced each time the pass reads the file.
         code:
           type: string
           description: >
@@ -19261,6 +19298,15 @@ components:
         fingerprintAlgo:
           type: integer
           description: "Fingerprint algorithm: 1 pure-Go, 100 Chromaprint."
+        fingerprintBucket:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 2147483647
+          description: >
+            The duration bucket the fingerprint was stored under, taken from
+            the decoded length when the header misstates it. Absent, the
+            import probes at `durationMs`'s bucket.
         mbid:
           type: string
           description: Recording MBID (track) or release MBID (book).

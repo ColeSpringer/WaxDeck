@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -92,4 +93,30 @@ func TestFileDiagnosticsDashboard(t *testing.T) {
 	userToken := loginAs(t, h.ts, "listener", "long-enough-pw").Token
 	resp = get(t, h.ts, "/api/v1/library/diagnostics", userToken)
 	wantStatus(t, resp, 403, "non-admin diagnostics")
+}
+
+// The analyze pass records the decode damage it met under its own
+// origin, which the origin filter selects.
+func TestTheAnalyzePassRecordsUnderItsOwnOrigin(t *testing.T) {
+	t.Parallel()
+	damaged := t.TempDir()
+	if _, err := fixtures.Generate(damaged, fixtures.Spec{
+		Name: "cut-short", Codec: fixtures.CodecFLAC, Duration: 4 * time.Second,
+		Corrupt: fixtures.CorruptTruncated,
+		Tags:    map[string]string{"TITLE": "Cut Short", "ARTIST": "Static", "ALBUM": "Static"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	h := newHarness(t, service.Root{Name: "damaged", Path: damaged})
+	analyzeAndWait(t, h)
+
+	page := decode[FileDiagnosticPage](t, get(t, h.ts, "/api/v1/library/diagnostics?origin=analyze", h.token))
+	if len(page.Diagnostics) == 0 {
+		t.Fatal("the analyze pass recorded nothing under its origin for a truncated file")
+	}
+	for _, d := range page.Diagnostics {
+		if d.Origin != "analyze" || d.Code != "corrupt_audio" || !strings.HasSuffix(d.Path, "cut-short.flac") {
+			t.Errorf("origin=analyze listed %+v", d)
+		}
+	}
 }

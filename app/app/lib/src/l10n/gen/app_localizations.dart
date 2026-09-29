@@ -5895,6 +5895,30 @@ abstract class AppLocalizations {
   /// **'Duplicates'**
   String get healthDuplicatesTitle;
 
+  /// Under an issue failing `duration-mismatch`: the length the file's header states, then the length its audio decodes to.
+  ///
+  /// In en, this message translates to:
+  /// **'Header {header}, audio {audio}'**
+  String healthDurationDetail(String header, String audio);
+
+  /// Under a cue-carved track failing `duration-mismatch`: the lengths are of the whole file the track is cut from.
+  ///
+  /// In en, this message translates to:
+  /// **'Whole file: header {header}, audio {audio}'**
+  String healthDurationDetailFile(String header, String audio);
+
+  /// Under a multi-file audiobook failing `duration-mismatch`: which part, counted from one, and its two lengths.
+  ///
+  /// In en, this message translates to:
+  /// **'Part {part}: header {header}, audio {audio}'**
+  String healthDurationDetailPart(int part, String header, String audio);
+
+  /// Name of the health rule `duration-mismatch`, which counts analyzed files whose header states a length more than two seconds and two percent off their decoded audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Header duration disagrees with the audio'**
+  String get healthDurationMismatch;
+
   /// Kind of a duplicate finding about two albums. Lower case: it fills a small chip.
   ///
   /// In en, this message translates to:
@@ -6074,6 +6098,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Names match'**
   String get healthNamesMatch;
+
+  /// In the diagnostics table's Origin column: which writer recorded the row. The analyze pass, which decodes every file end to end.
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis'**
+  String get healthOriginAnalyze;
+
+  /// In the diagnostics table's Origin column: which writer recorded the row. Writing edited tags back into the files.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag write-back'**
+  String get healthOriginEdit;
+
+  /// In the diagnostics table's Origin column: which writer recorded the row. The metadata and artwork enrichment pass.
+  ///
+  /// In en, this message translates to:
+  /// **'Enrichment'**
+  String get healthOriginEnrichment;
+
+  /// In the diagnostics table's Origin column: which writer recorded the row. Renaming and moving files into the organize profile.
+  ///
+  /// In en, this message translates to:
+  /// **'Organize'**
+  String get healthOriginOrganize;
+
+  /// In the diagnostics table's Origin column: which writer recorded the row. The ReplayGain loudness pass.
+  ///
+  /// In en, this message translates to:
+  /// **'ReplayGain'**
+  String get healthOriginReplayGain;
+
+  /// In the diagnostics table's Origin column: which writer recorded the row. The library scan.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan'**
+  String get healthOriginScan;
 
   /// Name of the health rule `path-mismatch`.
   ///

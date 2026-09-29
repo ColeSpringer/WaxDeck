@@ -3538,6 +3538,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get healthDuplicatesTitle => 'Duplicates';
 
   @override
+  String healthDurationDetail(String header, String audio) {
+    return 'Header $header, audio $audio';
+  }
+
+  @override
+  String healthDurationDetailFile(String header, String audio) {
+    return 'Whole file: header $header, audio $audio';
+  }
+
+  @override
+  String healthDurationDetailPart(int part, String header, String audio) {
+    return 'Part $part: header $header, audio $audio';
+  }
+
+  @override
+  String get healthDurationMismatch =>
+      'Header duration disagrees with the audio';
+
+  @override
   String get healthEntityAlbum => 'album';
 
   @override
@@ -3649,6 +3668,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get healthNamesMatch => 'Names match';
+
+  @override
+  String get healthOriginAnalyze => 'Analysis';
+
+  @override
+  String get healthOriginEdit => 'Tag write-back';
+
+  @override
+  String get healthOriginEnrichment => 'Enrichment';
+
+  @override
+  String get healthOriginOrganize => 'Organize';
+
+  @override
+  String get healthOriginReplayGain => 'ReplayGain';
+
+  @override
+  String get healthOriginScan => 'Scan';
 
   @override
   String get healthPathMismatch =>

@@ -156,6 +156,7 @@ export 'package:waxdeck_api_gen/src/model/health.dart';
 export 'package:waxdeck_api_gen/src/model/health_fix_request.dart';
 export 'package:waxdeck_api_gen/src/model/health_fix_result.dart';
 export 'package:waxdeck_api_gen/src/model/health_issue.dart';
+export 'package:waxdeck_api_gen/src/model/health_issue_detail.dart';
 export 'package:waxdeck_api_gen/src/model/health_issue_page.dart';
 export 'package:waxdeck_api_gen/src/model/health_rule_count.dart';
 export 'package:waxdeck_api_gen/src/model/health_summary.dart';

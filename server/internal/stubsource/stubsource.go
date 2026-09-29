@@ -19,6 +19,7 @@ import (
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/source"
+	"github.com/colespringer/waxbin/waxerr"
 
 	"github.com/colespringer/waxdeck/server/internal/syncsource"
 )
@@ -100,7 +101,7 @@ func (p *Provider) readManifest(ctx context.Context, rawURL string) (*manifest, 
 func (p *Provider) Resolve(ctx context.Context, req source.Request) (*source.Resolved, error) {
 	m, err := p.readManifest(ctx, req.URL)
 	if err != nil {
-		return nil, err
+		return nil, waxerr.Wrap(waxerr.CodeIO, "stubsource.Resolve", err)
 	}
 	return &source.Resolved{
 		IdentityKey: "stub:" + m.ID,
@@ -114,7 +115,7 @@ func (p *Provider) Resolve(ctx context.Context, req source.Request) (*source.Res
 func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.Enumeration, error) {
 	m, err := p.readManifest(ctx, req.URL)
 	if err != nil {
-		return nil, err
+		return nil, waxerr.Wrap(waxerr.CodeIO, "stubsource.Enumerate", err)
 	}
 	feed := &model.Feed{Title: m.Title}
 	for _, e := range m.Entries {

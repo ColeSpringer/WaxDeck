@@ -12,7 +12,7 @@ part 'file_diagnostic.g.dart';
 ///
 /// Properties:
 /// * [path] - The file's display path.
-/// * [origin] - The writer that recorded it (`scan`, `organize`, `replaygain`, `edit`, or `enrichment`); new writers may appear. 
+/// * [origin] - The writer that recorded it (`scan`, `organize`, `replaygain`, `edit`, `enrichment`, or `analyze`); new writers may appear. `analyze` records the decode damage the analyze pass found or worked around, replaced each time the pass reads the file. 
 /// * [code] - What was observed (`unsupported_format`, `legacy_only_tags`, `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`, `tag_write_lost`, `tag_write_unsynced`, or `corrupt_audio`); new codes may appear, so treat an unknown value as a generic finding. 
 /// * [severity] - `info`, `warn`, or `error`.
 /// * [tagKey] - The tag key a key-specific diagnostic concerns, when any.
@@ -24,7 +24,7 @@ abstract class FileDiagnostic implements Built<FileDiagnostic, FileDiagnosticBui
   @BuiltValueField(wireName: r'path')
   String get path;
 
-  /// The writer that recorded it (`scan`, `organize`, `replaygain`, `edit`, or `enrichment`); new writers may appear. 
+  /// The writer that recorded it (`scan`, `organize`, `replaygain`, `edit`, `enrichment`, or `analyze`); new writers may appear. `analyze` records the decode damage the analyze pass found or worked around, replaced each time the pass reads the file. 
   @BuiltValueField(wireName: r'origin')
   String get origin;
 

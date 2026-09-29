@@ -3,10 +3,14 @@ package service
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/waxerr"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -66,11 +70,8 @@ func (l *Library) RefreshDueFeeds(ctx context.Context, interval time.Duration) {
 		if now.Sub(time.Unix(0, st.LastAttemptNS)) < interval {
 			continue
 		}
-		if _, err := l.syncShow(ctx, model.PID(show), syncOwn); err != nil {
-			// syncShow recorded the failure; the log line is the operator
-			// surface until notifications land.
-			l.log.Warn("scheduled feed sync failed", "show", show, "err", err)
-		}
+		// syncShow records and logs a failure itself.
+		_, _ = l.syncShow(ctx, model.PID(show), syncOwn)
 	}
 }
 
@@ -96,19 +97,21 @@ const (
 func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOrigin) (int, error) {
 	pod, err := l.lib.Podcasts().Get(ctx, showPID)
 	if err != nil {
+		l.syncWithoutVerdict(ctx, showPID, origin, err)
 		return 0, classify(err)
 	}
 	started := time.Now().UnixNano()
 	res, err := l.lib.Podcasts().Sync(ctx, showPID)
 	now := time.Now().UnixNano()
 	if err != nil {
-		if origin == syncPinged {
-			// The attempt lands, the verdict does not. See syncPinged.
-			if dbErr := l.db.RecordFeedAttempt(ctx, string(showPID), now); dbErr != nil {
-				l.log.Warn("recording feed attempt", "show", string(showPID), "err", dbErr)
-			}
+		// A ping is a stranger's news and a server-side failure is not the
+		// feed's, so neither walks the counter. See syncPinged.
+		if origin == syncPinged || !feedAtFault(ctx, err) {
+			l.syncWithoutVerdict(ctx, showPID, origin, err)
 			return 0, l.classifyFeedErr(ctx, err, pod.FeedURL, l.showIsPrivate(ctx, pod))
 		}
+		unreachable := l.feedUnreachable(err, pod.FeedURL, l.showIsPrivate(ctx, pod))
+		l.log.Warn("feed sync failed", "show", string(showPID), "err", unreachable)
 		st, dbErr := l.db.RecordFeedFailure(ctx, string(showPID), err.Error(), now, feedDisableAfter)
 		if dbErr != nil {
 			l.log.Warn("recording feed failure", "show", string(showPID), "err", dbErr)
@@ -138,7 +141,7 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOr
 				}
 			}
 		}
-		return 0, l.classifyFeedErr(ctx, err, pod.FeedURL, l.showIsPrivate(ctx, pod))
+		return 0, unreachable
 	}
 	if err := l.db.RecordFeedSuccess(ctx, string(showPID), now); err != nil {
 		l.log.Warn("recording feed success", "show", string(showPID), "err", err)
@@ -150,6 +153,61 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOr
 		}
 	}
 	return res.EpisodesAdded, nil
+}
+
+// syncWithoutVerdict stamps a sync that says nothing about the feed, so
+// the next waits its turn, and logs this server's own.
+func (l *Library) syncWithoutVerdict(ctx context.Context, showPID model.PID, origin syncOrigin, err error) {
+	if origin == syncOwn {
+		// A switched-off source fails every poll until it is back.
+		level := slog.LevelWarn
+		if waxerr.CodeOf(err) == waxerr.CodeUnsupported {
+			level = slog.LevelDebug
+		}
+		l.log.Log(ctx, level, "feed sync failed on this server's side", "show", string(showPID), "err", err)
+	}
+	if ctx.Err() != nil {
+		return
+	}
+	if dbErr := l.db.RecordFeedAttempt(ctx, string(showPID), time.Now().UnixNano()); dbErr != nil {
+		l.log.Warn("recording feed attempt", "show", string(showPID), "err", dbErr)
+	}
+}
+
+// feedAtFault reports whether a sync failed on the feed itself: its host,
+// its content, or its provider, which classes its failures as the source's.
+func feedAtFault(ctx context.Context, err error) bool {
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) || kindFromWaxErr(err) == KindMaintenance || fromCatalogStore(err) {
+		return false
+	}
+	var classed *waxerr.Error
+	if !errors.As(err, &classed) {
+		return false
+	}
+	switch waxerr.CodeOf(err) {
+	case waxerr.CodeIO, waxerr.CodeNotFound, waxerr.CodeInvalid:
+		return true
+	}
+	return false
+}
+
+// fromCatalogStore reports whether the catalog's store raised err: its ops
+// are named store.*, and it classes its own failures IO like a feed's.
+func fromCatalogStore(err error) bool {
+	if we, ok := err.(*waxerr.Error); ok && strings.HasPrefix(we.Op, "store.") {
+		return true
+	}
+	switch e := err.(type) {
+	case interface{ Unwrap() error }:
+		return fromCatalogStore(e.Unwrap())
+	case interface{ Unwrap() []error }:
+		for _, inner := range e.Unwrap() {
+			if fromCatalogStore(inner) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // autoDownloadArrivals queues enclosure fetches for the episodes a sync

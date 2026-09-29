@@ -49,7 +49,11 @@ demand (the fetch button, or `POST /api/v1/episodes/{pid}/fetch`) or
 turn on automatic download for the subscription. The scheduled feed
 refresh (default every 30 minutes, `WAXDECK_FEED_REFRESH_MINUTES`)
 picks up new episodes; a feed that keeps failing is suspended from the
-schedule and reactivates on a successful manual refresh.
+schedule and reactivates on a successful manual refresh. Only the feed's
+own failures count: its host not answering, an answer that is not a
+feed, or the YouTube source's error. A refresh this server cuts short
+(a catalog error or maintenance, YouTube switched off, a restart)
+leaves the count where it was.
 
 The fetch has an inverse: any subscriber can remove a downloaded
 episode (`DELETE /api/v1/episodes/{pid}/fetch`). The audio moves to

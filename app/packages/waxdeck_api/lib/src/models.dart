@@ -4083,6 +4083,7 @@ class HealthIssue {
     this.artist,
     required this.mediaType,
     required this.rules,
+    this.detail,
   });
 
   final String pid;
@@ -4092,6 +4093,32 @@ class HealthIssue {
 
   /// The rules this item fails.
   final List<String> rules;
+
+  /// What a failing rule measured, when one did.
+  final HealthIssueDetail? detail;
+}
+
+/// A failing rule's measurements: `duration-mismatch` fills both lengths,
+/// of a book's part [partIndex] or the [wholeFile] a carved track is cut from.
+class HealthIssueDetail {
+  const HealthIssueDetail({
+    this.headerMs,
+    this.decodedMs,
+    this.partIndex,
+    this.wholeFile = false,
+  });
+
+  /// The length the file's header states.
+  final int? headerMs;
+
+  /// The length its audio decodes to.
+  final int? decodedMs;
+
+  /// The multi-file book part the lengths are of, zero-based.
+  final int? partIndex;
+
+  /// The lengths are of the whole file a cue-carved track is cut from.
+  final bool wholeFile;
 }
 
 /// One keyset-paginated page of health issues.
@@ -4104,8 +4131,9 @@ class HealthIssuePage {
   bool get hasMore => nextCursor != null;
 }
 
-/// One persisted per-file diagnostic (what scan, organize, replaygain, or
-/// tag write-back recorded about a file), keyed for display by its path.
+/// One persisted per-file diagnostic (what scan, organize, replaygain,
+/// enrichment, tag write-back or the analyze pass recorded about a file),
+/// keyed for display by its path.
 class FileDiagnostic {
   const FileDiagnostic({
     required this.path,
@@ -5815,6 +5843,7 @@ class PortableRef {
     this.essence,
     this.fingerprint,
     this.fingerprintAlgo,
+    this.fingerprintBucket,
     this.mbid,
     this.asin,
     this.isbn,
@@ -5836,6 +5865,10 @@ class PortableRef {
 
   /// Fingerprint algorithm: 1 pure-Go, 100 Chromaprint.
   final int? fingerprintAlgo;
+
+  /// The duration bucket the fingerprint was stored under; absent, the
+  /// import probes at [durationMs]'s.
+  final int? fingerprintBucket;
 
   /// Recording MBID (track) or release MBID (book).
   final String? mbid;

@@ -134,6 +134,7 @@ import 'package:waxdeck_api_gen/src/model/health.dart';
 import 'package:waxdeck_api_gen/src/model/health_fix_request.dart';
 import 'package:waxdeck_api_gen/src/model/health_fix_result.dart';
 import 'package:waxdeck_api_gen/src/model/health_issue.dart';
+import 'package:waxdeck_api_gen/src/model/health_issue_detail.dart';
 import 'package:waxdeck_api_gen/src/model/health_issue_page.dart';
 import 'package:waxdeck_api_gen/src/model/health_rule_count.dart';
 import 'package:waxdeck_api_gen/src/model/health_summary.dart';
@@ -526,6 +527,7 @@ part 'serializers.g.dart';
   HealthFixRequest,
   HealthFixResult,
   HealthIssue,
+  HealthIssueDetail,
   HealthIssuePage,
   HealthRuleCount,
   HealthSummary,

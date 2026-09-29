@@ -610,6 +610,28 @@ func TestPodcastLifecycle(t *testing.T) {
 // TestPodcastTwoPointOhExtras verifies the Podcasting 2.0 channel and item
 // extras (funding, medium, person credits, and soundbites) parse from the feed
 // and surface on the show and episode detail reads.
+// A transcript its host will not serve is the feed side's failure,
+// answered feed-unreachable like the feed's own.
+func TestATranscriptItsHostWillNotServeIsUnreachable(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 1)
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	if resp.StatusCode != 201 {
+		t.Fatalf("subscribe status = %d", resp.StatusCode)
+	}
+	sub := decode[Subscription](t, resp)
+	page := decode[EpisodePage](t, get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token))
+	if len(page.Items) != 1 {
+		t.Fatalf("episodes = %d, want 1", len(page.Items))
+	}
+	if err := os.Remove(filepath.Join(feed.dir, "transcript.vtt")); err != nil {
+		t.Fatal(err)
+	}
+	wantStatus(t, get(t, h.ts, "/api/v1/episodes/"+page.Items[0].Pid+"/transcript", h.token), 502,
+		"a transcript its host will not serve")
+}
+
 func TestPodcastTwoPointOhExtras(t *testing.T) {
 	t.Parallel()
 	h := newPodcastHarness(t)

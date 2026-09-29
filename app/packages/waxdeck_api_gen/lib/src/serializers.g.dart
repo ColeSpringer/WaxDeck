@@ -139,6 +139,7 @@ Serializers _$serializers =
           ..add(HealthFixRequest.serializer)
           ..add(HealthFixResult.serializer)
           ..add(HealthIssue.serializer)
+          ..add(HealthIssueDetail.serializer)
           ..add(HealthIssuePage.serializer)
           ..add(HealthRuleCount.serializer)
           ..add(HealthSummary.serializer)

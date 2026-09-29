@@ -21,6 +21,7 @@ import (
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/source"
+	"github.com/colespringer/waxbin/waxerr"
 	waxtap "github.com/colespringer/waxtap/v3"
 )
 
@@ -210,7 +211,7 @@ func watchURL(videoID string) string { return "https://www.youtube.com/watch?v="
 func (p *Provider) Resolve(ctx context.Context, req source.Request) (*source.Resolved, error) {
 	pl, err := p.tap.Enumerate(ctx, req.URL, waxtap.EnumerateOptions{MaxItems: 1})
 	if err != nil {
-		return nil, err
+		return nil, sourceErr(ctx, "waxtapsource.Resolve", err)
 	}
 	return &source.Resolved{
 		IdentityKey: identityKey(pl.ID),
@@ -220,12 +221,9 @@ func (p *Provider) Resolve(ctx context.Context, req source.Request) (*source.Res
 	}, nil
 }
 
-// Enumerate lists a channel or playlist as a feed for a subscription's
-// poll. The ETag is the sync cursor, the newest id that is not a live or
-// upcoming broadcast; listing stops at it, and only new entries are
-// enriched, at most enrichLimit. With Config.Pending set, the poll also
-// takes the second look (see secondLook), and an answer that hands
-// entries to the catalog adds the hand-over's token to the cursor.
+// Enumerate lists a channel or playlist for a subscription's poll, enriching
+// at most enrichLimit new entries. The ETag is the cursor plus the token of
+// any second-look hand-over, which the catalog returns only once stored.
 func (p *Provider) Enumerate(ctx context.Context, req source.Request) (*source.Enumeration, error) {
 	return p.enumerate(ctx, req, p.cfg.Pending)
 }
@@ -246,7 +244,7 @@ func (p *Provider) enumerate(ctx context.Context, req source.Request, pending Pe
 	}
 	pl, err := p.tap.Enumerate(ctx, req.URL, opts)
 	if err != nil {
-		return nil, err
+		return nil, sourceErr(ctx, "waxtapsource.Enumerate", err)
 	}
 
 	feed := &model.Feed{Title: pl.Title, Author: pl.Author}
@@ -302,7 +300,7 @@ func (p *Provider) enumerate(ctx context.Context, req source.Request, pending Pe
 				}
 				continue
 			default:
-				return nil, ferr
+				return nil, sourceErr(ctx, "waxtapsource.Enumerate", ferr)
 			}
 		}
 		feed.Episodes = append(feed.Episodes, episodeOf(entry.VideoID, entry.Title, entry.Duration, entry.Video))
@@ -333,7 +331,7 @@ func (p *Provider) enumerate(ctx context.Context, req source.Request, pending Pe
 		lookups := req.ETag != "" && !deferred
 		aired, token, err := p.secondLook(ctx, pending, pl.ID, listed, receipt, lookups)
 		if err != nil {
-			return nil, err
+			return nil, sourceErr(ctx, "waxtapsource.Enumerate", err)
 		}
 		handover = token
 		// After the listing's own entries, so those lend the image first.
@@ -374,6 +372,15 @@ func (p *Provider) enumerate(ctx context.Context, req source.Request, pending Pe
 	}, nil
 }
 
+// sourceErr classes a failure to read the source as the source's, which is
+// how a sync tells it from the catalog's own, or canceled once the caller is.
+func sourceErr(ctx context.Context, op string, err error) error {
+	if ctx.Err() != nil {
+		return waxerr.FromContext(op, err, waxerr.CodeCanceled)
+	}
+	return waxerr.Wrap(waxerr.CodeIO, op, err)
+}
+
 // episodeOf builds one entry's feed episode: the listing's title and
 // duration, overlaid with its lookup's metadata where there is one.
 func episodeOf(id, title string, duration time.Duration, v *waxtap.Video) model.FeedEpisode {
@@ -394,10 +401,9 @@ func episodeOf(id, title string, duration time.Duration, v *waxtap.Video) model.
 // A video id never holds it.
 const receiptSep = "@"
 
-// splitETag parts a stored ETag into the listing cursor and the token of
-// the hand-over the catalog stored with it, 0 when there is none. The
-// catalog writes the ETag in the transaction that writes the episodes,
-// so a token read back here is a receipt for them.
+// splitETag parts a stored ETag into the listing cursor and its hand-over
+// token (0 for none). Only a committed sync stores an ETag, so a token read
+// back is the receipt for its episodes (source.Provider.Enumerate).
 func splitETag(etag string) (cursor string, receipt int64) {
 	cursor, token, ok := strings.Cut(etag, receiptSep)
 	if ok {
@@ -450,9 +456,9 @@ type airedEntry struct {
 // recording still processing answers much the same. The store is best
 // effort, its failures logged; only a canceled sync fails the look.
 //
-// A handed-over entry stays held under the returned token until a later
-// poll's cursor carries that token back as receipt: a sync that fails
-// before the catalog writes it offers the entry again.
+// A handed-over entry stays held under the returned token until a poll's
+// cursor carries it back as receipt: a failed sync, or one another commit
+// overtook, offers the entry again, which the catalog takes as an update.
 func (p *Provider) secondLook(ctx context.Context, pending PendingLive, sourceID string, listed listings, receipt int64, lookups bool) ([]airedEntry, int64, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, 0, err

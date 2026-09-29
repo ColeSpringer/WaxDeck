@@ -1890,12 +1890,21 @@ HealthSummary healthSummaryFromGen(gen.HealthSummary summary) {
 }
 
 HealthIssue healthIssueFromGen(gen.HealthIssue issue) {
+  final detail = issue.detail;
   return HealthIssue(
     pid: issue.pid,
     title: issue.title,
     artist: issue.artist,
     mediaType: mediaTypeFromGen(issue.mediaType),
     rules: issue.rules.toList(),
+    detail: detail == null
+        ? null
+        : HealthIssueDetail(
+            headerMs: detail.headerMs,
+            decodedMs: detail.decodedMs,
+            partIndex: detail.partIndex,
+            wholeFile: detail.wholeFile ?? false,
+          ),
   );
 }
 
@@ -2873,6 +2882,7 @@ PortableRef portableRefFromGen(gen.PortableRef ref) {
     essence: ref.essence,
     fingerprint: ref.fingerprint,
     fingerprintAlgo: ref.fingerprintAlgo,
+    fingerprintBucket: ref.fingerprintBucket,
     mbid: ref.mbid,
     asin: ref.asin,
     isbn: ref.isbn,
@@ -2891,6 +2901,7 @@ gen.PortableRef portableRefToGen(PortableRef ref) {
       ..essence = ref.essence
       ..fingerprint = ref.fingerprint
       ..fingerprintAlgo = ref.fingerprintAlgo
+      ..fingerprintBucket = ref.fingerprintBucket
       ..mbid = ref.mbid
       ..asin = ref.asin
       ..isbn = ref.isbn

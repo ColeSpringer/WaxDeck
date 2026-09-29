@@ -250,11 +250,12 @@ class _Table extends ConsumerWidget {
             ),
             WaxColumn<FileDiagnostic>(
               label: l10n.healthColumnOrigin,
-              width: 108,
-              text: (diagnostic) => diagnostic.origin,
+              width: 156,
+              text: (diagnostic) => _originLabel(l10n, diagnostic.origin),
               cell: (context, diagnostic) => Text(
-                diagnostic.origin,
+                _originLabel(l10n, diagnostic.origin),
                 style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             WaxColumn<FileDiagnostic>(
@@ -286,9 +287,21 @@ class _Table extends ConsumerWidget {
     );
   }
 
-  /// How serious a finding is, in words. The code and the origin beside
-  /// it stay as the server wrote them: both name things - an observation
-  /// and the pass that recorded it - rather than describing one.
+  /// The pass that recorded a finding, in words; one this build does not
+  /// know shows as the server named it.
+  static String _originLabel(AppLocalizations l10n, String origin) =>
+      switch (origin) {
+        'scan' => l10n.healthOriginScan,
+        'organize' => l10n.healthOriginOrganize,
+        'replaygain' => l10n.healthOriginReplayGain,
+        'edit' => l10n.healthOriginEdit,
+        'enrichment' => l10n.healthOriginEnrichment,
+        'analyze' => l10n.healthOriginAnalyze,
+        _ => origin,
+      };
+
+  /// How serious a finding is, in words. The code beside it stays as the
+  /// server wrote it: it names an observation rather than describing one.
   static String _severityLabel(AppLocalizations l10n, String severity) =>
       switch (severity) {
         'info' => l10n.healthSeverityInfo,

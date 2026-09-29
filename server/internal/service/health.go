@@ -14,6 +14,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -61,19 +62,20 @@ const (
 
 // Health rule names, exactly as the API spec spells them.
 const (
-	ruleMissingArt      = "missing-art"
-	ruleSmallArt        = "small-art"
-	ruleMissingMBID     = "missing-mbid"
-	ruleMissingYear     = "missing-year"
-	ruleMissingGenre    = "missing-genre"
-	ruleGenreWhitelist  = "genre-whitelist"
-	ruleMissingLyrics   = "missing-lyrics"
-	ruleMissingNarrator = "missing-narrator"
-	ruleMissingASIN     = "missing-asin"
-	rulePathMismatch    = "path-mismatch"
-	ruleWriteUnsynced   = "write-unsynced"
-	ruleLegacyTags      = "legacy-tags"
-	ruleCorruptAudio    = "corrupt-audio"
+	ruleMissingArt       = "missing-art"
+	ruleSmallArt         = "small-art"
+	ruleMissingMBID      = "missing-mbid"
+	ruleMissingYear      = "missing-year"
+	ruleMissingGenre     = "missing-genre"
+	ruleGenreWhitelist   = "genre-whitelist"
+	ruleMissingLyrics    = "missing-lyrics"
+	ruleMissingNarrator  = "missing-narrator"
+	ruleMissingASIN      = "missing-asin"
+	rulePathMismatch     = "path-mismatch"
+	ruleWriteUnsynced    = "write-unsynced"
+	ruleLegacyTags       = "legacy-tags"
+	ruleCorruptAudio     = "corrupt-audio"
+	ruleDurationMismatch = "duration-mismatch"
 )
 
 // healthRules is every implemented rule, in the order the summary lists
@@ -82,7 +84,7 @@ var healthRules = []string{
 	ruleCorruptAudio, ruleMissingArt, ruleSmallArt, ruleMissingGenre,
 	ruleGenreWhitelist, ruleMissingYear, ruleMissingMBID, ruleMissingLyrics,
 	ruleMissingNarrator, ruleMissingASIN, rulePathMismatch, ruleWriteUnsynced,
-	ruleLegacyTags,
+	ruleLegacyTags, ruleDurationMismatch,
 }
 
 var healthRuleLabels = map[string]string{
@@ -99,6 +101,8 @@ var healthRuleLabels = map[string]string{
 	ruleWriteUnsynced:   "File tags out of sync with the catalog",
 	ruleLegacyTags:      "Legacy-only tags",
 	ruleCorruptAudio:    "Corrupt audio",
+	// Analyzed files only, off by more than two seconds and two percent.
+	ruleDurationMismatch: "Header duration disagrees with the audio",
 }
 
 // healthFixable names the rules the bulk-fix endpoint automates.
@@ -170,6 +174,22 @@ type HealthIssueDTO struct {
 	Title     string
 	Artist    string
 	Rules     []string
+	// Duration is the two lengths duration-mismatch compared, when failed.
+	Duration *DurationMismatchDTO
+}
+
+// DurationMismatchDTO is a file's header length beside its decoded one:
+// a book's part PartIndex, or the whole file a carved track is cut from.
+type DurationMismatchDTO struct {
+	HeaderMS  int64
+	DecodedMS int64
+	PartIndex *int
+	WholeFile bool
+}
+
+func (d *DurationMismatchDTO) gap() int64 {
+	g := d.DecodedMS - d.HeaderMS
+	return max(g, -g)
 }
 
 // DuplicateEntityDTO is one member of a duplicate group.
@@ -259,7 +279,7 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 			return classify(err)
 		}
 		for _, it := range page.Items {
-			rules := l.itemHealthRules(ctx, it, unofficial[it.PID], fileRules[it.DisplayPath], moves[it.PID], lyricsPresent, norm)
+			rules := l.itemHealthRules(ctx, it, unofficial[it.PID], l.itemFileRules(ctx, it, fileRules), moves[it.PID], lyricsPresent, norm)
 			evaluated++
 			if len(rules) == 0 {
 				continue
@@ -450,7 +470,7 @@ func (l *Library) unofficialItems(ctx context.Context) (map[model.PID]bool, erro
 // of fifty so a large library is not truncated.
 func (l *Library) fileDiagnosticRules(ctx context.Context) (map[string][]string, error) {
 	rep, err := l.lib.Audit(ctx, waxbin.AuditOptions{
-		Only:   []model.AuditCheck{model.CheckFileDiagnostic, model.CheckCorruptAudio},
+		Only:   []model.AuditCheck{model.CheckFileDiagnostic, model.CheckCorruptAudio, model.CheckDurationMismatch},
 		Sample: 1 << 20,
 	})
 	if err != nil {
@@ -472,6 +492,8 @@ func (l *Library) fileDiagnosticRules(ctx context.Context) (map[string][]string,
 		switch f.Check {
 		case model.CheckCorruptAudio:
 			add(f.Path, ruleCorruptAudio)
+		case model.CheckDurationMismatch:
+			add(f.Path, ruleDurationMismatch)
 		case model.CheckFileDiagnostic:
 			code, _, _ := strings.Cut(f.Message, ":")
 			switch model.DiagnosticCode(strings.TrimSpace(code)) {
@@ -483,6 +505,27 @@ func (l *Library) fileDiagnosticRules(ctx context.Context) (map[string][]string,
 		}
 	}
 	return out, nil
+}
+
+// itemFileRules gathers an item's file findings, which the sweep keys by
+// path: its own file's, or every part's for a multi-file book.
+func (l *Library) itemFileRules(ctx context.Context, it *model.ItemView, byPath map[string][]string) []string {
+	if it.Kind != model.KindBook || len(byPath) == 0 {
+		return byPath[it.DisplayPath]
+	}
+	parts, err := l.lib.ItemFiles(ctx, it.PID)
+	if err != nil || len(parts) < 2 {
+		return byPath[it.DisplayPath]
+	}
+	var out []string
+	for _, p := range parts {
+		for _, r := range byPath[p.DisplayPath] {
+			if !slices.Contains(out, r) {
+				out = append(out, r)
+			}
+		}
+	}
+	return out
 }
 
 // plannedMoves plans the default organize profile across the library
@@ -585,20 +628,95 @@ func (l *Library) ListHealthIssuesFor(ctx context.Context, rule, cursor string, 
 		next = encodeHealthCursor(last.RuleCount, last.Title, last.ItemPID)
 	}
 	out := make([]HealthIssueDTO, 0, len(rows))
+	byFile := map[model.PID]*DurationMismatchDTO{}
 	for _, r := range rows {
 		var rules []string
 		if jerr := json.Unmarshal([]byte(r.Rules), &rules); jerr != nil {
 			rules = nil
 		}
-		out = append(out, HealthIssueDTO{
+		issue := HealthIssueDTO{
 			PID:       healthAPIPID(r.MediaType, r.ItemPID),
 			MediaType: r.MediaType,
 			Title:     r.Title,
 			Artist:    r.Artist,
 			Rules:     rules,
-		})
+		}
+		if slices.Contains(rules, ruleDurationMismatch) {
+			issue.Duration = l.durationMismatch(ctx, model.PID(r.ItemPID), byFile)
+		}
+		out = append(out, issue)
 	}
 	return out, next, nil
+}
+
+// durationMismatch reads the lengths duration-mismatch compares, as the
+// catalog's check does, for the item's file furthest off, or nil once none
+// is. byFile shares a file's reading among the carved tracks on a page.
+func (l *Library) durationMismatch(ctx context.Context, itemPID model.PID, byFile map[model.PID]*DurationMismatchDTO) *DurationMismatchDTO {
+	it, err := l.lib.Get(ctx, itemPID)
+	if err != nil {
+		return nil
+	}
+	if parts, err := l.itemParts(ctx, it); err == nil && len(parts) > 1 {
+		return l.bookDurationMismatch(ctx, it.PID, parts)
+	}
+	d, ok := byFile[it.FilePID]
+	if !ok {
+		d = l.fileDurationMismatch(ctx, it.FilePID)
+		byFile[it.FilePID] = d
+	}
+	if d == nil {
+		return nil
+	}
+	out := *d
+	out.WholeFile = it.Virtual
+	return &out
+}
+
+// bookDurationMismatch reads every part's lengths at once: the header's
+// from the book, the decoded one from its waveforms.
+func (l *Library) bookDurationMismatch(ctx context.Context, itemPID model.PID, parts []model.BookPart) *DurationMismatchDTO {
+	stored, err := l.lib.PeaksForItem(ctx, itemPID)
+	if err != nil {
+		return nil
+	}
+	decoded := make(map[model.PID]int64, len(stored))
+	for _, p := range stored {
+		decoded[p.FilePID] = p.Peaks.DurationMS()
+	}
+	var worst *DurationMismatchDTO
+	for i, part := range parts {
+		if d := mismatchOf(part.DurationMS, decoded[part.FilePID]); d != nil && (worst == nil || d.gap() > worst.gap()) {
+			d.PartIndex = &i
+			worst = d
+		}
+	}
+	return worst
+}
+
+func (l *Library) fileDurationMismatch(ctx context.Context, filePID model.PID) *DurationMismatchDTO {
+	f, err := l.lib.File(ctx, filePID)
+	if err != nil {
+		return nil
+	}
+	pk, err := l.lib.PeaksForFile(ctx, filePID)
+	if err != nil || pk == nil {
+		return nil
+	}
+	return mismatchOf(f.DurationMS, pk.DurationMS())
+}
+
+// mismatchOf is the catalog's check on one file's lengths: off by more
+// than two seconds and two percent of the header's.
+func mismatchOf(headerMS, decodedMS int64) *DurationMismatchDTO {
+	if headerMS <= 0 || decodedMS <= 0 {
+		return nil
+	}
+	d := &DurationMismatchDTO{HeaderMS: headerMS, DecodedMS: decodedMS}
+	if d.gap() <= max(2000, headerMS/50) {
+		return nil
+	}
+	return d
 }
 
 // healthAPIPID renders a stored bare item pid with the API prefix its

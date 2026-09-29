@@ -124,9 +124,12 @@ class PlaylistImportMenu extends StatelessWidget {
       return value is String && value.isNotEmpty ? value : null;
     }
 
+    // Past an exact int (1e400 parses as infinity) a number reads as absent.
     int? number(String key) {
       final value = entry[key];
-      return value is num ? value.toInt() : null;
+      return value is num && value.isFinite && value.abs() <= _maxExactInt
+          ? value.toInt()
+          : null;
     }
 
     final kind = text('kind') ?? 'track';
@@ -138,6 +141,7 @@ class PlaylistImportMenu extends StatelessWidget {
         essence: text('essence'),
         fingerprint: text('fingerprint'),
         fingerprintAlgo: number('fingerprintAlgo'),
+        fingerprintBucket: number('fingerprintBucket'),
         mbid: text('mbid'),
         asin: text('asin'),
         isbn: text('isbn'),
@@ -158,6 +162,9 @@ class PlaylistImportMenu extends StatelessWidget {
 
 /// What a portable ref may be; the wire enum accepts nothing else.
 const _portableKinds = <String>{'track', 'book', 'episode'};
+
+/// The largest integer a double holds exactly, which is every int on the web.
+const _maxExactInt = 9007199254740991;
 
 /// The paste box for one source: an optional name, the export itself, and
 /// the message the server sent back when it refused.

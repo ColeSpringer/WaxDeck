@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -1380,4 +1381,72 @@ func getPlaylistUpdatedAt(t *testing.T, h *harness, pid string) string {
 // rawPlaylistPID strips the API prefix for store-level reads.
 func rawPlaylistPID(apiPid string) string {
 	return apiPid[len("pl-"):]
+}
+
+// A portable ref carries the bucket its fingerprint was stored under, so
+// a track whose header states half its audio still resolves by
+// fingerprint: probed at the header's length, the index would miss it.
+func TestAPortableRefCarriesItsFingerprintBucket(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	paths, err := fixtures.Generate(filepath.Join(h.library, "Bucket Artist", "Bucket Album"), fixtures.Spec{
+		Name: "Bucket Song", Codec: fixtures.CodecFLAC, Duration: 8 * time.Second,
+		Tags: map[string]string{"TITLE": "Bucket Song", "ARTIST": "Bucket Artist", "ALBUM": "Bucket Album"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	understateFLAC(t, paths[0], 1, 2)
+	h.rescanAndWait(t)
+	analyzeAndWait(t, h)
+	var pid string
+	for _, it := range h.items(t, "?mediaType=music").Items {
+		if it.Title == "Bucket Song" {
+			pid = it.Pid
+		}
+	}
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{"name": "Buckets", "kind": "static", "itemPids": []string{pid}})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create playlist status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+
+	exported := decode[PortablePlaylist](t, get(t, h.ts, "/api/v1/playlists/"+pl.Pid+"/portable", h.token))
+	if len(exported.Refs) != 1 {
+		t.Fatalf("exported %d refs, want 1", len(exported.Refs))
+	}
+	ref := exported.Refs[0]
+	// 8 s decoded in 2 s buckets, where the 4 s header would say 2.
+	if ref.FingerprintBucket == nil || *ref.FingerprintBucket != 4 || ref.Fingerprint == nil {
+		t.Fatalf("exported ref bucket = %v with a fingerprint: %v, want 4", ref.FingerprintBucket, ref.Fingerprint != nil)
+	}
+	ref.Essence = nil
+	resp = h.postJSON(t, "/api/v1/playlists/import", map[string]any{
+		"source": "portable", "name": "Buckets again", "refs": []PortableRef{ref},
+	})
+	if resp.StatusCode != 200 {
+		t.Fatalf("import status = %d", resp.StatusCode)
+	}
+	res := decode[PlaylistImportResult](t, resp)
+	if res.Resolved != 1 || res.Rungs.Fingerprint != 1 || res.PlaylistPid == nil {
+		t.Fatalf("import resolved %d, %+v by rung, want one by fingerprint", res.Resolved, res.Rungs)
+	}
+	// The demo tones sit two buckets down, near enough for the header's.
+	if got := playlistItems(t, h, h.token, *res.PlaylistPid); len(got) != 1 || got[0].Item.Pid != pid {
+		t.Fatalf("the fingerprint resolved to %v, want %s", entryPids(got), pid)
+	}
+}
+
+// A bucket no fingerprint can be stored under is refused rather than
+// probed as an empty range and quietly matched by metadata.
+func TestAPortableRefWithAnImpossibleBucketIsRefused(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	for _, bucket := range []int64{-1, 1 << 40} {
+		resp := h.postJSON(t, "/api/v1/playlists/import", map[string]any{
+			"source": "portable", "name": "Impossible",
+			"refs": []map[string]any{{"kind": "track", "title": "Alpha Song", "fingerprintBucket": bucket}},
+		})
+		wantStatus(t, resp, 400, fmt.Sprintf("a bucket of %d", bucket))
+	}
 }

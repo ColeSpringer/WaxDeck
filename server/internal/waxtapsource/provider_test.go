@@ -19,6 +19,7 @@ import (
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/podcast"
 	"github.com/colespringer/waxbin/source"
+	catalogerr "github.com/colespringer/waxbin/waxerr"
 	"github.com/colespringer/waxdeck/fixtures"
 	"github.com/colespringer/waxdeck/server/internal/db"
 	waxlabel "github.com/colespringer/waxlabel"
@@ -53,12 +54,17 @@ type fakeTap struct {
 	lastReq waxtap.Request
 	// lastEnum is the options the provider asked enumeration with.
 	lastEnum waxtap.EnumerateOptions
+	// enumErr, when set, fails every listing.
+	enumErr error
 }
 
 var _ tap = (*fakeTap)(nil)
 
 func (f *fakeTap) Enumerate(ctx context.Context, _ string, opts waxtap.EnumerateOptions) (*waxtap.Playlist, error) {
 	f.lastEnum = opts
+	if f.enumErr != nil {
+		return nil, f.enumErr
+	}
 	out := &waxtap.Playlist{ID: f.playlist.ID, Title: f.playlist.Title, Author: f.playlist.Author}
 	for _, e := range f.playlist.Entries {
 		if opts.Stop != nil && opts.Stop(e.VideoID) {
@@ -1396,6 +1402,89 @@ func TestEnumerateStopsLookingWhenTheSyncIsCanceled(t *testing.T) {
 				t.Errorf("lookups = %v, want %v", f.infoCalls, tc.want)
 			}
 		})
+	}
+}
+
+// contractViolation names what an answer does that source.Provider's
+// Enumerate rules out, which the catalog refuses as a failed sync.
+func contractViolation(req source.Request, enum *source.Enumeration) string {
+	switch {
+	case enum == nil:
+		return "a nil enumeration with a nil error"
+	case enum.NotModified && enum.Feed != nil:
+		return "not-modified with a feed"
+	case !enum.NotModified && enum.Feed == nil:
+		return "neither a feed nor not-modified"
+	case enum.NotModified && req.ETag == "" && req.LastModified == "":
+		return "not-modified to a request with no cursor"
+	}
+	return ""
+}
+
+func TestEnumerateAnswersOnlyWhatTheContractAllows(t *testing.T) {
+	premieres := func() *fakeTap {
+		f := channelFake(2)
+		for i := range f.playlist.Entries {
+			f.playlist.Entries[i].LiveStatus = waxtap.LiveUpcoming
+		}
+		return f
+	}
+	uploads := func(n int) func() *fakeTap { return func() *fakeTap { return channelFake(n) } }
+	for _, c := range []struct {
+		name string
+		fake func() *fakeTap
+		etag string
+	}{
+		{"a first sync", uploads(3), ""},
+		{"a first sync of an empty channel", uploads(0), ""},
+		{"a first sync of nothing but premieres", premieres, ""},
+		{"a receipt with no listing cursor", uploads(0), "@7"},
+		{"an unchanged channel", uploads(3), vid(3)},
+	} {
+		for _, second := range []bool{false, true} {
+			var p *Provider
+			if second {
+				p, _, _ = pendingProvider(t, c.fake(), nil)
+			} else {
+				p = testProvider(t, c.fake(), nil)
+			}
+			req := source.Request{URL: "u", ETag: c.etag}
+			enum, err := p.Enumerate(context.Background(), req)
+			if err != nil {
+				t.Fatalf("%s: %v", c.name, err)
+			}
+			if v := contractViolation(req, enum); v != "" {
+				t.Errorf("%s (second look %v): %s", c.name, second, v)
+			}
+		}
+	}
+}
+
+// A failure reaches the catalog classed as the source's, which is how a
+// sync tells it from the catalog's own, cause kept; a canceled one stays so.
+func TestAFailedListingIsClassedTheSources(t *testing.T) {
+	boom := errors.New("youtube answered 503")
+	f := channelFake(2)
+	f.enumErr = boom
+	p := testProvider(t, f, nil)
+	for name, call := range map[string]func(context.Context) error{
+		"a poll": func(ctx context.Context) error {
+			_, err := p.Enumerate(ctx, source.Request{URL: "u", ETag: vid(1)})
+			return err
+		},
+		"a resolve": func(ctx context.Context) error { _, err := p.Resolve(ctx, source.Request{URL: "u"}); return err },
+	} {
+		err := call(context.Background())
+		if catalogerr.CodeOf(err) != catalogerr.CodeIO || !errors.Is(err, boom) {
+			t.Errorf("%s failed with %v (class %q), want the cause classed io", name, err, catalogerr.CodeOf(err))
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		f.enumErr = context.Canceled
+		if err := call(ctx); catalogerr.CodeOf(err) != catalogerr.CodeCanceled {
+			t.Errorf("%s canceled failed with %v (class %q), want canceled", name, err, catalogerr.CodeOf(err))
+		}
+		f.enumErr = boom
 	}
 }
 

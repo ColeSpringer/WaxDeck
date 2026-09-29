@@ -37,6 +37,7 @@ String? healthRuleName(AppLocalizations l10n, String token) =>
 
 String? _byToken(AppLocalizations l, String token) => switch (token) {
   'corrupt-audio' => l.healthCorruptAudio,
+  'duration-mismatch' => l.healthDurationMismatch,
   'genre-whitelist' => l.healthGenreWhitelist,
   'legacy-tags' => l.healthLegacyTags,
   'missing-art' => l.healthMissingArt,

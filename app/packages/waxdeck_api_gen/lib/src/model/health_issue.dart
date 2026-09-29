@@ -4,6 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/health_issue_detail.dart';
 import 'package:waxdeck_api_gen/src/model/media_type.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
@@ -18,6 +19,7 @@ part 'health_issue.g.dart';
 /// * [artist] - Its artist or author.
 /// * [mediaType] 
 /// * [rules] - The rules the item currently fails.
+/// * [detail] 
 @BuiltValue()
 abstract class HealthIssue implements Built<HealthIssue, HealthIssueBuilder> {
   /// The item.
@@ -39,6 +41,9 @@ abstract class HealthIssue implements Built<HealthIssue, HealthIssueBuilder> {
   /// The rules the item currently fails.
   @BuiltValueField(wireName: r'rules')
   BuiltList<String> get rules;
+
+  @BuiltValueField(wireName: r'detail')
+  HealthIssueDetail? get detail;
 
   HealthIssue._();
 
@@ -90,6 +95,13 @@ class _$HealthIssueSerializer implements PrimitiveSerializer<HealthIssue> {
       object.rules,
       specifiedType: const FullType(BuiltList, [FullType(String)]),
     );
+    if (object.detail != null) {
+      yield r'detail';
+      yield serializers.serialize(
+        object.detail,
+        specifiedType: const FullType(HealthIssueDetail),
+      );
+    }
   }
 
   @override
@@ -148,6 +160,14 @@ class _$HealthIssueSerializer implements PrimitiveSerializer<HealthIssue> {
             specifiedType: const FullType(BuiltList, [FullType(String)]),
           ) as BuiltList<String>;
           result.rules.replace(valueDes);
+          break;
+        case r'detail':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(HealthIssueDetail),
+          ) as HealthIssueDetail?;
+          if (valueDes == null) continue;
+          result.detail.replace(valueDes);
           break;
         default:
           unhandled.add(key);

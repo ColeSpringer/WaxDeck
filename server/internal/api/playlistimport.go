@@ -118,6 +118,7 @@ func refDTOFromWire(r PortableRef) service.PortableRefDTO {
 	if r.FingerprintAlgo != nil {
 		out.FingerprintAlgo = *r.FingerprintAlgo
 	}
+	out.FingerprintBucket = derefInt64(r.FingerprintBucket)
 	return out
 }
 
@@ -131,6 +132,9 @@ func refDTOToWire(r service.PortableRefDTO) PortableRef {
 	}
 	if r.FingerprintAlgo != 0 {
 		out.FingerprintAlgo = ptr(r.FingerprintAlgo)
+	}
+	if r.FingerprintBucket != 0 {
+		out.FingerprintBucket = ptr(r.FingerprintBucket)
 	}
 	if r.MBID != "" {
 		out.Mbid = ptr(r.MBID)

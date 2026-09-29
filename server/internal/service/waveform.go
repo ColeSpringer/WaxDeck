@@ -30,7 +30,7 @@ type WaveformResult struct {
 	Version    int
 	Resolution int
 	Peaks      []byte
-	// Window is a carved track's frame window and the file length placing
+	// Window is a carved track's frame window and the decoded span placing
 	// it, for the validator only: siblings share one essence and version.
 	Window string
 }
@@ -81,13 +81,6 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 	if f.EssenceHash == "" {
 		return WaveformResult{State: waveformStateUnavailable, PartIndex: partOut}, nil
 	}
-	// A carved track draws its window of the file's buckets, placed by
-	// the file's length: without one there is nothing to place it by.
-	fileFrames := f.DurationMS * model.FramesPerSecond / 1000
-	if it.Virtual && fileFrames <= 0 {
-		return WaveformResult{State: waveformStateUnavailable}, nil
-	}
-
 	// A track and a single-file book have one file, so the item read is
 	// the same row and stays the simpler call.
 	var pk *model.PeaksData
@@ -99,10 +92,8 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 	if err == nil && pk != nil && pk.Buckets > 0 && len(pk.Data) >= pk.Buckets*2 {
 		res := WaveformResult{
 			State: waveformStateReady,
-			// Peaks come back with no essence hash of their own: the
-			// upstream read selects version, bucket count, and data only.
-			// The file view is the source for it, and it is the same
-			// value the row was keyed on, since the read joins the two.
+			// The peaks read leaves its essence unset; the file view's is
+			// the one the row is keyed on, since the read joins on it.
 			EssenceHash: f.EssenceHash,
 			Version:     pk.Version,
 			Resolution:  pk.Buckets,
@@ -110,15 +101,15 @@ func (l *Library) WaveformFor(ctx context.Context, uc *UserCtx, apiItemPID strin
 			PartIndex:   partOut,
 		}
 		if it.Virtual {
-			lo, hi, ok := windowBuckets(pk.Buckets, fileFrames, it.StartFrames, it.EndFrames)
+			// A carved track draws its window of the file's buckets, placed
+			// by the audio they were built from, not the header's length.
+			lo, hi, ok := windowBuckets(pk.Buckets, pk.Frames, pk.SampleRate, it.StartFrames, it.EndFrames)
 			if !ok {
-				// The stated length cannot hold the window, so it is wrong
-				// for this file and any envelope placed by it would be too.
 				return WaveformResult{State: waveformStateUnavailable}, nil
 			}
 			res.Resolution = hi - lo
 			res.Peaks = narrowPeaks(pk.Data[lo*2:hi*2], hi-lo)
-			res.Window = waveformWindow(it.StartFrames, it.EndFrames, fileFrames)
+			res.Window = waveformWindow(it.StartFrames, it.EndFrames, pk.Frames, pk.SampleRate)
 		}
 		return res, nil
 	}
@@ -198,12 +189,12 @@ func (l *Library) WaveformForItem(ctx context.Context, uc *UserCtx, apiItemPID s
 	var (
 		version     int
 		essence     []string
+		versions    []int
 		totalMS     int64
 		unavailable bool
 		pending     bool
 	)
 	for _, part := range parts {
-		totalMS += part.DurationMS
 		pk, ok := byFile[string(part.FilePID)]
 		if ok && pk.Version > version {
 			version = pk.Version
@@ -213,14 +204,11 @@ func (l *Library) WaveformForItem(ctx context.Context, uc *UserCtx, apiItemPID s
 			return WaveformResult{}, ferr
 		}
 		essence = append(essence, f.EssenceHash)
-		// A part with no duration has no span on a timeline whose
-		// parts are placed by duration, so its audio cannot be drawn at
-		// all - and the whole-book envelope would come out as if that
-		// part were not in the book, which is the same silent lie a
-		// missing envelope would be. So it answers the same way rather
-		// than being skipped. The duration column is nullable and read
-		// as zero, so this is a state to refuse rather than one to
-		// assume away.
+		versions = append(versions, pk.Version)
+		// Parts sit on the book's timeline by their header durations, as the
+		// player places them; one with none cannot be placed, and skipping
+		// it would draw the book without it.
+		totalMS += part.DurationMS
 		if part.DurationMS <= 0 {
 			unavailable = true
 			continue
@@ -243,8 +231,6 @@ func (l *Library) WaveformForItem(ctx context.Context, uc *UserCtx, apiItemPID s
 	case pending:
 		return WaveformResult{State: waveformStatePending}, nil
 	case totalMS <= 0:
-		// Durations are what the parts are weighted by; without them
-		// there is no timeline to spread buckets across.
 		return WaveformResult{State: waveformStateUnavailable}, nil
 	}
 
@@ -252,7 +238,7 @@ func (l *Library) WaveformForItem(ctx context.Context, uc *UserCtx, apiItemPID s
 	stitched := stitchPeaks(parts, byFile, totalMS, buckets)
 	return WaveformResult{
 		State:       waveformStateReady,
-		EssenceHash: wholeItemValidator(parts, essence, buckets),
+		EssenceHash: wholeItemValidator(parts, essence, versions, buckets),
 		Version:     version,
 		Resolution:  buckets,
 		Peaks:       stitched,
@@ -260,27 +246,12 @@ func (l *Library) WaveformForItem(ctx context.Context, uc *UserCtx, apiItemPID s
 }
 
 // wholeItemValidator digests everything the stitched bytes are built
-// from: each part's essence in reading order, each part's duration, and
-// the bucket count the total resolves to.
-//
-// The durations are not decoration. They are what each part's span on
-// the timeline is computed from, and what the resolution is chosen
-// from, so a rescan that corrects a lying VBR header rewrites every
-// bucket while leaving essence and analysis version untouched - a
-// client holding the old bytes under a day of freshness and a week of
-// stale-while-revalidate would draw an envelope that no longer lines up
-// with the seek positions under it.
-//
-// Digested rather than joined, because the join is unusable at the
-// length that matters: a shipping audiobook runs to a hundred parts and
-// an essence digest is some seventy characters, so the validator would
-// be kilobytes - past the header buffers reverse proxies ship with by
-// default, in both directions, which turns every conditional request
-// into an error instead of the 304 it exists to earn.
-func wholeItemValidator(parts []model.BookPart, essence []string, buckets int) string {
+// from: each part's essence, duration and analysis version in reading
+// order, and the bucket count. Digested so a long book still fits a header.
+func wholeItemValidator(parts []model.BookPart, essence []string, versions []int, buckets int) string {
 	sum := sha256.New()
 	for i, part := range parts {
-		fmt.Fprintf(sum, "%d\x00%s\x00%d\n", i, essence[i], part.DurationMS)
+		fmt.Fprintf(sum, "%d\x00%s\x00%d\x00%d\n", i, essence[i], part.DurationMS, versions[i])
 	}
 	fmt.Fprintf(sum, "buckets\x00%d", buckets)
 	// Half a SHA-256 is 128 bits of collision resistance against an
@@ -326,19 +297,9 @@ func wholeItemBuckets(totalMS int64) int {
 	return want
 }
 
-// stitchPeaks lays every part's envelope onto one timeline.
-//
-// Each bucket covers an equal slice of the whole duration, so a part
-// occupies bucket-space in proportion to its length, and each output
-// bucket takes the loudest input bucket overlapping it. Loudest-wins is
-// truthful here because the stored values are absolute full-scale
-// amplitude with no per-file normalisation anywhere in the pipeline: a
-// quiet part stays honestly quiet beside a loud one, which is the whole
-// reason a whole-book envelope is worth drawing.
-//
-// Done in the stored 16-bit domain and narrowed once at the end, so the
-// maximum is taken at full precision rather than after the wire's
-// rounding.
+// stitchPeaks lays every part's envelope onto one timeline of totalMS,
+// each part over its duration, each output bucket the loudest input
+// bucket it covers. Stored values are absolute, so parts share one scale.
 func stitchPeaks(parts []model.BookPart, byFile map[string]model.PeaksData, totalMS int64, buckets int) []byte {
 	out := make([]uint16, buckets)
 	var elapsedMS int64
@@ -394,18 +355,23 @@ func stitchPeaks(parts []model.BookPart, byFile map[string]model.PeaksData, tota
 	return wire
 }
 
-// windowBuckets is the run of a file's buckets covering the frame window
-// [startFrames, endFrames) of a file fileFrames long (endFrames 0 is the
-// file's end), never empty; not ok when the length cannot hold it, or it
-// ends before it starts.
-func windowBuckets(buckets int, fileFrames, startFrames, endFrames int64) (lo, hi int, ok bool) {
-	if startFrames >= fileFrames || endFrames > fileFrames || (endFrames > 0 && endFrames < startFrames) {
+// windowBuckets is the non-empty run of buckets over frames decoded samples
+// at rate covering the CD-frame window [startFrames, endFrames), 0 ending at
+// the audio's end; not ok when the audio cannot hold it or it is reversed.
+func windowBuckets(buckets int, frames int64, rate int, startFrames, endFrames int64) (lo, hi int, ok bool) {
+	if frames <= 0 || rate <= 0 {
+		return 0, 0, false
+	}
+	// Multiplied first, as upstream converts a window to samples.
+	from := startFrames * int64(rate) / model.FramesPerSecond
+	to := endFrames * int64(rate) / model.FramesPerSecond
+	if from >= frames || to > frames || (endFrames > 0 && endFrames < startFrames) {
 		return 0, 0, false
 	}
 	n := int64(buckets)
-	lo64, hi64 := startFrames*n/fileFrames, n
+	lo64, hi64 := from*n/frames, n
 	if endFrames > 0 {
-		hi64 = (endFrames*n + fileFrames - 1) / fileFrames
+		hi64 = (to*n + frames - 1) / frames
 	}
 	lo, hi = int(min(max(lo64, 0), n-1)), int(min(hi64, n))
 	if hi <= lo {
@@ -415,9 +381,9 @@ func windowBuckets(buckets int, fileFrames, startFrames, endFrames int64) (lo, h
 }
 
 // waveformWindow is a carved track's part of its validator: the window,
-// and the file length it was placed by, which a rescan may correct.
-func waveformWindow(startFrames, endFrames, fileFrames int64) string {
-	return fmt.Sprintf("%d-%d-of-%d", startFrames, endFrames, fileFrames)
+// and the decoded span it was placed by.
+func waveformWindow(startFrames, endFrames, frames int64, rate int) string {
+	return fmt.Sprintf("%d-%d-of-%d@%d", startFrames, endFrames, frames, rate)
 }
 
 // narrowPeaks converts the stored little-endian uint16 buckets to the

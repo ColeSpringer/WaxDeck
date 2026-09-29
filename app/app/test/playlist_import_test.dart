@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/l10n/l10n.dart';
+import 'package:waxdeck/src/playlists/playlist_actions.dart';
 import 'package:waxdeck/src/playlists/playlist_import.dart';
 import 'package:waxdeck/src/playlists/playlist_screen.dart';
 import 'package:waxdeck/src/playlists/playlists_screen.dart';
@@ -993,6 +994,38 @@ void main() {
       expect(name, 'Mix');
       expect(refs.map((r) => r.title), ['One', 'Two']);
       expect(refs.last.isrc, 'X');
+    });
+
+    test('a copied export keeps where each fingerprint was stored', () {
+      final (_, refs) = parsePortablePlaylistJson(
+        l10n,
+        portableJson(
+          const PortablePlaylist(
+            name: 'Mix',
+            refs: [
+              PortableRef(
+                kind: 'track',
+                title: 'One',
+                fingerprint: 'AAEC',
+                fingerprintAlgo: 1,
+                fingerprintBucket: 4,
+                durationMs: 4000,
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(refs.single.fingerprintBucket, 4);
+    });
+
+    test('a number no int holds reads as absent rather than throwing', () {
+      final (_, refs) = parsePortablePlaylistJson(
+        l10n,
+        '{"refs":[{"kind":"track","title":"One",'
+        '"fingerprintBucket":1e400,"durationMs":1e300}]}',
+      );
+      expect(refs.single.fingerprintBucket, isNull);
+      expect(refs.single.durationMs, isNull);
     });
 
     test('refuses an export with nothing in it', () {
