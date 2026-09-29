@@ -1,5 +1,7 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
-import 'package:intl/intl.dart';
+import 'package:intl/intl.dart' show NumberFormat;
 import 'package:material_ui/material_ui.dart';
 
 import '../icons/wax_icon.dart';
@@ -48,8 +50,8 @@ class DeckBarActions {
 
   final VoidCallback? onPlayPause;
 
-  /// Shuffle and repeat cycle the queue's modes. Null hides the control,
-  /// which is what radio gets: there is nothing to shuffle in a stream.
+  /// Shuffle and repeat cycle the queue's modes on the wide bar. Null
+  /// draws them disabled, as radio's are: a stream has nothing to shuffle.
   final VoidCallback? onShuffle;
   final VoidCallback? onRepeat;
 
@@ -287,30 +289,13 @@ class DeckBar extends StatelessWidget {
     );
   }
 
-  Widget _expanded(BuildContext context, WaxColors colors) {
-    return LayoutBuilder(
-      builder: (context, constraints) =>
-          _zones(context, colors, constraints.maxWidth),
-    );
-  }
-
-  /// The end slop this bar can afford its volume slider. Half the
-  /// primitive's default: the slop rides inside the cluster's measured
-  /// budget - the drawn track gives it up rather than the cluster
-  /// growing back into the left zone - and twelve a side would halve
-  /// the track.
+  /// The end slop this bar can afford its volume slider: half the
+  /// primitive's default, since twelve a side would halve the track.
   static const double _volumeSlop = 8;
 
-  /// How wide the volume track is drawn, given the room the bar has.
-  ///
-  /// The right cluster is sized to its contents and the other two zones
-  /// share what is left, so the newest thing in the cluster is the thing
-  /// that has to give: at 840 px a full-width track took the left zone
-  /// below what its artwork, title, and star need, and five pixels came
-  /// out the side. Measured from the bar's own width rather than the
-  /// window's, because the bar sits in a shell slot beside a sidebar.
-  static double _volumeTrack(double available) =>
-      (available >= 1000 ? 80 : 52) - 2 * _volumeSlop;
+  /// The volume track's range: the layout draws it longer as room allows.
+  static const double _volumeTrackMin = 36;
+  static const double _volumeTrackMax = 64;
 
   /// The layout slot the old centred column reserved for the drawn seek
   /// line. The transport centres in the band above it, and the seek
@@ -318,17 +303,105 @@ class DeckBar extends StatelessWidget {
   /// so the drawn track keeps the centre line this slot gave it.
   static const double _seekSlot = 24;
 
-  Widget _zones(BuildContext context, WaxColors colors, double available) {
+  Widget _expanded(BuildContext context, WaxColors colors) {
     final l10n = context.waxL10n;
+    // The level's row: its glyph, a control where it can mute, then track.
+    final levelLead = actions.onMute != null
+        ? WaxSpace.touchTarget
+        : WaxSlider.glyphSize;
+    final hasLevel = now.volume != null && actions.onVolume != null;
+    // Each drawn where wired or pending: a control that can never work
+    // reads as broken, and one that left for a load would move the bar.
+    final cluster = <(_Control, double, Widget)>[
+      if (now.speed != null) (_Control.speed, 0, _speedChip(context, colors)),
+      if (actions.onQueue != null)
+        (
+          _Control.queue,
+          WaxSpace.s8,
+          WaxIconButton(
+            glyph: WaxIcons.queue,
+            label: l10n.deckBarQueue,
+            size: 18,
+            onPressed: actions.onQueue,
+            semanticsId: ids.queue,
+          ),
+        ),
+      if (actions.onLyrics != null)
+        (
+          _Control.lyrics,
+          WaxSpace.s8,
+          WaxIconButton(
+            glyph: WaxIcons.lyrics,
+            label: l10n.deckBarLyrics,
+            size: 18,
+            onPressed: actions.onLyrics,
+            semanticsId: ids.lyrics,
+          ),
+        ),
+      if (actions.onCast != null || actions.pending)
+        (
+          _Control.cast,
+          WaxSpace.s8,
+          WaxIconButton(
+            glyph: WaxIcons.cast,
+            label: l10n.deckBarCast,
+            size: 18,
+            active: now.remoteEndpoint != null,
+            onPressed: actions.onCast,
+            semanticsId: ids.cast,
+          ),
+        ),
+      // Both halves or neither: a level with nothing to set it is a
+      // readout, and a setter with no level has nothing to draw.
+      if (hasLevel)
+        (
+          _Control.volume,
+          WaxSpace.s12,
+          LayoutBuilder(
+            builder: (context, constraints) => WaxSlider(
+              value: now.volume!,
+              onChanged: actions.onVolume,
+              label: l10n.deckBarVolume,
+              glyph: WaxIcons.volume,
+              mutedGlyph: WaxIcons.volumeMuted,
+              onMute: actions.onMute,
+              trackWidth: constraints.maxWidth - levelLead - 2 * _volumeSlop,
+              endSlop: _volumeSlop,
+              semanticsId: ids.volume,
+              muteSemanticsId: ids.mute,
+            ),
+          ),
+        ),
+      if (actions.onMore != null || actions.pending)
+        (
+          _Control.more,
+          WaxSpace.s8,
+          WaxIconButton(
+            glyph: WaxIcons.more,
+            label: l10n.commonMore,
+            size: 18,
+            onPressed: actions.onMore,
+            semanticsId: ids.more,
+          ),
+        ),
+    ];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
-      child: Row(
+      child: CustomMultiChildLayout(
+        delegate: _ZonesLayout(
+          <(_Control, double)>[for (final (id, gap, _) in cluster) (id, gap)],
+          Directionality.of(context),
+          live: now.live,
+          level: (
+            levelLead + _volumeTrackMin + 2 * _volumeSlop,
+            levelLead + _volumeTrackMax + 2 * _volumeSlop,
+          ),
+        ),
         children: <Widget>[
-          // Left zone: what is playing. Every text in it clips, so it
-          // yields before anything overflows; two parts to the centre's
-          // three still leave the seek track 180 px at the breakpoint.
-          Expanded(
-            flex: 2,
+          // What is playing. Every text in it clips, so it yields before
+          // anything overflows.
+          LayoutId(
+            id: _Zone.title,
             child: GestureDetector(
               // Same opaque surface and the same semantics exclusion as
               // the compact bar's, so the desktop zone expands from its
@@ -387,19 +460,17 @@ class DeckBar extends StatelessWidget {
               ),
             ),
           ),
-          // Centre zone: transport over the seek bar. The seek bar's box
-          // is the full touch target, which the fixed-height bar has no
-          // room to stack under the transport - so the two are layered,
-          // the seek surface beneath and bottom-anchored, its extra
-          // height overlapping the padding under the buttons, and the
-          // transport centred in the band above the seek's visual slot.
-          // The buttons are hit-tested first and keep their taps.
-          Expanded(
-            flex: 3,
+          // Transport over the seek bar, layered: the seek's touch target
+          // sits beneath, bottom-anchored, and the buttons centre in the
+          // band above its drawn line, hit-tested first.
+          LayoutId(
+            id: _Zone.centre,
             child: now.live
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: _transport(context, colors, compact: false),
+                ? Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: _transport(context, colors, compact: false),
+                    ),
                   )
                 : Stack(
                     children: <Widget>[
@@ -463,68 +534,10 @@ class DeckBar extends StatelessWidget {
                     ],
                   ),
           ),
-          // Right zone: where playback goes and what it shows. Sized to
-          // its contents rather than to a share of the width: four icon
-          // buttons and a speed chip do not fit in a quarter of an
-          // 840 px window, and a flex would have them overflow instead
-          // of taking the space they need.
-          // Each drawn where wired or pending: a button that can never
-          // work reads as broken, and one that left for a load's length
-          // would move the bar under the hand.
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              if (now.speed != null) _speedChip(context, colors),
-              if (actions.onQueue != null)
-                WaxIconButton(
-                  glyph: WaxIcons.queue,
-                  label: l10n.deckBarQueue,
-                  size: 18,
-                  onPressed: actions.onQueue,
-                  semanticsId: ids.queue,
-                ),
-              if (actions.onLyrics != null)
-                WaxIconButton(
-                  glyph: WaxIcons.lyrics,
-                  label: l10n.deckBarLyrics,
-                  size: 18,
-                  onPressed: actions.onLyrics,
-                  semanticsId: ids.lyrics,
-                ),
-              if (actions.onCast != null || actions.pending)
-                WaxIconButton(
-                  glyph: WaxIcons.cast,
-                  label: l10n.deckBarCast,
-                  size: 18,
-                  active: now.remoteEndpoint != null,
-                  onPressed: actions.onCast,
-                  semanticsId: ids.cast,
-                ),
-              // Both halves or neither: a level with nothing to set it is
-              // a readout, and a setter with no level has nothing to draw.
-              if (now.volume != null && actions.onVolume != null)
-                WaxSlider(
-                  value: now.volume!,
-                  onChanged: actions.onVolume,
-                  label: l10n.deckBarVolume,
-                  glyph: WaxIcons.volume,
-                  mutedGlyph: WaxIcons.volumeMuted,
-                  onMute: actions.onMute,
-                  trackWidth: _volumeTrack(available),
-                  endSlop: _volumeSlop,
-                  semanticsId: ids.volume,
-                  muteSemanticsId: ids.mute,
-                ),
-              if (actions.onMore != null || actions.pending)
-                WaxIconButton(
-                  glyph: WaxIcons.more,
-                  label: l10n.commonMore,
-                  size: 18,
-                  onPressed: actions.onMore,
-                  semanticsId: ids.more,
-                ),
-            ],
-          ),
+          // Where playback goes and what it shows, placed by the delegate
+          // and keyed by role, so focus stays put when a neighbour leaves.
+          for (final (id, _, control) in cluster)
+            LayoutId(id: id, child: control),
         ],
       ),
     );
@@ -656,7 +669,6 @@ class DeckBar extends StatelessWidget {
   }
 
   Widget _speedChip(BuildContext context, WaxColors colors) => Container(
-    margin: const EdgeInsetsDirectional.only(end: WaxSpace.s8),
     padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s8, vertical: 2),
     decoration: BoxDecoration(
       color: colors.surface2,
@@ -953,6 +965,121 @@ class DeckBarOffer extends StatelessWidget {
       ),
     );
   }
+}
+
+enum _Zone { title, centre }
+
+enum _Control { speed, queue, lyrics, cast, volume, more }
+
+/// Puts the wide bar's centre zone on its centre line: equal flanks, the
+/// end one holding the cluster. Short of room the centre narrows, then the
+/// level, then the gaps, and only then does the centre leave the line.
+class _ZonesLayout extends MultiChildLayoutDelegate {
+  _ZonesLayout(
+    this.cluster,
+    this.direction, {
+    required this.live,
+    required this.level,
+  });
+
+  /// Each cluster control in order, with the space before it.
+  final List<(_Control, double)> cluster;
+
+  final TextDirection direction;
+
+  /// A live centre holds the transport alone, so it asks for the floor.
+  final bool live;
+
+  /// The least and most the volume row takes, when there is one.
+  final (double, double) level;
+
+  /// The narrowest centre on the line: the transport, and a seek track of
+  /// about 180 px beside timecodes under ten hours.
+  static const double _centreFloor = 320;
+
+  /// Between the centre and either flank, whatever else gives way.
+  static const double _edge = WaxSpace.s8;
+
+  /// The title zone's and the centre's widths, given the end flank's.
+  (double, double) _split(double width, double flank) {
+    final ideal = live
+        ? _centreFloor
+        : (0.36 * width).clamp(_centreFloor, 720.0);
+    final centred = math.min(ideal, width - 2 * flank);
+    if (centred >= _centreFloor) return ((width - centred) / 2, centred);
+    // Off the line only as far as the cluster pushes, then the title and
+    // the centre share what is left, one part to two.
+    final rest = math.max(0.0, width - flank);
+    final title = math.max(rest - _centreFloor, rest / 3);
+    return (title, rest - title);
+  }
+
+  @override
+  void performLayout(Size size) {
+    final sizes = <_Control, Size>{
+      for (final (id, _) in cluster)
+        if (id != _Control.volume)
+          id: layoutChild(id, BoxConstraints.loose(size)),
+    };
+    final hasLevel = cluster.any((entry) => entry.$1 == _Control.volume);
+    final (levelMin, levelMax) = hasLevel ? level : (0.0, 0.0);
+    final packed = sizes.values.fold(0.0, (sum, s) => sum + s.width);
+    final spacing = cluster.skip(1).fold(0.0, (sum, entry) => sum + entry.$2);
+    // What the end flank leaves the level and the gaps, centre at its floor.
+    final room = (size.width - _centreFloor) / 2 - _edge - packed;
+    final levelWidth = (room - spacing).clamp(levelMin, levelMax);
+    final share = spacing == 0
+        ? 0.0
+        : ((room - levelWidth) / spacing).clamp(0.0, 1.0);
+    final end = packed + levelWidth + spacing * share;
+    if (hasLevel) {
+      sizes[_Control.volume] = layoutChild(
+        _Control.volume,
+        BoxConstraints.tightFor(
+          width: levelWidth,
+        ).copyWith(maxHeight: size.height),
+      );
+    }
+    final (title, centre) = _split(size.width, end + _edge);
+
+    final titleSize = layoutChild(
+      _Zone.title,
+      BoxConstraints(
+        maxWidth: math.max(0, title - _edge),
+        minWidth: math.max(0, title - _edge),
+        maxHeight: size.height,
+      ),
+    );
+    layoutChild(
+      _Zone.centre,
+      BoxConstraints.tightFor(width: centre, height: size.height),
+    );
+    // Measured from the start edge, so right-to-left text mirrors the bar.
+    void place(Object id, double start, Size child) => positionChild(
+      id,
+      Offset(
+        direction == TextDirection.ltr
+            ? start
+            : size.width - start - child.width,
+        (size.height - child.height) / 2,
+      ),
+    );
+    place(_Zone.title, 0, titleSize);
+    place(_Zone.centre, title, Size(centre, size.height));
+    var start = size.width - end;
+    for (final (i, (id, gap)) in cluster.indexed) {
+      if (i > 0) start += gap * share;
+      place(id, start, sizes[id]!);
+      start += sizes[id]!.width;
+    }
+  }
+
+  @override
+  bool shouldRelayout(_ZonesLayout oldDelegate) =>
+      oldDelegate.direction != direction ||
+      oldDelegate.live != live ||
+      oldDelegate.level != level ||
+      !listEquals(oldDelegate.cluster, cluster);
 }
 
 /// A seek timecode's box, as wide as the longest time the track can show,

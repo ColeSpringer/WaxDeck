@@ -308,13 +308,13 @@ void main() {
       builder: () => GoldenTestGroup(
         columns: 1,
         children: <Widget>[
-          // A table is columns on a desktop and a card per row below
-          // sidebar width, and it reads the window rather than its own
-          // box to decide - so the size class is declared here, and
-          // both shapes are locked.
-          for (final (name, width) in const <(String, double)>[
-            ('tabular', 1000),
-            ('cards', 560),
+          // Columns on a desktop and a card per row below sidebar width,
+          // so the size class is declared here and both shapes are locked.
+          // The table measures its box, which answers no intrinsic height,
+          // so the tabular scenario states its own.
+          for (final (name, width, height) in const <(String, double, double?)>[
+            ('tabular', 1000, 360),
+            ('cards', 560, null),
           ])
             for (final variant in _lightAndDark)
               GoldenTestScenario(
@@ -325,6 +325,7 @@ void main() {
                     variant,
                     SizedBox(
                       width: width,
+                      height: height,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: <Widget>[
@@ -787,6 +788,142 @@ void main() {
                       ),
                     ],
                   ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'the desktop deck bar keeps its transport on the centre line',
+      fileName: 'deck_bar_desktop',
+      builder: () => GoldenTestGroup(
+        columns: 1,
+        children: <Widget>[
+          for (final (name, now, actions)
+              in <(String, NowPlayingData, DeckBarActions)>[
+                (
+                  'music',
+                  const NowPlayingData(
+                    title: 'Salt Harbour',
+                    subtitle: 'Nightjar',
+                    position: Duration(minutes: 2, seconds: 41),
+                    duration: Duration(minutes: 4, seconds: 5),
+                    playing: true,
+                    starred: true,
+                    volume: 0.6,
+                  ),
+                  DeckBarActions(
+                    onPlayPause: () {},
+                    onNext: () {},
+                    onPrevious: () {},
+                    onShuffle: () {},
+                    onRepeat: () {},
+                    onSeek: (_) {},
+                    onStar: (_) {},
+                    onQueue: () {},
+                    onLyrics: () {},
+                    onCast: () {},
+                    onVolume: (_) {},
+                    onMute: () {},
+                    onMore: () {},
+                    onExpand: () {},
+                  ),
+                ),
+                (
+                  'live',
+                  const NowPlayingData(
+                    title: 'Coastal FM',
+                    subtitle: 'Ora Lune - Bell Tower',
+                    domain: WaxDomain.radio,
+                    shape: ArtworkShape.circle,
+                    position: Duration.zero,
+                    duration: Duration.zero,
+                    playing: true,
+                    live: true,
+                    volume: 0.6,
+                  ),
+                  DeckBarActions(
+                    onPlayPause: () {},
+                    onVolume: (_) {},
+                    onMute: () {},
+                    onSaveSong: (_) {},
+                    onExpand: () {},
+                  ),
+                ),
+              ])
+            GoldenTestScenario(
+              name: name,
+              child: _themed(
+                WaxThemeVariant.dark,
+                SizedBox(
+                  width: 1600,
+                  child: DeckBar(
+                    now: now,
+                    sizeClass: WaxSizeClass.wide,
+                    actions: actions,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+
+    goldenTest(
+      'a busy control keeps its place and its colours',
+      fileName: 'controls_busy',
+      pumpBeforeTest: _pumpAnimated,
+      builder: () => GoldenTestGroup(
+        columns: 1,
+        children: <Widget>[
+          for (final variant in _lightAndDark)
+            GoldenTestScenario(
+              name: variant.name,
+              child: _themed(
+                variant,
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    for (final busy in <bool>[false, true])
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: WaxSpace.s8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: <Widget>[
+                            WaxButton(
+                              label: 'Scan now',
+                              icon: WaxIcons.refresh,
+                              busy: busy,
+                              onPressed: () {},
+                            ),
+                            const SizedBox(width: WaxSpace.s8),
+                            WaxButton(
+                              label: 'Empty trash',
+                              kind: WaxButtonKind.tonal,
+                              busy: busy,
+                              onPressed: () {},
+                            ),
+                            const SizedBox(width: WaxSpace.s8),
+                            WaxButton(
+                              label: 'Back up now',
+                              kind: WaxButtonKind.text,
+                              busy: busy,
+                              onPressed: () {},
+                            ),
+                            const SizedBox(width: WaxSpace.s8),
+                            WaxIconButton(
+                              glyph: WaxIcons.refresh,
+                              label: 'Sweep',
+                              busy: busy,
+                              onPressed: () {},
+                            ),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ),

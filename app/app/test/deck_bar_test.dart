@@ -98,25 +98,20 @@ Future<PlayerHarness> _pumpDeck(
   return harness;
 }
 
-/// Where the wide bar's three zones sit: the seek track in the centre,
-/// the left zone that names what is playing, and the right cluster. A
-/// skip that moves any of them is the bar reflowing under the hand.
-({Rect seek, Rect left, Rect right}) _layoutOf(WidgetTester tester) => (
-  seek: tester.getRect(_byId(SemanticsIds.deckSeek)),
-  left: tester.getRect(
-    find
-        .ancestor(
-          of: _byId(SemanticsIds.deckExpand),
-          matching: find.byType(Expanded),
-        )
-        .first,
-  ),
-  right: tester.getRect(
-    find
-        .ancestor(of: _byId(SemanticsIds.deckQueue), matching: find.byType(Row))
-        .first,
-  ),
-);
+/// Where the wide bar's seek track, zones and cluster controls sit. A skip
+/// that moves, adds or drops any of them is the bar reflowing under the
+/// hand.
+List<Rect> _layoutOf(WidgetTester tester) => <Rect>[
+  tester.getRect(_byId(SemanticsIds.deckSeek)),
+  ...tester
+      .widgetList(
+        find.descendant(
+          of: find.byType(DeckBar),
+          matching: find.byType(LayoutId),
+        ),
+      )
+      .map((w) => tester.getRect(find.byWidget(w))),
+];
 
 StoredQueue _storedAlbum() => StoredQueue(
   entries: const <StoredQueueEntry>[

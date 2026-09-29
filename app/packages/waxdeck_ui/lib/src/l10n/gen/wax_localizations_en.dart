@@ -96,6 +96,9 @@ class WaxLocalizationsEn extends WaxLocalizations {
   }
 
   @override
+  String get controlsBusy => 'Working';
+
+  @override
   String get controlsMute => 'Mute';
 
   @override

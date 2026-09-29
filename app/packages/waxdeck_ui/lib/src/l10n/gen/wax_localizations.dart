@@ -225,6 +225,12 @@ abstract class WaxLocalizations {
   /// **'{label}, {value}'**
   String consoleStat(String label, String value);
 
+  /// Spoken with a control whose work is still running, which is why it takes no press until the work finishes.
+  ///
+  /// In en, this message translates to:
+  /// **'Working'**
+  String get controlsBusy;
+
   /// Button beside the volume slider that silences output.
   ///
   /// In en, this message translates to:

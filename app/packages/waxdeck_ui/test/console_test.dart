@@ -72,6 +72,99 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('keeps a numeric column off the column after it', (tester) async {
+    // Right-aligned against a left-aligned neighbour, the header read
+    // "ItemsPath" and the count touched the next cell.
+    await _pump(
+      tester,
+      WaxTable<_Row>(columns: _columns(), rows: _rows, rowId: (r) => r.id),
+    );
+
+    final header = tester.getRect(find.text('Path'));
+    final cell = tester.getRect(find.text('/srv/media/music'));
+    expect(
+      header.left - tester.getRect(find.text('Items')).right,
+      greaterThanOrEqualTo(WaxSpace.s16),
+    );
+    expect(
+      cell.left - tester.getRect(find.text('4210')).right,
+      greaterThanOrEqualTo(WaxSpace.s16),
+    );
+    expect(cell.left, header.left, reason: 'the header stays over its rows');
+  });
+
+  testWidgets('a width change lays its rows out again without rebuilding', (
+    tester,
+  ) async {
+    // A sidebar collapsing or a panel docking resizes it every frame.
+    var built = 0;
+    final width = ValueNotifier<double>(900);
+    addTearDown(width.dispose);
+    final table = WaxTable<_Row>(
+      columns: <WaxColumn<_Row>>[
+        WaxColumn<_Row>(
+          label: 'Name',
+          priority: WaxColumnPriority.primary,
+          text: (r) => r.name,
+          cell: (context, r) {
+            built++;
+            return Text(r.name);
+          },
+        ),
+      ],
+      rows: _rows,
+      rowId: (r) => r.id,
+    );
+    await _pump(
+      tester,
+      ValueListenableBuilder<double>(
+        valueListenable: width,
+        builder: (context, value, _) => SizedBox(width: value, child: table),
+      ),
+    );
+    final first = built;
+    expect(first, greaterThan(0));
+
+    width.value = 800;
+    await tester.pump();
+    expect(built, first);
+  });
+
+  testWidgets('becomes cards where its columns cannot fit beside a sidebar', (
+    tester,
+  ) async {
+    // The Libraries table's shape, in the pane an 840 px window leaves:
+    // its fixed columns and their gaps alone overran it.
+    WaxColumn<_Row> fixed(String label, double width) => WaxColumn<_Row>(
+      label: label,
+      width: width,
+      text: (r) => label,
+      cell: (context, r) => Text(label),
+    );
+    await _pump(
+      tester,
+      SizedBox(
+        width: 552,
+        child: WaxTable<_Row>(
+          columns: <WaxColumn<_Row>>[
+            ..._columns(),
+            fixed('Holds', 96),
+            fixed('Matching', 148),
+            fixed('Read-only', 108),
+          ],
+          rows: _rows,
+          rowId: (r) => r.id,
+          trailing: (context, r) => const SizedBox(width: 40),
+        ),
+      ),
+      width: 840,
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Name'), findsNothing, reason: 'cards, not a header');
+    expect(find.text('music'), findsOneWidget);
+  });
+
   testWidgets('becomes cards below sidebar width, detail columns dropped', (
     tester,
   ) async {

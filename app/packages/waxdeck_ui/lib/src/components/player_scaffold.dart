@@ -679,75 +679,59 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
           constraints: const BoxConstraints(maxWidth: _contentMaxWidth),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s24),
-            child: LayoutBuilder(
-              builder: (context, outer) => Column(
-                children: <Widget>[
-                  // The hero takes what the clusters below do not want,
-                  // rather than a fraction of the window. Both readings
-                  // were in this file at once - a width clamp and a height
-                  // fraction, added the second time this overflowed - and
-                  // neither can be right while what sits under the artwork
-                  // varies by face: the music face carries a volume row
-                  // and an action row that the first sketch of this did
-                  // not.
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        // The gutter above and below the artwork is taken
-                        // out of the extent rather than wrapped around it:
-                        // a Padding inside this Expanded demands its 32 px
-                        // even after the flex has been squeezed to
-                        // nothing, which is an overflow of exactly that
-                        // padding on a window with no room left.
-                        final extent = math.min(
-                          constraints.maxWidth,
-                          constraints.maxHeight - WaxSpace.s32,
-                        );
-                        // Nothing left to draw art in: a very short window
-                        // gives its height to the controls, which are what
-                        // the surface is for.
-                        if (extent < 96) return const SizedBox.shrink();
-                        return Center(child: _hero(extent));
-                      },
-                    ),
+            child: CustomMultiChildLayout(
+              delegate: _HeroAndControlsLayout(),
+              children: <Widget>[
+                // The hero takes what the clusters below do not want,
+                // rather than a fraction of the window: what sits under
+                // the artwork varies by face.
+                LayoutId(
+                  id: _Portrait.hero,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      // The gutter comes out of the extent, and a caption
+                      // under a cover at its floor draws into it.
+                      final extent = math.min(
+                        constraints.maxWidth,
+                        constraints.maxHeight - WaxSpace.s32,
+                      );
+                      // Nothing left to draw art in: a very short window
+                      // gives its height to the controls.
+                      if (extent < 96) return const SizedBox.shrink();
+                      return _hero(extent);
+                    },
                   ),
-                  // Bounded to the whole slot and scrollable inside it,
-                  // which is what keeps the flex above honest. As a
-                  // free-height child the clusters simply took what they
-                  // wanted, and a face whose action row wrapped to a
-                  // second line - or a large text scale, or a short
-                  // window - overflowed by whatever it wanted past the
-                  // end. Under the cap they take their natural height
-                  // while there is room, and the hero yields first;
-                  // past it they scroll and the hero is gone.
-                  ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: outer.maxHeight),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: <Widget>[
-                          _titleBlock(colors),
-                          const SizedBox(height: WaxSpace.s20),
-                          if (widget.seek != null) ...<Widget>[
-                            widget.seek!,
-                            const SizedBox(height: WaxSpace.s16),
-                          ],
-                          widget.transport,
-                          if (widget.volume != null) ...<Widget>[
-                            const SizedBox(height: WaxSpace.s8),
-                            widget.volume!,
-                          ],
-                          if (widget.actionRow != null) ...<Widget>[
-                            const SizedBox(height: WaxSpace.s16),
-                            widget.actionRow!,
-                          ],
+                ),
+                // Bounded to the whole slot and scrollable inside it: the
+                // clusters take their natural height while there is room
+                // and the hero yields first; past it they scroll.
+                LayoutId(
+                  id: _Portrait.controls,
+                  child: SingleChildScrollView(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: <Widget>[
+                        _titleBlock(colors),
+                        const SizedBox(height: WaxSpace.s20),
+                        if (widget.seek != null) ...<Widget>[
+                          widget.seek!,
                           const SizedBox(height: WaxSpace.s16),
                         ],
-                      ),
+                        widget.transport,
+                        if (widget.volume != null) ...<Widget>[
+                          const SizedBox(height: WaxSpace.s8),
+                          widget.volume!,
+                        ],
+                        if (widget.actionRow != null) ...<Widget>[
+                          const SizedBox(height: WaxSpace.s16),
+                          widget.actionRow!,
+                        ],
+                        const SizedBox(height: WaxSpace.s16),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -982,6 +966,46 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
         ),
     ],
   );
+}
+
+enum _Portrait { hero, controls }
+
+/// The portrait face: the controls at their own height, the hero centred
+/// in what they leave, and the controls pulled up to at most [_gap] under
+/// it, so a face with little under its art leaves no dead band between.
+class _HeroAndControlsLayout extends MultiChildLayoutDelegate {
+  static const double _gap = WaxSpace.s48;
+
+  @override
+  void performLayout(Size size) {
+    final controls = layoutChild(
+      _Portrait.controls,
+      BoxConstraints.loose(size),
+    );
+    final hero = layoutChild(
+      _Portrait.hero,
+      BoxConstraints.loose(
+        Size(size.width, math.max(0, size.height - controls.height)),
+      ),
+    );
+    final slack = math.max(0.0, size.height - controls.height - hero.height);
+    positionChild(
+      _Portrait.hero,
+      Offset((size.width - hero.width) / 2, slack / 2),
+    );
+    positionChild(
+      _Portrait.controls,
+      Offset(
+        (size.width - controls.width) / 2,
+        hero.height == 0
+            ? slack
+            : slack / 2 + hero.height + math.min(slack / 2, _gap),
+      ),
+    );
+  }
+
+  @override
+  bool shouldRelayout(_HeroAndControlsLayout oldDelegate) => false;
 }
 
 /// A region of the player a tap must not dismiss.

@@ -90,6 +90,19 @@ class _CountedState extends State<_Counted> {
   Widget build(BuildContext context) => const Text('Kept');
 }
 
+/// Whether the primary focus is the control drawing [label], or above it.
+bool _focusHolds(String label) {
+  final context = FocusManager.instance.primaryFocus?.context;
+  return context != null &&
+      find
+          .ancestor(
+            of: find.text(label),
+            matching: find.byElementPredicate((e) => e == context),
+          )
+          .evaluate()
+          .isNotEmpty;
+}
+
 void main() {
   group('WaxProse', () {
     testWidgets('a drag selects the line and a copy takes it', (tester) async {
@@ -234,11 +247,11 @@ void main() {
 
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
-      expect(Focus.of(tester.element(find.text('Before'))).hasFocus, isTrue);
+      expect(_focusHolds('Before'), isTrue);
 
       await tester.sendKeyEvent(LogicalKeyboardKey.tab);
       await tester.pump();
-      expect(Focus.of(tester.element(find.text('After'))).hasFocus, isTrue);
+      expect(_focusHolds('After'), isTrue);
     });
 
     testWidgets('a tap leaves the focus where it was', (tester) async {

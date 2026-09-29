@@ -136,6 +136,10 @@
       }
     }
   },
+  "controlsBusy": "Working",
+  "@controlsBusy": {
+    "description": "Spoken with a control whose work is still running, which is why it takes no press until the work finishes."
+  },
   "controlsMute": "Mute",
   "@controlsMute": {
     "description": "Button beside the volume slider that silences output."

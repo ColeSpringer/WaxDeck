@@ -2,6 +2,7 @@ import 'dart:ui' show Tristate;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -20,6 +21,77 @@ const _podcast = NowPlayingData(
   position: Duration(minutes: 18, seconds: 6),
   duration: Duration(minutes: 58, seconds: 12),
   playing: true,
+);
+
+const _spoken = NowPlayingData(
+  title: 'What the harbour remembers',
+  domain: WaxDomain.podcasts,
+  position: Duration(minutes: 18, seconds: 6),
+  duration: Duration(minutes: 58, seconds: 12),
+  playing: true,
+  speed: 1.2,
+  volume: 0.6,
+);
+
+const _station = NowPlayingData(
+  title: 'Coastal FM',
+  subtitle: 'Ora Lune - Bell Tower',
+  domain: WaxDomain.radio,
+  position: Duration.zero,
+  duration: Duration.zero,
+  live: true,
+  playing: true,
+  volume: 0.6,
+);
+
+/// Each medium's bar wired the way the app wires it.
+final _musicActions = DeckBarActions(
+  onPlayPause: () {},
+  onNext: () {},
+  onPrevious: () {},
+  onShuffle: () {},
+  onRepeat: () {},
+  onQueue: () {},
+  onLyrics: () {},
+  onCast: () {},
+  onVolume: (_) {},
+  onMute: () {},
+  onMore: () {},
+  onSeek: (_) {},
+  onStar: (_) {},
+);
+
+final _spokenActions = DeckBarActions(
+  onPlayPause: () {},
+  onSkipBack: () {},
+  onSkipForward: () {},
+  onShuffle: () {},
+  onRepeat: () {},
+  onQueue: () {},
+  onCast: () {},
+  onVolume: (_) {},
+  onMute: () {},
+  onMore: () {},
+  onSeek: (_) {},
+  onStar: (_) {},
+);
+
+final _liveActions = DeckBarActions(
+  onPlayPause: () {},
+  onVolume: (_) {},
+  onMute: () {},
+  onSaveSong: (_) {},
+  onExpand: () {},
+);
+
+/// The wide bar's transport row, found from its play control.
+Rect _transportOf(WidgetTester tester) => tester.getRect(
+  find
+      .ancestor(
+        of: find.bySemanticsLabel(RegExp(r'^(Pause|Stop)$')),
+        matching: find.byType(Row),
+      )
+      .first,
 );
 
 Future<void> _pumpAt(
@@ -77,14 +149,32 @@ void main() {
           size: Size(width, 600),
         );
         expect(tester.takeException(), isNull);
-        // The title zone's widening comes out of the centre, and the
-        // seek track is what gives: at the sidebar breakpoint, with the
-        // fullest right cluster, it still has room to aim at.
+        // The seek track is what gives: at the sidebar breakpoint, with
+        // the fullest right cluster, it still has room to aim at.
         if (width >= 840) {
           expect(
             tester.getSize(find.byType(WaxSeekBar)).width,
             greaterThanOrEqualTo(180),
           );
+          // Laid-out zones report no overflow when they collide.
+          final placed =
+              tester
+                  .widgetList(
+                    find.descendant(
+                      of: find.byType(DeckBar),
+                      matching: find.byType(LayoutId),
+                    ),
+                  )
+                  .map((w) => tester.getRect(find.byWidget(w)))
+                  .toList()
+                ..sort((a, b) => a.left.compareTo(b.left));
+          for (var i = 1; i < placed.length; i++) {
+            expect(
+              placed[i].left,
+              greaterThanOrEqualTo(placed[i - 1].right - 0.01),
+              reason: 'zone $i',
+            );
+          }
         }
       });
     }
@@ -117,15 +207,15 @@ void main() {
       );
 
       // Neither wired nor pending is still absent: a control that will
-      // never work reads as broken.
+      // never work reads as broken. The centre stays put either way.
       final bare = await seekWith(const DeckBarActions());
-      expect(bare.width, greaterThan(wired.width));
-      expect(
-        find.byWidgetPredicate(
-          (w) => w is WaxIconButton && w.glyph == WaxIcons.more,
-        ),
-        findsNothing,
-      );
+      expect(bare, wired);
+      for (final glyph in <WaxGlyph>[WaxIcons.cast, WaxIcons.more]) {
+        expect(
+          find.byWidgetPredicate((w) => w is WaxIconButton && w.glyph == glyph),
+          findsNothing,
+        );
+      }
     });
 
     testWidgets('the timecodes keep one width under an hour', (tester) async {
@@ -201,41 +291,252 @@ void main() {
       expect(tester.widget(length), same(before));
     });
 
-    testWidgets('the title zone takes two parts to the centre three', (
-      tester,
+    // Radio's right cluster is one slider, so a transport centred in its
+    // own zone sat hundreds of pixels right of the bar's middle.
+    for (final (name, now, actions)
+        in <(String, NowPlayingData, DeckBarActions)>[
+          ('music', _music.copyWithVolume(0.6), _musicActions),
+          ('spoken word', _spoken, _spokenActions),
+          ('live', _station, _liveActions),
+        ]) {
+      for (final width in <double>[1000, 1400, 2000, 2560]) {
+        testWidgets('the $name transport sits on the centre line at '
+            '${width.toInt()} px', (tester) async {
+          await _pumpAt(
+            tester,
+            DeckBar(now: now, actions: actions),
+            size: Size(width, 600),
+          );
+          expect(tester.takeException(), isNull);
+          final bar = tester.getRect(find.byType(DeckBar));
+          final transport = _transportOf(tester);
+          expect(transport.center.dx, moreOrLessEquals(width / 2, epsilon: 1));
+          if (now.live) {
+            expect(
+              transport.center.dy,
+              moreOrLessEquals(bar.center.dy, epsilon: 1),
+            );
+          }
+        });
+      }
+    }
+
+    // Measured from the bar: the zones and controls it lays out, in order
+    // along it, and the centre among them.
+    Future<({List<Rect> placed, int centre})> zonesAt(
+      WidgetTester tester,
+      double width,
+      NowPlayingData now,
+      DeckBarActions actions,
     ) async {
-      // It had one part to two, which left a long name a sliver of the
-      // bar that is there to show it.
       await _pumpAt(
         tester,
-        DeckBar(
-          now: _music,
-          actions: DeckBarActions(onPlayPause: () {}, onSeek: (_) {}),
-        ),
-        size: const Size(1280, 600),
+        DeckBar(now: now, actions: actions),
+        size: Size(width, 600),
       );
-      final left = tester
-          .getSize(
-            find
-                .ancestor(
-                  of: find.text('Salt Harbour'),
-                  matching: find.byType(Expanded),
-                )
-                .first,
-          )
-          .width;
-      final centre = tester
-          .getSize(
-            find
-                .ancestor(
-                  of: find.byType(WaxSeekBar),
-                  matching: find.byType(Stack),
-                )
-                .first,
-          )
-          .width;
-      expect(left / (left + centre), moreOrLessEquals(0.4, epsilon: 0.01));
+      final centre = tester.getRect(
+        find
+            .ancestor(
+              of: find.byType(WaxSeekBar),
+              matching: find.byType(LayoutId),
+            )
+            .first,
+      );
+      final placed =
+          tester
+              .widgetList(
+                find.descendant(
+                  of: find.byType(DeckBar),
+                  matching: find.byType(LayoutId),
+                ),
+              )
+              .map((w) => tester.getRect(find.byWidget(w)))
+              .toList()
+            ..sort((a, b) => a.left.compareTo(b.left));
+      return (placed: placed, centre: placed.indexOf(centre));
+    }
+
+    for (final (name, now, actions)
+        in <(String, NowPlayingData, DeckBarActions)>[
+          ('music', _music.copyWithVolume(0.6), _musicActions),
+          ('spoken word', _spoken, _spokenActions),
+        ]) {
+      testWidgets('the $name bar never tightens as the window widens', (
+        tester,
+      ) async {
+        List<double>? last;
+        for (var width = 840.0; width <= 1400; width += 4) {
+          final (:placed, :centre) = await zonesAt(tester, width, now, actions);
+          // The seek track, the level, then every gap from the centre on.
+          final measures = <double>[
+            tester.getSize(find.byType(WaxSeekBar)).width,
+            tester.getSize(find.byType(WaxSlider)).width,
+            for (var i = centre + 1; i < placed.length; i++)
+              placed[i].left - placed[i - 1].right,
+          ];
+          if (last != null) {
+            for (var i = 0; i < measures.length; i++) {
+              expect(
+                measures[i],
+                greaterThanOrEqualTo(last[i] - 0.01),
+                reason: 'measure $i at ${width.toInt()} px',
+              );
+            }
+          }
+          last = measures;
+        }
+      });
+
+      testWidgets('the $name bar keeps its flanks off the centre', (
+        tester,
+      ) async {
+        for (var width = 840.0; width <= 1400; width += 20) {
+          final (:placed, :centre) = await zonesAt(tester, width, now, actions);
+          expect(
+            placed[centre].left - placed[centre - 1].right,
+            greaterThanOrEqualTo(WaxSpace.s8),
+            reason: 'title side at ${width.toInt()} px',
+          );
+          expect(
+            placed[centre + 1].left - placed[centre].right,
+            greaterThanOrEqualTo(WaxSpace.s8),
+            reason: 'cluster side at ${width.toInt()} px',
+          );
+        }
+      });
+    }
+
+    testWidgets('a live bar gives its title the room its transport leaves', (
+      tester,
+    ) async {
+      // Its centre holds five buttons and no seek, so a centre as wide as
+      // a track's took room the station's name needed.
+      Future<double> titleZone(
+        NowPlayingData now,
+        DeckBarActions actions,
+      ) async {
+        await _pumpAt(
+          tester,
+          DeckBar(now: now, actions: actions),
+          size: const Size(2030, 600),
+        );
+        return tester
+            .getSize(
+              find
+                  .ancestor(
+                    of: find.text(now.title),
+                    matching: find.byType(LayoutId),
+                  )
+                  .first,
+            )
+            .width;
+      }
+
+      final music = await titleZone(_music.copyWithVolume(0.6), _musicActions);
+      final live = await titleZone(_station, _liveActions);
+      expect(live, greaterThan(music + 100));
+      expect(
+        _transportOf(tester).center.dx,
+        moreOrLessEquals(1015, epsilon: 1),
+      );
     });
+
+    testWidgets('a control keeps its focus when a neighbour comes or goes', (
+      tester,
+    ) async {
+      Future<void> pumpBar({required bool lyrics}) => _pumpAt(
+        tester,
+        DeckBar(
+          now: _music.copyWithVolume(0.6),
+          actions: DeckBarActions(
+            onPlayPause: () {},
+            onQueue: () {},
+            onLyrics: lyrics ? () {} : null,
+            onCast: () {},
+            onVolume: (_) {},
+            onMute: () {},
+            onMore: () {},
+          ),
+        ),
+        size: const Size(1400, 600),
+      );
+      final more = find.byWidgetPredicate(
+        (w) => w is WaxIconButton && w.glyph == WaxIcons.more,
+      );
+      bool onMore() {
+        final context = FocusManager.instance.primaryFocus?.context;
+        return context != null &&
+            find
+                .ancestor(
+                  of: find.byElementPredicate((e) => e == context),
+                  matching: more,
+                )
+                .evaluate()
+                .isNotEmpty;
+      }
+
+      await pumpBar(lyrics: true);
+      for (var i = 0; i < 30 && !onMore(); i++) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+        await tester.pump();
+      }
+      expect(onMore(), isTrue, reason: 'reached from the keyboard');
+
+      await pumpBar(lyrics: false);
+      expect(onMore(), isTrue);
+    });
+
+    testWidgets('the wide bar mirrors right to left', (tester) async {
+      await _pumpAt(
+        tester,
+        Directionality(
+          textDirection: TextDirection.rtl,
+          child: DeckBar(
+            now: _music.copyWithVolume(0.6),
+            actions: _musicActions,
+          ),
+        ),
+        size: const Size(1400, 600),
+      );
+      final more = tester.getRect(
+        find.byWidgetPredicate(
+          (w) => w is WaxIconButton && w.glyph == WaxIcons.more,
+        ),
+      );
+      expect(tester.getRect(find.text('Salt Harbour')).left, greaterThan(700));
+      expect(more.left, moreOrLessEquals(WaxSpace.s16));
+      expect(_transportOf(tester).center.dx, moreOrLessEquals(700, epsilon: 1));
+    });
+
+    // Narrower, the level and then the gaps give way before the transport
+    // leaves the line.
+    for (final width in <double>[1000, 1400, 2560]) {
+      testWidgets('the right cluster keeps its controls apart at '
+          '${width.toInt()} px', (tester) async {
+        await _pumpAt(
+          tester,
+          DeckBar(now: _music.copyWithVolume(0.6), actions: _musicActions),
+          size: Size(width, 600),
+        );
+        Rect button(WaxGlyph glyph) => tester.getRect(
+          find.byWidgetPredicate((w) => w is WaxIconButton && w.glyph == glyph),
+        );
+        final cluster = <Rect>[
+          button(WaxIcons.queue),
+          button(WaxIcons.lyrics),
+          button(WaxIcons.cast),
+          tester.getRect(find.byType(WaxSlider)),
+          button(WaxIcons.more),
+        ];
+        for (var i = 1; i < cluster.length; i++) {
+          expect(
+            cluster[i].left - cluster[i - 1].right,
+            greaterThanOrEqualTo(8),
+            reason: 'control $i',
+          );
+        }
+      });
+    }
 
     testWidgets('a station line too long for the strip scrolls, and keeps '
         'coming back to it', (tester) async {
@@ -384,6 +685,113 @@ void main() {
         expect(transport.top - subtitle.bottom, moreOrLessEquals(gap));
       });
     }
+
+    group('the controls under the cover', () {
+      // Each face as the app fills it: a caption line held, a rating
+      // row, a level, verbs, and the spoken faces' bottom region.
+      NowPlayingData nowFor(WaxDomain domain) => switch (domain) {
+        WaxDomain.radio => _station,
+        WaxDomain.podcasts => _podcast,
+        _ => _music,
+      };
+
+      Widget face(WaxDomain domain) {
+        final spoken = domain == WaxDomain.podcasts;
+        final now = nowFor(domain);
+        return PlayerScaffold(
+          now: now,
+          onCollapse: () {},
+          artworkCaptionReserved: true,
+          subtitleOverride: now.live ? const LiveLine('Ora Lune') : null,
+          titleTrailing: now.live
+              ? null
+              : const SizedBox(width: 272, height: 44),
+          seek: now.live ? null : SeekCluster(now: now, onSeek: (_) {}),
+          transport: TransportCluster(
+            playing: true,
+            live: now.live,
+            onPlayPause: () {},
+            onSkipBack: spoken ? () {} : null,
+            onSkipForward: spoken ? () {} : null,
+          ),
+          volume: WaxSlider(value: 0.6, onChanged: (_) {}, label: 'Volume'),
+          actionRow: WaxIconButton(
+            glyph: WaxIcons.more,
+            label: 'More',
+            onPressed: () {},
+          ),
+          bottomRegion: now.live
+              ? null
+              : SizedBox(width: double.infinity, height: spoken ? 200 : 88),
+        );
+      }
+
+      // Above the cover, and between its caption and the title block.
+      Future<(double, double)> spacing(
+        WidgetTester tester,
+        WaxDomain domain,
+      ) async {
+        await _pumpAt(
+          tester,
+          SizedBox(width: 600, height: 1080, child: face(domain)),
+          size: const Size(600, 1080),
+        );
+        expect(tester.takeException(), isNull);
+        final header = tester.getRect(find.byType(NavigationToolbar));
+        final art = tester.getRect(find.byType(ArtworkImage).first);
+        final caption = tester.getRect(find.byType(ArtworkCaption));
+        final title = tester.getRect(
+          find.byWidgetPredicate(
+            (w) =>
+                w is Text && w.data == nowFor(domain).title && w.maxLines == 2,
+          ),
+        );
+        return (art.top - header.bottom, title.top - caption.bottom);
+      }
+
+      for (final domain in <WaxDomain>[WaxDomain.radio, WaxDomain.podcasts]) {
+        testWidgets('follow the ${domain.name} cover rather than the window', (
+          tester,
+        ) async {
+          final (_, gap) = await spacing(tester, domain);
+          expect(gap, lessThanOrEqualTo(WaxSpace.s48));
+        });
+      }
+
+      testWidgets('leave a shrinking cover room for its caption', (
+        tester,
+      ) async {
+        // A cover floored at its smallest still draws its caption under
+        // it, into the gutter the extent left.
+        for (var height = 560.0; height <= 820; height += 4) {
+          await _pumpAt(
+            tester,
+            SizedBox(width: 420, height: height, child: face(WaxDomain.music)),
+            size: Size(420, height),
+          );
+          expect(tester.takeException(), isNull, reason: '420x$height');
+        }
+      });
+
+      testWidgets('stay where they were on the music face', (tester) async {
+        // Its slack is small, so the cover still centres between the
+        // header and the controls, and the controls end where they did.
+        final (above, gap) = await spacing(tester, WaxDomain.music);
+        expect(gap, moreOrLessEquals(above, epsilon: 1));
+        Rect around(Type type) => tester.getRect(
+          find
+              .ancestor(
+                of: find.byType(TransportCluster),
+                matching: find.byType(type),
+              )
+              .first,
+        );
+        expect(
+          around(SingleChildScrollView).bottom,
+          moreOrLessEquals(around(CustomMultiChildLayout).bottom, epsilon: 1),
+        );
+      });
+    });
 
     testWidgets('fits a short, wide window', (tester) async {
       // 900x600 is not compact, so it takes the portrait arrangement:

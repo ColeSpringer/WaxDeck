@@ -141,6 +141,99 @@ class _BarsPainter extends CustomPainter {
       old.phase != phase || old.playing != playing || old.color != color;
 }
 
+/// An indeterminate ring for work a control started, still in flight. A
+/// control's glyph, never a page's, which draws the shape of what is
+/// coming instead. Still under reduced motion.
+class WaxSpinner extends StatefulWidget {
+  const WaxSpinner({this.size = 16, this.color, super.key});
+
+  final double size;
+
+  /// Defaults to the accent.
+  final Color? color;
+
+  @override
+  State<WaxSpinner> createState() => _WaxSpinnerState();
+}
+
+class _WaxSpinnerState extends State<WaxSpinner>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _turn = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!WaxMotion.of(context).animationsEnabled) {
+      _turn.stop();
+    } else if (!_turn.isAnimating) {
+      _turn.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _turn.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.color ?? WaxColors.of(context).accent;
+    // Decoration: the control it sits in carries the name.
+    return ExcludeSemantics(
+      child: RepaintBoundary(
+        child: SizedBox.square(
+          dimension: widget.size,
+          child: RotationTransition(
+            turns: _turn,
+            // Its own layer, so a turn moves the arcs rather than repainting.
+            child: RepaintBoundary(
+              child: CustomPaint(painter: _SpinnerPainter(color)),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A faint track and a quarter of it drawn solid.
+class _SpinnerPainter extends CustomPainter {
+  _SpinnerPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final thickness = math.max(1.5, size.shortestSide / 8);
+    final rect = (Offset.zero & size).deflate(thickness / 2);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = thickness
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(
+      rect,
+      0,
+      2 * math.pi,
+      false,
+      paint..color = color.withValues(alpha: 0.25),
+    );
+    canvas.drawArc(
+      rect,
+      -math.pi / 2,
+      math.pi / 2,
+      false,
+      paint..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_SpinnerPainter oldDelegate) => oldDelegate.color != color;
+}
+
 /// How much room a [LivePill] takes.
 enum LivePillSize {
   /// Beside a caption line or on a logo: the deck bar, the dial.

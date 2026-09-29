@@ -23,6 +23,19 @@ void activateBySemantics(WidgetTester tester, String identifier) {
   node.owner!.performAction(node.id, SemanticsAction.tap);
 }
 
+/// Whether the primary focus is the control drawing [label], or above it.
+bool _focusHolds(String label) {
+  final context = FocusManager.instance.primaryFocus?.context;
+  return context != null &&
+      find
+          .ancestor(
+            of: find.text(label),
+            matching: find.byElementPredicate((e) => e == context),
+          )
+          .evaluate()
+          .isNotEmpty;
+}
+
 void main() {
   group('WaxTappable', () {
     testWidgets('is one tab stop, whatever ink it draws with', (tester) async {
@@ -49,7 +62,7 @@ void main() {
         await tester.sendKeyEvent(LogicalKeyboardKey.tab);
         await tester.pump();
       }
-      expect(Focus.of(tester.element(find.text('After'))).hasFocus, isTrue);
+      expect(_focusHolds('After'), isTrue);
     });
   });
 

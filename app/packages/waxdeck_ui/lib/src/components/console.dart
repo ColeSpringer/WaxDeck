@@ -67,12 +67,16 @@ class WaxColumn<T> {
 ///
 /// The compact behaviour belongs to the component rather than to each
 /// screen, because every screen would otherwise decide differently what
-/// a phone gets. Columns declare a priority; below `expanded` each row
-/// becomes a card carrying its primary and secondary fields, and the
-/// whole record is one tap away in a detail sheet.
+/// a phone gets. Columns declare a priority; below `expanded`, or where
+/// the columns cannot fit, each row becomes a card carrying its primary
+/// and secondary fields, and the whole record is one tap away in a
+/// detail sheet.
 ///
 /// Truly tabular content that has to stay tabular (an audit detail, a
 /// diff) is not this: it scrolls horizontally inside its own container.
+///
+/// It measures the width it is given, so nothing above it may ask for its
+/// intrinsic size: not an IntrinsicWidth, nor an AlertDialog's content.
 class WaxTable<T> extends StatelessWidget {
   const WaxTable({
     required this.columns,
@@ -119,8 +123,19 @@ class WaxTable<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
     if (rows.isEmpty && empty != null) return empty!;
-    final tabular = WaxSizeClass.of(context).hasSidebar;
-    final body = tabular ? _table(context, colors) : _cards(context, colors);
+    final cards = _cards(context, colors);
+    final Widget body;
+    if (WaxSizeClass.of(context).hasSidebar) {
+      // Built once here, so a resize picks a tree rather than rebuilding
+      // every row in it.
+      final table = _table(context, colors);
+      body = LayoutBuilder(
+        builder: (context, constraints) =>
+            _fits(constraints.maxWidth) ? table : cards,
+      );
+    } else {
+      body = cards;
+    }
     if (caption == null) return body;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -135,6 +150,23 @@ class WaxTable<T> extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  /// The least a flexible column is drawn at before the rows become cards.
+  static const double _flexibleFloor = WaxSpace.s64;
+
+  /// Whether the columns, their gaps, the row padding, the border and the
+  /// trailing control fit in [width].
+  bool _fits(double width) {
+    var need =
+        2 * WaxSpace.s12 +
+        2 +
+        (trailing == null ? 0 : WaxSpace.s40) +
+        _columnGap * (columns.length - 1);
+    for (final column in columns) {
+      need += column.width ?? _flexibleFloor;
+    }
+    return need <= width;
   }
 
   Widget _table(BuildContext context, WaxColors colors) {
@@ -160,7 +192,10 @@ class WaxTable<T> extends StatelessWidget {
             ),
             child: Row(
               children: <Widget>[
-                for (final column in shown) _headerCell(colors, column),
+                for (final (i, column) in shown.indexed) ...<Widget>[
+                  if (i > 0) const SizedBox(width: _columnGap),
+                  _headerCell(colors, column),
+                ],
                 if (trailing != null) const SizedBox(width: WaxSpace.s40),
               ],
             ),
@@ -214,6 +249,10 @@ class WaxTable<T> extends StatelessWidget {
   }
 }
 
+/// Between two cells, so a right-aligned number never meets the text of
+/// the column after it. The header and the rows share it and stay aligned.
+const double _columnGap = WaxSpace.s16;
+
 class _TableRow<T> extends StatelessWidget {
   const _TableRow({
     required this.columns,
@@ -240,7 +279,10 @@ class _TableRow<T> extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
       child: Row(
         children: <Widget>[
-          for (final column in columns) _cell(context, column),
+          for (final (i, column) in columns.indexed) ...<Widget>[
+            if (i > 0) const SizedBox(width: _columnGap),
+            _cell(context, column),
+          ],
         ],
       ),
     );
