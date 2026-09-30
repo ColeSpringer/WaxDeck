@@ -44,12 +44,38 @@ fi
 
 # Every buffer, from now until the end: the app announces its VM
 # service here, and a launch that never does is a hang's first fact.
-adb -s "$SERIAL" logcat -v threadtime -b all > "$WAX_LOGCAT" 2>&1 &
-LOGCAT=$!
-cleanup() {
-  kill "$LOGCAT" 2> /dev/null || true
+#
+# Rejoined whenever it ends, because logcat exits with the device's
+# connection: a transport that dropped for a moment as a launch began
+# once took the log for the rest of the attempt with it, leaving the
+# later suites unlogged and a hung one's probe reading the silence as
+# an app that never announced. A rejoin resumes at the last kept line's
+# timestamp: what was logged while the link was down comes back from the
+# ring buffer, the rest of the ring is not written out again, and only
+# that one millisecond's lines repeat (-T is inclusive).
+follow_logcat() {
+  local since
+  while :; do
+    since=$(grep -oE '^[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}' "$WAX_LOGCAT" |
+      tail -n 1 || true)
+    adb -s "$SERIAL" logcat -v threadtime -b all ${since:+-T "$since"} || true
+    sleep 1
+    adb -s "$SERIAL" wait-for-device || true
+  done
 }
-trap cleanup EXIT
+: > "$WAX_LOGCAT"
+follow_logcat >> "$WAX_LOGCAT" 2>&1 &
+LOGCAT=$!
+# The loop and whichever adb it is waiting on, together: the loop alone
+# would leave its logcat writing on.
+stop_logcat() {
+  local current
+  current=$(pgrep -P "$LOGCAT" || true)
+  # shellcheck disable=SC2086 # the pids are the words
+  kill "$LOGCAT" $current 2> /dev/null || true
+  wait "$LOGCAT" 2> /dev/null || true
+}
+trap stop_logcat EXIT
 
 cd "$ROOT/app/app"
 failed=()
@@ -85,8 +111,7 @@ WAX_FLUTTER_TEST_FLAGS="-v --reporter expanded --file-reporter json:$OUT/saf_cha
   SAF_ARTIFACTS="$OUT/saf-capture" \
   suite saf_channel 600 bash "$ROOT/e2e/tools/run-saf-probe.sh" "$SAF" "$SERIAL"
 
-kill "$LOGCAT" 2> /dev/null || true
-wait "$LOGCAT" 2> /dev/null || true
+stop_logcat
 trap - EXIT
 
 if [ ${#skipped[@]} -gt 0 ]; then

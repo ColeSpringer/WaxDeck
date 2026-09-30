@@ -104,6 +104,17 @@ tap_any() {
 # Whether $1 is anywhere in the hierarchy, tappable or not.
 showing() { [[ "$DUMP" == *"$1"* ]]; }
 
+# The text of the first node whose XML carries $1.
+node_text() {
+  local line
+  while IFS= read -r line; do
+    [[ "$line" == *"$1"* && "$line" =~ text=\"([^\"]*)\" ]] || continue
+    echo "${BASH_REMATCH[1]}"
+    return 0
+  done <<<"$DUMP"
+  return 1
+}
+
 # The emulator's primary storage reads as the device model in the roots
 # drawer; older builds and some images call it "Internal storage". Not
 # fatal when it cannot be read - the loop has other ways in, and under
@@ -131,6 +142,20 @@ while (($(date +%s) < deadline)); do
     # A refused dump says nothing about what is on screen, and reading
     # it as "the picker closed" would end the driver with DocumentsUI
     # still up and nobody left to tap it.
+    sleep 1
+    continue
+  fi
+  # A system error dialog - an app not responding, or one that stopped -
+  # holds input focus until it is answered, and a dump is of the focused
+  # window only, so the picker behind one is not in it at all. Left be,
+  # a dialog up since boot reads as a picker that never opened - Pixel
+  # Launcher's, raised by the emulator runner's own unlock keypress,
+  # stood over the picker for a whole attempt - and one raised mid-walk
+  # as a picker that closed. Wait before Close, so an app that was only
+  # slow keeps running; a crash dialog has no Wait.
+  if showing 'resource-id="android:id/aerr_'; then
+    echo "drive-saf-picker: answering \"$(node_text 'resource-id="android:id/alertTitle"' || true)\""
+    tap_any 'resource-id="android:id/aerr_wait"' 'resource-id="android:id/aerr_close"' || true
     sleep 1
     continue
   fi

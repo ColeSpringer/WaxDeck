@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -152,17 +153,36 @@ func TestRadioRelayRecordsTheListen(t *testing.T) {
 	// Sent in two halves with a pause between them, so the relay lasts
 	// long enough to measure: a station that answers in one write is
 	// over inside a millisecond and would record a listen of zero.
+	//
+	// The pause starts only once the listener holds the first half, so it
+	// falls inside the relay's clock. That clock starts when the station
+	// has answered, which on a loaded runner can trail the flush: a pause
+	// timed from the flush once measured 17ms of its 30.
 	payload := bytes.Repeat([]byte("waxdeck-radio-bytes."), 512)
+	heard := make(chan struct{})
+	var heardOnce sync.Once
+	hear := func() { heardOnce.Do(func() { close(heard) }) }
 	station := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "audio/mpeg")
 		w.Write(payload[:len(payload)/2])
 		if f, ok := w.(http.Flusher); ok {
 			f.Flush()
 		}
+		// Every path lands here, the logo warm-up's /favicon.ico
+		// included; that caller hangs up at the audio type and leaves
+		// through Done, so only the relay waits on heard.
+		select {
+		case <-heard:
+		case <-r.Context().Done():
+			return
+		}
 		time.Sleep(30 * time.Millisecond)
 		w.Write(payload[len(payload)/2:])
 	}))
 	t.Cleanup(station.Close)
+	// Registered after Close so it runs first: a test that fails before
+	// hearing anything must not leave Close waiting on the handler.
+	t.Cleanup(hear)
 
 	resp := h.postJSON(t, "/api/v1/radio/stations", map[string]any{
 		"name": "Measured FM", "streamUrl": station.URL + "/stream",
@@ -178,6 +198,10 @@ func TestRadioRelayRecordsTheListen(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := io.ReadFull(streamResp.Body, make([]byte, len(payload)/2)); err != nil {
+		t.Fatalf("reading the first half: %v", err)
+	}
+	hear()
 	io.Copy(io.Discard, streamResp.Body)
 	streamResp.Body.Close()
 
