@@ -176,6 +176,26 @@ func (d *DB) EnabledAdminIDs(ctx context.Context) ([]string, error) {
 	return out, rows.Err()
 }
 
+// EnabledUserIDs lists every account that can sign in, for news every
+// account reads.
+func (d *DB) EnabledUserIDs(ctx context.Context) ([]string, error) {
+	rows, err := d.r.QueryContext(ctx,
+		`SELECT id FROM users WHERE disabled = 0 AND pending = 0 ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // UpdateUser persists the mutable account fields. When
 // requireOtherAdmin is set, the update carries its own guard: it
 // applies only while another enabled administrator exists, in one

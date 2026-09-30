@@ -109,6 +109,10 @@
   "@bellSurfaceDownloads": {
     "description": "Which surface a bell row is about."
   },
+  "bellSurfaceHealth": "Library health",
+  "@bellSurfaceHealth": {
+    "description": "Overline of a bell row about the library health screen: a fix finished."
+  },
   "bellSurfaceImports": "Imports",
   "@bellSurfaceImports": {
     "description": "Which surface a bell row is about."

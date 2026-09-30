@@ -39,6 +39,7 @@ const ADMIN_SHAPES = [
   'admin-ops',
   'admin-readonly',
   'artwork',
+  'catalog-jobs',
   'driver-smoke',
   'metadata-workbench',
   'notifications',

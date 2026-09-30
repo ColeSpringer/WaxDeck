@@ -327,6 +327,7 @@ export const SemanticsIds = {
   duplicateMerge: (pid: string | number) => `duplicate-merge-${pid}`,
   health: (rule: string | number) => `health-rule-${rule}`,
   healthFix: (rule: string | number) => `health-fix-${rule}`,
+  healthFixBlocked: (rule: string | number) => `health-fix-blocked-${rule}`,
   healthIssue: (pid: string | number) => `health-issue-${pid}`,
   healthScore: 'health-score',
   healthSweep: 'health-sweep',
@@ -881,9 +882,12 @@ export const SemanticsIds = {
   yirServer: 'yir-server',
 
   // tools: Long-running tools and their progress rows.
+  jobRow: (pid: string | number) => `job-row-${pid}`,
+  openTasks: 'open-tasks',
   taskDismiss: (id: string | number) => `task-dismiss-${id}`,
   taskRow: (id: string | number) => `task-row-${id}`,
   tasksClearFinished: 'tasks-clear-finished',
+  tasksScreen: 'tasks-screen',
 
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.
   acquireFormat: 'acquire-format',
@@ -1022,6 +1026,7 @@ export const SemanticsIdPrefixes = {
   duplicateMerge: 'duplicate-merge-',
   health: 'health-rule-',
   healthFix: 'health-fix-',
+  healthFixBlocked: 'health-fix-blocked-',
   healthIssue: 'health-issue-',
   upgradeDetail: 'upgrade-detail-',
   upgradeGroup: 'upgrade-group-',
@@ -1208,6 +1213,7 @@ export const SemanticsIdPrefixes = {
   topEntry: 'top-entry-',
 
   // tools: Long-running tools and their progress rows.
+  jobRow: 'job-row-',
   taskDismiss: 'task-dismiss-',
   taskRow: 'task-row-',
 

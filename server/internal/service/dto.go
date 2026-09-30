@@ -107,14 +107,37 @@ type SearchResults struct {
 	Truncated bool
 }
 
-// Job mirrors a catalog job for the API.
+// Job mirrors a catalog job for the API. A finished one carries what it
+// did, by kind: at most one of Scan, Analyze, Enrich and Organize is set.
 type Job struct {
-	PID      string
-	Kind     string
-	State    string
-	Progress float64
-	Message  string
-	Error    string
+	PID        string
+	Kind       string
+	State      string
+	Progress   float64
+	Message    string
+	Error      string
+	StartedAt  time.Time
+	FinishedAt time.Time
+	Scan       *ScanTallyDTO
+	Analyze    *AnalyzeTallyDTO
+	Enrich     *EnrichmentLastRunDTO
+	Organize   *OrganizeTallyDTO
+}
+
+// ScanTallyDTO is what a scan did, in files.
+type ScanTallyDTO struct {
+	FilesSeen, Created, Updated, Relinked, Unchanged, Missing, Skipped, Errored int
+}
+
+// AnalyzeTallyDTO is what an analyze pass did, in files.
+type AnalyzeTallyDTO struct {
+	Analyzed, LoudnessMeasured, MeasureFailed, Skipped, Errored int
+}
+
+// OrganizeTallyDTO is what an organize run did under Profile.
+type OrganizeTallyDTO struct {
+	Profile                                string
+	Moved, Skipped, Errored, SidecarsMoved int
 }
 
 // ArtBlob is resolved artwork. SourceHash identifies the source image

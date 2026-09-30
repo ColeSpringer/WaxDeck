@@ -16,7 +16,7 @@ import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import '../sync/sync_providers.dart';
-import '../tools/tasks_screen.dart';
+import '../tools/tool_tasks_provider.dart';
 import 'file_picker_port.dart';
 import 'uploads_controller.dart';
 

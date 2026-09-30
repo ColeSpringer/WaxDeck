@@ -8,15 +8,25 @@ import 'package:built_value/serializer.dart';
 
 part 'health_fix_result.g.dart';
 
-/// How much fix work was queued.
+/// The fix that started: exactly one of `jobPid` and `taskId` names where it can be followed. 
 ///
 /// Properties:
-/// * [queued] - Items queued for fixing.
+/// * [queued] - Items the fix set out to reach.
+/// * [jobPid] - The catalog enrichment job running the fix, for an unscoped fix of an enrichment-backed rule. 
+/// * [taskId] - The `health-fix` tool task running the fix, otherwise.
 @BuiltValue()
 abstract class HealthFixResult implements Built<HealthFixResult, HealthFixResultBuilder> {
-  /// Items queued for fixing.
+  /// Items the fix set out to reach.
   @BuiltValueField(wireName: r'queued')
   int get queued;
+
+  /// The catalog enrichment job running the fix, for an unscoped fix of an enrichment-backed rule. 
+  @BuiltValueField(wireName: r'jobPid')
+  String? get jobPid;
+
+  /// The `health-fix` tool task running the fix, otherwise.
+  @BuiltValueField(wireName: r'taskId')
+  String? get taskId;
 
   HealthFixResult._();
 
@@ -46,6 +56,20 @@ class _$HealthFixResultSerializer implements PrimitiveSerializer<HealthFixResult
       object.queued,
       specifiedType: const FullType(int),
     );
+    if (object.jobPid != null) {
+      yield r'jobPid';
+      yield serializers.serialize(
+        object.jobPid,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.taskId != null) {
+      yield r'taskId';
+      yield serializers.serialize(
+        object.taskId,
+        specifiedType: const FullType(String),
+      );
+    }
   }
 
   @override
@@ -75,6 +99,22 @@ class _$HealthFixResultSerializer implements PrimitiveSerializer<HealthFixResult
             specifiedType: const FullType(int),
           ) as int;
           result.queued = valueDes;
+          break;
+        case r'jobPid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.jobPid = valueDes;
+          break;
+        case r'taskId':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.taskId = valueDes;
           break;
         default:
           unhandled.add(key);

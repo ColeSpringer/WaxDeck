@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/organize/organize_screen.dart';
@@ -129,5 +131,45 @@ void main() {
     expect(find.text('Moved'), findsOneWidget);
     expect(find.text('/old/b.flac'), findsOneWidget);
     expect(find.text('target exists'), findsOneWidget);
+  });
+
+  testWidgets('apply is busy until the moves answer', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final repo = FakeRepository()..applyOrganizeGate = Completer<void>();
+    repo.organizePlanResult = const OrganizePlan(
+      profile: 'default',
+      totalActions: 1,
+      actions: [
+        OrganizeAction(
+          itemPid: 'tr-1',
+          from: '/old/a.flac',
+          to: '/library/waves/a.flac',
+        ),
+      ],
+    );
+    await _pump(tester, _host(repo));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'default',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
+    await tester.pumpAndSettle();
+    WaxButton apply() => tester.widget<WaxButton>(
+      find.byWidgetPredicate(
+        (w) => w is WaxButton && w.semanticsId == SemanticsIds.organizeApply,
+      ),
+    );
+    expect(apply().busy, isTrue);
+
+    repo.applyOrganizeGate!.complete();
+    await tester.pumpAndSettle();
+    expect(apply().busy, isFalse);
   });
 }

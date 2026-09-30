@@ -142,6 +142,7 @@ Serializers _$serializers =
           ..add(HealthIssueDetail.serializer)
           ..add(HealthIssuePage.serializer)
           ..add(HealthRuleCount.serializer)
+          ..add(HealthRuleCountFixBlockedEnum.serializer)
           ..add(HealthSummary.serializer)
           ..add(HeatmapDay.serializer)
           ..add(InstantMix.serializer)
@@ -1470,6 +1471,13 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(WriteBackIssue)]),
             () => ListBuilder<WriteBackIssue>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType.nullable(JsonObject),
+            ]),
+            () => MapBuilder<String, JsonObject?>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltMap, const [

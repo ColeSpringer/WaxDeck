@@ -32,7 +32,7 @@ class HealthApi {
   const HealthApi(this._dio, this._serializers);
 
   /// Bulk-fix a health rule
-  /// Dispatches the fix that matches one rule across the named items (or every item currently failing the rule when &#x60;itemPids&#x60; is absent): enrichment fetches for missing art, lyrics, genres, and identifiers; organize moves for path mismatches; a write-back retry for out-of-sync files. Fixes run in the background at provider-etiquette pace; the response says how many items were queued. Rules with no automated fix (&#x60;corrupt-audio&#x60;, &#x60;legacy-tags&#x60;) answer &#x60;invalid-request&#x60; naming the rule. 
+  /// Starts the fix that matches one rule, across the named items or, when &#x60;itemPids&#x60; is absent, every item currently failing the rule. Only a rule the summary reports &#x60;fixable&#x60; has one; any other answers &#x60;invalid-request&#x60; naming the rule, and the summary&#39;s &#x60;fixBlocked&#x60; says what the install lacks for a rule that could be fixed with it. Administrators only.  An unscoped fix of &#x60;missing-art&#x60;, &#x60;missing-lyrics&#x60;, &#x60;missing-genre&#x60;, &#x60;missing-narrator&#x60; or &#x60;missing-asin&#x60; runs the catalog&#39;s enrichment pass as a catalog job whose pid is &#x60;jobPid&#x60;, with those of the phases that fill the rule which this server runs forced to re-ask everything they reach (either of &#x60;missing-art&#x60;&#39;s two picture phases is enough); the pass&#39;s other phases walk their ordinary sweeps, as any pass does. &#x60;missing-genre&#x60; re-asks MusicBrainz about every album. A scoped fix, and every fix of &#x60;path-mismatch&#x60; or &#x60;write-unsynced&#x60;, runs as a &#x60;health-fix&#x60; tool task whose id is &#x60;taskId&#x60;, working item by item. Either runs in the background and is listed where its kind is (&#x60;GET /jobs&#x60;, &#x60;GET /tools/tasks&#x60;); on finishing it re-checks the items it reached (a pass, every item failing the rule) and files a &#x60;health-fix-finished&#x60; notification for the administrator who started it, saying what it filled or why it failed. The &#x60;health&#x60; sync marker goes out when a fix starts and when its re-check lands, and the rule&#39;s &#x60;fixing&#x60; is true in between. The score waits for the next full sweep. &#x60;queued&#x60; is the number of items the fix set out to reach. While an enrichment pass is running, another fix that needs one answers &#x60;conflict&#x60;, as does any fix for a rule whose &#x60;fixing&#x60; is true. 
   ///
   /// Parameters:
   /// * [healthFixRequest] 
@@ -905,7 +905,7 @@ class HealthApi {
   }
 
   /// Re-sweep health now
-  /// Queues a full health sweep instead of waiting for the scheduled one. Administrators only. The summary updates over the event channel as the sweep progresses. 
+  /// Queues a full health sweep instead of waiting for the scheduled one. Administrators only. The summary&#39;s &#x60;sweeping&#x60; is true from the request until the sweep finishes, and the &#x60;health&#x60; sync marker tells every account when to read the summary again: once when the sweep is queued and once when it finishes. A sweep that fails answers the request too, and the summary&#39;s &#x60;sweepFailed&#x60; says so until a sweep lands; of a run of failures, only the first is marked. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation

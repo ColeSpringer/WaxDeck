@@ -212,4 +212,85 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.rescanForces, [true]);
   });
+
+  testWidgets('a library made while another job runs says its scan waits', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..createLibraryScanStarted = false;
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.libraryName),
+      'audiobooks',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.libraryPath),
+      '/srv/media/audiobooks',
+    );
+    await tester.ensureVisible(
+      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.librarySubmit),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Library "audiobooks" created. Another catalog job is running, so '
+      'the next scan will index it.',
+    );
+  });
+
+  testWidgets('a rescan refused while a job runs says so', (tester) async {
+    final repo = FakeRepository()
+      ..rescanError = const WaxDeckApiException(
+        code: 'conflict',
+        message: 'a conflicting catalog job is already running',
+        statusCode: 409,
+      );
+    repo.libraries.add(
+      const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
+    );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRescan('lb-1')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRescanConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'A scan or another catalog job is already running.',
+    );
+  });
+
+  testWidgets('rescan is busy while a scan runs', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final repo = FakeRepository()
+      ..jobs = [const Job(pid: 'jb-1', kind: 'scan', state: 'running')];
+    repo.libraries.add(
+      const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
+    );
+    await _pump(tester, _host(_container(repo)));
+
+    final rescan = tester.widget<WaxIconButton>(
+      find.byWidgetPredicate(
+        (w) =>
+            w is WaxIconButton &&
+            w.semanticsId == SemanticsIds.libraryRescan('lb-1'),
+      ),
+    );
+    expect(rescan.busy, isTrue);
+  });
 }

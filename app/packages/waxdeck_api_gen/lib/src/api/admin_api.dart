@@ -56,7 +56,7 @@ class AdminApi {
   const AdminApi(this._dio, this._serializers);
 
   /// Start the analyze pass
-  /// Starts the asynchronous analyze pass and returns the job tracking it. The pass decodes every audio file whose analysis is missing or stale and stores its loudness (what ReplayGain and voice-boost leveling read), its acoustic fingerprint (what duplicate grouping reads), and its waveform peaks (what the seek bar reads). It is the only pass that decodes audio: a scan hashes files and reads tags without decoding them, so none of those three exists until this runs. Expect it to be slow. Each file costs a full decode, and where &#x60;fpcalc&#x60; is installed it also costs one subprocess per file, so a large library is priced in hours rather than minutes. It is resumable and cancelable like the other catalog jobs, and a file it has already analyzed is not analyzed again until its audio or an analysis algorithm changes, so an interrupted run picks up where it stopped. It never runs automatically after a scan; the &#x60;analyze&#x60; schedule and this endpoint are the only triggers. Analysis serializes with itself but not with scans: starting a second analyze while one runs returns the conflict error, while a scan may run alongside. Podcast episodes are deliberately never analyzed. Administrators only. 
+  /// Starts the asynchronous analyze pass and returns the job tracking it. The pass decodes every audio file whose analysis is missing or stale and stores its loudness (what ReplayGain and voice-boost leveling read), its acoustic fingerprint (what duplicate grouping reads), and its waveform peaks (what the seek bar reads). It is the only pass that decodes audio: a scan hashes files and reads tags without decoding them, so none of those three exists until this runs. Expect it to be slow. Each file costs a full decode, and where &#x60;fpcalc&#x60; is installed it also costs one subprocess per file, so a large library is priced in hours rather than minutes. It is resumable: a file it has already analyzed is not analyzed again until its audio or an analysis algorithm changes, so a run cut short picks up where it stopped. It never runs automatically after a scan; the &#x60;analyze&#x60; schedule and this endpoint are the only triggers. Analysis serializes with itself but not with scans: starting a second analyze while one runs returns the conflict error, while a scan may run alongside. Podcast episodes are deliberately never analyzed. Administrators only. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -2104,7 +2104,7 @@ class AdminApi {
   }
 
   /// List recent catalog jobs
-  /// Recent server-run catalog jobs (scans, analysis, enrichment, organize runs, deletes), newest first. Bounded by &#x60;limit&#x60; rather than cursor-paged (a recent-history window, not a mirrorable list). The live counterpart of the tool task log for engine-side work. Administrators only. 
+  /// Recent server-run catalog jobs (scans, analysis, enrichment, organize runs, deletes), newest first. Bounded by &#x60;limit&#x60; rather than cursor-paged (a recent-history window, not a mirrorable list), except that a job still running is always listed, first, however many newer jobs have pushed it out of the window. The live counterpart of the tool task log for engine-side work; the &#x60;job&#x60; sync marker says when to read it again. Administrators only. 
   ///
   /// Parameters:
   /// * [limit] - Maximum jobs returned.

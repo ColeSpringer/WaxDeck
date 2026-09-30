@@ -362,9 +362,12 @@ or Gotify delivery, a Discord or generic webhook, an
 [Apprise](https://github.com/caronc/apprise) API server (one
 integration, most notification services), or the UnifiedPush endpoint
 the Android client registers so events push without any Google
-services. Each target selects its own events (new episode downloaded,
-podcast feed disabled, review queue ready) from the server's event
-catalog, has a per-target test button, and shows its delivery health:
+services. Each target selects its own events (a subscribed show's new
+episode, an episode you asked for downloaded, a podcast feed disabled,
+the review queue ready, and for an administrator the end of a library
+job or a health fix they started) from the server's event catalog, has
+a per-target test button that waits for the delivery and says whether
+it landed, and shows its delivery health:
 the last successful delivery, or the standing error while deliveries
 fail (a revoked token no longer fails silently). Configuration is
 sealed at rest and round-trips verbatim to its owner for editing.

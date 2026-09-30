@@ -14,11 +14,19 @@ class LiveInvalidations {
     required this.channelFactory,
     required this.onCatalog,
     required this.onUser,
+    this.onUserCatchUp,
   });
 
   final EventsChannelFactory channelFactory;
   final void Function() onCatalog;
   final void Function() onUser;
+
+  /// The user topic after continuity may have been lost (a connect, a
+  /// resync), when nothing can say which surfaces moved. Null is
+  /// [onUser].
+  final void Function()? onUserCatchUp;
+
+  void _userCatchUp() => (onUserCatchUp ?? onUser)();
 
   /// Player-topic invalidations: endpoint and session lists changed.
   void Function()? onPlayer;
@@ -89,7 +97,7 @@ class LiveInvalidations {
         onConnected?.call();
         // The socket may have been down across changes; refresh once.
         onCatalog();
-        onUser();
+        _userCatchUp();
       },
       onError: (Object _) {
         _onDown();
@@ -134,10 +142,10 @@ class LiveInvalidations {
           case 'catalog':
             onCatalog();
           case 'user':
-            onUser();
+            _userCatchUp();
           default:
             onCatalog();
-            onUser();
+            _userCatchUp();
         }
       default:
         // Command-bus frames route to the Connect layer; anything it

@@ -843,6 +843,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String adminLibraryCreatedNoScan(String name) {
+    return 'Biblioteca \"$name\" creada. Hay otro trabajo del catálogo en curso, así que la indexará el próximo escaneo.';
+  }
+
+  @override
   String get adminLibraryHoldsHelp =>
       'Qué tipo de contenido hay en la carpeta raíz';
 
@@ -2456,6 +2461,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get bellSurfaceDownloads => 'Descargas';
 
   @override
+  String get bellSurfaceHealth => 'Salud de la biblioteca';
+
+  @override
   String get bellSurfaceImports => 'Importaciones';
 
   @override
@@ -2903,6 +2911,9 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get commonOpenReview => 'Abrir la revisión';
+
+  @override
+  String get commonOpenTasks => 'Tareas';
 
   @override
   String get commonRetry => 'Reintentar';
@@ -3634,8 +3645,50 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get healthFixBlockedArtSource =>
+      'Necesita sus fuentes de ilustraciones activadas en Enriquecimiento.';
+
+  @override
+  String get healthFixBlockedBookSource =>
+      'Necesita un proveedor de metadatos de libros.';
+
+  @override
+  String get healthFixBlockedContact =>
+      'Necesita un contacto de enriquecimiento, que permite a este servidor consultar las fuentes públicas gratuitas.';
+
+  @override
+  String get healthFixBlockedGenreSource =>
+      'Necesita una fuente de géneros, MusicBrainz o ListenBrainz, activada en Enriquecimiento.';
+
+  @override
+  String get healthFixBlockedLyricsSource =>
+      'Necesita una fuente de letras activada en Enriquecimiento.';
+
+  @override
+  String get healthFixBlockedNoManaged =>
+      'Necesita una biblioteca gestionada: sin ninguna, no hay una estructura con la que coincidan las rutas.';
+
+  @override
+  String get healthFixBlockedOther =>
+      'Este servidor aún no puede ejecutar esta corrección.';
+
+  @override
+  String get healthFixBusy =>
+      'Ya hay un enriquecimiento en curso. Corrige esto cuando termine.';
+
+  @override
   String healthFixRule(String rule) {
     return 'Corregir $rule';
+  }
+
+  @override
+  String healthFixRunning(String rule) {
+    return 'Ya hay una corrección de $rule en curso';
+  }
+
+  @override
+  String healthFixStarted(String rule) {
+    return 'Corrigiendo $rule';
   }
 
   @override
@@ -3748,17 +3801,6 @@ class AppLocalizationsEs extends AppLocalizations {
       'La ruta del archivo no coincide con el perfil de organización';
 
   @override
-  String healthQueuedItems(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: '$count elementos en cola',
-      one: '1 elemento en cola',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get healthResolveAction => 'Resolver';
 
   @override
@@ -3811,6 +3853,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get healthSmallArt => 'Carátula de baja resolución';
+
+  @override
+  String get healthSweepFailed =>
+      'El último barrido falló, así que estas cifras son de uno anterior';
 
   @override
   String get healthSweepNow => 'Barrer ahora';
@@ -5489,11 +5535,18 @@ class AppLocalizationsEs extends AppLocalizations {
   String get notifBackupFailedTitle => 'Copia de seguridad fallida';
 
   @override
-  String get notifEpisodeDownloadedHelp =>
-      'Un episodio nuevo de un programa al que estás suscrito ha terminado de descargarse.';
+  String get notifEpisodeArrivedHelp =>
+      'Un programa al que estás suscrito ha publicado un episodio nuevo.';
 
   @override
-  String get notifEpisodeDownloadedTitle => 'Episodio nuevo descargado';
+  String get notifEpisodeArrivedTitle => 'Episodio nuevo';
+
+  @override
+  String get notifEpisodeDownloadedHelp =>
+      'Un episodio que pediste ha terminado de descargarse.';
+
+  @override
+  String get notifEpisodeDownloadedTitle => 'Episodio descargado';
 
   @override
   String get notifFeedDisabledHelp =>
@@ -5503,11 +5556,32 @@ class AppLocalizationsEs extends AppLocalizations {
   String get notifFeedDisabledTitle => 'Feed desactivado';
 
   @override
+  String get notifHealthFixFinishedHelp =>
+      'Ha terminado una corrección de salud de la biblioteca que iniciaste.';
+
+  @override
+  String get notifHealthFixFinishedTitle => 'Corrección de salud terminada';
+
+  @override
   String get notifImportCompletedHelp =>
       'Una subida o adquisición se ha identificado con suficiente confianza para archivarse sola, sin revisión.';
 
   @override
   String get notifImportCompletedTitle => 'Archivado sin revisión';
+
+  @override
+  String get notifJobFailedHelp =>
+      'Ha fallado un trabajo de la biblioteca que iniciaste.';
+
+  @override
+  String get notifJobFailedTitle => 'Trabajo de la biblioteca fallido';
+
+  @override
+  String get notifJobFinishedHelp =>
+      'Ha terminado un trabajo de la biblioteca que iniciaste: un escaneo, un análisis, un enriquecimiento, una organización o el vaciado de la papelera.';
+
+  @override
+  String get notifJobFinishedTitle => 'Trabajo de la biblioteca terminado';
 
   @override
   String get notifPlaylistSyncedHelp =>
@@ -9862,8 +9936,20 @@ class AppLocalizationsEs extends AppLocalizations {
       'No se han podido cargar los destinos de notificación';
 
   @override
+  String get settingsNotifyTestDelivered => 'Prueba entregada';
+
+  @override
+  String settingsNotifyTestFailed(String reason) {
+    return 'La prueba ha fallado: $reason';
+  }
+
+  @override
   String get settingsNotifyTestQueued =>
       'Prueba en cola; el resultado aparecerá en el destino en breve';
+
+  @override
+  String get settingsNotifyTestUnanswered =>
+      'La prueba aún no tiene respuesta; el destino la mostrará cuando llegue';
 
   @override
   String get settingsNotifyUnifiedPushHelp =>
@@ -11089,6 +11175,66 @@ class AppLocalizationsEs extends AppLocalizations {
   String get toolsClearFinished => 'Borrar las terminadas';
 
   @override
+  String toolsCountAdded(int count) {
+    return 'añadidos $count';
+  }
+
+  @override
+  String toolsCountAnalyzed(int count) {
+    return 'analizados $count';
+  }
+
+  @override
+  String toolsCountCovers(int count) {
+    return 'portadas $count';
+  }
+
+  @override
+  String toolsCountErrored(int count) {
+    return 'con errores $count';
+  }
+
+  @override
+  String toolsCountFailed(int count) {
+    return 'fallidos $count';
+  }
+
+  @override
+  String toolsCountFilledOf(int filled, int attempted) {
+    return 'completados $filled de $attempted';
+  }
+
+  @override
+  String toolsCountLyrics(int count) {
+    return 'letras $count';
+  }
+
+  @override
+  String toolsCountMissing(int count) {
+    return 'ausentes $count';
+  }
+
+  @override
+  String toolsCountMoved(int count) {
+    return 'movidos $count';
+  }
+
+  @override
+  String toolsCountPictures(int count) {
+    return 'imágenes $count';
+  }
+
+  @override
+  String toolsCountSkipped(int count) {
+    return 'omitidos $count';
+  }
+
+  @override
+  String toolsCountUpdated(int count) {
+    return 'actualizados $count';
+  }
+
+  @override
   String get toolsDismiss => 'Descartar';
 
   @override
@@ -11106,6 +11252,36 @@ class AppLocalizationsEs extends AppLocalizations {
   String toolsItemsProduced(int count) {
     return '$count elementos producidos · toca para abrirlos';
   }
+
+  @override
+  String get toolsJobAnalyze => 'Análisis de audio';
+
+  @override
+  String get toolsJobDelete => 'Eliminación';
+
+  @override
+  String get toolsJobEmptyTrash => 'Vaciado de la papelera';
+
+  @override
+  String get toolsJobEnrich => 'Enriquecimiento';
+
+  @override
+  String get toolsJobImport => 'Importación';
+
+  @override
+  String get toolsJobOrganize => 'Organización';
+
+  @override
+  String get toolsJobPurgeTrash => 'Purga de la papelera';
+
+  @override
+  String get toolsJobRestore => 'Restauración';
+
+  @override
+  String get toolsJobScan => 'Escaneo de la biblioteca';
+
+  @override
+  String get toolsJobsTitle => 'Trabajos de la biblioteca';
 
   @override
   String get toolsLoadError =>
@@ -11129,6 +11305,12 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get toolsStateCanceled => 'Cancelada';
+
+  @override
+  String get toolsStateCrashed => 'Interrumpida';
 
   @override
   String get toolsStateDone => 'Terminada';
@@ -11189,6 +11371,14 @@ class AppLocalizationsEs extends AppLocalizations {
   String get toolsTaskCueSplit => 'División por CUE';
 
   @override
+  String get toolsTaskGenreNormalize => 'Limpieza de géneros';
+
+  @override
+  String toolsTaskHealthFix(String rule) {
+    return 'Corrección: $rule';
+  }
+
+  @override
   String toolsTaskImportFrom(String source) {
     return 'Importación desde $source';
   }
@@ -11206,6 +11396,9 @@ class AppLocalizationsEs extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get toolsTasksSection => 'Tareas de herramientas';
 
   @override
   String get toolsTitle => 'Tareas de herramientas';

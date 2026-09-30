@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../review/review_controller.dart';
 import '../shell/routes.dart';
+import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
 import '../settings/listening_sections.dart';
 import '../shell/shell_messages.dart';
@@ -347,6 +348,9 @@ class _QuickActions extends ConsumerWidget {
           icon: WaxIcons.refresh,
           kind: WaxButtonKind.tonal,
           semanticsId: SemanticsIds.adminAction('scan'),
+          busy:
+              ref.watch(pendingActionsProvider).contains(PendingAction.scan) ||
+              ref.watch(scanRunningProvider),
           onPressed: () => startLibraryScan(ref),
         ),
         WaxButton(
@@ -393,21 +397,35 @@ Future<void> startLibraryScan(WidgetRef ref) async {
   final container = ProviderScope.containerOf(ref.context, listen: false);
   final messenger = container.read(shellMessengerProvider.notifier);
   final l10n = ref.context.l10n;
-  try {
-    await container.read(repositoryProvider).rescanLibrary();
-    container.invalidate(adminJobsProvider);
-    messenger.show(l10n.adminScanStarted);
-  } on WaxDeckApiException catch (error) {
-    // A job already running is the common answer, said in the app's
-    // words. It also proves the job list is stale, so it is read again,
-    // which lets the first-run wizard move on instead of re-offering it.
-    container.invalidate(adminJobsProvider);
-    messenger.show(
-      error.code == 'conflict'
-          ? l10n.adminScanBusy
-          : explainRefusal(l10n, error),
-    );
-  }
+  final router = GoRouter.maybeOf(ref.context);
+  await container.read(pendingActionsProvider.notifier).run(
+    PendingAction.scan,
+    () async {
+      try {
+        await container.read(repositoryProvider).rescanLibrary();
+        container.invalidate(adminJobsProvider);
+        messenger.show(
+          l10n.adminScanStarted,
+          actionLabel: router == null ? null : l10n.commonOpenTasks,
+          actionSemanticsId: SemanticsIds.openTasks,
+          onAction: router == null
+              ? null
+              : () => router.push<void>(WaxRoute.tasks),
+        );
+      } on WaxDeckApiException catch (error) {
+        // A job already running is the common answer, said in the app's
+        // words. It also proves the job list is stale, so it is read
+        // again, which lets the first-run wizard move on instead of
+        // re-offering it.
+        container.invalidate(adminJobsProvider);
+        messenger.show(
+          error.code == 'conflict'
+              ? l10n.adminScanBusy
+              : explainRefusal(l10n, error),
+        );
+      }
+    },
+  );
 }
 
 /// The section list, for the widths with no room for a sidebar.

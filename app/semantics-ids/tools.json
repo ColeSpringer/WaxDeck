@@ -1,8 +1,11 @@
 {
   "doc": "Long-running tools and their progress rows.",
   "ids": {
+    "jobRow": "job-row-{pid}",
+    "openTasks": "open-tasks",
     "taskDismiss": "task-dismiss-{id}",
     "taskRow": "task-row-{id}",
-    "tasksClearFinished": "tasks-clear-finished"
+    "tasksClearFinished": "tasks-clear-finished",
+    "tasksScreen": "tasks-screen"
   }
 }

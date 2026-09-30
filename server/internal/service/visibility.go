@@ -277,6 +277,9 @@ type LibraryInfo struct {
 	// StreamingWarning is set by AddLibrary when the root exists but the
 	// streaming sidecar did not take it.
 	StreamingWarning string
+	// ScanStarted is AddLibrary's scan starting; false when another job
+	// held the catalog, so the root waits for the next scan.
+	ScanStarted bool
 }
 
 // Libraries lists the catalog's libraries with their configured root

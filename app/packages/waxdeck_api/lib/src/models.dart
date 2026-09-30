@@ -4043,14 +4043,40 @@ class HealthRuleCount {
     this.label,
     required this.failing,
     required this.fixable,
+    this.fixing = false,
+    this.fixBlocked,
   });
 
   final String rule;
   final String? label;
   final int failing;
 
-  /// True when the fix endpoint can queue automatic repairs.
+  /// True when the fix endpoint can fix this rule on this install.
   final bool fixable;
+
+  /// True while a fix for this rule is under way, from its start until
+  /// its re-check has landed; another fix is refused meanwhile.
+  final bool fixing;
+
+  /// What this install lacks to fix a rule that has a fix, in wire
+  /// spelling (`needs-contact`, `needs-lyrics-source`, ...). Null when
+  /// [fixable], and for rules with no fix at all.
+  final String? fixBlocked;
+}
+
+/// A fix that started: exactly one of [jobPid] and [taskId] names where
+/// it runs.
+class HealthFixStart {
+  const HealthFixStart({required this.queued, this.jobPid, this.taskId});
+
+  /// Items the fix set out to reach.
+  final int queued;
+
+  /// The catalog job running an unscoped enrichment fix.
+  final String? jobPid;
+
+  /// The health-fix tool task running it otherwise.
+  final String? taskId;
 }
 
 /// The library health scoreboard.
@@ -4060,6 +4086,8 @@ class HealthSummary {
     required this.totalItems,
     required this.evaluatedItems,
     this.warmingUp = false,
+    this.sweeping = false,
+    this.sweepFailed = false,
     this.sweptAt,
     this.rules = const [],
   });
@@ -4071,6 +4099,13 @@ class HealthSummary {
 
   /// True while the first sweep is still filling in.
   final bool warmingUp;
+
+  /// True while a sweep runs, or one an administrator asked for waits.
+  final bool sweeping;
+
+  /// True when the last sweep failed: the numbers are the last landed
+  /// sweep's, from [sweptAt].
+  final bool sweepFailed;
   final DateTime? sweptAt;
   final List<HealthRuleCount> rules;
 }
@@ -4203,6 +4238,7 @@ class LibraryInfo {
     this.path,
     this.itemCount,
     this.streamingWarning,
+    this.scanStarted,
   });
 
   final String pid;
@@ -4224,6 +4260,11 @@ class LibraryInfo {
   /// did not take: the library works for browsing, downloading, and
   /// direct playback, and streaming waits for a sidecar restart.
   final String? streamingWarning;
+
+  /// On a freshly created library, whether creating it started a scan;
+  /// false when another job was running, so the root waits for the next
+  /// one. Null on a listed library.
+  final bool? scanStarted;
 }
 
 /// One genre in the canonical vocabulary: its display spelling, the
@@ -5082,6 +5123,9 @@ class Job {
     this.progress,
     this.message,
     this.error,
+    this.startedAt,
+    this.finishedAt,
+    this.result,
   });
 
   final String pid;
@@ -5092,6 +5136,15 @@ class Job {
   final double? progress;
   final String? message;
   final String? error;
+  final DateTime? startedAt;
+
+  /// When the job ended; null while it runs.
+  final DateTime? finishedAt;
+
+  /// What a finished job did, by kind (a scan's `created`, `updated`,
+  /// `missing`, `errored`, ...); null while running and for kinds that
+  /// record none.
+  final Map<String, Object?>? result;
 }
 
 /// One audit-log event, newest first in listings.

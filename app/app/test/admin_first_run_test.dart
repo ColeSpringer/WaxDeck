@@ -76,6 +76,11 @@ Future<void> _pump(WidgetTester tester, ProviderContainer container) async {
   tester.view.physicalSize = const Size(1280, 1600);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
+  // A running scan holds the dashboard's scan button busy, and a busy
+  // ring only settles with motion off.
+  tester.platformDispatcher.accessibilityFeaturesTestValue =
+      const FakeAccessibilityFeatures(disableAnimations: true);
+  addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
   await tester.pumpWidget(
     UncontrolledProviderScope(
       container: container,

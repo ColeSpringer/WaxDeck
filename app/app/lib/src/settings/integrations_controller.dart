@@ -123,6 +123,54 @@ abstract interface class NotificationTargetActions {
   });
   Future<void> remove(String pid);
   Future<void> sendTest(String pid);
+
+  /// Waits for a queued test's outcome to land on the target, reading the
+  /// list every [notifyTestPoll] for up to [notifyTestWait]. [before] is
+  /// the target as the press found it: what counts is a change to its
+  /// health fields, which reads no clock of this device's.
+  Future<NotifyTestOutcome> awaitTest(NotificationTarget before);
+}
+
+/// How often, and how long, a test delivery's outcome is waited for.
+const notifyTestPoll = Duration(seconds: 2);
+const notifyTestWait = Duration(seconds: 30);
+
+/// What a test delivery came to: delivered, failed with the server's
+/// reason, or no answer within the wait.
+typedef NotifyTestOutcome = ({bool? delivered, String? reason});
+
+/// The shared wait: [read] lists the targets, [publish] shows each read.
+Future<NotifyTestOutcome> _awaitTest(
+  NotificationTarget before,
+  Future<List<NotificationTarget>> Function() read,
+  void Function(List<NotificationTarget>) publish,
+) async {
+  for (
+    var waited = Duration.zero;
+    waited < notifyTestWait;
+    waited += notifyTestPoll
+  ) {
+    await Future<void>.delayed(notifyTestPoll);
+    final List<NotificationTarget> targets;
+    try {
+      targets = await read();
+    } on WaxDeckApiException {
+      continue;
+    }
+    publish(targets);
+    final now = targets.where((t) => t.pid == before.pid).firstOrNull;
+    if (now == null) break;
+    final failed =
+        now.lastErrorAt != null && now.lastErrorAt != before.lastErrorAt;
+    final delivered =
+        now.lastSuccessAt != null && now.lastSuccessAt != before.lastSuccessAt;
+    if (failed &&
+        (!delivered || now.lastErrorAt!.isAfter(now.lastSuccessAt!))) {
+      return (delivered: false, reason: now.lastError);
+    }
+    if (delivered) return (delivered: true, reason: null);
+  }
+  return (delivered: null, reason: null);
 }
 
 /// The server-scope notification targets (administrators). Save
@@ -183,6 +231,15 @@ class ServerNotificationTargetsController
     await ref.read(repositoryProvider).testServerNotificationTarget(pid);
     ref.invalidateSelf();
   }
+
+  @override
+  Future<NotifyTestOutcome> awaitTest(NotificationTarget before) => _awaitTest(
+    before,
+    () => ref.read(repositoryProvider).listServerNotificationTargets(),
+    (targets) {
+      if (ref.mounted) state = AsyncData(targets);
+    },
+  );
 }
 
 final serverNotificationTargetsProvider =
@@ -247,6 +304,15 @@ class MyNotificationTargetsController
     await ref.read(repositoryProvider).testMyNotificationTarget(pid);
     ref.invalidateSelf();
   }
+
+  @override
+  Future<NotifyTestOutcome> awaitTest(NotificationTarget before) => _awaitTest(
+    before,
+    () => ref.read(repositoryProvider).listMyNotificationTargets(),
+    (targets) {
+      if (ref.mounted) state = AsyncData(targets);
+    },
+  );
 }
 
 final myNotificationTargetsProvider =

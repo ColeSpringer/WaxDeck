@@ -91,6 +91,7 @@ func (l *Library) EmptyTrash(ctx context.Context, uc *UserCtx) (TrashEmptyDTO, e
 	out := TrashEmptyDTO{Purged: rep.Purged, Errored: rep.Errored, ReclaimedBytes: rep.ReclaimedBytes}
 	l.Audit(ctx, uc, "trash.empty", AuditTarget{Kind: "trash"},
 		map[string]any{"purged": out.Purged, "errored": out.Errored, "reclaimedBytes": out.ReclaimedBytes})
+	l.EmitNotificationFor(ctx, "job-finished", jobTitle("empty-trash", false), trashBody(out), "", []string{uc.ID})
 	return out, nil
 }
 

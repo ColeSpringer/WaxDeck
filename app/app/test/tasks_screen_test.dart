@@ -2,10 +2,12 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/tools/tasks_screen.dart';
+import 'package:waxdeck/src/tools/tool_tasks_provider.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -13,11 +15,22 @@ import 'fakes.dart';
 import 'routed_host.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
-  overrides: [repositoryProvider.overrideWithValue(repo)],
+  overrides: [
+    repositoryProvider.overrideWithValue(repo),
+    credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+  ],
   child: routedHost(const TasksScreen()),
 );
 
 Finder _row(String id) => find.bySemanticsIdentifier(SemanticsIds.taskRow(id));
+
+Finder _job(String pid) => find.bySemanticsIdentifier(SemanticsIds.jobRow(pid));
+
+const _admin = WaxDeckUser(
+  id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
+  username: 'admin',
+  roles: ['admin'],
+);
 
 void main() {
   testWidgets('a refresh redraws the tasks it already has', (tester) async {
@@ -411,5 +424,183 @@ void main() {
     expect(repo.splitBookCalls.single.pid, 'bk-2');
     expect(_row('tt-FAKE0'), findsOneWidget);
     expect(_row('tt-FAKE1'), findsOneWidget);
+  });
+
+  testWidgets('an administrator follows the catalog jobs above the tasks', (
+    tester,
+  ) async {
+    final started = DateTime.utc(2026, 9, 29, 10);
+    final repo =
+        FakeRepository(
+            sessionState: const SessionState(authenticated: true, user: _admin),
+          )
+          ..jobs = [
+            Job(
+              pid: 'jb-2',
+              kind: 'enrich',
+              state: 'done',
+              startedAt: started,
+              finishedAt: started.add(const Duration(minutes: 3)),
+              result: const {
+                'lyricsMatched': 3,
+                'artFetched': 2,
+                'auxArtFetched': 1,
+              },
+            ),
+            Job(
+              pid: 'jb-3',
+              kind: 'import',
+              state: 'done',
+              startedAt: started,
+              finishedAt: started,
+            ),
+            Job(
+              pid: 'jb-4',
+              kind: 'analyze',
+              state: 'crashed',
+              error: 'the server stopped',
+              startedAt: started,
+              finishedAt: started,
+            ),
+            Job(
+              pid: 'jb-1',
+              kind: 'scan',
+              state: 'running',
+              progress: 0.42,
+              message: 'Reading tags',
+              startedAt: started.subtract(const Duration(hours: 1)),
+            ),
+          ];
+    await tester.pumpWidget(_host(repo));
+    // A running job's bar animates forever: frames, not a settle, while
+    // the session and then the jobs answer.
+    for (var i = 0; i < 5; i++) {
+      await tester.pump();
+    }
+
+    final scan = _job('jb-1');
+    expect(
+      find.descendant(of: scan, matching: find.text('Library scan')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: scan, matching: find.text('Running · 42%')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: scan, matching: find.text('Reading tags')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: _job('jb-2'),
+        matching: find.text('lyrics 3, covers 2, pictures 1'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: _job('jb-4'), matching: find.text('Crashed')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: _job('jb-4'),
+        matching: find.text('the server stopped'),
+      ),
+      findsOneWidget,
+    );
+    expect(_job('jb-3'), findsNothing, reason: 'a finished import is noise');
+    // Running first, whatever its age.
+    expect(
+      tester.getTopLeft(scan).dy,
+      lessThan(tester.getTopLeft(_job('jb-2')).dy),
+    );
+  });
+
+  testWidgets("a listener's tasks read no jobs", (tester) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(id: 'us-2', username: 'sam'),
+      ),
+    )..jobs = [const Job(pid: 'jb-1', kind: 'scan', state: 'running')];
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(repo.jobReads, 0);
+    expect(_job('jb-1'), findsNothing);
+  });
+
+  testWidgets('a health fix that failed before it counted anything offers '
+      'no report', (tester) async {
+    // Its summary carries the rule from the start, for the row's name;
+    // that is not a report.
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-fix'] = ToolTask(
+      id: 'tt-fix',
+      type: 'health-fix',
+      state: 'failed',
+      error: 'gave up after repeated attempts',
+      createdAt: DateTime.utc(2026, 9, 29),
+      finishedAt: DateTime.utc(2026, 9, 29, 1),
+      summary: const {'rule': 'missing-lyrics'},
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: _row('tt-fix'),
+        matching: find.text('Fix: Missing lyrics'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Tap for the report'), findsNothing);
+  });
+
+  testWidgets('a health fix and a genre clean-up say what they are', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.toolTasksById['tt-fix'] = ToolTask(
+      id: 'tt-fix',
+      type: 'health-fix',
+      state: 'done',
+      createdAt: DateTime.utc(2026, 9, 29),
+      finishedAt: DateTime.utc(2026, 9, 29, 1),
+      summary: const {
+        'rule': 'missing-lyrics',
+        'attempted': 5,
+        'filled': 3,
+        'failed': 0,
+        'skipped': {'no match': 2},
+      },
+    );
+    repo.toolTasksById['tt-genre'] = ToolTask(
+      id: 'tt-genre',
+      type: 'genre-normalize',
+      state: 'queued',
+      createdAt: DateTime.utc(2026, 9, 29),
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.descendant(
+        of: _row('tt-fix'),
+        matching: find.text('Fix: Missing lyrics'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('filled 3 of 5, skipped 2, failed 0'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: _row('tt-genre'),
+        matching: find.text('Genre clean-up'),
+      ),
+      findsOneWidget,
+    );
   });
 }

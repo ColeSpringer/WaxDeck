@@ -56,6 +56,14 @@ const (
 	toolRunTimeout = 30 * time.Minute
 )
 
+// toolRunTimeoutFor is one attempt's bound for a task type.
+func toolRunTimeoutFor(typ string) time.Duration {
+	if typ == taskTypeHealthFix {
+		return healthFixTimeout
+	}
+	return toolRunTimeout
+}
+
 // errToolPermanent marks a task failure retrying cannot fix (invalid
 // input, an engine 4xx, a job the engine itself failed). Transport
 // trouble stays transient: the leased row re-runs when the lease
@@ -101,6 +109,10 @@ type toolTaskParams struct {
 	IdentifyDeclined bool `json:"identifyDeclined,omitempty"`
 	// Playlist-sync field: the API pid of the bound playlist to sync.
 	PlaylistPID string `json:"playlistPid,omitempty"`
+	// Health-fix fields: the rule, and the bare item pids to fix (none
+	// is every item failing it when the task runs).
+	Rule     string   `json:"rule,omitempty"`
+	ItemPIDs []string `json:"itemPids,omitempty"`
 }
 
 // StartBookMerge queues a merge of a multi-file audiobook into one
@@ -335,9 +347,21 @@ func (l *Library) ClearFinishedToolTasksFor(ctx context.Context, uc *UserCtx) (i
 	return n, nil
 }
 
-// DrainToolTasks retires exhausted tasks and works one leased task;
-// false means the queue is idle so the caller can sleep.
+// DrainToolTasks retires exhausted tasks and works one leased task other
+// than a health fix; false means the queue is idle so the caller can
+// sleep.
 func (l *Library) DrainToolTasks(ctx context.Context) bool {
+	return l.drainToolTasks(ctx, wdb.TaskTypes{Except: taskTypeHealthFix})
+}
+
+// DrainHealthFixes is DrainToolTasks for health fixes, which get a
+// worker of their own: one can run for hours, and an acquisition or a
+// sync queued behind it would wait as long.
+func (l *Library) DrainHealthFixes(ctx context.Context) bool {
+	return l.drainToolTasks(ctx, wdb.TaskTypes{Only: taskTypeHealthFix})
+}
+
+func (l *Library) drainToolTasks(ctx context.Context, types wdb.TaskTypes) bool {
 	now := time.Now().UnixNano()
 	if ids, err := l.db.FailExhaustedToolTasks(ctx, now, toolTaskMaxAttempts); err != nil {
 		l.log.Warn("retiring exhausted tool tasks", "err", err)
@@ -346,9 +370,12 @@ func (l *Library) DrainToolTasks(ctx context.Context) bool {
 			l.settleMigrationExport(ctx, id)
 			l.scrubTaskSecrets(ctx, id)
 			l.notifyToolTask(ctx, id)
+			if t, err := l.db.ToolTaskByID(ctx, id); err == nil {
+				l.toolTaskEnded(ctx, &t)
+			}
 		}
 	}
-	row, err := l.db.LeaseToolTask(ctx, now, toolTaskLease.Nanoseconds(), toolTaskMaxAttempts)
+	row, err := l.db.LeaseToolTask(ctx, now, toolTaskLease.Nanoseconds(), toolTaskMaxAttempts, types)
 	if err != nil {
 		if !errors.Is(err, wdb.ErrNotFound) {
 			l.log.Warn("leasing tool task", "err", err)
@@ -362,7 +389,7 @@ func (l *Library) DrainToolTasks(ctx context.Context) bool {
 	if row.Attempts <= 1 {
 		l.notifyToolTask(ctx, row.ID)
 	}
-	runCtx, cancel := context.WithTimeout(ctx, toolRunTimeout)
+	runCtx, cancel := context.WithTimeout(ctx, toolRunTimeoutFor(row.Type))
 	err = l.runToolTask(runCtx, &row)
 	cancel()
 	if err != nil {
@@ -410,6 +437,8 @@ func (l *Library) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
 		results, err = l.runPlaylistSync(ctx, t, p)
 	case t.Type == taskTypeGenreNormalize:
 		err = l.runGenreNormalize(ctx, t)
+	case t.Type == taskTypeHealthFix:
+		err = l.runHealthFixTask(ctx, t, p)
 	case strings.HasPrefix(t.Type, taskTypeMigratePrefix):
 		err = l.runMigrationTask(ctx, t)
 	default:
@@ -431,6 +460,7 @@ func (l *Library) runToolTask(ctx context.Context, t *wdb.ToolTask) error {
 	l.settleMigrationExport(ctx, t.ID)
 	l.scrubTaskSecrets(ctx, t.ID)
 	l.notifyToolTask(ctx, t.ID)
+	l.toolTaskEnded(ctx, t)
 	return nil
 }
 
@@ -729,7 +759,7 @@ func (l *Library) pollToolJob(ctx context.Context, t *wdb.ToolTask, jobID string
 			if uerr := l.db.UpdateToolTask(ctx, *t); uerr != nil {
 				l.log.Warn("recording tool task progress", "task", t.ID, "err", uerr)
 			}
-			l.notifyToolTask(ctx, t.ID)
+			l.notifyToolTaskProgress(ctx, t.ID)
 		}
 		if time.Since(lastRenew) >= toolLeaseRenew {
 			lastRenew = time.Now()
@@ -1144,21 +1174,33 @@ func (l *Library) trashToolItems(ctx context.Context, pids []model.PID) error {
 
 // insertToolTask persists a queued task and notifies its audience.
 func (l *Library) insertToolTask(ctx context.Context, uc *UserCtx, typ, itemPID string, p toolTaskParams) (ToolTaskDTO, error) {
-	t := wdb.ToolTask{
+	return l.insertToolTaskWith(ctx, uc, typ, itemPID, p, "")
+}
+
+// insertToolTaskWith is insertToolTask with a summary the task carries
+// from the start, so its row can say what it is before it runs.
+func (l *Library) insertToolTaskWith(ctx context.Context, uc *UserCtx, typ, itemPID string, p toolTaskParams, summary string) (ToolTaskDTO, error) {
+	t := newToolTask(uc, typ, itemPID, p, summary)
+	if err := l.db.InsertToolTask(ctx, t); err != nil {
+		return ToolTaskDTO{}, &Error{Kind: KindInternal, Err: err}
+	}
+	l.notifyToolTask(ctx, t.ID)
+	return toolTaskDTO(t), nil
+}
+
+// newToolTask is a queued task row for uc.
+func newToolTask(uc *UserCtx, typ, itemPID string, p toolTaskParams, summary string) wdb.ToolTask {
+	return wdb.ToolTask{
 		ID:          "tk-" + ulid.Make().String(),
 		Type:        typ,
 		State:       taskStateQueued,
 		ItemPID:     itemPID,
 		UserID:      uc.ID,
 		Params:      marshalJSON(p),
+		Summary:     summary,
 		ResultPIDs:  "[]",
 		CreatedAtNS: time.Now().UnixNano(),
 	}
-	if err := l.db.InsertToolTask(ctx, t); err != nil {
-		return ToolTaskDTO{}, &Error{Kind: KindInternal, Err: err}
-	}
-	l.notifyToolTask(ctx, t.ID)
-	return toolTaskDTO(t), nil
 }
 
 // taskUserCtx resolves a task's owner so a runner can audit under it.
@@ -1188,6 +1230,15 @@ func (l *Library) failToolTask(ctx context.Context, t *wdb.ToolTask, cause error
 	l.settleMigrationExport(ctx, t.ID)
 	l.scrubTaskSecrets(ctx, t.ID)
 	l.notifyToolTask(ctx, t.ID)
+	l.toolTaskEnded(ctx, t)
+}
+
+// toolTaskEnded is what a task's end tells beyond its own marker, once
+// the end is recorded.
+func (l *Library) toolTaskEnded(ctx context.Context, t *wdb.ToolTask) {
+	if t.Type == taskTypeHealthFix {
+		l.healthFixTaskEnded(ctx, t)
+	}
 }
 
 // scrubTaskSecrets drops sealed credentials from a terminal task's
@@ -1237,10 +1288,20 @@ func (l *Library) scrubTaskSecrets(ctx context.Context, taskID string) {
 // notifyToolTask fans a task lifecycle change out to its owner and
 // every enabled administrator, deduplicated by account.
 func (l *Library) notifyToolTask(ctx context.Context, taskID string) {
+	l.markToolTask(ctx, taskID, eventTask)
+}
+
+// notifyToolTaskProgress tells the same watchers a task's progress moved,
+// which refreshes their lists and is not news.
+func (l *Library) notifyToolTaskProgress(ctx context.Context, taskID string) {
+	l.markToolTask(ctx, taskID, eventTaskProgress)
+}
+
+func (l *Library) markToolTask(ctx context.Context, taskID, kind string) {
 	seen := map[string]bool{}
 	if t, err := l.db.ToolTaskByID(ctx, taskID); err == nil && t.UserID != "" {
 		seen[t.UserID] = true
-		l.emitUserEvent(ctx, t.UserID, eventTask, taskID)
+		l.emitUserEvent(ctx, t.UserID, kind, taskID)
 	}
 	admins, err := l.db.EnabledAdminIDs(ctx)
 	if err != nil {
@@ -1249,7 +1310,40 @@ func (l *Library) notifyToolTask(ctx context.Context, taskID string) {
 	for _, id := range admins {
 		if !seen[id] {
 			seen[id] = true
-			l.emitUserEvent(ctx, id, eventTask, taskID)
+			l.emitUserEvent(ctx, id, kind, taskID)
+		}
+	}
+}
+
+// toolProgress mirrors a task's progress to the store in five percent
+// steps, telling the task's watchers each time, and keeps its lease alive
+// across a long run.
+type toolProgress struct {
+	l         *Library
+	t         *wdb.ToolTask
+	lastPct   float64
+	lastRenew time.Time
+}
+
+func newToolProgress(l *Library, t *wdb.ToolTask) *toolProgress {
+	return &toolProgress{l: l, t: t, lastRenew: time.Now()}
+}
+
+func (tp *toolProgress) report(ctx context.Context, pct float64) {
+	if pct-tp.lastPct >= 5 {
+		tp.lastPct = pct
+		tp.t.ProgressPct = pct
+		if err := tp.l.db.UpdateToolTask(ctx, *tp.t); err != nil {
+			tp.l.log.Warn("recording tool task progress", "task", tp.t.ID, "err", err)
+		} else {
+			tp.l.notifyToolTaskProgress(ctx, tp.t.ID)
+		}
+	}
+	if time.Since(tp.lastRenew) >= toolLeaseRenew {
+		tp.lastRenew = time.Now()
+		until := time.Now().Add(toolTaskLease).UnixNano()
+		if err := tp.l.db.RenewToolTaskLease(ctx, tp.t.ID, until); err != nil {
+			tp.l.log.Warn("renewing tool task lease", "task", tp.t.ID, "err", err)
 		}
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -2656,5 +2657,80 @@ func putPlayState(t *testing.T, h *harness, pid string, positionMs int64) {
 	resp.Body.Close()
 	if resp.StatusCode != 204 {
 		t.Fatalf("play-state for %s = %d", pid, resp.StatusCode)
+	}
+}
+
+// inboxRows is one account's inbox rows for event.
+func inboxRows(t *testing.T, h *harness, token, event string) []Notification {
+	t.Helper()
+	var out []Notification
+	for _, n := range decode[NotificationPage](t, get(t, h.ts, "/api/v1/users/me/notifications?limit=100", token)).Notifications {
+		if n.Event == event {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// A refresh that adds episodes tells every subscriber once, whether or
+// not they download automatically, and a refresh that adds nothing
+// tells nobody.
+func TestAnArrivalTellsEverySubscriberOnce(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 3)
+	feed.writeFeed(t, 1)
+	ctx := context.Background()
+	wantStatus(t, h.postJSON(t, "/api/v1/users", map[string]any{"username": "sam", "password": testPassword}), 201, "create sam")
+	sam := loginAs(t, h.ts, "sam", testPassword).Token
+	sub := decode[Subscription](t, h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()}))
+	wantStatus(t, reqAs(t, h, "POST", "/api/v1/podcasts", sam, map[string]any{"url": feed.feedURL()}), 201, "sam subscribes")
+
+	feed.writeFeed(t, 3)
+	h.svc.RefreshDueFeeds(ctx, 0)
+	h.svc.RefreshDueFeeds(ctx, 0)
+	for who, token := range map[string]string{"the admin": h.token, "sam": sam} {
+		rows := inboxRows(t, h, token, "episode-arrived")
+		if len(rows) != 1 || rows[0].Title != "New episode: "+sub.Show.Title ||
+			rows[0].TargetPid == nil || *rows[0].TargetPid != sub.Show.Pid {
+			t.Errorf("%s's arrivals = %+v, want one naming the show", who, rows)
+		}
+		if rows := inboxRows(t, h, token, "episode-downloaded"); len(rows) != 0 {
+			t.Errorf("%s heard of a download nobody made: %+v", who, rows)
+		}
+	}
+}
+
+// A fetch somebody asked for tells them alone; the other subscribers'
+// clients still hear the episode is downloaded, so their rows flip.
+func TestAManualFetchTellsOnlyWhoAskedForIt(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 2)
+	wantStatus(t, h.postJSON(t, "/api/v1/users", map[string]any{"username": "sam", "password": testPassword}), 201, "create sam")
+	sam := loginAs(t, h.ts, "sam", testPassword).Token
+	sub := decode[Subscription](t, h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()}))
+	wantStatus(t, reqAs(t, h, "POST", "/api/v1/podcasts", sam, map[string]any{"url": feed.feedURL()}), 201, "sam subscribes")
+	samSince := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server", sam)).NextSince
+	ep := decode[EpisodePage](t, get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)).Items[0]
+
+	wantStatus(t, h.postJSON(t, "/api/v1/episodes/"+ep.Pid+"/fetch", nil), 202, "fetch")
+	drainFetches(t, h)
+
+	rows := inboxRows(t, h, h.token, "episode-downloaded")
+	if len(rows) != 1 || rows[0].Title != "Episode fetched: "+ep.Title ||
+		rows[0].TargetPid == nil || *rows[0].TargetPid != ep.Pid {
+		t.Fatalf("the requester's rows = %+v, want the fetched episode", rows)
+	}
+	if rows := inboxRows(t, h, sam, "episode-downloaded"); len(rows) != 0 {
+		t.Fatalf("a subscriber who asked for nothing was told: %+v", rows)
+	}
+	if !slices.ContainsFunc(
+		decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server?since="+samSince, sam)).Events,
+		func(ev ServerSyncEvent) bool {
+			return ev.Kind == "episode-downloaded" && ev.Pid != nil && *ev.Pid == ep.Pid
+		},
+	) {
+		t.Fatal("the other subscriber's stream did not hear of the download")
 	}
 }

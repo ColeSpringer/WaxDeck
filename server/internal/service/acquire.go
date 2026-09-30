@@ -249,7 +249,7 @@ func (l *Library) fetchAcquireBatch(ctx context.Context, t *wdb.ToolTask, p tool
 		rowByPath[doc.Path] = uploadID
 		t.ProgressPct = float64(i+1) / float64(len(items)) * progressCap
 		if uerr := l.db.UpdateToolTask(ctx, *t); uerr == nil {
-			l.notifyToolTask(ctx, t.ID)
+			l.notifyToolTaskProgress(ctx, t.ID)
 		}
 	}
 	if len(docs) == 0 {

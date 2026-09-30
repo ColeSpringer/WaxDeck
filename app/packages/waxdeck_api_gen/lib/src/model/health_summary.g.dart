@@ -18,6 +18,10 @@ class _$HealthSummary extends HealthSummary {
   @override
   final DateTime? sweptAt;
   @override
+  final bool? sweeping;
+  @override
+  final bool sweepFailed;
+  @override
   final BuiltList<HealthRuleCount> rules;
 
   factory _$HealthSummary([void Function(HealthSummaryBuilder)? updates]) =>
@@ -29,6 +33,8 @@ class _$HealthSummary extends HealthSummary {
     required this.evaluatedItems,
     required this.warmingUp,
     this.sweptAt,
+    this.sweeping,
+    required this.sweepFailed,
     required this.rules,
   }) : super._();
   @override
@@ -47,6 +53,8 @@ class _$HealthSummary extends HealthSummary {
         evaluatedItems == other.evaluatedItems &&
         warmingUp == other.warmingUp &&
         sweptAt == other.sweptAt &&
+        sweeping == other.sweeping &&
+        sweepFailed == other.sweepFailed &&
         rules == other.rules;
   }
 
@@ -58,6 +66,8 @@ class _$HealthSummary extends HealthSummary {
     _$hash = $jc(_$hash, evaluatedItems.hashCode);
     _$hash = $jc(_$hash, warmingUp.hashCode);
     _$hash = $jc(_$hash, sweptAt.hashCode);
+    _$hash = $jc(_$hash, sweeping.hashCode);
+    _$hash = $jc(_$hash, sweepFailed.hashCode);
     _$hash = $jc(_$hash, rules.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
@@ -71,6 +81,8 @@ class _$HealthSummary extends HealthSummary {
           ..add('evaluatedItems', evaluatedItems)
           ..add('warmingUp', warmingUp)
           ..add('sweptAt', sweptAt)
+          ..add('sweeping', sweeping)
+          ..add('sweepFailed', sweepFailed)
           ..add('rules', rules))
         .toString();
   }
@@ -101,6 +113,14 @@ class HealthSummaryBuilder
   DateTime? get sweptAt => _$this._sweptAt;
   set sweptAt(DateTime? sweptAt) => _$this._sweptAt = sweptAt;
 
+  bool? _sweeping;
+  bool? get sweeping => _$this._sweeping;
+  set sweeping(bool? sweeping) => _$this._sweeping = sweeping;
+
+  bool? _sweepFailed;
+  bool? get sweepFailed => _$this._sweepFailed;
+  set sweepFailed(bool? sweepFailed) => _$this._sweepFailed = sweepFailed;
+
   ListBuilder<HealthRuleCount>? _rules;
   ListBuilder<HealthRuleCount> get rules =>
       _$this._rules ??= ListBuilder<HealthRuleCount>();
@@ -118,6 +138,8 @@ class HealthSummaryBuilder
       _evaluatedItems = $v.evaluatedItems;
       _warmingUp = $v.warmingUp;
       _sweptAt = $v.sweptAt;
+      _sweeping = $v.sweeping;
+      _sweepFailed = $v.sweepFailed;
       _rules = $v.rules.toBuilder();
       _$v = null;
     }
@@ -164,6 +186,12 @@ class HealthSummaryBuilder
               'warmingUp',
             ),
             sweptAt: sweptAt,
+            sweeping: sweeping,
+            sweepFailed: BuiltValueNullFieldError.checkNotNull(
+              sweepFailed,
+              r'HealthSummary',
+              'sweepFailed',
+            ),
             rules: rules.build(),
           );
     } catch (_) {

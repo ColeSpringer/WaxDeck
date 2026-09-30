@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/colespringer/waxbin/enrich"
+	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxdeck/fixtures"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -35,10 +37,12 @@ func TestHealthSweepAndIssues(t *testing.T) {
 	if !h.svc.SweepRequested(ctx) {
 		t.Fatal("sweep request flag not set")
 	}
-	if err := h.svc.SweepHealth(ctx); err != nil {
+	if sum := decode[HealthSummary](t, get(t, h.ts, "/api/v1/library/health", h.token)); sum.Sweeping == nil || !*sum.Sweeping {
+		t.Fatalf("sweeping = %v while the request waits, want true", sum.Sweeping)
+	}
+	if err := h.svc.RunHealthSweep(ctx); err != nil {
 		t.Fatalf("sweeping: %v", err)
 	}
-	h.svc.ClearSweepRequest(ctx)
 	if h.svc.SweepRequested(ctx) {
 		t.Fatal("sweep request flag not cleared")
 	}
@@ -57,6 +61,9 @@ func TestHealthSweepAndIssues(t *testing.T) {
 	if sum.SweptAt == nil {
 		t.Fatal("no sweptAt after a sweep")
 	}
+	if sum.Sweeping == nil || *sum.Sweeping {
+		t.Fatalf("sweeping = %v after the sweep, want false", sum.Sweeping)
+	}
 	if sum.Score >= 100 {
 		t.Fatalf("score = %v, want under 100 for an unenriched library", sum.Score)
 	}
@@ -73,9 +80,6 @@ func TestHealthSweepAndIssues(t *testing.T) {
 	}
 	if fixable["corrupt-audio"] || fixable["legacy-tags"] || fixable["missing-year"] {
 		t.Fatalf("unfixable rules flagged fixable: %+v", fixable)
-	}
-	if !fixable["missing-genre"] || !fixable["missing-art"] {
-		t.Fatalf("fixable rules not flagged: %+v", fixable)
 	}
 
 	// The issues worklist, filtered to one rule and keyset-paged.
@@ -132,25 +136,146 @@ func TestHealthSweepAndIssues(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	// An un-scoped fix queues everything failing the rule; with no
-	// providers configured each fix drains as a completed no-op.
+	// A rule this install cannot fix says why and refuses: no contact,
+	// so nothing may ask MusicBrainz for genres.
+	for _, r := range sum.Rules {
+		if r.Rule == "missing-genre" && (r.Fixable || r.FixBlocked == nil || *r.FixBlocked != NeedsContact) {
+			t.Fatalf("missing-genre = %+v, want unfixable for want of a contact", r)
+		}
+		if r.Rule == "write-unsynced" && (!r.Fixable || r.FixBlocked != nil) {
+			t.Fatalf("write-unsynced = %+v, want fixable", r)
+		}
+	}
 	resp = h.postJSON(t, "/api/v1/library/health/fix", map[string]any{"rule": "missing-genre"})
+	wantStatus(t, resp, 400, "a blocked rule's fix")
+
+	// A write-back retry runs as a task that reports what it did.
+	resp = h.postJSON(t, "/api/v1/library/health/fix", map[string]any{
+		"rule": "write-unsynced", "itemPids": []string{page.Items[0].Pid},
+	})
+	if resp.StatusCode != 202 {
+		t.Fatalf("write-unsynced fix status = %d, want 202", resp.StatusCode)
+	}
+	fix := decode[HealthFixResult](t, resp)
+	if fix.Queued != 1 || fix.TaskId == nil || fix.JobPid != nil {
+		t.Fatalf("fix = %+v, want one item on a task", fix)
+	}
+	for h.svc.DrainHealthFixes(ctx) {
+	}
+	task := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+*fix.TaskId, h.token))
+	if task.State != "done" || task.Summary == nil || (*task.Summary)["attempted"] != float64(1) ||
+		(*task.Summary)["filled"] != float64(1) || (*task.Summary)["rule"] != "write-unsynced" {
+		t.Fatalf("task = %+v (summary %v), want one item written back", task, task.Summary)
+	}
+}
+
+// stubLyricist answers lyrics for one title and holds every answer at
+// its gate until the test lets it go.
+type stubLyricist struct {
+	title string
+	gate  chan struct{}
+	asked chan struct{}
+}
+
+func (p *stubLyricist) Name() string                    { return "stublyrics" }
+func (p *stubLyricist) Capabilities() enrich.Capability { return enrich.CapLyrics }
+func (p *stubLyricist) Enrich(ctx context.Context, req enrich.Request) (*enrich.Candidate, error) {
+	select {
+	case p.asked <- struct{}{}:
+	default:
+	}
+	select {
+	case <-p.gate:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	if req.Title != p.title {
+		return nil, nil
+	}
+	return &enrich.Candidate{Lyrics: &model.Lyrics{Unsynced: "la la la"}}, nil
+}
+
+// A fix of missing lyrics runs the catalog's lyrics pass as a job the
+// administrator can follow, refuses a second while it runs, and on
+// finishing re-checks the rule and says what it filled.
+func TestHealthFixStartsEnrichJob(t *testing.T) {
+	t.Parallel()
+	stub := &stubLyricist{title: "Alpha Song", gate: make(chan struct{}), asked: make(chan struct{}, 1)}
+	h := newHarnessWith(t, func(c *service.Config) {
+		c.EnrichmentProviders = []enrich.Provider{stub}
+	})
+	ctx := context.Background()
+	if err := h.svc.RunHealthSweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	since := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server", h.token)).NextSince
+
+	resp := h.postJSON(t, "/api/v1/library/health/fix", map[string]any{"rule": "missing-lyrics"})
 	if resp.StatusCode != 202 {
 		t.Fatalf("fix status = %d, want 202", resp.StatusCode)
 	}
 	fix := decode[HealthFixResult](t, resp)
-	if fix.Queued != 4 {
-		t.Fatalf("queued = %d, want 4", fix.Queued)
+	if fix.Queued != 4 || fix.JobPid == nil || !strings.HasPrefix(*fix.JobPid, "jb-") || fix.TaskId != nil {
+		t.Fatalf("fix = %+v, want the four failing items on a catalog job", fix)
 	}
-	worked := 0
-	for h.svc.DrainFixQueue(ctx) {
-		worked++
-		if worked > 20 {
-			t.Fatal("fix queue never drained")
+	<-stub.asked
+	resp = h.postJSON(t, "/api/v1/library/health/fix", map[string]any{"rule": "missing-lyrics"})
+	wantStatus(t, resp, 409, "a second fix while the pass runs")
+	fixing := func() bool {
+		sum := decode[HealthSummary](t, get(t, h.ts, "/api/v1/library/health", h.token))
+		for _, r := range sum.Rules {
+			if r.Rule == "missing-lyrics" {
+				return r.Fixing
+			}
 		}
+		t.Fatal("no missing-lyrics in the summary")
+		return false
 	}
-	if worked != 4 {
-		t.Fatalf("drained %d fixes, want 4", worked)
+	if !fixing() {
+		t.Fatal("the summary does not say missing-lyrics is fixing while its pass runs")
+	}
+	close(stub.gate)
+
+	row := waitForNotificationRow(t, h, "health-fix-finished")
+	if row.TargetPid == nil || *row.TargetPid != *fix.JobPid || !strings.Contains(row.Body, "Filled 1 of 4") {
+		t.Fatalf("row = %+v, want the job's fix filling one of four", row)
+	}
+	var sawJob, sawHealth bool
+	for _, ev := range decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server?since="+since, h.token)).Events {
+		sawJob = sawJob || (ev.Kind == "job" && ev.Pid != nil && *ev.Pid == *fix.JobPid)
+		sawHealth = sawHealth || ev.Kind == "health"
+	}
+	if !sawJob || !sawHealth {
+		t.Fatalf("stream: job marker %v, health marker %v; want both", sawJob, sawHealth)
+	}
+	issues := decode[HealthIssuePage](t, get(t, h.ts, "/api/v1/library/health/issues?rule=missing-lyrics", h.token))
+	if len(issues.Items) != 3 {
+		t.Fatalf("still missing lyrics = %d, want the three nothing answered for", len(issues.Items))
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for fixing() {
+		if time.Now().After(deadline) {
+			t.Fatal("missing-lyrics still reads as fixing after its re-check")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// waitForNotificationRow waits for the admin's inbox to hold a row for event.
+func waitForNotificationRow(t *testing.T, h *harness, event string) Notification {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		page := decode[NotificationPage](t, get(t, h.ts, "/api/v1/users/me/notifications?limit=100", h.token))
+		for _, n := range page.Notifications {
+			if n.Event == event {
+				return n
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no %s row reached the inbox", event)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

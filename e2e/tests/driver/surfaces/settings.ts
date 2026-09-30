@@ -5,7 +5,13 @@ import { Locator } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, clickThrough, typeInto, wheelIntoReach } from '../gestures';
+import {
+  chooseFromMenu,
+  clickThrough,
+  typeInto,
+  wheelIntoReach,
+  wheelIntoView,
+} from '../gestures';
 
 export class Settings extends Surface {
   search(): Locator {
@@ -58,9 +64,11 @@ export class Settings extends Surface {
   /// and a click at a rect read a frame earlier lands one row off.
   ///
   /// Wheeled to where a click lands first: a section is longer than the
-  /// window, and a row below the fold still reports visible.
+  /// window, and a row below the fold still reports visible - or, past
+  /// the part of the list flutter has built, reports nothing at all.
   async choose(name: string, option: Locator, settled?: Locator): Promise<void> {
     const trigger = this.setting(name);
+    if (!(await trigger.isVisible())) await wheelIntoView(this.ctx.page, trigger);
     await wheelIntoReach(this.ctx.page, trigger);
     await chooseFromMenu(trigger, option, { settled });
   }

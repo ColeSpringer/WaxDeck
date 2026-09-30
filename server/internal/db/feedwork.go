@@ -1,10 +1,12 @@
 package db
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 )
 
 // FeedState is the refresh scheduler's per-feed accounting. The catalog
@@ -199,15 +201,28 @@ func (d *DB) PruneExhaustedAnalysis(ctx context.Context, gaveUpBeforeNS int64, m
 	return res.RowsAffected()
 }
 
-// EnqueueFetch queues a server-side enclosure download for one episode;
-// queuing an already queued episode is a no-op.
-func (d *DB) EnqueueFetch(ctx context.Context, episodePID, requestedBy string, ns int64) error {
-	_, err := d.w.ExecContext(ctx, `
-		INSERT INTO fetch_queue (episode_pid, requested_by, enqueued_at_ns)
-		VALUES (?, ?, ?)
-		ON CONFLICT (episode_pid) DO NOTHING`,
-		episodePID, requestedBy, ns)
+// EnqueueFetch queues an episode's download; queuing one already queued
+// adds requester to those told when it lands. An empty requester is an
+// automatic fetch.
+func (d *DB) EnqueueFetch(ctx context.Context, episodePID, requester string, ns int64) error {
+	tx, err := d.w.BeginTx(ctx, nil)
 	if err != nil {
+		return fmt.Errorf("db: queuing fetch: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO fetch_queue (episode_pid, enqueued_at_ns) VALUES (?, ?)
+		ON CONFLICT (episode_pid) DO NOTHING`, episodePID, ns); err != nil {
+		return fmt.Errorf("db: queuing fetch: %w", err)
+	}
+	if requester != "" {
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO fetch_requesters (episode_pid, user_id) VALUES (?, ?)
+			ON CONFLICT DO NOTHING`, episodePID, requester); err != nil {
+			return fmt.Errorf("db: recording fetch requester: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("db: queuing fetch: %w", err)
 	}
 	return nil
@@ -218,11 +233,54 @@ func (d *DB) LeaseFetch(ctx context.Context, nowNS, leaseNS int64, maxAttempts i
 	return d.leaseQueue(ctx, "fetch_queue", "episode_pid", nowNS, leaseNS, maxAttempts)
 }
 
-// CompleteFetch removes a finished fetch row.
-func (d *DB) CompleteFetch(ctx context.Context, episodePID string) error {
-	_, err := d.w.ExecContext(ctx, `DELETE FROM fetch_queue WHERE episode_pid = ?`, episodePID)
+// FinishFetch removes a fetch that landed and answers everyone who asked
+// for it, sorted; ErrNotFound when it was canceled meanwhile.
+func (d *DB) FinishFetch(ctx context.Context, episodePID string) ([]string, error) {
+	tx, err := d.w.BeginTx(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("db: completing fetch: %w", err)
+		return nil, fmt.Errorf("db: finishing fetch: %w", err)
+	}
+	defer tx.Rollback()
+	res, err := tx.ExecContext(ctx, `DELETE FROM fetch_queue WHERE episode_pid = ?`, episodePID)
+	if err != nil {
+		return nil, fmt.Errorf("db: finishing fetch: %w", err)
+	}
+	if n, err := res.RowsAffected(); err != nil || n == 0 {
+		return nil, cmp.Or(err, ErrNotFound)
+	}
+	rows, err := tx.QueryContext(ctx, `
+		DELETE FROM fetch_requesters WHERE episode_pid = ? RETURNING user_id`, episodePID)
+	if err != nil {
+		return nil, fmt.Errorf("db: finishing fetch: %w", err)
+	}
+	var by []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("db: scanning fetch requester: %w", err)
+		}
+		by = append(by, id)
+	}
+	if err := cmp.Or(rows.Err(), rows.Close()); err != nil {
+		return nil, fmt.Errorf("db: finishing fetch: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("db: finishing fetch: %w", err)
+	}
+	slices.Sort(by)
+	return by, nil
+}
+
+// CompleteFetch removes a fetch row, landed or canceled, and who asked.
+func (d *DB) CompleteFetch(ctx context.Context, episodePID string) error {
+	for _, q := range []string{
+		`DELETE FROM fetch_queue WHERE episode_pid = ?`,
+		`DELETE FROM fetch_requesters WHERE episode_pid = ?`,
+	} {
+		if _, err := d.w.ExecContext(ctx, q, episodePID); err != nil {
+			return fmt.Errorf("db: completing fetch: %w", err)
+		}
 	}
 	return nil
 }

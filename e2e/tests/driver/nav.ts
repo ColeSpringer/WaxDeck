@@ -219,6 +219,13 @@ export const DEST = {
     arrival: at(SemanticsIds.notificationsScreen),
     walk: railTo('notifications', at(SemanticsIds.notificationsScreen)),
   },
+  // Where background work is followed. A rail row for any account that
+  // may upload, which the specs' administrator may.
+  tasks: {
+    path: '/tasks',
+    arrival: at(SemanticsIds.tasksScreen),
+    walk: railTo('tasks', at(SemanticsIds.tasksScreen)),
+  },
   uploads: {
     path: '/uploads',
     arrival: at(SemanticsIds.uploadsScreen),
@@ -253,6 +260,7 @@ export const DEST = {
   adminBackups: adminSection('backups', '/admin/backups', SemanticsIds.adminBackups),
   adminSchedules: adminSection('schedules', '/admin/schedules', SemanticsIds.adminSchedules),
   adminGenres: adminSection('genres', '/admin/genres', SemanticsIds.adminGenres),
+  health: adminSection('health', '/admin/health', SemanticsIds.adminHealth),
 } satisfies Record<string, Dest>;
 
 export type Destination = keyof typeof DEST;

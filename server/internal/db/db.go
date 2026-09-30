@@ -330,11 +330,17 @@ const baselineSchema = `
 	);
 	CREATE TABLE fetch_queue (
 		episode_pid    TEXT    PRIMARY KEY,
-		requested_by   TEXT    NOT NULL DEFAULT '',
 		enqueued_at_ns INTEGER NOT NULL,
 		attempts       INTEGER NOT NULL DEFAULT 0,
 		lease_until_ns INTEGER NOT NULL DEFAULT 0,
 		last_error     TEXT    NOT NULL DEFAULT ''
+	);
+	-- Who asked for a queued fetch, each told when it lands; an
+	-- automatic fetch has nobody.
+	CREATE TABLE fetch_requesters (
+		episode_pid TEXT NOT NULL,
+		user_id     TEXT NOT NULL,
+		PRIMARY KEY (episode_pid, user_id)
 	);
 	CREATE TABLE retention_queue (
 		show_pid       TEXT    PRIMARY KEY,
@@ -729,6 +735,17 @@ const baselineSchema = `
 	);
 	CREATE INDEX tool_tasks_user ON tool_tasks (user_id, created_at_ns DESC, id);
 	CREATE INDEX tool_tasks_state ON tool_tasks (state, lease_until_ns);
+	-- Who started a catalog job, and for a health fix the rule it fixes:
+	-- the job's end is announced to them. A row lives until that
+	-- announcement, so a restart between the two still makes it;
+	-- settling_at_ns is when a process took the job's end in hand.
+	CREATE TABLE job_origins (
+		pid            TEXT    PRIMARY KEY,
+		user_id        TEXT    NOT NULL,
+		rule           TEXT    NOT NULL DEFAULT '',
+		created_at_ns  INTEGER NOT NULL,
+		settling_at_ns INTEGER NOT NULL DEFAULT 0
+	);
 	CREATE TABLE health_index (
 		item_pid    TEXT    PRIMARY KEY,
 		media_type  TEXT    NOT NULL,
@@ -739,16 +756,6 @@ const baselineSchema = `
 		swept_at_ns INTEGER NOT NULL
 	);
 	CREATE INDEX health_index_worst ON health_index (rule_count DESC, title, item_pid);
-	CREATE TABLE fix_queue (
-		id             INTEGER PRIMARY KEY,
-		item_pid       TEXT    NOT NULL,
-		rule           TEXT    NOT NULL,
-		attempts       INTEGER NOT NULL DEFAULT 0,
-		lease_until_ns INTEGER NOT NULL DEFAULT 0,
-		next_at_ns     INTEGER NOT NULL DEFAULT 0,
-		last_error     TEXT    NOT NULL DEFAULT '',
-		UNIQUE (item_pid, rule)
-	);
 
 	-- The administration surface. Invites store only a token hash (the
 	-- token itself is shown once, at creation) plus the account shape

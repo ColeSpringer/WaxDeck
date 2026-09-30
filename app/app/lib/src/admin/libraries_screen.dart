@@ -4,6 +4,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'admin_console.dart';
@@ -230,6 +231,9 @@ class _RescanButton extends ConsumerWidget {
       glyph: WaxIcons.refresh,
       label: context.l10n.adminLibraryRescan,
       semanticsId: SemanticsIds.libraryRescan(library.pid),
+      busy:
+          ref.watch(pendingActionsProvider).contains(PendingAction.scan) ||
+          ref.watch(scanRunningProvider),
       onPressed: () => _rescan(context, ref),
     );
   }
@@ -246,16 +250,28 @@ class _RescanButton extends ConsumerWidget {
       builder: (_) => const _RescanDialog(),
     );
     if (force == null || !context.mounted) return;
-    try {
-      await ref.read(repositoryProvider).rescanLibrary(force: force);
-      ref
-        ..invalidate(adminJobsProvider)
-        ..invalidate(librariesProvider)
-        ..invalidate(libraryCountsProvider);
-      messenger.show(l10n.adminLibraryScanning);
-    } on WaxDeckApiException catch (error) {
-      messenger.show(explainError(l10n, error));
-    }
+    final container = ProviderScope.containerOf(context, listen: false);
+    await container.read(pendingActionsProvider.notifier).run(
+      PendingAction.scan,
+      () async {
+        try {
+          await container.read(repositoryProvider).rescanLibrary(force: force);
+          container
+            ..invalidate(adminJobsProvider)
+            ..invalidate(librariesProvider)
+            ..invalidate(libraryCountsProvider);
+          messenger.show(l10n.adminLibraryScanning);
+        } on WaxDeckApiException catch (error) {
+          // A job already running proves the job list stale too.
+          if (error.code == 'conflict') container.invalidate(adminJobsProvider);
+          messenger.show(
+            error.code == 'conflict'
+                ? l10n.adminScanBusy
+                : explainError(l10n, error),
+          );
+        }
+      },
+    );
   }
 }
 
@@ -381,7 +397,11 @@ class _AddLibraryFormState extends ConsumerState<_AddLibraryForm> {
         _managed = false;
         _warning = created.streamingWarning;
       });
-      messenger.show(l10n.adminLibraryCreated(name));
+      messenger.show(
+        created.scanStarted == false
+            ? l10n.adminLibraryCreatedNoScan(name)
+            : l10n.adminLibraryCreated(name),
+      );
     } on WaxDeckApiException catch (error) {
       // The path somebody just typed: the server names the root that
       // already covers it, which a translated conflict cannot.

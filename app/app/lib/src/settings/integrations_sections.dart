@@ -6,7 +6,9 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'client_prefs.dart';
 import 'integrations_controller.dart';
 import 'notify_labels.dart';
@@ -861,7 +863,9 @@ class _EventChecklist extends ConsumerWidget {
               .where(
                 (e) => serverScope
                     ? e.scope == 'server'
-                    : e.scope == 'user' ||
+                    : (e.scope == 'user' &&
+                              (ownerIsAdmin ||
+                                  !_adminWorkEvents.contains(e.name))) ||
                           (e.scope == 'server' && ownerIsAdmin),
               )
               .toList(growable: false);
@@ -1253,17 +1257,33 @@ class _TargetList extends ConsumerWidget {
     );
   }
 
-  Future<void> _test(BuildContext context, NotificationTarget target) async {
+  /// Queues a test and says what came of it, the button busy meanwhile.
+  Future<void> _test(
+    BuildContext context,
+    WidgetRef ref,
+    NotificationTarget target,
+  ) async {
     final l10n = context.l10n;
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await controller.sendTest(target.pid);
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.settingsNotifyTestQueued)),
-      );
-    } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
-    }
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    await ref.read(pendingActionsProvider.notifier).run(
+      PendingAction.notifyTest(target.pid),
+      () async {
+        try {
+          await controller.sendTest(target.pid);
+          messenger.show(l10n.settingsNotifyTestQueued);
+          final outcome = await controller.awaitTest(target);
+          messenger.show(switch (outcome) {
+            (delivered: true, reason: _) => l10n.settingsNotifyTestDelivered,
+            (delivered: false, :final reason) => l10n.settingsNotifyTestFailed(
+              reason ?? '',
+            ),
+            _ => l10n.settingsNotifyTestUnanswered,
+          });
+        } on WaxDeckApiException catch (e) {
+          messenger.show(explainError(l10n, e));
+        }
+      },
+    );
   }
 
   /// The delivery line under a target, or null where it has neither
@@ -1346,7 +1366,12 @@ class _TargetList extends ConsumerWidget {
                                 semanticsId: SemanticsIds.notifyTargetTest(
                                   target.pid,
                                 ),
-                                onPressed: () => _test(context, target),
+                                busy: ref
+                                    .watch(pendingActionsProvider)
+                                    .contains(
+                                      PendingAction.notifyTest(target.pid),
+                                    ),
+                                onPressed: () => _test(context, ref, target),
                               ),
                               WaxIconButton(
                                 key: ValueKey(
@@ -1413,3 +1438,7 @@ class ServerNotificationTargetsSection extends ConsumerWidget {
     );
   }
 }
+
+/// User events only an administrator's own work files: nobody else starts
+/// a library job or a health fix, so nobody else is told how one ended.
+const _adminWorkEvents = {'job-finished', 'job-failed', 'health-fix-finished'};

@@ -1521,6 +1521,12 @@ abstract class AppLocalizations {
   /// **'Library \"{name}\" created; scanning started'**
   String adminLibraryCreated(String name);
 
+  /// Message after a library was registered while another catalog job was running, so creating it could not start its scan; the next scan picks it up.
+  ///
+  /// In en, this message translates to:
+  /// **'Library \"{name}\" created. Another catalog job is running, so the next scan will index it.'**
+  String adminLibraryCreatedNoScan(String name);
+
   /// Line under the holds row in the add-library form.
   ///
   /// In en, this message translates to:
@@ -4179,6 +4185,12 @@ abstract class AppLocalizations {
   /// **'Downloads'**
   String get bellSurfaceDownloads;
 
+  /// Overline of a bell row about the library health screen: a fix finished.
+  ///
+  /// In en, this message translates to:
+  /// **'Library health'**
+  String get bellSurfaceHealth;
+
   /// Which surface a bell row is about.
   ///
   /// In en, this message translates to:
@@ -4820,6 +4832,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open review'**
   String get commonOpenReview;
+
+  /// Action on a message after background work started: opens the Tasks screen, where it is followed.
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks'**
+  String get commonOpenTasks;
 
   /// Button that runs the request that just failed again.
   ///
@@ -5949,11 +5967,71 @@ abstract class AppLocalizations {
   /// **'{total, plural, =1{Evaluated {checked} of 1 item} other{Evaluated {checked} of {total} items}}'**
   String healthEvaluatedOf(int checked, int total);
 
+  /// Under a health rule this server cannot fix: the sources that supply artwork are not all switched on. Enrichment is the admin screen where sources are switched on.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs its artwork sources switched on in Enrichment.'**
+  String get healthFixBlockedArtSource;
+
+  /// Under a health rule this server cannot fix: no provider of audiobook metadata is configured.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs a book metadata provider.'**
+  String get healthFixBlockedBookSource;
+
+  /// Under a health rule this server cannot fix: it has no enrichment contact (an email or URL the administrator sets), which is what lets it ask MusicBrainz and the other free sources.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs an enrichment contact, which lets this server ask the free public sources.'**
+  String get healthFixBlockedContact;
+
+  /// Under a health rule this server cannot fix: no source of genres is switched on. Enrichment is the admin screen where sources are switched on.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs a genre source, MusicBrainz or ListenBrainz, switched on in Enrichment.'**
+  String get healthFixBlockedGenreSource;
+
+  /// Under a health rule this server cannot fix: no lyrics source is switched on. Enrichment is the admin screen where sources are switched on.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs a lyrics source switched on in Enrichment.'**
+  String get healthFixBlockedLyricsSource;
+
+  /// Under the path-mismatch health rule when no library lets the server place files, so there is no layout to compare paths with.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs a managed library: with none, there is no layout for paths to match.'**
+  String get healthFixBlockedNoManaged;
+
+  /// Under a health rule this server cannot fix, for a reason this app does not know how to word.
+  ///
+  /// In en, this message translates to:
+  /// **'This server cannot run this fix yet.'**
+  String get healthFixBlockedOther;
+
+  /// Message when a fix was refused because an enrichment pass is already running.
+  ///
+  /// In en, this message translates to:
+  /// **'An enrichment pass is already running. Fix this when it ends.'**
+  String get healthFixBusy;
+
   /// Accessible name of the button that runs a health rule's bulk fix. {rule} is that rule's own name.
   ///
   /// In en, this message translates to:
   /// **'Fix {rule}'**
   String healthFixRule(String rule);
+
+  /// Message when a health rule's fix is refused because a fix for the same rule, started from this or another session, is still running or re-checking. {rule} is the rule's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'A fix for {rule} is already running'**
+  String healthFixRunning(String rule);
+
+  /// Message after a health rule's fix started; the fix runs in the background and the message offers the Tasks screen. {rule} is the rule's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Fixing {rule}'**
+  String healthFixStarted(String rule);
 
   /// Name of the health rule `genre-whitelist`, which counts items tagged with a genre the server's genre tree does not have.
   ///
@@ -6141,12 +6219,6 @@ abstract class AppLocalizations {
   /// **'File path does not match the organize profile'**
   String get healthPathMismatch;
 
-  /// Message after a rule's fix was started, saying how many items it will work on.
-  ///
-  /// In en, this message translates to:
-  /// **'{count, plural, =1{Queued 1 item} other{Queued {count} items}}'**
-  String healthQueuedItems(int count);
-
   /// Confirming button of the keep-the-best dialog.
   ///
   /// In en, this message translates to:
@@ -6230,6 +6302,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Low-resolution cover art'**
   String get healthSmallArt;
+
+  /// Line under the health score when the most recent health sweep failed; the counts shown are the last successful sweep's.
+  ///
+  /// In en, this message translates to:
+  /// **'The last sweep failed, so these numbers are from an earlier one'**
+  String get healthSweepFailed;
 
   /// Accessible name of the button that re-evaluates the library against every rule.
   ///
@@ -8589,16 +8667,28 @@ abstract class AppLocalizations {
   /// **'Backup failed'**
   String get notifBackupFailedTitle;
 
-  /// What the `episode-downloaded` notification is about, drawn under its switch.
+  /// What the new-episode notification is about, in a delivery target's event checklist.
   ///
   /// In en, this message translates to:
-  /// **'A new episode of a subscribed show finished downloading.'**
+  /// **'A subscribed show published a new episode.'**
+  String get notifEpisodeArrivedHelp;
+
+  /// Heading of the notification that a subscribed show published new episodes, and its name in a delivery target's event checklist.
+  ///
+  /// In en, this message translates to:
+  /// **'New episode'**
+  String get notifEpisodeArrivedTitle;
+
+  /// What the episode-fetched notification is about, in a delivery target's event checklist.
+  ///
+  /// In en, this message translates to:
+  /// **'An episode you asked for finished downloading.'**
   String get notifEpisodeDownloadedHelp;
 
-  /// Switch label for the `episode-downloaded` notification.
+  /// Heading of the notification that an episode the reader asked to download finished downloading, and its name in a delivery target's event checklist.
   ///
   /// In en, this message translates to:
-  /// **'New episode downloaded'**
+  /// **'Episode fetched'**
   String get notifEpisodeDownloadedTitle;
 
   /// What the `feed-disabled` notification is about, drawn under its switch.
@@ -8613,6 +8703,18 @@ abstract class AppLocalizations {
   /// **'Feed switched off'**
   String get notifFeedDisabledTitle;
 
+  /// What the health-fix-finished notification is about, in a delivery target's event checklist.
+  ///
+  /// In en, this message translates to:
+  /// **'A library health fix you started finished.'**
+  String get notifHealthFixFinishedHelp;
+
+  /// Heading of the notification that a library health fix the reader started finished. The line under it says what it filled.
+  ///
+  /// In en, this message translates to:
+  /// **'Health fix finished'**
+  String get notifHealthFixFinishedTitle;
+
   /// What the `import-completed` notification is about, drawn under its switch.
   ///
   /// In en, this message translates to:
@@ -8624,6 +8726,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Filed without review'**
   String get notifImportCompletedTitle;
+
+  /// What the job-failed notification is about, in a delivery target's event checklist.
+  ///
+  /// In en, this message translates to:
+  /// **'A library job you started failed.'**
+  String get notifJobFailedHelp;
+
+  /// Heading of the notification that a library job the reader started failed. The line under it says which and why.
+  ///
+  /// In en, this message translates to:
+  /// **'Library job failed'**
+  String get notifJobFailedTitle;
+
+  /// What the job-finished notification is about, in a delivery target's event checklist.
+  ///
+  /// In en, this message translates to:
+  /// **'A library job you started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash.'**
+  String get notifJobFinishedHelp;
+
+  /// Heading of the notification that a library job the reader started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash. The line under it says which and what it did.
+  ///
+  /// In en, this message translates to:
+  /// **'Library job finished'**
+  String get notifJobFinishedTitle;
 
   /// Help under the playlist-synced row in the notification-events checklist.
   ///
@@ -15207,11 +15333,29 @@ abstract class AppLocalizations {
   /// **'Could not load notification targets'**
   String get settingsNotifyTargetsError;
 
+  /// Message when a test notification reached its destination.
+  ///
+  /// In en, this message translates to:
+  /// **'Test delivered'**
+  String get settingsNotifyTestDelivered;
+
+  /// Message when a test notification could not be delivered. {reason} is the server's own words about the failure.
+  ///
+  /// In en, this message translates to:
+  /// **'Test failed: {reason}'**
+  String settingsNotifyTestFailed(String reason);
+
   /// Snackbar after a test notification has been asked for.
   ///
   /// In en, this message translates to:
   /// **'Test queued; the outcome shows on the target shortly'**
   String get settingsNotifyTestQueued;
+
+  /// Message when a test notification's outcome did not arrive within half a minute; the target's status line shows it once it does.
+  ///
+  /// In en, this message translates to:
+  /// **'No answer from the test yet; the target shows it when it lands'**
+  String get settingsNotifyTestUnanswered;
 
   /// The line under the UnifiedPush endpoint field, saying it is not usually typed by hand.
   ///
@@ -17146,6 +17290,78 @@ abstract class AppLocalizations {
   /// **'Clear finished'**
   String get toolsClearFinished;
 
+  /// Counter in a finished scan's result: files that brought new items. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'added {count}'**
+  String toolsCountAdded(int count);
+
+  /// Counter in a finished analysis's result: files fingerprinted. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'analyzed {count}'**
+  String toolsCountAnalyzed(int count);
+
+  /// Counter in a finished enrichment's result: front covers it fetched. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'covers {count}'**
+  String toolsCountCovers(int count);
+
+  /// Counter in a finished job's result: files it could not read or write. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'errored {count}'**
+  String toolsCountErrored(int count);
+
+  /// Counter in a finished fix's result: items it could not fix. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'failed {count}'**
+  String toolsCountFailed(int count);
+
+  /// Counter in a finished health fix's result: how many of the items it tried it fixed. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'filled {filled} of {attempted}'**
+  String toolsCountFilledOf(int filled, int attempted);
+
+  /// Counter in a finished enrichment's result: tracks some source answered lyrics for. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'lyrics {count}'**
+  String toolsCountLyrics(int count);
+
+  /// Counter in a finished scan's result: items whose files are gone from disk. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'missing {count}'**
+  String toolsCountMissing(int count);
+
+  /// Counter in a finished organize run's result: files moved into place. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'moved {count}'**
+  String toolsCountMoved(int count);
+
+  /// Counter in a finished enrichment's result: other pictures it fetched, backs and booklets. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'pictures {count}'**
+  String toolsCountPictures(int count);
+
+  /// Counter in a finished job's or fix's result: items left alone. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'skipped {count}'**
+  String toolsCountSkipped(int count);
+
+  /// Counter in a finished scan's result: files whose audio changed. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'updated {count}'**
+  String toolsCountUpdated(int count);
+
   /// Accessible name of the control that removes one finished task from the list.
   ///
   /// In en, this message translates to:
@@ -17176,6 +17392,66 @@ abstract class AppLocalizations {
   /// **'{count} items produced · tap to open'**
   String toolsItemsProduced(int count);
 
+  /// Name of a catalog job that fingerprints files and measures their loudness.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio analysis'**
+  String get toolsJobAnalyze;
+
+  /// Name of a catalog job that deletes files from the library.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get toolsJobDelete;
+
+  /// Name of a catalog job that permanently deletes the trashed files.
+  ///
+  /// In en, this message translates to:
+  /// **'Emptying the trash'**
+  String get toolsJobEmptyTrash;
+
+  /// Name of a catalog job that looks up artwork, lyrics and metadata.
+  ///
+  /// In en, this message translates to:
+  /// **'Enrichment'**
+  String get toolsJobEnrich;
+
+  /// Name of a catalog job that files one uploaded or downloaded file into the library.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get toolsJobImport;
+
+  /// Name of a catalog job that moves files into the library's layout.
+  ///
+  /// In en, this message translates to:
+  /// **'Organize'**
+  String get toolsJobOrganize;
+
+  /// Name of a catalog job that permanently deletes one trashed file.
+  ///
+  /// In en, this message translates to:
+  /// **'Purge from the trash'**
+  String get toolsJobPurgeTrash;
+
+  /// Name of a catalog job that restores files from the trash.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get toolsJobRestore;
+
+  /// Name of a catalog job that scans the library folders.
+  ///
+  /// In en, this message translates to:
+  /// **'Library scan'**
+  String get toolsJobScan;
+
+  /// Heading over the catalog's own jobs (scans, enrichment, analysis) on the tasks screen, shown to administrators.
+  ///
+  /// In en, this message translates to:
+  /// **'Library jobs'**
+  String get toolsJobsTitle;
+
   /// Title of the error state when the task list could not be read.
   ///
   /// In en, this message translates to:
@@ -17199,6 +17475,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 ready for review} other{{count} ready for review}}'**
   String toolsReadyForReview(int count);
+
+  /// State of a job an administrator canceled. Agrees with the word for a task in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Canceled'**
+  String get toolsStateCanceled;
+
+  /// State of a job the server stopped in the middle of, a restart or a crash. Agrees with the word for a task in this language.
+  ///
+  /// In en, this message translates to:
+  /// **'Crashed'**
+  String get toolsStateCrashed;
 
   /// State of a task that finished. Agrees with the word for a task in this language.
   ///
@@ -17296,6 +17584,18 @@ abstract class AppLocalizations {
   /// **'CUE split'**
   String get toolsTaskCueSplit;
 
+  /// Name of a task that folds genre spellings onto the canonical genre tree.
+  ///
+  /// In en, this message translates to:
+  /// **'Genre clean-up'**
+  String get toolsTaskGenreNormalize;
+
+  /// Name of a task fixing one library health rule. {rule} is the rule's own name.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix: {rule}'**
+  String toolsTaskHealthFix(String rule);
+
   /// Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated. A task's name is a noun, unlike the playlist import dialog's title of the same English.
   ///
   /// In en, this message translates to:
@@ -17313,6 +17613,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{Cleared 1 task} other{Cleared {count} tasks}}'**
   String toolsTasksCleared(int count);
+
+  /// Heading over the tool tasks list when the catalog's jobs are listed above it.
+  ///
+  /// In en, this message translates to:
+  /// **'Tool tasks'**
+  String get toolsTasksSection;
 
   /// Title of the screen following long-running library work: merges, splits, downloads, imports.
   ///

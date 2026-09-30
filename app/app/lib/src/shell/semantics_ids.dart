@@ -338,6 +338,7 @@ abstract final class SemanticsIds {
   static String duplicateMerge(Object pid) => 'duplicate-merge-$pid';
   static String health(Object rule) => 'health-rule-$rule';
   static String healthFix(Object rule) => 'health-fix-$rule';
+  static String healthFixBlocked(Object rule) => 'health-fix-blocked-$rule';
   static String healthIssue(Object pid) => 'health-issue-$pid';
   static const String healthScore = 'health-score';
   static const String healthSweep = 'health-sweep';
@@ -923,9 +924,12 @@ abstract final class SemanticsIds {
   static const String yirServer = 'yir-server';
 
   // tools: Long-running tools and their progress rows.
+  static String jobRow(Object pid) => 'job-row-$pid';
+  static const String openTasks = 'open-tasks';
   static String taskDismiss(Object id) => 'task-dismiss-$id';
   static String taskRow(Object id) => 'task-row-$id';
   static const String tasksClearFinished = 'tasks-clear-finished';
+  static const String tasksScreen = 'tasks-screen';
 
   // uploads: Uploads: batches, rows, duplicates, and the add-to-library flow.
   static const String acquireFormat = 'acquire-format';

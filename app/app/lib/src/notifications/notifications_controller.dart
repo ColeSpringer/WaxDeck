@@ -34,8 +34,12 @@ enum NotificationKind {
   reviewReady('review-ready', WaxIcons.check, WaxRoute.review),
   feedDisabled('feed-disabled', WaxIcons.warning, WaxRoute.podcasts),
   episodeDownloaded('episode-downloaded', WaxIcons.podcasts, WaxRoute.podcasts),
+  episodeArrived('episode-arrived', WaxIcons.podcasts, WaxRoute.podcasts),
   importCompleted('import-completed', WaxIcons.success, WaxRoute.review),
-  playlistSynced('playlist-synced', WaxIcons.refresh, WaxRoute.playlists);
+  playlistSynced('playlist-synced', WaxIcons.refresh, WaxRoute.playlists),
+  jobFinished('job-finished', WaxIcons.success, WaxRoute.tasks),
+  jobFailed('job-failed', WaxIcons.warning, WaxRoute.tasks),
+  healthFixFinished('health-fix-finished', WaxIcons.success, WaxRoute.health);
 
   const NotificationKind(this.token, this.glyph, this.location);
 
@@ -63,6 +67,7 @@ enum NotificationKind {
   /// [locationFor] opens, and what keeps two broken feeds two rows.
   bool get namesEntity =>
       this == NotificationKind.feedDisabled ||
+      this == NotificationKind.episodeArrived ||
       this == NotificationKind.episodeDownloaded ||
       this == NotificationKind.playlistSynced ||
       this == NotificationKind.importCompleted;
@@ -103,9 +108,13 @@ enum NotificationKind {
     NotificationKind.backupCompleted ||
     NotificationKind.backupFailed => l10n.bellSurfaceBackups,
     NotificationKind.feedDisabled ||
+    NotificationKind.episodeArrived ||
     NotificationKind.episodeDownloaded => l10n.bellSurfacePodcasts,
     NotificationKind.importCompleted => l10n.bellSurfaceImports,
     NotificationKind.playlistSynced => l10n.bellSurfacePlaylists,
+    NotificationKind.jobFinished ||
+    NotificationKind.jobFailed => l10n.bellSurfaceTasks,
+    NotificationKind.healthFixFinished => l10n.bellSurfaceHealth,
   };
 
   /// The one sentence a hint row says, or null for a catalog event.
@@ -127,7 +136,8 @@ enum NotificationKind {
   /// the kind's own surface otherwise. Only [namesEntity] kinds carry a
   /// pid, which is what makes kind and pid together a row's identity.
   String locationFor(String? pid) => switch (this) {
-    NotificationKind.feedDisabled when pid != null => WaxRoute.show(pid),
+    NotificationKind.feedDisabled ||
+    NotificationKind.episodeArrived when pid != null => WaxRoute.show(pid),
     NotificationKind.episodeDownloaded when pid != null => WaxRoute.episode(
       pid,
     ),

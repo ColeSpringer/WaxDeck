@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/trash_screen.dart';
@@ -207,5 +209,41 @@ void main() {
     // to press.
     expect(find.text('Nothing generated yet'), findsOneWidget);
     expect(find.bySemanticsIdentifier(SemanticsIds.thumbsClear), findsNothing);
+  });
+
+  testWidgets('emptying is busy until the purge answers', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final repo = FakeRepository()..emptyTrashGate = Completer<void>();
+    repo.trashEntries.add(_entry('ts-1'));
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier('trash-empty'),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'EMPTY',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.confirmAccept),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    WaxButton empty() => tester.widget<WaxButton>(
+      find.byWidgetPredicate(
+        (w) => w is WaxButton && w.semanticsId == SemanticsIds.trashEmpty,
+      ),
+    );
+    expect(empty().busy, isTrue);
+
+    repo.emptyTrashGate!.complete();
+    await tester.pumpAndSettle();
+    expect(empty().busy, isFalse);
   });
 }

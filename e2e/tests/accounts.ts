@@ -101,6 +101,9 @@ export const accountShapes: Record<string, AccountShape> = {
   // exist for anybody else.
   'admin-console': { role: 'admin' },
   'admin-ops': { role: 'admin' },
+  // Scans, health fixes and sweeps are administrator work, and so is
+  // the job list that follows them.
+  'catalog-jobs': { role: 'admin' },
   // The read-only switch, which left admin-ops for a project of its own.
   'admin-readonly': { role: 'admin' },
   notifications: { role: 'admin' },

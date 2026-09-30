@@ -43,6 +43,26 @@ func (d *DB) DeleteHealthRow(ctx context.Context, itemPID string) error {
 	return nil
 }
 
+// DropHealthRule takes one rule off an item's row, against the row as it
+// stands, and the row with it when that was its last: a sweep writing
+// the row meanwhile keeps its own fields and rules.
+func (d *DB) DropHealthRule(ctx context.Context, itemPID, rule string) error {
+	if _, err := d.w.ExecContext(ctx, `
+		UPDATE health_index SET
+			rules = (SELECT json_group_array(value) FROM (
+				SELECT value FROM json_each(health_index.rules) WHERE value <> ? ORDER BY key)),
+			rule_count = (SELECT COUNT(*) FROM json_each(health_index.rules) WHERE value <> ?)
+		WHERE item_pid = ? AND EXISTS (SELECT 1 FROM json_each(health_index.rules) WHERE value = ?)`,
+		rule, rule, itemPID, rule); err != nil {
+		return fmt.Errorf("db: dropping a health rule: %w", err)
+	}
+	if _, err := d.w.ExecContext(ctx, `
+		DELETE FROM health_index WHERE item_pid = ? AND rule_count = 0`, itemPID); err != nil {
+		return fmt.Errorf("db: dropping a passing health row: %w", err)
+	}
+	return nil
+}
+
 // PruneHealthRows removes rows the latest full sweep did not touch
 // (deleted or newly exempt items).
 func (d *DB) PruneHealthRows(ctx context.Context, sweptBeforeNS int64) (int64, error) {
@@ -144,73 +164,4 @@ func (d *DB) FailingItems(ctx context.Context, rule string, limit int) ([]string
 		out = append(out, pid)
 	}
 	return out, rows.Err()
-}
-
-// EnqueueFix queues one item for one rule's fixer; re-queueing is a
-// no-op.
-func (d *DB) EnqueueFix(ctx context.Context, itemPID, rule string) error {
-	_, err := d.w.ExecContext(ctx, `
-		INSERT INTO fix_queue (item_pid, rule) VALUES (?, ?)
-		ON CONFLICT (item_pid, rule) DO NOTHING`, itemPID, rule)
-	if err != nil {
-		return fmt.Errorf("db: queuing fix: %w", err)
-	}
-	return nil
-}
-
-// FixQueueRow is one queued fix.
-type FixQueueRow struct {
-	ID       int64
-	ItemPID  string
-	Rule     string
-	Attempts int
-}
-
-// LeaseFix claims the oldest lease-free fix; ErrNotFound when idle.
-func (d *DB) LeaseFix(ctx context.Context, nowNS, leaseNS int64, maxAttempts int) (FixQueueRow, error) {
-	row := d.w.QueryRowContext(ctx, `
-		UPDATE fix_queue SET lease_until_ns = ? + ?
-		WHERE id = (
-			SELECT id FROM fix_queue
-			WHERE lease_until_ns < ? AND next_at_ns <= ? AND attempts < ?
-			ORDER BY id LIMIT 1
-		)
-		RETURNING id, item_pid, rule, attempts`,
-		nowNS, leaseNS, nowNS, nowNS, maxAttempts)
-	var r FixQueueRow
-	if err := row.Scan(&r.ID, &r.ItemPID, &r.Rule, &r.Attempts); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return FixQueueRow{}, ErrNotFound
-		}
-		return FixQueueRow{}, fmt.Errorf("db: leasing fix: %w", err)
-	}
-	return r, nil
-}
-
-// CompleteFix removes a finished fix.
-func (d *DB) CompleteFix(ctx context.Context, id int64) error {
-	if _, err := d.w.ExecContext(ctx, `DELETE FROM fix_queue WHERE id = ?`, id); err != nil {
-		return fmt.Errorf("db: completing fix: %w", err)
-	}
-	return nil
-}
-
-// FailFix records a failed attempt and holds the row until retryAtNS.
-func (d *DB) FailFix(ctx context.Context, id int64, msg string, retryAtNS int64) error {
-	_, err := d.w.ExecContext(ctx, `
-		UPDATE fix_queue SET attempts = attempts + 1, lease_until_ns = ?, next_at_ns = ?, last_error = ?
-		WHERE id = ?`, retryAtNS, retryAtNS, msg, id)
-	if err != nil {
-		return fmt.Errorf("db: failing fix: %w", err)
-	}
-	return nil
-}
-
-// PruneFixQueue drops fixes out of attempts.
-func (d *DB) PruneFixQueue(ctx context.Context, maxAttempts int) (int64, error) {
-	res, err := d.w.ExecContext(ctx, `DELETE FROM fix_queue WHERE attempts >= ?`, maxAttempts)
-	if err != nil {
-		return 0, fmt.Errorf("db: pruning fix queue: %w", err)
-	}
-	return res.RowsAffected()
 }

@@ -5,6 +5,130 @@
   "@toolsClearFinished": {
     "description": "Button that removes every finished task from the list at once."
   },
+  "toolsCountAdded": "added {count}",
+  "@toolsCountAdded": {
+    "description": "Counter in a finished scan's result: files that brought new items. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "toolsCountAnalyzed": "analyzed {count}",
+  "@toolsCountAnalyzed": {
+    "description": "Counter in a finished analysis's result: files fingerprinted. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "120"
+      }
+    }
+  },
+  "toolsCountCovers": "covers {count}",
+  "@toolsCountCovers": {
+    "description": "Counter in a finished enrichment's result: front covers it fetched. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "6"
+      }
+    }
+  },
+  "toolsCountErrored": "errored {count}",
+  "@toolsCountErrored": {
+    "description": "Counter in a finished job's result: files it could not read or write. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "0"
+      }
+    }
+  },
+  "toolsCountFailed": "failed {count}",
+  "@toolsCountFailed": {
+    "description": "Counter in a finished fix's result: items it could not fix. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "0"
+      }
+    }
+  },
+  "toolsCountFilledOf": "filled {filled} of {attempted}",
+  "@toolsCountFilledOf": {
+    "description": "Counter in a finished health fix's result: how many of the items it tried it fixed. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "filled": {
+        "type": "int",
+        "example": "3"
+      },
+      "attempted": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "toolsCountLyrics": "lyrics {count}",
+  "@toolsCountLyrics": {
+    "description": "Counter in a finished enrichment's result: tracks some source answered lyrics for. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "40"
+      }
+    }
+  },
+  "toolsCountMissing": "missing {count}",
+  "@toolsCountMissing": {
+    "description": "Counter in a finished scan's result: items whose files are gone from disk. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "toolsCountMoved": "moved {count}",
+  "@toolsCountMoved": {
+    "description": "Counter in a finished organize run's result: files moved into place. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "toolsCountPictures": "pictures {count}",
+  "@toolsCountPictures": {
+    "description": "Counter in a finished enrichment's result: other pictures it fetched, backs and booklets. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "toolsCountSkipped": "skipped {count}",
+  "@toolsCountSkipped": {
+    "description": "Counter in a finished job's or fix's result: items left alone. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "toolsCountUpdated": "updated {count}",
+  "@toolsCountUpdated": {
+    "description": "Counter in a finished scan's result: files whose audio changed. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "toolsDismiss": "Dismiss",
   "@toolsDismiss": {
     "description": "Accessible name of the control that removes one finished task from the list."
@@ -30,6 +154,46 @@
         "example": "4"
       }
     }
+  },
+  "toolsJobAnalyze": "Audio analysis",
+  "@toolsJobAnalyze": {
+    "description": "Name of a catalog job that fingerprints files and measures their loudness."
+  },
+  "toolsJobDelete": "Delete",
+  "@toolsJobDelete": {
+    "description": "Name of a catalog job that deletes files from the library."
+  },
+  "toolsJobEmptyTrash": "Emptying the trash",
+  "@toolsJobEmptyTrash": {
+    "description": "Name of a catalog job that permanently deletes the trashed files."
+  },
+  "toolsJobEnrich": "Enrichment",
+  "@toolsJobEnrich": {
+    "description": "Name of a catalog job that looks up artwork, lyrics and metadata."
+  },
+  "toolsJobImport": "Import",
+  "@toolsJobImport": {
+    "description": "Name of a catalog job that files one uploaded or downloaded file into the library."
+  },
+  "toolsJobOrganize": "Organize",
+  "@toolsJobOrganize": {
+    "description": "Name of a catalog job that moves files into the library's layout."
+  },
+  "toolsJobPurgeTrash": "Purge from the trash",
+  "@toolsJobPurgeTrash": {
+    "description": "Name of a catalog job that permanently deletes one trashed file."
+  },
+  "toolsJobRestore": "Restore",
+  "@toolsJobRestore": {
+    "description": "Name of a catalog job that restores files from the trash."
+  },
+  "toolsJobScan": "Library scan",
+  "@toolsJobScan": {
+    "description": "Name of a catalog job that scans the library folders."
+  },
+  "toolsJobsTitle": "Library jobs",
+  "@toolsJobsTitle": {
+    "description": "Heading over the catalog's own jobs (scans, enrichment, analysis) on the tasks screen, shown to administrators."
   },
   "toolsLoadError": "Could not load tool tasks",
   "@toolsLoadError": {
@@ -58,6 +222,14 @@
         "example": "3"
       }
     }
+  },
+  "toolsStateCanceled": "Canceled",
+  "@toolsStateCanceled": {
+    "description": "State of a job an administrator canceled. Agrees with the word for a task in this language."
+  },
+  "toolsStateCrashed": "Crashed",
+  "@toolsStateCrashed": {
+    "description": "State of a job the server stopped in the middle of, a restart or a crash. Agrees with the word for a task in this language."
   },
   "toolsStateDone": "Done",
   "@toolsStateDone": {
@@ -153,6 +325,20 @@
   "@toolsTaskCueSplit": {
     "description": "Name of the task that cuts one long audio file into tracks using its CUE sheet. CUE is a file format and stays as it is."
   },
+  "toolsTaskGenreNormalize": "Genre clean-up",
+  "@toolsTaskGenreNormalize": {
+    "description": "Name of a task that folds genre spellings onto the canonical genre tree."
+  },
+  "toolsTaskHealthFix": "Fix: {rule}",
+  "@toolsTaskHealthFix": {
+    "description": "Name of a task fixing one library health rule. {rule} is the rule's own name.",
+    "placeholders": {
+      "rule": {
+        "type": "String",
+        "example": "Missing lyrics"
+      }
+    }
+  },
   "toolsTaskImportFrom": "Import from {source}",
   "@toolsTaskImportFrom": {
     "description": "Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated. A task's name is a noun, unlike the playlist import dialog's title of the same English.",
@@ -176,6 +362,10 @@
         "example": "7"
       }
     }
+  },
+  "toolsTasksSection": "Tool tasks",
+  "@toolsTasksSection": {
+    "description": "Heading over the tool tasks list when the catalog's jobs are listed above it."
   },
   "toolsTitle": "Tool tasks",
   "@toolsTitle": {

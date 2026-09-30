@@ -558,10 +558,10 @@ paths:
         Expect it to be slow. Each file costs a full decode, and where
         `fpcalc` is installed it also costs one subprocess per file, so a
         large library is priced in hours rather than minutes. It is
-        resumable and cancelable like the other catalog jobs, and a file
-        it has already analyzed is not analyzed again until its audio or
-        an analysis algorithm changes, so an interrupted run picks up
-        where it stopped. It never runs automatically after a scan; the
+        resumable: a file it has already analyzed is not analyzed again
+        until its audio or an analysis algorithm changes, so a run cut
+        short picks up where it stopped. It never runs automatically
+        after a scan; the
         `analyze` schedule and this endpoint are the only triggers.
 
         Analysis serializes with itself but not with scans: starting a
@@ -677,8 +677,11 @@ paths:
         Recent server-run catalog jobs (scans, analysis, enrichment,
         organize runs, deletes), newest first. Bounded by `limit`
         rather than cursor-paged (a recent-history window, not a
-        mirrorable list). The live counterpart of the tool task log
-        for engine-side work. Administrators only.
+        mirrorable list), except that a job still running is always
+        listed, first, however many newer jobs have pushed it out of
+        the window. The live counterpart of the tool task log for
+        engine-side work; the `job` sync marker says when to read it
+        again. Administrators only.
       tags: [admin]
       parameters:
         - name: limit
@@ -2772,8 +2775,13 @@ paths:
       summary: Re-sweep health now
       description: >
         Queues a full health sweep instead of waiting for the
-        scheduled one. Administrators only. The summary updates over
-        the event channel as the sweep progresses.
+        scheduled one. Administrators only. The summary's `sweeping`
+        is true from the request until the sweep finishes, and the
+        `health` sync marker tells every account when to read the
+        summary again: once when the sweep is queued and once when it
+        finishes. A sweep that fails answers the request too, and the
+        summary's `sweepFailed` says so until a sweep lands; of a run
+        of failures, only the first is marked.
       tags: [health]
       responses:
         "202":
@@ -2790,15 +2798,35 @@ paths:
       operationId: fixHealthIssues
       summary: Bulk-fix a health rule
       description: >
-        Dispatches the fix that matches one rule across the named
-        items (or every item currently failing the rule when
-        `itemPids` is absent): enrichment fetches for missing art,
-        lyrics, genres, and identifiers; organize moves for path
-        mismatches; a write-back retry for out-of-sync files. Fixes
-        run in the background at provider-etiquette pace; the
-        response says how many items were queued. Rules with no
-        automated fix (`corrupt-audio`, `legacy-tags`) answer
-        `invalid-request` naming the rule.
+        Starts the fix that matches one rule, across the named items or,
+        when `itemPids` is absent, every item currently failing the rule.
+        Only a rule the summary reports `fixable` has one; any other
+        answers `invalid-request` naming the rule, and the summary's
+        `fixBlocked` says what the install lacks for a rule that could
+        be fixed with it. Administrators only.
+
+
+        An unscoped fix of `missing-art`, `missing-lyrics`,
+        `missing-genre`, `missing-narrator` or `missing-asin` runs the
+        catalog's enrichment pass as a catalog job whose pid is `jobPid`,
+        with those of the phases that fill the rule which this server
+        runs forced to re-ask everything they reach (either of
+        `missing-art`'s two picture phases is enough); the pass's other
+        phases walk their ordinary sweeps, as any pass does.
+        `missing-genre` re-asks MusicBrainz about every album. A scoped
+        fix, and every fix of `path-mismatch` or `write-unsynced`, runs
+        as a `health-fix` tool task whose id is `taskId`, working item
+        by item. Either runs in the background and is listed where its
+        kind is (`GET /jobs`, `GET /tools/tasks`); on finishing it
+        re-checks the items it reached (a pass, every item failing the
+        rule) and files a `health-fix-finished` notification for the
+        administrator who started it, saying what it filled or why it
+        failed. The `health` sync marker goes out when a fix starts
+        and when its re-check lands, and the rule's `fixing` is true in
+        between. The score waits for the next full sweep. `queued` is
+        the number of items the fix set out to reach. While an
+        enrichment pass is running, another fix that needs one answers
+        `conflict`, as does any fix for a rule whose `fixing` is true.
       tags: [health]
       requestBody:
         required: true
@@ -2808,7 +2836,7 @@ paths:
               $ref: "#/components/schemas/HealthFixRequest"
       responses:
         "202":
-          description: How much work was queued.
+          description: The fix started.
           content:
             application/json:
               schema:
@@ -2819,6 +2847,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -5234,8 +5264,14 @@ paths:
 
 
         The current catalog is `signup-requested`, `backup-completed`,
-        `backup-failed`, `episode-downloaded`, `feed-disabled`,
-        `review-ready`, `import-completed`, and `playlist-synced`.
+        `backup-failed`, `episode-arrived`, `episode-downloaded`,
+        `feed-disabled`, `review-ready`, `import-completed`,
+        `playlist-synced`, `job-finished`, `job-failed`, and
+        `health-fix-finished`. The last three reach the administrator
+        who started the work: a catalog job (a scan, an analysis, an
+        enrichment or organize run, emptying the trash) finished or
+        failed, or a health fix finished. Work the server started on
+        its own schedule notifies nobody.
       tags: [notifications]
       responses:
         "200":
@@ -12447,6 +12483,14 @@ components:
               example: >-
                 streaming from this library is not available yet: the
                 sidecar could not open /srv/media/audiobooks
+            scanStarted:
+              type: boolean
+              description: >
+                Whether creating the library started a scan of every root.
+                False when another catalog job was already running: that
+                job began before this root existed, so the root is indexed
+                by the next scan, which an administrator can start from the
+                rescan endpoint once the running job ends.
       description: A newly created library, with any degradation it left behind.
 
     Libraries:
@@ -12502,7 +12546,10 @@ components:
           example: jb-01JZX5N8QW3F4V9T2B7KD3M9R6
         kind:
           type: string
-          description: What the job does (`scan`, `analyze`, `enrich`, `organize`).
+          description: >
+            What the job does: `scan`, `analyze`, `enrich`, `organize`,
+            `import`, `delete`, `restore`, `empty-trash`, or `purge-trash`.
+            New kinds may appear.
           example: scan
         state:
           type: string
@@ -12524,6 +12571,26 @@ components:
         error:
           type: string
           description: Failure detail for `failed`/`crashed` jobs.
+        startedAt:
+          type: string
+          format: date-time
+          description: When the job started.
+        finishedAt:
+          type: string
+          format: date-time
+          description: When the job reached a terminal state; absent while running.
+        result:
+          type: object
+          additionalProperties: true
+          description: >
+            What a finished job did, once it records a summary: a `scan`
+            reports `filesSeen`, `created`, `updated`, `relinked`,
+            `unchanged`, `missing`, `skipped` and `errored` (files); an
+            `analyze` pass `analyzed`, `loudnessMeasured`, `measureFailed`,
+            `skipped` and `errored`; an `enrich` pass the same tallies as
+            the enrichment status's `lastRun`; an `organize` run `profile`,
+            `moved`, `skipped`, `errored` and `sidecarsMoved`. Absent while
+            running and for kinds that record none. Shapes may grow fields.
 
     AuditEvent:
       type: object
@@ -15007,7 +15074,7 @@ components:
     HealthSummary:
       type: object
       description: The library's metadata health at the last sweep.
-      required: [score, totalItems, evaluatedItems, warmingUp, rules]
+      required: [score, totalItems, evaluatedItems, warmingUp, sweepFailed, rules]
       properties:
         score:
           type: number
@@ -15031,6 +15098,16 @@ components:
           type: string
           format: date-time
           description: When the last sweep finished.
+        sweeping:
+          type: boolean
+          description: >
+            True while a sweep runs, or one an administrator asked for
+            waits to run.
+        sweepFailed:
+          type: boolean
+          description: >
+            True when the last sweep failed, so the numbers are the last
+            landed sweep's (`sweptAt`); false again once a sweep lands.
         rules:
           type: array
           description: Per-rule failure counts, heaviest first.
@@ -15040,7 +15117,7 @@ components:
     HealthRuleCount:
       type: object
       description: One rule's current standing.
-      required: [rule, failing, fixable]
+      required: [rule, failing, fixable, fixing]
       properties:
         rule:
           type: string
@@ -15054,7 +15131,37 @@ components:
           description: Items currently failing the rule.
         fixable:
           type: boolean
-          description: Whether the bulk-fix endpoint automates this rule.
+          description: >
+            Whether the bulk-fix endpoint can fix this rule on this
+            install.
+        fixing:
+          type: boolean
+          description: >
+            True while a fix for the rule is under way: a pass-backed
+            fix from its start until its re-check lands, a task-backed
+            one while its task is queued or running. Another fix for
+            the rule answers `conflict` meanwhile.
+        fixBlocked:
+          type: string
+          description: >
+            Why a rule that has a fix cannot be fixed on this install;
+            absent when `fixable`, and for rules with no fix at all.
+            `needs-contact`: the server has no enrichment contact, which
+            is what lets it ask MusicBrainz and the other free public
+            sources. `needs-lyrics-source`, `needs-art-source`,
+            `needs-genre-source`, `needs-book-source`: no enrichment
+            source the fix could use, for lyrics, artwork, genres, or
+            book metadata, is switched on. `no-managed-library`: no
+            library is managed, so there is no layout for paths to match.
+          enum:
+            [
+              needs-contact,
+              needs-lyrics-source,
+              needs-art-source,
+              needs-genre-source,
+              needs-book-source,
+              no-managed-library,
+            ]
 
     HealthIssuePage:
       type: object
@@ -15138,12 +15245,24 @@ components:
 
     HealthFixResult:
       type: object
-      description: How much fix work was queued.
+      description: >
+        The fix that started: exactly one of `jobPid` and `taskId` names
+        where it can be followed.
       required: [queued]
       properties:
         queued:
           type: integer
-          description: Items queued for fixing.
+          description: Items the fix set out to reach.
+        jobPid:
+          type: string
+          description: >
+            The catalog enrichment job running the fix, for an unscoped
+            fix of an enrichment-backed rule.
+          example: jb-01JZX5N8QW3F4V9T2B7KD3M9R6
+        taskId:
+          type: string
+          description: The `health-fix` tool task running the fix, otherwise.
+          example: tk-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     DuplicateGroups:
       type: object
@@ -17466,10 +17585,13 @@ components:
           type: string
           description: >
             What the row is about, when the event names something: the
-            show for `feed-disabled`, the episode for
-            `episode-downloaded`, the playlist for `playlist-synced`,
-            the review entry (`rv-`) for `import-completed`. Absent for
-            events that are about the server rather than an item.
+            show for `feed-disabled` and `episode-arrived`, the episode
+            for `episode-downloaded`, the playlist for `playlist-synced`,
+            the review entry (`rv-`) for `import-completed`, the catalog
+            job (`jb-`) for `job-finished` and `job-failed`, and the job
+            or the tool task (`tk-`) that ran the fix for
+            `health-fix-finished`. Absent for events that are about the
+            server rather than an item.
           example: pc-01JZX5N8QW3F4V9T2B7KD3M9R6
         createdAt:
           type: string
@@ -22488,8 +22610,22 @@ components:
 
 
             Markers carry only `pid` and hydrate nothing: `review`, `upload`,
-            `task` (refetch that surface), and `entity-state` (an artist or
-            album was starred or rated).
+            `task` (a task was queued, started or ended; refetch that
+            surface), `task-progress` (a task's progress moved; refetch it,
+            though it is not news), `entity-state` (an artist or album was
+            starred or rated), and `job` (the `jb-` catalog job ended, or,
+            for a scan, analysis, enrichment, organize run or emptying the
+            trash, was first seen, crossed another five percent of progress
+            or changed its message, a message marked at most every fifteen
+            seconds; refetch `GET /jobs` or `GET /jobs/{pid}`). `job`
+            reaches administrators only.
+
+
+            `health` carries no `pid`: the library's health moved (a sweep
+            was queued, finished or failed, or a fix started or finished),
+            so re-read
+            `GET /library/health`. It reaches every signed-in account,
+            since every account can read health.
 
 
             Further markers are announcements rather than refetch
@@ -22498,7 +22634,9 @@ components:
             whose scheduled refresh was suspended), `import-completed`
             (`pid` is the review entry that filed itself),
             `episode-downloaded` (`pid` is the episode whose enclosure
-            the server finished fetching), and `playlist-synced`
+            the server finished fetching; it reaches every subscriber
+            of the show, while the notification event reaches only the
+            accounts that asked for the fetch), and `playlist-synced`
             (`pid` is the playlist whose sync run changed its
             membership, or whose scheduled syncing was suspended
             after repeated failures).
@@ -22519,8 +22657,8 @@ components:
         pid:
           type: string
           description: >
-            The item, show, book, or playlist the event is about
-            (absent for `prefs` and `account`).
+            The item, show, book, playlist, or job the event is about
+            (absent for `prefs`, `account`, and `health`).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         playState:
           $ref: "#/components/schemas/PlayState"
@@ -22615,8 +22753,9 @@ components:
           type: string
           description: >
             The operation: `book-merge`, `book-split`, `cue-split`,
-            `acquire`, or `playlist-sync`. A string, not a closed
-            enum.
+            `acquire`, `playlist-sync`, `genre-normalize`, `health-fix`,
+            or an `import-` migration (`import-jellyfin`,
+            `import-subsonic`, ...). A string, not a closed enum.
         state:
           type: string
           description: >
@@ -22655,7 +22794,11 @@ components:
           description: >
             Task-type-specific result detail once the task finishes,
             for example a migration import's match-and-write report.
-            Shapes are documented per task type and may grow fields.
+            Shapes are documented per task type and may grow fields. A
+            `health-fix` task carries `rule` from the moment it is
+            queued, and once it has run `attempted`, `filled`, `failed`
+            (item counts) and `skipped`, an object counting the items
+            left alone by reason (`gone`, `locked`, `no match`, ...).
 
     ToolTasksCleared:
       type: object

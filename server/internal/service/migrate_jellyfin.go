@@ -232,7 +232,7 @@ func (l *Library) runJellyfinImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 	} else if err := client.login(ctx, p.Username, secret); err != nil {
 		return sum, migrateClientErr(err)
 	}
-	prog := newMigrateProgress(l, t)
+	prog := newToolProgress(l, t)
 
 	// Every audio item carrying state, in the order the server lists
 	// them, so the summary and its samples come out deterministic.
@@ -375,7 +375,7 @@ func (l *Library) runJellyfinImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 // walk already done rather than from more requests - a favourite album
 // is named by the songs that say they belong to it - so this pass costs
 // one listing per entity type and no per-group fetches.
-func (l *Library) importJellyfinEntityStars(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, client *jellyfinClient, prog *migrateProgress, walked []jellyfinItem, sum *migrationSummary) error {
+func (l *Library) importJellyfinEntityStars(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, client *jellyfinClient, prog *toolProgress, walked []jellyfinItem, sum *migrationSummary) error {
 	var albums, artists []jellyfinItem
 	if err := client.items(ctx, "MusicAlbum,MusicArtist", url.Values{"Filters": {"IsFavorite"}},
 		func(it jellyfinItem) error {

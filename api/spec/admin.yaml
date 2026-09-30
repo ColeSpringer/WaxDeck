@@ -131,10 +131,10 @@ paths:
         Expect it to be slow. Each file costs a full decode, and where
         `fpcalc` is installed it also costs one subprocess per file, so a
         large library is priced in hours rather than minutes. It is
-        resumable and cancelable like the other catalog jobs, and a file
-        it has already analyzed is not analyzed again until its audio or
-        an analysis algorithm changes, so an interrupted run picks up
-        where it stopped. It never runs automatically after a scan; the
+        resumable: a file it has already analyzed is not analyzed again
+        until its audio or an analysis algorithm changes, so a run cut
+        short picks up where it stopped. It never runs automatically
+        after a scan; the
         `analyze` schedule and this endpoint are the only triggers.
 
         Analysis serializes with itself but not with scans: starting a
@@ -250,8 +250,11 @@ paths:
         Recent server-run catalog jobs (scans, analysis, enrichment,
         organize runs, deletes), newest first. Bounded by `limit`
         rather than cursor-paged (a recent-history window, not a
-        mirrorable list). The live counterpart of the tool task log
-        for engine-side work. Administrators only.
+        mirrorable list), except that a job still running is always
+        listed, first, however many newer jobs have pushed it out of
+        the window. The live counterpart of the tool task log for
+        engine-side work; the `job` sync marker says when to read it
+        again. Administrators only.
       tags: [admin]
       parameters:
         - name: limit
@@ -1371,6 +1374,14 @@ components:
               example: >-
                 streaming from this library is not available yet: the
                 sidecar could not open /srv/media/audiobooks
+            scanStarted:
+              type: boolean
+              description: >
+                Whether creating the library started a scan of every root.
+                False when another catalog job was already running: that
+                job began before this root existed, so the root is indexed
+                by the next scan, which an administrator can start from the
+                rescan endpoint once the running job ends.
       description: A newly created library, with any degradation it left behind.
 
     Libraries:
@@ -1426,7 +1437,10 @@ components:
           example: jb-01JZX5N8QW3F4V9T2B7KD3M9R6
         kind:
           type: string
-          description: What the job does (`scan`, `analyze`, `enrich`, `organize`).
+          description: >
+            What the job does: `scan`, `analyze`, `enrich`, `organize`,
+            `import`, `delete`, `restore`, `empty-trash`, or `purge-trash`.
+            New kinds may appear.
           example: scan
         state:
           type: string
@@ -1448,6 +1462,26 @@ components:
         error:
           type: string
           description: Failure detail for `failed`/`crashed` jobs.
+        startedAt:
+          type: string
+          format: date-time
+          description: When the job started.
+        finishedAt:
+          type: string
+          format: date-time
+          description: When the job reached a terminal state; absent while running.
+        result:
+          type: object
+          additionalProperties: true
+          description: >
+            What a finished job did, once it records a summary: a `scan`
+            reports `filesSeen`, `created`, `updated`, `relinked`,
+            `unchanged`, `missing`, `skipped` and `errored` (files); an
+            `analyze` pass `analyzed`, `loudnessMeasured`, `measureFailed`,
+            `skipped` and `errored`; an `enrich` pass the same tallies as
+            the enrichment status's `lastRun`; an `organize` run `profile`,
+            `moved`, `skipped`, `errored` and `sidecarsMoved`. Absent while
+            running and for kinds that record none. Shapes may grow fields.
 
     AuditEvent:
       type: object

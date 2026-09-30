@@ -18,6 +18,8 @@ part 'health_summary.g.dart';
 /// * [evaluatedItems] - Items the sweep has covered so far.
 /// * [warmingUp] - True until the sweep first covers the library; the score is provisional while true. 
 /// * [sweptAt] - When the last sweep finished.
+/// * [sweeping] - True while a sweep runs, or one an administrator asked for waits to run. 
+/// * [sweepFailed] - True when the last sweep failed, so the numbers are the last landed sweep's (`sweptAt`); false again once a sweep lands. 
 /// * [rules] - Per-rule failure counts, heaviest first.
 @BuiltValue()
 abstract class HealthSummary implements Built<HealthSummary, HealthSummaryBuilder> {
@@ -40,6 +42,14 @@ abstract class HealthSummary implements Built<HealthSummary, HealthSummaryBuilde
   /// When the last sweep finished.
   @BuiltValueField(wireName: r'sweptAt')
   DateTime? get sweptAt;
+
+  /// True while a sweep runs, or one an administrator asked for waits to run. 
+  @BuiltValueField(wireName: r'sweeping')
+  bool? get sweeping;
+
+  /// True when the last sweep failed, so the numbers are the last landed sweep's (`sweptAt`); false again once a sweep lands. 
+  @BuiltValueField(wireName: r'sweepFailed')
+  bool get sweepFailed;
 
   /// Per-rule failure counts, heaviest first.
   @BuiltValueField(wireName: r'rules')
@@ -95,6 +105,18 @@ class _$HealthSummarySerializer implements PrimitiveSerializer<HealthSummary> {
         specifiedType: const FullType(DateTime),
       );
     }
+    if (object.sweeping != null) {
+      yield r'sweeping';
+      yield serializers.serialize(
+        object.sweeping,
+        specifiedType: const FullType(bool),
+      );
+    }
+    yield r'sweepFailed';
+    yield serializers.serialize(
+      object.sweepFailed,
+      specifiedType: const FullType(bool),
+    );
     yield r'rules';
     yield serializers.serialize(
       object.rules,
@@ -158,6 +180,21 @@ class _$HealthSummarySerializer implements PrimitiveSerializer<HealthSummary> {
           ) as DateTime?;
           if (valueDes == null) continue;
           result.sweptAt = valueDes;
+          break;
+        case r'sweeping':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.sweeping = valueDes;
+          break;
+        case r'sweepFailed':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.sweepFailed = valueDes;
           break;
         case r'rules':
           final valueDes = serializers.deserialize(

@@ -141,6 +141,15 @@ func (d *DB) SettingDelete(ctx context.Context, key string) error {
 	return nil
 }
 
+// SettingDeleteIf removes one settings row while it still holds value,
+// so a write that landed since it was read survives.
+func (d *DB) SettingDeleteIf(ctx context.Context, key, value string) error {
+	if _, err := d.w.ExecContext(ctx, `DELETE FROM settings WHERE key = ? AND value = ?`, key, value); err != nil {
+		return fmt.Errorf("db: deleting setting %s: %w", key, err)
+	}
+	return nil
+}
+
 // SettingSet stores one settings value.
 func (d *DB) SettingSet(ctx context.Context, key, value string, ns int64) error {
 	_, err := d.w.ExecContext(ctx, `

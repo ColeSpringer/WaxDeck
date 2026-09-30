@@ -15,7 +15,7 @@ part 'notification.g.dart';
 /// * [event] - The catalog event this row reports.
 /// * [title] - The server's own one-line wording.
 /// * [body] - The server's own detail line.
-/// * [targetPid] - What the row is about, when the event names something: the show for `feed-disabled`, the episode for `episode-downloaded`, the playlist for `playlist-synced`, the review entry (`rv-`) for `import-completed`. Absent for events that are about the server rather than an item. 
+/// * [targetPid] - What the row is about, when the event names something: the show for `feed-disabled` and `episode-arrived`, the episode for `episode-downloaded`, the playlist for `playlist-synced`, the review entry (`rv-`) for `import-completed`, the catalog job (`jb-`) for `job-finished` and `job-failed`, and the job or the tool task (`tk-`) that ran the fix for `health-fix-finished`. Absent for events that are about the server rather than an item. 
 /// * [createdAt] - When the event happened.
 /// * [readAt] - When the row was marked read. Absent while unread.
 @BuiltValue()
@@ -36,7 +36,7 @@ abstract class Notification implements Built<Notification, NotificationBuilder> 
   @BuiltValueField(wireName: r'body')
   String get body;
 
-  /// What the row is about, when the event names something: the show for `feed-disabled`, the episode for `episode-downloaded`, the playlist for `playlist-synced`, the review entry (`rv-`) for `import-completed`. Absent for events that are about the server rather than an item. 
+  /// What the row is about, when the event names something: the show for `feed-disabled` and `episode-arrived`, the episode for `episode-downloaded`, the playlist for `playlist-synced`, the review entry (`rv-`) for `import-completed`, the catalog job (`jb-`) for `job-finished` and `job-failed`, and the job or the tool task (`tk-`) that ran the fix for `health-fix-finished`. Absent for events that are about the server rather than an item. 
   @BuiltValueField(wireName: r'targetPid')
   String? get targetPid;
 

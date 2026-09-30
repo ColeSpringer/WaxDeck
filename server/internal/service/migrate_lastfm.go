@@ -61,7 +61,7 @@ func (l *Library) runLastfmImport(ctx context.Context, t *wdb.ToolTask, uc *User
 		// server's API credentials there is nothing to retry.
 		return sum, fmt.Errorf("%w: configure the server's Last.fm API key first", errToolPermanent)
 	}
-	prog := newMigrateProgress(l, t)
+	prog := newToolProgress(l, t)
 	hist := l.newMigrateHistory(uc, p, &sum)
 
 	if p.History {

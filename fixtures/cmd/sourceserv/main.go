@@ -3,7 +3,10 @@
 // audio at /audio/<id>, synthesized at startup with -generate. It is
 // what the server's -source-stub-url bridge enumerates and fetches, so
 // the playlist-sync scenarios run against a stubbed source instead of a
-// real platform. It holds no state and must never face a real network.
+// real platform. Under /lyrics it is also a custom enrichment provider
+// (docs/custom-provider-api) answering lyrics for one fixture title, so
+// a health fix has a source to run against. It holds no state and must
+// never face a real network.
 //
 //	sourceserv -dir /tmp/source -generate
 package main
@@ -16,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -106,6 +110,23 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/playlist":
 		w.Header().Set("Content-Type", "application/json; charset=utf-8")
 		http.ServeFile(w, r, filepath.Join(s.dir, "playlist.json"))
+	case r.URL.Path == "/lyrics/capabilities":
+		writeJSON(w, map[string]any{"name": "stubtapes-lyrics", "capabilities": []string{"lyrics"}})
+	case r.URL.Path == "/lyrics/enrich" && r.Method == http.MethodPost:
+		var req struct {
+			Wants []string `json:"wants"`
+			Title string   `json:"title"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// One title, so a fix fills one track and leaves the rest failing.
+		if req.Title != lyricsTitle || !slices.Contains(req.Wants, "lyrics") {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		writeJSON(w, map[string]any{"lyrics": map[string]any{"unsynced": "Stubbed lyrics for " + lyricsTitle}})
 	case strings.HasPrefix(r.URL.Path, "/audio/"):
 		id := strings.TrimPrefix(r.URL.Path, "/audio/")
 		if strings.ContainsAny(id, "/\\.") {
@@ -116,6 +137,16 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, filepath.Join(s.dir, id+".mp3"))
 	default:
 		http.NotFound(w, r)
+	}
+}
+
+// lyricsTitle is the fixture track the stub provider knows lyrics for.
+const lyricsTitle = "Alpha Song"
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		log.Printf("sourceserv: writing a response: %v", err)
 	}
 }
 

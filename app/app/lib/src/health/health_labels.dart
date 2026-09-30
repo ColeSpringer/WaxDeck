@@ -52,3 +52,16 @@ String? _byToken(AppLocalizations l, String token) => switch (token) {
   'write-unsynced' => l.healthWriteUnsynced,
   _ => null,
 };
+
+/// What an install lacks to fix a rule, from the summary's code. A code
+/// this build does not know still says the fix cannot run.
+String healthFixBlockedReason(AppLocalizations l10n, String code) =>
+    switch (code) {
+      'needs-contact' => l10n.healthFixBlockedContact,
+      'needs-lyrics-source' => l10n.healthFixBlockedLyricsSource,
+      'needs-art-source' => l10n.healthFixBlockedArtSource,
+      'needs-genre-source' => l10n.healthFixBlockedGenreSource,
+      'needs-book-source' => l10n.healthFixBlockedBookSource,
+      'no-managed-library' => l10n.healthFixBlockedNoManaged,
+      _ => l10n.healthFixBlockedOther,
+    };

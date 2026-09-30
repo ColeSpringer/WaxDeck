@@ -934,9 +934,27 @@
   "@settingsNotifyTargetsError": {
     "description": "Shown where the notification target rows would be when the read failed."
   },
+  "settingsNotifyTestDelivered": "Test delivered",
+  "@settingsNotifyTestDelivered": {
+    "description": "Message when a test notification reached its destination."
+  },
+  "settingsNotifyTestFailed": "Test failed: {reason}",
+  "@settingsNotifyTestFailed": {
+    "description": "Message when a test notification could not be delivered. {reason} is the server's own words about the failure.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "connection refused"
+      }
+    }
+  },
   "settingsNotifyTestQueued": "Test queued; the outcome shows on the target shortly",
   "@settingsNotifyTestQueued": {
     "description": "Snackbar after a test notification has been asked for."
+  },
+  "settingsNotifyTestUnanswered": "No answer from the test yet; the target shows it when it lands",
+  "@settingsNotifyTestUnanswered": {
+    "description": "Message when a test notification's outcome did not arrive within half a minute; the target's status line shows it once it does."
   },
   "settingsNotifyUnifiedPushHelp": "Usually registered by the app through its distributor",
   "@settingsNotifyUnifiedPushHelp": {

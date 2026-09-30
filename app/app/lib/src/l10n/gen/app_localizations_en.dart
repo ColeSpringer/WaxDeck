@@ -825,6 +825,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String adminLibraryCreatedNoScan(String name) {
+    return 'Library \"$name\" created. Another catalog job is running, so the next scan will index it.';
+  }
+
+  @override
   String get adminLibraryHoldsHelp => 'What kind of content the root carries';
 
   @override
@@ -2411,6 +2416,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bellSurfaceDownloads => 'Downloads';
 
   @override
+  String get bellSurfaceHealth => 'Library health';
+
+  @override
   String get bellSurfaceImports => 'Imports';
 
   @override
@@ -2856,6 +2864,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get commonOpenReview => 'Open review';
+
+  @override
+  String get commonOpenTasks => 'Tasks';
 
   @override
   String get commonRetry => 'Retry';
@@ -3580,8 +3591,48 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get healthFixBlockedArtSource =>
+      'Needs its artwork sources switched on in Enrichment.';
+
+  @override
+  String get healthFixBlockedBookSource => 'Needs a book metadata provider.';
+
+  @override
+  String get healthFixBlockedContact =>
+      'Needs an enrichment contact, which lets this server ask the free public sources.';
+
+  @override
+  String get healthFixBlockedGenreSource =>
+      'Needs a genre source, MusicBrainz or ListenBrainz, switched on in Enrichment.';
+
+  @override
+  String get healthFixBlockedLyricsSource =>
+      'Needs a lyrics source switched on in Enrichment.';
+
+  @override
+  String get healthFixBlockedNoManaged =>
+      'Needs a managed library: with none, there is no layout for paths to match.';
+
+  @override
+  String get healthFixBlockedOther => 'This server cannot run this fix yet.';
+
+  @override
+  String get healthFixBusy =>
+      'An enrichment pass is already running. Fix this when it ends.';
+
+  @override
   String healthFixRule(String rule) {
     return 'Fix $rule';
+  }
+
+  @override
+  String healthFixRunning(String rule) {
+    return 'A fix for $rule is already running';
+  }
+
+  @override
+  String healthFixStarted(String rule) {
+    return 'Fixing $rule';
   }
 
   @override
@@ -3692,17 +3743,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'File path does not match the organize profile';
 
   @override
-  String healthQueuedItems(int count) {
-    String _temp0 = intl.Intl.pluralLogic(
-      count,
-      locale: localeName,
-      other: 'Queued $count items',
-      one: 'Queued 1 item',
-    );
-    return '$_temp0';
-  }
-
-  @override
   String get healthResolveAction => 'Resolve';
 
   @override
@@ -3755,6 +3795,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get healthSmallArt => 'Low-resolution cover art';
+
+  @override
+  String get healthSweepFailed =>
+      'The last sweep failed, so these numbers are from an earlier one';
 
   @override
   String get healthSweepNow => 'Sweep now';
@@ -5422,11 +5466,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notifBackupFailedTitle => 'Backup failed';
 
   @override
-  String get notifEpisodeDownloadedHelp =>
-      'A new episode of a subscribed show finished downloading.';
+  String get notifEpisodeArrivedHelp =>
+      'A subscribed show published a new episode.';
 
   @override
-  String get notifEpisodeDownloadedTitle => 'New episode downloaded';
+  String get notifEpisodeArrivedTitle => 'New episode';
+
+  @override
+  String get notifEpisodeDownloadedHelp =>
+      'An episode you asked for finished downloading.';
+
+  @override
+  String get notifEpisodeDownloadedTitle => 'Episode fetched';
 
   @override
   String get notifFeedDisabledHelp =>
@@ -5436,11 +5487,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notifFeedDisabledTitle => 'Feed switched off';
 
   @override
+  String get notifHealthFixFinishedHelp =>
+      'A library health fix you started finished.';
+
+  @override
+  String get notifHealthFixFinishedTitle => 'Health fix finished';
+
+  @override
   String get notifImportCompletedHelp =>
       'An upload or acquisition identified confidently enough to file itself, with no review.';
 
   @override
   String get notifImportCompletedTitle => 'Filed without review';
+
+  @override
+  String get notifJobFailedHelp => 'A library job you started failed.';
+
+  @override
+  String get notifJobFailedTitle => 'Library job failed';
+
+  @override
+  String get notifJobFinishedHelp =>
+      'A library job you started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash.';
+
+  @override
+  String get notifJobFinishedTitle => 'Library job finished';
 
   @override
   String get notifPlaylistSyncedHelp =>
@@ -9740,8 +9811,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'Could not load notification targets';
 
   @override
+  String get settingsNotifyTestDelivered => 'Test delivered';
+
+  @override
+  String settingsNotifyTestFailed(String reason) {
+    return 'Test failed: $reason';
+  }
+
+  @override
   String get settingsNotifyTestQueued =>
       'Test queued; the outcome shows on the target shortly';
+
+  @override
+  String get settingsNotifyTestUnanswered =>
+      'No answer from the test yet; the target shows it when it lands';
 
   @override
   String get settingsNotifyUnifiedPushHelp =>
@@ -10942,6 +11025,66 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolsClearFinished => 'Clear finished';
 
   @override
+  String toolsCountAdded(int count) {
+    return 'added $count';
+  }
+
+  @override
+  String toolsCountAnalyzed(int count) {
+    return 'analyzed $count';
+  }
+
+  @override
+  String toolsCountCovers(int count) {
+    return 'covers $count';
+  }
+
+  @override
+  String toolsCountErrored(int count) {
+    return 'errored $count';
+  }
+
+  @override
+  String toolsCountFailed(int count) {
+    return 'failed $count';
+  }
+
+  @override
+  String toolsCountFilledOf(int filled, int attempted) {
+    return 'filled $filled of $attempted';
+  }
+
+  @override
+  String toolsCountLyrics(int count) {
+    return 'lyrics $count';
+  }
+
+  @override
+  String toolsCountMissing(int count) {
+    return 'missing $count';
+  }
+
+  @override
+  String toolsCountMoved(int count) {
+    return 'moved $count';
+  }
+
+  @override
+  String toolsCountPictures(int count) {
+    return 'pictures $count';
+  }
+
+  @override
+  String toolsCountSkipped(int count) {
+    return 'skipped $count';
+  }
+
+  @override
+  String toolsCountUpdated(int count) {
+    return 'updated $count';
+  }
+
+  @override
   String get toolsDismiss => 'Dismiss';
 
   @override
@@ -10958,6 +11101,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String toolsItemsProduced(int count) {
     return '$count items produced · tap to open';
   }
+
+  @override
+  String get toolsJobAnalyze => 'Audio analysis';
+
+  @override
+  String get toolsJobDelete => 'Delete';
+
+  @override
+  String get toolsJobEmptyTrash => 'Emptying the trash';
+
+  @override
+  String get toolsJobEnrich => 'Enrichment';
+
+  @override
+  String get toolsJobImport => 'Import';
+
+  @override
+  String get toolsJobOrganize => 'Organize';
+
+  @override
+  String get toolsJobPurgeTrash => 'Purge from the trash';
+
+  @override
+  String get toolsJobRestore => 'Restore';
+
+  @override
+  String get toolsJobScan => 'Library scan';
+
+  @override
+  String get toolsJobsTitle => 'Library jobs';
 
   @override
   String get toolsLoadError => 'Could not load tool tasks';
@@ -10980,6 +11153,12 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get toolsStateCanceled => 'Canceled';
+
+  @override
+  String get toolsStateCrashed => 'Crashed';
 
   @override
   String get toolsStateDone => 'Done';
@@ -11040,6 +11219,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get toolsTaskCueSplit => 'CUE split';
 
   @override
+  String get toolsTaskGenreNormalize => 'Genre clean-up';
+
+  @override
+  String toolsTaskHealthFix(String rule) {
+    return 'Fix: $rule';
+  }
+
+  @override
   String toolsTaskImportFrom(String source) {
     return 'Import from $source';
   }
@@ -11057,6 +11244,9 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0';
   }
+
+  @override
+  String get toolsTasksSection => 'Tool tasks';
 
   @override
   String get toolsTitle => 'Tool tasks';

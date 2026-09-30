@@ -386,7 +386,7 @@ type subsonicSongState struct {
 func (l *Library) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
 	sum := migrationSummary{Source: p.Source, DryRun: p.DryRun, Samples: migrationSamples{Unmatched: []string{}}}
 	client := newSubsonicClient(p.ServerURL, p.Username, secret)
-	prog := newMigrateProgress(l, t)
+	prog := newToolProgress(l, t)
 
 	cache := newAlbumSongCache(client)
 
@@ -597,7 +597,7 @@ func (l *Library) runSubsonicImport(ctx context.Context, t *wdb.ToolTask, uc *Us
 // which the resolve ladder already matches, and the matched item's own
 // entity handles name the album or artist to star. The extra requests
 // are per starred group, not per library item.
-func (l *Library) importSubsonicEntityStars(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, client *subsonicClient, prog *migrateProgress, starred subsonicStarred, sum *migrationSummary, cache *albumSongCache) error {
+func (l *Library) importSubsonicEntityStars(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, client *subsonicClient, prog *toolProgress, starred subsonicStarred, sum *migrationSummary, cache *albumSongCache) error {
 	// resolveMember walks candidate source albums, and every song
 	// within one, until the resolve ladder matches a local item, which
 	// is the item whose entity handles name what to star.

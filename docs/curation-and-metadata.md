@@ -421,9 +421,29 @@ file rules (corrupt audio, tags lagging the catalog, legacy-only tags,
 a misstated length) look at every part of a multi-file book, so one
 damaged part flags the book. Items marked unofficial are exempt from
 the rules that assume a canonical release.
-Rules with an automated fix can be fixed in bulk; fixes run in the
-background at provider-etiquette pace. A fresh install shows a
-warming-up state with honest progress instead of a wall of red.
+An administrator can fix a rule in bulk where this install has what
+the fix needs; a rule it cannot fix says what is missing: the
+enrichment contact, a lyrics, artwork, genre or book source, or a
+managed library. Fixing missing art, lyrics, genres, narrators or
+ASINs across the library runs the catalog's enrichment pass as a job,
+with the phases that fill them forced to re-ask every item (a source
+for either the album's or the release group's cover is enough for
+missing art); the rest of the pass runs as a scheduled one would,
+asking whatever lookups are pending (fixing genres re-asks MusicBrainz
+about every album). Fixing named items, paths that disagree with the
+template, or tags that lag the catalog runs a health-fix task that
+works item by item, on a worker of its own so a long fix holds up no
+other task. Either is listed in Tasks while it runs. When it ends, the
+items it reached are re-checked (for a pass, every item failing the
+rule), and whoever started it gets a notification saying what it
+filled, counting an item only where the rule now passes, or why it
+failed; the score itself refreshes at the next full sweep.
+The rule reads as being fixed, on every administrator's screen, from
+the start until that re-check lands, and a second fix is refused
+meanwhile. A sweep asked for by hand shows as running until it lands;
+one that fails says so, and the numbers stay the last landed sweep's.
+A fresh install shows a warming-up state with honest progress instead
+of a wall of red.
 
 ## Duplicates and upgrades
 

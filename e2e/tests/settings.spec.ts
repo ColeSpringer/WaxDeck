@@ -68,7 +68,10 @@ test('About reports both versions', async ({ app }) => {
 
 test('an account setting reaches the preference document', async ({ app }) => {
   await app.nav.enter('settings');
-  await app.settings.openSection('playback', 'crossfade');
+  // Opened on its first row: crossfade sits past the part of the list
+  // flutter has built, so it has no node to wait on until `choose`
+  // wheels to it.
+  await app.settings.openSection('playback', 'skip-back');
 
   await app.settings.choose('crossfade', app.settings.option('crossfade', 6));
   await expect

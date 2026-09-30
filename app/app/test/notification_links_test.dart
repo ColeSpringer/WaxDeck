@@ -42,7 +42,11 @@ void main() {
     'import-completed': WaxRoute.review,
     'feed-disabled': WaxRoute.podcasts,
     'episode-downloaded': WaxRoute.podcasts,
+    'episode-arrived': WaxRoute.podcasts,
     'playlist-synced': WaxRoute.playlists,
+    'job-finished': WaxRoute.tasks,
+    'job-failed': WaxRoute.tasks,
+    'health-fix-finished': WaxRoute.health,
   };
 
   test('the server links to locations this app answers', () {

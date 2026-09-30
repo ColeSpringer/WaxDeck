@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -147,12 +148,63 @@ func (l *Library) syncShow(ctx context.Context, showPID model.PID, origin syncOr
 		l.log.Warn("recording feed success", "show", string(showPID), "err", err)
 	}
 	if res.EpisodesAdded > 0 {
-		l.autoDownloadArrivals(ctx, showPID, started, res.EpisodesAdded)
+		l.handleArrivals(ctx, pod, started, res.EpisodesAdded)
 		if err := l.db.EnqueueRetention(ctx, string(showPID), now); err != nil {
 			l.log.Warn("queuing retention", "show", string(showPID), "err", err)
 		}
 	}
 	return res.EpisodesAdded, nil
+}
+
+// handleArrivals tells subscribers what a sync added, those the catalog
+// created at or after since, and queues what their auto-download policies
+// admit, from one read of the subscribers and of the listing.
+func (l *Library) handleArrivals(ctx context.Context, pod *model.Podcast, since int64, added int) {
+	subs, err := l.db.SubscribersByShow(ctx, string(pod.PID))
+	if err != nil {
+		l.log.Warn("listing subscribers", "show", string(pod.PID), "err", err)
+		return
+	}
+	if len(subs) == 0 {
+		return
+	}
+	// The top rows, unless an arrival is dated among older episodes.
+	eps, err := l.lib.Podcasts().Episodes(ctx, pod.PID, added)
+	if err == nil && !allCreatedSince(eps, since) {
+		eps, err = l.lib.Podcasts().Episodes(ctx, pod.PID, 0)
+	}
+	if err != nil {
+		l.log.Warn("listing new episodes", "show", string(pod.PID), "err", err)
+		return
+	}
+	l.notifyArrivals(ctx, pod, subs, eps, since)
+	l.autoDownloadArrivals(ctx, subs, eps, since)
+}
+
+// notifyArrivals tells every subscriber of a show what a sync added,
+// once per sync, whether or not they download automatically. Best effort
+// by design.
+func (l *Library) notifyArrivals(ctx context.Context, pod *model.Podcast, subs []wdb.Subscription, eps []*model.Episode, since int64) {
+	var arrived []*model.Episode
+	for _, ep := range eps {
+		if ep.CreatedAt >= since {
+			arrived = append(arrived, ep)
+		}
+	}
+	if len(arrived) == 0 {
+		return
+	}
+	// Newest first, as the listing is: the body leads with the latest.
+	body := arrived[0].Title
+	if len(arrived) > 1 {
+		body = fmt.Sprintf("%s and %d more", arrived[0].Title, len(arrived)-1)
+	}
+	userIDs := make([]string, 0, len(subs))
+	for _, s := range subs {
+		userIDs = append(userIDs, s.UserID)
+	}
+	l.EmitNotificationFor(ctx, "episode-arrived", "New episode: "+cmp.Or(pod.Title, "podcast"), body,
+		apiPID(PrefixPodcast, pod.PID), userIDs)
 }
 
 // syncWithoutVerdict stamps a sync that says nothing about the feed, so
@@ -225,12 +277,7 @@ func fromCatalogStore(err error) bool {
 // subscribers, so one subscriber wanting an episode is enough to fetch
 // the shared file, and a filter narrows what that subscriber asks for
 // rather than what everyone else gets.
-func (l *Library) autoDownloadArrivals(ctx context.Context, showPID model.PID, since int64, added int) {
-	subs, err := l.db.SubscribersByShow(ctx, string(showPID))
-	if err != nil {
-		l.log.Warn("listing subscribers", "show", string(showPID), "err", err)
-		return
-	}
+func (l *Library) autoDownloadArrivals(ctx context.Context, subs []wdb.Subscription, eps []*model.Episode, since int64) {
 	filters := make([]EpisodeFilter, 0, len(subs))
 	for _, s := range subs {
 		if s.AutoDownload {
@@ -238,16 +285,6 @@ func (l *Library) autoDownloadArrivals(ctx context.Context, showPID model.PID, s
 		}
 	}
 	if len(filters) == 0 {
-		return
-	}
-	// Arrivals are usually the newest by date, and then the top rows are
-	// all of them; one dated among older episodes takes the whole show.
-	eps, err := l.lib.Podcasts().Episodes(ctx, showPID, added)
-	if err == nil && !allCreatedSince(eps, since) {
-		eps, err = l.lib.Podcasts().Episodes(ctx, showPID, 0)
-	}
-	if err != nil {
-		l.log.Warn("listing new episodes", "show", string(showPID), "err", err)
 		return
 	}
 	keep := l.unionRetention(subs)
@@ -264,7 +301,7 @@ func (l *Library) autoDownloadArrivals(ctx context.Context, showPID model.PID, s
 		if ep.CreatedAt < since || !anyFilterAdmits(filters, ep.Title) {
 			continue
 		}
-		if err := l.db.EnqueueFetch(ctx, string(ep.PID), "auto", now); err != nil {
+		if err := l.db.EnqueueFetch(ctx, string(ep.PID), "", now); err != nil {
 			l.log.Warn("queuing auto download", "episode", string(ep.PID), "err", err)
 		}
 		kept++
@@ -315,7 +352,9 @@ func (l *Library) DrainFetchQueue(ctx context.Context) bool {
 		}
 		return true
 	}
-	if err := l.db.CompleteFetch(ctx, row.Key); err != nil {
+	// Everyone who asked, whenever they did: asking while it ran counts.
+	requesters, err := l.db.FinishFetch(ctx, row.Key)
+	if err != nil && !errors.Is(err, wdb.ErrNotFound) {
 		l.log.Warn("completing fetch", "episode", row.Key, "err", err)
 	}
 	l.log.Info("episode fetched", "episode", row.Key, "bytes", res.Bytes)
@@ -328,36 +367,32 @@ func (l *Library) DrainFetchQueue(ctx context.Context) bool {
 	// A fresh spoken-word file wants a silence map; queue analysis by
 	// essence so a replayed fetch never duplicates the work.
 	l.enqueueAnalysisForItem(ctx, model.PID(row.Key))
-	l.notifyEpisodeDownloaded(ctx, model.PID(row.Key))
+	l.notifyEpisodeDownloaded(ctx, model.PID(row.Key), requesters)
 	return true
 }
 
-// notifyEpisodeDownloaded fans a finished download out to the show's
-// subscribers and the admin relay. Best effort by design.
-func (l *Library) notifyEpisodeDownloaded(ctx context.Context, episodePID model.PID) {
+// notifyEpisodeDownloaded files a finished download in the inbox of each
+// account that asked for it, and tells every subscriber's client the
+// episode is downloaded now. An automatic fetch files nothing: its
+// arrival was the news. Best effort by design.
+func (l *Library) notifyEpisodeDownloaded(ctx context.Context, episodePID model.PID, requesters []string) {
 	det, err := l.lib.Podcasts().Episode(ctx, episodePID)
 	if err != nil {
 		return
+	}
+	apiEpisode := apiPID(PrefixEpisode, det.Episode.PID)
+	if len(requesters) > 0 {
+		l.EmitNotificationFor(ctx, "episode-downloaded", "Episode fetched: "+det.Episode.Title,
+			cmp.Or(det.Episode.PodcastTitle, "podcast"), apiEpisode, requesters)
 	}
 	subs, err := l.db.SubscribersByShow(ctx, string(det.Episode.PodcastPID))
 	if err != nil {
 		l.log.Warn("reading subscribers for notification", "err", err)
 		return
 	}
-	userIDs := make([]string, 0, len(subs))
+	// The pid is the episode, so a client's row flips.
 	for _, s := range subs {
-		userIDs = append(userIDs, s.UserID)
-	}
-	show := det.Episode.PodcastTitle
-	if show == "" {
-		show = "podcast"
-	}
-	l.EmitNotificationFor(ctx, "episode-downloaded", "New episode: "+show, det.Episode.Title,
-		apiPID(PrefixEpisode, det.Episode.PID), userIDs)
-	// The same news to whoever is running a client; the pid is the
-	// episode so the row opens it.
-	for _, uid := range userIDs {
-		l.emitUserEvent(ctx, uid, eventEpisodeDownloaded, apiPID(PrefixEpisode, det.Episode.PID))
+		l.emitUserEvent(ctx, s.UserID, eventEpisodeDownloaded, apiEpisode)
 	}
 }
 

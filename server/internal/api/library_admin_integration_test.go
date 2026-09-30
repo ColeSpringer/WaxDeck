@@ -23,9 +23,12 @@ func TestCreateLibraryRuntime(t *testing.T) {
 	if resp.StatusCode != 201 {
 		t.Fatalf("create library status = %d, want 201", resp.StatusCode)
 	}
-	lib := decode[Library](t, resp)
+	lib := decode[LibraryCreated](t, resp)
 	if lib.Name != "extra" {
 		t.Fatalf("created name = %q, want extra", lib.Name)
+	}
+	if lib.ScanStarted == nil || !*lib.ScanStarted {
+		t.Fatalf("scanStarted = %v with nothing else running, want true", lib.ScanStarted)
 	}
 	if lib.Media == nil || *lib.Media != "music" {
 		t.Fatalf("created media = %v, want music", lib.Media)

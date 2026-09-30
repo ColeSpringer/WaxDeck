@@ -18,8 +18,13 @@ part 'library_created.g.dart';
 /// * [path] - Absolute filesystem path of the root, for the administrative surface that manages it. Absent where the catalog cannot render the stored path as text (roots on non-UTF8 filesystems are stored as raw bytes). 
 /// * [itemCount] - Playable items the catalog holds under this root. Present only where the caller asked for counts, and counted at read time, so it lags a running scan. 
 /// * [streamingWarning] - Present when the library exists but streaming from it does not work yet, saying what an administrator still has to do. Creating a root reconciles the WaxFlow sidecar so it serves the same directory; where that cannot happen (a sidecar too old to reload, a path it cannot open) browsing, downloading, and direct playback still work and streaming waits for a sidecar restart. Absent means streaming works now. 
+/// * [scanStarted] - Whether creating the library started a scan of every root. False when another catalog job was already running: that job began before this root existed, so the root is indexed by the next scan, which an administrator can start from the rescan endpoint once the running job ends. 
 @BuiltValue()
 abstract class LibraryCreated implements ModelLibrary, Built<LibraryCreated, LibraryCreatedBuilder> {
+  /// Whether creating the library started a scan of every root. False when another catalog job was already running: that job began before this root existed, so the root is indexed by the next scan, which an administrator can start from the rescan endpoint once the running job ends. 
+  @BuiltValueField(wireName: r'scanStarted')
+  bool? get scanStarted;
+
   /// Present when the library exists but streaming from it does not work yet, saying what an administrator still has to do. Creating a root reconciles the WaxFlow sidecar so it serves the same directory; where that cannot happen (a sidecar too old to reload, a path it cannot open) browsing, downloading, and direct playback still work and streaming waits for a sidecar restart. Absent means streaming works now. 
   @BuiltValueField(wireName: r'streamingWarning')
   String? get streamingWarning;
@@ -47,11 +52,6 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
     LibraryCreated object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
-    yield r'name';
-    yield serializers.serialize(
-      object.name,
-      specifiedType: const FullType(String),
-    );
     if (object.path != null) {
       yield r'path';
       yield serializers.serialize(
@@ -59,6 +59,18 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
         specifiedType: const FullType(String),
       );
     }
+    if (object.scanStarted != null) {
+      yield r'scanStarted';
+      yield serializers.serialize(
+        object.scanStarted,
+        specifiedType: const FullType(bool),
+      );
+    }
+    yield r'name';
+    yield serializers.serialize(
+      object.name,
+      specifiedType: const FullType(String),
+    );
     yield r'pid';
     yield serializers.serialize(
       object.pid,
@@ -108,13 +120,6 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
       final key = serializedList[i] as String;
       final value = serializedList[i + 1];
       switch (key) {
-        case r'name':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(String),
-          ) as String;
-          result.name = valueDes;
-          break;
         case r'path':
           final valueDes = serializers.deserialize(
             value,
@@ -122,6 +127,21 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
           ) as String?;
           if (valueDes == null) continue;
           result.path = valueDes;
+          break;
+        case r'scanStarted':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.scanStarted = valueDes;
+          break;
+        case r'name':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.name = valueDes;
           break;
         case r'pid':
           final valueDes = serializers.deserialize(

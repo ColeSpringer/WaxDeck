@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -14,7 +15,9 @@ part 'health_rule_count.g.dart';
 /// * [rule] - The rule name.
 /// * [label] - Human-readable rule label.
 /// * [failing] - Items currently failing the rule.
-/// * [fixable] - Whether the bulk-fix endpoint automates this rule.
+/// * [fixable] - Whether the bulk-fix endpoint can fix this rule on this install. 
+/// * [fixing] - True while a fix for the rule is under way: a pass-backed fix from its start until its re-check lands, a task-backed one while its task is queued or running. Another fix for the rule answers `conflict` meanwhile. 
+/// * [fixBlocked] - Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match. 
 @BuiltValue()
 abstract class HealthRuleCount implements Built<HealthRuleCount, HealthRuleCountBuilder> {
   /// The rule name.
@@ -29,9 +32,18 @@ abstract class HealthRuleCount implements Built<HealthRuleCount, HealthRuleCount
   @BuiltValueField(wireName: r'failing')
   int get failing;
 
-  /// Whether the bulk-fix endpoint automates this rule.
+  /// Whether the bulk-fix endpoint can fix this rule on this install. 
   @BuiltValueField(wireName: r'fixable')
   bool get fixable;
+
+  /// True while a fix for the rule is under way: a pass-backed fix from its start until its re-check lands, a task-backed one while its task is queued or running. Another fix for the rule answers `conflict` meanwhile. 
+  @BuiltValueField(wireName: r'fixing')
+  bool get fixing;
+
+  /// Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match. 
+  @BuiltValueField(wireName: r'fixBlocked')
+  HealthRuleCountFixBlockedEnum? get fixBlocked;
+  // enum fixBlockedEnum {  needs-contact,  needs-lyrics-source,  needs-art-source,  needs-genre-source,  needs-book-source,  no-managed-library,  };
 
   HealthRuleCount._();
 
@@ -78,6 +90,18 @@ class _$HealthRuleCountSerializer implements PrimitiveSerializer<HealthRuleCount
       object.fixable,
       specifiedType: const FullType(bool),
     );
+    yield r'fixing';
+    yield serializers.serialize(
+      object.fixing,
+      specifiedType: const FullType(bool),
+    );
+    if (object.fixBlocked != null) {
+      yield r'fixBlocked';
+      yield serializers.serialize(
+        object.fixBlocked,
+        specifiedType: const FullType(HealthRuleCountFixBlockedEnum),
+      );
+    }
   }
 
   @override
@@ -130,6 +154,21 @@ class _$HealthRuleCountSerializer implements PrimitiveSerializer<HealthRuleCount
           ) as bool;
           result.fixable = valueDes;
           break;
+        case r'fixing':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.fixing = valueDes;
+          break;
+        case r'fixBlocked':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(HealthRuleCountFixBlockedEnum),
+          ) as HealthRuleCountFixBlockedEnum?;
+          if (valueDes == null) continue;
+          result.fixBlocked = valueDes;
+          break;
         default:
           unhandled.add(key);
           unhandled.add(value);
@@ -159,4 +198,30 @@ class _$HealthRuleCountSerializer implements PrimitiveSerializer<HealthRuleCount
   }
 }
 
+
+/// Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match. 
+class HealthRuleCountFixBlockedEnum extends EnumClass {
+
+  @BuiltValueEnumConst(wireName: r'needs-contact')
+  static const HealthRuleCountFixBlockedEnum needsContact = _$healthRuleCountFixBlockedEnum_needsContact;
+  @BuiltValueEnumConst(wireName: r'needs-lyrics-source')
+  static const HealthRuleCountFixBlockedEnum needsLyricsSource = _$healthRuleCountFixBlockedEnum_needsLyricsSource;
+  @BuiltValueEnumConst(wireName: r'needs-art-source')
+  static const HealthRuleCountFixBlockedEnum needsArtSource = _$healthRuleCountFixBlockedEnum_needsArtSource;
+  @BuiltValueEnumConst(wireName: r'needs-genre-source')
+  static const HealthRuleCountFixBlockedEnum needsGenreSource = _$healthRuleCountFixBlockedEnum_needsGenreSource;
+  @BuiltValueEnumConst(wireName: r'needs-book-source')
+  static const HealthRuleCountFixBlockedEnum needsBookSource = _$healthRuleCountFixBlockedEnum_needsBookSource;
+  @BuiltValueEnumConst(wireName: r'no-managed-library')
+  static const HealthRuleCountFixBlockedEnum noManagedLibrary = _$healthRuleCountFixBlockedEnum_noManagedLibrary;
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const HealthRuleCountFixBlockedEnum unknownDefaultOpenApi = _$healthRuleCountFixBlockedEnum_unknownDefaultOpenApi;
+
+  static Serializer<HealthRuleCountFixBlockedEnum> get serializer => _$healthRuleCountFixBlockedEnumSerializer;
+
+  const HealthRuleCountFixBlockedEnum._(String name): super(name);
+
+  static BuiltSet<HealthRuleCountFixBlockedEnum> get values => _$healthRuleCountFixBlockedEnumValues;
+  static HealthRuleCountFixBlockedEnum valueOf(String name) => _$healthRuleCountFixBlockedEnumValueOf(name);
+}
 

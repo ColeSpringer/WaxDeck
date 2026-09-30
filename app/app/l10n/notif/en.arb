@@ -17,13 +17,21 @@
   "@notifBackupFailedTitle": {
     "description": "Switch label for the `backup-failed` notification."
   },
-  "notifEpisodeDownloadedHelp": "A new episode of a subscribed show finished downloading.",
-  "@notifEpisodeDownloadedHelp": {
-    "description": "What the `episode-downloaded` notification is about, drawn under its switch."
+  "notifEpisodeArrivedHelp": "A subscribed show published a new episode.",
+  "@notifEpisodeArrivedHelp": {
+    "description": "What the new-episode notification is about, in a delivery target's event checklist."
   },
-  "notifEpisodeDownloadedTitle": "New episode downloaded",
+  "notifEpisodeArrivedTitle": "New episode",
+  "@notifEpisodeArrivedTitle": {
+    "description": "Heading of the notification that a subscribed show published new episodes, and its name in a delivery target's event checklist."
+  },
+  "notifEpisodeDownloadedHelp": "An episode you asked for finished downloading.",
+  "@notifEpisodeDownloadedHelp": {
+    "description": "What the episode-fetched notification is about, in a delivery target's event checklist."
+  },
+  "notifEpisodeDownloadedTitle": "Episode fetched",
   "@notifEpisodeDownloadedTitle": {
-    "description": "Switch label for the `episode-downloaded` notification."
+    "description": "Heading of the notification that an episode the reader asked to download finished downloading, and its name in a delivery target's event checklist."
   },
   "notifFeedDisabledHelp": "A subscribed feed kept failing and was disabled.",
   "@notifFeedDisabledHelp": {
@@ -33,6 +41,14 @@
   "@notifFeedDisabledTitle": {
     "description": "Switch label for the `feed-disabled` notification."
   },
+  "notifHealthFixFinishedHelp": "A library health fix you started finished.",
+  "@notifHealthFixFinishedHelp": {
+    "description": "What the health-fix-finished notification is about, in a delivery target's event checklist."
+  },
+  "notifHealthFixFinishedTitle": "Health fix finished",
+  "@notifHealthFixFinishedTitle": {
+    "description": "Heading of the notification that a library health fix the reader started finished. The line under it says what it filled."
+  },
   "notifImportCompletedHelp": "An upload or acquisition identified confidently enough to file itself, with no review.",
   "@notifImportCompletedHelp": {
     "description": "What the `import-completed` notification is about, drawn under its switch."
@@ -40,6 +56,22 @@
   "notifImportCompletedTitle": "Filed without review",
   "@notifImportCompletedTitle": {
     "description": "Switch label for the `import-completed` notification."
+  },
+  "notifJobFailedHelp": "A library job you started failed.",
+  "@notifJobFailedHelp": {
+    "description": "What the job-failed notification is about, in a delivery target's event checklist."
+  },
+  "notifJobFailedTitle": "Library job failed",
+  "@notifJobFailedTitle": {
+    "description": "Heading of the notification that a library job the reader started failed. The line under it says which and why."
+  },
+  "notifJobFinishedHelp": "A library job you started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash.",
+  "@notifJobFinishedHelp": {
+    "description": "What the job-finished notification is about, in a delivery target's event checklist."
+  },
+  "notifJobFinishedTitle": "Library job finished",
+  "@notifJobFinishedTitle": {
+    "description": "Heading of the notification that a library job the reader started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash. The line under it says which and what it did."
   },
   "notifPlaylistSyncedHelp": "A synced playlist pulled in changes from its source, or its syncing kept failing and was suspended.",
   "@notifPlaylistSyncedHelp": {

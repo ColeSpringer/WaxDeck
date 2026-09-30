@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
+import '../admin/admin_providers.dart';
 import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
 import '../books/books_controller.dart';
@@ -11,6 +12,7 @@ import '../books/series_controller.dart';
 import '../books/series_merge.dart';
 import '../connect/connect_providers.dart';
 import '../downloads/downloads_controller.dart';
+import '../health/health_controller.dart';
 import '../home/home_shelves.dart';
 import '../metadata/metadata_controller.dart';
 import '../player/entity_play_state_controller.dart';
@@ -25,7 +27,7 @@ import '../review/review_controller.dart';
 import '../settings/prefs_controller.dart';
 import '../shell/adaptive_shell.dart';
 import '../shell/lifecycle_banners.dart';
-import '../tools/tasks_screen.dart';
+import '../tools/tool_tasks_provider.dart';
 import '../uploads/uploads_controller.dart';
 import 'live_invalidations.dart';
 import 'refresh_pacing.dart';
@@ -150,6 +152,28 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     ],
   );
 
+  // The catalog's job and health news have fan-outs of their own: a
+  // running scan announces itself every five percent and its message
+  // every fifteen seconds, and the user fan-out on each would refetch
+  // every open list for the length of it.
+  final jobsFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    providers: [adminJobsProvider],
+  );
+  final healthFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    providers: [healthProvider],
+    families: [healthIssuesProvider],
+  );
+  // A task's progress moves only its own list.
+  final tasksFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    providers: [toolTasksProvider],
+  );
+
   // Both transports hand their hints to the same pacers: the fan-out
   // is what a hint costs, and running it on every one of them is what
   // starved a screen still on its first build.
@@ -158,6 +182,15 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     retry: catalogFanOut.retry,
   );
   final user = PacedRefresh(fanOut: userFanOut.sweep, retry: userFanOut.retry);
+  final jobs = PacedRefresh(fanOut: jobsFanOut.sweep, retry: jobsFanOut.retry);
+  final health = PacedRefresh(
+    fanOut: healthFanOut.sweep,
+    retry: healthFanOut.retry,
+  );
+  final tasks = PacedRefresh(
+    fanOut: tasksFanOut.sweep,
+    retry: tasksFanOut.retry,
+  );
   // Paced like the other two: a station whose stream announces a new
   // title every few minutes can land two rungs of artwork for it, and
   // unpaced each frame is a round trip.
@@ -173,10 +206,39 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   ref.onDispose(() {
     catalog.dispose();
     user.dispose();
+    jobs.dispose();
+    health.dispose();
+    tasks.dispose();
     radio.dispose();
   });
 
   final engine = ref.watch(syncEngineProvider);
+  // Every server event this session observes, by kind, from whichever
+  // transport it came over. On native the mirror stores play states,
+  // entity states and bookmarks and hints for them itself.
+  final bus = ref.watch(serverEventBusProvider);
+  final eventSub = bus.events.listen((event) {
+    switch (event.kind) {
+      case 'job':
+        jobs.hint();
+      case 'health':
+        health.hint();
+      case 'task-progress':
+        tasks.hint();
+      case 'play-state' || 'entity-state' || 'bookmarks' when engine != null:
+        break;
+      default:
+        user.hint();
+    }
+  });
+  ref.onDispose(eventSub.cancel);
+  // A walk that lost its place cannot say by kind what changed.
+  final resetSub = bus.resets.listen((_) {
+    user.hint();
+    jobs.hint();
+    health.hint();
+  });
+  ref.onDispose(resetSub.cancel);
   final connect = ref.watch(connectBinderProvider);
   // What makes the radio invalidation addressed rather than broadcast:
   // the server holds the station per connection and wakes only the
@@ -193,18 +255,6 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   if (engine != null) {
     final catalogSub = engine.catalogChanged.listen((_) => catalog.hint());
     final stateSub = engine.playStateChanged.listen((_) => user.hint());
-    // Kinds the mirror does not store reach the fan-out only here, as web
-    // hints on every user invalidation. Not the two hinted above (that runs
-    // it twice), nor bookmarks, which the mirror stores and announces.
-    final eventSub = engine.serverEvents
-        .where(
-          (e) => !const {
-            'play-state',
-            'entity-state',
-            'bookmarks',
-          }.contains(e.kind),
-        )
-        .listen((_) => user.hint());
     // An item whose audio the server cannot give back takes its download
     // and its pinned artwork with it. Only `removed` reaches this stream:
     // trash tombstones the mirror row as well and keeps the bytes,
@@ -252,7 +302,6 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     ref.onDispose(() {
       catalogSub.cancel();
       stateSub.cancel();
-      eventSub.cancel();
       removedSub.cancel();
       engine.stop();
     });
@@ -266,18 +315,20 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
         token: () => repository.authToken,
       ),
       onCatalog: catalog.hint,
-      // Two consumers of the same signal. The pacer refetches whatever
-      // is on screen; the tick is what lets the notifications bell walk
-      // the user stream for itself, which is the only way a build with
-      // no sync engine learns what a change was about (an invalidation
-      // frame carries no detail).
+      // An invalidation frame carries no detail, so the tick walks the
+      // user stream, and the walk's events reach the fan-outs above by
+      // kind. A catch-up may have lost changes the walk cannot report,
+      // so it refreshes everything as well.
       //
       // Held rather than read from the callback, for the reason the
       // link below is: a frame can arrive between `stop()` and the
       // socket actually closing, and `ref` on a disposed element throws
       // into a container that swallows it.
-      onUser: () {
+      onUser: tick.bump,
+      onUserCatchUp: () {
         user.hint();
+        jobs.hint();
+        health.hint();
         tick.bump();
       },
     );

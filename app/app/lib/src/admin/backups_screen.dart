@@ -4,6 +4,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import '../uploads/audio_drop_area.dart';
@@ -23,12 +24,18 @@ class BackupsScreen extends ConsumerWidget {
   Future<void> _createBackup(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
-    try {
-      await ref.read(repositoryProvider).createBackup();
-      ref.invalidate(backupsProvider);
-    } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
-    }
+    final container = ProviderScope.containerOf(context, listen: false);
+    await container.read(pendingActionsProvider.notifier).run(
+      PendingAction.backup,
+      () async {
+        try {
+          await container.read(repositoryProvider).createBackup();
+          container.invalidate(backupsProvider);
+        } on WaxDeckApiException catch (e) {
+          messenger.show(explainError(l10n, e));
+        }
+      },
+    );
   }
 
   Future<void> _pickAndImport(BuildContext context, WidgetRef ref) async {
@@ -56,15 +63,21 @@ class BackupsScreen extends ConsumerWidget {
     final messenger = ref.read(shellMessengerProvider.notifier);
     final openRead = file.openRead;
     if (openRead == null) return;
-    try {
-      await ref
-          .read(repositoryProvider)
-          .importBackup(sizeBytes: file.size, openRead: () => openRead());
-      ref.invalidate(backupsProvider);
-      messenger.show(l10n.adminBackupImported(file.name));
-    } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
-    }
+    final container = ProviderScope.containerOf(context, listen: false);
+    await container.read(pendingActionsProvider.notifier).run(
+      PendingAction.backupImport,
+      () async {
+        try {
+          await container
+              .read(repositoryProvider)
+              .importBackup(sizeBytes: file.size, openRead: () => openRead());
+          container.invalidate(backupsProvider);
+          messenger.show(l10n.adminBackupImported(file.name));
+        } on WaxDeckApiException catch (e) {
+          messenger.show(explainError(l10n, e));
+        }
+      },
+    );
   }
 
   Future<void> _cancelRestore(BuildContext context, WidgetRef ref) async {
@@ -83,6 +96,7 @@ class BackupsScreen extends ConsumerWidget {
     final backups = ref.watch(backupsProvider);
     final staged = ref.watch(stagedRestoreProvider).value;
     final anyRunning = backups.value?.any((b) => b.state == 'running') ?? false;
+    final pending = ref.watch(pendingActionsProvider);
     final picker = ref.watch(filePickerProvider);
     final sizeClass = WaxSizeClass.of(context);
     final l10n = context.l10n;
@@ -129,31 +143,30 @@ class BackupsScreen extends ConsumerWidget {
                         ),
                       Row(
                         children: [
-                          Semantics(
-                            identifier: SemanticsIds.backupCreate,
-                            child: FilledButton.icon(
-                              key: const Key(SemanticsIds.backupCreate),
-                              onPressed: anyRunning
-                                  ? null
-                                  : () => _createBackup(context, ref),
-                              icon: const WaxIcon(WaxIcons.archive),
-                              label: Text(
-                                anyRunning
-                                    ? l10n.adminBackupRunning
-                                    : l10n.adminBackupNow,
-                              ),
-                            ),
+                          WaxButton(
+                            key: const Key(SemanticsIds.backupCreate),
+                            label: anyRunning
+                                ? l10n.adminBackupRunning
+                                : l10n.adminBackupNow,
+                            icon: WaxIcons.archive,
+                            semanticsId: SemanticsIds.backupCreate,
+                            busy:
+                                anyRunning ||
+                                pending.contains(PendingAction.backup),
+                            onPressed: () => _createBackup(context, ref),
                           ),
                           const SizedBox(width: WaxSpace.s8),
                           if (picker != null)
-                            Semantics(
-                              identifier: SemanticsIds.backupImport,
-                              child: OutlinedButton.icon(
-                                key: const Key(SemanticsIds.backupImport),
-                                onPressed: () => _pickAndImport(context, ref),
-                                icon: const WaxIcon(WaxIcons.upload),
-                                label: Text(l10n.adminBackupImportArchive),
+                            WaxButton(
+                              key: const Key(SemanticsIds.backupImport),
+                              label: l10n.adminBackupImportArchive,
+                              icon: WaxIcons.upload,
+                              kind: WaxButtonKind.tonal,
+                              semanticsId: SemanticsIds.backupImport,
+                              busy: pending.contains(
+                                PendingAction.backupImport,
                               ),
+                              onPressed: () => _pickAndImport(context, ref),
                             ),
                         ],
                       ),

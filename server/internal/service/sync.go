@@ -194,6 +194,9 @@ const (
 	eventReview       = "review"
 	eventUpload       = "upload"
 	eventTask         = "task"
+	// eventTaskProgress marks a task's progress moving: task lists
+	// refetch, and it is not news the way a start or an end is.
+	eventTaskProgress = "task-progress"
 	// eventEntityState marks a star or rating change on a catalog
 	// entity. A marker, not a hydrated kind: its pid is an artist or
 	// album, which the item-shaped play-state payload cannot carry, and
@@ -214,6 +217,14 @@ const (
 	// and it rides every emit, whether or not the account has anywhere
 	// for the news to be delivered.
 	eventNotification = "notification"
+	// eventJob marks a catalog job moving, for administrators: first
+	// seen, another five percent and a new message (at most every
+	// fifteen seconds) for the jobs that report progress, and the end.
+	eventJob = "job"
+	// eventHealth marks the library's health moving: a sweep queued,
+	// finished or failed, a fix started or finished. Pid-less, and for
+	// every account.
+	eventHealth = "health"
 )
 
 // ErrSyncReset marks a cursor the stream can no longer serve
@@ -313,7 +324,9 @@ func (l *Library) initSync(ctx context.Context) error {
 // runCatalogFeed is the change-feed consumer: it subscribes before
 // priming (the documented order, so nothing lands in the gap), drains
 // to the tail, then follows live changes, waking the event hub on
-// item-granular ones and persisting its position coarsely.
+// item-granular ones and persisting its position coarsely. The
+// subscription drops rows when it falls behind, so a row past the next
+// one, and a quiet tick, send it back to the log for what it missed.
 func (l *Library) runCatalogFeed(ctx context.Context) error {
 	sub, cancel := l.lib.Subscribe()
 	defer cancel()
@@ -331,16 +344,42 @@ func (l *Library) runCatalogFeed(ctx context.Context) error {
 			if !ok {
 				return nil
 			}
+			// The log holds the dropped rows and this one too.
+			if l.feedSkipped(ch.Seq) && l.redrainCatalog(ctx) {
+				continue
+			}
 			l.advanceFeed(ch)
 		case <-ticker.C:
+			if len(sub) == 0 {
+				l.redrainCatalog(ctx)
+			}
 			l.persistFeedCursor(ctx, false)
 		}
 	}
 }
 
+// feedSkipped reports whether a live row lands past the one after the
+// feed's position, which rows the subscription dropped leave behind.
+func (l *Library) feedSkipped(seq int64) bool {
+	l.feed.mu.Lock()
+	defer l.feed.mu.Unlock()
+	return seq > l.feed.tail+1
+}
+
+// redrainCatalog reads the log from the feed's position, reporting
+// whether it could.
+func (l *Library) redrainCatalog(ctx context.Context) bool {
+	if err := l.drainCatalog(ctx); err != nil {
+		if ctx.Err() == nil {
+			l.log.Warn("catalog feed: reading missed changes", "err", err)
+		}
+		return false
+	}
+	return true
+}
+
 // drainCatalog pulls the change log from the feed's position to the
-// tail. The subscription buffer is lossy under backpressure, so the
-// consumer also re-drains whenever it might have fallen behind.
+// tail.
 func (l *Library) drainCatalog(ctx context.Context) error {
 	for {
 		l.feed.mu.Lock()
@@ -369,7 +408,7 @@ func (l *Library) advanceFeed(ch model.Change) {
 	}
 	l.feed.mu.Unlock()
 	if ch.EntityType == "job" {
-		l.jobs.saw(ch.EntityPID)
+		l.followJob(ch.EntityPID)
 	}
 	// Items feed summary mirrors; podcast rows feed show lists. Both
 	// travel the catalog stream (a show is not per-user state).
@@ -986,9 +1025,10 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 	seenPrefs := false
 	for _, e := range events {
 		switch e.Kind {
-		case eventReview, eventUpload, eventTask, eventEntityState,
+		case eventReview, eventUpload, eventTask, eventTaskProgress, eventEntityState,
 			eventFeedDisabled, eventImportCompleted, eventEpisodeDownloaded,
-			eventPlaylistSynced, eventAccount, eventNotification:
+			eventPlaylistSynced, eventAccount, eventNotification,
+			eventJob, eventHealth:
 			// Marker kinds hydrate nothing: the pid names what to
 			// refetch and the surfaces are live reads.
 			key := e.Kind + "\x00" + e.ItemPID

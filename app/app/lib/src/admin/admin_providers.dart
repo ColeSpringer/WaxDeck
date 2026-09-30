@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../notifications/notifications_controller.dart';
 import '../providers.dart';
 
 /// Server-wide switches (signup, read-only, backup retention). Shared by
@@ -89,15 +90,65 @@ final schedulesProvider =
       SchedulesController.new,
     );
 
-/// The backup archive list, newest first.
-final backupsProvider = FutureProvider<List<Backup>>(
-  (ref) => ref.watch(repositoryProvider).listBackups(),
+/// How often the archive list is read while one is being made.
+const backupsRunningPoll = Duration(seconds: 5);
+
+/// The backup archive list, newest first: read again every few seconds
+/// while an archive is being made, and when the inbox files the news that
+/// one finished or failed.
+class BackupsController extends AsyncNotifier<List<Backup>> {
+  @override
+  Future<List<Backup>> build() async {
+    // This build's own ref: [ref] answers for whichever build is newest.
+    final built = ref;
+    // News is a backup row this read had not seen, by id: the server's
+    // clock is not this device's.
+    bool isBackupRow(WaxNotification row) =>
+        row.event == 'backup-completed' || row.event == 'backup-failed';
+    final known = {
+      for (final row in ref.read(notificationsProvider).value?.rows ?? [])
+        if (isBackupRow(row)) row.id,
+    };
+    ref.listen(notificationsProvider, (_, next) {
+      final news = next.value?.rows.any(
+        (row) => isBackupRow(row) && !known.contains(row.id),
+      );
+      if ((news ?? false) && built.mounted) built.invalidateSelf();
+    });
+    final backups = await ref.watch(repositoryProvider).listBackups();
+    if (backups.any((b) => b.state == 'running') && built.mounted) {
+      final poll = Timer(backupsRunningPoll, () {
+        if (built.mounted) built.invalidateSelf();
+      });
+      built.onDispose(poll.cancel);
+    }
+    return backups;
+  }
+}
+
+final backupsProvider = AsyncNotifierProvider<BackupsController, List<Backup>>(
+  BackupsController.new,
 );
 
-/// Recent catalog jobs, newest first. The dashboard counts what is
-/// running; the tasks screen is where one is watched.
+/// Recent catalog jobs, newest first, after any still running that newer
+/// ones pushed out of the window. The dashboard counts what is running;
+/// the tasks screen is where one is watched; the sync binder refetches
+/// it on every job marker. An administrator's: anyone else is refused,
+/// and a refusal is not retried.
 final adminJobsProvider = FutureProvider<List<Job>>(
   (ref) => ref.watch(repositoryProvider).listJobs(),
+  retry: retryUnlessRefused,
+);
+
+/// Whether a library scan is running, as far as the job list knows. A
+/// scan covers every root, so every scan trigger reads this one.
+final scanRunningProvider = Provider<bool>(
+  (ref) =>
+      ref
+          .watch(adminJobsProvider)
+          .value
+          ?.any((job) => job.kind == 'scan' && job.state == 'running') ??
+      false,
 );
 
 /// The catalog's libraries: names, paths, and the per-library switches.

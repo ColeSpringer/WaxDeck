@@ -2824,7 +2824,12 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<void> testMyNotificationTarget(String pid) async {
     notificationTargetTests[pid] = (notificationTargetTests[pid] ?? 0) + 1;
+    onNotificationTargetTest?.call(pid);
   }
+
+  /// Runs after a target test is queued, standing in for the delivery
+  /// landing on the target's health fields.
+  void Function(String pid)? onNotificationTargetTest;
 
   /// The notification inbox, newest first, as the server would hold it.
   List<ServerNotification> inbox = <ServerNotification>[];
@@ -3168,8 +3173,12 @@ class FakeRepository implements WaxDeckRepository {
       media: info.media,
       path: info.path,
       streamingWarning: createLibraryWarning,
+      scanStarted: createLibraryScanStarted,
     );
   }
+
+  /// Whether the next [createLibrary] reports its scan started.
+  bool createLibraryScanStarted = true;
 
   /// What the next [createLibrary] reports about streaming, so a test
   /// can drive the degraded answer.
@@ -4460,6 +4469,15 @@ class FakeRepository implements WaxDeckRepository {
   int sweepCalls = 0;
   final List<({String rule, List<String>? itemPids})> fixHealthCalls = [];
 
+  /// Where a started fix answers it runs; null starts it on `jb-fix`.
+  HealthFixStart? fixHealthStart;
+
+  /// Holds a fix's answer until completed, for the in-flight state.
+  Completer<void>? fixHealthGate;
+
+  /// Thrown by the fix when set; [healthError] fails the reads alone.
+  WaxDeckApiException? fixHealthError;
+
   List<DuplicateGroup> duplicateGroups = const [];
   final List<({String entityType, String survivorPid, List<String> loserPids})>
   mergeDuplicatesCalls = [];
@@ -4472,10 +4490,15 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<HealthSummary> getLibraryHealth() async {
+    await healthGate?.future;
     final error = healthError;
     if (error != null) throw error;
     return healthSummary;
   }
+
+  /// Holds a health read until completed, for the moment between a
+  /// request and the summary that answers it.
+  Completer<void>? healthGate;
 
   @override
   Future<HealthIssuePage> listHealthIssues({
@@ -4528,15 +4551,21 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<int> fixHealthIssues({
+  Future<HealthFixStart> fixHealthIssues({
     required String rule,
     List<String>? itemPids,
   }) async {
-    final error = healthError;
-    if (error != null) throw error;
     fixHealthCalls.add((rule: rule, itemPids: itemPids));
-    return itemPids?.length ??
-        healthIssues.where((i) => i.rules.contains(rule)).length;
+    await fixHealthGate?.future;
+    final error = fixHealthError;
+    if (error != null) throw error;
+    return fixHealthStart ??
+        HealthFixStart(
+          queued:
+              itemPids?.length ??
+              healthIssues.where((i) => i.rules.contains(rule)).length,
+          jobPid: 'jb-fix',
+        );
   }
 
   @override
@@ -4620,8 +4649,12 @@ class FakeRepository implements WaxDeckRepository {
     List<String>? itemPids,
   }) async {
     applyOrganizeCalls.add((profile: profile, itemPids: itemPids));
+    await applyOrganizeGate?.future;
     return organizeReportResult;
   }
+
+  /// Holds an apply's answer until completed, for the in-flight state.
+  Completer<void>? applyOrganizeGate;
 
   /// Tool tasks by id, in creation order.
   final Map<String, ToolTask> toolTasksById = {};
@@ -4792,9 +4825,13 @@ class FakeRepository implements WaxDeckRepository {
     List<String> forcePhases = const [],
   }) async {
     runEnrichmentCalls.add((force: force, forcePhases: forcePhases));
+    await runEnrichmentGate?.future;
     if (runEnrichmentError case final error?) throw error;
     return 'jb-FAKEENRICH';
   }
+
+  /// Holds a run's answer until completed, for the in-flight state.
+  Completer<void>? runEnrichmentGate;
 
   /// The catalog's built-ins in its own order, which is where one left
   /// out of a save goes.
@@ -5350,10 +5387,14 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<List<Backup>> listBackups() async {
+    backupReads++;
     final error = listError;
     if (error != null) throw error;
     return backupsById.values.toList().reversed.toList();
   }
+
+  /// How many times the archive list was read.
+  int backupReads = 0;
 
   @override
   Future<Backup> createBackup() async {
@@ -5585,11 +5626,15 @@ class FakeRepository implements WaxDeckRepository {
     );
   }
 
+  /// Holds an empty's answer until completed, for the in-flight state.
+  Completer<void>? emptyTrashGate;
+
   @override
   Future<TrashEmptyResult> emptyTrash() async {
     final error = adminError;
     if (error != null) throw error;
     emptyTrashCalls++;
+    await emptyTrashGate?.future;
     final purgeable = trashEntries.where((e) => e.restoredAt == null).toList();
     trashEntries.removeWhere((e) => e.restoredAt == null);
     return TrashEmptyResult(

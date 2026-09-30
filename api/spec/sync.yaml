@@ -272,8 +272,22 @@ components:
 
 
             Markers carry only `pid` and hydrate nothing: `review`, `upload`,
-            `task` (refetch that surface), and `entity-state` (an artist or
-            album was starred or rated).
+            `task` (a task was queued, started or ended; refetch that
+            surface), `task-progress` (a task's progress moved; refetch it,
+            though it is not news), `entity-state` (an artist or album was
+            starred or rated), and `job` (the `jb-` catalog job ended, or,
+            for a scan, analysis, enrichment, organize run or emptying the
+            trash, was first seen, crossed another five percent of progress
+            or changed its message, a message marked at most every fifteen
+            seconds; refetch `GET /jobs` or `GET /jobs/{pid}`). `job`
+            reaches administrators only.
+
+
+            `health` carries no `pid`: the library's health moved (a sweep
+            was queued, finished or failed, or a fix started or finished),
+            so re-read
+            `GET /library/health`. It reaches every signed-in account,
+            since every account can read health.
 
 
             Further markers are announcements rather than refetch
@@ -282,7 +296,9 @@ components:
             whose scheduled refresh was suspended), `import-completed`
             (`pid` is the review entry that filed itself),
             `episode-downloaded` (`pid` is the episode whose enclosure
-            the server finished fetching), and `playlist-synced`
+            the server finished fetching; it reaches every subscriber
+            of the show, while the notification event reaches only the
+            accounts that asked for the fetch), and `playlist-synced`
             (`pid` is the playlist whose sync run changed its
             membership, or whose scheduled syncing was suspended
             after repeated failures).
@@ -303,8 +319,8 @@ components:
         pid:
           type: string
           description: >
-            The item, show, book, or playlist the event is about
-            (absent for `prefs` and `account`).
+            The item, show, book, playlist, or job the event is about
+            (absent for `prefs`, `account`, and `health`).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         playState:
           $ref: "#/components/schemas/PlayState"

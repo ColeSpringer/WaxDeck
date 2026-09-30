@@ -25,6 +25,10 @@
   "@commonOpenReview": {
     "description": "Action that opens the review queue, wherever something just landed there: home's pending banner, the post-upload message, the metadata editor's rematch message."
   },
+  "commonOpenTasks": "Tasks",
+  "@commonOpenTasks": {
+    "description": "Action on a message after background work started: opens the Tasks screen, where it is followed."
+  },
   "commonRetry": "Retry",
   "@commonRetry": {
     "description": "Button that runs the request that just failed again."

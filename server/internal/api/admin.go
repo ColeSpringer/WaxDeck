@@ -633,6 +633,7 @@ func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObje
 	if lib.StreamingWarning != "" {
 		out.StreamingWarning = ptr(lib.StreamingWarning)
 	}
+	out.ScanStarted = ptr(lib.ScanStarted)
 	return CreateLibrary201JSONResponse(out), nil
 }
 

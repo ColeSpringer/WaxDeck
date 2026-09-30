@@ -12,7 +12,7 @@ import '../settings/integrations_controller.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
-import '../tools/tasks_screen.dart';
+import '../tools/tool_tasks_provider.dart';
 import '../uploads/file_picker_port.dart';
 import 'admin_console.dart';
 import 'users_screen.dart';

@@ -20,7 +20,7 @@ Set<String> _specCatalog() {
   const opening = 'The current catalog is';
   final start = spec.indexOf(opening);
   if (start < 0) throw StateError('the spec no longer says "$opening"');
-  final end = spec.indexOf('.', spec.indexOf('`playlist-synced`', start));
+  final end = spec.indexOf('.', spec.indexOf('`health-fix-finished`', start));
   if (end < 0) throw StateError('the catalog list no longer ends as it did');
   return RegExp(
     r'`([a-z][a-z-]*)`',
@@ -46,7 +46,7 @@ void main() {
   final catalog = _specCatalog();
 
   test('the spec still names the whole catalog', () {
-    expect(catalog, hasLength(8));
+    expect(catalog, hasLength(12));
   });
 
   for (final MapEntry(key: locale, value: l10n) in <String, AppLocalizations>{

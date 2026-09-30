@@ -16,10 +16,18 @@ import 'sync_providers.dart';
 /// just started has observed nothing yet, and replaying last week as
 /// "just now" would be a lie with a badge on it.
 class UserEventPuller {
-  UserEventPuller({required this.repository, required this.onEvent});
+  UserEventPuller({
+    required this.repository,
+    required this.onEvent,
+    this.onReset,
+  });
 
   final WaxDeckRepository repository;
   final void Function(ServerSyncEvent event) onEvent;
+
+  /// Called when the walk lost its place: the events between the old
+  /// cursor and the fresh one are gone.
+  final void Function()? onReset;
 
   String? _since;
   bool _running = false;
@@ -49,8 +57,8 @@ class UserEventPuller {
   }
 
   Future<void> _walk() async {
+    var since = _since;
     try {
-      var since = _since;
       if (since == null) {
         _since = (await repository.syncServer()).nextSince;
         return;
@@ -68,9 +76,15 @@ class UserEventPuller {
         if (!page.more) break;
       }
     } on WaxDeckApiException catch (error) {
-      // Nothing here mirrors anything, so re-minting is the whole
-      // recovery from a cursor the server can no longer serve.
-      if (error.code == 'sync-reset') _since = null;
+      // Nothing here mirrors anything, so a fresh cursor is the whole
+      // recovery from one the server can no longer serve. It is minted
+      // at once, or the next change would go unreported too, and what
+      // fell between the two is told as lost.
+      if (error.code == 'sync-reset' && since != null) {
+        _since = null;
+        _pending = true;
+        onReset?.call();
+      }
     }
   }
 }
@@ -86,15 +100,28 @@ class UserEventPuller {
 /// next, which is what a session-scoped surface means.
 class ServerEventBus {
   final _events = StreamController<ServerSyncEvent>.broadcast();
+  final _resets = StreamController<void>.broadcast();
 
   Stream<ServerSyncEvent> get events => _events.stream;
+
+  /// The walk lost its place, so events went unreported: a consumer
+  /// refreshes everything it holds.
+  Stream<void> get resets => _resets.stream;
 
   void add(ServerSyncEvent event) {
     if (_events.isClosed) return;
     _events.add(event);
   }
 
-  Future<void> dispose() => _events.close();
+  void reset() {
+    if (_resets.isClosed) return;
+    _resets.add(null);
+  }
+
+  Future<void> dispose() async {
+    await _events.close();
+    await _resets.close();
+  }
 }
 
 /// The bus, wired to whichever transport this build runs.
@@ -118,6 +145,7 @@ final serverEventBusProvider = Provider.autoDispose<ServerEventBus>((ref) {
   final puller = UserEventPuller(
     repository: ref.watch(repositoryProvider),
     onEvent: bus.add,
+    onReset: bus.reset,
   );
   // Minted immediately, so the first change after a launch is reported
   // rather than swallowed by the mint it would have paid for.

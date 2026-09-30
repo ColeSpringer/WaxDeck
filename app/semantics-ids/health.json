@@ -13,6 +13,7 @@
     "duplicateMerge": "duplicate-merge-{pid}",
     "health": "health-rule-{rule}",
     "healthFix": "health-fix-{rule}",
+    "healthFixBlocked": "health-fix-blocked-{rule}",
     "healthIssue": "health-issue-{pid}",
     "healthScore": "health-score",
     "healthSweep": "health-sweep",

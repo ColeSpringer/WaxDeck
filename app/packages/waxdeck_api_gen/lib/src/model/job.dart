@@ -3,6 +3,8 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:built_collection/built_collection.dart';
+import 'package:built_value/json_object.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -12,18 +14,21 @@ part 'job.g.dart';
 ///
 /// Properties:
 /// * [pid] - Job PID.
-/// * [kind] - What the job does (`scan`, `analyze`, `enrich`, `organize`).
+/// * [kind] - What the job does: `scan`, `analyze`, `enrich`, `organize`, `import`, `delete`, `restore`, `empty-trash`, or `purge-trash`. New kinds may appear. 
 /// * [state] - Job lifecycle state. Currently `running`, `done`, `failed`, `crashed`, or `canceled`; new states may appear, and clients must treat unknown values as \"not finished successfully yet\" rather than failing. 
 /// * [progress] - Completion fraction in [0, 1]. Absent when the job has not yet reported progress or cannot estimate it. 
 /// * [message] - Human-readable progress note.
 /// * [error] - Failure detail for `failed`/`crashed` jobs.
+/// * [startedAt] - When the job started.
+/// * [finishedAt] - When the job reached a terminal state; absent while running.
+/// * [result] - What a finished job did, once it records a summary: a `scan` reports `filesSeen`, `created`, `updated`, `relinked`, `unchanged`, `missing`, `skipped` and `errored` (files); an `analyze` pass `analyzed`, `loudnessMeasured`, `measureFailed`, `skipped` and `errored`; an `enrich` pass the same tallies as the enrichment status's `lastRun`; an `organize` run `profile`, `moved`, `skipped`, `errored` and `sidecarsMoved`. Absent while running and for kinds that record none. Shapes may grow fields. 
 @BuiltValue()
 abstract class Job implements Built<Job, JobBuilder> {
   /// Job PID.
   @BuiltValueField(wireName: r'pid')
   String get pid;
 
-  /// What the job does (`scan`, `analyze`, `enrich`, `organize`).
+  /// What the job does: `scan`, `analyze`, `enrich`, `organize`, `import`, `delete`, `restore`, `empty-trash`, or `purge-trash`. New kinds may appear. 
   @BuiltValueField(wireName: r'kind')
   String get kind;
 
@@ -42,6 +47,18 @@ abstract class Job implements Built<Job, JobBuilder> {
   /// Failure detail for `failed`/`crashed` jobs.
   @BuiltValueField(wireName: r'error')
   String? get error;
+
+  /// When the job started.
+  @BuiltValueField(wireName: r'startedAt')
+  DateTime? get startedAt;
+
+  /// When the job reached a terminal state; absent while running.
+  @BuiltValueField(wireName: r'finishedAt')
+  DateTime? get finishedAt;
+
+  /// What a finished job did, once it records a summary: a `scan` reports `filesSeen`, `created`, `updated`, `relinked`, `unchanged`, `missing`, `skipped` and `errored` (files); an `analyze` pass `analyzed`, `loudnessMeasured`, `measureFailed`, `skipped` and `errored`; an `enrich` pass the same tallies as the enrichment status's `lastRun`; an `organize` run `profile`, `moved`, `skipped`, `errored` and `sidecarsMoved`. Absent while running and for kinds that record none. Shapes may grow fields. 
+  @BuiltValueField(wireName: r'result')
+  BuiltMap<String, JsonObject?>? get result;
 
   Job._();
 
@@ -100,6 +117,27 @@ class _$JobSerializer implements PrimitiveSerializer<Job> {
       yield serializers.serialize(
         object.error,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.startedAt != null) {
+      yield r'startedAt';
+      yield serializers.serialize(
+        object.startedAt,
+        specifiedType: const FullType(DateTime),
+      );
+    }
+    if (object.finishedAt != null) {
+      yield r'finishedAt';
+      yield serializers.serialize(
+        object.finishedAt,
+        specifiedType: const FullType(DateTime),
+      );
+    }
+    if (object.result != null) {
+      yield r'result';
+      yield serializers.serialize(
+        object.result,
+        specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
       );
     }
   }
@@ -169,6 +207,30 @@ class _$JobSerializer implements PrimitiveSerializer<Job> {
           ) as String?;
           if (valueDes == null) continue;
           result.error = valueDes;
+          break;
+        case r'startedAt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
+          result.startedAt = valueDes;
+          break;
+        case r'finishedAt':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(DateTime),
+          ) as DateTime?;
+          if (valueDes == null) continue;
+          result.finishedAt = valueDes;
+          break;
+        case r'result':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
+          ) as BuiltMap<String, JsonObject?>?;
+          if (valueDes == null) continue;
+          result.result.replace(valueDes);
           break;
         default:
           unhandled.add(key);

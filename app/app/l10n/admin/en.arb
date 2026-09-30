@@ -1017,6 +1017,16 @@
       }
     }
   },
+  "adminLibraryCreatedNoScan": "Library \"{name}\" created. Another catalog job is running, so the next scan will index it.",
+  "@adminLibraryCreatedNoScan": {
+    "description": "Message after a library was registered while another catalog job was running, so creating it could not start its scan; the next scan picks it up.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
   "adminLibraryHoldsHelp": "What kind of content the root carries",
   "@adminLibraryHoldsHelp": {
     "description": "Line under the holds row in the add-library form."

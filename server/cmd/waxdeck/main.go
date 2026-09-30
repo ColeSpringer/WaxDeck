@@ -1005,38 +1005,29 @@ func run() error {
 			}
 		}
 	})
-	group.Go(ctx, "fix-worker", func(ctx context.Context) error {
-		tick := time.NewTicker(15 * time.Second)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-tick.C:
-				for svc.DrainFixQueue(ctx) {
-					if ctx.Err() != nil {
-						return nil
+	for name, drain := range map[string]func(context.Context) bool{
+		"tool-worker": svc.DrainToolTasks,
+		// Health fixes run for hours; on the tool worker, every
+		// acquisition and sync queued behind one would wait as long.
+		"health-fix-worker": svc.DrainHealthFixes,
+	} {
+		group.Go(ctx, name, func(ctx context.Context) error {
+			tick := time.NewTicker(10 * time.Second)
+			defer tick.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-tick.C:
+					for drain(ctx) {
+						if ctx.Err() != nil {
+							return nil
+						}
 					}
 				}
 			}
-		}
-	})
-	group.Go(ctx, "tool-worker", func(ctx context.Context) error {
-		tick := time.NewTicker(10 * time.Second)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-tick.C:
-				for svc.DrainToolTasks(ctx) {
-					if ctx.Err() != nil {
-						return nil
-					}
-				}
-			}
-		}
-	})
+		})
+	}
 	group.Go(ctx, "upload-janitor", func(ctx context.Context) error {
 		tick := time.NewTicker(time.Hour)
 		defer tick.Stop()
@@ -1071,7 +1062,7 @@ func run() error {
 				if !svc.HealthSweepDue(ctx) {
 					continue
 				}
-				if err := svc.SweepHealth(ctx); err != nil {
+				if err := svc.RunHealthSweep(ctx); err != nil {
 					log.Warn("health sweep", "err", err)
 				}
 			}

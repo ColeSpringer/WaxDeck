@@ -1,3 +1,5 @@
+import 'package:built_collection/built_collection.dart';
+import 'package:built_value/json_object.dart';
 import 'package:test/test.dart';
 import 'package:waxdeck_api/src/mapping.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -813,6 +815,59 @@ void main() {
       expect(issue.detail?.wholeFile, isTrue);
     });
 
+    test('a rule says what blocks its fix or that one runs, and a summary '
+        'its sweep', () {
+      final summary = healthSummaryFromGen(
+        gen.HealthSummary(
+          (b) => b
+            ..score = 80
+            ..totalItems = 4
+            ..evaluatedItems = 4
+            ..warmingUp = false
+            ..sweeping = true
+            ..sweepFailed = true
+            ..rules.add(
+              gen.HealthRuleCount(
+                (r) => r
+                  ..rule = 'missing-lyrics'
+                  ..failing = 4
+                  ..fixable = false
+                  ..fixing = false
+                  ..fixBlocked = gen.HealthRuleCountFixBlockedEnum.needsContact,
+              ),
+            )
+            ..rules.add(
+              gen.HealthRuleCount(
+                (r) => r
+                  ..rule = 'write-unsynced'
+                  ..failing = 1
+                  ..fixable = true
+                  ..fixing = true,
+              ),
+            ),
+        ),
+      );
+      expect(summary.sweeping, isTrue);
+      expect(summary.sweepFailed, isTrue);
+      expect(summary.rules.first.fixBlocked, 'needs-contact');
+      expect(summary.rules.first.fixing, isFalse);
+      expect(summary.rules.last.fixBlocked, isNull);
+      expect(summary.rules.last.fixing, isTrue);
+    });
+
+    test('a started fix names where it runs', () {
+      final job = healthFixStartFromGen(
+        gen.HealthFixResult(
+          (b) => b
+            ..queued = 4
+            ..jobPid = 'jb-01JZX5N8QW3F4V9T2B7KDEXAMPL',
+        ),
+      );
+      expect(job.queued, 4);
+      expect(job.jobPid, 'jb-01JZX5N8QW3F4V9T2B7KDEXAMPL');
+      expect(job.taskId, isNull);
+    });
+
     test('an issue that measured nothing carries no detail', () {
       final issue = healthIssueFromGen(
         gen.HealthIssue(
@@ -824,6 +879,40 @@ void main() {
         ),
       );
       expect(issue.detail, isNull);
+    });
+  });
+
+  group('job mapping', () {
+    test('a finished job carries when it ran and what it did', () {
+      final job = jobFromGen(
+        gen.Job(
+          (b) => b
+            ..pid = 'jb-01JZX5N8QW3F4V9T2B7KDEXAMPL'
+            ..kind = 'scan'
+            ..state = 'done'
+            ..startedAt = DateTime.utc(2026, 9, 29, 10)
+            ..finishedAt = DateTime.utc(2026, 9, 29, 10, 2)
+            ..result = MapBuilder<String, JsonObject?>({
+              'created': JsonObject(3),
+              'errored': JsonObject(0),
+            }),
+        ),
+      );
+      expect(job.startedAt, DateTime.utc(2026, 9, 29, 10));
+      expect(job.finishedAt, DateTime.utc(2026, 9, 29, 10, 2));
+      expect(job.result, {'created': 3, 'errored': 0});
+    });
+
+    test('a created library says whether its scan started', () {
+      final lib = libraryCreatedFromGen(
+        gen.LibraryCreated(
+          (b) => b
+            ..pid = 'lb-01JZX5N8QW3F4V9T2B7KDEXAMPL'
+            ..name = 'extra'
+            ..scanStarted = false,
+        ),
+      );
+      expect(lib.scanStarted, isFalse);
     });
   });
 

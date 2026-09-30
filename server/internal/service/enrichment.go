@@ -479,19 +479,27 @@ func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool, fo
 	if err != nil {
 		return "", err
 	}
-	// WriteTags rather than the catalog's WriteEnrichmentTags option: that
-	// one is fixed at open and the catalog ORs the two, so per-run is what
-	// lets the admin toggle work without a restart.
-	pid, err := l.lib.StartEnrich(l.procCtx, waxbin.EnrichOptions{
-		Force:       force,
-		ForcePhases: phases,
-		WriteTags:   l.currentToggles().enrichWriteTags,
-	})
+	pid, err := l.startEnrichJob(ctx, uc, waxbin.EnrichOptions{Force: force, ForcePhases: phases}, "")
 	if err != nil {
 		return "", l.explainEnrichRefusal(err, forcePhases)
 	}
-	l.watchEnrichArtwork(pid)
 	return apiPID(PrefixJob, pid), nil
+}
+
+// startEnrichJob starts a pass on the process context, so it outlives
+// the request, and records who started it, and for a health fix the
+// rule, so its end reaches them.
+func (l *Library) startEnrichJob(ctx context.Context, uc *UserCtx, opts waxbin.EnrichOptions, rule string) (model.PID, error) {
+	// WriteTags rather than the catalog's WriteEnrichmentTags option: that
+	// one is fixed at open and the catalog ORs the two, so per-run is what
+	// lets the admin toggle work without a restart.
+	opts.WriteTags = l.currentToggles().enrichWriteTags
+	pid, err := l.lib.StartEnrich(l.procCtx, opts)
+	if err != nil {
+		return "", err
+	}
+	l.adoptJob(ctx, pid, uc.ID, rule)
+	return pid, nil
 }
 
 // explainEnrichRefusal words the catalog's refusal of a run for a WaxDeck
@@ -539,57 +547,9 @@ func (l *Library) RunScheduledEnrichment(ctx context.Context) error {
 	if err != nil {
 		return classify(err)
 	}
-	l.watchEnrichArtwork(pid)
+	// Its pictures move the artwork epoch when it ends.
+	l.followJob(pid)
 	return nil
-}
-
-const (
-	// enrichArtWatchInterval is how often the artwork watcher asks
-	// whether the pass it is following has ended. A whole-library pass
-	// runs for minutes to hours, so a slow poll costs nothing and the
-	// only thing waiting on it is a mosaic rebuild.
-	enrichArtWatchInterval = time.Minute
-	// enrichArtWatchLimit bounds the watch, so a job row that never
-	// reaches a terminal state does not leave a goroutine polling for
-	// the life of the process.
-	enrichArtWatchLimit = 12 * time.Hour
-)
-
-// watchEnrichArtwork bumps the artwork epoch once a pass that gathered
-// pictures ends, so generated playlist covers re-composite: the catalog has
-// no completion hook, so this follows the job row. Best effort.
-func (l *Library) watchEnrichArtwork(jobPID model.PID) {
-	l.workers.GoOnce(l.procCtx, "enrich-artwork-epoch", func(ctx context.Context) error {
-		deadline := time.Now().Add(enrichArtWatchLimit)
-		tick := time.NewTicker(cmp.Or(l.enrichWatchEvery, enrichArtWatchInterval))
-		defer tick.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-tick.C:
-			}
-			job, err := l.lib.Job(ctx, jobPID)
-			if err != nil || job == nil {
-				return nil
-			}
-			if job.State == model.JobRunning {
-				if time.Now().After(deadline) {
-					l.log.Warn("enrichment artwork epoch: gave up waiting on the pass", "job", string(jobPID))
-					return nil
-				}
-				continue
-			}
-			var res enrich.Result
-			if job.Result == "" || json.Unmarshal([]byte(job.Result), &res) != nil {
-				return nil
-			}
-			if res.ArtFetched > 0 || res.AuxArtFetched > 0 {
-				l.noteArtworkChanged(ctx)
-			}
-			return nil
-		}
-	})
 }
 
 // EnrichFieldProposalDTO is one field an enrichment provider would
@@ -652,21 +612,29 @@ func (l *Library) EnrichItemFor(ctx context.Context, uc *UserCtx, apiItemPID str
 	if err != nil {
 		return nil, nil, err
 	}
-	if proposal != nil {
-		applied, skipped, err = l.enrichCommitProposal(ctx, it.PID, wants, *proposal)
-	} else {
-		applied, skipped, err = l.enrichItemNow(ctx, it.PID, wants, true)
+	if proposal == nil {
+		return l.enrichItemFully(ctx, it, wants)
 	}
+	applied, skipped, err = l.enrichCommitProposal(ctx, it.PID, wants, *proposal)
 	if err != nil {
 		return applied, skipped, err
 	}
-	// The interactive button also runs the catalog's key-free built-ins
-	// per item, which the injected-provider port cannot reach; the health
-	// fixer calls EnrichItemNow one want at a time, so it stays on the
-	// injected path rather than re-running the whole item-scoped pass.
-	// They run on the proposal path too, for a want the proposal left
-	// unmet, or every install whose only sources are the built-ins would
-	// regress.
+	// The built-ins run on the proposal path too, for a want the proposal
+	// left unmet, or every install whose only sources are the built-ins
+	// would regress.
+	l.enrichItemCatalogPass(ctx, it, wants, &applied, &skipped)
+	return applied, skipped, nil
+}
+
+// enrichItemFully fetches the wanted artifacts for one item from the
+// injected providers, then runs the catalog's key-free built-ins for it,
+// which the injected-provider port cannot reach: the interactive button's
+// path, and a scoped health fix's.
+func (l *Library) enrichItemFully(ctx context.Context, it *model.ItemView, wants []string) (applied, skipped []string, err error) {
+	applied, skipped, err = l.enrichItemNow(ctx, it.PID, wants, true)
+	if err != nil {
+		return applied, skipped, err
+	}
 	l.enrichItemCatalogPass(ctx, it, wants, &applied, &skipped)
 	return applied, skipped, nil
 }
@@ -787,9 +755,9 @@ func dropEntriesWithPrefix(entries []string, prefix string) []string {
 // "cover: reason". A propose pass followed by a commit of everything
 // it proposed - the same halves the preview and apply endpoints use,
 // so the blind path cannot drift from the previewed one. The item
-// state loads once and both halves share it: the health fixer calls
-// this per want across whole-library passes, where re-reading would
-// double every facade round trip.
+// state loads once and both halves share it: a health fix calls this
+// per item across whole rules, where re-reading would double every
+// facade round trip.
 func (l *Library) EnrichItemNow(ctx context.Context, pid model.PID, wants []string) (applied, skipped []string, err error) {
 	return l.enrichItemNow(ctx, pid, wants, false)
 }

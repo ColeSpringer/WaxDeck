@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/backups_screen.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
@@ -56,11 +58,21 @@ Future<void> _pump(
       overrides: [
         repositoryProvider.overrideWithValue(repo),
         filePickerProvider.overrideWithValue(picker),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
       ],
       child: localizedHost(const BackupsScreen()),
     ),
   );
   await tester.pumpAndSettle();
+}
+
+/// The same host, with motion off: a running archive holds the create
+/// button busy, and a busy ring only settles with motion off.
+Future<void> _pumpStill(WidgetTester tester, FakeRepository repo) async {
+  tester.platformDispatcher.accessibilityFeaturesTestValue =
+      const FakeAccessibilityFeatures(disableAnimations: true);
+  addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+  await _pump(tester, repo);
 }
 
 Backup _backup(String id, {String state = 'done'}) => Backup(
@@ -172,5 +184,116 @@ void main() {
 
     expect(find.byKey(const Key('backup-import')), findsNothing);
     expect(find.byKey(const Key('backup-create')), findsOneWidget);
+  });
+
+  testWidgets('a running archive is read again until it is done', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.backupsById['ba-1'] = _backup('ba-1', state: 'running');
+    await _pumpStill(tester, repo);
+    final reads = repo.backupReads;
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+    expect(repo.backupReads, reads + 1);
+
+    repo.backupsById['ba-1'] = _backup('ba-1');
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump();
+    expect(repo.backupReads, reads + 2);
+
+    await tester.pump(const Duration(seconds: 15));
+    expect(repo.backupReads, reads + 2, reason: 'nothing running, no poll');
+  });
+
+  testWidgets("a finished archive's inbox row reads the list again", (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']),
+      ),
+    );
+    repo.backupsById['ba-1'] = _backup('ba-1');
+    await _pump(tester, repo);
+    final reads = repo.backupReads;
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(BackupsScreen)),
+    );
+
+    repo.inbox.add(
+      ServerNotification(
+        id: 'nf-1',
+        event: 'backup-completed',
+        title: 'Backup finished',
+        body: 'waxdeck-ba-2.tar.zst',
+        createdAt: DateTime.now().add(const Duration(seconds: 1)),
+      ),
+    );
+    container.invalidate(notificationsProvider);
+    await tester.pumpAndSettle();
+
+    expect(repo.backupReads, reads + 1);
+  });
+
+  testWidgets("an archive's row is news whatever the server's clock says", (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']),
+      ),
+    );
+    // A row from before this read, which is not news.
+    repo.inbox.add(
+      ServerNotification(
+        id: 'nf-old',
+        event: 'backup-completed',
+        title: 'Backup finished',
+        body: 'waxdeck-ba-1.tar.zst',
+        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
+      ),
+    );
+    repo.backupsById['ba-1'] = _backup('ba-1');
+    await _pump(tester, repo);
+    final reads = repo.backupReads;
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(BackupsScreen)),
+    );
+    container.invalidate(notificationsProvider);
+    await tester.pumpAndSettle();
+    expect(repo.backupReads, reads, reason: 'a row it already had');
+
+    // The server's clock an hour behind this device's.
+    repo.inbox.add(
+      ServerNotification(
+        id: 'nf-2',
+        event: 'backup-completed',
+        title: 'Backup finished',
+        body: 'waxdeck-ba-2.tar.zst',
+        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
+      ),
+    );
+    container.invalidate(notificationsProvider);
+    await tester.pumpAndSettle();
+    expect(repo.backupReads, reads + 1);
+  });
+
+  testWidgets('back up now is busy while an archive is being made', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.backupsById['ba-1'] = _backup('ba-1', state: 'running');
+    await _pumpStill(tester, repo);
+
+    final create = tester.widget<WaxButton>(
+      find.byWidgetPredicate(
+        (w) => w is WaxButton && w.semanticsId == SemanticsIds.backupCreate,
+      ),
+    );
+    expect(create.busy, isTrue);
   });
 }

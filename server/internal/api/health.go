@@ -22,15 +22,20 @@ func (s *Server) GetLibraryHealth(ctx context.Context, _ GetLibraryHealthRequest
 		TotalItems:     sum.TotalItems,
 		EvaluatedItems: sum.EvaluatedItems,
 		WarmingUp:      sum.WarmingUp,
+		Sweeping:       ptr(sum.Sweeping),
+		SweepFailed:    sum.SweepFailed,
 		Rules:          make([]HealthRuleCount, 0, len(sum.Rules)),
 	}
 	if !sum.SweptAt.IsZero() {
 		out.SweptAt = ptr(sum.SweptAt)
 	}
 	for _, r := range sum.Rules {
-		rc := HealthRuleCount{Rule: r.Rule, Failing: r.Failing, Fixable: r.Fixable}
+		rc := HealthRuleCount{Rule: r.Rule, Failing: r.Failing, Fixable: r.Fixable, Fixing: r.Fixing}
 		if r.Label != "" {
 			rc.Label = ptr(r.Label)
+		}
+		if r.FixBlocked != "" {
+			rc.FixBlocked = ptr(HealthRuleCountFixBlocked(r.FixBlocked))
 		}
 		out.Rules = append(out.Rules, rc)
 	}
@@ -106,17 +111,26 @@ func (s *Server) FixHealthIssues(ctx context.Context, req FixHealthIssuesRequest
 	if req.Body.ItemPids != nil {
 		pids = *req.Body.ItemPids
 	}
-	queued, err := s.svc.QueueHealthFix(ctx, uc, req.Body.Rule, pids)
+	start, err := s.svc.StartHealthFix(ctx, uc, req.Body.Rule, pids)
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
 			return FixHealthIssues400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 		case service.KindForbidden:
 			return FixHealthIssues403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		case service.KindConflict:
+			return FixHealthIssues409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
 		}
 		return nil, err
 	}
-	return FixHealthIssues202JSONResponse(HealthFixResult{Queued: queued}), nil
+	out := HealthFixResult{Queued: start.Queued}
+	if start.JobPID != "" {
+		out.JobPid = ptr(start.JobPID)
+	}
+	if start.TaskID != "" {
+		out.TaskId = ptr(start.TaskID)
+	}
+	return FixHealthIssues202JSONResponse(out), nil
 }
 
 func (s *Server) ListDuplicates(ctx context.Context, _ ListDuplicatesRequestObject) (ListDuplicatesResponseObject, error) {

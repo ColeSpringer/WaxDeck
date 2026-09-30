@@ -30,7 +30,8 @@ func TestNotifyCatalogMatchesTheSpec(t *testing.T) {
 		t.Fatalf("the spec no longer says %q", opening)
 	}
 	tail := spec[start:]
-	end := strings.Index(tail, "`playlist-synced`")
+	const last = "`health-fix-finished`"
+	end := strings.Index(tail, last)
 	if end < 0 {
 		t.Fatal("the catalog list no longer ends as it did")
 	}
@@ -38,7 +39,7 @@ func TestNotifyCatalogMatchesTheSpec(t *testing.T) {
 	if end < 0 {
 		t.Fatal("the catalog sentence no longer ends in a full stop")
 	}
-	sentence := tail[:strings.Index(tail, "`playlist-synced`")+end]
+	sentence := tail[:strings.Index(tail, last)+end]
 
 	documented := map[string]bool{}
 	for _, m := range regexp.MustCompile("`([a-z][a-z-]*)`").FindAllStringSubmatch(sentence, -1) {

@@ -72,7 +72,7 @@ type absItem struct {
 func (l *Library) runABSImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
 	sum := migrationSummary{Source: p.Source, DryRun: p.DryRun, Samples: migrationSamples{Unmatched: []string{}}}
 	client := newABSClient(p.ServerURL, secret)
-	prog := newMigrateProgress(l, t)
+	prog := newToolProgress(l, t)
 	var me struct {
 		MediaProgress []absMediaProgress `json:"mediaProgress"`
 	}

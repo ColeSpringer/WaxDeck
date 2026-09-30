@@ -1092,6 +1092,16 @@
       }
     }
   },
+  "adminLibraryCreatedNoScan": "Library \"{name}\" created. Another catalog job is running, so the next scan will index it.",
+  "@adminLibraryCreatedNoScan": {
+    "description": "Message after a library was registered while another catalog job was running, so creating it could not start its scan; the next scan picks it up.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Vinyl rips"
+      }
+    }
+  },
   "adminLibraryHoldsHelp": "What kind of content the root carries",
   "@adminLibraryHoldsHelp": {
     "description": "Line under the holds row in the add-library form."
@@ -3315,6 +3325,10 @@
   "@bellSurfaceDownloads": {
     "description": "Which surface a bell row is about."
   },
+  "bellSurfaceHealth": "Library health",
+  "@bellSurfaceHealth": {
+    "description": "Overline of a bell row about the library health screen: a fix finished."
+  },
   "bellSurfaceImports": "Imports",
   "@bellSurfaceImports": {
     "description": "Which surface a bell row is about."
@@ -3894,6 +3908,10 @@
   "commonOpenReview": "Open review",
   "@commonOpenReview": {
     "description": "Action that opens the review queue, wherever something just landed there: home's pending banner, the post-upload message, the metadata editor's rematch message."
+  },
+  "commonOpenTasks": "Tasks",
+  "@commonOpenTasks": {
+    "description": "Action on a message after background work started: opens the Tasks screen, where it is followed."
   },
   "commonRetry": "Retry",
   "@commonRetry": {
@@ -4889,6 +4907,38 @@
       }
     }
   },
+  "healthFixBlockedArtSource": "Needs its artwork sources switched on in Enrichment.",
+  "@healthFixBlockedArtSource": {
+    "description": "Under a health rule this server cannot fix: the sources that supply artwork are not all switched on. Enrichment is the admin screen where sources are switched on."
+  },
+  "healthFixBlockedBookSource": "Needs a book metadata provider.",
+  "@healthFixBlockedBookSource": {
+    "description": "Under a health rule this server cannot fix: no provider of audiobook metadata is configured."
+  },
+  "healthFixBlockedContact": "Needs an enrichment contact, which lets this server ask the free public sources.",
+  "@healthFixBlockedContact": {
+    "description": "Under a health rule this server cannot fix: it has no enrichment contact (an email or URL the administrator sets), which is what lets it ask MusicBrainz and the other free sources."
+  },
+  "healthFixBlockedGenreSource": "Needs a genre source, MusicBrainz or ListenBrainz, switched on in Enrichment.",
+  "@healthFixBlockedGenreSource": {
+    "description": "Under a health rule this server cannot fix: no source of genres is switched on. Enrichment is the admin screen where sources are switched on."
+  },
+  "healthFixBlockedLyricsSource": "Needs a lyrics source switched on in Enrichment.",
+  "@healthFixBlockedLyricsSource": {
+    "description": "Under a health rule this server cannot fix: no lyrics source is switched on. Enrichment is the admin screen where sources are switched on."
+  },
+  "healthFixBlockedNoManaged": "Needs a managed library: with none, there is no layout for paths to match.",
+  "@healthFixBlockedNoManaged": {
+    "description": "Under the path-mismatch health rule when no library lets the server place files, so there is no layout to compare paths with."
+  },
+  "healthFixBlockedOther": "This server cannot run this fix yet.",
+  "@healthFixBlockedOther": {
+    "description": "Under a health rule this server cannot fix, for a reason this app does not know how to word."
+  },
+  "healthFixBusy": "An enrichment pass is already running. Fix this when it ends.",
+  "@healthFixBusy": {
+    "description": "Message when a fix was refused because an enrichment pass is already running."
+  },
   "healthFixRule": "Fix {rule}",
   "@healthFixRule": {
     "description": "Accessible name of the button that runs a health rule's bulk fix. {rule} is that rule's own name.",
@@ -4896,6 +4946,26 @@
       "rule": {
         "type": "String",
         "example": "Missing cover art"
+      }
+    }
+  },
+  "healthFixRunning": "A fix for {rule} is already running",
+  "@healthFixRunning": {
+    "description": "Message when a health rule's fix is refused because a fix for the same rule, started from this or another session, is still running or re-checking. {rule} is the rule's own name.",
+    "placeholders": {
+      "rule": {
+        "type": "String",
+        "example": "Missing lyrics"
+      }
+    }
+  },
+  "healthFixStarted": "Fixing {rule}",
+  "@healthFixStarted": {
+    "description": "Message after a health rule's fix started; the fix runs in the background and the message offers the Tasks screen. {rule} is the rule's own name.",
+    "placeholders": {
+      "rule": {
+        "type": "String",
+        "example": "Missing lyrics"
       }
     }
   },
@@ -5045,16 +5115,6 @@
   "@healthPathMismatch": {
     "description": "Name of the health rule `path-mismatch`."
   },
-  "healthQueuedItems": "{count, plural, =1{Queued 1 item} other{Queued {count} items}}",
-  "@healthQueuedItems": {
-    "description": "Message after a rule's fix was started, saying how many items it will work on.",
-    "placeholders": {
-      "count": {
-        "type": "int",
-        "example": "42"
-      }
-    }
-  },
   "healthResolveAction": "Resolve",
   "@healthResolveAction": {
     "description": "Confirming button of the keep-the-best dialog."
@@ -5122,6 +5182,10 @@
   "healthSmallArt": "Low-resolution cover art",
   "@healthSmallArt": {
     "description": "Name of the health rule `small-art`."
+  },
+  "healthSweepFailed": "The last sweep failed, so these numbers are from an earlier one",
+  "@healthSweepFailed": {
+    "description": "Line under the health score when the most recent health sweep failed; the counts shown are the last successful sweep's."
   },
   "healthSweepNow": "Sweep now",
   "@healthSweepNow": {
@@ -7097,13 +7161,21 @@
   "@notifBackupFailedTitle": {
     "description": "Switch label for the `backup-failed` notification."
   },
-  "notifEpisodeDownloadedHelp": "A new episode of a subscribed show finished downloading.",
-  "@notifEpisodeDownloadedHelp": {
-    "description": "What the `episode-downloaded` notification is about, drawn under its switch."
+  "notifEpisodeArrivedHelp": "A subscribed show published a new episode.",
+  "@notifEpisodeArrivedHelp": {
+    "description": "What the new-episode notification is about, in a delivery target's event checklist."
   },
-  "notifEpisodeDownloadedTitle": "New episode downloaded",
+  "notifEpisodeArrivedTitle": "New episode",
+  "@notifEpisodeArrivedTitle": {
+    "description": "Heading of the notification that a subscribed show published new episodes, and its name in a delivery target's event checklist."
+  },
+  "notifEpisodeDownloadedHelp": "An episode you asked for finished downloading.",
+  "@notifEpisodeDownloadedHelp": {
+    "description": "What the episode-fetched notification is about, in a delivery target's event checklist."
+  },
+  "notifEpisodeDownloadedTitle": "Episode fetched",
   "@notifEpisodeDownloadedTitle": {
-    "description": "Switch label for the `episode-downloaded` notification."
+    "description": "Heading of the notification that an episode the reader asked to download finished downloading, and its name in a delivery target's event checklist."
   },
   "notifFeedDisabledHelp": "A subscribed feed kept failing and was disabled.",
   "@notifFeedDisabledHelp": {
@@ -7113,6 +7185,14 @@
   "@notifFeedDisabledTitle": {
     "description": "Switch label for the `feed-disabled` notification."
   },
+  "notifHealthFixFinishedHelp": "A library health fix you started finished.",
+  "@notifHealthFixFinishedHelp": {
+    "description": "What the health-fix-finished notification is about, in a delivery target's event checklist."
+  },
+  "notifHealthFixFinishedTitle": "Health fix finished",
+  "@notifHealthFixFinishedTitle": {
+    "description": "Heading of the notification that a library health fix the reader started finished. The line under it says what it filled."
+  },
   "notifImportCompletedHelp": "An upload or acquisition identified confidently enough to file itself, with no review.",
   "@notifImportCompletedHelp": {
     "description": "What the `import-completed` notification is about, drawn under its switch."
@@ -7120,6 +7200,22 @@
   "notifImportCompletedTitle": "Filed without review",
   "@notifImportCompletedTitle": {
     "description": "Switch label for the `import-completed` notification."
+  },
+  "notifJobFailedHelp": "A library job you started failed.",
+  "@notifJobFailedHelp": {
+    "description": "What the job-failed notification is about, in a delivery target's event checklist."
+  },
+  "notifJobFailedTitle": "Library job failed",
+  "@notifJobFailedTitle": {
+    "description": "Heading of the notification that a library job the reader started failed. The line under it says which and why."
+  },
+  "notifJobFinishedHelp": "A library job you started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash.",
+  "@notifJobFinishedHelp": {
+    "description": "What the job-finished notification is about, in a delivery target's event checklist."
+  },
+  "notifJobFinishedTitle": "Library job finished",
+  "@notifJobFinishedTitle": {
+    "description": "Heading of the notification that a library job the reader started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash. The line under it says which and what it did."
   },
   "notifPlaylistSyncedHelp": "A synced playlist pulled in changes from its source, or its syncing kept failing and was suspended.",
   "@notifPlaylistSyncedHelp": {
@@ -13033,9 +13129,27 @@
   "@settingsNotifyTargetsError": {
     "description": "Shown where the notification target rows would be when the read failed."
   },
+  "settingsNotifyTestDelivered": "Test delivered",
+  "@settingsNotifyTestDelivered": {
+    "description": "Message when a test notification reached its destination."
+  },
+  "settingsNotifyTestFailed": "Test failed: {reason}",
+  "@settingsNotifyTestFailed": {
+    "description": "Message when a test notification could not be delivered. {reason} is the server's own words about the failure.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "connection refused"
+      }
+    }
+  },
   "settingsNotifyTestQueued": "Test queued; the outcome shows on the target shortly",
   "@settingsNotifyTestQueued": {
     "description": "Snackbar after a test notification has been asked for."
+  },
+  "settingsNotifyTestUnanswered": "No answer from the test yet; the target shows it when it lands",
+  "@settingsNotifyTestUnanswered": {
+    "description": "Message when a test notification's outcome did not arrive within half a minute; the target's status line shows it once it does."
   },
   "settingsNotifyUnifiedPushHelp": "Usually registered by the app through its distributor",
   "@settingsNotifyUnifiedPushHelp": {
@@ -14573,6 +14687,130 @@
   "@toolsClearFinished": {
     "description": "Button that removes every finished task from the list at once."
   },
+  "toolsCountAdded": "added {count}",
+  "@toolsCountAdded": {
+    "description": "Counter in a finished scan's result: files that brought new items. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      }
+    }
+  },
+  "toolsCountAnalyzed": "analyzed {count}",
+  "@toolsCountAnalyzed": {
+    "description": "Counter in a finished analysis's result: files fingerprinted. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "120"
+      }
+    }
+  },
+  "toolsCountCovers": "covers {count}",
+  "@toolsCountCovers": {
+    "description": "Counter in a finished enrichment's result: front covers it fetched. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "6"
+      }
+    }
+  },
+  "toolsCountErrored": "errored {count}",
+  "@toolsCountErrored": {
+    "description": "Counter in a finished job's result: files it could not read or write. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "0"
+      }
+    }
+  },
+  "toolsCountFailed": "failed {count}",
+  "@toolsCountFailed": {
+    "description": "Counter in a finished fix's result: items it could not fix. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "0"
+      }
+    }
+  },
+  "toolsCountFilledOf": "filled {filled} of {attempted}",
+  "@toolsCountFilledOf": {
+    "description": "Counter in a finished health fix's result: how many of the items it tried it fixed. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "filled": {
+        "type": "int",
+        "example": "3"
+      },
+      "attempted": {
+        "type": "int",
+        "example": "5"
+      }
+    }
+  },
+  "toolsCountLyrics": "lyrics {count}",
+  "@toolsCountLyrics": {
+    "description": "Counter in a finished enrichment's result: tracks some source answered lyrics for. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "40"
+      }
+    }
+  },
+  "toolsCountMissing": "missing {count}",
+  "@toolsCountMissing": {
+    "description": "Counter in a finished scan's result: items whose files are gone from disk. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "toolsCountMoved": "moved {count}",
+  "@toolsCountMoved": {
+    "description": "Counter in a finished organize run's result: files moved into place. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "30"
+      }
+    }
+  },
+  "toolsCountPictures": "pictures {count}",
+  "@toolsCountPictures": {
+    "description": "Counter in a finished enrichment's result: other pictures it fetched, backs and booklets. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "toolsCountSkipped": "skipped {count}",
+  "@toolsCountSkipped": {
+    "description": "Counter in a finished job's or fix's result: items left alone. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "toolsCountUpdated": "updated {count}",
+  "@toolsCountUpdated": {
+    "description": "Counter in a finished scan's result: files whose audio changed. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "toolsDismiss": "Dismiss",
   "@toolsDismiss": {
     "description": "Accessible name of the control that removes one finished task from the list."
@@ -14598,6 +14836,46 @@
         "example": "4"
       }
     }
+  },
+  "toolsJobAnalyze": "Audio analysis",
+  "@toolsJobAnalyze": {
+    "description": "Name of a catalog job that fingerprints files and measures their loudness."
+  },
+  "toolsJobDelete": "Delete",
+  "@toolsJobDelete": {
+    "description": "Name of a catalog job that deletes files from the library."
+  },
+  "toolsJobEmptyTrash": "Emptying the trash",
+  "@toolsJobEmptyTrash": {
+    "description": "Name of a catalog job that permanently deletes the trashed files."
+  },
+  "toolsJobEnrich": "Enrichment",
+  "@toolsJobEnrich": {
+    "description": "Name of a catalog job that looks up artwork, lyrics and metadata."
+  },
+  "toolsJobImport": "Import",
+  "@toolsJobImport": {
+    "description": "Name of a catalog job that files one uploaded or downloaded file into the library."
+  },
+  "toolsJobOrganize": "Organize",
+  "@toolsJobOrganize": {
+    "description": "Name of a catalog job that moves files into the library's layout."
+  },
+  "toolsJobPurgeTrash": "Purge from the trash",
+  "@toolsJobPurgeTrash": {
+    "description": "Name of a catalog job that permanently deletes one trashed file."
+  },
+  "toolsJobRestore": "Restore",
+  "@toolsJobRestore": {
+    "description": "Name of a catalog job that restores files from the trash."
+  },
+  "toolsJobScan": "Library scan",
+  "@toolsJobScan": {
+    "description": "Name of a catalog job that scans the library folders."
+  },
+  "toolsJobsTitle": "Library jobs",
+  "@toolsJobsTitle": {
+    "description": "Heading over the catalog's own jobs (scans, enrichment, analysis) on the tasks screen, shown to administrators."
   },
   "toolsLoadError": "Could not load tool tasks",
   "@toolsLoadError": {
@@ -14626,6 +14904,14 @@
         "example": "3"
       }
     }
+  },
+  "toolsStateCanceled": "Canceled",
+  "@toolsStateCanceled": {
+    "description": "State of a job an administrator canceled. Agrees with the word for a task in this language."
+  },
+  "toolsStateCrashed": "Crashed",
+  "@toolsStateCrashed": {
+    "description": "State of a job the server stopped in the middle of, a restart or a crash. Agrees with the word for a task in this language."
   },
   "toolsStateDone": "Done",
   "@toolsStateDone": {
@@ -14721,6 +15007,20 @@
   "@toolsTaskCueSplit": {
     "description": "Name of the task that cuts one long audio file into tracks using its CUE sheet. CUE is a file format and stays as it is."
   },
+  "toolsTaskGenreNormalize": "Genre clean-up",
+  "@toolsTaskGenreNormalize": {
+    "description": "Name of a task that folds genre spellings onto the canonical genre tree."
+  },
+  "toolsTaskHealthFix": "Fix: {rule}",
+  "@toolsTaskHealthFix": {
+    "description": "Name of a task fixing one library health rule. {rule} is the rule's own name.",
+    "placeholders": {
+      "rule": {
+        "type": "String",
+        "example": "Missing lyrics"
+      }
+    }
+  },
   "toolsTaskImportFrom": "Import from {source}",
   "@toolsTaskImportFrom": {
     "description": "Name of the task that copies stars, ratings, history, and progress out of another server. {source} is that server's product name and is not translated. A task's name is a noun, unlike the playlist import dialog's title of the same English.",
@@ -14744,6 +15044,10 @@
         "example": "7"
       }
     }
+  },
+  "toolsTasksSection": "Tool tasks",
+  "@toolsTasksSection": {
+    "description": "Heading over the tool tasks list when the catalog's jobs are listed above it."
   },
   "toolsTitle": "Tool tasks",
   "@toolsTitle": {

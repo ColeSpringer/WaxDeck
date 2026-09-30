@@ -1427,6 +1427,7 @@ LibraryInfo libraryCreatedFromGen(gen.LibraryCreated l) => LibraryInfo(
   path: l.path,
   itemCount: l.itemCount,
   streamingWarning: l.streamingWarning,
+  scanStarted: l.scanStarted,
 );
 
 GenreNode genreNodeFromGen(gen.GenreNode n) => GenreNode(
@@ -1875,6 +1876,8 @@ HealthSummary healthSummaryFromGen(gen.HealthSummary summary) {
     totalItems: summary.totalItems,
     evaluatedItems: summary.evaluatedItems,
     warmingUp: summary.warmingUp,
+    sweeping: summary.sweeping ?? false,
+    sweepFailed: summary.sweepFailed,
     sweptAt: summary.sweptAt?.toUtc(),
     rules: summary.rules
         .map(
@@ -1883,11 +1886,24 @@ HealthSummary healthSummaryFromGen(gen.HealthSummary summary) {
             label: r.label,
             failing: r.failing,
             fixable: r.fixable,
+            fixing: r.fixing,
+            fixBlocked: r.fixBlocked == null
+                ? null
+                : gen.standardSerializers.serialize(
+                        r.fixBlocked,
+                        specifiedType: const FullType(
+                          gen.HealthRuleCountFixBlockedEnum,
+                        ),
+                      )
+                      as String,
           ),
         )
         .toList(),
   );
 }
+
+HealthFixStart healthFixStartFromGen(gen.HealthFixResult r) =>
+    HealthFixStart(queued: r.queued, jobPid: r.jobPid, taskId: r.taskId);
 
 HealthIssue healthIssueFromGen(gen.HealthIssue issue) {
   final detail = issue.detail;
@@ -2498,6 +2514,11 @@ Job jobFromGen(gen.Job job) {
     progress: job.progress,
     message: job.message,
     error: job.error,
+    startedAt: job.startedAt?.toUtc(),
+    finishedAt: job.finishedAt?.toUtc(),
+    result: job.result?.toMap().map<String, Object?>(
+      (key, value) => MapEntry(key, value?.value),
+    ),
   );
 }
 

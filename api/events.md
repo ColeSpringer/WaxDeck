@@ -111,12 +111,20 @@ plus two cursorless topics:
 - `user` (`serverSeq`): the calling user's own WaxDeck-side state (playback
   state, preferences, podcast subscriptions and their settings, per-book
   playback settings), from the `event_log` table. Curation surfaces ride
-  this stream as marker kinds (`review`, `upload`, `task`) carrying only
-  the pid to refetch by: the review queue, upload sessions, and tool
-  tasks are live reads, not mirrored state, so the markers hydrate
-  nothing. Review markers fan out to every administrator plus the
-  entry's uploader; upload and task markers go to their owner and the
-  administrators.
+  this stream as marker kinds (`review`, `upload`, `task`,
+  `task-progress`, `job`) carrying only the pid to refetch by: the review
+  queue, upload sessions, tool tasks and catalog jobs are live reads, not
+  mirrored state, so the markers hydrate nothing. Review markers fan out
+  to every administrator plus the entry's uploader; upload markers go to
+  their owner alone; task markers go to their owner and the
+  administrators when a task is queued, starts or ends, and
+  `task-progress` markers to the same accounts as its progress moves,
+  which is not news; job markers go to the administrators once when a job
+  ends and, for a scan, analysis, enrichment, organize run or emptying the
+  trash, when it is first seen, crosses another five percent of progress
+  or changes its message (at most every fifteen seconds). The pid-less
+  `health` marker reaches every account when a sweep is queued, finishes
+  or fails, and when a fix starts or finishes.
 - `player` (no cursor): the caller's visible player-endpoint and
   playback-session *lists* changed (an endpoint appeared or went offline,
   a session started, ended, or moved to another endpoint, or a session's

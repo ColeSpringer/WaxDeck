@@ -1,9 +1,9 @@
 package service
 
 // Library health: the sweep that grades every item against the health
-// rules, the issue index it maintains, the durable fix queue, and the
-// duplicate and upgrade maintenance surfaces built on the catalog
-// audit.
+// rules, the issue index it maintains, and the duplicate and upgrade
+// maintenance surfaces built on the catalog audit. The fixes are in
+// healthfix.go.
 //
 // Rule coverage notes. small-art rides along with missing-art for
 // free: resolving art for that rule already loads the source blob,
@@ -40,15 +40,6 @@ const (
 	// healthSweepInterval is how stale the last sweep may get before
 	// HealthSweepDue asks the worker for another.
 	healthSweepInterval = 24 * time.Hour
-
-	// fixMaxAttempts and fixLease bound the durable fix queue: a fix
-	// out of attempts is pruned, and a crashed worker's lease expires.
-	fixMaxAttempts = 5
-	fixLease       = 2 * time.Minute
-
-	// fixQueueDefaultScope caps how many failing items an un-scoped
-	// bulk fix enqueues in one request.
-	fixQueueDefaultScope = 10000
 
 	// smallArtMinSide is the minimum width and height source art must
 	// have to pass the small-art rule.
@@ -105,23 +96,6 @@ var healthRuleLabels = map[string]string{
 	ruleDurationMismatch: "Header duration disagrees with the audio",
 }
 
-// healthFixable names the rules the bulk-fix endpoint automates.
-// missing-year and missing-mbid are computable but have no per-item fix
-// path (identity fields ride the whole-library enrichment pass and the
-// matching queue), small-art would need
-// the force-overwrite the fill-when-empty enrichment path refuses, and
-// corrupt-audio plus legacy-tags have no automated fix at all.
-// genre-whitelist is deliberately absent: the normalization sweeper
-// already rewrites everything the vocabulary knows, continuously, so an
-// item still flagged carries a genre the tree does not cover. The fix is
-// an edit to the tree, not to the item, and a per-item button would only
-// queue no-op work.
-var healthFixable = map[string]bool{
-	ruleMissingArt: true, ruleMissingLyrics: true, ruleMissingGenre: true,
-	ruleMissingNarrator: true, ruleMissingASIN: true,
-	rulePathMismatch: true, ruleWriteUnsynced: true,
-}
-
 // healthRuleWeight is a rule's contribution to an item's failure
 // weight: corrupt audio is the worst thing that can be true of a file,
 // missing art is the most visible gap, everything else weighs one.
@@ -149,12 +123,16 @@ type healthState struct {
 	SweptAtNS      int64   `json:"sweptAtNs"`
 }
 
-// HealthRuleCountDTO is one rule's standing for the API.
+// HealthRuleCountDTO is one rule's standing for the API. FixBlocked
+// says what this install lacks to fix a rule that has a fix.
 type HealthRuleCountDTO struct {
-	Rule    string
-	Label   string
-	Failing int
-	Fixable bool
+	Rule       string
+	Label      string
+	Failing    int
+	Fixable    bool
+	FixBlocked string
+	// Fixing is a fix for the rule under way.
+	Fixing bool
 }
 
 // HealthSummaryDTO is the health dashboard aggregate.
@@ -164,7 +142,12 @@ type HealthSummaryDTO struct {
 	EvaluatedItems int
 	SweptAt        time.Time
 	WarmingUp      bool
-	Rules          []HealthRuleCountDTO
+	// Sweeping is a sweep running, or one an administrator asked for.
+	Sweeping bool
+	// SweepFailed is the last sweep having failed: the numbers are the
+	// last landed sweep's.
+	SweepFailed bool
+	Rules       []HealthRuleCountDTO
 }
 
 // HealthIssueDTO is one failing item with the rules it fails.
@@ -533,13 +516,26 @@ func (l *Library) itemFileRules(ctx context.Context, it *model.ItemView, byPath 
 // rule. Best-effort: a server with no managed library (in-place roots
 // only) has no canonical layout to mismatch, so the rule is skipped.
 func (l *Library) plannedMoves(ctx context.Context) map[model.PID]bool {
-	if len(l.lib.Profiles()) == 0 {
-		return nil
-	}
-	plan, err := l.lib.PlanOrganize(ctx, query.New(query.EntityItems).Build(), l.defaultOrganizeProfile())
+	moves, err := l.readPlannedMoves(ctx)
 	if err != nil {
 		l.log.Debug("health: organize plan for path-mismatch", "err", err)
 		return nil
+	}
+	return moves
+}
+
+// errNoOrganizeProfile is a plan asked of a catalog with no profile.
+var errNoOrganizeProfile = errInvalid("no organize profile to plan with")
+
+// readPlannedMoves is plannedMoves with its failure, for a re-check that
+// must not read a plan it could not make as nothing to move.
+func (l *Library) readPlannedMoves(ctx context.Context) (map[model.PID]bool, error) {
+	if len(l.lib.Profiles()) == 0 {
+		return nil, errNoOrganizeProfile
+	}
+	plan, err := l.lib.PlanOrganize(ctx, query.New(query.EntityItems).Build(), l.defaultOrganizeProfile())
+	if err != nil {
+		return nil, classify(err)
 	}
 	out := map[model.PID]bool{}
 	for i := range plan.Actions {
@@ -548,7 +544,7 @@ func (l *Library) plannedMoves(ctx context.Context) map[model.PID]bool {
 			out[a.ItemPID] = true
 		}
 	}
-	return out
+	return out, nil
 }
 
 // defaultOrganizeProfile picks the profile the sweep and the per-item
@@ -588,16 +584,25 @@ func (l *Library) HealthSummaryFor(ctx context.Context) (HealthSummaryDTO, error
 	default:
 		return HealthSummaryDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
+	out.Sweeping = l.sweeping.Load() || l.SweepRequested(ctx)
+	out.SweepFailed = l.sweepFailed.Load()
 	counts, err := l.db.HealthRuleCounts(ctx)
 	if err != nil {
 		return HealthSummaryDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
+	fixing, err := l.fixingRules(ctx)
+	if err != nil {
+		return HealthSummaryDTO{}, &Error{Kind: KindInternal, Err: err}
+	}
 	for _, rule := range healthRules {
+		fixable, blocked := l.healthFixability(rule)
 		out.Rules = append(out.Rules, HealthRuleCountDTO{
-			Rule:    rule,
-			Label:   healthRuleLabels[rule],
-			Failing: counts[rule],
-			Fixable: healthFixable[rule],
+			Rule:       rule,
+			Label:      healthRuleLabels[rule],
+			Failing:    counts[rule],
+			Fixable:    fixable,
+			FixBlocked: blocked,
+			Fixing:     fixing[rule],
 		})
 	}
 	sort.SliceStable(out.Rules, func(i, j int) bool {
@@ -760,37 +765,72 @@ func decodeHealthCursor(s string) (count int, title, pid string, ok bool) {
 
 // QueueHealthSweep flags an off-schedule full sweep. The 202 answers
 // immediately; the main-registered health worker sees the flag on its
-// next tick and runs SweepHealth.
+// next tick and runs RunHealthSweep. The flag names who asked and when,
+// so a request made while a sweep runs outlives that sweep.
 func (l *Library) QueueHealthSweep(ctx context.Context, uc *UserCtx) error {
 	if !uc.Admin {
 		return &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	if err := l.db.SettingSet(ctx, healthSweepReqKey, "1", time.Now().UnixNano()); err != nil {
+	now := time.Now().UnixNano()
+	if err := l.db.SettingSet(ctx, healthSweepReqKey, uc.ID+"@"+strconv.FormatInt(now, 10), now); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
+	l.emitEveryoneEvent(ctx, eventHealth)
 	return nil
+}
+
+// sweepRequest is the pending request's flag, empty when none is.
+func (l *Library) sweepRequest(ctx context.Context) string {
+	v, err := l.db.SettingGet(ctx, healthSweepReqKey)
+	if err != nil {
+		return ""
+	}
+	return v
 }
 
 // SweepRequested reports whether an admin has asked for an off-schedule
 // sweep.
 func (l *Library) SweepRequested(ctx context.Context) bool {
-	v, err := l.db.SettingGet(ctx, healthSweepReqKey)
-	return err == nil && v == "1"
+	return l.sweepRequest(ctx) != ""
 }
 
-// ClearSweepRequest drops the off-schedule sweep flag; the worker calls
-// it after a sweep completes.
-func (l *Library) ClearSweepRequest(ctx context.Context) {
-	if err := l.db.SettingDelete(ctx, healthSweepReqKey); err != nil {
-		l.log.Warn("health: clearing sweep request", "err", err)
+// RunHealthSweep is the health worker's sweep: it shows as sweeping while
+// it runs, answers the request it found waiting once it lands, and tells
+// every account the summary moved.
+func (l *Library) RunHealthSweep(ctx context.Context) error {
+	req := l.sweepRequest(ctx)
+	l.sweeping.Store(true)
+	err := l.SweepHealth(ctx)
+	l.sweepEnded(ctx, req, err)
+	return err
+}
+
+// sweepEnded settles a sweep that answered req (empty when none asked).
+// A failure answers the request too: kept, it would run again every
+// minute and read as sweeping until one landed. One cut short by the
+// server stopping keeps it for the next start. Accounts hear of a landed
+// sweep, a requested one's end, and the first failure in a run of them.
+func (l *Library) sweepEnded(ctx context.Context, req string, err error) {
+	stopping := err != nil && ctx.Err() != nil
+	if req != "" && !stopping {
+		if derr := l.db.SettingDeleteIf(ctx, healthSweepReqKey, req); derr != nil {
+			l.log.Warn("health: clearing sweep request", "err", derr)
+		}
+	}
+	l.sweeping.Store(false)
+	if stopping {
+		return
+	}
+	if failedBefore := l.sweepFailed.Swap(err != nil); err == nil || !failedBefore || req != "" {
+		l.emitEveryoneEvent(ctx, eventHealth)
 	}
 }
 
 // HealthSweepDue reports whether the main-registered health worker
 // should sweep now: an explicit request is pending, no sweep has ever
 // completed, or the last one is older than healthSweepInterval. Main's
-// ticker loop calls this, then SweepHealth and ClearSweepRequest, all
-// synchronously on the supervised worker.
+// ticker loop calls this, then RunHealthSweep, synchronously on the
+// supervised worker.
 func (l *Library) HealthSweepDue(ctx context.Context) bool {
 	if l.SweepRequested(ctx) {
 		return true
@@ -804,137 +844,6 @@ func (l *Library) HealthSweepDue(ctx context.Context) bool {
 		return true
 	}
 	return time.Since(time.Unix(0, st.SweptAtNS)) > healthSweepInterval
-}
-
-// QueueHealthFix enqueues the fix matching one rule for the named items
-// (or for everything currently failing the rule) on the durable fix
-// queue. Re-queueing an already queued (item, rule) is a no-op upstream
-// but still counts as queued here, since the work is pending either
-// way.
-func (l *Library) QueueHealthFix(ctx context.Context, uc *UserCtx, rule string, itemPids []string) (int, error) {
-	if !uc.Admin {
-		return 0, &Error{Kind: KindForbidden, Msg: "administrators only"}
-	}
-	if !healthFixable[rule] {
-		return 0, errInvalid("no automated fix for rule " + rule)
-	}
-	var bare []string
-	if len(itemPids) > 0 {
-		for _, p := range itemPids {
-			prefix, pid, ok := parseAPIPID(p)
-			if !ok || !itemPrefix(prefix) {
-				return 0, errInvalid("bad item pid " + p)
-			}
-			bare = append(bare, string(pid))
-		}
-	} else {
-		pids, err := l.db.FailingItems(ctx, rule, fixQueueDefaultScope)
-		if err != nil {
-			return 0, &Error{Kind: KindInternal, Err: err}
-		}
-		bare = pids
-	}
-	for _, pid := range bare {
-		if err := l.db.EnqueueFix(ctx, pid, rule); err != nil {
-			return 0, &Error{Kind: KindInternal, Err: err}
-		}
-	}
-	return len(bare), nil
-}
-
-// DrainFixQueue works one queued health fix; false means the queue is
-// idle. The main-registered fix worker loops it at provider-etiquette
-// pace. A permanent failure (the item is gone, the rule has no path
-// forward) completes the row with a log line; a transient one backs the
-// row off for a retry.
-func (l *Library) DrainFixQueue(ctx context.Context) bool {
-	now := time.Now()
-	row, err := l.db.LeaseFix(ctx, now.UnixNano(), fixLease.Nanoseconds(), fixMaxAttempts)
-	if err != nil {
-		if !errors.Is(err, wdb.ErrNotFound) {
-			l.log.Warn("health: leasing fix", "err", err)
-		}
-		return false
-	}
-	ferr := l.runHealthFix(ctx, row)
-	switch {
-	case ferr == nil:
-		if err := l.db.CompleteFix(ctx, row.ID); err != nil {
-			l.log.Warn("health: completing fix", "id", row.ID, "err", err)
-		}
-	case KindOf(ferr) == KindInvalid || KindOf(ferr) == KindNotFound:
-		l.log.Warn("health: fix dropped", "item", row.ItemPID, "rule", row.Rule, "err", ferr)
-		if err := l.db.CompleteFix(ctx, row.ID); err != nil {
-			l.log.Warn("health: completing fix", "id", row.ID, "err", err)
-		}
-	default:
-		retry := now.Add(queueRetryDelay(row.Attempts + 1))
-		if err := l.db.FailFix(ctx, row.ID, ferr.Error(), retry.UnixNano()); err != nil {
-			l.log.Warn("health: recording fix failure", "id", row.ID, "err", err)
-		}
-	}
-	return true
-}
-
-// runHealthFix executes one leased fix. The enrichment-backed fixes
-// share EnrichItemNow with the editor's per-item endpoint; a run whose
-// providers found nothing still completes (the item shows again on the
-// next sweep, and re-fixing without new providers cannot do better).
-func (l *Library) runHealthFix(ctx context.Context, row wdb.FixQueueRow) error {
-	pid := model.PID(row.ItemPID)
-	switch row.Rule {
-	case ruleMissingArt:
-		_, _, err := l.EnrichItemNow(ctx, pid, []string{enrichWantCover})
-		return err
-	case ruleMissingLyrics:
-		_, _, err := l.EnrichItemNow(ctx, pid, []string{enrichWantLyrics})
-		return err
-	case ruleMissingGenre:
-		_, _, err := l.EnrichItemNow(ctx, pid, []string{enrichWantGenres})
-		return err
-	case ruleMissingNarrator, ruleMissingASIN:
-		_, _, err := l.EnrichItemNow(ctx, pid, []string{enrichWantBook})
-		return err
-	case rulePathMismatch:
-		// Re-plan scoped to this one item (the query grammar has a pid
-		// field) and apply the move.
-		plan, err := l.lib.PlanOrganize(ctx,
-			query.New(query.EntityItems).Where("pid", query.OpIs, string(pid)).Build(),
-			l.defaultOrganizeProfile())
-		if err != nil {
-			return classify(err)
-		}
-		if _, err := l.lib.ApplyOrganize(ctx, plan); err != nil {
-			return classify(err)
-		}
-		return nil
-	case ruleWriteUnsynced:
-		// Retry the write-back by re-editing the title to its current
-		// value with WriteBack and Force: the catalog edit is a no-op,
-		// but it forces a tag rewrite of the backing file, and a
-		// successful write-back clears the unsynced diagnostic
-		// upstream. The lock is left as it stands: Force is here to get
-		// the no-op edit past a locked title, not to release one, and a
-		// fix that quietly unpinned a curated title would be worse than
-		// the diagnostic it clears.
-		//
-		// It is not mark-free, though: an edit naming no source records a
-		// user one, so each fixed item gains a field_provenance row saying
-		// a person set its title. That is what enrichment and organize read
-		// to decide authority, so a sweep over a library full of unsynced
-		// diagnostics leaves that many titles reading as hand-curated.
-		it, err := l.lib.Get(ctx, pid)
-		if err != nil {
-			return classify(err)
-		}
-		if err := l.lib.EditFields(ctx, pid, map[string]string{"title": it.Title},
-			waxbin.EditOptions{WriteBack: true, Force: true, Lock: model.LockUnchanged}); err != nil {
-			return classify(err)
-		}
-		return nil
-	default:
-		return errInvalid("no automated fix for rule " + row.Rule)
-	}
 }
 
 // ListDuplicateGroups runs the catalog's duplicate audits and maps the

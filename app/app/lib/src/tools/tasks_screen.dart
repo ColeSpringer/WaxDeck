@@ -6,141 +6,42 @@ import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../admin/admin_providers.dart';
+import '../health/health_labels.dart';
 import '../home/item_shelf.dart';
 import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
+import '../settings/settings_registry.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-
-/// Accumulated pages of tool tasks, newest first.
-class ToolTasksState {
-  const ToolTasksState({
-    required this.tasks,
-    this.nextCursor,
-    this.loadingMore = false,
-  });
-
-  final List<ToolTask> tasks;
-  final String? nextCursor;
-  final bool loadingMore;
-
-  bool get hasMore => nextCursor != null;
-
-  ToolTasksState copyWith({bool? loadingMore}) => ToolTasksState(
-    tasks: tasks,
-    nextCursor: nextCursor,
-    loadingMore: loadingMore ?? this.loadingMore,
-  );
-}
-
-/// Pages the tool task list with keyset cursors.
-class ToolTasksController extends AsyncNotifier<ToolTasksState> {
-  static const pageSize = 50;
-
-  var _generation = 0;
-
-  @override
-  Future<ToolTasksState> build() async {
-    _generation++;
-    final page = await ref
-        .watch(repositoryProvider)
-        .listToolTasks(limit: pageSize);
-    return ToolTasksState(tasks: page.tasks, nextCursor: page.nextCursor);
-  }
-
-  Future<void> loadMore() async {
-    final current = state.value;
-    if (current == null || !current.hasMore || current.loadingMore) return;
-    final generation = _generation;
-    state = AsyncData(current.copyWith(loadingMore: true));
-    try {
-      final page = await ref
-          .read(repositoryProvider)
-          .listToolTasks(cursor: current.nextCursor, limit: pageSize);
-      if (generation != _generation) return;
-      state = AsyncData(
-        ToolTasksState(
-          tasks: [...current.tasks, ...page.tasks],
-          nextCursor: page.nextCursor,
-        ),
-      );
-    } on WaxDeckApiException {
-      // An expected transport or server error. Keep what we have;
-      // scrolling near the end again retries.
-      if (generation != _generation) return;
-      state = AsyncData(current.copyWith(loadingMore: false));
-    } catch (_) {
-      // Anything else is a defect, not a hiccup: a decode failure,
-      // a bad cast. Release the paging guard first - loadingMore is
-      // what keeps two fetches from racing, so leaving it set would
-      // wedge paging permanently and silently - then let the error
-      // reach the app's error handler instead of vanishing here.
-      if (generation == _generation) {
-        state = AsyncData(current.copyWith(loadingMore: false));
-      }
-      rethrow;
-    }
-  }
-
-  /// Removes one finished row, in place rather than by refetch, so a
-  /// dismiss mid-scroll does not throw the reader back to the top.
-  /// Failures propagate; the row's control answers for them.
-  Future<void> dismiss(String taskId) async {
-    try {
-      await ref.read(repositoryProvider).deleteToolTask(taskId);
-    } on WaxDeckApiException catch (e) {
-      // Already gone - dismissed from another device, or swept - is
-      // the outcome this tap wanted, so the splice below still runs.
-      if (e.statusCode != 404) rethrow;
-    }
-    // Mounted before state: an unmounted notifier's state getter
-    // throws, and a sign-out mid-flight lands this exactly there.
-    if (!ref.mounted) return;
-    final current = state.value;
-    if (current == null) return;
-    state = AsyncData(
-      ToolTasksState(
-        tasks: [
-          for (final task in current.tasks)
-            if (task.id != taskId) task,
-        ],
-        nextCursor: current.nextCursor,
-        loadingMore: current.loadingMore,
-      ),
-    );
-  }
-
-  /// Sweeps the finished rows the caller can see (everyone's for an
-  /// administrator, whose list shows everyone's) and answers how many
-  /// went, for the toolbar's toast. Refetched rather than filtered
-  /// locally: the server's answer is the truth about what it deleted.
-  Future<int> clearFinished() async {
-    final deleted = await ref.read(repositoryProvider).clearFinishedToolTasks();
-    if (ref.mounted) ref.invalidateSelf();
-    return deleted;
-  }
-}
-
-final toolTasksProvider =
-    AsyncNotifierProvider<ToolTasksController, ToolTasksState>(
-      ToolTasksController.new,
-      retry: retryUnlessRefused,
-    );
+import 'tool_tasks_provider.dart';
 
 /// Whether a task has reached a terminal state.
 bool _finished(ToolTask task) => task.state == 'done' || task.state == 'failed';
 
 /// The kinds in words. The three imports name a product rather than a
 /// kind of work, so the name rides in as a placeholder and the sentence
-/// around it is what gets translated.
-String _typeLabel(AppLocalizations l10n, String type) => switch (type) {
+/// around it is what gets translated; a health fix names its rule, which
+/// its summary carries from the start.
+String _typeLabel(
+  AppLocalizations l10n,
+  String type, [
+  Map<String, Object?>? summary,
+]) => switch (type) {
   'book-merge' => l10n.toolsTaskBookMerge,
   'book-split' => l10n.toolsTaskBookSplit,
   'cue-split' => l10n.toolsTaskCueSplit,
   'acquire' => l10n.toolsTaskAcquire,
   'playlist-sync' => l10n.toolsTaskPlaylistSync,
+  'genre-normalize' => l10n.toolsTaskGenreNormalize,
+  'health-fix' => switch (summary?['rule']) {
+    final String rule => l10n.toolsTaskHealthFix(
+      healthRuleName(l10n, rule) ?? rule,
+    ),
+    _ => l10n.toolsTaskHealthFix(type),
+  },
   'import-navidrome' => l10n.toolsTaskImportFrom('Navidrome'),
   'import-subsonic' => l10n.toolsTaskImportFrom('Subsonic'),
   'import-audiobookshelf' => l10n.toolsTaskImportFrom('Audiobookshelf'),
@@ -163,6 +64,10 @@ class TasksScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
     final tasks = ref.watch(toolTasksProvider);
+    // Catalog jobs are an administrator's: nobody else may list them.
+    final jobs = ref.watch(isAdminProvider)
+        ? _visibleJobs(ref.watch(adminJobsProvider).value ?? const <Job>[])
+        : const <Job>[];
     // Read off the value rather than the runtime type, for the same
     // reason the face below does: a refresh carries the previous value
     // under an AsyncLoading, and a toolbar control that vanished on
@@ -178,6 +83,7 @@ class TasksScreen extends ConsumerWidget {
       },
       child: WaxScaffold(
         title: l10n.toolsTitle,
+        semanticsId: SemanticsIds.tasksScreen,
         actions: <Widget>[
           if (anyFinished)
             WaxIconButton(
@@ -188,19 +94,41 @@ class TasksScreen extends ConsumerWidget {
             ),
         ],
         slivers: <Widget>[
+          if (jobs.isNotEmpty) ...<Widget>[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+                child: SectionHeader(title: l10n.toolsJobsTitle),
+              ),
+            ),
+            SliverList.builder(
+              itemCount: jobs.length,
+              itemBuilder: (context, index) => _JobRow(job: jobs[index]),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: WaxSpace.s16),
+                child: SectionHeader(title: l10n.toolsTasksSection),
+              ),
+            ),
+          ],
           AsyncSliverFace<ToolTasksState>(
             state: tasks,
             errorTitle: l10n.toolsLoadError,
             onRetry: () => ref.invalidate(toolTasksProvider),
             isEmpty: (value) => value.tasks.isEmpty,
-            empty: (context, _) => SliverFillRemaining(
-              hasScrollBody: false,
-              child: EmptyState(
+            // Under the jobs it keeps its own height; alone, it centres in
+            // the screen.
+            empty: (context, _) {
+              final empty = EmptyState(
                 title: l10n.toolsEmptyTitle,
                 message: l10n.toolsEmptyMessage,
                 glyph: WaxIcons.check,
-              ),
-            ),
+              );
+              return jobs.isEmpty
+                  ? SliverFillRemaining(hasScrollBody: false, child: empty)
+                  : SliverToBoxAdapter(child: empty);
+            },
             builder: (context, value) => SliverPadding(
               padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
               sliver: SliverList.builder(
@@ -277,6 +205,18 @@ class _TaskRow extends ConsumerWidget {
     _ => colors.textTertiary,
   };
 
+  /// The summary as a report, or null when there is none: a health fix
+  /// carries its rule from the start, to be named by, and its counts only
+  /// once it has some.
+  Map<String, Object?>? get _report {
+    final summary = task.summary;
+    if (task.type == 'health-fix' &&
+        !(summary?.containsKey('attempted') ?? false)) {
+      return null;
+    }
+    return summary;
+  }
+
   /// What the finished task points at, said in words; null when there
   /// is nowhere to go and nothing to show.
   String? _resultLabel(AppLocalizations l10n) {
@@ -284,7 +224,7 @@ class _TaskRow extends ConsumerWidget {
       // A failure can still have written a report worth reading: an
       // import that matched half the library before dying stores what
       // landed, and the error line alone buries it.
-      return task.summary == null ? null : l10n.toolsTapForReport;
+      return _report == null ? null : l10n.toolsTapForReport;
     }
     if (task.state != 'done') return null;
     final results = task.resultPids;
@@ -294,7 +234,7 @@ class _TaskRow extends ConsumerWidget {
           : l10n.toolsReadyForReview(results.length);
     }
     if (results.isEmpty) {
-      return task.summary == null ? null : l10n.toolsFinishedTapForReport;
+      return _report == null ? null : l10n.toolsFinishedTapForReport;
     }
     return results.length == 1
         ? l10n.toolsTapToOpenResult
@@ -307,6 +247,14 @@ class _TaskRow extends ConsumerWidget {
     Map<String, Object?> summary,
   ) {
     final parts = <String>[
+      // A health fix's: what it filled of what it tried, and the rest.
+      if (_count(summary['attempted']) case final attempted?) ...<String>[
+        l10n.toolsCountFilledOf(_count(summary['filled']) ?? 0, attempted),
+        if (_skippedTotal(summary['skipped']) case final skipped?)
+          l10n.toolsCountSkipped(skipped),
+        if (_count(summary['failed']) case final failed?)
+          l10n.toolsCountFailed(failed),
+      ],
       if (summary['matched'] != null)
         l10n.toolsSummaryMatched('${summary['matched']}'),
       if (summary['unmatched'] != null)
@@ -332,7 +280,7 @@ class _TaskRow extends ConsumerWidget {
   /// stored report explains itself inline.
   VoidCallback? _openAction(BuildContext context, WidgetRef ref) {
     if (task.state == 'failed') {
-      final summary = task.summary;
+      final summary = _report;
       if (summary == null) return null;
       return () => _showSummary(context, summary);
     }
@@ -344,7 +292,7 @@ class _TaskRow extends ConsumerWidget {
     if (task.type == 'acquire' || results.any((pid) => pid.startsWith('rv-'))) {
       return () => context.go(WaxRoute.review);
     }
-    final summary = task.summary;
+    final summary = _report;
     if (results.isEmpty) {
       if (summary == null) return null;
       return () => _showSummary(context, summary);
@@ -438,7 +386,7 @@ class _TaskRow extends ConsumerWidget {
         final colors = WaxColors.of(dialogContext);
         return AlertDialog(
           key: const Key('task-summary-dialog'),
-          title: Text(_typeLabel(l10n, task.type)),
+          title: Text(_typeLabel(l10n, task.type, task.summary)),
           content: SingleChildScrollView(
             child: WaxProse(
               const JsonEncoder.withIndent('  ').convert(summary),
@@ -474,6 +422,7 @@ class _TaskRow extends ConsumerWidget {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final running = task.state == 'running' || task.state == 'queued';
+    final typeLabel = _typeLabel(l10n, task.type, task.summary);
     final open = _openAction(context, ref);
     final error = task.error;
     final summary = task.summary;
@@ -525,7 +474,7 @@ class _TaskRow extends ConsumerWidget {
                       children: <Widget>[
                         Expanded(
                           child: Text(
-                            _typeLabel(l10n, task.type),
+                            typeLabel,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: WaxType.titleItem.copyWith(
@@ -601,6 +550,216 @@ class _TaskRow extends ConsumerWidget {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A summary counter as a whole number, or null when absent.
+int? _count(Object? value) => value is num ? value.toInt() : null;
+
+/// Everything a fix left alone, whatever the reasons, or null when none.
+int? _skippedTotal(Object? skipped) {
+  if (skipped is! Map) return null;
+  final total = skipped.values.fold<int>(0, (sum, n) => sum + (_count(n) ?? 0));
+  return total == 0 ? null : total;
+}
+
+/// Kinds a job runs per item: an upload's imports, a delete, a restore,
+/// one purge. Finished, they would bury a scan.
+const _perItemJobKinds = {'import', 'delete', 'restore', 'purge-trash'};
+
+/// How many finished jobs the section keeps.
+const _finishedJobsShown = 20;
+
+/// The jobs worth a row: every running one first, then the finished
+/// ones newest first, per-item kinds left out.
+List<Job> _visibleJobs(List<Job> jobs) {
+  DateTime at(Job j) =>
+      j.finishedAt ?? j.startedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+  final finished = [
+    for (final job in jobs)
+      if (job.state != 'running' && !_perItemJobKinds.contains(job.kind)) job,
+  ]..sort((a, b) => at(b).compareTo(at(a)));
+  return [
+    for (final job in jobs)
+      if (job.state == 'running') job,
+    ...finished.take(_finishedJobsShown),
+  ];
+}
+
+String _jobLabel(AppLocalizations l10n, String kind) => switch (kind) {
+  'scan' => l10n.toolsJobScan,
+  'enrich' => l10n.toolsJobEnrich,
+  'analyze' => l10n.toolsJobAnalyze,
+  'organize' => l10n.toolsJobOrganize,
+  'empty-trash' => l10n.toolsJobEmptyTrash,
+  'purge-trash' => l10n.toolsJobPurgeTrash,
+  'import' => l10n.toolsJobImport,
+  'delete' => l10n.toolsJobDelete,
+  'restore' => l10n.toolsJobRestore,
+  _ => kind,
+};
+
+/// One catalog job: what it is, how far along, what it said, and once
+/// finished what it did.
+class _JobRow extends StatelessWidget {
+  const _JobRow({required this.job});
+
+  final Job job;
+
+  WaxGlyph get _glyph => switch (job.kind) {
+    'scan' => WaxIcons.refresh,
+    'enrich' => WaxIcons.search,
+    'analyze' => WaxIcons.waveform,
+    'organize' || 'restore' => WaxIcons.archive,
+    'empty-trash' || 'purge-trash' || 'delete' => WaxIcons.delete,
+    'import' => WaxIcons.upload,
+    _ => WaxIcons.hourglass,
+  };
+
+  String _stateLabel(AppLocalizations l10n) {
+    final progress = job.progress;
+    return switch (job.state) {
+      'running' =>
+        progress == null
+            ? l10n.toolsStateRunning
+            : l10n.toolsStateRunningPct((progress * 100).round()),
+      'done' => l10n.toolsStateDone,
+      'failed' => l10n.toolsStateFailed,
+      'crashed' => l10n.toolsStateCrashed,
+      'canceled' => l10n.toolsStateCanceled,
+      final other => other,
+    };
+  }
+
+  Color _stateColor(WaxColors colors) => switch (job.state) {
+    'done' => colors.success,
+    'failed' || 'crashed' => colors.error,
+    'running' => colors.accent,
+    _ => colors.textTertiary,
+  };
+
+  /// The finished job's headline counters, by kind.
+  String? _resultLine(AppLocalizations l10n) {
+    final r = job.result;
+    if (r == null) return null;
+    int? n(String key) => _count(r[key]);
+    final parts = <String>[
+      ...switch (job.kind) {
+        'scan' => <String>[
+          if (n('created') case final v?) l10n.toolsCountAdded(v),
+          if (n('updated') case final v?) l10n.toolsCountUpdated(v),
+          if (n('missing') case final v?) l10n.toolsCountMissing(v),
+          if (n('errored') case final v?) l10n.toolsCountErrored(v),
+        ],
+        'enrich' => <String>[
+          if (n('lyricsMatched') case final v?) l10n.toolsCountLyrics(v),
+          if (n('artFetched') case final v?) l10n.toolsCountCovers(v),
+          if (n('auxArtFetched') case final v?) l10n.toolsCountPictures(v),
+        ],
+        'analyze' => <String>[
+          if (n('analyzed') case final v?) l10n.toolsCountAnalyzed(v),
+          if (n('errored') case final v?) l10n.toolsCountErrored(v),
+        ],
+        'organize' => <String>[
+          if (n('moved') case final v?) l10n.toolsCountMoved(v),
+          if (n('skipped') case final v?) l10n.toolsCountSkipped(v),
+          if (n('errored') case final v?) l10n.toolsCountErrored(v),
+        ],
+        _ => const <String>[],
+      },
+    ];
+    return parts.isEmpty ? null : parts.join(', ');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    final message = job.message;
+    final error = job.error;
+    final result = _resultLine(l10n);
+    // Its lines stay nodes of their own, as a task row's do, rather than
+    // merging into one label that changes shape as the job moves.
+    return Semantics(
+      identifier: SemanticsIds.jobRow(job.pid),
+      container: true,
+      explicitChildNodes: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: WaxSpace.s16,
+          vertical: WaxSpace.s12,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Padding(
+              padding: const EdgeInsets.only(top: WaxSpace.s4),
+              child: WaxIcon(_glyph, size: 20, color: colors.textSecondary),
+            ),
+            const SizedBox(width: WaxSpace.s12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Row(
+                    children: <Widget>[
+                      Expanded(
+                        child: Text(
+                          _jobLabel(l10n, job.kind),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: WaxType.titleItem.copyWith(
+                            color: colors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: WaxSpace.s8),
+                      Text(
+                        _stateLabel(l10n),
+                        style: WaxType.overline.copyWith(
+                          color: _stateColor(colors),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (message != null && message.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: WaxSpace.s4),
+                    Text(
+                      message,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: WaxType.monoData.copyWith(
+                        color: colors.textTertiary,
+                      ),
+                    ),
+                  ],
+                  if (job.state == 'running') ...<Widget>[
+                    const SizedBox(height: WaxSpace.s8),
+                    LinearProgressIndicator(value: job.progress),
+                  ],
+                  if (error != null) ...<Widget>[
+                    const SizedBox(height: WaxSpace.s4),
+                    Text(
+                      error,
+                      style: WaxType.caption.copyWith(color: colors.error),
+                    ),
+                  ],
+                  if (result != null) ...<Widget>[
+                    const SizedBox(height: WaxSpace.s4),
+                    Text(
+                      result,
+                      style: WaxType.caption.copyWith(
+                        color: colors.textTertiary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

@@ -201,5 +201,9 @@ func (l *Library) ApplyOrganize(ctx context.Context, uc *UserCtx, profile string
 			Reason: f.Err,
 		})
 	}
+	l.notifyWorkDone(ctx, uc, Job{Kind: "organize", Organize: &OrganizeTallyDTO{
+		Profile: plan.Profile, Moved: rep.Moved, Skipped: rep.Skipped,
+		Errored: rep.Errored, SidecarsMoved: rep.SidecarsMoved,
+	}})
 	return out, nil
 }

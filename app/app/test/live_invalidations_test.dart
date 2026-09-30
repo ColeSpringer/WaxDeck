@@ -220,4 +220,43 @@ void main() {
     expect(catalog, 0);
     expect(user, 0, reason: 'and pulls no mirrored stream');
   });
+
+  test(
+    'a catch-up refreshes through its own callback when there is one',
+    () async {
+      // A user invalidation names no kind, so the web build walks the
+      // stream to learn which surfaces moved; a (re)connect or a resync
+      // may have lost changes the walk can no longer report.
+      final gate = Completer<void>()..complete();
+      var user = 0, catchUp = 0;
+      late void Function(String) deliver;
+      final live = LiveInvalidations(
+        channelFactory:
+            ({required onFrame, required onDone, required subscribe}) {
+              deliver = onFrame;
+              return _GatedChannel(
+                gate: gate,
+                onFrame: onFrame,
+                onDone: onDone,
+                subscribe: subscribe,
+              );
+            },
+        onCatalog: () {},
+        onUser: () => user++,
+        onUserCatchUp: () => catchUp++,
+      );
+      live.start();
+      addTearDown(live.stop);
+      await gate.future;
+      await Future<void>.delayed(Duration.zero);
+      expect(catchUp, 1, reason: 'the connect catches up');
+      expect(user, 0);
+
+      deliver(jsonEncode({'type': 'invalidate', 'topic': 'user'}));
+      deliver(jsonEncode({'type': 'resync', 'topic': 'user'}));
+
+      expect(user, 1);
+      expect(catchUp, 2);
+    },
+  );
 }

@@ -63,14 +63,17 @@ func TestHealthFixableRulesAreImplemented(t *testing.T) {
 	for _, r := range healthRules {
 		implemented[r] = true
 	}
-	for r := range healthFixable {
+	for r := range healthFixPhases {
 		if !implemented[r] {
 			t.Fatalf("fixable rule %q is not in the implemented rule set", r)
 		}
+		if healthFixWants[r] == "" || fixBlockedSource[r] == "" {
+			t.Fatalf("fixable rule %q has no per-item want or blocked code", r)
+		}
 	}
-	for _, r := range []string{ruleCorruptAudio, ruleLegacyTags, ruleSmallArt, ruleMissingYear, ruleDurationMismatch} {
-		if healthFixable[r] {
-			t.Fatalf("rule %q must not be fixable", r)
+	for _, r := range []string{ruleCorruptAudio, ruleLegacyTags, ruleSmallArt, ruleMissingYear, ruleDurationMismatch, ruleGenreWhitelist} {
+		if _, ok := healthFixPhases[r]; ok || r == rulePathMismatch || r == ruleWriteUnsynced {
+			t.Fatalf("rule %q must not have a fix", r)
 		}
 	}
 }

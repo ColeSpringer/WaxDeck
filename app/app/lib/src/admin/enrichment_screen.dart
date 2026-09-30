@@ -322,6 +322,7 @@ class _RunPassState extends ConsumerState<_RunPass> {
         WaxButton(
           label: l10n.adminEnrichmentRunAction,
           semanticsId: SemanticsIds.enrichmentRun,
+          busy: _busy,
           onPressed: runnable && chosen ? () => unawaited(_run()) : null,
         ),
       ],
@@ -406,6 +407,7 @@ class _SourcesState extends ConsumerState<_Sources> {
             WaxButton(
               label: l10n.adminEnrichmentSourcesSave,
               semanticsId: SemanticsIds.enrichmentSourcesSave,
+              busy: _busy,
               onPressed: _dirty && !_busy ? () => unawaited(_save()) : null,
             ),
             WaxButton(

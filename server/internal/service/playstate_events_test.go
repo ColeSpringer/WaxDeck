@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,14 +15,18 @@ import (
 // something. Safe because the delta builder is a pure projection of
 // stored events: nothing treats one as a heartbeat.
 
-// eventsAfter returns the caller's server events appended after id.
+// eventsAfter returns the caller's server events appended after id,
+// less the catalog's job and health news, which reaches an administrator
+// on the catalog's schedule rather than the caller's.
 func eventsAfter(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, id int64) []wdb.Event {
 	t.Helper()
 	evs, _, err := svc.db.EventsSince(ctx, uc.ID, id, 1000)
 	if err != nil {
 		t.Fatalf("reading events: %v", err)
 	}
-	return evs
+	return slices.DeleteFunc(evs, func(e wdb.Event) bool {
+		return e.Kind == eventJob || e.Kind == eventHealth
+	})
 }
 
 // eventTail is the id of the caller's newest server event, 0 when the

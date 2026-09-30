@@ -4,6 +4,7 @@ import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/settings/integrations_sections.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -336,6 +337,45 @@ void main() {
     expect(find.text('My events'), findsOneWidget);
   });
 
+  testWidgets("a listener's checklist leaves out the administrators' work", (
+    tester,
+  ) async {
+    // Only an administrator starts a scan or a health fix, so only one
+    // is ever told how it ended.
+    const work = NotifyEvent(
+      name: 'job-finished',
+      scope: 'user',
+      description: 'A library job you started finished.',
+    );
+    final repo = FakeRepository()
+      ..notifyEvents = [...FakeRepository().notifyEvents, work];
+    await tester.pumpWidget(
+      _host(repo, const PersonalNotificationTargetsSection()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('notify-event-job-finished')),
+      findsNothing,
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    final adminRepo = _adminRepo()
+      ..notifyEvents = [...FakeRepository().notifyEvents, work];
+    await tester.pumpWidget(
+      _host(adminRepo, const PersonalNotificationTargetsSection()),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.notifyTargetAdd));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('notify-event-job-finished')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('the server section edits server-scope targets only', (
     tester,
   ) async {
@@ -606,5 +646,109 @@ void main() {
     expect(repo.scrobblingConfig.lastfmConfigured, isFalse);
     expect(find.text('Needs server API credentials'), findsOneWidget);
     expect(find.text('Set up…'), findsOneWidget);
+  });
+
+  group('a target test waits for its answer', () {
+    NotificationTarget target({
+      DateTime? lastSuccessAt,
+      String? lastError,
+      DateTime? lastErrorAt,
+    }) => NotificationTarget(
+      pid: 'nt-T',
+      kind: 'ntfy',
+      scope: 'user',
+      label: 'Tablet',
+      config: const {'topic': 'waxdeck'},
+      enabledEvents: const ['episode-downloaded'],
+      createdAt: DateTime.utc(2026),
+      lastSuccessAt: lastSuccessAt,
+      lastError: lastError,
+      lastErrorAt: lastErrorAt,
+    );
+
+    Future<ProviderContainer> press(
+      WidgetTester tester,
+      FakeRepository repo,
+    ) async {
+      tester.platformDispatcher.accessibilityFeaturesTestValue =
+          const FakeAccessibilityFeatures(disableAnimations: true);
+      addTearDown(
+        tester.platformDispatcher.clearAccessibilityFeaturesTestValue,
+      );
+      await tester.pumpWidget(
+        _host(repo, const PersonalNotificationTargetsSection()),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.notifyTargetTest('nt-T')),
+      );
+      await tester.pump();
+      return ProviderScope.containerOf(
+        tester.element(find.byType(PersonalNotificationTargetsSection)),
+      );
+    }
+
+    WaxIconButton button(WidgetTester tester) => tester.widget<WaxIconButton>(
+      find.byWidgetPredicate(
+        (w) =>
+            w is WaxIconButton &&
+            w.semanticsId == SemanticsIds.notifyTargetTest('nt-T'),
+      ),
+    );
+
+    testWidgets('and says it was delivered', (tester) async {
+      final repo = FakeRepository()
+        ..myNotificationTargets.add(
+          target(lastSuccessAt: DateTime.utc(2026, 9, 1)),
+        );
+      repo.onNotificationTargetTest = (_) => repo.myNotificationTargets[0] =
+          target(lastSuccessAt: DateTime.utc(2026, 9, 29, 12));
+      final container = await press(tester, repo);
+      expect(button(tester).busy, isTrue);
+      expect(
+        shellMessageText(container.read(shellMessengerProvider)),
+        'Test queued; the outcome shows on the target shortly',
+      );
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(
+        shellMessageText(container.read(shellMessengerProvider)),
+        'Test delivered',
+      );
+      expect(button(tester).busy, isFalse);
+    });
+
+    testWidgets('and says why it failed', (tester) async {
+      final repo = FakeRepository()..myNotificationTargets.add(target());
+      repo.onNotificationTargetTest = (_) =>
+          repo.myNotificationTargets[0] = target(
+            lastError: 'connection refused',
+            lastErrorAt: DateTime.utc(2026, 9, 29, 12),
+          );
+      final container = await press(tester, repo);
+
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+      expect(
+        shellMessageText(container.read(shellMessengerProvider)),
+        'Test failed: connection refused',
+      );
+    });
+
+    testWidgets('and says so when nothing answers', (tester) async {
+      final repo = FakeRepository()..myNotificationTargets.add(target());
+      final container = await press(tester, repo);
+
+      await tester.pump(const Duration(seconds: 28));
+      expect(button(tester).busy, isTrue);
+      await tester.pump(const Duration(seconds: 4));
+      await tester.pumpAndSettle();
+      expect(
+        shellMessageText(container.read(shellMessengerProvider)),
+        'No answer from the test yet; the target shows it when it lands',
+      );
+      expect(button(tester).busy, isFalse);
+    });
   });
 }

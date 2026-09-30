@@ -224,6 +224,7 @@
   "adminLibraryContentClass": "Tipo de contenido",
   "adminLibraryCreate": "Crear la biblioteca",
   "adminLibraryCreated": "Biblioteca \"{name}\" creada; el escaneo ha empezado",
+  "adminLibraryCreatedNoScan": "Biblioteca \"{name}\" creada. Hay otro trabajo del catálogo en curso, así que la indexará el próximo escaneo.",
   "adminLibraryHoldsHelp": "Qué tipo de contenido hay en la carpeta raíz",
   "adminLibraryHoldsTitle": "Contiene",
   "adminLibraryManagedHelp": "Permite que las subidas y la organización coloquen archivos en esta carpeta raíz",

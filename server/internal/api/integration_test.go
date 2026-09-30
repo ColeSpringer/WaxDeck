@@ -269,6 +269,26 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	return h
 }
 
+// waitForJobNews waits for the inbox row a finished job the admin started
+// files, which comes after every marker the job put on the stream: a
+// cursor minted after this sees none of them.
+func (h *harness) waitForJobNews(t *testing.T, pid string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		page := decode[NotificationPage](t, get(t, h.ts, "/api/v1/users/me/notifications?limit=100", h.token))
+		for _, n := range page.Notifications {
+			if n.TargetPid != nil && *n.TargetPid == pid {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no inbox row for job %s", pid)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 // newFakeFlowBridge builds the fake WaxFlow sidecar (/caps as the
 // flavored build reports it, /stream serving the named source file,
 // ranges included) and the bridge over it.
@@ -415,15 +435,16 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 	return bridge
 }
 
-// rescanAndWait runs a scan through the API and polls the job to done.
-func (h *harness) rescanAndWait(t *testing.T) {
+// rescanAndWait runs a scan through the API and polls the job to done,
+// returning its pid.
+func (h *harness) rescanAndWait(t *testing.T) string {
 	t.Helper()
-	h.rescanAndWaitWith(t, "")
+	return h.rescanAndWaitWith(t, "")
 }
 
 // rescanAndWaitWith is rescanAndWait with an options body (empty posts
 // none, the pre-options wire shape).
-func (h *harness) rescanAndWaitWith(t *testing.T, body string) {
+func (h *harness) rescanAndWaitWith(t *testing.T, body string) string {
 	t.Helper()
 	var rd io.Reader
 	if body != "" {
@@ -451,7 +472,8 @@ func (h *harness) rescanAndWaitWith(t *testing.T, body string) {
 		j := decode[Job](t, resp)
 		switch j.State {
 		case "done":
-			return
+			h.waitForJobNews(t, job.Pid)
+			return job.Pid
 		case "failed", "crashed", "canceled":
 			t.Fatalf("scan job ended %s: %v", j.State, deref(j.Error))
 		}

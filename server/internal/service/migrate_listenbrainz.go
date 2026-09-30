@@ -144,7 +144,7 @@ func (c *lbClient) feedback(ctx context.Context, user string, offset int) ([]lbT
 func (l *Library) runListenBrainzImport(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, p migrationParams, secret string) (migrationSummary, error) {
 	sum := migrationSummary{Source: p.Source, DryRun: p.DryRun, Samples: migrationSamples{Unmatched: []string{}}}
 	client := newLBClient(p.ServerURL, secret)
-	prog := newMigrateProgress(l, t)
+	prog := newToolProgress(l, t)
 	hist := l.newMigrateHistory(uc, p, &sum)
 
 	if p.History {

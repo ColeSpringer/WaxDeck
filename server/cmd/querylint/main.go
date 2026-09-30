@@ -6,9 +6,9 @@
 // query.New(query.EntityTracks) has skipped the helper and, unless it is
 // an audit or a sweep, is a listing that will answer with deleted items.
 //
-// The allowlist below is the ADR's exception list: surfaces whose job is
-// to see everything the catalog holds. Adding to it is a decision, which
-// is why it lives here and in the ADR rather than in a comment.
+// The allowlist below is the exception list: surfaces whose job is to
+// see everything the catalog holds. Adding to it is a decision, which is
+// why it lives here rather than in a comment at the call site.
 //
 // Run as: go run ./cmd/querylint ./...
 package main
@@ -48,14 +48,16 @@ const helperFile = "itemquery.go"
 var allowed = map[string]map[string]bool{
 	"health.go": {
 		// The health grade (already narrowed to present items), the
-		// lyrics and unofficial-tag sweeps behind it, the organize plan
-		// it previews, and the one-item drill a fix runs against.
-		"SweepHealth":     true,
-		"lyricsPresence":  true,
-		"unofficialItems": true,
-		"plannedMoves":    true,
-		"runHealthFix":    true,
+		// lyrics and unofficial-tag sweeps behind it, and the organize
+		// plan it previews.
+		"SweepHealth":      true,
+		"lyricsPresence":   true,
+		"unofficialItems":  true,
+		"readPlannedMoves": true,
 	},
+	// A path fix plans the organize moves for the items it names, and a
+	// re-check reads its rule's items in the sweep's own scope.
+	"healthfix.go": {"fixPaths": true, "presentItems": true},
 	// The genre normalizer rewrites tags wherever they are.
 	"genres.go": {"runGenreNormalize": true},
 	// A review unit is every track of an album, including ones already

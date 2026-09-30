@@ -4,9 +4,9 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../admin/admin_console.dart';
-import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../media_view.dart';
+import '../settings/settings_registry.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -19,14 +19,39 @@ import 'health_labels.dart';
 class HealthScreen extends ConsumerWidget {
   const HealthScreen({super.key});
 
-  Future<void> _fix(BuildContext context, WidgetRef ref, String rule) async {
+  Future<void> _fix(
+    BuildContext context,
+    WidgetRef ref,
+    HealthRuleCount rule,
+  ) async {
     final l10n = context.l10n;
+    final name = healthRuleLabel(l10n, rule);
     final messenger = ref.read(shellMessengerProvider.notifier);
+    final router = GoRouter.of(context);
     try {
-      final queued = await ref.read(healthProvider.notifier).fix(rule);
-      messenger.show(l10n.healthQueuedItems(queued));
+      await ref.read(healthFixesProvider.notifier).start(rule.rule);
+      messenger.show(
+        l10n.healthFixStarted(name),
+        actionLabel: l10n.commonOpenTasks,
+        actionSemanticsId: SemanticsIds.openTasks,
+        onAction: () => router.push<void>(WaxRoute.tasks),
+      );
     } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
+      if (e.statusCode != 409) {
+        messenger.show(explainError(l10n, e));
+        return;
+      }
+      // Refused while a pass holds the enrichment, or while the rule is
+      // being fixed already: the summary the refusal re-read says which.
+      final fixing =
+          context.mounted &&
+          (ref
+                  .read(healthProvider)
+                  .value
+                  ?.rules
+                  .any((r) => r.rule == rule.rule && r.fixing) ??
+              false);
+      messenger.show(fixing ? l10n.healthFixRunning(name) : l10n.healthFixBusy);
     }
   }
 
@@ -34,7 +59,7 @@ class HealthScreen extends ConsumerWidget {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
-      await ref.read(healthProvider.notifier).sweep();
+      await ref.read(healthSweepRequestProvider.notifier).send();
       messenger.show(l10n.healthSweepQueued);
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e));
@@ -99,14 +124,10 @@ class HealthScreen extends ConsumerWidget {
     final sizeClass = WaxSizeClass.of(context);
     final l10n = context.l10n;
     final health = ref.watch(healthProvider);
-    final isAdmin =
-        ref
-            .watch(authControllerProvider)
-            .value
-            ?.user
-            ?.roles
-            .contains('admin') ??
-        false;
+    final isAdmin = ref.watch(isAdminProvider);
+    final sweeping =
+        ref.watch(healthSweepRequestProvider) ||
+        (health.value?.sweeping ?? false);
     return WaxScaffold(
       title: l10n.adminTileHealth,
       largeTitle: false,
@@ -118,6 +139,7 @@ class HealthScreen extends ConsumerWidget {
             glyph: WaxIcons.refresh,
             label: l10n.healthSweepNow,
             semanticsId: SemanticsIds.healthSweep,
+            busy: sweeping,
             onPressed: () => _sweep(context, ref),
           ),
       ],
@@ -126,7 +148,7 @@ class HealthScreen extends ConsumerWidget {
           const EdgeInsets.only(bottom: WaxSpace.s32),
         ),
         child: switch (health) {
-          AsyncData(:final value) => _body(context, ref, value),
+          AsyncData(:final value) => _body(context, ref, value, isAdmin),
           AsyncError(:final error) => ErrorState(
             title: l10n.healthLoadError,
             message: context.explain(error),
@@ -138,7 +160,12 @@ class HealthScreen extends ConsumerWidget {
     );
   }
 
-  Widget _body(BuildContext context, WidgetRef ref, HealthSummary summary) {
+  Widget _body(
+    BuildContext context,
+    WidgetRef ref,
+    HealthSummary summary,
+    bool isAdmin,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -150,7 +177,8 @@ class HealthScreen extends ConsumerWidget {
         ),
         _RuleTable(
           rules: summary.rules,
-          onFix: (rule) => _fix(context, ref, rule),
+          // The fixes are an administrator's; everyone reads the standing.
+          onFix: isAdmin ? (rule) => _fix(context, ref, rule) : null,
           onOpen: (rule) => context.go(WaxRoute.healthRule(rule)),
         ),
         const SizedBox(height: WaxSpace.s32),
@@ -246,9 +274,22 @@ class _ScoreHeadline extends StatelessWidget {
           ),
           const SizedBox(width: WaxSpace.s20),
           Expanded(
-            child: Text(
-              l10n.healthScoreBlurb(summary.evaluatedItems),
-              style: WaxType.body.copyWith(color: colors.textSecondary),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Text(
+                  l10n.healthScoreBlurb(summary.evaluatedItems),
+                  style: WaxType.body.copyWith(color: colors.textSecondary),
+                ),
+                if (summary.sweepFailed) ...<Widget>[
+                  const SizedBox(height: WaxSpace.s4),
+                  Text(
+                    l10n.healthSweepFailed,
+                    style: WaxType.caption.copyWith(color: colors.error),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -277,7 +318,7 @@ class _Card extends StatelessWidget {
   }
 }
 
-class _RuleTable extends StatelessWidget {
+class _RuleTable extends ConsumerWidget {
   const _RuleTable({
     required this.rules,
     required this.onFix,
@@ -285,13 +326,17 @@ class _RuleTable extends StatelessWidget {
   });
 
   final List<HealthRuleCount> rules;
-  final void Function(String rule) onFix;
+
+  /// Null for a session that may not fix, which draws neither the fixes
+  /// nor what blocks them.
+  final void Function(HealthRuleCount rule)? onFix;
   final void Function(String rule) onOpen;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
+    final fix = onFix;
     return WaxTable<HealthRuleCount>(
       rows: rules,
       rowId: (rule) => rule.rule,
@@ -307,11 +352,29 @@ class _RuleTable extends StatelessWidget {
           label: l10n.healthColumnRule,
           priority: WaxColumnPriority.primary,
           text: (rule) => healthRuleLabel(l10n, rule),
-          cell: (context, rule) => Text(
-            healthRuleLabel(l10n, rule),
-            style: WaxType.titleItem.copyWith(color: colors.textPrimary),
-            overflow: TextOverflow.ellipsis,
-          ),
+          cell: (context, rule) {
+            final blocked = rule.fixBlocked;
+            final name = Text(
+              healthRuleLabel(l10n, rule),
+              style: WaxType.titleItem.copyWith(color: colors.textPrimary),
+              overflow: TextOverflow.ellipsis,
+            );
+            if (fix == null || blocked == null || rule.failing == 0) {
+              return name;
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                name,
+                const SizedBox(height: WaxSpace.s4),
+                Text(
+                  healthFixBlockedReason(l10n, blocked),
+                  style: WaxType.caption.copyWith(color: colors.textTertiary),
+                ),
+              ],
+            );
+          },
         ),
         WaxColumn<HealthRuleCount>(
           label: l10n.healthColumnFailing,
@@ -326,14 +389,41 @@ class _RuleTable extends StatelessWidget {
           ),
         ),
       ],
-      trailing: (context, rule) => rule.fixable && rule.failing > 0
-          ? WaxIconButton(
+      trailing: (context, rule) {
+        if (fix == null || rule.failing == 0) return const SizedBox.shrink();
+        if (rule.fixable) {
+          return Consumer(
+            builder: (context, ref, _) => WaxIconButton(
               glyph: WaxIcons.success,
               label: l10n.healthFixRule(healthRuleLabel(l10n, rule)),
               semanticsId: SemanticsIds.healthFix(rule.rule),
-              onPressed: () => onFix(rule.rule),
-            )
-          : const SizedBox.shrink(),
+              busy: ref.watch(healthFixingProvider(rule.rule)),
+              onPressed: () => fix(rule),
+            ),
+          );
+        }
+        final blocked = rule.fixBlocked;
+        if (blocked == null) return const SizedBox.shrink();
+        // The row reads as one button and excludes its cells, so what
+        // blocks the fix is said here too, where it has a handle.
+        final reason = healthFixBlockedReason(l10n, blocked);
+        return Semantics(
+          identifier: SemanticsIds.healthFixBlocked(rule.rule),
+          container: true,
+          label: reason,
+          excludeSemantics: true,
+          child: Tooltip(
+            message: reason,
+            child: Center(
+              child: WaxIcon(
+                WaxIcons.info,
+                size: 20,
+                color: colors.textTertiary,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

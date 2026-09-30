@@ -69,7 +69,11 @@ void main() {
         NotificationKind.feedDisabled: 'feed-disabled',
         NotificationKind.importCompleted: 'import-completed',
         NotificationKind.episodeDownloaded: 'episode-downloaded',
+        NotificationKind.episodeArrived: 'episode-arrived',
         NotificationKind.playlistSynced: 'playlist-synced',
+        NotificationKind.jobFinished: 'job-finished',
+        NotificationKind.jobFailed: 'job-failed',
+        NotificationKind.healthFixFinished: 'health-fix-finished',
       };
       for (final entry in events.entries) {
         expect(entry.key.token, entry.value);
@@ -135,6 +139,13 @@ void main() {
         // just wrote. A bell that rang for these would ring constantly.
         ..recordServerEvent(const ServerSyncEvent(kind: 'play-state'))
         ..recordServerEvent(const ServerSyncEvent(kind: 'prefs'))
+        // A running scan's progress and the health summary moving: the
+        // surfaces refetch, and the inbox row is where an end is told.
+        ..recordServerEvent(_marker('job', pid: 'jb-1'))
+        ..recordServerEvent(const ServerSyncEvent(kind: 'health'))
+        // A task's progress: its list refetches, and only its start and
+        // end are news.
+        ..recordServerEvent(_marker('task-progress', pid: 'tk-1'))
         // A kind from a newer server: skipped, never drawn as a row that
         // goes nowhere. An unknown *catalog event* is drawn from the
         // inbox instead, which is a different thing entirely.
@@ -728,6 +739,37 @@ void main() {
       expect(repo.sinceCalls, <String?>[null, 'c0']);
     });
 
+    test(
+      'a reset says the walk lost its place, and mints again at once',
+      () async {
+        // A change after the reset would otherwise wait for a hint whose
+        // walk only mints, and go unreported too.
+        final repo = _SyncRepository();
+        final seen = <ServerSyncEvent>[];
+        var resets = 0;
+        final puller = UserEventPuller(
+          repository: repo,
+          onEvent: seen.add,
+          onReset: () => resets++,
+        );
+        await puller.pull();
+
+        repo.resetOnce = true;
+        await puller.pull();
+        expect(resets, 1);
+        expect(repo.sinceCalls, <String?>[null, 'c0', null]);
+
+        repo.pages = <ServerSyncPage>[
+          ServerSyncPage(
+            events: <ServerSyncEvent>[_marker('review')],
+            nextSince: 'c1',
+          ),
+        ];
+        await puller.pull();
+        expect(seen.map((e) => e.kind), <String>['review']);
+      },
+    );
+
     test('a reset re-mints rather than replaying an old week', () async {
       final repo = _SyncRepository();
       final seen = <ServerSyncEvent>[];
@@ -763,6 +805,9 @@ class _SyncRepository extends FakeRepository {
 
   WaxDeckApiException? failWith;
 
+  /// Answers the next cursor-bearing read with `sync-reset`, once.
+  bool resetOnce = false;
+
   /// Held open, so a test can land a hint mid-walk.
   Completer<void>? hold;
 
@@ -778,6 +823,13 @@ class _SyncRepository extends FakeRepository {
     if (held != null) await held.future;
     final failure = failWith;
     if (failure != null) throw failure;
+    if (resetOnce && since != null) {
+      resetOnce = false;
+      throw const WaxDeckApiException(
+        code: 'sync-reset',
+        message: 'cursor too old',
+      );
+    }
     if (failAfter != null && since != null) {
       if (_served >= failAfter!) {
         _served = 0;

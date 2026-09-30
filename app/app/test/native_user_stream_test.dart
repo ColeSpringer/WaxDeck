@@ -1,11 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/health/health_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/settings/prefs_controller.dart';
+import 'package:waxdeck/src/sync/server_event_bus.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
+import 'package:waxdeck/src/tools/tool_tasks_provider.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -55,14 +59,29 @@ _bind({
   return (container: container, engine: engine, repo: repo);
 }
 
-/// Counts preference reads, which is what a user fan-out costs here.
+/// Counts preference reads, which is what a user fan-out costs here,
+/// health reads, which is what a health marker's costs, and task reads.
 class _CountingRepository extends FakeRepository {
   int prefsReads = 0;
+  int healthReads = 0;
+  int taskReads = 0;
+
+  @override
+  Future<ToolTaskPage> listToolTasks({String? cursor, int? limit}) {
+    taskReads++;
+    return super.listToolTasks(cursor: cursor, limit: limit);
+  }
 
   @override
   Future<Prefs> getPrefs() {
     prefsReads++;
     return super.getPrefs();
+  }
+
+  @override
+  Future<HealthSummary> getLibraryHealth() {
+    healthReads++;
+    return super.getLibraryHealth();
   }
 }
 
@@ -205,4 +224,117 @@ void main() {
 
     expect((b.repo as _CountingRepository).prefsReads, reads);
   });
+
+  test(
+    'a task-progress marker refreshes the tasks and none of the user surfaces',
+    () async {
+      // A long task reports every five percent; the user fan-out on each
+      // would refetch every open list for the length of it.
+      final b = await _bind(
+        serverPages: [
+          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(
+            events: [ServerSyncEvent(kind: 'task-progress', pid: 'tk-1')],
+            nextSince: 'scur-2',
+          ),
+        ],
+      );
+      b.container.listen(toolTasksProvider, (_, _) {});
+      await b.container.read(toolTasksProvider.future);
+      await b.engine.pullServer();
+      final repo = b.repo as _CountingRepository;
+      final (prefs, tasks) = (repo.prefsReads, repo.taskReads);
+
+      await b.engine.pullServer();
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+
+      expect(repo.taskReads, tasks + 1);
+      expect(repo.prefsReads, prefs);
+    },
+  );
+
+  test(
+    'a stream that lost its place refreshes every surface it feeds',
+    () async {
+      // What fell between the lost cursor and the fresh one is gone, so
+      // nothing per-kind can say what to refresh.
+      final b = await _bind();
+      b.container
+        ..listen(adminJobsProvider, (_, _) {})
+        ..listen(healthProvider, (_, _) {});
+      await b.container.read(adminJobsProvider.future);
+      await b.container.read(healthProvider.future);
+      final repo = b.repo as _CountingRepository;
+      final (prefs, jobs, health) = (
+        repo.prefsReads,
+        repo.jobReads,
+        repo.healthReads,
+      );
+
+      b.container.read(serverEventBusProvider).reset();
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+
+      expect(repo.prefsReads, prefs + 1);
+      expect(repo.jobReads, jobs + 1);
+      expect(repo.healthReads, health + 1);
+    },
+  );
+
+  test(
+    'a job marker refreshes the jobs and none of the user surfaces',
+    () async {
+      // A running scan announces every five percent and its message
+      // every fifteen seconds; running the user fan-out for each would
+      // refetch every open list on every admin client for the length of
+      // the scan.
+      final b = await _bind(
+        serverPages: [
+          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(
+            events: [ServerSyncEvent(kind: 'job', pid: 'jb-1')],
+            nextSince: 'scur-2',
+          ),
+        ],
+      );
+      b.container.listen(adminJobsProvider, (_, _) {});
+      await b.container.read(adminJobsProvider.future);
+      await b.engine.pullServer();
+      final repo = b.repo as _CountingRepository;
+      final prefs = repo.prefsReads;
+      final jobs = repo.jobReads;
+
+      await b.engine.pullServer();
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+
+      expect(repo.jobReads, jobs + 1);
+      expect(repo.prefsReads, prefs);
+    },
+  );
+
+  test(
+    'a health marker refreshes health and none of the user surfaces',
+    () async {
+      final b = await _bind(
+        serverPages: [
+          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(
+            events: [ServerSyncEvent(kind: 'health')],
+            nextSince: 'scur-2',
+          ),
+        ],
+      );
+      b.container.listen(healthProvider, (_, _) {});
+      await b.container.read(healthProvider.future);
+      await b.engine.pullServer();
+      final repo = b.repo as _CountingRepository;
+      final prefs = repo.prefsReads;
+      final health = repo.healthReads;
+
+      await b.engine.pullServer();
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+
+      expect(repo.healthReads, health + 1);
+      expect(repo.prefsReads, prefs);
+    },
+  );
 }

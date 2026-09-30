@@ -91,8 +91,13 @@ paths:
       summary: Re-sweep health now
       description: >
         Queues a full health sweep instead of waiting for the
-        scheduled one. Administrators only. The summary updates over
-        the event channel as the sweep progresses.
+        scheduled one. Administrators only. The summary's `sweeping`
+        is true from the request until the sweep finishes, and the
+        `health` sync marker tells every account when to read the
+        summary again: once when the sweep is queued and once when it
+        finishes. A sweep that fails answers the request too, and the
+        summary's `sweepFailed` says so until a sweep lands; of a run
+        of failures, only the first is marked.
       tags: [health]
       responses:
         "202":
@@ -109,15 +114,35 @@ paths:
       operationId: fixHealthIssues
       summary: Bulk-fix a health rule
       description: >
-        Dispatches the fix that matches one rule across the named
-        items (or every item currently failing the rule when
-        `itemPids` is absent): enrichment fetches for missing art,
-        lyrics, genres, and identifiers; organize moves for path
-        mismatches; a write-back retry for out-of-sync files. Fixes
-        run in the background at provider-etiquette pace; the
-        response says how many items were queued. Rules with no
-        automated fix (`corrupt-audio`, `legacy-tags`) answer
-        `invalid-request` naming the rule.
+        Starts the fix that matches one rule, across the named items or,
+        when `itemPids` is absent, every item currently failing the rule.
+        Only a rule the summary reports `fixable` has one; any other
+        answers `invalid-request` naming the rule, and the summary's
+        `fixBlocked` says what the install lacks for a rule that could
+        be fixed with it. Administrators only.
+
+
+        An unscoped fix of `missing-art`, `missing-lyrics`,
+        `missing-genre`, `missing-narrator` or `missing-asin` runs the
+        catalog's enrichment pass as a catalog job whose pid is `jobPid`,
+        with those of the phases that fill the rule which this server
+        runs forced to re-ask everything they reach (either of
+        `missing-art`'s two picture phases is enough); the pass's other
+        phases walk their ordinary sweeps, as any pass does.
+        `missing-genre` re-asks MusicBrainz about every album. A scoped
+        fix, and every fix of `path-mismatch` or `write-unsynced`, runs
+        as a `health-fix` tool task whose id is `taskId`, working item
+        by item. Either runs in the background and is listed where its
+        kind is (`GET /jobs`, `GET /tools/tasks`); on finishing it
+        re-checks the items it reached (a pass, every item failing the
+        rule) and files a `health-fix-finished` notification for the
+        administrator who started it, saying what it filled or why it
+        failed. The `health` sync marker goes out when a fix starts
+        and when its re-check lands, and the rule's `fixing` is true in
+        between. The score waits for the next full sweep. `queued` is
+        the number of items the fix set out to reach. While an
+        enrichment pass is running, another fix that needs one answers
+        `conflict`, as does any fix for a rule whose `fixing` is true.
       tags: [health]
       requestBody:
         required: true
@@ -127,7 +152,7 @@ paths:
               $ref: "#/components/schemas/HealthFixRequest"
       responses:
         "202":
-          description: How much work was queued.
+          description: The fix started.
           content:
             application/json:
               schema:
@@ -138,6 +163,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -389,7 +416,7 @@ components:
     HealthSummary:
       type: object
       description: The library's metadata health at the last sweep.
-      required: [score, totalItems, evaluatedItems, warmingUp, rules]
+      required: [score, totalItems, evaluatedItems, warmingUp, sweepFailed, rules]
       properties:
         score:
           type: number
@@ -413,6 +440,16 @@ components:
           type: string
           format: date-time
           description: When the last sweep finished.
+        sweeping:
+          type: boolean
+          description: >
+            True while a sweep runs, or one an administrator asked for
+            waits to run.
+        sweepFailed:
+          type: boolean
+          description: >
+            True when the last sweep failed, so the numbers are the last
+            landed sweep's (`sweptAt`); false again once a sweep lands.
         rules:
           type: array
           description: Per-rule failure counts, heaviest first.
@@ -422,7 +459,7 @@ components:
     HealthRuleCount:
       type: object
       description: One rule's current standing.
-      required: [rule, failing, fixable]
+      required: [rule, failing, fixable, fixing]
       properties:
         rule:
           type: string
@@ -436,7 +473,37 @@ components:
           description: Items currently failing the rule.
         fixable:
           type: boolean
-          description: Whether the bulk-fix endpoint automates this rule.
+          description: >
+            Whether the bulk-fix endpoint can fix this rule on this
+            install.
+        fixing:
+          type: boolean
+          description: >
+            True while a fix for the rule is under way: a pass-backed
+            fix from its start until its re-check lands, a task-backed
+            one while its task is queued or running. Another fix for
+            the rule answers `conflict` meanwhile.
+        fixBlocked:
+          type: string
+          description: >
+            Why a rule that has a fix cannot be fixed on this install;
+            absent when `fixable`, and for rules with no fix at all.
+            `needs-contact`: the server has no enrichment contact, which
+            is what lets it ask MusicBrainz and the other free public
+            sources. `needs-lyrics-source`, `needs-art-source`,
+            `needs-genre-source`, `needs-book-source`: no enrichment
+            source the fix could use, for lyrics, artwork, genres, or
+            book metadata, is switched on. `no-managed-library`: no
+            library is managed, so there is no layout for paths to match.
+          enum:
+            [
+              needs-contact,
+              needs-lyrics-source,
+              needs-art-source,
+              needs-genre-source,
+              needs-book-source,
+              no-managed-library,
+            ]
 
     HealthIssuePage:
       type: object
@@ -520,12 +587,24 @@ components:
 
     HealthFixResult:
       type: object
-      description: How much fix work was queued.
+      description: >
+        The fix that started: exactly one of `jobPid` and `taskId` names
+        where it can be followed.
       required: [queued]
       properties:
         queued:
           type: integer
-          description: Items queued for fixing.
+          description: Items the fix set out to reach.
+        jobPid:
+          type: string
+          description: >
+            The catalog enrichment job running the fix, for an unscoped
+            fix of an enrichment-backed rule.
+          example: jb-01JZX5N8QW3F4V9T2B7KD3M9R6
+        taskId:
+          type: string
+          description: The `health-fix` tool task running the fix, otherwise.
+          example: tk-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     DuplicateGroups:
       type: object

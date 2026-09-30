@@ -14,7 +14,7 @@ part 'tool_task.g.dart';
 ///
 /// Properties:
 /// * [id] - Task pid.
-/// * [type] - The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, or `playlist-sync`. A string, not a closed enum. 
+/// * [type] - The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, `playlist-sync`, `genre-normalize`, `health-fix`, or an `import-` migration (`import-jellyfin`, `import-subsonic`, ...). A string, not a closed enum. 
 /// * [state] - `queued`, `running`, `done`, or `failed`. A string, not a closed enum. 
 /// * [itemPid] - The book, track, or playlist the task was started from. 
 /// * [progressPct] - Progress in percent when the engine reports it.
@@ -22,14 +22,14 @@ part 'tool_task.g.dart';
 /// * [resultPids] - What the task produced once `done`: the merged book or the split pieces (item pids), or the review entries an acquisition or playlist sync opened (entry pids). 
 /// * [createdAt] - When the task was queued.
 /// * [finishedAt] - When it reached a terminal state.
-/// * [summary] - Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. 
+/// * [summary] - Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. A `health-fix` task carries `rule` from the moment it is queued, and once it has run `attempted`, `filled`, `failed` (item counts) and `skipped`, an object counting the items left alone by reason (`gone`, `locked`, `no match`, ...). 
 @BuiltValue()
 abstract class ToolTask implements Built<ToolTask, ToolTaskBuilder> {
   /// Task pid.
   @BuiltValueField(wireName: r'id')
   String get id;
 
-  /// The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, or `playlist-sync`. A string, not a closed enum. 
+  /// The operation: `book-merge`, `book-split`, `cue-split`, `acquire`, `playlist-sync`, `genre-normalize`, `health-fix`, or an `import-` migration (`import-jellyfin`, `import-subsonic`, ...). A string, not a closed enum. 
   @BuiltValueField(wireName: r'type')
   String get type;
 
@@ -61,7 +61,7 @@ abstract class ToolTask implements Built<ToolTask, ToolTaskBuilder> {
   @BuiltValueField(wireName: r'finishedAt')
   DateTime? get finishedAt;
 
-  /// Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. 
+  /// Task-type-specific result detail once the task finishes, for example a migration import's match-and-write report. Shapes are documented per task type and may grow fields. A `health-fix` task carries `rule` from the moment it is queued, and once it has run `attempted`, `filled`, `failed` (item counts) and `skipped`, an object counting the items left alone by reason (`gone`, `locked`, `no match`, ...). 
   @BuiltValueField(wireName: r'summary')
   BuiltMap<String, JsonObject?>? get summary;
 

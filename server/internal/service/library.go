@@ -226,8 +226,14 @@ type Library struct {
 	// serverGen names the event_log stream's generation.
 	feed      syncFeed
 	serverGen string
-	// jobs follows the catalog's jobs off the feed.
-	jobs jobWatch
+	// jobs follows the catalog's jobs off the feed; jobWake is the feed's
+	// lossy nudge to the follower when a job row changes.
+	jobs    jobWatch
+	jobWake chan struct{}
+	// sweeping is a health sweep in progress.
+	sweeping atomic.Bool
+	// sweepFailed is the last sweep having failed, until one lands.
+	sweepFailed atomic.Bool
 	// catalogWake and userWake are the lossy wakeup hints the event hub
 	// fans out as invalidation frames.
 	catalogWake chan struct{}
@@ -397,9 +403,12 @@ type Library struct {
 	// sources are the server-registered enrichment providers in the
 	// operator's order, and what the catalog's pass runs on.
 	sources *enrichSources
-	// enrichWatchEvery is how often a pass's watcher polls its job; zero
-	// is enrichArtWatchInterval.
-	enrichWatchEvery time.Duration
+	// openedAtNS is when this process opened the library: a job's end
+	// taken in hand before it was cut short by a stop.
+	openedAtNS int64
+	// jobFollowEvery is how often the job follower reads the running jobs;
+	// zero is jobFollowInterval.
+	jobFollowEvery time.Duration
 	// matchWake nudges the identify worker; lossy, ticker-backstopped.
 	matchWake chan struct{}
 	// toggles is the hot-path settings cache (read-only flags, transcode
@@ -598,6 +607,8 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		socketDir:                socketDir,
 		catalogWake:              make(chan struct{}, 1),
 		userWake:                 make(chan string, 64),
+		jobWake:                  make(chan struct{}, 1),
+		openedAtNS:               time.Now().UnixNano(),
 		matchWake:                make(chan struct{}, 1),
 		radioWrites:              make(chan radioWrite, radioWriteQueue),
 		sealer:                   cfg.Sealer,
@@ -719,6 +730,9 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	// the event hub's invalidation fan-out.
 	group.Go(ctx, "catalog-feed", l.runCatalogFeed)
 
+	// The catalog's jobs, announced as they move and settled as they end.
+	group.Go(ctx, "job-follow", l.runJobFollower)
+
 	// The radio bookkeeping writer. Started here rather than on the
 	// first segment a listener produces: spawning it from a request
 	// goroutine would add to the group's wait counter while shutdown may
@@ -758,6 +772,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 			if err != nil {
 				return err
 			}
+			l.followJob(pid)
 			log.Info("startup scan launched", "job", string(pid))
 			return nil
 		})
@@ -800,11 +815,26 @@ func (l *Library) Close() error {
 // must survive the response that reported it started. Force bypasses
 // the incremental fast-path so unchanged files are re-read (the repair
 // pass); locks are never ignored, so curated fields survive either way.
+// Nobody hears of its end; RescanFor is an administrator's.
 func (l *Library) Rescan(ctx context.Context, force bool) (Job, error) {
+	return l.startScan(ctx, "", force)
+}
+
+// RescanFor is Rescan started by an administrator, whose inbox hears when
+// the scan ends.
+func (l *Library) RescanFor(ctx context.Context, uc *UserCtx, force bool) (Job, error) {
+	if !uc.Admin {
+		return Job{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	return l.startScan(ctx, uc.ID, force)
+}
+
+func (l *Library) startScan(ctx context.Context, userID string, force bool) (Job, error) {
 	pid, err := l.lib.StartScan(l.procCtx, waxbin.ScanRequest{Force: force})
 	if err != nil {
 		return Job{}, classify(err)
 	}
+	l.followStarted(ctx, pid, userID)
 	return l.JobStatus(ctx, apiPID(PrefixJob, pid))
 }
 
@@ -819,11 +849,36 @@ func (l *Library) Rescan(ctx context.Context, force bool) (Job, error) {
 // whatever this library is configured to do" rather than "never write
 // tags"; opting in here would override the deployment's choice.
 func (l *Library) Analyze(ctx context.Context) (Job, error) {
+	return l.startAnalyze(ctx, "")
+}
+
+// AnalyzeFor is Analyze started by an administrator, whose inbox hears
+// when the pass ends.
+func (l *Library) AnalyzeFor(ctx context.Context, uc *UserCtx) (Job, error) {
+	if !uc.Admin {
+		return Job{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	return l.startAnalyze(ctx, uc.ID)
+}
+
+func (l *Library) startAnalyze(ctx context.Context, userID string) (Job, error) {
 	pid, err := l.lib.StartAnalyze(l.procCtx, waxbin.AnalyzeOptions{})
 	if err != nil {
 		return Job{}, classify(err)
 	}
+	l.followStarted(ctx, pid, userID)
 	return l.JobStatus(ctx, apiPID(PrefixJob, pid))
+}
+
+// followStarted hands a job this server started to the follower, which
+// the feed alone may never tell of it, recording who asked when a person
+// did (userID, empty for the server's own).
+func (l *Library) followStarted(ctx context.Context, pid model.PID, userID string) {
+	if userID != "" {
+		l.adoptJob(ctx, pid, userID, "")
+		return
+	}
+	l.followJob(pid)
 }
 
 // JobStatus reports one catalog job.
@@ -836,17 +891,11 @@ func (l *Library) JobStatus(ctx context.Context, apiJobPID string) (Job, error) 
 	if err != nil {
 		return Job{}, classify(err)
 	}
-	return Job{
-		PID:      apiPID(PrefixJob, job.PID),
-		Kind:     job.Kind,
-		State:    string(job.State),
-		Progress: job.Progress,
-		Message:  job.Message,
-		Error:    job.Error,
-	}, nil
+	return jobDTO(job), nil
 }
 
-// Jobs lists recent catalog jobs, newest first. Administrators only.
+// Jobs lists recent catalog jobs, newest first, after any still running
+// that newer ones pushed out of the window. Administrators only.
 func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, error) {
 	if !uc.Admin {
 		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
@@ -855,16 +904,26 @@ func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, erro
 	if err != nil {
 		return nil, classify(err)
 	}
-	out := make([]Job, 0, len(jobs))
+	listed := make(map[model.PID]bool, len(jobs))
 	for _, job := range jobs {
-		out = append(out, Job{
-			PID:      apiPID(PrefixJob, job.PID),
-			Kind:     job.Kind,
-			State:    string(job.State),
-			Progress: job.Progress,
-			Message:  job.Message,
-			Error:    job.Error,
-		})
+		listed[job.PID] = true
+	}
+	var out []Job
+	running, err := l.followedRunning(ctx)
+	if err != nil {
+		l.log.Warn("jobs: reading the followed jobs", "err", err)
+	}
+	for _, pid := range running {
+		if listed[pid] {
+			continue
+		}
+		if job, err := l.lib.Job(ctx, pid); err == nil && job.State == model.JobRunning {
+			out = append(out, jobDTO(job))
+		}
+	}
+	sortJobsNewestFirst(out)
+	for _, job := range jobs {
+		out = append(out, jobDTO(job))
 	}
 	return out, nil
 }

@@ -293,8 +293,9 @@ components:
           type: string
           description: >
             The operation: `book-merge`, `book-split`, `cue-split`,
-            `acquire`, or `playlist-sync`. A string, not a closed
-            enum.
+            `acquire`, `playlist-sync`, `genre-normalize`, `health-fix`,
+            or an `import-` migration (`import-jellyfin`,
+            `import-subsonic`, ...). A string, not a closed enum.
         state:
           type: string
           description: >
@@ -333,7 +334,11 @@ components:
           description: >
             Task-type-specific result detail once the task finishes,
             for example a migration import's match-and-write report.
-            Shapes are documented per task type and may grow fields.
+            Shapes are documented per task type and may grow fields. A
+            `health-fix` task carries `rule` from the moment it is
+            queued, and once it has run `attempted`, `filled`, `failed`
+            (item counts) and `skipped`, an object counting the items
+            left alone by reason (`gone`, `locked`, `no match`, ...).
 
     ToolTasksCleared:
       type: object

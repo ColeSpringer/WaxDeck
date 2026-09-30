@@ -23,7 +23,7 @@ import '../search/search_chrome.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
-import '../tools/tasks_screen.dart' show toolTasksProvider;
+import '../tools/tool_tasks_provider.dart';
 import 'books_controller.dart';
 import 'series_merge.dart';
 

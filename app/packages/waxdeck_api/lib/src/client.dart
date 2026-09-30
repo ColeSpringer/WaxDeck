@@ -1458,10 +1458,12 @@ abstract interface class WaxDeckRepository {
   /// `POST /library/health/sweep`: queues a full health re-evaluation.
   Future<void> sweepLibraryHealth();
 
-  /// `POST /library/health/fix`: queues automatic repairs for one
-  /// [rule], on [itemPids] or on every failing item, returning the
-  /// queued count.
-  Future<int> fixHealthIssues({required String rule, List<String>? itemPids});
+  /// `POST /library/health/fix`: starts the fix for one [rule], on
+  /// [itemPids] or on every failing item, answering where it runs.
+  Future<HealthFixStart> fixHealthIssues({
+    required String rule,
+    List<String>? itemPids,
+  });
 
   /// `GET /library/duplicates`: detected duplicate entity clusters.
   Future<List<DuplicateGroup>> listDuplicates();
@@ -4629,19 +4631,19 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<int> fixHealthIssues({required String rule, List<String>? itemPids}) =>
-      _guard(() async {
-        final response = await _gen.getHealthApi().fixHealthIssues(
-          healthFixRequest: gen.HealthFixRequest(
-            (b) => b
-              ..rule = rule
-              ..itemPids = itemPids == null
-                  ? null
-                  : ListBuilder<String>(itemPids),
-          ),
-        );
-        return _require(response.data).queued;
-      });
+  Future<HealthFixStart> fixHealthIssues({
+    required String rule,
+    List<String>? itemPids,
+  }) => _guard(() async {
+    final response = await _gen.getHealthApi().fixHealthIssues(
+      healthFixRequest: gen.HealthFixRequest(
+        (b) => b
+          ..rule = rule
+          ..itemPids = itemPids == null ? null : ListBuilder<String>(itemPids),
+      ),
+    );
+    return healthFixStartFromGen(_require(response.data));
+  });
 
   @override
   Future<List<DuplicateGroup>> listDuplicates() => _guard(() async {

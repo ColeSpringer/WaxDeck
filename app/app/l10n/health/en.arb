@@ -197,6 +197,38 @@
       }
     }
   },
+  "healthFixBlockedArtSource": "Needs its artwork sources switched on in Enrichment.",
+  "@healthFixBlockedArtSource": {
+    "description": "Under a health rule this server cannot fix: the sources that supply artwork are not all switched on. Enrichment is the admin screen where sources are switched on."
+  },
+  "healthFixBlockedBookSource": "Needs a book metadata provider.",
+  "@healthFixBlockedBookSource": {
+    "description": "Under a health rule this server cannot fix: no provider of audiobook metadata is configured."
+  },
+  "healthFixBlockedContact": "Needs an enrichment contact, which lets this server ask the free public sources.",
+  "@healthFixBlockedContact": {
+    "description": "Under a health rule this server cannot fix: it has no enrichment contact (an email or URL the administrator sets), which is what lets it ask MusicBrainz and the other free sources."
+  },
+  "healthFixBlockedGenreSource": "Needs a genre source, MusicBrainz or ListenBrainz, switched on in Enrichment.",
+  "@healthFixBlockedGenreSource": {
+    "description": "Under a health rule this server cannot fix: no source of genres is switched on. Enrichment is the admin screen where sources are switched on."
+  },
+  "healthFixBlockedLyricsSource": "Needs a lyrics source switched on in Enrichment.",
+  "@healthFixBlockedLyricsSource": {
+    "description": "Under a health rule this server cannot fix: no lyrics source is switched on. Enrichment is the admin screen where sources are switched on."
+  },
+  "healthFixBlockedNoManaged": "Needs a managed library: with none, there is no layout for paths to match.",
+  "@healthFixBlockedNoManaged": {
+    "description": "Under the path-mismatch health rule when no library lets the server place files, so there is no layout to compare paths with."
+  },
+  "healthFixBlockedOther": "This server cannot run this fix yet.",
+  "@healthFixBlockedOther": {
+    "description": "Under a health rule this server cannot fix, for a reason this app does not know how to word."
+  },
+  "healthFixBusy": "An enrichment pass is already running. Fix this when it ends.",
+  "@healthFixBusy": {
+    "description": "Message when a fix was refused because an enrichment pass is already running."
+  },
   "healthFixRule": "Fix {rule}",
   "@healthFixRule": {
     "description": "Accessible name of the button that runs a health rule's bulk fix. {rule} is that rule's own name.",
@@ -204,6 +236,26 @@
       "rule": {
         "type": "String",
         "example": "Missing cover art"
+      }
+    }
+  },
+  "healthFixRunning": "A fix for {rule} is already running",
+  "@healthFixRunning": {
+    "description": "Message when a health rule's fix is refused because a fix for the same rule, started from this or another session, is still running or re-checking. {rule} is the rule's own name.",
+    "placeholders": {
+      "rule": {
+        "type": "String",
+        "example": "Missing lyrics"
+      }
+    }
+  },
+  "healthFixStarted": "Fixing {rule}",
+  "@healthFixStarted": {
+    "description": "Message after a health rule's fix started; the fix runs in the background and the message offers the Tasks screen. {rule} is the rule's own name.",
+    "placeholders": {
+      "rule": {
+        "type": "String",
+        "example": "Missing lyrics"
       }
     }
   },
@@ -353,16 +405,6 @@
   "@healthPathMismatch": {
     "description": "Name of the health rule `path-mismatch`."
   },
-  "healthQueuedItems": "{count, plural, =1{Queued 1 item} other{Queued {count} items}}",
-  "@healthQueuedItems": {
-    "description": "Message after a rule's fix was started, saying how many items it will work on.",
-    "placeholders": {
-      "count": {
-        "type": "int",
-        "example": "42"
-      }
-    }
-  },
   "healthResolveAction": "Resolve",
   "@healthResolveAction": {
     "description": "Confirming button of the keep-the-best dialog."
@@ -430,6 +472,10 @@
   "healthSmallArt": "Low-resolution cover art",
   "@healthSmallArt": {
     "description": "Name of the health rule `small-art`."
+  },
+  "healthSweepFailed": "The last sweep failed, so these numbers are from an earlier one",
+  "@healthSweepFailed": {
+    "description": "Line under the health score when the most recent health sweep failed; the counts shown are the last successful sweep's."
   },
   "healthSweepNow": "Sweep now",
   "@healthSweepNow": {

@@ -466,11 +466,21 @@ sealed at rest.
 ## Catalog jobs and tasks
 
 The tasks screen shows background work: file tooling, acquisitions,
-migration imports (with their reports), and the catalog's own jobs
-(scans, enrichment, organize runs). Task progress streams live over
-the WebSocket channel; `GET /api/v1/tools/tasks/{id}/events` serves
-the same lifecycle as server-sent events for anything that prefers a
+migration imports (with their reports), health fixes, and, for an
+administrator, the catalog's own jobs (scans, analysis, enrichment,
+organize runs, emptying the trash) with their progress and, once they
+end, what they did. A running job is listed however many newer ones
+came after it; finished per-item jobs (an upload's imports, deletes,
+restores) are left out. Task and job progress streams live over the
+WebSocket channel; `GET /api/v1/tools/tasks/{id}/events` serves a
+task's lifecycle as server-sent events for anything that prefers a
 plain HTTP stream.
+
+Whoever started a scan, an analysis, an enrichment or organize run,
+emptying the trash, or a health fix gets a notification when it ends,
+saying what it did or why it failed (a job cut off by the server
+stopping says so), even when the server restarted in between; work
+the server started on its own schedule notifies nobody.
 
 A finished task is a receipt, and receipts pile up on an account that
 never opens this screen. The scheduled prune clears terminal rows past

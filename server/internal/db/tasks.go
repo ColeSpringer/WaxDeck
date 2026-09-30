@@ -51,6 +51,31 @@ func (d *DB) InsertToolTask(ctx context.Context, t ToolTask) error {
 	return nil
 }
 
+// InsertHealthFixTask inserts a health-fix task unless its rule is being
+// fixed already, by a queued or running task or by a pass whose origin
+// stands, and reports whether it did. One statement, so two requests
+// cannot both find the rule free.
+func (d *DB) InsertHealthFixTask(ctx context.Context, t ToolTask, rule string) (bool, error) {
+	res, err := d.w.ExecContext(ctx, `
+		INSERT INTO tool_tasks (`+taskCols+`)
+		SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		WHERE NOT EXISTS (
+			SELECT 1 FROM tool_tasks WHERE type = ? AND state IN ('queued', 'running')
+				AND json_extract(params, '$.rule') = ?)
+		AND NOT EXISTS (SELECT 1 FROM job_origins WHERE rule = ?)`,
+		t.ID, t.Type, t.State, t.ItemPID, t.UserID, t.Params, t.ProgressPct,
+		t.Error, t.ResultPIDs, t.Summary, t.Attempts, t.CreatedAtNS, t.FinishedAtNS,
+		t.Type, rule, rule)
+	if err != nil {
+		return false, fmt.Errorf("db: inserting health fix task: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("db: inserting health fix task: %w", err)
+	}
+	return n == 1, nil
+}
+
 // ActiveToolTask finds a queued or running task of one type over one
 // item; ErrNotFound when none is in flight. It is the dedupe read that
 // keeps a sync-now and the sweeper from queuing the same run twice.
@@ -128,19 +153,26 @@ func (d *DB) ListToolTasks(ctx context.Context, userID string, beforeNS int64, b
 	return out, rows.Err()
 }
 
-// LeaseToolTask claims the oldest queued task; ErrNotFound when idle.
-// A crashed worker's lease expires and the task re-runs, so task
+// TaskTypes narrows a lease to one task type, or to every type but one,
+// so a worker can keep to its own share of the queue.
+type TaskTypes struct {
+	Only, Except string
+}
+
+// LeaseToolTask claims the oldest queued task of types; ErrNotFound when
+// idle. A crashed worker's lease expires and the task re-runs, so task
 // execution must tolerate a duplicate attempt.
-func (d *DB) LeaseToolTask(ctx context.Context, nowNS, leaseNS int64, maxAttempts int) (ToolTask, error) {
+func (d *DB) LeaseToolTask(ctx context.Context, nowNS, leaseNS int64, maxAttempts int, types TaskTypes) (ToolTask, error) {
 	row := d.w.QueryRowContext(ctx, `
 		UPDATE tool_tasks SET lease_until_ns = ? + ?, attempts = attempts + 1, state = 'running'
 		WHERE id = (
 			SELECT id FROM tool_tasks
 			WHERE state IN ('queued', 'running') AND lease_until_ns < ? AND attempts < ?
+				AND (? = '' OR type = ?) AND (? = '' OR type <> ?)
 			ORDER BY created_at_ns, id LIMIT 1
 		)
 		RETURNING `+taskCols,
-		nowNS, leaseNS, nowNS, maxAttempts)
+		nowNS, leaseNS, nowNS, maxAttempts, types.Only, types.Only, types.Except, types.Except)
 	t, err := scanTask(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ToolTask{}, ErrNotFound
@@ -149,6 +181,28 @@ func (d *DB) LeaseToolTask(ctx context.Context, nowNS, leaseNS int64, maxAttempt
 		return ToolTask{}, fmt.Errorf("db: leasing tool task: %w", err)
 	}
 	return t, nil
+}
+
+// ActiveToolTaskRules lists the `rule` param of every queued or running
+// task of type typ: the rules a health-fix task is fixing.
+func (d *DB) ActiveToolTaskRules(ctx context.Context, typ string) ([]string, error) {
+	rows, err := d.r.QueryContext(ctx, `
+		SELECT DISTINCT json_extract(params, '$.rule') FROM tool_tasks
+		WHERE type = ? AND state IN ('queued', 'running')
+			AND json_extract(params, '$.rule') IS NOT NULL`, typ)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing active task rules: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var rule string
+		if err := rows.Scan(&rule); err != nil {
+			return nil, fmt.Errorf("db: scanning active task rule: %w", err)
+		}
+		out = append(out, rule)
+	}
+	return out, rows.Err()
 }
 
 // RenewToolTaskLease extends a running task's lease while long engine

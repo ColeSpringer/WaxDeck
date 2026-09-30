@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'admin_console.dart';
@@ -85,18 +86,24 @@ class TrashScreen extends ConsumerWidget {
       confirmSemanticsId: SemanticsIds.confirmAccept,
       cancelSemanticsId: SemanticsIds.confirmCancel,
     );
-    if (!confirmed) return;
-    try {
-      final result = await ref.read(trashProvider.notifier).empty();
-      messenger.show(
-        l10n.adminTrashEmptied(
-          result.purged,
-          l10n.formatBytes(result.reclaimedBytes),
-        ),
-      );
-    } on WaxDeckApiException catch (error) {
-      messenger.show(explainError(l10n, error));
-    }
+    if (!confirmed || !context.mounted) return;
+    final container = ProviderScope.containerOf(context, listen: false);
+    await container.read(pendingActionsProvider.notifier).run(
+      PendingAction.trashEmpty,
+      () async {
+        try {
+          final result = await container.read(trashProvider.notifier).empty();
+          messenger.show(
+            l10n.adminTrashEmptied(
+              result.purged,
+              l10n.formatBytes(result.reclaimedBytes),
+            ),
+          );
+        } on WaxDeckApiException catch (error) {
+          messenger.show(explainError(l10n, error));
+        }
+      },
+    );
   }
 
   @override
@@ -116,6 +123,9 @@ class TrashScreen extends ConsumerWidget {
           label: l10n.adminTrashEmptyAction,
           kind: WaxButtonKind.destructive,
           semanticsId: SemanticsIds.trashEmpty,
+          busy: ref
+              .watch(pendingActionsProvider)
+              .contains(PendingAction.trashEmpty),
           onPressed: () => _empty(context, ref),
         ),
       ],

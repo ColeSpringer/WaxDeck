@@ -856,11 +856,15 @@ func (s *Server) GetItemLyrics(ctx context.Context, req GetItemLyricsRequestObje
 // --- admin -----------------------------------------------------------------------
 
 func (s *Server) RescanLibrary(ctx context.Context, req RescanLibraryRequestObject) (RescanLibraryResponseObject, error) {
-	if p, ok := principalFromContext(ctx); !ok || !p.IsAdmin() {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
 		return RescanLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
 	force := req.Body != nil && req.Body.Force != nil && *req.Body.Force
-	job, err := s.svc.Rescan(ctx, force)
+	job, err := s.svc.RescanFor(ctx, uc, force)
 	if err != nil {
 		if service.KindOf(err) == service.KindConflict {
 			return RescanLibrary409JSONResponse{ConflictJSONResponse(errObj("conflict", "a conflicting catalog job is already running"))}, nil
@@ -871,10 +875,14 @@ func (s *Server) RescanLibrary(ctx context.Context, req RescanLibraryRequestObje
 }
 
 func (s *Server) AnalyzeLibrary(ctx context.Context, _ AnalyzeLibraryRequestObject) (AnalyzeLibraryResponseObject, error) {
-	if p, ok := principalFromContext(ctx); !ok || !p.IsAdmin() {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
 		return AnalyzeLibrary403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
-	job, err := s.svc.Analyze(ctx)
+	job, err := s.svc.AnalyzeFor(ctx, uc)
 	if err != nil {
 		if service.KindOf(err) == service.KindConflict {
 			// Narrower prose than the rescan twin's: analysis takes its
@@ -1266,7 +1274,53 @@ func jobJSON(j service.Job) Job {
 	if j.Error != "" {
 		out.Error = ptr(j.Error)
 	}
+	if !j.StartedAt.IsZero() {
+		out.StartedAt = ptr(j.StartedAt)
+	}
+	if !j.FinishedAt.IsZero() {
+		out.FinishedAt = ptr(j.FinishedAt)
+	}
+	if r := jobResultJSON(j); r != nil {
+		out.Result = &r
+	}
 	return out
+}
+
+// jobResultJSON is a finished job's summary in the spec's words: an
+// enrichment pass's is the status surface's last run, less its date.
+func jobResultJSON(j service.Job) map[string]any {
+	switch {
+	case j.Scan != nil:
+		r := j.Scan
+		return map[string]any{
+			"filesSeen": r.FilesSeen, "created": r.Created, "updated": r.Updated,
+			"relinked": r.Relinked, "unchanged": r.Unchanged, "missing": r.Missing,
+			"skipped": r.Skipped, "errored": r.Errored,
+		}
+	case j.Analyze != nil:
+		r := j.Analyze
+		return map[string]any{
+			"analyzed": r.Analyzed, "loudnessMeasured": r.LoudnessMeasured,
+			"measureFailed": r.MeasureFailed, "skipped": r.Skipped, "errored": r.Errored,
+		}
+	case j.Organize != nil:
+		r := j.Organize
+		return map[string]any{
+			"profile": r.Profile, "moved": r.Moved, "skipped": r.Skipped,
+			"errored": r.Errored, "sidecarsMoved": r.SidecarsMoved,
+		}
+	case j.Enrich != nil:
+		raw, err := json.Marshal(enrichmentLastRun(j.Enrich))
+		if err != nil {
+			return nil
+		}
+		var out map[string]any
+		if json.Unmarshal(raw, &out) != nil {
+			return nil
+		}
+		return out
+	}
+	return nil
 }
 
 // --- small helpers ----------------------------------------------------------------

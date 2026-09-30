@@ -119,6 +119,7 @@ export default defineConfig({
         /playlist-sync\.spec\.ts/,
         /uploads\.spec\.ts/,
         /admin-ops\.spec\.ts/,
+        /catalog-jobs\.spec\.ts/,
         /admin-readonly\.spec\.ts/,
         /a11y-audit\.spec\.ts/,
         /feishin\.spec\.ts/,
@@ -164,12 +165,21 @@ export default defineConfig({
       dependencies: ['mutators-uploads'],
       ...motion('reduce'),
     },
+    // The catalog's jobs and health fixes: a scan and an enrichment pass
+    // each hold a lease the whole stack shares, and a sweep request is
+    // server-wide, so the file runs serially after the admin surfaces.
+    {
+      name: 'mutators-jobs',
+      testMatch: /catalog-jobs\.spec\.ts/,
+      dependencies: ['mutators-admin'],
+      ...motion('reduce'),
+    },
     // Server-wide read-only, alone on the stack: the global switch's cost
     // paid once instead of charged to every test sharing its file.
     {
       name: 'mutators-readonly',
       testMatch: /admin-readonly\.spec\.ts/,
-      dependencies: ['mutators-admin'],
+      dependencies: ['mutators-jobs'],
       ...motion('reduce'),
     },
     // Unreduced-motion coverage. Before the focus projects: those are the

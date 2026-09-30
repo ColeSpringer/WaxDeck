@@ -39,8 +39,10 @@ var notifyEventCatalog = []NotifyEvent{
 		Description: "A backup archive finished building."},
 	{Name: "backup-failed", Scope: NotifyScopeServer,
 		Description: "A backup attempt failed."},
+	{Name: "episode-arrived", Scope: NotifyScopeUser,
+		Description: "A subscribed show published a new episode."},
 	{Name: "episode-downloaded", Scope: NotifyScopeUser,
-		Description: "A new episode of a subscribed show finished downloading."},
+		Description: "An episode you asked for finished downloading."},
 	{Name: "feed-disabled", Scope: NotifyScopeUser,
 		Description: "A subscribed feed kept failing and was disabled."},
 	{Name: "review-ready", Scope: NotifyScopeUser,
@@ -49,6 +51,12 @@ var notifyEventCatalog = []NotifyEvent{
 		Description: "An upload or acquisition identified confidently enough to file itself, with no review."},
 	{Name: "playlist-synced", Scope: NotifyScopeUser,
 		Description: "A synced playlist pulled in changes from its source, or its syncing kept failing and was suspended."},
+	{Name: "job-finished", Scope: NotifyScopeUser,
+		Description: "A library job you started finished: a scan, an analysis, an enrichment or organize run, or emptying the trash."},
+	{Name: "job-failed", Scope: NotifyScopeUser,
+		Description: "A library job you started failed."},
+	{Name: "health-fix-finished", Scope: NotifyScopeUser,
+		Description: "A health fix you started finished."},
 }
 
 // NotifyEvents returns the event catalog.
@@ -665,6 +673,12 @@ func (l *Library) notificationLink(event, targetPID string) string {
 		} else {
 			path = "/podcasts/" + targetPID
 		}
+	case "episode-arrived":
+		if targetPID == "" {
+			path = "/podcasts"
+		} else {
+			path = "/podcasts/" + targetPID
+		}
 	case "episode-downloaded":
 		if targetPID == "" {
 			path = "/podcasts"
@@ -677,6 +691,10 @@ func (l *Library) notificationLink(event, targetPID string) string {
 		} else {
 			path = "/playlists/" + targetPID
 		}
+	case "job-finished", "job-failed":
+		path = "/tasks"
+	case "health-fix-finished":
+		path = "/admin/health"
 	default:
 		// Including the reserved test event: a test is about the
 		// destination, not about anything in the library.

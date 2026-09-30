@@ -66,7 +66,7 @@ func (l *Library) runSpotifyImport(ctx context.Context, t *wdb.ToolTask, uc *Use
 		return sum, fmt.Errorf("%w: the uploaded export cannot be read: %v", errToolPermanent, err)
 	}
 	defer zr.Close()
-	prog := newMigrateProgress(l, t)
+	prog := newToolProgress(l, t)
 	hist := l.newMigrateHistory(uc, p, &sum)
 	// Reporting is the importer's only lease renewal, and one history
 	// file can be a hundred thousand plays: without a tick from inside

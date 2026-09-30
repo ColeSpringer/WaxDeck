@@ -8,6 +8,8 @@ part of 'library_created.dart';
 
 class _$LibraryCreated extends LibraryCreated {
   @override
+  final bool? scanStarted;
+  @override
   final String? streamingWarning;
   @override
   final String pid;
@@ -24,6 +26,7 @@ class _$LibraryCreated extends LibraryCreated {
       (LibraryCreatedBuilder()..update(updates))._build();
 
   _$LibraryCreated._({
+    this.scanStarted,
     this.streamingWarning,
     required this.pid,
     required this.name,
@@ -42,6 +45,7 @@ class _$LibraryCreated extends LibraryCreated {
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
     return other is LibraryCreated &&
+        scanStarted == other.scanStarted &&
         streamingWarning == other.streamingWarning &&
         pid == other.pid &&
         name == other.name &&
@@ -53,6 +57,7 @@ class _$LibraryCreated extends LibraryCreated {
   @override
   int get hashCode {
     var _$hash = 0;
+    _$hash = $jc(_$hash, scanStarted.hashCode);
     _$hash = $jc(_$hash, streamingWarning.hashCode);
     _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, name.hashCode);
@@ -66,6 +71,7 @@ class _$LibraryCreated extends LibraryCreated {
   @override
   String toString() {
     return (newBuiltValueToStringHelper(r'LibraryCreated')
+          ..add('scanStarted', scanStarted)
           ..add('streamingWarning', streamingWarning)
           ..add('pid', pid)
           ..add('name', name)
@@ -81,6 +87,11 @@ class LibraryCreatedBuilder
         Builder<LibraryCreated, LibraryCreatedBuilder>,
         ModelLibraryBuilder {
   _$LibraryCreated? _$v;
+
+  bool? _scanStarted;
+  bool? get scanStarted => _$this._scanStarted;
+  set scanStarted(covariant bool? scanStarted) =>
+      _$this._scanStarted = scanStarted;
 
   String? _streamingWarning;
   String? get streamingWarning => _$this._streamingWarning;
@@ -114,6 +125,7 @@ class LibraryCreatedBuilder
   LibraryCreatedBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
+      _scanStarted = $v.scanStarted;
       _streamingWarning = $v.streamingWarning;
       _pid = $v.pid;
       _name = $v.name;
@@ -142,6 +154,7 @@ class LibraryCreatedBuilder
     final _$result =
         _$v ??
         _$LibraryCreated._(
+          scanStarted: scanStarted,
           streamingWarning: streamingWarning,
           pid: BuiltValueNullFieldError.checkNotNull(
             pid,

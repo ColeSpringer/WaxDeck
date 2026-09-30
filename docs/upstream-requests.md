@@ -55,6 +55,28 @@ note.
   pid on the finding. Shipped workaround: the copy, in
   `service.mismatchOf`.
 
+- **A run cannot be limited to the phases it is about.**
+  `EnrichOptions.ForcePhases` forces the named phases and walks every
+  other phase's ordinary sweep, and a scope forces every phase for its
+  targets, so nothing runs one phase alone. WaxDeck's health fix of
+  missing lyrics wants the lyrics phase and nothing else, and instead
+  runs the whole pass with lyrics forced: every pending lookup of every
+  other phase is asked too, which makes a quick fix a long one and can
+  reach every provider the install has. Wanted: an option running only
+  the named phases (forced or not). Shipped workaround: the fix is the
+  whole pass with its phases forced, and says so.
+
+- **An item-scoped enrichment writes a job row like a whole pass.**
+  `Enrich` with `ItemPID` runs under `jobs.Run` as kind `enrich`, scope
+  `enrich`, the same row a full pass writes, and nothing on the row says
+  it was scoped. WaxDeck runs one for the editor's Enrich button and for
+  each item of a scoped health fix, so an administrator's Tasks screen
+  lists each as an Enrichment and the job follower announces each to
+  every administrator. `RunLeased`'s own doc names this case (a verb
+  that is one step inside a user action). Wanted: a scoped run under
+  `RunLeased`, or its scope on the job row. Shipped workaround: none;
+  those runs are listed as enrichment passes.
+
 ## WaxTap
 
 - **A chunked download has no stall timeout.** `Timeouts.ChunkRetry`

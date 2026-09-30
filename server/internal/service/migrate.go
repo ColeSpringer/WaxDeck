@@ -860,35 +860,3 @@ func (c migrateSource) get(ctx context.Context, path string, header http.Header,
 func newMigrateSource(name, base string) migrateSource {
 	return migrateSource{name: name, base: strings.TrimRight(base, "/"), hc: migrateHTTPClient()}
 }
-
-// migrateProgress mirrors task progress to the store in coarse steps
-// and keeps the lease alive across a long walk of the source server.
-type migrateProgress struct {
-	l         *Library
-	t         *wdb.ToolTask
-	lastPct   float64
-	lastRenew time.Time
-}
-
-func newMigrateProgress(l *Library, t *wdb.ToolTask) *migrateProgress {
-	return &migrateProgress{l: l, t: t, lastRenew: time.Now()}
-}
-
-func (mp *migrateProgress) report(ctx context.Context, pct float64) {
-	if pct-mp.lastPct >= 5 {
-		mp.lastPct = pct
-		mp.t.ProgressPct = pct
-		if err := mp.l.db.UpdateToolTask(ctx, *mp.t); err != nil {
-			mp.l.log.Warn("recording migration progress", "task", mp.t.ID, "err", err)
-		} else {
-			mp.l.notifyToolTask(ctx, mp.t.ID)
-		}
-	}
-	if time.Since(mp.lastRenew) >= toolLeaseRenew {
-		mp.lastRenew = time.Now()
-		until := time.Now().Add(toolTaskLease).UnixNano()
-		if err := mp.l.db.RenewToolTaskLease(ctx, mp.t.ID, until); err != nil {
-			mp.l.log.Warn("renewing migration lease", "task", mp.t.ID, "err", err)
-		}
-	}
-}

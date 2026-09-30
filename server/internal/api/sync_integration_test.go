@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -1009,5 +1010,44 @@ func TestSyncCatalogTombstoneReasonsForARestrictedCaller(t *testing.T) {
 	}
 	if got := reasons[gone]; got != "removed" {
 		t.Errorf("permanent-delete reason for a restricted caller = %q, want removed", got)
+	}
+}
+
+// A catalog job reaches administrators as a `job` marker naming its pid,
+// and nobody else: the job surface is an administrator's.
+func TestJobMarkersReachAdmins(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	wantStatus(t, h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "listener", "password": "listener-pass",
+	}), 201, "create listener")
+	listener := loginAs(t, h.ts, "listener", "listener-pass").Token
+	adminSince := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server", h.token)).NextSince
+	listenerSince := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server", listener)).NextSince
+
+	pid := h.rescanAndWait(t)
+
+	deadline := time.Now().Add(10 * time.Second)
+	for !slices.ContainsFunc(
+		decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server?since="+adminSince, h.token)).Events,
+		func(ev ServerSyncEvent) bool { return ev.Kind == "job" && ev.Pid != nil && *ev.Pid == pid },
+	) {
+		if time.Now().After(deadline) {
+			t.Fatalf("the administrator's stream never carried a job marker for %s", pid)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	for _, ev := range decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server?since="+listenerSince, listener)).Events {
+		if ev.Kind == "job" {
+			t.Fatalf("a listener's stream carried a job marker: %+v", ev)
+		}
+	}
+
+	job := decode[Job](t, get(t, h.ts, "/api/v1/jobs/"+pid, h.token))
+	if job.StartedAt == nil || job.FinishedAt == nil || job.FinishedAt.Before(*job.StartedAt) {
+		t.Fatalf("finished job = started %v, finished %v; want both, in order", job.StartedAt, job.FinishedAt)
+	}
+	if job.Result == nil || (*job.Result)["filesSeen"] == nil {
+		t.Fatalf("finished scan result = %v, want its counts", job.Result)
 	}
 }

@@ -28,6 +28,9 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
   OrganizeReport? _report;
   var _busy = false;
 
+  /// The apply is the request in flight, not the preview.
+  var _applying = false;
+
   Future<void> _preview(String profile) async {
     if (_busy) return;
     setState(() {
@@ -64,7 +67,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
       cancelSemanticsId: SemanticsIds.confirmCancel,
     );
     if (!confirmed || !mounted) return;
-    setState(() => _busy = true);
+    setState(() => _busy = _applying = true);
     final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       final report = await ref
@@ -79,7 +82,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e));
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) setState(() => _busy = _applying = false);
     }
   }
 
@@ -157,6 +160,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
               label: l10n.organizeApply,
               icon: WaxIcons.sort,
               semanticsId: SemanticsIds.organizeApply,
+              busy: _applying,
               // No plan, no apply: a run without one rewrites the
               // library on trust.
               onPressed: _busy || plan == null ? null : () => _apply(profile),

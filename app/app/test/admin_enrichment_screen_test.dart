@@ -755,4 +755,24 @@ void main() {
     listen.close();
     container.dispose();
   });
+
+  testWidgets('run is busy until the pass has started', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final repo = await _pump(tester);
+    repo.runEnrichmentGate = Completer<void>();
+
+    await _tap(tester, SemanticsIds.enrichmentRun);
+    WaxButton run() => tester.widget<WaxButton>(
+      find.byWidgetPredicate(
+        (w) => w is WaxButton && w.semanticsId == SemanticsIds.enrichmentRun,
+      ),
+    );
+    expect(run().busy, isTrue);
+
+    repo.runEnrichmentGate!.complete();
+    await tester.pumpAndSettle();
+    expect(run().busy, isFalse);
+  });
 }

@@ -1,30 +1,105 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../admin/admin_providers.dart';
 import '../providers.dart';
+import '../tools/tool_tasks_provider.dart';
 
-/// The library health scoreboard, with the fix and sweep actions.
+/// The library health scoreboard. The `health` marker refetches it when a
+/// sweep or a fix lands.
 class HealthController extends AsyncNotifier<HealthSummary> {
   @override
   Future<HealthSummary> build() =>
       ref.watch(repositoryProvider).getLibraryHealth();
-
-  /// Queues automatic repairs for every failing item of one rule;
-  /// returns the queued count.
-  Future<int> fix(String rule) async {
-    final queued = await ref
-        .read(repositoryProvider)
-        .fixHealthIssues(rule: rule);
-    if (ref.mounted) ref.invalidateSelf();
-    return queued;
-  }
-
-  /// Queues a full re-evaluation; the score refreshes as it lands.
-  Future<void> sweep() => ref.read(repositoryProvider).sweepLibraryHealth();
 }
 
 final healthProvider = AsyncNotifierProvider<HealthController, HealthSummary>(
   HealthController.new,
+);
+
+/// The rules this session has asked to fix whose request is still out.
+/// Once the server has one, the summary's `fixing` carries the state.
+class HealthFixes extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => const {};
+
+  /// Starts the fix for every failing item of one rule, answering where
+  /// it runs.
+  Future<HealthFixStart> start(String rule) async {
+    state = {...state, rule};
+    try {
+      final started = await ref
+          .read(repositoryProvider)
+          .fixHealthIssues(rule: rule);
+      if (ref.mounted) {
+        ref.invalidate(
+          started.jobPid != null ? adminJobsProvider : toolTasksProvider,
+        );
+      }
+      return started;
+    } finally {
+      // Held until the summary saying so arrives, so the control does not
+      // read idle in between. A refusal reads it too: the rule may be
+      // another session's fix, which the summary then shows.
+      if (ref.mounted) await refreshedSummary(ref);
+      if (ref.mounted) state = {...state}..remove(rule);
+    }
+  }
+}
+
+/// Reads the summary again and waits for its answer, a value or a
+/// failure. A failed read is retried with backoff, reporting loading
+/// with the error meanwhile, so waiting on `.future` would sit through
+/// the whole of it.
+Future<void> refreshedSummary(Ref ref) {
+  final answered = Completer<void>();
+  final sub = ref.container.listen<AsyncValue<HealthSummary>>(healthProvider, (
+    _,
+    next,
+  ) {
+    if (!answered.isCompleted && (next.hasError || !next.isLoading)) {
+      answered.complete();
+    }
+  });
+  ref.invalidate(healthProvider);
+  return answered.future.whenComplete(sub.close);
+}
+
+final healthFixesProvider = NotifierProvider<HealthFixes, Set<String>>(
+  HealthFixes.new,
+);
+
+/// Whether one rule's fix is on its way or under way: a request this
+/// session has out, or the summary saying a fix runs, whoever started it.
+final healthFixingProvider = Provider.family<bool, String>((ref, rule) {
+  if (ref.watch(healthFixesProvider).contains(rule)) return true;
+  final rules = ref.watch(healthProvider).value?.rules ?? const [];
+  return rules.any((r) => r.rule == rule && r.fixing);
+});
+
+/// A sweep request on its way to the server. Once there, the summary's
+/// own `sweeping` carries the state until the sweep lands.
+class HealthSweepRequest extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  Future<void> send() async {
+    state = true;
+    try {
+      await ref.read(repositoryProvider).sweepLibraryHealth();
+      // Held until the summary saying so arrives, so the control does not
+      // read idle in between. A failed read leaves the request standing.
+      if (ref.mounted) await refreshedSummary(ref);
+    } finally {
+      if (ref.mounted) state = false;
+    }
+  }
+}
+
+final healthSweepRequestProvider = NotifierProvider<HealthSweepRequest, bool>(
+  HealthSweepRequest.new,
 );
 
 /// Accumulated pages of one rule's failing items.
