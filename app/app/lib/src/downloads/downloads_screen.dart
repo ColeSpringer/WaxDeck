@@ -9,6 +9,7 @@ import '../l10n/l10n.dart';
 import '../search/search_chrome.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'downloads_controller.dart';
 
 /// What this overflow can do.
@@ -198,27 +199,20 @@ class _Overflow extends ConsumerWidget {
     WidgetRef ref,
     _DownloadsAction action,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final notifier = ref.read(downloadsProvider.notifier);
     switch (action) {
       case _DownloadsAction.removeFinished:
         final removed = await notifier.removeFinishedEpisodes();
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(
-                removed == 0
-                    ? l10n.downloadsNoneFinished
-                    : l10n.downloadsRemovedEpisodes(removed),
-              ),
-            ),
-          );
+        messenger.show(
+          removed == 0
+              ? l10n.downloadsNoneFinished
+              : l10n.downloadsRemovedEpisodes(removed),
+          channel: ShellChannel.downloads,
+        );
       case _DownloadsAction.refreshStale:
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(l10n.downloadsChecking)));
+        messenger.show(l10n.downloadsChecking, channel: ShellChannel.downloads);
         await notifier.refreshStale();
     }
   }

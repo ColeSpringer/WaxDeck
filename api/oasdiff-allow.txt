@@ -1,0 +1,7 @@
+# Deliberately accepted breaking changes, matched by `make oasdiff`.
+# Temporary by construction: this file rides the change that makes the
+# break and is deleted once the base ref contains it.
+#
+# A fix that writes files says it is blocked on a read-only server; the
+# app words an unknown code as a fix that cannot run.
+GET /library/health added the new `read-only` enum value to the `rules/items/fixBlocked` response property for the response status `200`

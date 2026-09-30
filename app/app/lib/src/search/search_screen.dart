@@ -14,6 +14,7 @@ import '../radio/radio_screen.dart';
 import '../shell/adaptive_shell.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'search_controller.dart';
 import 'search_open.dart';
 
@@ -459,12 +460,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   /// Adds a directory match, reporting a refusal where there is no modal to
   /// hide a snackbar behind.
   Future<void> _addStation(RadioDirectoryEntry entry) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final refusal = await addDirectoryStation(context, ref, entry);
     if (refusal == null || !mounted) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(refusal)));
+    messenger.show(refusal, channel: ShellChannel.radio);
   }
 
   List<Widget> _recents() {
@@ -727,11 +726,9 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   /// Subscribes to a directory match, reporting the refusal where there
   /// is no modal to put it in. The shared call says so on success.
   Future<void> _subscribeShow(PodcastDirectoryEntry entry) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final refusal = await subscribeToDirectoryEntry(context, ref, entry);
     if (refusal == null || !mounted) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(refusal)));
+    messenger.show(refusal, channel: ShellChannel.podcasts);
   }
 }

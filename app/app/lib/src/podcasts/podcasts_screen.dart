@@ -17,6 +17,7 @@ import '../shell/async_sliver_face.dart';
 import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../uploads/file_picker_port.dart';
 import 'add_podcast.dart';
 import 'episode_actions.dart';
@@ -147,15 +148,13 @@ class _HubOverflow extends ConsumerWidget {
   /// web build has no file-save surface, and an OPML document on the
   /// clipboard pastes into every other podcast client's import box.
   static Future<void> _exportOpml(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final String opml;
     try {
       opml = await ref.read(repositoryProvider).exportOpml();
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: _opml);
       return;
     }
     if (!context.mounted) return;
@@ -166,18 +165,18 @@ class _HubOverflow extends ConsumerWidget {
       documentKey: const Key('opml-export-content'),
       closeLabel: l10n.commonClose,
       copyLabel: l10n.podcastOpmlCopy,
-      onCopied: () => messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.podcastOpmlCopied))),
+      onCopied: () => messenger.show(l10n.podcastOpmlCopied, channel: _opml),
     );
   }
 
   static const _opmlExtensions = {'opml', 'xml'};
 
+  static const _opml = ShellChannel.opml;
+
   static Future<void> _importOpml(BuildContext context, WidgetRef ref) async {
     final picker = ref.read(filePickerProvider);
     if (picker == null) return;
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
       final file = await picker.pickFile(
@@ -194,20 +193,12 @@ class _HubOverflow extends ConsumerWidget {
       await ref
           .read(subscriptionsProvider.notifier)
           .importOpml(utf8.decode(bytes.takeBytes(), allowMalformed: true));
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.podcastOpmlImported)));
+      messenger.show(l10n.podcastOpmlImported, channel: _opml);
     } on WaxDeckApiException catch (e) {
       // What was pasted in is what was refused, so the server's words.
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+      messenger.show(explainRefusal(l10n, e), channel: _opml);
     } on Exception catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text(l10n.podcastFileUnreadable('$e'))),
-        );
+      messenger.show(l10n.podcastFileUnreadable('$e'), channel: _opml);
     }
   }
 }

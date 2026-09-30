@@ -13,6 +13,7 @@ import '../metadata/artwork_manager.dart';
 import '../providers.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../uploads/file_picker_port.dart';
 import 'nsp_gap_copy.dart';
 import 'playlist_create.dart';
@@ -263,9 +264,9 @@ Future<void> runPlaylistAction(
 Future<void> _rename(BuildContext context, Playlist playlist) async {
   // Captured before the prompt: reading one off this context after it
   // is a use across the gap.
-  final messenger = ScaffoldMessenger.of(context);
   final l10n = context.l10n;
   final container = ProviderScope.containerOf(context, listen: false);
+  final messenger = container.read(shellMessengerProvider.notifier);
   final name = await promptPlaylistName(
     context,
     title: l10n.playlistRenameTitle,
@@ -286,7 +287,7 @@ Future<void> _rename(BuildContext context, Playlist playlist) async {
 Future<void> _setVisibility(BuildContext context, Playlist playlist) {
   final container = ProviderScope.containerOf(context, listen: false);
   return _guard(
-    ScaffoldMessenger.of(context),
+    container.read(shellMessengerProvider.notifier),
     context.l10n,
     () => _edit(
       container,
@@ -318,7 +319,7 @@ Future<void> _delete(
   VoidCallback? onDeleted,
 ) async {
   final container = ProviderScope.containerOf(context, listen: false);
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = container.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   final confirmed = await showDialog<bool>(
     context: context,
@@ -358,7 +359,7 @@ Future<void> _exportM3u(
   WidgetRef ref,
   Playlist playlist,
 ) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   final String content;
   try {
@@ -366,9 +367,7 @@ Future<void> _exportM3u(
         .read(repositoryProvider)
         .exportPlaylistM3u(playlist.pid);
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+    messenger.show(explainError(l10n, e), channel: _channel);
     return;
   }
   if (!context.mounted) return;
@@ -389,13 +388,11 @@ Future<void> _exportNsp(
   WidgetRef ref,
   Playlist playlist,
 ) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   final repository = ref.read(repositoryProvider);
   final pid = playlist.pid;
-  void say(String message) => messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message)));
+  void say(String message) => messenger.show(message, channel: _channel);
   Map<String, Object?>? document;
   // A rule edited after its report was read refuses the export as a
   // `conflict`; the new rule is reported and asked about once more.
@@ -588,7 +585,7 @@ Future<bool?> _confirmNspLoss(BuildContext context, NspReport report) {
 /// Both text exports land in the design system's one document dialog.
 Future<void> _showDocument(
   BuildContext context, {
-  required ScaffoldMessengerState messenger,
+  required ShellMessenger messenger,
   required String title,
   required String document,
   required String copied,
@@ -599,9 +596,7 @@ Future<void> _showDocument(
   closeLabel: context.l10n.commonClose,
   copyLabel: context.l10n.playlistExportCopy,
   copySemanticsId: SemanticsIds.playlistExportCopy,
-  onCopied: () => messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(copied))),
+  onCopied: () => messenger.show(copied, channel: _channel),
 );
 
 /// Copies the portable refs, for importing on another server.
@@ -610,7 +605,7 @@ Future<void> _exportPortable(
   WidgetRef ref,
   Playlist playlist,
 ) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   final PortablePlaylist portable;
   try {
@@ -618,15 +613,11 @@ Future<void> _exportPortable(
         .read(repositoryProvider)
         .exportPlaylistPortable(playlist.pid);
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+    messenger.show(explainError(l10n, e), channel: _channel);
     return;
   }
   await Clipboard.setData(ClipboardData(text: portableJson(portable)));
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(l10n.playlistCopiedPortable)));
+  messenger.show(l10n.playlistCopiedPortable, channel: _channel);
 }
 
 /// What the picker offers; the server decides what it accepts.
@@ -642,7 +633,7 @@ Future<void> _setCover(
   final picker = ref.read(filePickerProvider);
   if (picker == null) return;
   final pid = playlist.pid;
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   // Picking and reading are inside the guard: a permission error or a
   // file that vanished throws from the platform, not from the API.
@@ -662,15 +653,9 @@ Future<void> _setCover(
         .read(playlistDetailProvider(pid).notifier)
         .setCover(bytes.takeBytes());
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+    messenger.show(explainError(l10n, e), channel: _channel);
   } on Exception catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(l10n.playlistCoverUnreadable('$e'))),
-      );
+    messenger.show(l10n.playlistCoverUnreadable('$e'), channel: _channel);
   }
 }
 
@@ -682,17 +667,13 @@ Future<void> _resetCover(
   Playlist playlist,
 ) async {
   final pid = playlist.pid;
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   try {
     await ref.read(playlistDetailProvider(pid).notifier).resetCover();
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(l10n.playlistCoverReset)));
+    messenger.show(l10n.playlistCoverReset, channel: _channel);
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+    messenger.show(explainError(l10n, e), channel: _channel);
   }
 }
 
@@ -700,7 +681,7 @@ Future<void> _resetCover(
 /// carrying something just typed, where the server's own sentence
 /// names the value it would not take.
 Future<void> _guard(
-  ScaffoldMessengerState messenger,
+  ShellMessenger messenger,
   AppLocalizations l10n,
   Future<void> Function() edit, {
   bool refusal = false,
@@ -708,17 +689,15 @@ Future<void> _guard(
   try {
     await edit();
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            refusal ? explainRefusal(l10n, e) : explainError(l10n, e),
-          ),
-        ),
-      );
+    messenger.show(
+      refusal ? explainRefusal(l10n, e) : explainError(l10n, e),
+      channel: _channel,
+    );
   }
 }
+
+/// A playlist's verbs are one run: the latest answer replaces the last.
+const _channel = ShellChannel.playlists;
 
 /// The portable export, as the JSON the importer on another server reads.
 String portableJson(PortablePlaylist portable) => jsonEncode(<String, Object?>{

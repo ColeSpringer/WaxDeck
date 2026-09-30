@@ -8,6 +8,7 @@ import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../settings/prefs_controller.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'radio_controller.dart';
 
 /// Opens the add-station dialog, or the edit form for [editing].
@@ -43,7 +44,7 @@ Future<String?> addDirectoryStation(
   WidgetRef ref,
   RadioDirectoryEntry entry,
 ) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   try {
     await ref
@@ -56,11 +57,10 @@ Future<String?> addDirectoryStation(
         );
     // The success toast is safe from the dialog too: it pops on success, so
     // the message is uncovered by the time it matters.
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(l10n.radioAddedStation(entry.name))),
-      );
+    messenger.show(
+      l10n.radioAddedStation(entry.name),
+      channel: ShellChannel.radio,
+    );
     return null;
   } on WaxDeckApiException catch (e) {
     // The server's own words: a duplicate stream URL names the station
@@ -115,32 +115,25 @@ Future<void> toggleStationScrobble(
   WidgetRef ref,
   RadioStation station,
 ) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   try {
     final muted = await ref
         .read(prefsControllerProvider.notifier)
         .toggleRadioStationScrobble(station.pid);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            muted
-                ? l10n.radioScrobbleStationMuted(station.name)
-                : l10n.radioScrobbleStationResumed(station.name),
-          ),
-        ),
-      );
+    messenger.show(
+      muted
+          ? l10n.radioScrobbleStationMuted(station.name)
+          : l10n.radioScrobbleStationResumed(station.name),
+      channel: ShellChannel.radio,
+    );
     // `on Object`, not the API exception alone: the preference write
     // rethrows whatever it caught, and a serializer failure on the
     // document's round trip is not a Dio error. Both call sites here
     // fire and forget, so anything this misses is a menu that closes
     // and does nothing.
   } on Object catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+    messenger.show(explainError(l10n, e), channel: ShellChannel.radio);
   }
 }
 

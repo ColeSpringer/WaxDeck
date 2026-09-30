@@ -76,7 +76,7 @@ void main() {
     await tester.tap(find.text('Welcome back to the inn'));
     await tester.pump();
 
-    expect(find.text('Cue starts at 0:30'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Cue starts at 0:30');
   });
 
   testWidgets('a cue tap seeks the live player when the episode matches', (
@@ -185,7 +185,7 @@ void main() {
       container.read(queueControllerProvider).entries.map((e) => e.pid),
       <String>[episodePid],
     );
-    expect(find.text('Added to the queue'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Added to the queue');
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.episodeMarkPlayed),
@@ -194,7 +194,7 @@ void main() {
     // Played is a position at the full duration; there is no flag to set.
     expect(repo.putPlayStateCalls.single.pid, episodePid);
     expect(repo.putPlayStateCalls.single.positionMs, 214000);
-    expect(find.text('Marked as played'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Marked as played');
 
     container.read(queueControllerProvider.notifier).clear();
     await tester.pumpAndSettle();

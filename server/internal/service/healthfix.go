@@ -21,6 +21,7 @@ import (
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/enrich"
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/organize"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
 
@@ -51,6 +52,7 @@ const (
 	fixBlockedGenreSource  = "needs-genre-source"
 	fixBlockedBookSource   = "needs-book-source"
 	fixBlockedNoManaged    = "no-managed-library"
+	fixBlockedReadOnly     = "read-only"
 )
 
 // healthFixPhases are the catalog phases whose forced pass fills each
@@ -88,10 +90,16 @@ var (
 func (l *Library) healthFixability(rule string) (bool, string) {
 	switch rule {
 	case ruleWriteUnsynced:
+		if l.currentToggles().readOnly {
+			return false, fixBlockedReadOnly
+		}
 		return true, ""
 	case rulePathMismatch:
 		if !slices.ContainsFunc(l.libraryRoots(), func(r Root) bool { return r.Managed }) {
 			return false, fixBlockedNoManaged
+		}
+		if l.currentToggles().readOnly {
+			return false, fixBlockedReadOnly
 		}
 		return true, ""
 	}
@@ -163,6 +171,11 @@ var (
 func (l *Library) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, apiItemPids []string) (HealthFixStartDTO, error) {
 	if !uc.Admin {
 		return HealthFixStartDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	if rule == ruleWriteUnsynced || rule == rulePathMismatch {
+		if err := l.CheckWritable(ctx, ""); err != nil {
+			return HealthFixStartDTO{}, err
+		}
 	}
 	if fixable, _ := l.healthFixability(rule); !fixable {
 		return HealthFixStartDTO{}, errInvalid("no automated fix for rule " + rule + " on this server")
@@ -314,6 +327,14 @@ func (l *Library) fixHealthItem(ctx context.Context, rule string, pid model.PID,
 		return
 	}
 	if rule == ruleWriteUnsynced {
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			if KindOf(err) == KindReadOnly {
+				sum.Skipped[readOnlyReason]++
+			} else {
+				sum.Failed++
+			}
+			return
+		}
 		// Re-editing the title to its current value, with WriteBack and
 		// Force, rewrites the file's tags and clears the unsynced
 		// diagnostic; Force only gets the no-op edit past a locked title.
@@ -354,11 +375,18 @@ func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSum
 	plan, err := l.lib.PlanOrganize(ctx,
 		query.New(query.EntityItems).WhereValues("pid", query.OpIn, query.Values(pids)...).Build(),
 		l.defaultOrganizeProfile())
+	if err == nil {
+		err = l.holdReadOnly(ctx, plan)
+	}
 	if err != nil {
 		sum.Failed += len(pids)
 		return
 	}
-	rep, err := l.lib.ApplyOrganize(ctx, plan)
+	// Nothing to move is no job, and no lease a scan could be holding.
+	var rep *organize.Report
+	if plan.Pending() > 0 {
+		rep, err = l.lib.ApplyOrganize(ctx, plan)
+	}
 	// A run cut short has reached its actions in plan order.
 	reached := len(plan.Actions)
 	failedFiles := map[model.PID]bool{}

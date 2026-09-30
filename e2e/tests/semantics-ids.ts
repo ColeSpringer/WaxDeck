@@ -501,6 +501,7 @@ export const SemanticsIds = {
   adminOrganize: 'admin-organize',
   organizeApply: 'organize-apply',
   organizeConfirm: 'organize-confirm',
+  organizeDiscard: 'organize-discard',
   organizePlan: 'organize-plan',
   organizePreview: 'organize-preview',
   organizeProfile: 'organize-profile',

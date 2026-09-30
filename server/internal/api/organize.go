@@ -20,8 +20,11 @@ func (s *Server) ListOrganizeProfiles(ctx context.Context, _ ListOrganizeProfile
 		}
 		return nil, err
 	}
-	out := OrganizeProfiles{Profiles: make([]OrganizeProfile, 0, len(profiles))}
-	for _, p := range profiles {
+	out := OrganizeProfiles{
+		Profiles:         make([]OrganizeProfile, 0, len(profiles.Profiles)),
+		ManagedLibraries: profiles.ManagedLibraries,
+	}
+	for _, p := range profiles.Profiles {
 		// Templates and the tag-write flag are not readable through the
 		// catalog facade, so the listing carries names only.
 		out.Profiles = append(out.Profiles, OrganizeProfile{Name: p.Name})
@@ -54,6 +57,7 @@ func (s *Server) PreviewOrganize(ctx context.Context, req PreviewOrganizeRequest
 	out := OrganizePlan{
 		Profile:      plan.Profile,
 		TotalActions: plan.TotalActions,
+		Held:         plan.Held,
 		TagWrite:     ptr(plan.TagWrite),
 		Actions:      make([]OrganizeAction, 0, len(plan.Actions)),
 	}
@@ -85,7 +89,7 @@ func (s *Server) ApplyOrganize(ctx context.Context, req ApplyOrganizeRequestObje
 		}
 		return nil, err
 	}
-	out := OrganizeReport{Moved: rep.Moved, Skipped: rep.Skipped, Failed: rep.Failed}
+	out := OrganizeReport{Moved: rep.Moved, Skipped: rep.Skipped, Held: rep.Held, Failed: rep.Failed}
 	if len(rep.Failures) > 0 {
 		failures := make([]OrganizeFailure, 0, len(rep.Failures))
 		for _, f := range rep.Failures {

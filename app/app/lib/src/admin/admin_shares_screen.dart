@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../sharing/share_dialog.dart';
 import '../sharing/share_rows.dart';
 import '../sharing/shares_controller.dart';
@@ -48,9 +49,9 @@ class _AdminSharesScreenState extends ConsumerState<AdminSharesScreen> {
   }
 
   void _report(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    ref
+        .read(shellMessengerProvider.notifier)
+        .show(message, channel: ShellChannel.shares);
   }
 
   Future<void> _copy(Share share) async {

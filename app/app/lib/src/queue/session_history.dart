@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../player/now_playing_controller.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'queue_controller.dart';
 import 'queue_persistence.dart';
 
@@ -131,19 +132,18 @@ class SessionHistorySection extends ConsumerWidget {
     final displaced = ref.read(queueControllerProvider).isNotEmpty;
     playback.restore(queueFromSession(session), offerUndo: displaced);
     if (!displaced) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
+    final undo = ref.read(queueControllerProvider).undo;
+    ref
+        .read(shellMessengerProvider.notifier)
+        .show(
           // "Restored", because restore's contract is put-it-back,
           // paused: nothing is playing when this shows.
-          content: Text(l10n.queueRestored(_title(session))),
-          action: SnackBarAction(
-            label: l10n.queueUndo,
-            onPressed: playback.undoReplace,
-          ),
-        ),
-      );
+          l10n.queueRestored(_title(session)),
+          actionLabel: l10n.queueUndo,
+          onAction: () => playback.undoReplace(undo),
+          channel: ShellChannel.queueRestore,
+          persist: true,
+        );
   }
 
   /// What the session was on when it stopped. The entry it stopped on,

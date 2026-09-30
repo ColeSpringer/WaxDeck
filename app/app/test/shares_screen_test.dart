@@ -144,6 +144,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(copied.single, 'http://server.test/s/SECRET-sh-1');
-    expect(find.text('Link copied'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Link copied');
   });
 }

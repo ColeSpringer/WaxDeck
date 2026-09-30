@@ -14,6 +14,7 @@ import '../player/smart_rewind.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'about_screen.dart';
 import 'account_sections.dart';
 import 'client_prefs.dart';
@@ -764,13 +765,13 @@ class _ArtworkCacheRowState extends ConsumerState<_ArtworkCacheRow> {
   bool _clearing = false;
 
   Future<void> _clear() async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final cleared = context.l10n.settingsArtworkCacheCleared;
     setState(() => _clearing = true);
     try {
       await ref.read(artworkStoreProvider).forgetEverything();
       ref.read(paletteCacheProvider).clear();
-      messenger.showSnackBar(SnackBar(content: Text(cleared)));
+      messenger.show(cleared);
     } finally {
       if (mounted) setState(() => _clearing = false);
     }

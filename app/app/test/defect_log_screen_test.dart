@@ -127,6 +127,6 @@ void main() {
     expect(copied, hasLength(1));
     expect(copied.single, contains('WaxDeck defect log'));
     expect(copied.single, contains('a build error'));
-    expect(find.text('Defect log copied'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Defect log copied');
   });
 }

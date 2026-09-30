@@ -132,7 +132,10 @@ void main() {
     expect(call.endpointId, 'pe-speaker');
     expect(call.itemPids, ['tr-current']);
     expect(call.positionMs, 5000);
-    expect(find.text('Playing on Kitchen speaker'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'Playing on Kitchen speaker',
+    );
 
     // Starting playback elsewhere is what the shell now follows: the bar's
     // remote face and the remote screen both read this.
@@ -283,7 +286,10 @@ void main() {
 
     expect(repo.transferPlaybackSessionCalls, hasLength(1));
     expect(repo.createPlaybackSessionCalls, hasLength(1));
-    expect(find.text('Playing on Kitchen speaker'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'Playing on Kitchen speaker',
+    );
 
     container.read(remoteSessionProvider.notifier).release();
   });
@@ -1118,6 +1124,9 @@ void main() {
 
     // The refusal's params, rendered as the thing to do about it rather
     // than as the sentence a server logs.
-    expect(find.textContaining('Play it on this one instead'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      contains('Play it on this one instead'),
+    );
   });
 }

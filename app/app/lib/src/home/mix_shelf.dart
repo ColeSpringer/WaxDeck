@@ -15,6 +15,7 @@ import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'home_shelves.dart';
 import 'item_shelf.dart';
 
@@ -103,7 +104,7 @@ Future<void> playMixCard(
   bool shuffle = false,
 }) async {
   final router = GoRouter.of(context);
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   final title = card.titleOf(l10n);
   final playback = ref.read(nowPlayingProvider.notifier);
@@ -117,9 +118,7 @@ Future<void> playMixCard(
           size: instantMixSize,
         );
     if (mix.items.isEmpty) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.homeMixEmpty(title))));
+      messenger.show(l10n.homeMixEmpty(title), channel: ShellChannel.mixes);
       return;
     }
     // A mix takes a moment to build, and the tap that asked for it is a
@@ -150,9 +149,7 @@ Future<void> playMixCard(
       ),
     );
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+    messenger.show(explainError(l10n, e), channel: ShellChannel.mixes);
   }
 }
 
@@ -219,7 +216,7 @@ Future<void> _openBasis(
     unawaited(router.push(WaxRoute.musicBucket(MusicDimension.artists, seed)));
     return;
   }
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   final genre = card.genre ?? card.name;
   try {
@@ -250,8 +247,6 @@ Future<void> _openBasis(
       ),
     );
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+    messenger.show(explainError(l10n, e), channel: ShellChannel.mixes);
   }
 }

@@ -6009,6 +6009,12 @@ abstract class AppLocalizations {
   /// **'This server cannot run this fix yet.'**
   String get healthFixBlockedOther;
 
+  /// Why a fix that writes files cannot run: the whole server is in read-only mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Writes files, and the server is read-only.'**
+  String get healthFixBlockedReadOnly;
+
   /// Message when a fix was refused because an enrichment pass is already running.
   ///
   /// In en, this message translates to:
@@ -8817,13 +8823,19 @@ abstract class AppLocalizations {
   /// **'Apply organize profile?'**
   String get organizeConfirmTitle;
 
+  /// Drops the dry run on screen without moving anything.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard preview'**
+  String get organizeDiscard;
+
   /// Empty state of the organize screen.
   ///
   /// In en, this message translates to:
-  /// **'Profiles are part of the server configuration. Add one there and it appears here.'**
+  /// **'The server offers no profile to organize files by.'**
   String get organizeEmptyMessage;
 
-  /// Empty state where the server configuration defines no profiles.
+  /// Empty state where the server lists no profiles.
   ///
   /// In en, this message translates to:
   /// **'No organize profiles'**
@@ -8835,10 +8847,22 @@ abstract class AppLocalizations {
   /// **'Failed'**
   String get organizeFailed;
 
+  /// Under the dry run: files out of place that a read-only library keeps where they are.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file stays where it is: its library is read-only.} other{{count} files stay where they are: their libraries are read-only.}}'**
+  String organizeHeld(int count);
+
+  /// How many files a finished run left where they were because their library is read-only.
+  ///
+  /// In en, this message translates to:
+  /// **'Read-only'**
+  String get organizeHeldTile;
+
   /// Drawn where the plan or the report goes, before either exists.
   ///
   /// In en, this message translates to:
-  /// **'Preview shows where the selected profile would move files before anything happens.'**
+  /// **'Preview checks every managed library against this profile, so it finds files added or moved since the last run even when nothing else changed. Nothing moves until you apply.'**
   String get organizeHint;
 
   /// Title of the error state when the profile list would not load.
@@ -8853,6 +8877,18 @@ abstract class AppLocalizations {
   /// **'Moved'**
   String get organizeMoved;
 
+  /// Empty state of the organize screen when no library is managed.
+  ///
+  /// In en, this message translates to:
+  /// **'Organizing moves files only within managed libraries, and this server has none.'**
+  String get organizeNoManagedMessage;
+
+  /// Empty state of the organize screen when no library is managed.
+  ///
+  /// In en, this message translates to:
+  /// **'No managed library'**
+  String get organizeNoManagedTitle;
+
   /// Empty state of a dry run that would move nothing.
   ///
   /// In en, this message translates to:
@@ -8864,6 +8900,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Everything is already in place'**
   String get organizeNothingTitle;
+
+  /// Under the profile picker when the built-in profile is the only one.
+  ///
+  /// In en, this message translates to:
+  /// **'This server has only the built-in profile.'**
+  String get organizeOnlyBuiltIn;
 
   /// Heading over the dry run, saying how many files it would move.
   ///
@@ -8907,7 +8949,7 @@ abstract class AppLocalizations {
   /// **'Showing the first {shown} of {total}'**
   String organizeShowingFirst(int shown, int total);
 
-  /// How many files a finished run left where they were.
+  /// How many files a finished run found already in place.
   ///
   /// In en, this message translates to:
   /// **'Skipped'**

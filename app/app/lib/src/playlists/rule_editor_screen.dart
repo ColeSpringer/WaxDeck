@@ -10,6 +10,7 @@ import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'playlists_controller.dart';
 import 'rule_vocabulary.dart';
 
@@ -312,7 +313,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     if (_busy) return;
     setState(() => _busy = true);
     final router = GoRouter.of(context);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
       final rule = _draftRule();
@@ -338,9 +339,7 @@ class _RuleEditorScreenState extends ConsumerState<RuleEditorScreen> {
     } on WaxDeckApiException catch (e) {
       // A rule somebody just wrote, so the server's own refusal: it
       // names the field or the shape it would not take.
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+      messenger.show(explainRefusal(l10n, e), channel: ShellChannel.playlists);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

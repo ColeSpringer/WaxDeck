@@ -121,8 +121,8 @@ func run() error {
 		uploadFormats = flag.String("upload-formats", envOr("WAXDECK_UPLOAD_FORMATS", ""), "file extensions uploads accept, comma separated. Replaces the default set rather than extending it; empty keeps the default (every format the catalog scans and the decode stack reads). DRM containers (aax, aaxc) are refused regardless")
 
 		matchingOn   = env.Bool("matching", "WAXDECK_MATCHING", true, "identify new and uploaded music against MusicBrainz (paced background lookups)")
-		mbBase       = flag.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override (a local mirror, or a stub in tests)")
-		coverArtBase = flag.String("coverart-base", envOr("WAXDECK_COVERART_BASE", ""), "Cover Art Archive base override (a mirror, or a stub in tests); the archive rung only exists when matching is on")
+		mbBase       = flag.String("musicbrainz-base", envOr("WAXDECK_MUSICBRAINZ_BASE", ""), "MusicBrainz API base override for matching, the ISRC upgrade and radio artwork (a local mirror, or a stub in tests); the enrichment pass always asks the public service")
+		coverArtBase = flag.String("coverart-base", envOr("WAXDECK_COVERART_BASE", ""), "Cover Art Archive base override for radio artwork (a mirror, or a stub in tests); that rung only exists when matching is on, and the enrichment pass always asks the public archive")
 		trustedProxy = flag.String("trusted-proxies", envOr("WAXDECK_TRUSTED_PROXIES", ""), "comma-separated CIDRs or addresses of reverse proxies whose X-Forwarded-For may be believed; empty counts the socket address")
 		corsOrigins  = flag.String("cors-origins", envOr("WAXDECK_CORS_ORIGINS", ""), "comma-separated origins allowed to call this server from a browser on another origin (a self-hosted Feishin, say); empty serves same-origin only")
 		acoustidKey  = flag.String("acoustid-key", envOr("WAXDECK_ACOUSTID_KEY", ""), "AcoustID API key; empty disables fingerprint evidence in matching")
@@ -132,12 +132,12 @@ func run() error {
 		hardcoverKey   = flag.String("hardcover-key", envOr("WAXDECK_HARDCOVER_KEY", ""), "Hardcover API token; empty leaves that audiobook provider unconfigured")
 		googleBooksKey = flag.String("google-books-key", envOr("WAXDECK_GOOGLE_BOOKS_KEY", ""), "Google Books API key; optional - the provider works keyless and a key only raises the quota")
 
-		enrichURLs = flag.String("enrich-provider-urls", envOr("WAXDECK_ENRICH_PROVIDER_URLS", ""), "custom enrichment providers as name=url pairs, comma separated, each implementing the contract in docs/custom-provider-api/. Validated at startup (the capabilities document must answer and advertise a name) and asked first unless an administrator reorders the sources")
+		enrichURLs = flag.String("enrich-provider-urls", envOr("WAXDECK_ENRICH_PROVIDER_URLS", ""), "custom enrichment providers as name=url pairs, comma separated, each implementing the contract in docs/custom-provider-api/. Validated at startup (the capabilities document must answer and advertise a name) and asked first, ahead of the providers WaxDeck ships; once an administrator has saved an order, one wired later joins its end until it is moved")
 		enrichAuth = flag.String("enrich-provider-auth", envOr("WAXDECK_ENRICH_PROVIDER_AUTH", ""), "bearer tokens for custom enrichment providers as name=token pairs, comma separated; names must match -enrich-provider-urls")
 
 		artistArtOn = env.Bool("artist-art", "WAXDECK_ARTIST_ART", true, "fill missing artist portraits during enrichment. The catalog's artist walk asks fanart.tv by MusicBrainz id where its key is set, and Deezer by name for every artist including the ones MusicBrainz never matched. On by default; set WAXDECK_ARTIST_ART=false and the providers stop advertising artist art, so the walk never asks either service for one")
 
-		enrichContact = flag.String("enrichment-contact", envOr("WAXDECK_ENRICHMENT_CONTACT", ""), "MusicBrainz contact (an email or a URL) the catalog's whole-library enrichment pass identifies itself with. MusicBrainz requires an identifying agent, so empty leaves that pass disabled and /admin/enrichment/run refuses")
+		enrichContact = flag.String("enrichment-contact", envOr("WAXDECK_ENRICHMENT_CONTACT", ""), "MusicBrainz contact (an email or a URL) the catalog's enrichment pass identifies itself with. MusicBrainz requires an identifying agent, so empty leaves the identity phases and the catalog's key-free sources (the Cover Art Archive, MusicBrainz and ListenBrainz genres, LRCLIB lyrics) off; the phases WaxDeck's own providers serve still run")
 		enrichMatch   = env.Bool("enrichment-match-releases", "WAXDECK_ENRICHMENT_MATCH_RELEASES", true, "during enrichment, resolve which pressing of a record the library holds from its barcode or catalog number, deciding ties on medium and country. On by default; needs -enrichment-contact to have any effect")
 		enrichRetry   = env.Int("enrichment-retry-misses-days", "WAXDECK_ENRICHMENT_RETRY_MISSES_DAYS", 30, "days a target nothing answered for waits before an enrichment pass asks about it again, so a source that has since learned it is reached; 0 never asks again. A match is never re-asked")
 
@@ -364,11 +364,9 @@ func run() error {
 		waxproviders.NewGoogleBooks(waxproviders.GoogleBooksConfig{APIKey: *googleBooksKey}),
 		waxproviders.NewOpenLibrary(waxproviders.OpenLibraryConfig{}),
 	)
-	// fanart.tv rides ahead of everything else that answers art on the
-	// port: the engine stops asking once every slot is held, so
-	// registration order is precedence, and it is the only provider
-	// that answers per role. One client for the same pacing reason as
-	// Deezer's.
+	// fanart.tv is registered ahead of the other art providers, so it
+	// leads the default order: it is the only one answering per role.
+	// One client for the same pacing reason as Deezer's.
 	if *fanartKey != "" {
 		fanart := waxproviders.NewFanartTV(waxproviders.FanartTVConfig{APIKey: *fanartKey})
 		enrichProviders = append([]enrich.Provider{hideArtistArt(fanart)}, enrichProviders...)

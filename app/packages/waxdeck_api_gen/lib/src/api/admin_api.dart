@@ -798,7 +798,7 @@ class AdminApi {
   }
 
   /// Empty the trash
-  /// Permanently deletes every active trashed file and reports what was reclaimed. Irreversible. Administrators only. 
+  /// Permanently deletes every active trashed file and reports what was reclaimed. Irreversible. Refused with &#x60;read-only&#x60; while the server is read-only or a read-only library holds a trashed file, since the pass cannot leave one library out; the retention sweep waits the same way. Administrators only. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -2676,7 +2676,7 @@ class AdminApi {
   }
 
   /// Purge one trashed file
-  /// Permanently deletes a single trashed file and reports the bytes it reclaimed. Irreversible; the age-based retention sweep (&#x60;trashRetentionDays&#x60;) purges the same way in bulk. Administrators only. 
+  /// Permanently deletes a single trashed file and reports the bytes it reclaimed. Irreversible; the age-based retention sweep (&#x60;trashRetentionDays&#x60;) purges the same way in bulk. A read-only library&#39;s entry is refused with &#x60;read-only&#x60;. Administrators only. 
   ///
   /// Parameters:
   /// * [trashId] - Trash entry PID (e.g. `th-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -3400,7 +3400,7 @@ class AdminApi {
   }
 
   /// Restore a trashed file
-  /// Moves the file back to its original path and re-catalogs it, un-archiving its item. Refuses when the original path is occupied (&#x60;conflict&#x60;), and when it points into the internal podcast download tree, which owns its own files: entries left there by older versions come back by re-downloading the episode, and purge and expiry still apply to them. Administrators only. 
+  /// Moves the file back to its original path and re-catalogs it, un-archiving its item. Refuses when the original path is occupied (&#x60;conflict&#x60;), and when it points into the internal podcast download tree, which owns its own files: entries left there by older versions come back by re-downloading the episode, and purge and expiry still apply to them. The trash sits under each library&#39;s root, so a read-only library&#39;s entries are refused with &#x60;read-only&#x60;. Administrators only. 
   ///
   /// Parameters:
   /// * [trashId] - Trash entry PID (e.g. `th-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -3458,7 +3458,7 @@ class AdminApi {
   }
 
   /// Set a library&#39;s read-only mode
-  /// A read-only library refuses uploads, organizing, file write-back, deletion, and the file tools with code &#x60;read-only&#x60;, while reads, playback, and per-user state (stars, progress, playlists) keep working. For media mounted read-only on principle. Podcast libraries need a writable root for episode fetching, and the flag refuses fetches into the library too. Administrators only. 
+  /// A read-only library refuses uploads, file write-back, deletion, restoring or purging its trash, and the file tools with code &#x60;read-only&#x60;, while reads, playback, and per-user state (stars, progress, playlists) keep working. For media mounted read-only on principle. Organizing and the path and tag health fixes leave its files where they are, and edits that write into every member file of an album, a release group or an artist are refused with &#x60;read-only&#x60; while any library is read-only, since they can reach every library. Podcast libraries need a writable root for episode fetching: the flag refuses fetches and download removal, and holds the fetch queue and download retention until it clears. Administrators only. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

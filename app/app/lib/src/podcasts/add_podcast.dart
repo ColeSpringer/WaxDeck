@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'podcasts_controller.dart';
 
 /// Subscribes to a directory match, saying so where the caller cannot.
@@ -21,7 +22,7 @@ Future<String?> subscribeToDirectoryEntry(
   WidgetRef ref,
   PodcastDirectoryEntry entry,
 ) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   try {
     // A directory match is always an RSS feed, so no source kind is asked
@@ -33,16 +34,11 @@ Future<String?> subscribeToDirectoryEntry(
         .read(subscriptionsProvider.notifier)
         .subscribe(url: entry.feedUrl);
     // Safe from the dialog too: it pops on success, so the message is
-    // uncovered by the time it matters. Checked because the messenger
-    // was captured before the await and a subscribe outlives the screen
-    // that started it: showing on a torn-down one throws.
-    if (messenger.mounted) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text(l10n.searchSubscribed(entry.name))),
-        );
-    }
+    // uncovered by the time it matters.
+    messenger.show(
+      l10n.searchSubscribed(entry.name),
+      channel: ShellChannel.podcasts,
+    );
     return null;
   } on WaxDeckApiException catch (e) {
     // The feed URL came off the directory rather than out of a field, so

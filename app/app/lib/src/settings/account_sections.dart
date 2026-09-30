@@ -6,6 +6,7 @@ import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'about_screen.dart';
 import 'integrations_sections.dart';
 import 'listening_sections.dart';
@@ -167,7 +168,7 @@ class _PasswordDialogState extends ConsumerState<_PasswordDialog> {
   Future<void> _save() async {
     if (_busy) return;
     final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final changed = context.l10n.settingsPasswordChanged;
     setState(() {
       _busy = true;
@@ -187,7 +188,7 @@ class _PasswordDialogState extends ConsumerState<_PasswordDialog> {
       // the scrim. The password still changed, so the confirmation is
       // shown either way.
       if (mounted) navigator.pop();
-      messenger.showSnackBar(SnackBar(content: Text(changed)));
+      messenger.show(changed);
     } on WaxDeckApiException catch (e) {
       // Guarded because the dialog can be dismissed while the request is
       // out, and setState past that throws.
@@ -269,7 +270,7 @@ class _DeviceSessions extends ConsumerWidget {
     DeviceSession session,
   ) async {
     final l10n = context.l10n;
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -307,7 +308,7 @@ class _DeviceSessions extends ConsumerWidget {
         await ref.read(authControllerProvider.notifier).signOutLocally();
       }
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e));
     }
   }
 

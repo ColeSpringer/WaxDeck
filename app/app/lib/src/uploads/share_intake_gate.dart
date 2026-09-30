@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../l10n/l10n.dart';
 import '../providers.dart';
+import '../shell/shell_messages.dart';
 import 'add_to_library.dart';
 import 'share_intake.dart';
 import 'uploads_controller.dart';
@@ -59,9 +60,9 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
     ShareIntakePort port,
     List<SharedFile> files,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     // Held beside the messenger and for the same reason: the loop below
-    // outlives this frame, and both are read from the element tree.
+    // outlives this frame.
     final l10n = context.l10n;
     // A multi-file share groups through a batch with auto-detection -
     // no dialog: the share sheet is a fire-and-forget gesture, and
@@ -86,9 +87,7 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
             );
         batchId = batch.id;
       } on WaxDeckApiException catch (e) {
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+        messenger.show(explainError(l10n, e), channel: ShellChannel.uploads);
         return;
       }
     }
@@ -107,24 +106,17 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
               batchId: batchId,
             );
       } on WaxDeckApiException catch (e) {
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(
-                l10n.uploadsFileFailed(file.name, explainError(l10n, e)),
-              ),
-            ),
-          );
+        messenger.show(
+          l10n.uploadsFileFailed(file.name, explainError(l10n, e)),
+          channel: ShellChannel.uploads,
+        );
       }
     }
     if (batchId != null) {
       try {
         await ref.read(repositoryProvider).completeUploadBatch(batchId);
       } on WaxDeckApiException catch (e) {
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+        messenger.show(explainError(l10n, e), channel: ShellChannel.uploads);
       }
       ref.invalidate(uploadsProvider);
     }

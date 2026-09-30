@@ -72,7 +72,6 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
     // the mix was building.
     final navigator = Navigator.of(context);
     final router = GoRouter.of(context);
-    final messenger = ScaffoldMessenger.of(context);
     final shell = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final playback = ref.read(nowPlayingProvider.notifier);
@@ -109,17 +108,12 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
         // Two different empty answers: candidates that are all already
         // queued, and a seed with no candidates at all. The count is
         // what tells them apart.
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(
-                mix.excluded > 0
-                    ? l10n.discoveryMixAllQueued
-                    : l10n.discoveryMixEmpty,
-              ),
-            ),
-          );
+        shell.show(
+          mix.excluded > 0
+              ? l10n.discoveryMixAllQueued
+              : l10n.discoveryMixEmpty,
+          channel: ShellChannel.instantMix,
+        );
         return;
       }
       // Read again rather than reusing the snapshot above: `mounted` is
@@ -170,9 +164,7 @@ class _InstantMixSheetState extends ConsumerState<InstantMixSheet> {
         source: const QueueSource(kind: QueueSourceKind.mix, label: ''),
       );
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      shell.show(explainError(l10n, e), channel: ShellChannel.instantMix);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -244,7 +236,7 @@ Future<void> openSimilarTracks(
   ItemSummary seed,
 ) async {
   final router = GoRouter.of(context);
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   try {
     final similar = await ref
@@ -263,8 +255,6 @@ Future<void> openSimilarTracks(
       ),
     );
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+    messenger.show(explainError(l10n, e), channel: ShellChannel.similarTracks);
   }
 }

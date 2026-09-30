@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'device_picker.dart';
 import 'remote_session.dart';
 
@@ -236,15 +237,13 @@ class _Remote extends ConsumerWidget {
   /// succeeded, so a caller can leave the screen only if there is nothing
   /// left to say on it.
   Future<bool> _report(BuildContext context, Future<void> work) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ShellMessenger.of(context);
     final l10n = context.l10n;
     try {
       await work;
       return true;
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+      messenger.show(explainRefusal(l10n, e), channel: ShellChannel.remote);
       return false;
     }
   }

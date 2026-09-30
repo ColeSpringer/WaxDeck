@@ -95,6 +95,7 @@ import '../uploads/uploads_screen.dart';
 import 'adaptive_shell.dart';
 import 'commands.dart';
 import 'routes.dart';
+import 'shell_messages.dart';
 import 'signed_in_cover.dart';
 
 /// The app's router, built once per provider container.
@@ -420,7 +421,8 @@ final publicRoutes = <RouteBase>[
 /// it loses its tab, not its routes, which is also what keeps a shared
 /// link into one working.
 List<RouteBase> shellRoutes() => <RouteBase>[
-  StatefulShellRoute.indexedStack(
+  StatefulShellRoute(
+    navigatorContainerBuilder: _branchStack,
     builder: (context, state, navigationShell) => AdaptiveShell(
       shell: navigationShell,
       location: state.uri.path,
@@ -661,8 +663,9 @@ List<RouteBase> shellRoutes() => <RouteBase>[
           // entry opens beside it. Nested routes would stack a second
           // surface over the first.
           ShellRoute(
-            builder: (context, state, child) =>
-                ReviewSurface(openEntryId: _reviewEntryOf(state.uri.path)),
+            builder: (context, state, child) => _CoveredWithoutHeroes(
+              child: ReviewSurface(openEntryId: _reviewEntryOf(state.uri.path)),
+            ),
             routes: <RouteBase>[
               GoRoute(
                 path: WaxRoute.review,
@@ -748,8 +751,9 @@ List<RouteBase> shellRoutes() => <RouteBase>[
           // branch so a visit here never rewrites the stack a tab
           // restores.
           ShellRoute(
-            builder: (context, state, child) =>
-                AdminConsole(location: state.uri.path, child: child),
+            builder: (context, state, child) => _CoveredWithoutHeroes(
+              child: AdminConsole(location: state.uri.path, child: child),
+            ),
             routes: <RouteBase>[
               GoRoute(
                 path: WaxRoute.admin,
@@ -868,6 +872,40 @@ List<RouteBase> shellRoutes() => <RouteBase>[
   ),
 ];
 
+/// go_router's indexed stack of branches, with the hidden ones kept out
+/// of hero flights: each branch's top screen is a Scaffold that draws
+/// the shell's bar, and two of one hero in a route is an error.
+Widget _branchStack(
+  BuildContext context,
+  StatefulNavigationShell shell,
+  List<Widget> branches,
+) => IndexedStack(
+  index: shell.currentIndex,
+  children: <Widget>[
+    for (final (index, branch) in branches.indexed)
+      Offstage(
+        offstage: index != shell.currentIndex,
+        child: TickerMode(
+          enabled: index == shell.currentIndex,
+          child: HeroMode(enabled: index == shell.currentIndex, child: branch),
+        ),
+      ),
+  ],
+);
+
+/// A nested shell out of hero flights while a screen covers it: Flutter
+/// counts the top screen of the shell's own navigator even then, and a
+/// second copy of the shell's bar in one route is an error.
+class _CoveredWithoutHeroes extends StatelessWidget {
+  const _CoveredWithoutHeroes({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      HeroMode(enabled: ModalRoute.isCurrentOf(context) ?? true, child: child);
+}
+
 /// Wraps every signed-in screen, so the machinery that belongs to a
 /// session lives exactly as long as the session does.
 ///
@@ -949,7 +987,9 @@ class _SignedInScope extends ConsumerWidget {
     // Here rather than in the shell: the overlays are pushed onto this
     // navigator, so a map inside the shell would be their sibling and
     // dead on the player, the queue, and car mode.
-    return SignedInCover(child: CommandShortcuts(child: watched));
+    return SignedInCover(
+      child: CommandShortcuts(child: ShellMessageHost(child: watched)),
+    );
   }
 }
 

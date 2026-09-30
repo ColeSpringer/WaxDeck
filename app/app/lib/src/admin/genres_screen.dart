@@ -213,6 +213,8 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
   Future<void> _normalize({required bool dryRun}) async {
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
+    // Hoisted: the offer outlives this screen.
+    final router = GoRouter.of(context);
     try {
       await ref.read(repositoryProvider).normalizeGenres(dryRun: dryRun);
       if (!mounted) return;
@@ -220,7 +222,7 @@ class _GenreTreeScreenState extends ConsumerState<GenreTreeScreen> {
         dryRun ? l10n.adminGenreDryRunStarted : l10n.adminGenreNormalizing,
         actionLabel: l10n.adminOpenTasks,
         actionSemanticsId: SemanticsIds.adminAction('genre-tasks'),
-        onAction: () => context.push(WaxRoute.tasks),
+        onAction: () => router.pushInShell<void>(WaxRoute.tasks),
       );
     } on WaxDeckApiException catch (error) {
       messenger.show(explainError(l10n, error));

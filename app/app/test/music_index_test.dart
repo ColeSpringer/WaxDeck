@@ -435,8 +435,8 @@ void main() {
     // The button is fire-and-forget, so a swallowed failure would be a
     // control that does nothing.
     expect(
-      find.text('The server ran into a problem it could not handle.'),
-      findsOneWidget,
+      shellMessageText(raisedMessage(tester)),
+      'The server ran into a problem it could not handle.',
     );
     expect(container.read(queueControllerProvider).isEmpty, isTrue);
   });

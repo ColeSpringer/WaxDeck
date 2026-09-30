@@ -10,6 +10,7 @@ import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'nsp_gap_copy.dart';
 import 'playlists_controller.dart';
 import 'rule_chip_row.dart';
@@ -247,7 +248,7 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
       _error = null;
     });
     final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     // Read here, beside the navigator and messenger and for the same
     // reason: the bind happens after an await, and `ref` is only good
     // while this dialog is mounted - which a dismissal ends. The
@@ -265,24 +266,16 @@ class _ImportDialogState extends ConsumerState<_ImportDialog> {
         if (mounted) navigator.pop();
         // The M3U endpoint answers with counts rather than a resolve
         // report, and it pops on success, so a toast is readable.
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(
-                result.unmatched == 0
-                    ? l10n.playlistImportedAll(
-                        result.playlist.name,
-                        result.matched,
-                      )
-                    : l10n.playlistImportedPartial(
-                        result.playlist.name,
-                        result.matched,
-                        result.unmatched,
-                      ),
-              ),
-            ),
-          );
+        messenger.show(
+          result.unmatched == 0
+              ? l10n.playlistImportedAll(result.playlist.name, result.matched)
+              : l10n.playlistImportedPartial(
+                  result.playlist.name,
+                  result.matched,
+                  result.unmatched,
+                ),
+          channel: ShellChannel.playlists,
+        );
         return;
       }
       // The portable source carries refs, not export text.

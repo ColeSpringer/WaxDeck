@@ -9,6 +9,7 @@ import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../sync/server_event_bus.dart';
 import '../sync/sync_providers.dart';
 import 'playback_session.dart';
@@ -290,7 +291,7 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
     final l10n = context.l10n;
     if (_saving) return;
     setState(() => _saving = true);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final note = _note.text.trim();
     try {
       await ref
@@ -304,27 +305,21 @@ class _BookmarkSheetState extends ConsumerState<_BookmarkSheet> {
       // the field is simply no longer there to clear.
       if (mounted) _note.clear();
     } on BookmarksFullException {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.playerBookmarksFull)));
+      messenger.show(l10n.playerBookmarksFull, channel: ShellChannel.bookmarks);
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+      messenger.show(explainRefusal(l10n, e), channel: ShellChannel.bookmarks);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
   Future<void> _remove(String id) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
       await ref.read(bookmarksProvider(_pid).notifier).remove(id);
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+      messenger.show(explainRefusal(l10n, e), channel: ShellChannel.bookmarks);
     }
   }
 

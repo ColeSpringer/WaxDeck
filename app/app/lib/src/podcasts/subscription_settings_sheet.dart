@@ -4,6 +4,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'podcasts_controller.dart';
 
 /// Per-subscription settings. Save PUTs the complete object, so every
@@ -104,7 +105,7 @@ class _SubscriptionSettingsSheetState
   Future<void> _save() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final navigator = Navigator.of(context);
     final l10n = context.l10n;
     final include = _splitTerms(_include.text);
@@ -140,9 +141,7 @@ class _SubscriptionSettingsSheetState
     } on WaxDeckApiException catch (e) {
       // The fields carry values somebody just typed, so a refusal of one
       // keeps the server's own words about it.
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+      messenger.show(explainRefusal(l10n, e), channel: ShellChannel.podcasts);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

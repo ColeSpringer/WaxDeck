@@ -6,6 +6,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'shares_controller.dart';
 
 /// Expiry choices the share dialog offers.
@@ -83,13 +84,13 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
     if (_busy) return;
     setState(() => _busy = true);
     final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
     final l10n = context.l10n;
     // The container rather than `ref`: the link is minted whether or not
     // this dialog is still on screen when the server answers, and the
     // list it joined has to hear about it either way. `ref` is dead the
     // moment this State is disposed; the container is not.
     final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = container.read(shellMessengerProvider.notifier);
     try {
       final share = await container
           .read(repositoryProvider)
@@ -111,13 +112,9 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
       // underneath with it.
       if (!mounted) return;
       navigator.pop();
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.sharingLinkCopied)));
+      messenger.show(l10n.sharingLinkCopied, channel: ShellChannel.shares);
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.shares);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

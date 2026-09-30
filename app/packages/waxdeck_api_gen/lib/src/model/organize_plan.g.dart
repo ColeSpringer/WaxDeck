@@ -12,6 +12,8 @@ class _$OrganizePlan extends OrganizePlan {
   @override
   final int totalActions;
   @override
+  final int held;
+  @override
   final BuiltList<OrganizeAction> actions;
   @override
   final bool? tagWrite;
@@ -22,6 +24,7 @@ class _$OrganizePlan extends OrganizePlan {
   _$OrganizePlan._({
     required this.profile,
     required this.totalActions,
+    required this.held,
     required this.actions,
     this.tagWrite,
   }) : super._();
@@ -38,6 +41,7 @@ class _$OrganizePlan extends OrganizePlan {
     return other is OrganizePlan &&
         profile == other.profile &&
         totalActions == other.totalActions &&
+        held == other.held &&
         actions == other.actions &&
         tagWrite == other.tagWrite;
   }
@@ -47,6 +51,7 @@ class _$OrganizePlan extends OrganizePlan {
     var _$hash = 0;
     _$hash = $jc(_$hash, profile.hashCode);
     _$hash = $jc(_$hash, totalActions.hashCode);
+    _$hash = $jc(_$hash, held.hashCode);
     _$hash = $jc(_$hash, actions.hashCode);
     _$hash = $jc(_$hash, tagWrite.hashCode);
     _$hash = $jf(_$hash);
@@ -58,6 +63,7 @@ class _$OrganizePlan extends OrganizePlan {
     return (newBuiltValueToStringHelper(r'OrganizePlan')
           ..add('profile', profile)
           ..add('totalActions', totalActions)
+          ..add('held', held)
           ..add('actions', actions)
           ..add('tagWrite', tagWrite))
         .toString();
@@ -75,6 +81,10 @@ class OrganizePlanBuilder
   int? _totalActions;
   int? get totalActions => _$this._totalActions;
   set totalActions(int? totalActions) => _$this._totalActions = totalActions;
+
+  int? _held;
+  int? get held => _$this._held;
+  set held(int? held) => _$this._held = held;
 
   ListBuilder<OrganizeAction>? _actions;
   ListBuilder<OrganizeAction> get actions =>
@@ -95,6 +105,7 @@ class OrganizePlanBuilder
     if ($v != null) {
       _profile = $v.profile;
       _totalActions = $v.totalActions;
+      _held = $v.held;
       _actions = $v.actions.toBuilder();
       _tagWrite = $v.tagWrite;
       _$v = null;
@@ -130,6 +141,11 @@ class OrganizePlanBuilder
               totalActions,
               r'OrganizePlan',
               'totalActions',
+            ),
+            held: BuiltValueNullFieldError.checkNotNull(
+              held,
+              r'OrganizePlan',
+              'held',
             ),
             actions: actions.build(),
             tagWrite: tagWrite,

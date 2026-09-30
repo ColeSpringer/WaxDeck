@@ -331,8 +331,12 @@ func anyFilterAdmits(filters []EpisodeFilter, title string) bool {
 }
 
 // DrainFetchQueue works one queued enclosure download; returns false
-// when the queue is idle so the caller can sleep.
+// when the queue is idle so the caller can sleep. A read-only podcast
+// library leaves the queue waiting for it.
 func (l *Library) DrainFetchQueue(ctx context.Context) bool {
+	if l.checkPodcastWritable(ctx) != nil {
+		return false
+	}
 	row, err := l.db.LeaseFetch(ctx, time.Now().UnixNano(), fetchLease.Nanoseconds(), fetchMaxAttempts)
 	if err != nil {
 		if err != wdb.ErrNotFound {
@@ -483,7 +487,8 @@ func (l *Library) sweepShowRetention(ctx context.Context, showPID model.PID) err
 			}
 		}
 	}
-	if inUse {
+	// A read-only podcast library defers the show the same way.
+	if inUse || l.checkPodcastWritable(ctx) != nil {
 		if err := l.db.EnqueueRetention(ctx, string(showPID), time.Now().UnixNano()); err != nil {
 			l.log.Warn("re-queuing deferred retention", "show", string(showPID), "err", err)
 		}

@@ -145,7 +145,7 @@ void main() {
 
     expect(repo.fetchEpisodeCalls, <String>[remotePid]);
     expect(find.text('Queued for download'), findsOneWidget);
-    expect(find.text('Fetching to server'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Fetching to server');
   });
 
   testWidgets('the remove button reclaims a downloaded episode', (
@@ -170,7 +170,10 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.episodeFetch(downloadedPid)),
       findsOneWidget,
     );
-    expect(find.textContaining('progress is kept'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      contains('progress is kept'),
+    );
   });
 
   testWidgets('an unfetched episode with an enclosure plays rather than '
@@ -217,7 +220,10 @@ void main() {
 
     expect(repo.fetchEpisodeCalls, <String>[remotePid]);
     expect(container.read(queueControllerProvider).entries, isEmpty);
-    expect(find.textContaining('named no audio to stream'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      contains('named no audio to stream'),
+    );
   });
 
   testWidgets('the unplayed filter hides what the caller has heard', (
@@ -332,7 +338,7 @@ void main() {
     expect(repo.putPlayStateCalls, hasLength(1));
     expect(repo.putPlayStateCalls.single.pid, remotePid);
     expect(repo.putPlayStateCalls.single.positionMs, 214000);
-    expect(find.text('1 marked played'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), '1 marked played');
   });
 
   testWidgets('an episode row opens the item menu from its kebab', (
@@ -415,7 +421,7 @@ void main() {
     final queue = container.read(queueControllerProvider);
     expect(queue.entries.map((e) => e.pid), <String>[downloadedPid, remotePid]);
     expect(queue.currentEntry?.pid, downloadedPid);
-    expect(find.text('1 added to the queue'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), '1 added to the queue');
     await _stop(tester, container);
   });
 
@@ -442,7 +448,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(container.read(queueControllerProvider).entries, isEmpty);
-    expect(find.textContaining('had no audio in the feed'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      contains('had no audio in the feed'),
+    );
   });
 
   testWidgets('a filter that empties the loaded pages can still reach the '

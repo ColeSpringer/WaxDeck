@@ -15,6 +15,7 @@ part 'organize_report.g.dart';
 /// Properties:
 /// * [moved] - Files moved.
 /// * [skipped] - Files already in place.
+/// * [held] - Files left where they are because their library is read-only.
 /// * [failed] - Files that could not move.
 /// * [failures] - The failures, path and reason each.
 @BuiltValue()
@@ -26,6 +27,10 @@ abstract class OrganizeReport implements Built<OrganizeReport, OrganizeReportBui
   /// Files already in place.
   @BuiltValueField(wireName: r'skipped')
   int get skipped;
+
+  /// Files left where they are because their library is read-only.
+  @BuiltValueField(wireName: r'held')
+  int get held;
 
   /// Files that could not move.
   @BuiltValueField(wireName: r'failed')
@@ -66,6 +71,11 @@ class _$OrganizeReportSerializer implements PrimitiveSerializer<OrganizeReport> 
     yield r'skipped';
     yield serializers.serialize(
       object.skipped,
+      specifiedType: const FullType(int),
+    );
+    yield r'held';
+    yield serializers.serialize(
+      object.held,
       specifiedType: const FullType(int),
     );
     yield r'failed';
@@ -116,6 +126,13 @@ class _$OrganizeReportSerializer implements PrimitiveSerializer<OrganizeReport> 
             specifiedType: const FullType(int),
           ) as int;
           result.skipped = valueDes;
+          break;
+        case r'held':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.held = valueDes;
           break;
         case r'failed':
           final valueDes = serializers.deserialize(

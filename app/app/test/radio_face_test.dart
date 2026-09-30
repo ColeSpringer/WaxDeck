@@ -569,8 +569,8 @@ void main() {
 
     expect(container.read(radioPlaybackProvider).nowPlayingSaved, isFalse);
     expect(
-      find.text('the saved songs list is full; remove something first'),
-      findsOneWidget,
+      shellMessageText(raisedMessage(tester)),
+      'the saved songs list is full; remove something first',
     );
     await _stop(container);
   });

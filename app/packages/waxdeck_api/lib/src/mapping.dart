@@ -2035,10 +2035,18 @@ OrganizeProfile organizeProfileFromGen(gen.OrganizeProfile profile) {
   );
 }
 
+OrganizeProfiles organizeProfilesFromGen(gen.OrganizeProfiles listing) {
+  return OrganizeProfiles(
+    profiles: listing.profiles.map(organizeProfileFromGen).toList(),
+    managedLibraries: listing.managedLibraries,
+  );
+}
+
 OrganizePlan organizePlanFromGen(gen.OrganizePlan plan) {
   return OrganizePlan(
     profile: plan.profile,
     totalActions: plan.totalActions,
+    held: plan.held,
     actions: plan.actions
         .map((a) => OrganizeAction(itemPid: a.itemPid, from: a.from, to: a.to))
         .toList(),
@@ -2050,6 +2058,7 @@ OrganizeReport organizeReportFromGen(gen.OrganizeReport report) {
   return OrganizeReport(
     moved: report.moved,
     skipped: report.skipped,
+    held: report.held,
     failed: report.failed,
     failures:
         report.failures

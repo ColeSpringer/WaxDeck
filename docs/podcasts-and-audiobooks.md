@@ -83,13 +83,14 @@ is a refresh of a feed already subscribed here.
 
 Two limits keep that from being worth much to anyone who tried to abuse
 it. A show is refreshed at most once a minute this way no matter how
-many notifications name it, and the floor is kept in the catalog rather
-than in memory, so restarting WaxDeck does not reset it - which is the
-same floor a subscriber's own manual refresh keeps. And a refresh that
-fails does not count towards the ten consecutive failures that disable
-a feed: those count this server's own scheduled attempts, because a
-stranger relaying a busy host through a bad afternoon should not be
-able to turn off a subscription nobody here asked to stop.
+many notifications name it, and the floor is kept in WaxDeck's own
+database rather than in memory, so restarting WaxDeck does not reset
+it - which is the same floor a subscriber's own manual refresh keeps.
+And a refresh that fails does not count towards the ten consecutive
+failures that disable a feed: those count this server's own attempts,
+scheduled or a subscriber's manual refresh, because a stranger
+relaying a busy host through a bad afternoon should not be able to
+turn off a subscription nobody here asked to stop.
 
 - `WAXDECK_PODPING_NODE` names a Hive API node (empty picks a public
   one).
@@ -102,7 +103,7 @@ able to turn off a subscription nobody here asked to stop.
 
 A feed suspended after repeated failures stays suspended: a stranger's
 notification is not a manual refresh, and honouring it would undo the
-backoff. A show already refreshed in the last thirty seconds is left
+backoff. A show already refreshed in the last minute is left
 alone, so one publish that puts several notifications on the chain
 still costs the host one request.
 

@@ -428,7 +428,7 @@ managed library. Fixing missing art, lyrics, genres, narrators or
 ASINs across the library runs the catalog's enrichment pass as a job,
 with the phases that fill them forced to re-ask every item (a source
 for either the album's or the release group's cover is enough for
-missing art); the rest of the pass runs as a scheduled one would,
+missing art); the rest of the pass runs as an uncapped pass would,
 asking whatever lookups are pending (fixing genres re-asks MusicBrainz
 about every album). Fixing named items, paths that disagree with the
 template, or tags that lag the catalog runs a health-fix task that
@@ -457,12 +457,21 @@ recoverable within the trash window.
 
 ## Organizer
 
-Template-driven renames and moves with a dry-run preview, using the
-server's configured organize profiles. Sidecars (covers, lyrics, cue
-sheets) ride along with their files, moves are crash safe, and
-templates are sandboxed per path segment so they cannot escape the
-library root. WaxDeck never fights an externally managed library:
-organizing is always explicit.
+Template-driven renames and moves with a dry-run preview. The profile
+on offer is the catalog's built-in `waxbin-native` layout: music by
+album artist, album and numbered track; audiobooks by author, series
+and title; podcasts by show. Custom profiles are not available yet.
+Organizing works within managed libraries only (`WAXDECK_MANAGED_ROOTS`
+names them); with none, the screen says so rather than offering a
+preview. Preview checks every managed library against the profile, so
+it is worth running even when nothing was changed on purpose: files
+added or moved by hand since the last run show up as moves. A
+read-only library's files stay where they are, and the preview and the
+result count them apart. Discard preview drops the plan, and nothing
+moves until Apply is confirmed by typing the profile's name. Sidecars (covers, lyrics, cue sheets) ride along with
+their files, moves are crash safe, and templates are sandboxed per path
+segment so they cannot escape the library root. WaxDeck never fights an
+externally managed library: organizing is always explicit.
 
 ## Audiobook and CUE tooling
 
@@ -494,21 +503,23 @@ Deezer and iTunes artwork (key free), Audnexus audiobook metadata
 Hardcover bridges an ASIN to the ISBN (`WAXDECK_HARDCOVER_KEY`), and
 Google Books and Open Library answer by ISBN, or by a title-and-author
 search that must match both names (key free; a Google Books key only
-raises its quota). Ahead of all of them ride any custom providers the
-install wired through `WAXDECK_ENRICH_PROVIDER_URLS` - self-hosted
-services implementing the contract in `docs/custom-provider-api/`. The
-editor's per-item fetch uses the same providers for one item at a
+raises its quota). By default any custom providers the install wired
+through `WAXDECK_ENRICH_PROVIDER_URLS` - self-hosted services
+implementing the contract in `docs/custom-provider-api/` - ride ahead
+of all of them; once an administrator has saved an order, one wired
+later joins its end. The editor's per-item fetch uses the same providers for one item at a
 time.
 
 The pass runs in two halves, and they are configured separately. The
 MusicBrainz identity phases - matching artists, release groups and
 books, and resolving which pressing the library holds - need
 `WAXDECK_ENRICHMENT_CONTACT`, because MusicBrainz requires an
-identifying agent before anything is sent. The contact gates the Cover
-Art Archive's album art and LRCLIB's lyrics as well: neither needs a
+identifying agent before anything is sent. The contact gates the
+catalog's key-free sources as well (the Cover Art Archive's covers,
+MusicBrainz's and ListenBrainz's genres, LRCLIB's lyrics): none needs a
 key, but the catalog will not dial a public service without an agent to
-identify itself with. The provider-gated phases - artist art, auxiliary
-artwork, and the fields walks - answer to their own providers and run
+identify itself with. The provider-gated phases - artist art,
+release-group artwork, and the fields walks - answer to their own providers and run
 without it, and so do album art where a provider supplies covers or
 auxiliary art and lyrics where one supplies them. So a server with no
 contact still enriches; it just does not resolve identity. The status surface says which half is
@@ -559,8 +570,9 @@ scenic background there, and disc art on a release group, since it is
 the one provider that answers per role. Writes are fill-when-empty and
 pin-respecting like every other enrichment write, and compilation
 stand-ins like Various Artists are skipped rather than given a
-stranger's face. `WAXDECK_ARTIST_ART=false` takes artist art off the
-providers entirely, so the walk never asks.
+stranger's face. `WAXDECK_ARTIST_ART=false` takes artist art off
+fanart.tv and Deezer, so the walk never asks them; a custom provider
+that advertises artist art is still asked.
 
 Album art has a backfill of its own. An album that resolves no front
 cover at all (a picture embedded in any member counts) is asked about by

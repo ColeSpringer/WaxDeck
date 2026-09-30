@@ -225,6 +225,10 @@
   "@healthFixBlockedOther": {
     "description": "Under a health rule this server cannot fix, for a reason this app does not know how to word."
   },
+  "healthFixBlockedReadOnly": "Writes files, and the server is read-only.",
+  "@healthFixBlockedReadOnly": {
+    "description": "Why a fix that writes files cannot run: the whole server is in read-only mode."
+  },
   "healthFixBusy": "An enrichment pass is already running. Fix this when it ends.",
   "@healthFixBusy": {
     "description": "Message when a fix was refused because an enrichment pass is already running."

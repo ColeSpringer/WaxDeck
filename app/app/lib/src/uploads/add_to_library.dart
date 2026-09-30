@@ -192,7 +192,7 @@ Future<void> acquireFromUrl(
       l10n.uploadsAcquireQueued,
       actionLabel: l10n.uploadsAcquireTasks,
       actionSemanticsId: SemanticsIds.acquireTasks,
-      onAction: () => router.push<void>(WaxRoute.tasks),
+      onAction: () => router.pushInShell<void>(WaxRoute.tasks),
     );
   } on WaxDeckApiException catch (e) {
     // A refusal of the URL somebody just pasted keeps the server's own

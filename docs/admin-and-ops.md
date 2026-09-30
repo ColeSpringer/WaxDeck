@@ -290,11 +290,25 @@ staging its failures reserved.
 ## Read-only mode
 
 For media mounted read-only on principle: per library, or server-wide
-(the console's Server settings). A read-only library refuses uploads, organizing,
-file write-back, deletion, and the file tools with the `read-only`
-error code, while playback, browsing, and per-user state (stars,
-progress, playlists) keep working. Podcast libraries need a writable
-root for episode fetching; the flag refuses fetches too.
+(the console's Server settings). A read-only library refuses uploads,
+file write-back, deletion (a quality upgrade's included), restoring or
+purging its trash, and the file tools with the `read-only` error code,
+while playback, browsing, and per-user state (stars, progress,
+playlists) keep working. Organizing and the health fixes that write
+files (paths off the template, tags lagging the catalog) leave a
+read-only library's files where they are, counted apart, and are
+refused while the whole server is read-only; a fix already running
+when the server goes read-only skips what it has not reached.
+
+Some writes span every library and cannot leave one out, so while any
+library is read-only they stop for all of them: the enrichment pass
+writes no tags into files (a pass already running keeps what it
+started with), an album, release group or artist edit is refused its
+write-back, and emptying the trash, by hand or by the retention sweep,
+waits while a read-only library holds a file it would purge. The
+podcast download tree needs a writable root: while the server is
+read-only, episode fetches and download removal are refused, and the
+fetch queue and download retention wait for the flag to clear.
 
 ## Adding a library at runtime
 
@@ -471,16 +485,19 @@ administrator, the catalog's own jobs (scans, analysis, enrichment,
 organize runs, emptying the trash) with their progress and, once they
 end, what they did. A running job is listed however many newer ones
 came after it; finished per-item jobs (an upload's imports, deletes,
-restores) are left out. Task and job progress streams live over the
+restores, trash purges) are left out, and only the 20 newest finished
+jobs are shown. Task and job progress streams live over the
 WebSocket channel; `GET /api/v1/tools/tasks/{id}/events` serves a
 task's lifecycle as server-sent events for anything that prefers a
 plain HTTP stream.
 
-Whoever started a scan, an analysis, an enrichment or organize run,
-emptying the trash, or a health fix gets a notification when it ends,
-saying what it did or why it failed (a job cut off by the server
-stopping says so), even when the server restarted in between; work
-the server started on its own schedule notifies nobody.
+Whoever started a scan, an analysis, an enrichment pass or a health fix
+gets a notification when it ends, saying what it did or why it failed
+(a job cut off by the server stopping says so), even when the server
+restarted in between. An organize run and emptying the trash run inside
+the request that started them: their starter hears of success, and a
+failure is answered on the request. Work the server started on its own
+schedule notifies nobody.
 
 A finished task is a receipt, and receipts pile up on an account that
 never opens this screen. The scheduled prune clears terminal rows past
@@ -489,4 +506,5 @@ keeps them indefinitely. Only terminal rows go - a task still running or
 still waiting to be claimed is work in progress whatever its age - and
 the setting is re-read on every pass, so a change takes effect at the
 next run rather than at the next restart. Clearing by hand, per row or
-all-finished-at-once, still works and is unaffected.
+all-finished-at-once, still works and is unaffected. Both touch tasks
+only; the catalog's jobs are not pruned or cleared from here.

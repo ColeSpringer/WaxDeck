@@ -66,7 +66,7 @@ void main() {
     expect(applied.dryRun, isFalse);
     expect(applied.mode, 'permanent');
     expect(repo.libraryItems, isEmpty);
-    expect(find.text('Deleted 3 files for good'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Deleted 3 files for good');
   });
 
   testWidgets('cancelling the dialog deletes nothing', (tester) async {

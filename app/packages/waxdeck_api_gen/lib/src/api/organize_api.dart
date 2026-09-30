@@ -23,7 +23,7 @@ class OrganizeApi {
   const OrganizeApi(this._dio, this._serializers);
 
   /// Apply an organize pass
-  /// Plans and applies the moves in one call (the plan is always recomputed server-side; a stale preview cannot apply). Moves are crash-safe per file and locked fields are respected. Whole-library passes on large libraries take a while; the request runs synchronously and reports the full outcome. Administrators only. 
+  /// Plans and applies the moves in one call (the plan is always recomputed server-side; a stale preview cannot apply). Moves are crash-safe per file and locked fields are respected. A read-only library&#39;s files stay where they are and count as &#x60;held&#x60;; while the whole server is read-only the apply is refused with &#x60;read-only&#x60;. Whole-library passes on large libraries take a while; the request runs synchronously and reports the full outcome. Administrators only. 
   ///
   /// Parameters:
   /// * [organizeRequest] 
@@ -129,7 +129,7 @@ class OrganizeApi {
   }
 
   /// List organize profiles
-  /// The server-configured organize profiles (path templates per media kind, whether organize writes tags). Profiles are server configuration, not API-editable: template mistakes move files, so they change deliberately. 
+  /// The organize profiles the server offers: the catalog&#39;s built-in &#x60;waxbin-native&#x60; layout. Organizing moves files within managed libraries only, so the listing also counts them; with none, a preview or an apply answers &#x60;invalid-request&#x60;. Read-only. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -213,7 +213,7 @@ class OrganizeApi {
   }
 
   /// Dry-run an organize pass
-  /// Plans the moves and renames a profile would make for the named items (or the whole library when &#x60;itemPids&#x60; is absent) without touching anything. The response carries the first five hundred actions plus the total, so a whole-library preview stays a bounded page; sidecars (covers, lyrics, cue sheets) ride along with their file and are not listed separately. Path templates are sandboxed upstream (per segment sanitizing; a template cannot escape the library root). 
+  /// Plans the moves and renames a profile would make for the named items (or every managed library when &#x60;itemPids&#x60; is absent) without touching anything. A move out of a read-only library, or any move while the server is read-only, is held back rather than planned, and &#x60;held&#x60; counts those. The response carries the first five hundred actions plus the total, so a whole-library preview stays a bounded page; sidecars (covers, lyrics, cue sheets) ride along with their file and are not listed separately. Path templates are sandboxed upstream (per segment sanitizing; a template cannot escape the library root). 
   ///
   /// Parameters:
   /// * [organizeRequest] 

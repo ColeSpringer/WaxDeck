@@ -347,7 +347,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 750));
 
       expect(container.read(queueControllerProvider).pids, ['tr-9', 'tr-8']);
-      await tester.tap(find.text('Undo'));
+      expect(raisedMessage(tester)!.actionLabel, 'Undo');
+      expect(raisedMessage(tester)!.persist, isTrue);
+      raisedMessage(tester)!.onAction!();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 
@@ -355,6 +357,39 @@ void main() {
       expect(queue.pids, ['tr-1', 'tr-2']);
       expect(queue.currentPid, 'tr-2');
       container.read(queueControllerProvider.notifier).clear();
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('a restore\'s undo takes back that restore or nothing', (
+      tester,
+    ) async {
+      // The offer waits for its answer, and the queue can be replaced
+      // again meanwhile: taking back that newer replacement would bring
+      // the restored session back rather than what it displaced.
+      final repository = FakeRepository()
+        ..sessionHistory = <PlaybackSessionHistoryEntry>[
+          _session('ps-1', pids: ['tr-9', 'tr-8'], index: 1),
+        ];
+      final container = await _pump(tester, repository: repository);
+      final queue = container.read(queueControllerProvider.notifier)
+        ..playNow(['tr-1', 'tr-2'], source: _album, startIndex: 1);
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.queueRestoreSession('ps-1')),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 750));
+      final offer = raisedMessage(tester)!;
+
+      queue.playNow(['tr-5', 'tr-6'], source: _album);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      offer.onAction!();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(container.read(queueControllerProvider).pids, ['tr-5', 'tr-6']);
+      queue.clear();
       await tester.pumpAndSettle();
     });
 

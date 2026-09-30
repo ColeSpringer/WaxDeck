@@ -7,6 +7,7 @@ import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
+import '../shell/shell_messages.dart';
 import 'podcasts_controller.dart';
 
 /// The verbs an episode has, wherever it is shown.
@@ -24,10 +25,10 @@ class EpisodeActions {
   /// fetch can refresh the rows that show its state.
   final String? showPid;
 
-  void _report(BuildContext context, String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+  void _report(String message) {
+    ref
+        .read(shellMessengerProvider.notifier)
+        .show(message, channel: ShellChannel.episodes);
   }
 
   /// Whether this server can put audio on the wire for [episode] right
@@ -82,11 +83,11 @@ class EpisodeActions {
   /// Appends the episode to whatever is playing.
   void enqueue(BuildContext context, EpisodeSummary episode) {
     if (!playable(episode)) {
-      _report(context, context.l10n.podcastNoAudioToQueue);
+      _report(context.l10n.podcastNoAudioToQueue);
       return;
     }
     ref.read(nowPlayingProvider.notifier).enqueue(<ItemSummary>[episode]);
-    _report(context, context.l10n.podcastAddedToQueue);
+    _report(context.l10n.podcastAddedToQueue);
   }
 
   /// Queues a server-side fetch.
@@ -96,9 +97,9 @@ class EpisodeActions {
     final l10n = context.l10n;
     try {
       await _fetch(pid);
-      if (context.mounted) _report(context, l10n.podcastFetchingToServer);
+      if (context.mounted) _report(l10n.podcastFetchingToServer);
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(context, explainError(l10n, e));
+      if (context.mounted) _report(explainError(l10n, e));
     }
   }
 
@@ -114,10 +115,10 @@ class EpisodeActions {
     try {
       await _fetch(episode.pid);
       if (context.mounted) {
-        _report(context, l10n.podcastFetchingBeforePlay);
+        _report(l10n.podcastFetchingBeforePlay);
       }
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(context, explainError(l10n, e));
+      if (context.mounted) _report(explainError(l10n, e));
     }
   }
 
@@ -133,10 +134,10 @@ class EpisodeActions {
       }
       ref.invalidate(episodeDetailProvider(pid));
       if (context.mounted) {
-        _report(context, l10n.podcastRemovedFromServer);
+        _report(l10n.podcastRemovedFromServer);
       }
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(context, explainError(l10n, e));
+      if (context.mounted) _report(explainError(l10n, e));
     }
   }
 
@@ -155,11 +156,10 @@ class EpisodeActions {
           .markPlayed(episode.pid, episode.durationMs);
       if (!context.mounted) return;
       _report(
-        context,
         done ? l10n.podcastMarkedAsPlayed : l10n.podcastNoDurationToFinish,
       );
     } on WaxDeckApiException catch (e) {
-      if (context.mounted) _report(context, explainError(l10n, e));
+      if (context.mounted) _report(explainError(l10n, e));
     }
   }
 

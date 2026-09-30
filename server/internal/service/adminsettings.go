@@ -82,6 +82,37 @@ type runtimeToggles struct {
 	radioExternalArt bool
 }
 
+// enrichWritesTags is whether an enrichment pass writes into files. It
+// cannot keep its writes out of one library, so any live read-only
+// library stops them all.
+func (l *Library) enrichWritesTags(ctx context.Context) bool {
+	t := l.currentToggles()
+	if !t.enrichWriteTags || t.readOnly {
+		return false
+	}
+	readOnly, err := l.anyLibraryReadOnly(ctx)
+	return err == nil && !readOnly
+}
+
+// anyLibraryReadOnly reports a live library flagged read-only; a flag
+// outliving its library, which a catalog reset leaves, does not count.
+func (l *Library) anyLibraryReadOnly(ctx context.Context) (bool, error) {
+	t := l.currentToggles()
+	if len(t.readOnlyLibs) == 0 {
+		return false, nil
+	}
+	libs, err := l.lib.Libraries(ctx)
+	if err != nil {
+		return false, classify(err)
+	}
+	for _, lib := range libs {
+		if t.readOnlyLibs[string(lib.PID)] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // loadRuntimeToggles primes the settings cache; called at Open and
 // after every settings mutation.
 func (l *Library) loadRuntimeToggles(ctx context.Context) {
@@ -244,9 +275,9 @@ func (l *Library) RadioExternalArtEnabled() bool {
 	return l.currentToggles().radioExternalArt
 }
 
-// EnrichmentWriteTagsEnabled reports whether an enrichment pass should
-// write what it filled back into the files. Cached, so the settings PUT
-// reads it without a round trip.
+// EnrichmentWriteTagsEnabled reports the saved write-back setting, which
+// a settings PUT omitting it keeps; whether a pass writes is
+// enrichWritesTags. Cached, so the PUT reads it without a round trip.
 func (l *Library) EnrichmentWriteTagsEnabled() bool {
 	return l.currentToggles().enrichWriteTags
 }
@@ -352,6 +383,23 @@ func (l *Library) CheckWritable(ctx context.Context, bareLibraryPID string) erro
 	}
 	if bareLibraryPID != "" && t.readOnlyLibs[bareLibraryPID] {
 		return errReadOnly("this library")
+	}
+	return nil
+}
+
+// checkFanOutWritable refuses a write the catalog fans out over every
+// library it reaches, an entity's member files say: it cannot keep the
+// write out of one, so any read-only library refuses it.
+func (l *Library) checkFanOutWritable(ctx context.Context) error {
+	if err := l.CheckWritable(ctx, ""); err != nil {
+		return err
+	}
+	readOnly, err := l.anyLibraryReadOnly(ctx)
+	if err != nil {
+		return err
+	}
+	if readOnly {
+		return errReadOnly("a library")
 	}
 	return nil
 }

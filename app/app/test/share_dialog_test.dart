@@ -71,7 +71,7 @@ void main() {
       positionMs: null,
     ));
     expect(copied.single, 'http://server.test/s/FAKESECRET0');
-    expect(find.text('Link copied'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Link copied');
     await harness.endPlayback(tester);
   });
 

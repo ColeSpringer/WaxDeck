@@ -15,6 +15,7 @@ import '../settings/settings_registry.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../uploads/add_to_library.dart';
 import 'item_detach.dart';
 import 'item_facts_sheet.dart';
@@ -85,7 +86,7 @@ Future<void> showItemMenuSheet(
   // outlive the row, so what was tapped still happens.
   final rootContext = Navigator.of(context, rootNavigator: true).context;
   final router = GoRouter.of(context);
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   final pinnedController = ref.read(pinnedEntitiesProvider.notifier);
   // Which navigator this row sits in decides the verb, and it has to be
@@ -290,7 +291,7 @@ Future<void> showAlbumMenuSheet(
 }) async {
   // Captured for the reason the item menu writes out.
   final rootContext = Navigator.of(context, rootNavigator: true).context;
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   final pinnedController = ref.read(pinnedEntitiesProvider.notifier);
   final PinTarget target = (pid: pid, what: 'album', name: title);

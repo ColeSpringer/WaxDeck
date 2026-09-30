@@ -29,6 +29,7 @@ import 'package:waxdeck/src/shell/adaptive_shell.dart';
 import 'package:waxdeck/src/shell/router.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/shell/side_panel.dart';
 import 'package:waxdeck/src/sync/sync_providers.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -740,13 +741,10 @@ void main() {
   testWidgets('a replacing play verb does not eat another surface\'s toast', (
     tester,
   ) async {
-    // One ScaffoldMessenger serves the whole app, so hiding
-    // unconditionally would take down an error nobody has read.
+    // One bar serves the whole app, so hiding unconditionally would take
+    // down an error nobody has read.
     final container = await _pumpShell(tester);
-    final messenger = ScaffoldMessenger.of(
-      tester.element(find.byType(WaxShellFrame)),
-    );
-    messenger.showSnackBar(const SnackBar(content: Text('Could not save')));
+    container.read(shellMessengerProvider.notifier).show('Could not save');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 750));
 

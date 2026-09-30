@@ -364,8 +364,10 @@ integration, most notification services), or the UnifiedPush endpoint
 the Android client registers so events push without any Google
 services. Each target selects its own events (a subscribed show's new
 episode, an episode you asked for downloaded, a podcast feed disabled,
-the review queue ready, and for an administrator the end of a library
-job or a health fix they started) from the server's event catalog, has
+the review queue ready, an upload or acquisition filed without review,
+a synced playlist pulling in changes or being suspended, and for an
+administrator the end of a library job or a health fix they started)
+from the server's event catalog, has
 a per-target test button that waits for the delivery and says whether
 it landed, and shows its delivery health:
 the last successful delivery, or the standing error while deliveries

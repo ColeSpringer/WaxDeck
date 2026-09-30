@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'books_controller.dart';
 import 'series_controller.dart';
 
@@ -73,9 +74,9 @@ Future<void> showSeriesMergeSheet(
 }) async {
   final loser = book.seriesPid;
   if (loser == null) return;
-  final messenger = ScaffoldMessenger.of(context);
   final l10n = context.l10n;
   final container = ProviderScope.containerOf(context, listen: false);
+  final messenger = container.read(shellMessengerProvider.notifier);
   await showWaxOptionSheet(
     context,
     scrolls: false,
@@ -170,7 +171,7 @@ Future<void> showSeriesMergeSheet(
 
 Future<void> _merge({
   required ProviderContainer container,
-  required ScaffoldMessengerState messenger,
+  required ShellMessenger messenger,
   required AppLocalizations l10n,
   required BookSeries survivor,
   required String loser,
@@ -187,12 +188,8 @@ Future<void> _merge({
       ..invalidate(bookSeriesProvider)
       ..invalidate(bookSeriesDetailProvider)
       ..invalidate(bookDetailProvider);
-    messenger.showSnackBar(
-      SnackBar(content: Text(l10n.bookSeriesMergeDone(survivor.name))),
-    );
+    messenger.show(l10n.bookSeriesMergeDone(survivor.name));
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+    messenger.show(explainRefusal(l10n, e), channel: ShellChannel.seriesMerge);
   }
 }

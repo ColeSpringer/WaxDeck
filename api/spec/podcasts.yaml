@@ -625,6 +625,8 @@ paths:
             itself does not help. `catalog-busy`: another job holds the
             podcast download tree's shared file-mutation scope, which
             clears on its own, so an unattended retry is worth something.
+            `read-only`: the podcast library, or the whole server, is
+            read-only.
           content:
             application/json:
               schema:

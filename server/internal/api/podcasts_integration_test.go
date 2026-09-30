@@ -2734,3 +2734,71 @@ func TestAManualFetchTellsOnlyWhoAskedForIt(t *testing.T) {
 		t.Fatal("the other subscriber's stream did not hear of the download")
 	}
 }
+
+// A read-only server holds the podcast fetch queue and download
+// retention until the flag clears, and refuses a download's removal:
+// each writes into the download tree.
+func TestAReadOnlyServerKeepsThePodcastTreeAsItIs(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 2)
+	ctx := context.Background()
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+	setReadOnly := func(on bool) {
+		t.Helper()
+		st := decode[AdminSettings](t, get(t, h.ts, "/api/v1/admin/settings", h.token))
+		resp := h.putJSON(t, "/api/v1/admin/settings", map[string]any{
+			"signupEnabled":   st.SignupEnabled,
+			"readOnly":        on,
+			"backupKeepCount": st.BackupKeepCount,
+			"backupKeepBytes": st.BackupKeepBytes,
+		})
+		wantStatus(t, resp, 200, "flip the server's read-only flag")
+	}
+	downloaded := func() (n int, pids []string) {
+		t.Helper()
+		for _, ep := range decode[EpisodePage](t, get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)).Items {
+			pids = append(pids, ep.Pid)
+			if ep.Downloaded {
+				n++
+			}
+		}
+		return n, pids
+	}
+
+	_, pids := downloaded()
+	for _, pid := range pids {
+		h.postJSON(t, "/api/v1/episodes/"+pid+"/fetch", nil).Body.Close()
+	}
+	setReadOnly(true)
+	drainFetches(t, h)
+	if n, _ := downloaded(); n != 0 {
+		t.Fatalf("%d episodes fetched into a read-only library", n)
+	}
+	setReadOnly(false)
+	drainFetches(t, h)
+	if n, _ := downloaded(); n != 2 {
+		t.Fatalf("%d episodes fetched once writable, want both", n)
+	}
+
+	resp = reqAs(t, h, "PUT", "/api/v1/podcasts/"+show+"/settings", h.token, map[string]any{"retentionKeep": 1})
+	wantStatus(t, resp, 200, "keep one download")
+	setReadOnly(true)
+	h.svc.SweepRetention(ctx)
+	if n, _ := downloaded(); n != 2 {
+		t.Fatalf("retention left %d downloads in a read-only library, want both", n)
+	}
+	resp = reqAs(t, h, "DELETE", "/api/v1/episodes/"+pids[0]+"/fetch", h.token, nil)
+	if resp.StatusCode != 409 {
+		t.Fatalf("removal status = %d, want 409", resp.StatusCode)
+	}
+	if e := decode[Error](t, resp); e.Code != "read-only" {
+		t.Fatalf("removal code = %q, want read-only", e.Code)
+	}
+	setReadOnly(false)
+	h.svc.SweepRetention(ctx)
+	if n, _ := downloaded(); n != 1 {
+		t.Fatalf("retention left %d downloads once writable, want one", n)
+	}
+}

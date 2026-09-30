@@ -126,8 +126,10 @@ Conventions:
   aaxc; unlike `unsupported-format` this is permanent - no server
   configuration can make the file playable), `read-only` (the target
   library, or the whole server, is in read-only mode: uploads,
-  organizing, file write-back, deletion, and the file tools are
-  refused while reads and playback keep working),
+  file write-back, deletion, and the file tools are refused while
+  reads and playback keep working, and organizing is refused only
+  server-wide, since it leaves a read-only library's files where
+  they are),
   `transcode-limited` (the server's or the caller's concurrent
   transcode session limit is reached; retry when a session ends,
   or play a direct-play format), and `timeout` (a command routed to

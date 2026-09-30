@@ -14,6 +14,9 @@ import 'integrations_controller.dart';
 import 'notify_labels.dart';
 import 'setting_anchor.dart';
 
+/// The scrobbling rows' one run of messages.
+const _scrobbling = ShellChannel.scrobbling;
+
 /// Scrobbling connections: Last.fm through the browser authorization
 /// flow, ListenBrainz through a token dialog.
 class ScrobblingSection extends ConsumerWidget {
@@ -32,18 +35,16 @@ class ScrobblingSection extends ConsumerWidget {
     Scrobbler slot,
   ) async {
     final l10n = context.l10n;
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     if (slot.service == 'lastfm') {
       try {
         final authUrl = await ref
             .read(scrobblersProvider.notifier)
             .startLastfmConnect();
         await ref.read(urlOpenerProvider).open(authUrl);
-        messenger.showSnackBar(
-          SnackBar(content: Text(l10n.settingsScrobblerApprove)),
-        );
+        messenger.show(l10n.settingsScrobblerApprove);
       } on WaxDeckApiException catch (e) {
-        messenger.showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+        messenger.show(explainError(l10n, e));
       }
       return;
     }
@@ -60,11 +61,11 @@ class ScrobblingSection extends ConsumerWidget {
     Scrobbler slot,
   ) async {
     final l10n = context.l10n;
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     try {
       await ref.read(scrobblersProvider.notifier).disconnect(slot.service);
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -228,7 +229,8 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
     if (token.isEmpty || _busy) return;
     setState(() => _busy = true);
     final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    final l10n = context.l10n;
     final apiUrl = _apiUrlController.text.trim();
     try {
       await ref
@@ -240,9 +242,7 @@ class _ListenBrainzDialogState extends ConsumerState<_ListenBrainzDialog> {
       // refusal of the token that was just typed, and the translation
       // for `invalid-request` would say only that something was wrong.
       // The same rule the password and timezone dialogs follow.
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(explainRefusal(l10n, e), channel: _scrobbling);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -335,7 +335,8 @@ class _LastfmCredentialsDialogState
     if (_busy) return;
     setState(() => _busy = true);
     final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    final l10n = context.l10n;
     try {
       await ref
           .read(scrobblingAdminConfigProvider.notifier)
@@ -348,9 +349,7 @@ class _LastfmCredentialsDialogState
       // The server's own sentence, for the same reason the ListenBrainz
       // dialog keeps one: this refuses the pair that was just typed, and
       // says which half is missing.
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(explainRefusal(l10n, e), channel: _scrobbling);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -553,7 +552,7 @@ class AppPasswordsSection extends ConsumerWidget {
   Future<void> _create(BuildContext context, WidgetRef ref) async {
     final l10n = context.l10n;
     final controller = TextEditingController();
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final label = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -619,7 +618,7 @@ class AppPasswordsSection extends ConsumerWidget {
         ),
       );
     } on WaxDeckApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e));
     }
   }
 
@@ -1092,7 +1091,7 @@ class _TargetEditorDialogState extends ConsumerState<_TargetEditorDialog> {
       if (mounted) {
         setState(() {
           _busy = false;
-          _error = e.message;
+          _error = explainRefusal(l10n, e);
         });
       }
     }

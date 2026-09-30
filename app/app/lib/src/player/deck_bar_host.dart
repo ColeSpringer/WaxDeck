@@ -23,6 +23,7 @@ import '../sharing/share_dialog.dart';
 import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'autoplay_gate.dart';
 import 'lyrics.dart';
 import 'now_playing_controller.dart';
@@ -472,14 +473,12 @@ class _RemoteDeckBar extends ConsumerWidget {
   /// something. The bus keeps the server's own code and message, and that
   /// message is what a listener reads.
   Future<void> _report(BuildContext context, Future<void> work) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ShellMessenger.of(context);
     final l10n = context.l10n;
     try {
       await work;
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+      messenger.show(explainRefusal(l10n, e), channel: ShellChannel.remote);
     }
   }
 }

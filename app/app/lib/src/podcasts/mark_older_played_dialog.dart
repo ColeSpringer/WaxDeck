@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'podcast_shelves.dart';
 import 'podcasts_controller.dart';
 
@@ -115,9 +116,8 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
       _done = 0;
       _total = 0;
     });
-    final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-    // Read beside them, and for the same reason: this loop outlives the
+    // Read beside it, and for the same reason: this loop outlives the
     // frame that started it, so nothing here reaches for a context.
     final l10n = context.l10n;
     // The container rather than `ref`: this loop outlives the dialog
@@ -126,6 +126,7 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
     // `ref` is dead the moment this State is disposed; the container is
     // not.
     final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = container.read(shellMessengerProvider.notifier);
     final repository = container.read(repositoryProvider);
     var done = 0;
     String? failure;
@@ -141,13 +142,10 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
     } on WaxDeckApiException catch (e) {
       if (_cancelled || !mounted) return;
       setState(() => _running = false);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(l10n.podcastBacklogReadError(explainError(l10n, e))),
-          ),
-        );
+      messenger.show(
+        l10n.podcastBacklogReadError(explainError(l10n, e)),
+        channel: ShellChannel.markOlder,
+      );
       return;
     }
     if (mounted) setState(() => _total = episodes.length);
@@ -201,19 +199,17 @@ class _MarkOlderPlayedDialogState extends ConsumerState<MarkOlderPlayedDialog> {
     if (_cancelled || !mounted) return;
     if (failure != null) {
       setState(() => _running = false);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text(l10n.podcastMarkOlderStopped(done, failure))),
-        );
+      messenger.show(
+        l10n.podcastMarkOlderStopped(done, failure),
+        channel: ShellChannel.markOlder,
+      );
       return;
     }
     navigator.pop();
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(l10n.podcastMarkedPlayedTotal(done))),
-      );
+    messenger.show(
+      l10n.podcastMarkedPlayedTotal(done),
+      channel: ShellChannel.markOlder,
+    );
   }
 
   /// One checkpoint: null when it landed, a sentence when it did not.

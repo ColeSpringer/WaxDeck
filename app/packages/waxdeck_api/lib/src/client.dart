@@ -1488,12 +1488,12 @@ abstract interface class WaxDeckRepository {
     required List<String> removeItemPids,
   });
 
-  /// `GET /organize/profiles`: the configured file organization
-  /// profiles.
-  Future<List<OrganizeProfile>> listOrganizeProfiles();
+  /// `GET /organize/profiles`: the file organization profiles, and how
+  /// many libraries they can lay out.
+  Future<OrganizeProfiles> listOrganizeProfiles();
 
   /// `POST /organize/preview`: dry-runs a profile over [itemPids] or
-  /// the whole library.
+  /// every managed library.
   Future<OrganizePlan> previewOrganize({
     required String profile,
     List<String>? itemPids,
@@ -4695,11 +4695,9 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<List<OrganizeProfile>> listOrganizeProfiles() => _guard(() async {
+  Future<OrganizeProfiles> listOrganizeProfiles() => _guard(() async {
     final response = await _gen.getOrganizeApi().listOrganizeProfiles();
-    return _require(
-      response.data,
-    ).profiles.map(organizeProfileFromGen).toList(growable: false);
+    return organizeProfilesFromGen(_require(response.data));
   });
 
   @override

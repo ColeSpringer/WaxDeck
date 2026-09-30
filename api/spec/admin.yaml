@@ -210,13 +210,19 @@ paths:
       operationId: setLibraryReadOnly
       summary: Set a library's read-only mode
       description: >
-        A read-only library refuses uploads, organizing, file
-        write-back, deletion, and the file tools with code
-        `read-only`, while reads, playback, and per-user state
-        (stars, progress, playlists) keep working. For media mounted
-        read-only on principle. Podcast libraries need a writable
-        root for episode fetching, and the flag refuses fetches into
-        the library too. Administrators only.
+        A read-only library refuses uploads, file write-back,
+        deletion, restoring or purging its trash, and the file tools
+        with code `read-only`, while reads, playback, and per-user
+        state (stars, progress, playlists) keep working. For media
+        mounted read-only on principle. Organizing and the path and
+        tag health fixes leave its files where they are, and edits
+        that write into every member file of an album, a release
+        group or an artist are refused with `read-only` while any
+        library is read-only, since they can reach every library.
+        Podcast libraries need a writable root for episode fetching:
+        the flag refuses fetches and download removal, and holds the
+        fetch queue and download retention until it clears.
+        Administrators only.
       tags: [admin]
       requestBody:
         required: true
@@ -985,8 +991,9 @@ paths:
         occupied (`conflict`), and when it points into the internal
         podcast download tree, which owns its own files: entries left
         there by older versions come back by re-downloading the
-        episode, and purge and expiry still apply to them.
-        Administrators only.
+        episode, and purge and expiry still apply to them. The trash
+        sits under each library's root, so a read-only library's
+        entries are refused with `read-only`. Administrators only.
       tags: [admin]
       parameters:
         - $ref: "#/components/parameters/TrashId"
@@ -1000,7 +1007,14 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The restore was refused. `conflict`: the original path is
+            occupied. `read-only`: the entry's library, or the whole
+            server, is read-only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -1010,7 +1024,10 @@ paths:
       summary: Empty the trash
       description: >
         Permanently deletes every active trashed file and reports
-        what was reclaimed. Irreversible. Administrators only.
+        what was reclaimed. Irreversible. Refused with `read-only`
+        while the server is read-only or a read-only library holds a
+        trashed file, since the pass cannot leave one library out; the
+        retention sweep waits the same way. Administrators only.
       tags: [admin]
       responses:
         "200":
@@ -1023,6 +1040,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -1035,7 +1054,8 @@ paths:
       description: >
         Permanently deletes a single trashed file and reports the bytes
         it reclaimed. Irreversible; the age-based retention sweep
-        (`trashRetentionDays`) purges the same way in bulk.
+        (`trashRetentionDays`) purges the same way in bulk. A
+        read-only library's entry is refused with `read-only`.
         Administrators only.
       tags: [admin]
       responses:
@@ -1051,6 +1071,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -1591,9 +1613,12 @@ components:
             Off by default, because it modifies the listener's own
             files. Files whose format cannot store a key are counted
             in `enrichmentStatus.lastRun.tagsUnrepresented` and left
-            byte-identical, which is not a failure. Applies to the next
-            pass; a run already in flight keeps the setting it started
-            under. Optional on PUT so settings writers predating this
+            byte-identical, which is not a failure. A pass that starts
+            while the server or any library is read-only writes nothing
+            back, whatever this says, since it cannot keep its writes
+            out of one library. Applies to the next pass; a run already
+            in flight keeps what it started under, the read-only state
+            included. Optional on PUT so settings writers predating this
             field never change it: absent keeps the current value.
             Always present in responses.
 

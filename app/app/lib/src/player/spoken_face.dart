@@ -14,6 +14,7 @@ import '../providers.dart';
 import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'bookmarks.dart';
 import 'playback_session.dart';
 import 'speed_sheet.dart';
@@ -489,17 +490,17 @@ class SpeedChip extends StatelessWidget {
 /// appears every time is one nobody reads. The flag is written before
 /// the message so a double press cannot say it twice.
 void explainOnce(
-  BuildContext context,
   WidgetRef ref,
   NotifierProvider<BoolSetting, bool> seen,
   String message,
 ) {
   if (ref.read(seen)) return;
   ref.read(seen.notifier).set(true);
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message)));
+  ref.read(shellMessengerProvider.notifier).show(message, channel: _effects);
 }
+
+/// The effect chips' run: the last press is the one being explained.
+const _effects = ShellChannel.spokenEffects;
 
 /// Silence-trimming toggle with its own saved badge.
 ///
@@ -543,7 +544,6 @@ class TrimChip extends ConsumerWidget {
               onPressed: () {
                 if (!enabled) {
                   explainOnce(
-                    context,
                     ref,
                     trimSilenceExplainedProvider,
                     l10n.playerTrimExplained,
@@ -583,22 +583,19 @@ class _VoiceBoostChipState extends ConsumerState<VoiceBoostChip> {
     final l10n = context.l10n;
     if (to) {
       explainOnce(
-        context,
         ref,
         voiceBoostExplainedProvider,
         l10n.playerVoiceBoostExplained,
       );
     }
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     setState(() => _busy = true);
     try {
       // The chip puts itself back when there was nothing to store the
       // choice on, so the refusal is visible; saying why is this
       // surface's half of it.
       if (!await widget.session.setVoiceBoost(to)) {
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(l10n.playerVoiceBoostFailed)));
+        messenger.show(l10n.playerVoiceBoostFailed, channel: _effects);
       }
     } finally {
       if (mounted) setState(() => _busy = false);

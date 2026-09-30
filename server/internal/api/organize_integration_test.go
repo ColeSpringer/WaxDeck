@@ -15,7 +15,11 @@ func TestOrganizeProfilesAndPreview(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("profiles status = %d", resp.StatusCode)
 	}
-	profiles := decode[OrganizeProfiles](t, resp).Profiles
+	listing := decode[OrganizeProfiles](t, resp)
+	if listing.ManagedLibraries != 0 {
+		t.Fatalf("managedLibraries = %d, want none on in-place roots", listing.ManagedLibraries)
+	}
+	profiles := listing.Profiles
 	found := false
 	for _, p := range profiles {
 		if p.Name == "waxbin-native" {

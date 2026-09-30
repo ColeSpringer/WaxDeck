@@ -19,11 +19,6 @@ Every entry carries a gate tag saying what actually blocks it:
 - `[third-party]` needs a fix in a dependency outside the Wax repos;
   the entry names the package and what WaxDeck does meanwhile.
 
-Most of this list is `[in-repo]` by design: the working rule is that
-a slice ships when its acceptance holds, and polish residuals get
-written down instead of silently dropped or half-shipped. Very little
-here waits on upstream.
-
 ## Playback and apps
 
 
@@ -58,21 +53,17 @@ here waits on upstream.
   `Listener` per row on every platform is a poor trade for a menu that
   may never render.
 
-- `[in-repo]` **A shell message raised from outside the shell is
-  dropped.** `_listenForMessages` (`adaptive_shell.dart`) is what draws
-  `shellMessengerProvider`, and it lives inside `AdaptiveShell` - which
-  is mounted only for the locations in `shellRoutes()`. A message raised
-  from login, setup, or any other public route reaches the notifier and
-  is never drawn. Unreachable today: every raiser in the app is a
-  signed-in screen inside the shell, and `shell_messages_test.dart`
-  covers the two positions that do occur (an ordinary screen, and the
-  player pushed over it). Closing it means a listener above the router
-  in `app.dart`, which drags the rest of the shape with it - the
-  snackbar would then present into an app-level Scaffold rather than the
-  screen's own, so FAB lift and per-screen bottom insets stop applying
-  to it, and `PlayerScreen`'s compensating Scaffold and `DeckBarHost`
-  both want checking against the move. Worth doing when a public route
-  first needs to say something, not before.
+- `[in-repo]` **A shell message raised from a public route is
+  dropped.** `ShellMessageHost` (`shell_messages.dart`) draws
+  `shellMessengerProvider` and is mounted in the signed-in scope
+  (`router.dart`), so a message raised from login, setup, or any other
+  public route reaches the notifier and is never drawn. Unreachable
+  today: every raiser in the app is a signed-in screen, and
+  `shell_messages_test.dart` covers the positions that occur (an
+  ordinary screen, the player pushed over it, a lone overlay). Closing
+  it means mounting the host where the public routes are built too, and
+  checking that each public page has a Scaffold to present into. Worth
+  doing when a public route first needs to say something, not before.
 
 - `[in-repo]` **The rule editor does not say which fields can never
   reach `.nsp`.** An export's report names every loss after the fact;
@@ -276,6 +267,38 @@ here waits on upstream.
 
 ## Connect and casting
 
+
+## Curation and metadata
+
+- `[upstream]` **Organize profiles cannot be defined or edited.** The
+  organize screen offers only the catalog's built-in `waxbin-native`
+  layout. The editor wanted: profile create, edit and delete in the
+  console, stored in `waxdeck.db` and handed to WaxBin; a profile picker
+  with a rendered sample path on the organize screen; and a default
+  profile per library. Waits on the organize-profiles ask in
+  upstream-requests.md.
+
+- `[upstream]` **Writes that span every library stop for all of them
+  while one is read-only.** The enrichment pass writes no tags into
+  files, entity write-back (an album, release group or artist edit, an
+  album's front cover) is refused, and emptying the trash, by hand or
+  by the retention sweep, waits while a read-only library holds a file
+  it would purge, since the catalog cannot leave one library out of any
+  of them. A pass already running when a library is flagged keeps
+  writing to its end. Restore each for the writable libraries, and stop
+  a running pass at the flag, once the library-scoping ask in
+  upstream-requests.md lands.
+
+- `[in-repo]` **The MusicBrainz and Cover Art Archive base overrides
+  stop short of enrichment.** `WAXDECK_MUSICBRAINZ_BASE` and
+  `WAXDECK_COVERART_BASE` reach matching and radio artwork (the Cover
+  Art Archive one radio artwork only), while the catalog's enrichment
+  pass always asks the public services:
+  `library.go` never hands WaxBin `MusicBrainzBaseURL` or
+  `CoverArtBaseURL`. The wiring is a few lines, but the pass's
+  private-address guard refuses a mirror on a private address unless
+  `WAXDECK_ALLOW_PRIVATE_FEED_HOSTS` is on, so it wants a decision on
+  whether a configured mirror is exempt.
 
 ## Localization
 

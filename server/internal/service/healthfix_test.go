@@ -1,10 +1,13 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -129,17 +132,9 @@ func TestAScopedFixFillsWhatItNames(t *testing.T) {
 	if start.Queued != 1 || start.TaskID == "" || start.JobPID != "" {
 		t.Fatalf("start = %+v, want one item on a task", start)
 	}
-	for svc.DrainHealthFixes(ctx) {
-	}
-	task, err := svc.GetToolTaskFor(ctx, uc, start.TaskID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := json.Marshal(task.Summary)
-	var sum healthFixSummary
-	if err := json.Unmarshal(raw, &sum); err != nil || task.State != taskStateDone ||
-		sum.Rule != ruleMissingLyrics || sum.Attempted != 1 || sum.Filled != 1 || sum.Failed != 0 {
-		t.Fatalf("task %s, summary %s; want one item filled", task.State, raw)
+	sum := fixSummary(t, ctx, svc, uc, start.TaskID)
+	if sum.Rule != ruleMissingLyrics || sum.Attempted != 1 || sum.Filled != 1 || sum.Failed != 0 {
+		t.Fatalf("summary %+v, want one item filled", sum)
 	}
 	if issues, _, err := svc.ListHealthIssuesFor(ctx, ruleMissingLyrics, "", 10); err != nil || len(issues) != 0 {
 		t.Fatalf("still missing lyrics = %+v (%v), want none after the re-check", issues, err)
@@ -366,16 +361,9 @@ func TestAScopedFixCountsFilledOnlyWhereTheRuleNowPasses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainHealthFixes(ctx) {
-	}
-	task, err := svc.GetToolTaskFor(ctx, uc, start.TaskID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := json.Marshal(task.Summary)
-	var sum healthFixSummary
-	if err := json.Unmarshal(raw, &sum); err != nil || sum.Attempted != 1 || sum.Filled != 0 || sum.Skipped["no match"] != 1 {
-		t.Fatalf("summary %s, want the book attempted and skipped for want of an ASIN", raw)
+	sum := fixSummary(t, ctx, svc, uc, start.TaskID)
+	if sum.Attempted != 1 || sum.Filled != 0 || sum.Skipped["no match"] != 1 {
+		t.Fatalf("summary %+v, want the book attempted and skipped for want of an ASIN", sum)
 	}
 	it, err := svc.lib.Get(ctx, books[0].PID)
 	if err != nil || it.Narrator != "Some Reader" {
@@ -421,17 +409,10 @@ func TestAPathFixCountsItemsNotFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for svc.DrainHealthFixes(ctx) {
-	}
-	task, err := svc.GetToolTaskFor(ctx, uc, start.TaskID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	raw, _ := json.Marshal(task.Summary)
-	var sum healthFixSummary
-	if err := json.Unmarshal(raw, &sum); err != nil || sum.Attempted != 3 || sum.Filled != 2 ||
-		sum.Failed != 0 || sum.Skipped["destination taken"] != 1 || len(sum.Skipped) != 1 {
-		t.Fatalf("summary %s, want the book and one twin moved and the other twin held back", raw)
+	sum := fixSummary(t, ctx, svc, uc, start.TaskID)
+	if sum.Attempted != 3 || sum.Filled != 2 || sum.Failed != 0 ||
+		sum.Skipped["destination taken"] != 1 || len(sum.Skipped) != 1 {
+		t.Fatalf("summary %+v, want the book and one twin moved and the other twin held back", sum)
 	}
 }
 
@@ -621,5 +602,187 @@ func TestATaskSaysItsProgressApartFromItsNews(t *testing.T) {
 	// Queued, running, one item's progress, done.
 	if want := []string{eventTask, eventTask, eventTaskProgress, eventTask}; !slices.Equal(kinds, want) {
 		t.Fatalf("markers = %v, want %v", kinds, want)
+	}
+}
+
+// managedTrackFixture opens a managed library holding one track off
+// the organize template, scanned; it answers the track's path and its
+// API pid.
+func managedTrackFixture(t *testing.T) (context.Context, *Library, *UserCtx, string, string) {
+	t.Helper()
+	var paths []string
+	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
+		c.Roots[0].Managed = true
+		var err error
+		if paths, err = fixtures.Generate(c.Roots[0].Path, fixtures.Spec{
+			Name: "stray", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second,
+			Tags: map[string]string{"TITLE": "Stray", "ARTIST": "Nomad", "ALBUM": "Wander", "TRACKNUMBER": "1"},
+		}); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	items, err := svc.lib.Query(ctx, query.New(query.EntityItems).Build(), "")
+	if err != nil || len(items) != 1 {
+		t.Fatalf("items = %v (%v), want the one track", items, err)
+	}
+	return ctx, svc, uc, paths[0], apiPID(PrefixTrack, items[0].PID)
+}
+
+// readOnlyFixture is managedTrackFixture with every library read-only.
+func readOnlyFixture(t *testing.T) (context.Context, *Library, *UserCtx, string, string) {
+	t.Helper()
+	ctx, svc, uc, path, pid := managedTrackFixture(t)
+	setLibrariesReadOnly(t, ctx, svc, uc, true)
+	return ctx, svc, uc, path, pid
+}
+
+// setLibrariesReadOnly flags every library read-only, or clears them.
+func setLibrariesReadOnly(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, readOnly bool) {
+	t.Helper()
+	libs, err := svc.lib.Libraries(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, lib := range libs {
+		if err := svc.LibraryReadOnlySet(ctx, uc, apiPID(PrefixLibrary, lib.PID), readOnly); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// setServerReadOnly flips the server-wide flag.
+func setServerReadOnly(t *testing.T, ctx context.Context, svc *Library, readOnly bool) {
+	t.Helper()
+	if err := svc.db.SettingSet(ctx, settingReadOnly, strconv.FormatBool(readOnly), time.Now().UnixNano()); err != nil {
+		t.Fatal(err)
+	}
+	svc.loadRuntimeToggles(ctx)
+}
+
+// fixSummary runs the queued fixes and reads the report of the task,
+// which has to have finished.
+func fixSummary(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx, taskID string) healthFixSummary {
+	t.Helper()
+	for svc.DrainHealthFixes(ctx) {
+	}
+	task, err := svc.GetToolTaskFor(ctx, uc, taskID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.State != taskStateDone {
+		t.Fatalf("task %s, want it done", task.State)
+	}
+	raw, _ := json.Marshal(task.Summary)
+	var sum healthFixSummary
+	if err := json.Unmarshal(raw, &sum); err != nil {
+		t.Fatal(err)
+	}
+	return sum
+}
+
+func TestAPathFixLeavesAReadOnlyLibraryInPlace(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, path, pid := readOnlyFixture(t)
+	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := fixSummary(t, ctx, svc, uc, start.TaskID)
+	if sum.Filled != 0 || sum.Skipped["read-only library"] != 1 {
+		t.Fatalf("summary %+v, want the track held back as read-only", sum)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the track moved out of a read-only library: %v", err)
+	}
+}
+
+func TestAWriteBackFixLeavesAReadOnlyLibraryAlone(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, path, pid := readOnlyFixture(t)
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, err := svc.StartHealthFix(ctx, uc, ruleWriteUnsynced, []string{pid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := fixSummary(t, ctx, svc, uc, start.TaskID)
+	if sum.Filled != 0 || sum.Skipped["read-only library"] != 1 {
+		t.Fatalf("summary %+v, want the track left alone as read-only", sum)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatalf("the fix rewrote a file in a read-only library (%v)", err)
+	}
+}
+
+func TestAReadOnlyServerRefusesAFileWritingFix(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := openEnrichFixture(t, func(c *Config) { c.Roots[0].Managed = true })
+	setServerReadOnly(t, ctx, svc, true)
+	for _, rule := range []string{ruleWriteUnsynced, rulePathMismatch} {
+		if _, err := svc.StartHealthFix(ctx, uc, rule, nil); KindOf(err) != KindReadOnly {
+			t.Fatalf("%s: err = %v, want read-only", rule, err)
+		}
+	}
+}
+
+// A fix that writes files cannot run on a read-only server, and the
+// rule says so rather than offering a fix that can only be refused.
+func TestAReadOnlyServerBlocksTheFileWritingFixes(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _ := openEnrichFixture(t, func(c *Config) { c.Roots[0].Managed = true })
+	setServerReadOnly(t, ctx, svc, true)
+	for _, rule := range []string{ruleWriteUnsynced, rulePathMismatch} {
+		if fixable, blocked := svc.healthFixability(rule); fixable || blocked != fixBlockedReadOnly {
+			t.Errorf("%s = (%v, %q), want blocked as read-only", rule, fixable, blocked)
+		}
+	}
+}
+
+// A path fix queued before the server went read-only moves nothing
+// when it runs.
+func TestAPathFixRunningOnAReadOnlyServerMovesNothing(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, path, pid := managedTrackFixture(t)
+	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setServerReadOnly(t, ctx, svc, true)
+	sum := fixSummary(t, ctx, svc, uc, start.TaskID)
+	if sum.Filled != 0 || sum.Skipped[readOnlyReason] != 1 {
+		t.Fatalf("summary %+v, want the track held back as read-only", sum)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the track moved on a read-only server: %v", err)
+	}
+}
+
+// A plan whose every move is held back runs no organize job, so it
+// neither takes the file-mutation lease nor files a job row.
+func TestAHeldPlanRunsNoOrganizeJob(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _, pid := readOnlyFixture(t)
+	if _, err := svc.ApplyOrganize(ctx, uc, svc.defaultOrganizeProfile(), nil); err != nil {
+		t.Fatal(err)
+	}
+	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixSummary(t, ctx, svc, uc, start.TaskID)
+	jobs, err := svc.lib.Jobs(ctx, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, j := range jobs {
+		if j.Kind == "organize" {
+			t.Fatalf("an organize job ran with nothing to move: %+v", j)
+		}
 	}
 }

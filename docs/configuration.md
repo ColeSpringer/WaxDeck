@@ -249,14 +249,18 @@ provider.
   `name=url` pairs, comma separated, each implementing the contract in
   `docs/custom-provider-api/`. Validated at startup (the capabilities
   document must answer and advertise a name) and asked first, ahead of
-  the providers WaxDeck ships, until an administrator reorders them.
+  the providers WaxDeck ships; once an administrator has saved an
+  order, one wired later joins its end until it is moved.
 - `WAXDECK_ENRICH_PROVIDER_AUTH`: bearer tokens for custom enrichment
   providers as `name=token` pairs, comma separated; names must match
   the URLs variable.
 - `WAXDECK_MUSICBRAINZ_BASE`: MusicBrainz API base override (a local
-  mirror).
-- `WAXDECK_COVERART_BASE`: Cover Art Archive base override (a mirror);
-  the archive rung only exists when matching is on.
+  mirror) for matching, the ISRC upgrade and radio artwork. The
+  catalog's enrichment pass always asks the public service.
+- `WAXDECK_COVERART_BASE`: Cover Art Archive base override (a mirror)
+  for radio artwork; the archive rung only exists when matching is on.
+  The enrichment pass's Cover Art Archive source always uses the public
+  host.
 - `WAXDECK_ENRICHMENT_CONTACT`: MusicBrainz contact (an email or a
   URL) the whole-library enrichment pass identifies itself with.
   MusicBrainz requires an identifying agent, so empty leaves the

@@ -34,10 +34,10 @@ class HealthScreen extends ConsumerWidget {
         l10n.healthFixStarted(name),
         actionLabel: l10n.commonOpenTasks,
         actionSemanticsId: SemanticsIds.openTasks,
-        onAction: () => router.push<void>(WaxRoute.tasks),
+        onAction: () => router.pushInShell<void>(WaxRoute.tasks),
       );
     } on WaxDeckApiException catch (e) {
-      if (e.statusCode != 409) {
+      if (e.code != 'conflict') {
         messenger.show(explainError(l10n, e));
         return;
       }

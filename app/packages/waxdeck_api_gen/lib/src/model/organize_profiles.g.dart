@@ -9,12 +9,15 @@ part of 'organize_profiles.dart';
 class _$OrganizeProfiles extends OrganizeProfiles {
   @override
   final BuiltList<OrganizeProfile> profiles;
+  @override
+  final int managedLibraries;
 
   factory _$OrganizeProfiles([
     void Function(OrganizeProfilesBuilder)? updates,
   ]) => (OrganizeProfilesBuilder()..update(updates))._build();
 
-  _$OrganizeProfiles._({required this.profiles}) : super._();
+  _$OrganizeProfiles._({required this.profiles, required this.managedLibraries})
+    : super._();
   @override
   OrganizeProfiles rebuild(void Function(OrganizeProfilesBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -26,22 +29,26 @@ class _$OrganizeProfiles extends OrganizeProfiles {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is OrganizeProfiles && profiles == other.profiles;
+    return other is OrganizeProfiles &&
+        profiles == other.profiles &&
+        managedLibraries == other.managedLibraries;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, profiles.hashCode);
+    _$hash = $jc(_$hash, managedLibraries.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'OrganizeProfiles',
-    )..add('profiles', profiles)).toString();
+    return (newBuiltValueToStringHelper(r'OrganizeProfiles')
+          ..add('profiles', profiles)
+          ..add('managedLibraries', managedLibraries))
+        .toString();
   }
 }
 
@@ -55,6 +62,11 @@ class OrganizeProfilesBuilder
   set profiles(ListBuilder<OrganizeProfile>? profiles) =>
       _$this._profiles = profiles;
 
+  int? _managedLibraries;
+  int? get managedLibraries => _$this._managedLibraries;
+  set managedLibraries(int? managedLibraries) =>
+      _$this._managedLibraries = managedLibraries;
+
   OrganizeProfilesBuilder() {
     OrganizeProfiles._defaults(this);
   }
@@ -63,6 +75,7 @@ class OrganizeProfilesBuilder
     final $v = _$v;
     if ($v != null) {
       _profiles = $v.profiles.toBuilder();
+      _managedLibraries = $v.managedLibraries;
       _$v = null;
     }
     return this;
@@ -84,7 +97,16 @@ class OrganizeProfilesBuilder
   _$OrganizeProfiles _build() {
     _$OrganizeProfiles _$result;
     try {
-      _$result = _$v ?? _$OrganizeProfiles._(profiles: profiles.build());
+      _$result =
+          _$v ??
+          _$OrganizeProfiles._(
+            profiles: profiles.build(),
+            managedLibraries: BuiltValueNullFieldError.checkNotNull(
+              managedLibraries,
+              r'OrganizeProfiles',
+              'managedLibraries',
+            ),
+          );
     } catch (_) {
       late String _$failedField;
       try {

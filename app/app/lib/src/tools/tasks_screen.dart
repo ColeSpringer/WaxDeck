@@ -16,6 +16,7 @@ import '../settings/settings_registry.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'tool_tasks_provider.dart';
 
 /// Whether a task has reached a terminal state.
@@ -151,21 +152,18 @@ class TasksScreen extends ConsumerWidget {
   }
 
   Future<void> _clearFinished(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
       final deleted = await ref
           .read(toolTasksProvider.notifier)
           .clearFinished();
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text(l10n.toolsTasksCleared(deleted))),
-        );
+      messenger.show(
+        l10n.toolsTasksCleared(deleted),
+        channel: ShellChannel.tasks,
+      );
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.tasks);
     }
   }
 }
@@ -310,16 +308,14 @@ class _TaskRow extends ConsumerWidget {
     WidgetRef ref,
     String pid,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
       final item = await ref.read(repositoryProvider).getItem(pid);
       if (!context.mounted) return;
       openHomeItem(context, ref, item, PlayProgress.none);
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.tasks);
     }
   }
 
@@ -329,7 +325,7 @@ class _TaskRow extends ConsumerWidget {
     WidgetRef ref,
     List<String> pids,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final List<ItemDetail> items;
     try {
@@ -337,9 +333,7 @@ class _TaskRow extends ConsumerWidget {
         for (final pid in pids) ref.read(repositoryProvider).getItem(pid),
       ]);
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.tasks);
       return;
     }
     if (!context.mounted) return;
@@ -406,14 +400,12 @@ class _TaskRow extends ConsumerWidget {
   }
 
   Future<void> _dismiss(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
       await ref.read(toolTasksProvider.notifier).dismiss(task.id);
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.tasks);
     }
   }
 

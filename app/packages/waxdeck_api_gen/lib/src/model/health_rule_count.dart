@@ -17,7 +17,7 @@ part 'health_rule_count.g.dart';
 /// * [failing] - Items currently failing the rule.
 /// * [fixable] - Whether the bulk-fix endpoint can fix this rule on this install. 
 /// * [fixing] - True while a fix for the rule is under way: a pass-backed fix from its start until its re-check lands, a task-backed one while its task is queued or running. Another fix for the rule answers `conflict` meanwhile. 
-/// * [fixBlocked] - Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match. 
+/// * [fixBlocked] - Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match. `read-only`: the server is read-only, and the fix writes files. 
 @BuiltValue()
 abstract class HealthRuleCount implements Built<HealthRuleCount, HealthRuleCountBuilder> {
   /// The rule name.
@@ -40,10 +40,10 @@ abstract class HealthRuleCount implements Built<HealthRuleCount, HealthRuleCount
   @BuiltValueField(wireName: r'fixing')
   bool get fixing;
 
-  /// Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match. 
+  /// Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match. `read-only`: the server is read-only, and the fix writes files. 
   @BuiltValueField(wireName: r'fixBlocked')
   HealthRuleCountFixBlockedEnum? get fixBlocked;
-  // enum fixBlockedEnum {  needs-contact,  needs-lyrics-source,  needs-art-source,  needs-genre-source,  needs-book-source,  no-managed-library,  };
+  // enum fixBlockedEnum {  needs-contact,  needs-lyrics-source,  needs-art-source,  needs-genre-source,  needs-book-source,  no-managed-library,  read-only,  };
 
   HealthRuleCount._();
 
@@ -199,7 +199,7 @@ class _$HealthRuleCountSerializer implements PrimitiveSerializer<HealthRuleCount
 }
 
 
-/// Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match. 
+/// Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match. `read-only`: the server is read-only, and the fix writes files. 
 class HealthRuleCountFixBlockedEnum extends EnumClass {
 
   @BuiltValueEnumConst(wireName: r'needs-contact')
@@ -214,6 +214,8 @@ class HealthRuleCountFixBlockedEnum extends EnumClass {
   static const HealthRuleCountFixBlockedEnum needsBookSource = _$healthRuleCountFixBlockedEnum_needsBookSource;
   @BuiltValueEnumConst(wireName: r'no-managed-library')
   static const HealthRuleCountFixBlockedEnum noManagedLibrary = _$healthRuleCountFixBlockedEnum_noManagedLibrary;
+  @BuiltValueEnumConst(wireName: r'read-only')
+  static const HealthRuleCountFixBlockedEnum readOnly = _$healthRuleCountFixBlockedEnum_readOnly;
   @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
   static const HealthRuleCountFixBlockedEnum unknownDefaultOpenApi = _$healthRuleCountFixBlockedEnum_unknownDefaultOpenApi;
 

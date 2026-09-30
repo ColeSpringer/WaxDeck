@@ -77,6 +77,34 @@ note.
   `RunLeased`, or its scope on the job row. Shipped workaround: none;
   those runs are listed as enrichment passes.
 
+- **Organize profiles are fixed at open and opaque.** `Options.Profiles`
+  is read once by `Open`, `Profiles()` returns names only, and
+  `PlanOrganize` takes a name it resolves privately, so a host cannot
+  let an administrator define or edit a profile without a restart, nor
+  show a profile's templates. Wanted: profiles settable at runtime (a
+  `SetOrganizeProfiles` that validates as `Open` does), `PlanOrganize`
+  accepting a profile value or a name from the live set, and
+  `Profiles()` returning each profile's templates and tag-write flag
+  (`organize.RenderRelPath` is already exported for a sample path).
+  Shipped workaround: the built-in profile only; the console's profile
+  editor waits on this.
+
+- **Writes that span libraries cannot leave one out.**
+  `EnrichOptions.WriteTags` writes what a pass filled into every backing
+  file it touched; `EditEntity`, `RenameEntity` and `SetEntityArt` with
+  write-back write into every member file of the entity; `EmptyTrash`
+  purges every library's trash. None takes a library scope, and the
+  facade does not say which files an entity edit will reach. WaxDeck's
+  read-only flag is per library, so while any library is read-only it
+  turns enrichment write-back off, refuses entity write-back, and holds
+  an empty (the retention sweep's too) that would purge a read-only
+  library's trash, and the writable libraries lose all three. A pass
+  reads `WriteTags` once, so one already running keeps writing into a
+  library flagged after it started. Wanted: a library scope on each
+  (the libraries to write into, or to skip), or for the pass a per-item
+  predicate it consults as it goes. Shipped workaround: those refusals
+  and holds.
+
 ## WaxTap
 
 - **A chunked download has no stall timeout.** `Timeouts.ChunkRetry`

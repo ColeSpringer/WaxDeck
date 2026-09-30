@@ -16,6 +16,7 @@ import '../search/search_chrome.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'credits.dart';
 import 'episode_actions.dart';
 import 'podcast_shelves.dart';
@@ -427,24 +428,21 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     }
     final l10n = context.l10n;
     setState(_selected.clear);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            <String>[
-              if (playable.isNotEmpty) l10n.podcastQueuedCount(playable.length),
-              // An episode whose feed named no audio cannot play, so
-              // queueing it would drop an entry that dies on arrival.
-              if (refused > 0) l10n.podcastNoAudioCount(refused),
-            ].join('; '),
-          ),
-        ),
-      );
+    ref
+        .read(shellMessengerProvider.notifier)
+        .show(
+          <String>[
+            if (playable.isNotEmpty) l10n.podcastQueuedCount(playable.length),
+            // An episode whose feed named no audio cannot play, so
+            // queueing it would drop an entry that dies on arrival.
+            if (refused > 0) l10n.podcastNoAudioCount(refused),
+          ].join('; '),
+          channel: ShellChannel.episodes,
+        );
   }
 
   Future<void> _fetchSelected(List<EpisodeSummary> chosen) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final notifier = ref.read(episodesProvider(widget.pid).notifier);
     var queued = 0;
@@ -463,21 +461,16 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     }
     if (!mounted) return;
     setState(_selected.clear);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            failure == null
-                ? l10n.podcastQueuedForDownloadCount(queued)
-                : l10n.podcastQueuedWithFailure(queued, failure),
-          ),
-        ),
-      );
+    messenger.show(
+      failure == null
+          ? l10n.podcastQueuedForDownloadCount(queued)
+          : l10n.podcastQueuedWithFailure(queued, failure),
+      channel: ShellChannel.episodes,
+    );
   }
 
   Future<void> _markSelectedPlayed(List<EpisodeSummary> chosen) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final repository = ref.read(repositoryProvider);
     var marked = 0;
@@ -507,19 +500,14 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
     }
     if (!mounted) return;
     setState(_selected.clear);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            failure ??
-                <String>[
-                  l10n.podcastMarkedPlayedCount(marked),
-                  if (skipped > 0) l10n.podcastNoDurationCount(skipped),
-                ].join('; '),
-          ),
-        ),
-      );
+    messenger.show(
+      failure ??
+          <String>[
+            l10n.podcastMarkedPlayedCount(marked),
+            if (skipped > 0) l10n.podcastNoDurationCount(skipped),
+          ].join('; '),
+      channel: ShellChannel.episodes,
+    );
   }
 }
 
@@ -571,13 +559,11 @@ class _ShowHeader extends ConsumerWidget {
     final l10n = context.l10n;
 
     Future<void> guarded(Future<void> Function() action) async {
-      final messenger = ScaffoldMessenger.of(context);
+      final messenger = ref.read(shellMessengerProvider.notifier);
       try {
         await action();
       } on WaxDeckApiException catch (e) {
-        messenger
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+        messenger.show(explainError(l10n, e), channel: ShellChannel.podcasts);
       }
     }
 

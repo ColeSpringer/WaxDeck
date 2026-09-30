@@ -72,6 +72,9 @@ func (l *Library) RestoreTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID
 	if !ok || prefix != PrefixTrash {
 		return errInvalid("bad trash id " + apiTrashID)
 	}
+	if err := l.checkTrashWritable(ctx, pid, 0); err != nil {
+		return err
+	}
 	if err := l.lib.RestoreTrash(ctx, pid); err != nil {
 		return classify(err)
 	}
@@ -83,6 +86,9 @@ func (l *Library) RestoreTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID
 func (l *Library) EmptyTrash(ctx context.Context, uc *UserCtx) (TrashEmptyDTO, error) {
 	if !uc.Admin {
 		return TrashEmptyDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	if err := l.checkTrashWritable(ctx, "", 0); err != nil {
+		return TrashEmptyDTO{}, err
 	}
 	rep, err := l.lib.EmptyTrash(ctx, waxbin.EmptyTrashOptions{})
 	if err != nil {
@@ -105,6 +111,9 @@ func (l *Library) PurgeTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID s
 	if !ok || prefix != PrefixTrash {
 		return 0, errInvalid("bad trash id " + apiTrashID)
 	}
+	if err := l.checkTrashWritable(ctx, pid, 0); err != nil {
+		return 0, err
+	}
 	reclaimed, err := l.lib.PurgeTrash(ctx, pid)
 	if err != nil {
 		return 0, classify(err)
@@ -121,6 +130,15 @@ func (l *Library) PurgeTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID s
 func (l *Library) PurgeTrashOlderThan(ctx context.Context, olderThan time.Duration) (TrashEmptyDTO, error) {
 	if olderThan <= 0 {
 		return TrashEmptyDTO{}, nil
+	}
+	if err := l.checkTrashWritable(ctx, "", olderThan); err != nil {
+		if KindOf(err) == KindReadOnly {
+			// The next sweep tries again; the catalog cannot leave the
+			// read-only library's trash out of this one.
+			l.log.Info("trash retention waits for a read-only library", "err", err)
+			return TrashEmptyDTO{}, nil
+		}
+		return TrashEmptyDTO{}, err
 	}
 	rep, err := l.lib.EmptyTrash(ctx, waxbin.EmptyTrashOptions{OlderThan: olderThan})
 	if err != nil {
@@ -146,6 +164,32 @@ func (l *Library) SweepTrashRetention(ctx context.Context) (TrashEmptyDTO, error
 		return TrashEmptyDTO{}, nil
 	}
 	return l.PurgeTrashOlderThan(ctx, time.Duration(days)*24*time.Hour)
+}
+
+// checkTrashWritable refuses touching a read-only library's trash, which
+// sits under its root: the entry pid names, or else every entry trashed
+// over olderThan ago (zero: all), which is what an empty purges.
+func (l *Library) checkTrashWritable(ctx context.Context, pid model.PID, olderThan time.Duration) error {
+	if err := l.CheckWritable(ctx, ""); err != nil {
+		return err
+	}
+	if len(l.currentToggles().readOnlyLibs) == 0 {
+		return nil
+	}
+	entries, err := l.lib.Trash(ctx, false, 0)
+	if err != nil {
+		return classify(err)
+	}
+	cutoff := time.Now().Add(-olderThan).UnixNano()
+	for _, e := range entries {
+		if pid != "" && e.PID != pid || olderThan > 0 && e.TrashedAt >= cutoff {
+			continue
+		}
+		if err := l.checkPathWritable(ctx, e.OrigDisplay); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // DeletePlanDTO is one item's share of a deletion.

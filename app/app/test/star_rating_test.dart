@@ -121,7 +121,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byIcon(WaxIcons.heart.regular), findsOneWidget);
     expect(repo.starredByPid[pid], isNull);
-    expect(find.text('Could not save that change'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'Could not save that change',
+    );
     await harness.endPlayback(tester);
   });
 }

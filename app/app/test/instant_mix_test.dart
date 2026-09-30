@@ -259,7 +259,10 @@ void main() {
 
     await _runSheet(tester);
 
-    expect(find.text('No mix available for this track'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'No mix available for this track',
+    );
     expect(
       find.bySemanticsIdentifier(SemanticsIds.mixBasis('mix')),
       findsNothing,
@@ -325,10 +328,9 @@ void main() {
     await _runSheet(tester);
 
     expect(
-      find.text('Everything similar is already in your queue'),
-      findsOneWidget,
+      shellMessageText(raisedMessage(tester)),
+      'Everything similar is already in your queue',
     );
-    expect(find.text('No mix available for this track'), findsNothing);
     await harness.endPlayback(tester);
   });
 }

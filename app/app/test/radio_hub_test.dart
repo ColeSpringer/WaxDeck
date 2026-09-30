@@ -313,7 +313,10 @@ void main() {
 
     // Said, and not written: a silent drop is a tap that reports success
     // and does nothing.
-    expect(find.textContaining('Unpin one to make room'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      contains('Unpin one to make room'),
+    );
     expect(repo.prefs.radioFavorites, full);
   });
 
@@ -333,8 +336,8 @@ void main() {
     // pid is this client's doing rather than something anybody typed.
     expect(container.read(radioFavoritesProvider), isEmpty);
     expect(
-      find.text('That request was not something the server could act on.'),
-      findsOneWidget,
+      shellMessageText(raisedMessage(tester)),
+      'That request was not something the server could act on.',
     );
   });
 
@@ -399,7 +402,10 @@ void main() {
       reason: 'the hub must not name a station making no sound',
     );
     // And the tap says so rather than reading as one that was dropped.
-    expect(find.text('Could not tune Deck Radio'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'Could not tune Deck Radio',
+    );
   });
 
   testWidgets('a tune overtaken before it opens leaves the newer one alone', (
@@ -455,8 +461,10 @@ void main() {
     await tester.tap(_byId(SemanticsIds.radio('rs-1')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Could not stop Coastal FM'), findsOneWidget);
-    expect(find.textContaining('Could not tune'), findsNothing);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'Could not stop Coastal FM',
+    );
   });
 
   testWidgets('an overtaken tune that then fails says nothing', (tester) async {
@@ -482,7 +490,7 @@ void main() {
     gate.complete();
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Could not tune'), findsNothing);
+    expect(raisedMessage(tester), isNull);
     expect(
       container.read(radioPlaybackProvider).station?.pid,
       'rs-2',
@@ -965,7 +973,10 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.prefs.radioScrobbleMutedStations, ['rs-2']);
-      expect(find.text('Deck Radio will not be scrobbled'), findsOneWidget);
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'Deck Radio will not be scrobbled',
+      );
     });
 
     testWidgets('unmutes a muted station and clears the last entry', (
@@ -983,7 +994,10 @@ void main() {
       // Empty, not absent: the write has to carry the last unmute
       // through, and the server is what drops the field.
       expect(repo.putPrefsCalls.last.radioScrobbleMutedStations, isEmpty);
-      expect(find.text('Deck Radio will be scrobbled'), findsOneWidget);
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        'Deck Radio will be scrobbled',
+      );
     });
   });
 

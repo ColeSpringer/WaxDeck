@@ -17,6 +17,7 @@ import '../search/search_chrome.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'music_controllers.dart';
 
 /// A list of tracks: everything in the library, or everything in one
@@ -264,9 +265,9 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
   }
 
   void _report(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+    ref
+        .read(shellMessengerProvider.notifier)
+        .show(message, channel: ShellChannel.listing);
   }
 
   @override

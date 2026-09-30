@@ -63,5 +63,6 @@ String healthFixBlockedReason(AppLocalizations l10n, String code) =>
       'needs-genre-source' => l10n.healthFixBlockedGenreSource,
       'needs-book-source' => l10n.healthFixBlockedBookSource,
       'no-managed-library' => l10n.healthFixBlockedNoManaged,
+      'read-only' => l10n.healthFixBlockedReadOnly,
       _ => l10n.healthFixBlockedOther,
     };

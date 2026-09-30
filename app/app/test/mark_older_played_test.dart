@@ -77,7 +77,10 @@ void main() {
       expect(call.positionMs, 214000);
     }
     expect(find.byType(MarkOlderPlayedDialog), findsNothing);
-    expect(find.text('4 episodes marked as played'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      '4 episodes marked as played',
+    );
   });
 
   testWidgets('stopping mid-run closes the dialog and nothing else', (

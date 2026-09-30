@@ -26,7 +26,7 @@ Future<void> _pump(WidgetTester tester, Widget host) async {
 }
 
 void main() {
-  testWidgets('an empty profile list explains server configuration', (
+  testWidgets('an empty profile list promises no configuration', (
     tester,
   ) async {
     final repo = FakeRepository();
@@ -35,9 +35,165 @@ void main() {
 
     expect(find.text('No organize profiles'), findsOneWidget);
     expect(
-      find.textContaining('part of the server configuration'),
+      find.text('The server offers no profile to organize files by.'),
       findsOneWidget,
     );
+  });
+
+  testWidgets('a lone profile is named as the built-in one', (tester) async {
+    final repo = FakeRepository()
+      ..organizeProfiles = const [OrganizeProfile(name: 'waxbin-native')];
+    await _pump(tester, _host(repo));
+    expect(
+      find.text('This server has only the built-in profile.'),
+      findsOneWidget,
+    );
+
+    repo.organizeProfiles = const [
+      OrganizeProfile(name: 'waxbin-native'),
+      OrganizeProfile(name: 'classical'),
+    ];
+    await _pump(
+      tester,
+      ProviderScope(
+        key: UniqueKey(),
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+        child: localizedHost(const OrganizeScreen()),
+      ),
+    );
+    expect(
+      find.text('This server has only the built-in profile.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('the hint says a preview checks every managed library', (
+    tester,
+  ) async {
+    await _pump(tester, _host(FakeRepository()));
+
+    expect(
+      find.textContaining('checks every managed library against this profile'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('with no managed library it says where organizing works', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..organizeManagedLibraries = 0;
+    await _pump(tester, _host(repo));
+
+    expect(find.text('No managed library'), findsOneWidget);
+    expect(
+      find.text(
+        'Organizing moves files only within managed libraries, and this '
+        'server has none.',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizePreview),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a preview says what a read-only library holds back', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'default',
+        totalActions: 0,
+        held: 2,
+      );
+    await _pump(tester, _host(repo));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('2 files stay where they are: their libraries are read-only.'),
+      findsOneWidget,
+    );
+    expect(find.text('Everything is already in place'), findsNothing);
+  });
+
+  testWidgets('a run counts what a read-only library held back', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'default',
+        totalActions: 1,
+        held: 2,
+        actions: [
+          OrganizeAction(itemPid: 'tr-1', from: '/old/a.flac', to: '/a.flac'),
+        ],
+      )
+      ..organizeReportResult = const OrganizeReport(
+        moved: 1,
+        skipped: 0,
+        held: 2,
+        failed: 0,
+      );
+    await _pump(tester, _host(repo));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'default',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
+    await tester.pumpAndSettle();
+
+    final tile = find.ancestor(
+      of: find.text('Read-only'),
+      matching: find.byType(StatTile),
+    );
+    expect(find.descendant(of: tile, matching: find.text('2')), findsOneWidget);
+  });
+
+  testWidgets('a preview can be discarded', (tester) async {
+    final repo = FakeRepository()
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'default',
+        totalActions: 1,
+        actions: [
+          OrganizeAction(itemPid: 'tr-1', from: '/old/a.flac', to: '/a.flac'),
+        ],
+      );
+    await _pump(tester, _host(repo));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizePlan),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeDiscard));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier(SemanticsIds.organizePlan), findsNothing);
+    expect(
+      find.textContaining('checks every managed library against this profile'),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<WaxButton>(
+            find.byWidgetPredicate(
+              (w) =>
+                  w is WaxButton && w.semanticsId == SemanticsIds.organizeApply,
+            ),
+          )
+          .onPressed,
+      isNull,
+      reason: 'no plan, no apply',
+    );
+    expect(repo.applyOrganizeCalls, isEmpty);
   });
 
   testWidgets('preview renders the plan', (tester) async {

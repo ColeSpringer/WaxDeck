@@ -7,6 +7,7 @@ import '../music/album_detail.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 
 /// Confirms and performs a per-member detach: the track leaves the
 /// release a MusicBrainz id pins it to and lands on the album its own
@@ -26,9 +27,9 @@ Future<void> confirmDetachItem(
   BuildContext context, {
   required String pid,
 }) async {
-  final messenger = ScaffoldMessenger.of(context);
   final l10n = context.l10n;
   final container = ProviderScope.containerOf(context, listen: false);
+  final messenger = container.read(shellMessengerProvider.notifier);
   var writeBack = true;
   final confirmed = await showDialog<bool>(
     context: context,
@@ -79,20 +80,13 @@ Future<void> confirmDetachItem(
     container
       ..invalidate(musicItemsProvider)
       ..invalidate(albumDetailProvider);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          <String>[
-            l10n.libraryMenuDetached,
-            if (result.writeBackFailures.isNotEmpty)
-              l10n.metadataWriteBackWarning,
-          ].join('\n'),
-        ),
-      ),
+    messenger.show(
+      <String>[
+        l10n.libraryMenuDetached,
+        if (result.writeBackFailures.isNotEmpty) l10n.metadataWriteBackWarning,
+      ].join('\n'),
     );
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+    messenger.show(explainRefusal(l10n, e), channel: ShellChannel.itemDetach);
   }
 }

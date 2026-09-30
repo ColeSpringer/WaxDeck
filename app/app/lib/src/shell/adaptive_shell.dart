@@ -16,7 +16,6 @@ import '../sync/sync_providers.dart';
 import 'lifecycle_banners.dart';
 import 'routes.dart';
 import 'semantics_ids.dart';
-import 'shell_messages.dart';
 import 'side_panel.dart';
 
 /// Where a target sits in the navigation chrome.
@@ -557,10 +556,6 @@ class AdaptiveShell extends ConsumerStatefulWidget {
 }
 
 class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
-  /// The action of the last message raised, so a repeat of the same
-  /// offer replaces its predecessor rather than queueing behind it.
-  String? _lastRaised;
-
   /// Where the visitor was before the location they are on now.
   ///
   /// A branch index and not a stack of locations: each branch keeps a
@@ -779,47 +774,6 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
     }
   }
 
-  /// Raises the shell's transient messages.
-  void _listenForMessages() {
-    ref.listen(shellMessengerProvider, (_, next) {
-      if (next == null) return;
-      final action = next.onAction;
-      final label = next.actionLabel;
-      final messenger = ScaffoldMessenger.of(context);
-      // Only a message this one supersedes. One messenger serves the
-      // whole app, so hiding unconditionally eats unread errors.
-      if (_lastRaised != null && _lastRaised == next.channel) {
-        messenger.removeCurrentSnackBar();
-      }
-      _lastRaised = next.channel;
-      // Delivered, so the action closure is not held for the session.
-      ref.read(shellMessengerProvider.notifier).clear();
-      messenger.showSnackBar(
-        SnackBar(
-          // In the content, not the bar's action slot: SnackBarAction
-          // takes no semantics identifier, and the e2e suite drives
-          // the UI through those.
-          content: Row(
-            children: <Widget>[
-              Expanded(child: Text(next.resolve(context.l10n))),
-              if (action != null && label != null)
-                WaxButton(
-                  label: label,
-                  kind: WaxButtonKind.text,
-                  semanticsId: next.actionSemanticsId,
-                  onPressed: () {
-                    action();
-                    // Spent, so it must not invite a second undo.
-                    messenger.hideCurrentSnackBar();
-                  },
-                ),
-            ],
-          ),
-        ),
-      );
-    });
-  }
-
   void _select(WaxNavTarget target) {
     // Choosing a destination is an outward move, whatever it lands on, so
     // it drops the way back rather than becoming it: back after tapping a
@@ -843,7 +797,6 @@ class _AdaptiveShellState extends ConsumerState<AdaptiveShell> {
   @override
   Widget build(BuildContext context) {
     final chrome = ref.watch(shellChromeProvider);
-    _listenForMessages();
     _listenForQuery();
 
     final router = GoRouter.of(context);

@@ -23,6 +23,7 @@ import '../search/search_chrome.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import '../tools/tool_tasks_provider.dart';
 import 'books_controller.dart';
 import 'series_merge.dart';
@@ -626,7 +627,6 @@ class _BookOverflow extends ConsumerWidget {
     int positionMs,
     String message,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
     final l10n = context.l10n;
     // The container rather than `ref`, and captured here rather than read
     // inside the toast: the undo outlives the row that offered it. A
@@ -634,26 +634,21 @@ class _BookOverflow extends ConsumerWidget {
     // screen left behind while the toast is still up would take the undo
     // with it - the same lesson the mark-older dialog is built on.
     final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = container.read(shellMessengerProvider.notifier);
     final repository = container.read(repositoryProvider);
     try {
       final before = await repository.getPlayState(book.pid);
       await repository.putPlayState(book.pid, positionMs);
       _refresh(container);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(message),
-            action: SnackBarAction(
-              label: l10n.bookUndo,
-              onPressed: () => unawaited(_undo(container, repository, before)),
-            ),
-          ),
-        );
+      messenger.show(
+        message,
+        actionLabel: l10n.bookUndo,
+        onAction: () => unawaited(_undo(container, repository, before)),
+        channel: ShellChannel.bookPosition,
+        persist: true,
+      );
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.bookPosition);
     }
   }
 
@@ -754,33 +749,28 @@ class _BookOverflow extends ConsumerWidget {
     WidgetRef ref,
     Future<ToolTask> Function() start,
   ) async {
-    final messenger = ScaffoldMessenger.of(context);
     final router = GoRouter.of(context);
     final l10n = context.l10n;
     // The container, captured first: this runs unawaited from a menu, so
     // `ref` may be dead by the time the request lands.
     final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = container.read(shellMessengerProvider.notifier);
     try {
       await start();
       container.invalidate(toolTasksProvider);
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(l10n.bookToolQueued),
-            action: SnackBarAction(
-              label: l10n.bookToolTasks,
-              onPressed: () => router.push<void>(WaxRoute.tasks),
-            ),
-          ),
-        );
+      messenger.show(
+        l10n.bookToolQueued,
+        actionLabel: l10n.bookToolTasks,
+        onAction: () => router.pushInShell<void>(WaxRoute.tasks),
+        actionSemanticsId: SemanticsIds.openTasks,
+        channel: ShellChannel.bookTools,
+        persist: true,
+      );
     } on WaxDeckApiException catch (e) {
       // The server's words: these refuse on what the book is, and the
       // table's `conflict` sentence would invite a retry that can never
       // succeed.
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+      messenger.show(explainRefusal(l10n, e), channel: ShellChannel.bookTools);
     }
   }
 }
@@ -854,7 +844,7 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
   Future<void> _save() async {
     if (_busy) return;
     setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final navigator = Navigator.of(context);
     final l10n = context.l10n;
     try {
@@ -874,9 +864,7 @@ class _BookSettingsSheetState extends ConsumerState<BookSettingsSheet> {
       // underneath with it.
       if (mounted) navigator.pop();
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.bookSettings);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

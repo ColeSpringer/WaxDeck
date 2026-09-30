@@ -85,7 +85,39 @@ void main() {
     await tester.tap(find.byKey(const Key('listenbrainz-connect-confirm')));
     await tester.pumpAndSettle();
 
-    expect(find.text('the service did not accept this token'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'the service did not accept this token',
+    );
+  });
+
+  testWidgets('an unreachable ListenBrainz is said in the app\'s words', (
+    tester,
+  ) async {
+    // Not a refusal of the token, so not the server's sentence either.
+    final repo = FakeRepository()
+      ..connectError = const WaxDeckApiException(
+        code: 'service-unreachable',
+        message: 'listenbrainz: dial tcp: i/o timeout',
+      );
+    await tester.pumpWidget(_host(repo, const ScrobblingSection()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey('scrobbler-connect-listenbrainz')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('listenbrainz-token-field')),
+      'token',
+    );
+    await tester.tap(find.byKey(const Key('listenbrainz-connect-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'An outside service this needs did not answer. Try again later.',
+    );
   });
 
   testWidgets('creates an app password and shows the secret once', (
@@ -602,8 +634,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('set both the API key and the secret, or neither'),
-      findsOneWidget,
+      shellMessageText(raisedMessage(tester)),
+      'set both the API key and the secret, or neither',
     );
     // The dialog stays up for the correction.
     expect(find.byKey(const Key('lastfm-credentials-save')), findsOneWidget);

@@ -410,7 +410,7 @@ Future<void> startLibraryScan(WidgetRef ref) async {
           actionSemanticsId: SemanticsIds.openTasks,
           onAction: router == null
               ? null
-              : () => router.push<void>(WaxRoute.tasks),
+              : () => router.pushInShell<void>(WaxRoute.tasks),
         );
       } on WaxDeckApiException catch (error) {
         // A job already running is the common answer, said in the app's

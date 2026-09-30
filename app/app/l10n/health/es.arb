@@ -43,6 +43,7 @@
   "healthFixBlockedLyricsSource": "Necesita una fuente de letras activada en Enriquecimiento.",
   "healthFixBlockedNoManaged": "Necesita una biblioteca gestionada: sin ninguna, no hay una estructura con la que coincidan las rutas.",
   "healthFixBlockedOther": "Este servidor aún no puede ejecutar esta corrección.",
+  "healthFixBlockedReadOnly": "Escribe en los archivos, y el servidor está en solo lectura.",
   "healthFixBusy": "Ya hay un enriquecimiento en curso. Corrige esto cuando termine.",
   "healthFixRule": "Corregir {rule}",
   "healthFixRunning": "Ya hay una corrección de {rule} en curso",

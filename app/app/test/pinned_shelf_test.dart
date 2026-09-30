@@ -64,13 +64,8 @@ Future<void> _pump(WidgetTester tester, FakeRepository repo) async {
         credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
         artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
       ],
-      // A Scaffold around it, because a ScaffoldMessenger with none
-      // registered queues a snackbar rather than showing it, and the
-      // unpin confirmation is one of the things under test.
       child: routedHost(
-        const Scaffold(
-          body: CustomScrollView(slivers: <Widget>[PinnedShelf()]),
-        ),
+        const CustomScrollView(slivers: <Widget>[PinnedShelf()]),
       ),
     ),
   );
@@ -158,7 +153,7 @@ void main() {
 
     expect(repo.putPrefsCalls.single.pinned, isEmpty);
     expect(_byId(SemanticsIds.shelf('pinned')), findsNothing);
-    expect(find.text('Unpinned Long Exposure'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Unpinned Long Exposure');
   });
 
   _showPinGroup();

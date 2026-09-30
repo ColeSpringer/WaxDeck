@@ -307,7 +307,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(SnackBar), findsOneWidget);
+    expect(raisedMessage(tester), isNotNull);
     expect(find.text('Road Trip'), findsOneWidget);
   });
 
@@ -1151,7 +1151,7 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.playlistExportCopy),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Playlist copied as M3U'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Playlist copied as M3U');
   });
 
   testWidgets('a lossless NSP export goes straight to the document', (
@@ -1205,7 +1205,7 @@ void main() {
       find.bySemanticsIdentifier(SemanticsIds.playlistExportCopy),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Playlist copied as NSP'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Playlist copied as NSP');
   });
 
   testWidgets('a lossy NSP export lists the loss and can be backed out of', (
@@ -1372,7 +1372,10 @@ void main() {
     expect(repo.nspExports, [
       (pid: created.pid, partial: true, ruleHash: null),
     ]);
-    expect(find.textContaining('nothing in this rule'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      contains('nothing in this rule'),
+    );
   });
 
   NspReport lossyReport(String hash, String genre) => NspReport(
@@ -1637,10 +1640,8 @@ void main() {
     expect(repo.nspExports, hasLength(2));
     expect(repo.nspReports, hasLength(2));
     expect(
-      find.text(
-        'Something else changed this first. Take another look and try again.',
-      ),
-      findsOneWidget,
+      shellMessageText(raisedMessage(tester)),
+      'Something else changed this first. Take another look and try again.',
     );
     expect(
       find.bySemanticsIdentifier(SemanticsIds.playlistExportNspLoss),
@@ -1834,7 +1835,10 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSetCover));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Could not read that image'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      contains('Could not read that image'),
+    );
     expect(repo.entityArtworkCalls, isEmpty);
   });
 

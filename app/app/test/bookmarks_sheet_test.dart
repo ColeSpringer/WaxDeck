@@ -185,7 +185,7 @@ void main() {
       find.descendant(of: _state(0), matching: find.text('Not sent yet')),
       findsOneWidget,
     );
-    expect(find.text('network unreachable'), findsNothing);
+    expect(raisedMessage(tester), isNull);
     await rig.harness.endPlayback(tester);
   });
 
@@ -395,11 +395,9 @@ void main() {
     await rig.mark(tester);
 
     expect(
-      find.text(
-        'This book already holds as many bookmarks as it can. Remove one to '
-        'mark another.',
-      ),
-      findsOneWidget,
+      shellMessageText(raisedMessage(tester)),
+      'This book already holds as many bookmarks as it can. Remove one to '
+      'mark another.',
     );
     expect(await rig.outbox(), isEmpty);
     await rig.harness.endPlayback(tester);

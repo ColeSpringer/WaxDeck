@@ -108,7 +108,7 @@ export interface paths {
         get: operations["getLibraryReadOnly"];
         /**
          * Set a library's read-only mode
-         * @description A read-only library refuses uploads, organizing, file write-back, deletion, and the file tools with code `read-only`, while reads, playback, and per-user state (stars, progress, playlists) keep working. For media mounted read-only on principle. Podcast libraries need a writable root for episode fetching, and the flag refuses fetches into the library too. Administrators only.
+         * @description A read-only library refuses uploads, file write-back, deletion, restoring or purging its trash, and the file tools with code `read-only`, while reads, playback, and per-user state (stars, progress, playlists) keep working. For media mounted read-only on principle. Organizing and the path and tag health fixes leave its files where they are, and edits that write into every member file of an album, a release group or an artist are refused with `read-only` while any library is read-only, since they can reach every library. Podcast libraries need a writable root for episode fetching: the flag refuses fetches and download removal, and holds the fetch queue and download retention until it clears. Administrators only.
          */
         put: operations["setLibraryReadOnly"];
         post?: never;
@@ -504,7 +504,7 @@ export interface paths {
         put?: never;
         /**
          * Restore a trashed file
-         * @description Moves the file back to its original path and re-catalogs it, un-archiving its item. Refuses when the original path is occupied (`conflict`), and when it points into the internal podcast download tree, which owns its own files: entries left there by older versions come back by re-downloading the episode, and purge and expiry still apply to them. Administrators only.
+         * @description Moves the file back to its original path and re-catalogs it, un-archiving its item. Refuses when the original path is occupied (`conflict`), and when it points into the internal podcast download tree, which owns its own files: entries left there by older versions come back by re-downloading the episode, and purge and expiry still apply to them. The trash sits under each library's root, so a read-only library's entries are refused with `read-only`. Administrators only.
          */
         post: operations["restoreTrashEntry"];
         delete?: never;
@@ -524,7 +524,7 @@ export interface paths {
         put?: never;
         /**
          * Empty the trash
-         * @description Permanently deletes every active trashed file and reports what was reclaimed. Irreversible. Administrators only.
+         * @description Permanently deletes every active trashed file and reports what was reclaimed. Irreversible. Refused with `read-only` while the server is read-only or a read-only library holds a trashed file, since the pass cannot leave one library out; the retention sweep waits the same way. Administrators only.
          */
         post: operations["emptyTrash"];
         delete?: never;
@@ -548,7 +548,7 @@ export interface paths {
         post?: never;
         /**
          * Purge one trashed file
-         * @description Permanently deletes a single trashed file and reports the bytes it reclaimed. Irreversible; the age-based retention sweep (`trashRetentionDays`) purges the same way in bulk. Administrators only.
+         * @description Permanently deletes a single trashed file and reports the bytes it reclaimed. Irreversible; the age-based retention sweep (`trashRetentionDays`) purges the same way in bulk. A read-only library's entry is refused with `read-only`. Administrators only.
          */
         delete: operations["purgeTrashEntry"];
         options?: never;
@@ -1296,6 +1296,8 @@ export interface paths {
          * @description Starts the fix that matches one rule, across the named items or, when `itemPids` is absent, every item currently failing the rule. Only a rule the summary reports `fixable` has one; any other answers `invalid-request` naming the rule, and the summary's `fixBlocked` says what the install lacks for a rule that could be fixed with it. Administrators only.
          *
          *     An unscoped fix of `missing-art`, `missing-lyrics`, `missing-genre`, `missing-narrator` or `missing-asin` runs the catalog's enrichment pass as a catalog job whose pid is `jobPid`, with those of the phases that fill the rule which this server runs forced to re-ask everything they reach (either of `missing-art`'s two picture phases is enough); the pass's other phases walk their ordinary sweeps, as any pass does. `missing-genre` re-asks MusicBrainz about every album. A scoped fix, and every fix of `path-mismatch` or `write-unsynced`, runs as a `health-fix` tool task whose id is `taskId`, working item by item. Either runs in the background and is listed where its kind is (`GET /jobs`, `GET /tools/tasks`); on finishing it re-checks the items it reached (a pass, every item failing the rule) and files a `health-fix-finished` notification for the administrator who started it, saying what it filled or why it failed. The `health` sync marker goes out when a fix starts and when its re-check lands, and the rule's `fixing` is true in between. The score waits for the next full sweep. `queued` is the number of items the fix set out to reach. While an enrichment pass is running, another fix that needs one answers `conflict`, as does any fix for a rule whose `fixing` is true.
+         *
+         *     The fixes of `path-mismatch` and `write-unsynced` write files: while the server is read-only they answer `read-only` (and the summary reports them blocked), and a library flagged read-only on its own keeps its files as they are, its items counted as skipped. A fix already running when the server goes read-only skips what it has not reached.
          */
         post: operations["fixHealthIssues"];
         delete?: never;
@@ -1415,7 +1417,7 @@ export interface paths {
         put?: never;
         /**
          * Keep the best encoding
-         * @description Keeps one item of an upgrade group and moves the named inferior encodings to the trash (recoverable within the retention window). Administrators only.
+         * @description Keeps one item of an upgrade group and moves the named inferior encodings to the trash (recoverable within the retention window). A named encoding in a read-only library, or any while the server is read-only, refuses the whole call with `read-only`. Administrators only.
          */
         post: operations["resolveUpgrade"];
         delete?: never;
@@ -1887,7 +1889,7 @@ export interface paths {
         get?: never;
         /**
          * Set entity artwork
-         * @description Stores the raw image bytes in one artwork slot (`role`, default `front`) of an album, artist, release group, genre, playlist, or podcast entity. Album front covers may additionally embed into member files with `writeBack=true`; other slots and entity types are catalog-only. An artist portrait lands under `front` - the slot the artist screen and index tiles resolve, and the one enrichment's artist walk fills; `background` is the scenic slot, which no surface draws yet. Catalog entities are administrators-only, with two exceptions: a playlist cover is set by its owner, and replaces the cover the server generates from the members until it is cleared, and a podcast show cover is set by `managePodcasts` holders as well, replacing the feed's image until it is cleared.
+         * @description Stores the raw image bytes in one artwork slot (`role`, default `front`) of an album, artist, release group, genre, playlist, or podcast entity. Album front covers may additionally embed into member files with `writeBack=true`, which is refused with `read-only` while the server or any library is read-only; other slots and entity types are catalog-only. An artist portrait lands under `front` - the slot the artist screen and index tiles resolve, and the one enrichment's artist walk fills; `background` is the scenic slot, which no surface draws yet. Catalog entities are administrators-only, with two exceptions: a playlist cover is set by its owner, and replaces the cover the server generates from the members until it is cleared, and a podcast show cover is set by `managePodcasts` holders as well, replacing the feed's image until it is cleared.
          */
         put: operations["setEntityArtwork"];
         post?: never;
@@ -2053,7 +2055,7 @@ export interface paths {
          *
          *     `barcode` and `country` are normalized on the way in, where a scan stores the tag verbatim, so an edit refuses values `GET /albums/{pid}` will happily show ("US &amp; Europe" is a country a scan can store and an edit cannot). `media` has no normalizer and is stored as typed.
          *
-         *     Clearing an `mbid` re-keys the entity, which is the one edit that can move it: the chain falls back to the heuristic key, so the entity may merge into a twin that already held it (`mergedInto`) or, on a release group, shed differently titled albums into groups of their own (`movedAlbums`). With `writeBack` an album's or release group's `mbid` clear also strips that id from the member files, which is what stops the next scan putting the linkage back. A clear that merges is refused alongside any other field with code `conflict`, whose message names the survivor to edit instead, because the merge deletes the row those other values would be written to.
+         *     Clearing an `mbid` re-keys the entity, which is the one edit that can move it: the chain falls back to the heuristic key, so the entity may merge into a twin that already held it (`mergedInto`) or, on a release group, shed differently titled albums into groups of their own (`movedAlbums`). With `writeBack` an album's or release group's `mbid` clear also strips that id from the member files, which is what stops the next scan putting the linkage back. A clear that merges is refused alongside any other field with code `conflict`, whose message names the survivor to edit instead, because the merge deletes the row those other values would be written to. `writeBack` can reach every library, so it is refused with `read-only` while the server or any library is read-only.
          */
         patch: operations["editEntity"];
         trace?: never;
@@ -2516,7 +2518,7 @@ export interface paths {
         };
         /**
          * List organize profiles
-         * @description The server-configured organize profiles (path templates per media kind, whether organize writes tags). Profiles are server configuration, not API-editable: template mistakes move files, so they change deliberately.
+         * @description The organize profiles the server offers: the catalog's built-in `waxbin-native` layout. Organizing moves files within managed libraries only, so the listing also counts them; with none, a preview or an apply answers `invalid-request`. Read-only.
          */
         get: operations["listOrganizeProfiles"];
         put?: never;
@@ -2538,7 +2540,7 @@ export interface paths {
         put?: never;
         /**
          * Dry-run an organize pass
-         * @description Plans the moves and renames a profile would make for the named items (or the whole library when `itemPids` is absent) without touching anything. The response carries the first five hundred actions plus the total, so a whole-library preview stays a bounded page; sidecars (covers, lyrics, cue sheets) ride along with their file and are not listed separately. Path templates are sandboxed upstream (per segment sanitizing; a template cannot escape the library root).
+         * @description Plans the moves and renames a profile would make for the named items (or every managed library when `itemPids` is absent) without touching anything. A move out of a read-only library, or any move while the server is read-only, is held back rather than planned, and `held` counts those. The response carries the first five hundred actions plus the total, so a whole-library preview stays a bounded page; sidecars (covers, lyrics, cue sheets) ride along with their file and are not listed separately. Path templates are sandboxed upstream (per segment sanitizing; a template cannot escape the library root).
          */
         post: operations["previewOrganize"];
         delete?: never;
@@ -2558,7 +2560,7 @@ export interface paths {
         put?: never;
         /**
          * Apply an organize pass
-         * @description Plans and applies the moves in one call (the plan is always recomputed server-side; a stale preview cannot apply). Moves are crash-safe per file and locked fields are respected. Whole-library passes on large libraries take a while; the request runs synchronously and reports the full outcome. Administrators only.
+         * @description Plans and applies the moves in one call (the plan is always recomputed server-side; a stale preview cannot apply). Moves are crash-safe per file and locked fields are respected. A read-only library's files stay where they are and count as `held`; while the whole server is read-only the apply is refused with `read-only`. Whole-library passes on large libraries take a while; the request runs synchronously and reports the full outcome. Administrators only.
          */
         post: operations["applyOrganize"];
         delete?: never;
@@ -5460,7 +5462,7 @@ export interface components {
             /**
              * @description Whether the whole-library enrichment pass writes what it filled back into the files, which is what makes enrichment survive a rescan: the catalog is authoritative either way, but a rescan re-reads the tags and would otherwise clear values only the catalog held.
              *
-             *     Off by default, because it modifies the listener's own files. Files whose format cannot store a key are counted in `enrichmentStatus.lastRun.tagsUnrepresented` and left byte-identical, which is not a failure. Applies to the next pass; a run already in flight keeps the setting it started under. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses.
+             *     Off by default, because it modifies the listener's own files. Files whose format cannot store a key are counted in `enrichmentStatus.lastRun.tagsUnrepresented` and left byte-identical, which is not a failure. A pass that starts while the server or any library is read-only writes nothing back, whatever this says, since it cannot keep its writes out of one library. Applies to the next pass; a run already in flight keeps what it started under, the read-only state included. Optional on PUT so settings writers predating this field never change it: absent keeps the current value. Always present in responses.
              *
              *     Switching it on catches up: an unlimited pass writes every value the catalog holds that is not yet on disk, including ones filled by earlier passes that ran with it off. A pass that was capped or scoped writes only within its own reach, so the nightly schedule catches up a night at a time.
              */
@@ -6864,10 +6866,10 @@ export interface components {
             /** @description True while a fix for the rule is under way: a pass-backed fix from its start until its re-check lands, a task-backed one while its task is queued or running. Another fix for the rule answers `conflict` meanwhile. */
             fixing: boolean;
             /**
-             * @description Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match.
+             * @description Why a rule that has a fix cannot be fixed on this install; absent when `fixable`, and for rules with no fix at all. `needs-contact`: the server has no enrichment contact, which is what lets it ask MusicBrainz and the other free public sources. `needs-lyrics-source`, `needs-art-source`, `needs-genre-source`, `needs-book-source`: no enrichment source the fix could use, for lyrics, artwork, genres, or book metadata, is switched on. `no-managed-library`: no library is managed, so there is no layout for paths to match. `read-only`: the server is read-only, and the fix writes files.
              * @enum {string}
              */
-            fixBlocked?: "needs-contact" | "needs-lyrics-source" | "needs-art-source" | "needs-genre-source" | "needs-book-source" | "no-managed-library";
+            fixBlocked?: "needs-contact" | "needs-lyrics-source" | "needs-art-source" | "needs-genre-source" | "needs-book-source" | "no-managed-library" | "read-only";
         };
         /** @description One page of items with outstanding issues. */
         HealthIssuePage: {
@@ -8265,8 +8267,10 @@ export interface components {
         };
         /** @description The server's organize profiles. */
         OrganizeProfiles: {
-            /** @description Configured profiles. */
+            /** @description The profiles, by name. */
             profiles: components["schemas"]["OrganizeProfile"][];
+            /** @description How many libraries are managed, the only ones organize moves files within. */
+            managedLibraries: number;
         };
         /** @description One organize profile. */
         OrganizeProfile: {
@@ -8285,7 +8289,7 @@ export interface components {
         OrganizeRequest: {
             /** @description The profile to apply. */
             profile: string;
-            /** @description Restrict to these items; absent means the whole library. */
+            /** @description Restrict to these items; absent means every managed library. */
             itemPids?: string[];
         };
         /** @description A dry-run organize plan. */
@@ -8294,6 +8298,8 @@ export interface components {
             profile: string;
             /** @description Moves the pass would make in total. */
             totalActions: number;
+            /** @description Moves held back because their library, or the whole server, is read-only. Not in `actions` or `totalActions`. */
+            held: number;
             /** @description The first five hundred actions. */
             actions: components["schemas"]["OrganizeAction"][];
             /** @description Whether applying would also write tags. */
@@ -8314,6 +8320,8 @@ export interface components {
             moved: number;
             /** @description Files already in place. */
             skipped: number;
+            /** @description Files left where they are because their library is read-only. */
+            held: number;
             /** @description Files that could not move. */
             failed: number;
             /** @description The failures, path and reason each. */
@@ -12581,7 +12589,15 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description The restore was refused. `conflict`: the original path is occupied. `read-only`: the entry's library, or the whole server, is read-only. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -12605,6 +12621,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["ReadOnly"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -12632,6 +12649,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["ReadOnly"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -13677,7 +13695,15 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
-            409: components["responses"]["Conflict"];
+            /** @description The fix was refused. `conflict`: an enrichment pass is running and the fix needs one, or the rule is being fixed already. `read-only`: the fix writes files and the server is read-only. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -13855,7 +13881,15 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description The resolution was refused. `read-only`: a named encoding's library, or the whole server, is read-only. `conflict`: another catalog job holds the file-mutation scope the move to the trash needs; retry when it ends. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -14668,6 +14702,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["ReadOnly"];
             415: components["responses"]["UnsupportedFormat"];
             503: components["responses"]["CatalogMaintenance"];
         };
@@ -14966,7 +15001,15 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["FieldLocked"];
+            /** @description The edit was refused. `field-locked`: the field is locked and the request did not set `force`. `conflict`: an `mbid` clear that merges was sent with other fields; the message names the survivor. `read-only`: `writeBack` was asked for while the server or any library is read-only. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -15001,7 +15044,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description A member's keying field or a moved credit is locked and the request did not set `force` (code `field-locked`); the rename would split the entity rather than move it (code `conflict`: members landing on different keys, an archived member, a release group titled apart, a reference the batch does not cover); or `writeBack` was asked for on a read-only library (code `read-only`). The message names the case. */
+            /** @description A member's keying field or a moved credit is locked and the request did not set `force` (code `field-locked`); the rename would split the entity rather than move it (code `conflict`: members landing on different keys, an archived member, a release group titled apart, a reference the batch does not cover); or `writeBack` was asked for while the server or any library is read-only (code `read-only`), since the rename can reach every library. The message names the case. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -17764,7 +17807,7 @@ export interface operations {
                 };
             };
             404: components["responses"]["NotFound"];
-            /** @description The removal was refused. `conflict`: the episode is being listened to right now and removing the file would kill the stream; it clears only when playback stops, so retrying by itself does not help. `catalog-busy`: another job holds the podcast download tree's shared file-mutation scope, which clears on its own, so an unattended retry is worth something. */
+            /** @description The removal was refused. `conflict`: the episode is being listened to right now and removing the file would kill the stream; it clears only when playback stops, so retrying by itself does not help. `catalog-busy`: another job holds the podcast download tree's shared file-mutation scope, which clears on its own, so an unattended retry is worth something. `read-only`: the podcast library, or the whole server, is read-only. */
             409: {
                 headers: {
                     [name: string]: unknown;

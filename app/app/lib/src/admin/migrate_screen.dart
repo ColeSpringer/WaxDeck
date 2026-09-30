@@ -187,7 +187,7 @@ class _MigrateScreenState extends ConsumerState<MigrateScreen> {
         l10n.adminMigrateStarted,
         actionLabel: l10n.adminOpenTasks,
         actionSemanticsId: SemanticsIds.adminAction('migrate-tasks'),
-        onAction: () => router.push<void>(WaxRoute.tasks),
+        onAction: () => router.pushInShell<void>(WaxRoute.tasks),
       );
     } on WaxDeckApiException catch (e) {
       // The address and credentials somebody just typed.

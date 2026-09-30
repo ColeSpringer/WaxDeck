@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'playlist_create.dart';
 import 'playlists_controller.dart';
 
@@ -64,7 +65,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
     if (_busy) return;
     setState(() => _busy = true);
     final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
       await ref.read(playlistsProvider.notifier).appendTo(playlist, <String>[
@@ -73,19 +74,12 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
       // A request outlives a sheet somebody swiped away, and popping
       // then takes the screen underneath.
       if (mounted) navigator.pop();
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(
-              l10n.playlistAddedTo(widget.item.title, playlist.name),
-            ),
-          ),
-        );
+      messenger.show(
+        l10n.playlistAddedTo(widget.item.title, playlist.name),
+        channel: ShellChannel.playlists,
+      );
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.playlists);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -94,7 +88,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
   Future<void> _createAndAdd() async {
     if (_busy) return;
     final navigator = Navigator.of(context);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final name = await promptPlaylistName(
       context,
@@ -113,18 +107,13 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
             itemPids: <String>[widget.item.pid],
           );
       if (mounted) navigator.pop();
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(
-            content: Text(l10n.playlistAddedTo(widget.item.title, name)),
-          ),
-        );
+      messenger.show(
+        l10n.playlistAddedTo(widget.item.title, name),
+        channel: ShellChannel.playlists,
+      );
     } on WaxDeckApiException catch (e) {
       // A name somebody just typed, so the server's own refusal.
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+      messenger.show(explainRefusal(l10n, e), channel: ShellChannel.playlists);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

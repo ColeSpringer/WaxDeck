@@ -8,8 +8,9 @@ import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 
-/// The configured file organization profiles.
-final organizeProfilesProvider = FutureProvider<List<OrganizeProfile>>(
+/// The server's file organization profiles, and how many libraries
+/// they can lay out.
+final organizeProfilesProvider = FutureProvider<OrganizeProfiles>(
   (ref) => ref.watch(repositoryProvider).listOrganizeProfiles(),
 );
 
@@ -113,14 +114,24 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     );
   }
 
-  Widget _body(BuildContext context, List<OrganizeProfile> profiles) {
+  Widget _body(BuildContext context, OrganizeProfiles listing) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
+    final profiles = listing.profiles;
     if (profiles.isEmpty) {
       return EmptyState(
         glyph: WaxIcons.sort,
         title: l10n.organizeEmptyTitle,
         message: l10n.organizeEmptyMessage,
+      );
+    }
+    // The catalog lays out managed roots only, so with none a preview
+    // could only be refused.
+    if (listing.managedLibraries == 0) {
+      return EmptyState(
+        glyph: WaxIcons.sort,
+        title: l10n.organizeNoManagedTitle,
+        message: l10n.organizeNoManagedMessage,
       );
     }
     final profile = _profile ?? profiles.first.name;
@@ -145,6 +156,14 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
             _report = null;
           }),
         ),
+        // The catalog always lists its built-in, so one is that one.
+        if (profiles.length == 1) ...<Widget>[
+          const SizedBox(height: WaxSpace.s8),
+          Text(
+            l10n.organizeOnlyBuiltIn,
+            style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+          ),
+        ],
         const SizedBox(height: WaxSpace.s16),
         Row(
           children: <Widget>[
@@ -169,7 +188,10 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
         ),
         const SizedBox(height: WaxSpace.s24),
         if (plan != null)
-          _PlanTable(plan: plan)
+          _PlanTable(
+            plan: plan,
+            onDiscard: _busy ? null : () => setState(() => _plan = null),
+          )
         else if (report != null)
           _ReportView(report: report)
         else
@@ -184,9 +206,10 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
 
 /// The dry run: what would move, and where to.
 class _PlanTable extends StatelessWidget {
-  const _PlanTable({required this.plan});
+  const _PlanTable({required this.plan, required this.onDiscard});
 
   final OrganizePlan plan;
+  final VoidCallback? onDiscard;
 
   @override
   Widget build(BuildContext context) {
@@ -201,14 +224,25 @@ class _PlanTable extends StatelessWidget {
           SectionHeader(
             title: l10n.organizePlannedMoves(plan.totalActions),
             overline: plan.tagWrite ? l10n.organizeTagWrite : null,
+            actionLabel: l10n.organizeDiscard,
+            onAction: onDiscard,
+            semanticsId: SemanticsIds.organizeDiscard,
           ),
-          if (plan.actions.isEmpty)
+          // Out of place but not moving, so not "already in place".
+          if (plan.held > 0) ...<Widget>[
+            Text(
+              l10n.organizeHeld(plan.held),
+              style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+            ),
+            const SizedBox(height: WaxSpace.s12),
+          ],
+          if (plan.actions.isEmpty && plan.held == 0)
             EmptyState(
               glyph: WaxIcons.success,
               title: l10n.organizeNothingTitle,
               message: l10n.organizeNothingMessage,
             )
-          else
+          else if (plan.actions.isNotEmpty)
             WaxTable<OrganizeAction>(
               rows: plan.actions,
               rowId: (action) => action.from,
@@ -273,6 +307,8 @@ class _ReportView extends StatelessWidget {
             children: <Widget>[
               StatTile(label: l10n.organizeMoved, value: '${report.moved}'),
               StatTile(label: l10n.organizeSkipped, value: '${report.skipped}'),
+              if (report.held > 0)
+                StatTile(label: l10n.organizeHeldTile, value: '${report.held}'),
               StatTile(
                 label: l10n.organizeFailed,
                 value: '${report.failed}',

@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'defect_log.dart';
 
 /// What the app caught that nobody was there to see.
@@ -25,11 +26,9 @@ class _DefectLogScreenState extends ConsumerState<DefectLogScreen> {
   Future<void> _copy() async {
     final report = ref.read(defectLogProvider.notifier).report();
     final copied = context.l10n.defectsCopied;
+    final messenger = ref.read(shellMessengerProvider.notifier);
     await Clipboard.setData(ClipboardData(text: report));
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(copied)));
+    messenger.show(copied, channel: ShellChannel.defects);
   }
 
   @override

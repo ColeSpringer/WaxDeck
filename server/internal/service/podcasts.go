@@ -428,6 +428,10 @@ func (l *Library) removeShowDownloads(ctx context.Context, showPID model.PID) {
 	if len(remove) == 0 {
 		return
 	}
+	if err := l.checkPodcastWritable(ctx); err != nil {
+		l.log.Info("cleanup keeps the downloads of a read-only podcast library", "show", string(showPID))
+		return
+	}
 	// The unsubscribe already committed and this runs inside its request,
 	// so a client disconnect must not strand a half-done cleanup - hence
 	// WithoutCancel. It stays synchronous because it stays bounded:
@@ -891,6 +895,18 @@ func (l *Library) RefreshPodcast(ctx context.Context, uc *UserCtx, apiShowPID st
 	return l.syncShow(ctx, pod.PID, syncOwn)
 }
 
+// checkPodcastWritable refuses writing into the podcast download tree
+// while the server, or the library holding the tree, is read-only.
+func (l *Library) checkPodcastWritable(ctx context.Context) error {
+	pid := ""
+	if l.podcastDir != "" {
+		if p, err := l.libraryForPath(ctx, l.podcastDir); err == nil {
+			pid = p
+		}
+	}
+	return l.CheckWritable(ctx, pid)
+}
+
 // QueueEpisodeFetch queues a server-side enclosure download. The
 // caller must be subscribed to the show; an already-present episode is
 // a no-op.
@@ -898,12 +914,8 @@ func (l *Library) QueueEpisodeFetch(ctx context.Context, uc *UserCtx, apiEpisode
 	if err := requirePodcastManagement(uc); err != nil {
 		return err
 	}
-	if l.podcastDir != "" {
-		if pid, err := l.libraryForPath(ctx, l.podcastDir); err == nil {
-			if err := l.CheckWritable(ctx, pid); err != nil {
-				return err
-			}
-		}
+	if err := l.checkPodcastWritable(ctx); err != nil {
+		return err
 	}
 	det, err := l.getEpisode(ctx, apiEpisodePID)
 	if err != nil {
@@ -986,6 +998,9 @@ func (l *Library) RemoveEpisodeDownload(ctx context.Context, uc *UserCtx, apiEpi
 		}
 	}
 
+	if err := l.checkPodcastWritable(ctx); err != nil {
+		return err
+	}
 	// classifyMutation: Unfetch holds the podcast filesystem lease for its
 	// whole body, so a concurrent retention pass or unsubscribe answers a
 	// conflict that clears on its own. The in-use refusal above is the

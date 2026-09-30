@@ -493,7 +493,7 @@ func (l *Library) startEnrichJob(ctx context.Context, uc *UserCtx, opts waxbin.E
 	// WriteTags rather than the catalog's WriteEnrichmentTags option: that
 	// one is fixed at open and the catalog ORs the two, so per-run is what
 	// lets the admin toggle work without a restart.
-	opts.WriteTags = l.currentToggles().enrichWriteTags
+	opts.WriteTags = l.enrichWritesTags(ctx)
 	pid, err := l.lib.StartEnrich(l.procCtx, opts)
 	if err != nil {
 		return "", err
@@ -541,7 +541,7 @@ const scheduledEnrichLimit = 2000
 // carries the outcome the status surface reads.
 func (l *Library) RunScheduledEnrichment(ctx context.Context) error {
 	pid, err := l.lib.StartEnrich(l.procCtx, waxbin.EnrichOptions{
-		WriteTags: l.currentToggles().enrichWriteTags,
+		WriteTags: l.enrichWritesTags(ctx),
 		Limit:     scheduledEnrichLimit,
 	})
 	if err != nil {

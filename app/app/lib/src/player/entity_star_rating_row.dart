@@ -2,6 +2,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/shell_messages.dart';
 import 'entity_play_state_controller.dart';
 import 'star_rating_row.dart';
 
@@ -33,9 +34,9 @@ class EntityStarRatingRow extends ConsumerWidget {
     final l10n = context.l10n;
     ref.listen(entityPlayStateControllerProvider(pid), (previous, next) {
       if (next.hasError && !next.isLoading) {
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(l10n.playerRatingFailed)));
+        ref
+            .read(shellMessengerProvider.notifier)
+            .show(l10n.playerRatingFailed, channel: ShellChannel.rating);
       }
     });
     final playState = ref.watch(entityPlayStateControllerProvider(pid)).value;

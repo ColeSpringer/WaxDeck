@@ -24,6 +24,8 @@ _$healthRuleCountFixBlockedEnum_needsBookSource =
 const HealthRuleCountFixBlockedEnum
 _$healthRuleCountFixBlockedEnum_noManagedLibrary =
     const HealthRuleCountFixBlockedEnum._('noManagedLibrary');
+const HealthRuleCountFixBlockedEnum _$healthRuleCountFixBlockedEnum_readOnly =
+    const HealthRuleCountFixBlockedEnum._('readOnly');
 const HealthRuleCountFixBlockedEnum
 _$healthRuleCountFixBlockedEnum_unknownDefaultOpenApi =
     const HealthRuleCountFixBlockedEnum._('unknownDefaultOpenApi');
@@ -44,6 +46,8 @@ HealthRuleCountFixBlockedEnum _$healthRuleCountFixBlockedEnumValueOf(
       return _$healthRuleCountFixBlockedEnum_needsBookSource;
     case 'noManagedLibrary':
       return _$healthRuleCountFixBlockedEnum_noManagedLibrary;
+    case 'readOnly':
+      return _$healthRuleCountFixBlockedEnum_readOnly;
     case 'unknownDefaultOpenApi':
       return _$healthRuleCountFixBlockedEnum_unknownDefaultOpenApi;
     default:
@@ -60,6 +64,7 @@ _$healthRuleCountFixBlockedEnumValues = BuiltSet<HealthRuleCountFixBlockedEnum>(
     _$healthRuleCountFixBlockedEnum_needsGenreSource,
     _$healthRuleCountFixBlockedEnum_needsBookSource,
     _$healthRuleCountFixBlockedEnum_noManagedLibrary,
+    _$healthRuleCountFixBlockedEnum_readOnly,
     _$healthRuleCountFixBlockedEnum_unknownDefaultOpenApi,
   ],
 );
@@ -77,6 +82,7 @@ class _$HealthRuleCountFixBlockedEnumSerializer
     'needsGenreSource': 'needs-genre-source',
     'needsBookSource': 'needs-book-source',
     'noManagedLibrary': 'no-managed-library',
+    'readOnly': 'read-only',
     'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
@@ -86,6 +92,7 @@ class _$HealthRuleCountFixBlockedEnumSerializer
     'needs-genre-source': 'needsGenreSource',
     'needs-book-source': 'needsBookSource',
     'no-managed-library': 'noManagedLibrary',
+    'read-only': 'readOnly',
     'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 

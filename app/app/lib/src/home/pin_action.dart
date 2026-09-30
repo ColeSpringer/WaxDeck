@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'pinned_controller.dart';
 
 /// Pins or unpins, saying so when the write did not land.
@@ -21,7 +22,7 @@ Future<void> togglePin(
   String pid, {
   String? label,
 }) => togglePinCaptured(
-  messenger: ScaffoldMessenger.of(context),
+  messenger: ref.read(shellMessengerProvider.notifier),
   l10n: context.l10n,
   pinned: ref.read(pinnedEntitiesProvider.notifier),
   pid: pid,
@@ -36,7 +37,7 @@ Future<void> togglePin(
 /// messenger, the copy table, and the controller all outlive the row,
 /// so what was tapped still happens.
 Future<void> togglePinCaptured({
-  required ScaffoldMessengerState messenger,
+  required ShellMessenger messenger,
   required AppLocalizations l10n,
   required PinnedEntities pinned,
   required String pid,
@@ -45,9 +46,10 @@ Future<void> togglePinCaptured({
   final wasPinned = pinned.contains(pid);
   final refusal = await pinned.toggle(pid);
   if (refusal != null) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(pinRefusalMessage(l10n, refusal))));
+    messenger.show(
+      pinRefusalMessage(l10n, refusal),
+      channel: ShellChannel.pins,
+    );
     return;
   }
   // Confirmed only on the way off, and only where the caller named what
@@ -55,9 +57,7 @@ Future<void> togglePinCaptured({
   // change worth a word, while pinning puts one there and speaks for
   // itself.
   if (!wasPinned || label == null) return;
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(l10n.homeUnpinned(label))));
+  messenger.show(l10n.homeUnpinned(label), channel: ShellChannel.pins);
 }
 
 /// The menu row every entity surface offers, labelled for what the tap
@@ -117,7 +117,7 @@ Future<void> showPinSheet(
   required List<PinTarget> targets,
 }) async {
   // Captured before the sheet: it outlives the row that opened it.
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   final pinned = ref.read(pinnedEntitiesProvider.notifier);
   await showWaxOptionSheet(

@@ -4397,6 +4397,15 @@ class OrganizeProfile {
   final bool tagWrite;
 }
 
+/// The server's organize profiles, and how many libraries they can lay
+/// out: organizing moves files within managed libraries only.
+class OrganizeProfiles {
+  const OrganizeProfiles({required this.profiles, this.managedLibraries = 0});
+
+  final List<OrganizeProfile> profiles;
+  final int managedLibraries;
+}
+
 /// One planned file move.
 class OrganizeAction {
   const OrganizeAction({
@@ -4415,6 +4424,7 @@ class OrganizePlan {
   const OrganizePlan({
     required this.profile,
     required this.totalActions,
+    this.held = 0,
     this.actions = const [],
     this.tagWrite = false,
   });
@@ -4423,6 +4433,10 @@ class OrganizePlan {
 
   /// Total planned moves; [actions] may be a truncated preview.
   final int totalActions;
+
+  /// Moves a read-only library, or a read-only server, holds back; not
+  /// in [totalActions].
+  final int held;
   final List<OrganizeAction> actions;
   final bool tagWrite;
 }
@@ -4440,12 +4454,18 @@ class OrganizeReport {
   const OrganizeReport({
     required this.moved,
     required this.skipped,
+    this.held = 0,
     required this.failed,
     this.failures = const [],
   });
 
   final int moved;
+
+  /// Files already in place.
   final int skipped;
+
+  /// Files left where they are because their library is read-only.
+  final int held;
   final int failed;
   final List<OrganizeFailure> failures;
 }

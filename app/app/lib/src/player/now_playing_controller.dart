@@ -588,12 +588,15 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// Playing rather than paused, unlike a restore: an undo answers an
   /// accident that happened mid-listen, and silence would be the second
   /// surprise rather than the end of the first.
-  void undoReplace() {
+  ///
+  /// [only] is the replacement an offer was made for; once another has
+  /// replaced the queue since, that offer takes nothing back.
+  void undoReplace([QueueUndo? only]) {
     // Read before the queue moves, not from what the undo returns: the
     // queue notifies its listeners as it is assigned, so the start this
     // lands on has already read these by the time the call comes back.
     final pending = ref.read(queueControllerProvider).undo;
-    if (pending == null) return;
+    if (pending == null || only != null && !identical(pending, only)) return;
     _pendingPositionMs = pending.positionMs;
     _pendingPaused = false;
     ref.read(queueControllerProvider.notifier).undoReplace();
@@ -1064,7 +1067,7 @@ class NowPlayingController extends Notifier<NowPlaying> {
   /// the standing one instead of stacking a second bar over it. Not a
   /// semantics identifier: none of these has a button, and there is
   /// nothing here for a test to press.
-  static const String _skipChannel = 'player-skipped-unplayable';
+  static const _skipChannel = ShellChannel.skippedUnplayable;
 
   /// Points [liveSession] at [session] and tells Connect, whose reports
   /// follow whatever owns the engine: a fresh session mirrors from here,

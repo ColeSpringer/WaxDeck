@@ -14,6 +14,7 @@ import '../search/search_chrome.dart';
 import '../sharing/share_dialog.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'credits.dart';
 import 'episode_actions.dart';
 import 'podcasts_controller.dart';
@@ -46,15 +47,12 @@ void seekLiveOrReport(
     session.seek(Duration(milliseconds: ms));
     return;
   }
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      SnackBar(
-        content: Text(
-          context.l10n.podcastCueStartsAt(kind.name, formatCueTimestamp(ms)),
-        ),
-      ),
-    );
+  ref
+      .read(shellMessengerProvider.notifier)
+      .show(
+        context.l10n.podcastCueStartsAt(kind.name, formatCueTimestamp(ms)),
+        channel: ShellChannel.episodes,
+      );
 }
 
 /// One episode: what it is, what can be done with it, and everything the

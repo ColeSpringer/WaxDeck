@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/shell_messages.dart';
 
 /// Runs a preference write, and says so where it fails.
 ///
@@ -26,16 +27,11 @@ import '../l10n/l10n.dart';
 /// the defect log, which is the trade `pinned_controller` already makes
 /// where it catches `on Object` for the same reason.
 void saveSetting(BuildContext context, Future<void> write) {
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ShellMessenger.of(context);
   final l10n = context.l10n;
   unawaited(
     write.catchError((Object error) {
-      // The messenger outlives the row but not the screen: leaving a
-      // section with a write in flight must not throw on the way out.
-      if (!messenger.mounted) return;
-      messenger.showSnackBar(
-        SnackBar(content: Text(explainError(l10n, error))),
-      );
+      messenger.show(explainError(l10n, error));
     }),
   );
 }

@@ -537,8 +537,9 @@ paths:
         Stores the raw image bytes in one artwork slot (`role`, default
         `front`) of an album, artist, release group, genre, playlist, or
         podcast entity. Album front covers may additionally embed into
-        member files with `writeBack=true`; other slots and entity types
-        are catalog-only. An artist portrait lands under `front` - the
+        member files with `writeBack=true`, which is refused with
+        `read-only` while the server or any library is read-only;
+        other slots and entity types are catalog-only. An artist portrait lands under `front` - the
         slot the artist screen and index tiles resolve, and the one
         enrichment's artist walk fills; `background` is the scenic
         slot, which no surface draws yet. Catalog entities are
@@ -584,6 +585,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
         "415":
           $ref: "#/components/responses/UnsupportedFormat"
         "503":
@@ -1009,6 +1012,8 @@ paths:
         refused alongside any other field with code `conflict`, whose
         message names the survivor to edit instead, because the merge
         deletes the row those other values would be written to.
+        `writeBack` can reach every library, so it is refused with
+        `read-only` while the server or any library is read-only.
       tags: [metadata]
       requestBody:
         required: true
@@ -1032,7 +1037,16 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/FieldLocked"
+          description: >
+            The edit was refused. `field-locked`: the field is locked
+            and the request did not set `force`. `conflict`: an `mbid`
+            clear that merges was sent with other fields; the message
+            names the survivor. `read-only`: `writeBack` was asked for
+            while the server or any library is read-only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -1100,9 +1114,10 @@ paths:
             rename would split the entity rather than move it (code
             `conflict`: members landing on different keys, an archived
             member, a release group titled apart, a reference the batch
-            does not cover); or `writeBack` was asked for on a
-            read-only library (code `read-only`). The message names the
-            case.
+            does not cover); or `writeBack` was asked for while the
+            server or any library is read-only (code `read-only`),
+            since the rename can reach every library. The message names
+            the case.
           content:
             application/json:
               schema:

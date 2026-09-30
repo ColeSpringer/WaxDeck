@@ -520,6 +520,7 @@ abstract final class SemanticsIds {
   static const String adminOrganize = 'admin-organize';
   static const String organizeApply = 'organize-apply';
   static const String organizeConfirm = 'organize-confirm';
+  static const String organizeDiscard = 'organize-discard';
   static const String organizePlan = 'organize-plan';
   static const String organizePreview = 'organize-preview';
   static const String organizeProfile = 'organize-profile';

@@ -4935,6 +4935,10 @@
   "@healthFixBlockedOther": {
     "description": "Under a health rule this server cannot fix, for a reason this app does not know how to word."
   },
+  "healthFixBlockedReadOnly": "Writes files, and the server is read-only.",
+  "@healthFixBlockedReadOnly": {
+    "description": "Why a fix that writes files cannot run: the whole server is in read-only mode."
+  },
   "healthFixBusy": "An enrichment pass is already running. Fix this when it ends.",
   "@healthFixBusy": {
     "description": "Message when a fix was refused because an enrichment pass is already running."
@@ -7261,19 +7265,37 @@
   "@organizeConfirmTitle": {
     "description": "Title of the typed confirmation before files are moved."
   },
-  "organizeEmptyMessage": "Profiles are part of the server configuration. Add one there and it appears here.",
+  "organizeDiscard": "Discard preview",
+  "@organizeDiscard": {
+    "description": "Drops the dry run on screen without moving anything."
+  },
+  "organizeEmptyMessage": "The server offers no profile to organize files by.",
   "@organizeEmptyMessage": {
     "description": "Empty state of the organize screen."
   },
   "organizeEmptyTitle": "No organize profiles",
   "@organizeEmptyTitle": {
-    "description": "Empty state where the server configuration defines no profiles."
+    "description": "Empty state where the server lists no profiles."
   },
   "organizeFailed": "Failed",
   "@organizeFailed": {
     "description": "How many files a finished run could not move."
   },
-  "organizeHint": "Preview shows where the selected profile would move files before anything happens.",
+  "organizeHeld": "{count, plural, =1{1 file stays where it is: its library is read-only.} other{{count} files stay where they are: their libraries are read-only.}}",
+  "@organizeHeld": {
+    "description": "Under the dry run: files out of place that a read-only library keeps where they are.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "organizeHeldTile": "Read-only",
+  "@organizeHeldTile": {
+    "description": "How many files a finished run left where they were because their library is read-only."
+  },
+  "organizeHint": "Preview checks every managed library against this profile, so it finds files added or moved since the last run even when nothing else changed. Nothing moves until you apply.",
   "@organizeHint": {
     "description": "Drawn where the plan or the report goes, before either exists."
   },
@@ -7285,6 +7307,14 @@
   "@organizeMoved": {
     "description": "How many files a finished run moved."
   },
+  "organizeNoManagedMessage": "Organizing moves files only within managed libraries, and this server has none.",
+  "@organizeNoManagedMessage": {
+    "description": "Empty state of the organize screen when no library is managed."
+  },
+  "organizeNoManagedTitle": "No managed library",
+  "@organizeNoManagedTitle": {
+    "description": "Empty state of the organize screen when no library is managed."
+  },
   "organizeNothingMessage": "This profile would move nothing.",
   "@organizeNothingMessage": {
     "description": "Empty state of a dry run that would move nothing."
@@ -7292,6 +7322,10 @@
   "organizeNothingTitle": "Everything is already in place",
   "@organizeNothingTitle": {
     "description": "Empty state of a dry run that would move nothing."
+  },
+  "organizeOnlyBuiltIn": "This server has only the built-in profile.",
+  "@organizeOnlyBuiltIn": {
+    "description": "Under the profile picker when the built-in profile is the only one."
   },
   "organizePlannedMoves": "{count, plural, =1{1 planned move} other{{count} planned moves}}",
   "@organizePlannedMoves": {
@@ -7339,7 +7373,7 @@
   },
   "organizeSkipped": "Skipped",
   "@organizeSkipped": {
-    "description": "How many files a finished run left where they were."
+    "description": "How many files a finished run found already in place."
   },
   "organizeTagWrite": "Tags are rewritten too",
   "@organizeTagWrite": {

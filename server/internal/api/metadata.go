@@ -916,7 +916,7 @@ func (s *Server) EditEntity(ctx context.Context, req EditEntityRequestObject) (E
 		case service.KindNotFound:
 			return EditEntity404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no "+string(req.EntityType)+" with pid "+req.EntityPid))}, nil
 		case service.KindLocked:
-			return EditEntity409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
+			return EditEntity409JSONResponse(errObj("field-locked", err.Error())), nil
 		}
 		return nil, err
 	}

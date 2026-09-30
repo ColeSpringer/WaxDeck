@@ -319,7 +319,9 @@ func (s *Server) RestoreTrashEntry(ctx context.Context, req RestoreTrashEntryReq
 		case service.KindNotFound:
 			return RestoreTrashEntry404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no trash entry with id "+string(req.TrashId)))}, nil
 		case service.KindConflict, service.KindInvalid:
-			return RestoreTrashEntry409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+			return RestoreTrashEntry409JSONResponse(errObj("conflict", err.Error())), nil
+		case service.KindReadOnly:
+			return RestoreTrashEntry409JSONResponse(errObj("read-only", err.Error())), nil
 		}
 		return nil, err
 	}

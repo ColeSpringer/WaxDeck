@@ -253,7 +253,7 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
       actionSemanticsId: SemanticsIds.metadataOpenReview,
       onAction: router == null
           ? null
-          : () => router.push<void>(WaxRoute.reviewEntry(entryId)),
+          : () => router.pushInShell<void>(WaxRoute.reviewEntry(entryId)),
     );
   });
 

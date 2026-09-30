@@ -143,6 +143,14 @@ paths:
         the number of items the fix set out to reach. While an
         enrichment pass is running, another fix that needs one answers
         `conflict`, as does any fix for a rule whose `fixing` is true.
+
+
+        The fixes of `path-mismatch` and `write-unsynced` write files:
+        while the server is read-only they answer `read-only` (and the
+        summary reports them blocked), and a library flagged read-only
+        on its own keeps its files as they are, its items counted as
+        skipped. A fix already running when the server goes read-only
+        skips what it has not reached.
       tags: [health]
       requestBody:
         required: true
@@ -164,7 +172,15 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The fix was refused. `conflict`: an enrichment pass is
+            running and the fix needs one, or the rule is being fixed
+            already. `read-only`: the fix writes files and the server is
+            read-only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -346,7 +362,9 @@ paths:
       description: >
         Keeps one item of an upgrade group and moves the named
         inferior encodings to the trash (recoverable within the
-        retention window). Administrators only.
+        retention window). A named encoding in a read-only library,
+        or any while the server is read-only, refuses the whole call
+        with `read-only`. Administrators only.
       tags: [health]
       requestBody:
         required: true
@@ -370,7 +388,15 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The resolution was refused. `read-only`: a named encoding's
+            library, or the whole server, is read-only. `conflict`:
+            another catalog job holds the file-mutation scope the move
+            to the trash needs; retry when it ends.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -495,6 +521,8 @@ components:
             source the fix could use, for lyrics, artwork, genres, or
             book metadata, is switched on. `no-managed-library`: no
             library is managed, so there is no layout for paths to match.
+            `read-only`: the server is read-only, and the fix writes
+            files.
           enum:
             [
               needs-contact,
@@ -503,6 +531,7 @@ components:
               needs-genre-source,
               needs-book-source,
               no-managed-library,
+              read-only,
             ]
 
     HealthIssuePage:

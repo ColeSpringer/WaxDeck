@@ -10,6 +10,7 @@ import '../providers.dart';
 import '../radio/radio_controller.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'cast_preflight.dart';
 import 'connect_providers.dart';
 import 'remote_session.dart';
@@ -38,7 +39,7 @@ Future<void> showDevicePicker(
   final handles = _HostHandles(
     router: GoRouter.of(context),
     rootContext: Navigator.of(context, rootNavigator: true).context,
-    messenger: ScaffoldMessenger.of(context),
+    messenger: ShellMessenger.of(context),
   );
   return showWaxSheet<void>(
     context: context,
@@ -86,7 +87,7 @@ class _HostHandles {
 
   final GoRouter router;
   final BuildContext rootContext;
-  final ScaffoldMessengerState messenger;
+  final ShellMessenger messenger;
 }
 
 class _DevicePickerSheet extends ConsumerWidget {
@@ -415,9 +416,7 @@ class _DevicePickerSheet extends ConsumerWidget {
         if (pids == null || pids.isEmpty) {
           // Said plainly rather than minted as an API failure: nothing
           // was refused, because nothing was ever sent.
-          messenger
-            ..hideCurrentSnackBar()
-            ..showSnackBar(SnackBar(content: Text(l10n.devicesNothingToSend)));
+          messenger.show(l10n.devicesNothingToSend, channel: _channel);
           return;
         }
         started = await repository.createPlaybackSession(
@@ -440,9 +439,7 @@ class _DevicePickerSheet extends ConsumerWidget {
       // The bar follows the sound: a session on another endpoint is what
       // it now shows, and the transport on it is routed there.
       remoteController.adopt(started);
-      messenger.showSnackBar(
-        SnackBar(content: Text(l10n.devicesPlayingOn(endpoint.name))),
-      );
+      messenger.show(l10n.devicesPlayingOn(endpoint.name));
     } on WaxDeckApiException catch (e) {
       _explain(l10n, messenger, e);
     }
@@ -524,17 +521,16 @@ class _DevicePickerSheet extends ConsumerWidget {
     unawaited(showCastPreflight(handles.rootContext));
   }
 
-  /// Says why a command was refused, replacing whatever is on screen:
-  /// a picker taps through several devices, and the last answer is the
-  /// one being read.
+  /// One run: a picker taps through several devices, and the last answer
+  /// is the one being read.
+  static const _channel = ShellChannel.devices;
+
   static void _explain(
     AppLocalizations l10n,
-    ScaffoldMessengerState messenger,
+    ShellMessenger messenger,
     WaxDeckApiException error,
   ) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, error))));
+    messenger.show(explainError(l10n, error), channel: _channel);
   }
 }
 

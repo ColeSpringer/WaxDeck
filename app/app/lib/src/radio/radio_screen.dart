@@ -16,6 +16,7 @@ import '../shell/account_chrome.dart';
 import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'add_station.dart';
 import 'radio_controller.dart';
 
@@ -488,17 +489,16 @@ class _StationTile extends ConsumerWidget {
   /// go: a full dial is actionable, and a refused write would otherwise be
   /// a star that silently springs back.
   Future<void> _pin(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final refusal = await ref
         .read(radioFavoritesProvider.notifier)
         .toggle(station.pid);
     if (refusal == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(radioPinRefusalMessage(l10n, refusal))),
-      );
+    messenger.show(
+      radioPinRefusalMessage(l10n, refusal),
+      channel: ShellChannel.radio,
+    );
   }
 
   Future<void> _menu(BuildContext context, WidgetRef ref, String choice) async {
@@ -515,7 +515,7 @@ class _StationTile extends ConsumerWidget {
   }
 
   Future<void> _remove(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final favorites = ref.read(radioFavoritesProvider.notifier);
     final playbackController = ref.read(radioPlaybackProvider.notifier);
@@ -524,9 +524,7 @@ class _StationTile extends ConsumerWidget {
       await ref.read(radioStationsProvider.notifier).remove(station.pid);
       if (wasPlaying) await playbackController.stop();
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.radio);
       return;
     }
     // A pin outlives the station it names: the dial draws nothing, but the
@@ -535,11 +533,10 @@ class _StationTile extends ConsumerWidget {
     if (!favorites.contains(station.pid)) return;
     final refusal = await favorites.toggle(station.pid);
     if (refusal == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(radioPinRefusalMessage(l10n, refusal))),
-      );
+    messenger.show(
+      radioPinRefusalMessage(l10n, refusal),
+      channel: ShellChannel.radio,
+    );
   }
 }
 
@@ -566,22 +563,17 @@ Future<void> _tune(
   if (station.pid != playback.station?.pid) {
     return tuneStation(context, ref, station);
   }
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   try {
     await ref.read(radioPlaybackProvider.notifier).stop();
   } on Exception catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            e is WaxDeckApiException
-                ? explainError(l10n, e)
-                : l10n.radioCouldNotStop(station.name),
-          ),
-        ),
-      );
+    messenger.show(
+      e is WaxDeckApiException
+          ? explainError(l10n, e)
+          : l10n.radioCouldNotStop(station.name),
+      channel: ShellChannel.radio,
+    );
   }
 }
 
@@ -592,22 +584,17 @@ Future<void> tuneStation(
   WidgetRef ref,
   RadioStation station,
 ) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   try {
     await ref.read(radioPlaybackProvider.notifier).play(station);
   } on Exception catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            e is WaxDeckApiException
-                ? explainError(l10n, e)
-                : l10n.radioCouldNotTune(station.name),
-          ),
-        ),
-      );
+    messenger.show(
+      e is WaxDeckApiException
+          ? explainError(l10n, e)
+          : l10n.radioCouldNotTune(station.name),
+      channel: ShellChannel.radio,
+    );
   }
 }
 

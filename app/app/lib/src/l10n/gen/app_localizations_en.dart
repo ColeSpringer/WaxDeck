@@ -3617,6 +3617,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get healthFixBlockedOther => 'This server cannot run this fix yet.';
 
   @override
+  String get healthFixBlockedReadOnly =>
+      'Writes files, and the server is read-only.';
+
+  @override
   String get healthFixBusy =>
       'An enrichment pass is already running. Fix this when it ends.';
 
@@ -5551,8 +5555,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeConfirmTitle => 'Apply organize profile?';
 
   @override
+  String get organizeDiscard => 'Discard preview';
+
+  @override
   String get organizeEmptyMessage =>
-      'Profiles are part of the server configuration. Add one there and it appears here.';
+      'The server offers no profile to organize files by.';
 
   @override
   String get organizeEmptyTitle => 'No organize profiles';
@@ -5561,8 +5568,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeFailed => 'Failed';
 
   @override
+  String organizeHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files stay where they are: their libraries are read-only.',
+      one: '1 file stays where it is: its library is read-only.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get organizeHeldTile => 'Read-only';
+
+  @override
   String get organizeHint =>
-      'Preview shows where the selected profile would move files before anything happens.';
+      'Preview checks every managed library against this profile, so it finds files added or moved since the last run even when nothing else changed. Nothing moves until you apply.';
 
   @override
   String get organizeLoadError => 'Could not load organize profiles';
@@ -5571,10 +5592,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeMoved => 'Moved';
 
   @override
+  String get organizeNoManagedMessage =>
+      'Organizing moves files only within managed libraries, and this server has none.';
+
+  @override
+  String get organizeNoManagedTitle => 'No managed library';
+
+  @override
   String get organizeNothingMessage => 'This profile would move nothing.';
 
   @override
   String get organizeNothingTitle => 'Everything is already in place';
+
+  @override
+  String get organizeOnlyBuiltIn =>
+      'This server has only the built-in profile.';
 
   @override
   String organizePlannedMoves(int count) {

@@ -289,6 +289,19 @@ void main() {
     });
   });
 
+  test('a snack bar close icon clears 3:1 on its bar', () {
+    // The only dismiss a waiting bar offers; left to Material it takes
+    // the inverse-surface tone, which is this bar's canvas.
+    for (final variant in WaxThemeVariant.values) {
+      final bar = buildWaxTheme(variant: variant).snackBarTheme;
+      expect(
+        WaxContrast.ratio(bar.closeIconColor!, bar.backgroundColor!),
+        greaterThanOrEqualTo(WaxContrast.aaLarge),
+        reason: '${variant.name}: the close icon fades into the bar',
+      );
+    }
+  });
+
   group('shelf chevron', () {
     // The chevron sits over any artwork at its resting opacity, and no one
     // colour clears 3:1 over black and white, so disc or ring must.

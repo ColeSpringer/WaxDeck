@@ -13,12 +13,17 @@ part 'organize_profiles.g.dart';
 /// The server's organize profiles.
 ///
 /// Properties:
-/// * [profiles] - Configured profiles.
+/// * [profiles] - The profiles, by name.
+/// * [managedLibraries] - How many libraries are managed, the only ones organize moves files within. 
 @BuiltValue()
 abstract class OrganizeProfiles implements Built<OrganizeProfiles, OrganizeProfilesBuilder> {
-  /// Configured profiles.
+  /// The profiles, by name.
   @BuiltValueField(wireName: r'profiles')
   BuiltList<OrganizeProfile> get profiles;
+
+  /// How many libraries are managed, the only ones organize moves files within. 
+  @BuiltValueField(wireName: r'managedLibraries')
+  int get managedLibraries;
 
   OrganizeProfiles._();
 
@@ -47,6 +52,11 @@ class _$OrganizeProfilesSerializer implements PrimitiveSerializer<OrganizeProfil
     yield serializers.serialize(
       object.profiles,
       specifiedType: const FullType(BuiltList, [FullType(OrganizeProfile)]),
+    );
+    yield r'managedLibraries';
+    yield serializers.serialize(
+      object.managedLibraries,
+      specifiedType: const FullType(int),
     );
   }
 
@@ -77,6 +87,13 @@ class _$OrganizeProfilesSerializer implements PrimitiveSerializer<OrganizeProfil
             specifiedType: const FullType(BuiltList, [FullType(OrganizeProfile)]),
           ) as BuiltList<OrganizeProfile>;
           result.profiles.replace(valueDes);
+          break;
+        case r'managedLibraries':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.managedLibraries = valueDes;
           break;
         default:
           unhandled.add(key);

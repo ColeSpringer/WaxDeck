@@ -5,7 +5,8 @@ fields, and book metadata from pluggable providers. Besides the built-ins, an in
 the server at any HTTP service implementing the small contract in
 [`openapi.yaml`](openapi.yaml) - a regional lyrics database, a
 scene-specific cover source, a house genre taxonomy - and it is asked
-first unless an administrator reorders the sources.
+first by default; once an administrator has saved an order, one
+registered later joins its end until it is moved.
 
 ## The contract in one paragraph
 
@@ -86,9 +87,9 @@ The catalog's own names are taken: its built-ins' `musicbrainz`,
   timeout, a refused connection, a body that is not the promised JSON.
   The lookup stays owed and is asked once more on the next pass, and
   three failures in a row sit the provider out for the rest of the pass.
-  Answer an
-  error when unsure: a wrong `204` settles the target until the retry
-  window passes.
+  Answer an error only when the lookup itself failed. A request you
+  cannot key (no identifier or name you use) is a `204`: an error there
+  stays owed, and three in a row take the provider out of the pass.
 - WaxDeck keeps no cache of enrich answers (a candidate can carry a
   whole cover inline), so caching is the service's to do; `force: true`
   asks it to bypass whatever cache it keeps.

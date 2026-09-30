@@ -866,10 +866,8 @@ void main() {
 
       // The client's own sentence for the code, not the server's line.
       expect(
-        find.text(
-          'The library is read-only right now, so nothing can be changed.',
-        ),
-        findsOneWidget,
+        shellMessageText(raisedMessage(tester)),
+        'The library is read-only right now, so nothing can be changed.',
       );
       // Nothing was stored, and nothing on the row moved either: the
       // sentence is the only thing that happened.
@@ -901,10 +899,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text(
-          'The library is read-only right now, so nothing can be changed.',
-        ),
-        findsOneWidget,
+        shellMessageText(raisedMessage(tester)),
+        'The library is read-only right now, so nothing can be changed.',
       );
       expect(repo.prefs.locale, isNull);
     });

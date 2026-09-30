@@ -8,6 +8,7 @@ import '../providers.dart';
 import '../home/home_shelves.dart';
 import '../music/music_controllers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 
 /// Whether this account is offered destructive catalog verbs.
 ///
@@ -39,15 +40,15 @@ Future<void> confirmDeleteItem(
   required String pid,
   VoidCallback? onDeleted,
 }) async {
-  final messenger = ScaffoldMessenger.of(context);
-  // Read beside the messenger, for the same reason: both are wanted
-  // after an await, and a context is not read across one.
+  // Read here: it is wanted after an await, and a context is not read
+  // across one.
   final l10n = context.l10n;
   // The container rather than `ref`, for the same reason the mark-older
   // dialog holds one: the deletion happens whether or not the screen
   // that offered it is still mounted when the server answers, and the
   // listings showing what just went have to be told regardless.
   final container = ProviderScope.containerOf(context, listen: false);
+  final messenger = container.read(shellMessengerProvider.notifier);
   final repo = container.read(repositoryProvider);
   // Permanent deletion is admin-only on the server whatever the delete
   // right says, so the radio for it is drawn only where it can succeed
@@ -79,20 +80,14 @@ Future<void> confirmDeleteItem(
     for (final provider in homeShelfProviders) {
       container.invalidate(provider);
     }
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          result.mode == 'permanent'
-              ? l10n.libraryDeletePermanentDone(result.totalFiles)
-              : l10n.libraryDeleteTrashDone(result.totalFiles),
-        ),
-      ),
+    messenger.show(
+      result.mode == 'permanent'
+          ? l10n.libraryDeletePermanentDone(result.totalFiles)
+          : l10n.libraryDeleteTrashDone(result.totalFiles),
     );
     onDeleted?.call();
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+    messenger.show(explainError(l10n, e), channel: ShellChannel.itemDelete);
   }
 }
 

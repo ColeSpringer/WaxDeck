@@ -139,7 +139,7 @@ func TestHealthSweepAndIssues(t *testing.T) {
 	// A rule this install cannot fix says why and refuses: no contact,
 	// so nothing may ask MusicBrainz for genres.
 	for _, r := range sum.Rules {
-		if r.Rule == "missing-genre" && (r.Fixable || r.FixBlocked == nil || *r.FixBlocked != NeedsContact) {
+		if r.Rule == "missing-genre" && (r.Fixable || r.FixBlocked == nil || *r.FixBlocked != HealthRuleCountFixBlockedNeedsContact) {
 			t.Fatalf("missing-genre = %+v, want unfixable for want of a contact", r)
 		}
 		if r.Rule == "write-unsynced" && (!r.Fixable || r.FixBlocked != nil) {

@@ -17,6 +17,7 @@ import '../search/search_chrome.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'playlist_actions.dart';
 import 'playlist_play.dart';
 import 'playlist_sync_controller.dart';
@@ -393,7 +394,7 @@ class _AddRowState extends ConsumerState<_AddRow> {
     _debounce?.cancel();
     _generation++;
     setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
       await ref.read(playlistDetailProvider(widget.pid).notifier).append(
@@ -405,13 +406,12 @@ class _AddRowState extends ConsumerState<_AddRow> {
         _hits = const <SearchHit>[];
         _answered = null;
       });
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(l10n.playlistAdded(hit.title))));
+      messenger.show(
+        l10n.playlistAdded(hit.title),
+        channel: ShellChannel.playlists,
+      );
     } on WaxDeckApiException catch (e) {
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.playlists);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -567,7 +567,7 @@ class _ReorderableEntries extends ConsumerWidget {
     if (from < 0 || from >= pids.length || to < 0 || to >= pids.length) return;
     final moved = pids.removeAt(from);
     pids.insert(to, moved);
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
       await ref.read(playlistDetailProvider(pid).notifier).reorder(pids);
@@ -579,9 +579,7 @@ class _ReorderableEntries extends ConsumerWidget {
         onConflict(explainRefusal(l10n, e));
         return;
       }
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.playlists);
     }
   }
 
@@ -590,15 +588,13 @@ class _ReorderableEntries extends ConsumerWidget {
     // leaves a viewer's rows non-contiguous.
     final position = view.entries[index].position;
     if (position == null) return;
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
       await ref.read(playlistDetailProvider(pid).notifier).removeAt(position);
     } on WaxDeckApiException catch (e) {
       ref.invalidate(playlistDetailProvider(pid));
-      messenger
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      messenger.show(explainError(l10n, e), channel: ShellChannel.playlists);
     }
   }
 }

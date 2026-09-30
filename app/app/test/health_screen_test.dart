@@ -249,6 +249,28 @@ void main() {
     expect(_fixButton(tester, 'missing-art').busy, isFalse);
   });
 
+  testWidgets('a fix a read-only library refuses says so', (tester) async {
+    final repo = _repo();
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    repo.fixHealthError = const WaxDeckApiException(
+      code: 'read-only',
+      message: 'the library is read-only on this server',
+      statusCode: 409,
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.healthFix('missing-art')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'The library is read-only right now, so nothing can be changed.',
+    );
+    expect(_fixButton(tester, 'missing-art').busy, isFalse);
+  });
+
   testWidgets('a fix refused because the rule is being fixed says that', (
     tester,
   ) async {
@@ -369,6 +391,35 @@ void main() {
     expect(blocked, findsOneWidget);
     expect(tester.getSemantics(blocked).label, reason);
     expect(find.text(reason), findsOneWidget);
+  });
+
+  testWidgets('a fix that writes files is blocked on a read-only server', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..healthSummary = const HealthSummary(
+        score: 90,
+        totalItems: 4,
+        evaluatedItems: 4,
+        rules: [
+          HealthRuleCount(
+            rule: 'path-mismatch',
+            failing: 4,
+            fixable: false,
+            fixBlocked: 'read-only',
+          ),
+        ],
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.healthFix('path-mismatch')),
+      findsNothing,
+    );
+    expect(
+      find.text('Writes files, and the server is read-only.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('a listener sees the standing and no fixes', (tester) async {

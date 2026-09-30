@@ -148,7 +148,7 @@ void main() {
     expect(call.url, 'https://tube.example/playlist?list=PLnew');
     expect(call.mode, 'append');
     expect(call.intervalHours, 12);
-    expect(find.text('Sync settings saved'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Sync settings saved');
     // The binding landed, so the running verbs appear.
     expect(
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncNow),
@@ -234,7 +234,7 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncNow));
     await tester.pumpAndSettle();
     expect(repo.syncPlaylistSourceCalls, [pl.pid]);
-    expect(find.text('Sync started'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Sync started');
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncUnbind),
@@ -367,7 +367,10 @@ void main() {
     await _openSheet(tester);
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncSave));
     await tester.pumpAndSettle();
-    expect(find.text('bind a url or a source export'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'bind a url or a source export',
+    );
     expect(
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncNow),
       findsNothing,
@@ -548,7 +551,7 @@ void main() {
     final call = repo.setPlaylistSourceCalls.single;
     expect(call.url, isNull);
     expect(call.intervalHours, isNull, reason: 'a matched binding takes none');
-    expect(find.text('Sync settings saved'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Sync settings saved');
   });
 
   testWidgets('clearing the URL is a refused rebind, not a settings save', (
@@ -575,7 +578,10 @@ void main() {
 
     // Sent as a bind with a blank url, and refused as one.
     expect(repo.setPlaylistSourceCalls.single.url, '');
-    expect(find.text('bind a url or a source export'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'bind a url or a source export',
+    );
     // The stored binding is untouched.
     expect(repo.playlistSources[pl.pid]?.url, _bound.url);
   });

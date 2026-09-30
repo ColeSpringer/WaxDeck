@@ -316,7 +316,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(_row('tt-a'), findsNothing);
-    expect(find.text('no such task'), findsNothing);
+    expect(raisedMessage(tester), isNull);
   });
 
   testWidgets('a dismiss takes its row and nothing else', (tester) async {
@@ -375,7 +375,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.clearFinishedToolTaskCalls, 1);
-    expect(find.text('Cleared 2 tasks'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Cleared 2 tasks');
     expect(find.text('No tool tasks'), findsOneWidget);
   });
 

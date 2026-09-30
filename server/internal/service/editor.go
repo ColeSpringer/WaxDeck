@@ -1236,12 +1236,10 @@ func (l *Library) SetEntityArtwork(ctx context.Context, uc *UserCtx, entityType,
 		return EditOutcomeDTO{}, err
 	}
 	// Only a front cover fans into member files; the auxiliary slots are
-	// catalog-only. Entity write-back crosses libraries, so the server-wide
-	// flag gates it (per-library precision would need the member enumeration
-	// the facade does internally).
+	// catalog-only.
 	writeBack = writeBack && art == model.ArtRoleFront
 	if writeBack {
-		if err := l.CheckWritable(ctx, ""); err != nil {
+		if err := l.checkFanOutWritable(ctx); err != nil {
 			return EditOutcomeDTO{}, err
 		}
 	}
@@ -1496,7 +1494,7 @@ func (l *Library) EditEntity(ctx context.Context, entityType, apiEntityPID strin
 		}
 	}
 	if p.WriteBack {
-		if err := l.CheckWritable(ctx, ""); err != nil {
+		if err := l.checkFanOutWritable(ctx); err != nil {
 			return EditOutcomeDTO{}, err
 		}
 	}
@@ -1555,7 +1553,7 @@ func (l *Library) RenameEntity(ctx context.Context, entityType, apiEntityPID str
 		return EntityRenameOutcomeDTO{}, errInvalid("at least one field is required")
 	}
 	if p.WriteBack {
-		if err := l.CheckWritable(ctx, ""); err != nil {
+		if err := l.checkFanOutWritable(ctx); err != nil {
 			return EntityRenameOutcomeDTO{}, err
 		}
 	}

@@ -9,6 +9,7 @@ import '../media_view.dart';
 import '../providers.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'radio_saved_controller.dart';
 import 'radio_saved_menu.dart';
 
@@ -54,9 +55,9 @@ class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen> {
       await ref.read(radioSavedProvider.notifier).remove(song.pid);
     } on WaxDeckApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+      ref
+          .read(shellMessengerProvider.notifier)
+          .show(explainError(l10n, e), channel: ShellChannel.radio);
     }
   }
 

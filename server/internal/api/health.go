@@ -119,7 +119,9 @@ func (s *Server) FixHealthIssues(ctx context.Context, req FixHealthIssuesRequest
 		case service.KindForbidden:
 			return FixHealthIssues403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindConflict:
-			return FixHealthIssues409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+			return FixHealthIssues409JSONResponse(errObj("conflict", err.Error())), nil
+		case service.KindReadOnly:
+			return FixHealthIssues409JSONResponse(errObj("read-only", err.Error())), nil
 		}
 		return nil, err
 	}

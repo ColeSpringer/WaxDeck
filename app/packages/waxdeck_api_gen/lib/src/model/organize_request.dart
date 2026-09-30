@@ -13,14 +13,14 @@ part 'organize_request.g.dart';
 ///
 /// Properties:
 /// * [profile] - The profile to apply.
-/// * [itemPids] - Restrict to these items; absent means the whole library.
+/// * [itemPids] - Restrict to these items; absent means every managed library.
 @BuiltValue()
 abstract class OrganizeRequest implements Built<OrganizeRequest, OrganizeRequestBuilder> {
   /// The profile to apply.
   @BuiltValueField(wireName: r'profile')
   String get profile;
 
-  /// Restrict to these items; absent means the whole library.
+  /// Restrict to these items; absent means every managed library.
   @BuiltValueField(wireName: r'itemPids')
   BuiltList<String>? get itemPids;
 

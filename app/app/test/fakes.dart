@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/artwork/artwork_store.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
@@ -18,6 +20,20 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 /// no reading of one that does not name a locale.
 String? shellMessageText(ShellMessage? message) =>
     message?.resolve(AppLocalizationsEn());
+
+/// The last message the app [tester] pumped raised to the shell, which a
+/// test host does not draw.
+ShellMessage? raisedMessage(WidgetTester tester) => ProviderScope.containerOf(
+  tester.element(find.byType(Navigator).first),
+  listen: false,
+).read(shellMessengerProvider);
+
+/// Presses the action on the last message raised to the shell, as the
+/// shell's bar would.
+Future<void> pressRaisedAction(WidgetTester tester) async {
+  raisedMessage(tester)!.onAction!();
+  await tester.pumpAndSettle();
+}
 
 /// In-memory repository for widget tests. Pagination uses the item index as
 /// the cursor, which is enough to exercise keyset-style paging end to end.
@@ -4617,6 +4633,7 @@ class FakeRepository implements WaxDeckRepository {
   List<OrganizeProfile> organizeProfiles = const [
     OrganizeProfile(name: 'default'),
   ];
+  int organizeManagedLibraries = 1;
   OrganizePlan? organizePlanResult;
   OrganizeReport organizeReportResult = const OrganizeReport(
     moved: 0,
@@ -4630,8 +4647,10 @@ class FakeRepository implements WaxDeckRepository {
       [];
 
   @override
-  Future<List<OrganizeProfile>> listOrganizeProfiles() async =>
-      List.of(organizeProfiles);
+  Future<OrganizeProfiles> listOrganizeProfiles() async => OrganizeProfiles(
+    profiles: List.of(organizeProfiles),
+    managedLibraries: organizeManagedLibraries,
+  );
 
   @override
   Future<OrganizePlan> previewOrganize({

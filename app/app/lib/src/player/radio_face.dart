@@ -15,6 +15,7 @@ import '../radio/add_station.dart';
 import '../radio/radio_controller.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'autoplay_gate.dart';
 import 'output_volume.dart';
 import 'player_screen.dart';
@@ -331,14 +332,12 @@ class _SaveSong extends ConsumerWidget {
 /// here is say what went wrong - a full list being the refusal worth
 /// reading, since nothing else on these surfaces explains it.
 Future<void> saveNowPlayingSong(BuildContext context, WidgetRef ref) async {
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   try {
     await ref.read(radioPlaybackProvider.notifier).toggleSaveNowPlaying();
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainRefusal(l10n, e))));
+    messenger.show(explainRefusal(l10n, e), channel: ShellChannel.radio);
   }
 }
 
@@ -364,17 +363,16 @@ class _FavoriteButton extends ConsumerWidget {
   /// A full dial is a refusal worth reading; the star has nowhere to
   /// put one, so it goes where the hub's does.
   Future<void> _pin(BuildContext context, WidgetRef ref) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final refusal = await ref
         .read(radioFavoritesProvider.notifier)
         .toggle(station.pid);
     if (refusal == null) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(radioPinRefusalMessage(l10n, refusal))),
-      );
+    messenger.show(
+      radioPinRefusalMessage(l10n, refusal),
+      channel: ShellChannel.radio,
+    );
   }
 }
 

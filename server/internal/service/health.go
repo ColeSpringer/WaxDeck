@@ -549,7 +549,7 @@ func (l *Library) readPlannedMoves(ctx context.Context) (map[model.PID]bool, err
 
 // defaultOrganizeProfile picks the profile the sweep and the per-item
 // path fix plan with: the upstream default when present, else the first
-// configured name.
+// name the catalog lists.
 func (l *Library) defaultOrganizeProfile() string {
 	names := l.lib.Profiles()
 	for _, n := range names {
@@ -1033,6 +1033,9 @@ func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, keepPid strin
 		}
 		if it.Kind == model.KindEpisode {
 			return 0, errEpisodeNotDeletable()
+		}
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			return 0, err
 		}
 		removes = append(removes, pid)
 	}

@@ -248,7 +248,7 @@ void main() {
     await _tap(tester, SemanticsIds.downloadsRemoveFinished);
 
     expect(downloads.removed, [_episode]);
-    expect(find.text('Removed 1 episode'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Removed 1 episode');
   });
 
   test('the sweep waits out its grace window', () async {
@@ -329,7 +329,10 @@ void main() {
     await _tap(tester, SemanticsIds.downloadsRemoveFinished);
 
     expect(downloads.removed, isEmpty);
-    expect(find.text('No finished episodes to remove'), findsOneWidget);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'No finished episodes to remove',
+    );
   });
 
   testWidgets('the stale sweep asks for every held item again', (tester) async {
@@ -407,7 +410,7 @@ void main() {
       // It landed under the tap, and the row is about to say so.
       expect(_byId(SemanticsIds.downloadPause(_book)), findsOneWidget);
       expect(_byId(SemanticsIds.downloadResume(_book)), findsNothing);
-      expect(find.byType(SnackBar), findsNothing);
+      expect(raisedMessage(tester), isNull);
     });
 
     testWidgets('a pause from an earlier run offers resume', (tester) async {

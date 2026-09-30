@@ -373,8 +373,8 @@ void main() {
       await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playerTrim));
       await tester.pump();
       expect(
-        find.textContaining('skips the mapped quiet parts'),
-        findsOneWidget,
+        shellMessageText(raisedMessage(tester)),
+        contains('skips the mapped quiet parts'),
       );
 
       // Said once and remembered as said: the flag is what stops the
@@ -905,7 +905,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('as many bookmarks'), findsOneWidget);
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        contains('as many bookmarks'),
+      );
       expect(
         find.bySemanticsIdentifier(SemanticsIds.playerBookmark(0)),
         findsNothing,

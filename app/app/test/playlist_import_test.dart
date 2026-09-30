@@ -215,7 +215,7 @@ void main() {
     expect(copied.single, contains('"name":"Road Trip"'));
     expect(copied.single, contains('"title":"Prancing Pony Blues"'));
     expect(copied.single, contains('"kind":"track"'));
-    expect(find.text('Portable playlist copied'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Portable playlist copied');
   });
 
   testWidgets('imports a portable JSON export through the refs source', (

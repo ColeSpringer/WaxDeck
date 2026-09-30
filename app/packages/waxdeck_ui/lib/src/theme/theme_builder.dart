@@ -295,6 +295,7 @@ ThemeData buildWaxTheme({
       backgroundColor: colors.surface3,
       contentTextStyle: WaxType.body.copyWith(color: colors.textPrimary),
       actionTextColor: colors.accent,
+      closeIconColor: colors.textSecondary,
       behavior: SnackBarBehavior.floating,
       shape: const RoundedRectangleBorder(borderRadius: WaxRadius.card),
     ),

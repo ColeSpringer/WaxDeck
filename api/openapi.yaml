@@ -132,8 +132,10 @@ info:
       aaxc; unlike `unsupported-format` this is permanent - no server
       configuration can make the file playable), `read-only` (the target
       library, or the whole server, is in read-only mode: uploads,
-      organizing, file write-back, deletion, and the file tools are
-      refused while reads and playback keep working),
+      file write-back, deletion, and the file tools are refused while
+      reads and playback keep working, and organizing is refused only
+      server-wide, since it leaves a read-only library's files where
+      they are),
       `transcode-limited` (the server's or the caller's concurrent
       transcode session limit is reached; retry when a session ends,
       or play a direct-play format), and `timeout` (a command routed to
@@ -637,13 +639,19 @@ paths:
       operationId: setLibraryReadOnly
       summary: Set a library's read-only mode
       description: >
-        A read-only library refuses uploads, organizing, file
-        write-back, deletion, and the file tools with code
-        `read-only`, while reads, playback, and per-user state
-        (stars, progress, playlists) keep working. For media mounted
-        read-only on principle. Podcast libraries need a writable
-        root for episode fetching, and the flag refuses fetches into
-        the library too. Administrators only.
+        A read-only library refuses uploads, file write-back,
+        deletion, restoring or purging its trash, and the file tools
+        with code `read-only`, while reads, playback, and per-user
+        state (stars, progress, playlists) keep working. For media
+        mounted read-only on principle. Organizing and the path and
+        tag health fixes leave its files where they are, and edits
+        that write into every member file of an album, a release
+        group or an artist are refused with `read-only` while any
+        library is read-only, since they can reach every library.
+        Podcast libraries need a writable root for episode fetching:
+        the flag refuses fetches and download removal, and holds the
+        fetch queue and download retention until it clears.
+        Administrators only.
       tags: [admin]
       requestBody:
         required: true
@@ -1412,8 +1420,9 @@ paths:
         occupied (`conflict`), and when it points into the internal
         podcast download tree, which owns its own files: entries left
         there by older versions come back by re-downloading the
-        episode, and purge and expiry still apply to them.
-        Administrators only.
+        episode, and purge and expiry still apply to them. The trash
+        sits under each library's root, so a read-only library's
+        entries are refused with `read-only`. Administrators only.
       tags: [admin]
       parameters:
         - $ref: "#/components/parameters/TrashId"
@@ -1427,7 +1436,14 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The restore was refused. `conflict`: the original path is
+            occupied. `read-only`: the entry's library, or the whole
+            server, is read-only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -1437,7 +1453,10 @@ paths:
       summary: Empty the trash
       description: >
         Permanently deletes every active trashed file and reports
-        what was reclaimed. Irreversible. Administrators only.
+        what was reclaimed. Irreversible. Refused with `read-only`
+        while the server is read-only or a read-only library holds a
+        trashed file, since the pass cannot leave one library out; the
+        retention sweep waits the same way. Administrators only.
       tags: [admin]
       responses:
         "200":
@@ -1450,6 +1469,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "403":
           $ref: "#/components/responses/Forbidden"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -1462,7 +1483,8 @@ paths:
       description: >
         Permanently deletes a single trashed file and reports the bytes
         it reclaimed. Irreversible; the age-based retention sweep
-        (`trashRetentionDays`) purges the same way in bulk.
+        (`trashRetentionDays`) purges the same way in bulk. A
+        read-only library's entry is refused with `read-only`.
         Administrators only.
       tags: [admin]
       responses:
@@ -1478,6 +1500,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -2827,6 +2851,14 @@ paths:
         the number of items the fix set out to reach. While an
         enrichment pass is running, another fix that needs one answers
         `conflict`, as does any fix for a rule whose `fixing` is true.
+
+
+        The fixes of `path-mismatch` and `write-unsynced` write files:
+        while the server is read-only they answer `read-only` (and the
+        summary reports them blocked), and a library flagged read-only
+        on its own keeps its files as they are, its items counted as
+        skipped. A fix already running when the server goes read-only
+        skips what it has not reached.
       tags: [health]
       requestBody:
         required: true
@@ -2848,7 +2880,15 @@ paths:
         "403":
           $ref: "#/components/responses/Forbidden"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The fix was refused. `conflict`: an enrichment pass is
+            running and the fix needs one, or the rule is being fixed
+            already. `read-only`: the fix writes files and the server is
+            read-only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -3030,7 +3070,9 @@ paths:
       description: >
         Keeps one item of an upgrade group and moves the named
         inferior encodings to the trash (recoverable within the
-        retention window). Administrators only.
+        retention window). A named encoding in a read-only library,
+        or any while the server is read-only, refuses the whole call
+        with `read-only`. Administrators only.
       tags: [health]
       requestBody:
         required: true
@@ -3054,7 +3096,15 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The resolution was refused. `read-only`: a named encoding's
+            library, or the whole server, is read-only. `conflict`:
+            another catalog job holds the file-mutation scope the move
+            to the trash needs; retry when it ends.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -4423,8 +4473,9 @@ paths:
         Stores the raw image bytes in one artwork slot (`role`, default
         `front`) of an album, artist, release group, genre, playlist, or
         podcast entity. Album front covers may additionally embed into
-        member files with `writeBack=true`; other slots and entity types
-        are catalog-only. An artist portrait lands under `front` - the
+        member files with `writeBack=true`, which is refused with
+        `read-only` while the server or any library is read-only;
+        other slots and entity types are catalog-only. An artist portrait lands under `front` - the
         slot the artist screen and index tiles resolve, and the one
         enrichment's artist walk fills; `background` is the scenic
         slot, which no surface draws yet. Catalog entities are
@@ -4470,6 +4521,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/ReadOnly"
         "415":
           $ref: "#/components/responses/UnsupportedFormat"
         "503":
@@ -4895,6 +4948,8 @@ paths:
         refused alongside any other field with code `conflict`, whose
         message names the survivor to edit instead, because the merge
         deletes the row those other values would be written to.
+        `writeBack` can reach every library, so it is refused with
+        `read-only` while the server or any library is read-only.
       tags: [metadata]
       requestBody:
         required: true
@@ -4918,7 +4973,16 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/FieldLocked"
+          description: >
+            The edit was refused. `field-locked`: the field is locked
+            and the request did not set `force`. `conflict`: an `mbid`
+            clear that merges was sent with other fields; the message
+            names the survivor. `read-only`: `writeBack` was asked for
+            while the server or any library is read-only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -4986,9 +5050,10 @@ paths:
             rename would split the entity rather than move it (code
             `conflict`: members landing on different keys, an archived
             member, a release group titled apart, a reference the batch
-            does not cover); or `writeBack` was asked for on a
-            read-only library (code `read-only`). The message names the
-            case.
+            does not cover); or `writeBack` was asked for while the
+            server or any library is read-only (code `read-only`),
+            since the rename can reach every library. The message names
+            the case.
           content:
             application/json:
               schema:
@@ -5758,10 +5823,11 @@ paths:
       operationId: listOrganizeProfiles
       summary: List organize profiles
       description: >
-        The server-configured organize profiles (path templates per
-        media kind, whether organize writes tags). Profiles are
-        server configuration, not API-editable: template mistakes
-        move files, so they change deliberately.
+        The organize profiles the server offers: the catalog's
+        built-in `waxbin-native` layout. Organizing moves files within
+        managed libraries only, so the listing also counts them; with
+        none, a preview or an apply answers `invalid-request`.
+        Read-only.
       tags: [organize]
       responses:
         "200":
@@ -5783,8 +5849,11 @@ paths:
       summary: Dry-run an organize pass
       description: >
         Plans the moves and renames a profile would make for the
-        named items (or the whole library when `itemPids` is absent)
-        without touching anything. The response carries the first
+        named items (or every managed library when `itemPids` is
+        absent) without touching anything. A move out of a read-only
+        library, or any move while the server is read-only, is held
+        back rather than planned, and `held` counts those. The
+        response carries the first
         five hundred actions plus the total, so a whole-library
         preview stays a bounded page; sidecars (covers, lyrics, cue
         sheets) ride along with their file and are not listed
@@ -5821,7 +5890,10 @@ paths:
       description: >
         Plans and applies the moves in one call (the plan is always
         recomputed server-side; a stale preview cannot apply). Moves
-        are crash-safe per file and locked fields are respected.
+        are crash-safe per file and locked fields are respected. A
+        read-only library's files stay where they are and count as
+        `held`; while the whole server is read-only the apply is
+        refused with `read-only`.
         Whole-library passes on large libraries take a while; the
         request runs synchronously and reports the full outcome.
         Administrators only.
@@ -8750,6 +8822,8 @@ paths:
             itself does not help. `catalog-busy`: another job holds the
             podcast download tree's shared file-mutation scope, which
             clears on its own, so an unattended retry is worth something.
+            `read-only`: the podcast library, or the whole server, is
+            read-only.
           content:
             application/json:
               schema:
@@ -12700,9 +12774,12 @@ components:
             Off by default, because it modifies the listener's own
             files. Files whose format cannot store a key are counted
             in `enrichmentStatus.lastRun.tagsUnrepresented` and left
-            byte-identical, which is not a failure. Applies to the next
-            pass; a run already in flight keeps the setting it started
-            under. Optional on PUT so settings writers predating this
+            byte-identical, which is not a failure. A pass that starts
+            while the server or any library is read-only writes nothing
+            back, whatever this says, since it cannot keep its writes
+            out of one library. Applies to the next pass; a run already
+            in flight keeps what it started under, the read-only state
+            included. Optional on PUT so settings writers predating this
             field never change it: absent keeps the current value.
             Always present in responses.
 
@@ -15153,6 +15230,8 @@ components:
             source the fix could use, for lyrics, artwork, genres, or
             book metadata, is switched on. `no-managed-library`: no
             library is managed, so there is no layout for paths to match.
+            `read-only`: the server is read-only, and the fix writes
+            files.
           enum:
             [
               needs-contact,
@@ -15161,6 +15240,7 @@ components:
               needs-genre-source,
               needs-book-source,
               no-managed-library,
+              read-only,
             ]
 
     HealthIssuePage:
@@ -17886,13 +17966,18 @@ components:
     OrganizeProfiles:
       type: object
       description: The server's organize profiles.
-      required: [profiles]
+      required: [profiles, managedLibraries]
       properties:
         profiles:
           type: array
-          description: Configured profiles.
+          description: The profiles, by name.
           items:
             $ref: "#/components/schemas/OrganizeProfile"
+        managedLibraries:
+          type: integer
+          description: >
+            How many libraries are managed, the only ones organize moves
+            files within.
 
     OrganizeProfile:
       type: object
@@ -17926,14 +18011,14 @@ components:
         itemPids:
           type: array
           maxItems: 1000
-          description: Restrict to these items; absent means the whole library.
+          description: Restrict to these items; absent means every managed library.
           items:
             type: string
 
     OrganizePlan:
       type: object
       description: A dry-run organize plan.
-      required: [profile, totalActions, actions]
+      required: [profile, totalActions, held, actions]
       properties:
         profile:
           type: string
@@ -17941,6 +18026,11 @@ components:
         totalActions:
           type: integer
           description: Moves the pass would make in total.
+        held:
+          type: integer
+          description: >
+            Moves held back because their library, or the whole server,
+            is read-only. Not in `actions` or `totalActions`.
         actions:
           type: array
           description: The first five hundred actions.
@@ -17968,7 +18058,7 @@ components:
     OrganizeReport:
       type: object
       description: The outcome of an applied organize pass.
-      required: [moved, skipped, failed]
+      required: [moved, skipped, held, failed]
       properties:
         moved:
           type: integer
@@ -17976,6 +18066,9 @@ components:
         skipped:
           type: integer
           description: Files already in place.
+        held:
+          type: integer
+          description: Files left where they are because their library is read-only.
         failed:
           type: integer
           description: Files that could not move.

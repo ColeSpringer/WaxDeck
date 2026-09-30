@@ -221,14 +221,15 @@ void main() {
       await _tap(tester, SemanticsIds.bookMarkFinished);
 
       expect(repo.putPlayStateCalls.last.positionMs, 3600000);
-      expect(find.text('Marked finished'), findsOneWidget);
+      expect(shellMessageText(raisedMessage(tester)), 'Marked finished');
+      expect(raisedMessage(tester)!.actionLabel, 'Undo');
+      expect(raisedMessage(tester)!.persist, isTrue);
 
       // The undo puts back where the listener actually was, which is the
       // position read before the write rather than zero - and it rides
       // the same request as the flags, so a completion checkpoint from
       // another device cannot land between the two.
-      await tester.tap(find.text('Undo'));
-      await tester.pumpAndSettle();
+      await pressRaisedAction(tester);
       expect(repo.setPlayedCalls.last.positionMs, 600000);
       expect(repo.playPositions[bookPid], 600000);
       // No second write: the mark's own position write is still the last
@@ -265,8 +266,7 @@ void main() {
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMarkFinished);
       final marked = repo.setPlayedCalls.length;
-      await tester.tap(find.text('Undo'));
-      await tester.pumpAndSettle();
+      await pressRaisedAction(tester);
 
       final undo = repo.setPlayedCalls.skip(marked).toList();
       expect(undo, hasLength(2), reason: 'the atomic try, then the old pair');
@@ -298,8 +298,7 @@ void main() {
         code: 'unavailable',
         message: 'the catalog is busy',
       );
-      await tester.tap(find.text('Undo'));
-      await tester.pumpAndSettle();
+      await pressRaisedAction(tester);
 
       expect(tester.takeException(), isNull);
       expect(repo.putPlayStateCalls.last.positionMs, 600000);
@@ -318,8 +317,7 @@ void main() {
 
       await openOverflow(tester);
       await _tap(tester, SemanticsIds.bookMarkFinished);
-      await tester.tap(find.text('Undo'));
-      await tester.pumpAndSettle();
+      await pressRaisedAction(tester);
 
       expect(repo.setPlayedCalls.last.played, isTrue);
       expect(repo.setPlayedCalls.last.finished, isTrue);
@@ -327,7 +325,7 @@ void main() {
     });
 
     testWidgets('the undo outlives the screen that offered it', (tester) async {
-      // The toast is a `ScaffoldMessenger` surface: it stays up while the
+      // The toast is the shell's: it stays up while the
       // visitor walks away, so the undo has to run through the provider
       // container rather than through this row's `WidgetRef`, which is
       // dead the moment its element is disposed. The comment said so
@@ -340,7 +338,7 @@ void main() {
       await _tap(tester, SemanticsIds.bookMarkFinished);
       expect(repo.putPlayStateCalls.last.positionMs, 3600000);
 
-      // Replace the screen, keeping the messenger's toast on screen.
+      // Replace the screen; the shell's toast stays up.
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -356,8 +354,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Whatever is on screen, the write still lands.
-      await tester.tap(find.text('Undo'));
-      await tester.pumpAndSettle();
+      await pressRaisedAction(tester);
       expect(tester.takeException(), isNull);
       expect(repo.setPlayedCalls.last.positionMs, 600000);
       expect(repo.playPositions[bookPid], 600000);
@@ -372,7 +369,7 @@ void main() {
       await _tap(tester, SemanticsIds.bookStartOver);
 
       expect(repo.putPlayStateCalls.last.positionMs, 0);
-      expect(find.text('Back to the beginning'), findsOneWidget);
+      expect(shellMessageText(raisedMessage(tester)), 'Back to the beginning');
     });
 
     testWidgets('an admin merges a multi-file book', (tester) async {
@@ -386,6 +383,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repo.mergeBookCalls.map((c) => c.pid), [bookPid]);
+      expect(raisedMessage(tester)!.actionLabel, 'Tasks');
+      expect(raisedMessage(tester)!.persist, isTrue);
     });
 
     testWidgets('an admin splits a single-file book with chapters', (

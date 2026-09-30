@@ -202,6 +202,23 @@ void main() {
       );
     });
 
+    test('toasts go through the shell messenger', () {
+      // The shell coalesces a run by channel; a screen's own hide eats
+      // whatever unread bar another screen raised.
+      final offenders = <String>[
+        for (final path in _sourcesMatching(const <String>[
+          'lib',
+          _designSystem,
+        ], _rawToast))
+          if (!path.endsWith('/shell/shell_messages.dart')) path,
+      ];
+      expect(
+        offenders,
+        isEmpty,
+        reason: 'use shellMessengerProvider:\n${offenders.join('\n')}',
+      );
+    });
+
     test('no host installs a generated delegate list', () {
       // gen-l10n's lists name the SDK's Material tables, which material_ui
       // never reads: under es there is no Material table of its type at all.
@@ -398,6 +415,8 @@ final _designSystemList = RegExp(r'\bwaxLocalizationsDelegates\b');
 final _selectableText = RegExp(r'\bSelectableText(?:\.rich)?\(');
 
 final _rawSheet = RegExp(r'\bshowModalBottomSheet\b');
+
+final _rawToast = RegExp(r'\bScaffoldMessenger(?:State)?\b');
 
 /// Whether an `AlertDialog(` in [code] takes a bare `Text` as its content.
 bool _dialogWithBareText(String code) {

@@ -17,7 +17,8 @@ info:
     (`name=url` pairs, comma separated) and, if it wants auth,
     `WAXDECK_ENRICH_PROVIDER_AUTH` (`name=token` pairs; the token rides
     every request as `Authorization: Bearer <token>`). Custom providers
-    are asked first unless an administrator reorders the sources.
+    are asked first by default; once an administrator has saved an
+    order, one registered later joins its end until it is moved.
 paths:
   /capabilities:
     get:
@@ -107,8 +108,14 @@ components:
             booklet, background), and `artist-art` an artist's own
             images, `artist-front` and `artist-background` for a provider
             serving one of the two. They are separate because each gates
-            a separate pass, and a provider that only knows front covers
-            must not be walked over every artist in a library.
+            its own half of an art walk (a front, the other slots, an
+            artist's portrait or background), and a provider that only
+            knows front covers must not be walked over every artist in a
+            library. `genres` is asked at `release_group`: by the
+            enrichment pass only for a release group MusicBrainz
+            resolved, so only with the enrichment contact set, and by the
+            editor's Fetch for one album by its title and artist alone.
+            `identity` is accepted and reserved, and nothing asks for it.
 
 
             `fields` is scalar metadata returned in `candidate.fields`
@@ -159,11 +166,12 @@ components:
         wants:
           type: array
           description: >
-            What this answer will be used for; absent means everything. A
-            `release` is asked separately for `cover`, `aux-art` and
-            `fields`, and an `artist` for `artist-front`,
-            `artist-background` or both as `artist-art`, so skip what the
-            others need.
+            What this answer will be used for; absent means everything.
+            An art ask at `release` or `release_group` names `cover`,
+            `aux-art`, or both when both are open; `fields` is asked on
+            its own, and an `artist` for `artist-front`,
+            `artist-background` or both as `artist-art`. Answer what
+            `wants` names and skip the rest.
           items:
             $ref: "#/components/schemas/Capability"
         title:
@@ -230,7 +238,7 @@ components:
       properties:
         confidence:
           type: number
-          description: Advisory 0..1; providers are ranked by registration order today.
+          description: Advisory 0..1 and not read; providers are asked in the administrator's source order.
         mbid:
           type: string
           description: Resolved MusicBrainz id (identity capability).
@@ -260,8 +268,10 @@ components:
           type: object
           description: >
             Images by role (`front`, `back`, `disc`, `booklet`,
-            `background`); the `aux-art` and `artist-art` walks read only
-            this. An artist's `cover` counts as its `front`.
+            `background`). The enrichment pass reads every role here,
+            taking `front` over `cover` when both come; the editor's
+            Fetch reads `cover` alone, so a front belongs there too. An
+            artist's `cover` counts as its `front`.
           additionalProperties:
             $ref: "#/components/schemas/Image"
         publisher:

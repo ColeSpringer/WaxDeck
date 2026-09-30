@@ -3673,6 +3673,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Este servidor aún no puede ejecutar esta corrección.';
 
   @override
+  String get healthFixBlockedReadOnly =>
+      'Escribe en los archivos, y el servidor está en solo lectura.';
+
+  @override
   String get healthFixBusy =>
       'Ya hay un enriquecimiento en curso. Corrige esto cuando termine.';
 
@@ -5621,8 +5625,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get organizeConfirmTitle => '¿Aplicar el perfil de organización?';
 
   @override
+  String get organizeDiscard => 'Descartar la previsualización';
+
+  @override
   String get organizeEmptyMessage =>
-      'Los perfiles forman parte de la configuración del servidor. Añade uno allí y aparecerá aquí.';
+      'El servidor no ofrece ningún perfil con el que organizar los archivos.';
 
   @override
   String get organizeEmptyTitle => 'No hay perfiles de organización';
@@ -5631,8 +5638,23 @@ class AppLocalizationsEs extends AppLocalizations {
   String get organizeFailed => 'Con error';
 
   @override
+  String organizeHeld(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count archivos se quedan donde están: sus bibliotecas son de solo lectura.',
+      one: '1 archivo se queda donde está: su biblioteca es de solo lectura.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get organizeHeldTile => 'Solo lectura';
+
+  @override
   String get organizeHint =>
-      'La previsualización muestra a dónde movería los archivos el perfil elegido, antes de que pase nada.';
+      'La previsualización comprueba cada biblioteca gestionada con este perfil, así que encuentra archivos añadidos o movidos desde la última vez aunque no haya cambiado nada más. No se mueve nada hasta que apliques.';
 
   @override
   String get organizeLoadError =>
@@ -5642,10 +5664,21 @@ class AppLocalizationsEs extends AppLocalizations {
   String get organizeMoved => 'Movidos';
 
   @override
+  String get organizeNoManagedMessage =>
+      'Organizar solo mueve archivos dentro de bibliotecas gestionadas, y este servidor no tiene ninguna.';
+
+  @override
+  String get organizeNoManagedTitle => 'Ninguna biblioteca gestionada';
+
+  @override
   String get organizeNothingMessage => 'Este perfil no movería nada.';
 
   @override
   String get organizeNothingTitle => 'Todo está ya en su sitio';
+
+  @override
+  String get organizeOnlyBuiltIn =>
+      'Este servidor solo tiene el perfil integrado.';
 
   @override
   String organizePlannedMoves(int count) {

@@ -7,6 +7,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import '../l10n/l10n.dart';
 import '../library/item_delete.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'playlist_import.dart';
 import 'playlist_sync_controller.dart';
 
@@ -123,7 +124,7 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
     Future<void> Function() action, {
     required bool refusal,
   }) async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     setState(() => _busy = true);
     try {
@@ -132,15 +133,9 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
       // A pasted export the parser could not read. Its own sentence,
       // for the same reason a server refusal keeps the server's: the
       // subject is what somebody just typed.
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      messenger.show(e.message);
     } on Object catch (e) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(
-            refusal ? explainRefusal(l10n, e) : explainError(l10n, e),
-          ),
-        ),
-      );
+      messenger.show(refusal ? explainRefusal(l10n, e) : explainError(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -173,7 +168,7 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
   }
 
   Future<void> _save(PlaylistSource? bound) => _run(refusal: true, () async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final body = _body(bound, l10n);
     await ref
@@ -189,22 +184,22 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
     // What is stored now, so a second save that only moves the mode is
     // a settings-only one: the seed never ran for a binding made here.
     _seededUrl = _url.text;
-    messenger.showSnackBar(SnackBar(content: Text(l10n.playlistSyncSaved)));
+    messenger.show(l10n.playlistSyncSaved);
   });
 
   Future<void> _syncNow() => _run(refusal: true, () async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     await ref.read(playlistSyncProvider(widget.pid).notifier).syncNow();
-    messenger.showSnackBar(SnackBar(content: Text(l10n.playlistSyncQueued)));
+    messenger.show(l10n.playlistSyncQueued);
   });
 
   Future<void> _unbind() => _run(refusal: false, () async {
-    final messenger = ScaffoldMessenger.of(context);
+    final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     final navigator = Navigator.of(context);
     await ref.read(playlistSyncProvider(widget.pid).notifier).unbind();
-    messenger.showSnackBar(SnackBar(content: Text(l10n.playlistSyncUnbound)));
+    messenger.show(l10n.playlistSyncUnbound);
     if (navigator.mounted) navigator.pop();
   });
 

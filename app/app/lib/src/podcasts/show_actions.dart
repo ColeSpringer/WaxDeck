@@ -13,6 +13,7 @@ import '../player/now_playing_controller.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'episode_actions.dart';
 import 'mark_older_played_dialog.dart';
 import 'podcast_shelves.dart';
@@ -179,10 +180,10 @@ Future<void> runShowAction(
 }
 
 Future<void> _refresh(BuildContext context, String pid) async {
-  final messenger = ScaffoldMessenger.of(context);
   final l10n = context.l10n;
   // The container rather than a widget's ref, which a card can outlive.
   final container = ProviderScope.containerOf(context, listen: false);
+  final messenger = container.read(shellMessengerProvider.notifier);
   try {
     final result = await container.read(repositoryProvider).refreshPodcast(pid);
     // New episodes change what the hub's tile and shelves say, and the
@@ -193,21 +194,14 @@ Future<void> _refresh(BuildContext context, String pid) async {
       ..invalidate(subscriptionsProvider)
       ..invalidate(upNextEpisodesProvider)
       ..invalidate(latestEpisodesProvider);
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            result.newEpisodes == 0
-                ? l10n.podcastNoNewEpisodes
-                : l10n.podcastNewEpisodes(result.newEpisodes),
-          ),
-        ),
-      );
+    messenger.show(
+      result.newEpisodes == 0
+          ? l10n.podcastNoNewEpisodes
+          : l10n.podcastNewEpisodes(result.newEpisodes),
+      channel: ShellChannel.podcasts,
+    );
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+    messenger.show(explainError(l10n, e), channel: ShellChannel.podcasts);
   }
 }
 
@@ -230,7 +224,7 @@ Future<void> playShowLatest(
 ) async {
   // Read before the awaits: the card may be gone when the answer lands,
   // and the play is honoured anyway.
-  final messenger = ScaffoldMessenger.of(context);
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
   final repository = ref.read(repositoryProvider);
   final playback = ref.read(nowPlayingProvider.notifier);
@@ -263,9 +257,7 @@ Future<void> playShowLatest(
       positionMs: progress[episode.pid].played ? 0 : null,
     );
   } on WaxDeckApiException catch (e) {
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(explainError(l10n, e))));
+    messenger.show(explainError(l10n, e), channel: ShellChannel.podcasts);
   }
 }
 

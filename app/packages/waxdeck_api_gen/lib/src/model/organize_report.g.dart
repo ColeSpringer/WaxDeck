@@ -12,6 +12,8 @@ class _$OrganizeReport extends OrganizeReport {
   @override
   final int skipped;
   @override
+  final int held;
+  @override
   final int failed;
   @override
   final BuiltList<OrganizeFailure>? failures;
@@ -22,6 +24,7 @@ class _$OrganizeReport extends OrganizeReport {
   _$OrganizeReport._({
     required this.moved,
     required this.skipped,
+    required this.held,
     required this.failed,
     this.failures,
   }) : super._();
@@ -38,6 +41,7 @@ class _$OrganizeReport extends OrganizeReport {
     return other is OrganizeReport &&
         moved == other.moved &&
         skipped == other.skipped &&
+        held == other.held &&
         failed == other.failed &&
         failures == other.failures;
   }
@@ -47,6 +51,7 @@ class _$OrganizeReport extends OrganizeReport {
     var _$hash = 0;
     _$hash = $jc(_$hash, moved.hashCode);
     _$hash = $jc(_$hash, skipped.hashCode);
+    _$hash = $jc(_$hash, held.hashCode);
     _$hash = $jc(_$hash, failed.hashCode);
     _$hash = $jc(_$hash, failures.hashCode);
     _$hash = $jf(_$hash);
@@ -58,6 +63,7 @@ class _$OrganizeReport extends OrganizeReport {
     return (newBuiltValueToStringHelper(r'OrganizeReport')
           ..add('moved', moved)
           ..add('skipped', skipped)
+          ..add('held', held)
           ..add('failed', failed)
           ..add('failures', failures))
         .toString();
@@ -75,6 +81,10 @@ class OrganizeReportBuilder
   int? _skipped;
   int? get skipped => _$this._skipped;
   set skipped(int? skipped) => _$this._skipped = skipped;
+
+  int? _held;
+  int? get held => _$this._held;
+  set held(int? held) => _$this._held = held;
 
   int? _failed;
   int? get failed => _$this._failed;
@@ -95,6 +105,7 @@ class OrganizeReportBuilder
     if ($v != null) {
       _moved = $v.moved;
       _skipped = $v.skipped;
+      _held = $v.held;
       _failed = $v.failed;
       _failures = $v.failures?.toBuilder();
       _$v = null;
@@ -130,6 +141,11 @@ class OrganizeReportBuilder
               skipped,
               r'OrganizeReport',
               'skipped',
+            ),
+            held: BuiltValueNullFieldError.checkNotNull(
+              held,
+              r'OrganizeReport',
+              'held',
             ),
             failed: BuiltValueNullFieldError.checkNotNull(
               failed,
