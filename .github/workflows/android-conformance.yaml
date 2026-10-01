@@ -23,6 +23,15 @@
 # and the retry gets its fresh emulator. What every attempt leaves is
 # uploaded whatever happened.
 #
+# The third harness failure is the device itself: the emulator's adb
+# transport is torn down and rebuilt once after boot, usually a second
+# in, which is when this action hands the device over, and `flutter
+# test` reads `adb devices` once and takes an offline device for none.
+# The script waits for the device to hold steady before the first
+# suite, and a suite that died before its first test with the transport
+# rebuilt under it gets one more try on the same emulator, minutes
+# cheaper than the attempt below.
+#
 # Why it exists at all: the port contract says a play after completion
 # restarts the item; the FakeEngine implemented that and just_audio did
 # not, and because nothing held the real engine to the shared suite,

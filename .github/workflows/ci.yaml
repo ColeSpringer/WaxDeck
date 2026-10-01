@@ -242,7 +242,12 @@ jobs:
       # underneath were the part nobody could gate. `@TestOn('browser')`
       # keeps these out of the VM sweep, so this is the run that
       # executes them.
+      # Bounded on its own: the one time this hung it printed nothing
+      # for twenty minutes and ran the job into its cap. A step that
+      # fails names itself and lets the failure-only uploads run; a
+      # cancelled job does neither. A green run takes under two minutes.
       - name: Test (browser)
+        timeout-minutes: 10
         run: cd app/app && flutter test --platform chrome test/*_web_test.dart
       - name: Build web (wasm)
         run: cd app/app && flutter build web --wasm

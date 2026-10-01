@@ -23,8 +23,13 @@
 # json:...`) names the last test that started, which is the one line a
 # hang needs most. Verdicts: `passed`; `failed`, any non-zero exit, a
 # death by signal named as such; `hung`, the budget ran out, reported as
-# exit 124 the way `timeout` would. The failing kinds get an error
-# annotation, the log's tail in a collapsed group, and a summary row.
+# exit 124 the way `timeout` would; `died`, a non-zero exit before the
+# report named a first test - the harness, not the suite - which a
+# caller may run again, so it gets a warning annotation where the other
+# two get an error, and the caller decides whether it ends up one. The
+# verdict is written to <name>.verdict for that caller; a run ended by
+# a signal leaves none. The failing kinds get the log's tail in a
+# collapsed group and a summary row.
 set -euo pipefail
 
 usage() {
@@ -47,6 +52,8 @@ PROBE_BUDGET=480
 mkdir -p "$OUT"
 LOG="$OUT/$NAME.log"
 REPORT="$OUT/$NAME.report.json"
+VERDICT="$OUT/$NAME.verdict"
+rm -f "$VERDICT"
 
 # Every process under $1, then $1 itself.
 descendants() {
@@ -139,9 +146,16 @@ if [ -s "$REPORT" ] && command -v jq > /dev/null 2>&1; then
     grep -v '^loading ' | tail -n 1 || true)
   finished=$(jq -r 'select(.type == "done") | .success' "$REPORT" 2> /dev/null | tail -n 1 || true)
 fi
+# A failure the report names no test for is the harness dying before
+# the suite began: no device, no VM service, a build that never ran.
+# Without jq the report is unreadable and the verdict stays `failed`.
+if [ "$verdict" = failed ] && [ -z "$last_test" ] && command -v jq > /dev/null 2>&1; then
+  verdict=died
+fi
+echo "$verdict" > "$VERDICT"
 
 detail="exit $status after ${elapsed}s"
-if [ "$verdict" = failed ] && [ "$status" -gt 128 ]; then
+if [ "$status" -gt 128 ]; then
   detail="$detail (killed by signal $((status - 128)))"
 fi
 [ -n "$last_test" ] && detail="$detail; last test started: $last_test"
@@ -154,7 +168,11 @@ if [ "$verdict" != passed ]; then
   echo "::group::$NAME: last 120 lines of $LOG"
   tail -n 120 "$LOG" || true
   echo "::endgroup::"
-  echo "::error title=$NAME $verdict::$detail"
+  if [ "$verdict" = died ]; then
+    echo "::warning title=$NAME $verdict::$detail"
+  else
+    echo "::error title=$NAME $verdict::$detail"
+  fi
 fi
 
 if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then

@@ -105,6 +105,12 @@ suite() {
   "$CI_TOOLS/run-suite.sh" "$name" "$budget" "$DIAG" "$CI_TOOLS/probe-linux.sh" -- \
     flutter test -v --reporter expanded --file-reporter "json:$DIAG/$name.report.json" \
     -d linux "integration_test/${name}_test.dart" || status=$?
+  # A death before the first test is a warning from run-suite.sh, for
+  # the caller that retries one; nothing retries a desktop suite, so
+  # here it is the error it ends up as.
+  if [ "$(cat "$DIAG/$name.verdict" 2> /dev/null)" = died ]; then
+    echo "::error title=$name died::the harness died before the suite's first test; the warning above has the exit and the log's tail"
+  fi
   [ "$status" -eq 124 ] && HUNG=$name
   [ "$status" -eq 0 ] || FAILED+=("$name")
   return 0

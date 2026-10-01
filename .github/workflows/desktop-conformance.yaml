@@ -54,11 +54,11 @@ jobs:
       #
       # gdb and x11-apps are for the hang probe (tools/ci/probe-linux.sh):
       # native thread stacks are the only view into mpv's threads, and
-      # xwd is the screenshot of the virtual display.
+      # xwd is the screenshot of the virtual display. The helper retries
+      # a stalled apt mirror instead of waiting out the cap.
       - name: Linux desktop toolchain
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          tools/ci/apt-install.sh \
             clang cmake ninja-build pkg-config libgtk-3-dev \
             libsecret-1-dev libx11-dev libxi-dev \
             xvfb pulseaudio libmpv-dev gdb x11-apps
