@@ -348,6 +348,66 @@ func TestAddLibrarySyncsFlowRoot(t *testing.T) {
 	}
 }
 
+// The name is stored before the catalog takes the root, so a create whose
+// name cannot be stored adds nothing: the feed's refresh would otherwise
+// name the root after its directory, and the bridge learn both names.
+func TestAddLibraryWhoseNameCannotBeStoredAddsNothing(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	flow := &fakeFlowRoots{names: []string{"lib"}}
+	svc.SetFlowRoots(flow)
+	if _, err := svc.db.Writer().ExecContext(ctx, `CREATE TRIGGER refuse_names BEFORE INSERT ON library_roots
+		BEGIN SELECT RAISE(ABORT, 'refused'); END`); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "books", Path: dir}); err == nil {
+		t.Fatal("AddLibrary succeeded with its name refused")
+	}
+	libs, err := svc.lib.Libraries(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, lib := range libs {
+		if rootKey(lib.DisplayRoot) == rootKey(dir) {
+			t.Errorf("the catalog took %s with no name stored for it", dir)
+		}
+	}
+	flow.mu.Lock()
+	defer flow.mu.Unlock()
+	if len(flow.synced) != 0 {
+		t.Errorf("synced roots = %v, want none", flow.synced)
+	}
+}
+
+// A root the catalog refuses takes its stored name back out, so the name
+// cannot attach to a root the CLI adds at that path later.
+func TestAddLibraryRefusedByTheCatalogLeavesNoName(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	roots := svc.RootTable()
+	if len(roots) == 0 {
+		t.Fatal("the fixture has no library root")
+	}
+	// Inside an existing root: the catalog refuses an overlap.
+	nested := filepath.Join(roots[0].Path, "nested")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "nested", Path: nested}); err == nil {
+		t.Fatal("AddLibrary inside an existing root succeeded")
+	}
+	stored, err := svc.db.LibraryRootsList(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range stored {
+		if rootKey(r.Path) == rootKey(nested) {
+			t.Errorf("the refused root left its name %q stored", r.Name)
+		}
+	}
+}
+
 // A library made in the console tells every account to re-read the
 // libraries by the time the create answers.
 func TestAddingALibraryTellsEveryAccount(t *testing.T) {

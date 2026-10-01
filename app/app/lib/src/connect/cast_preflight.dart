@@ -255,6 +255,7 @@ class _DeviceTestsState extends ConsumerState<_DeviceTests> {
     final answer = _answer?.endpointId == device.id ? _answer : null;
     return <Widget>[
       WaxOptionRow(
+        key: ValueKey(SemanticsIds.preflightDevice(device.id)),
         title: device.name,
         subtitle: _running == device.id ? l10n.devicesTesting : null,
         glyph: WaxIcons.cast,

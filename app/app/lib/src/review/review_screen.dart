@@ -500,6 +500,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
         controller: _scroll,
         itemExtent: _rowExtent,
         itemCount: state.entries.length + (state.loadingMore ? 1 : 0),
+        findChildIndexCallback: indexByKey(state.entries, _reviewKey),
         itemBuilder: (context, index) {
           if (index >= state.entries.length) {
             return const Center(
@@ -512,6 +513,7 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
           }
           final entry = state.entries[index];
           return _ReviewRow(
+            key: _reviewKey(entry),
             entry: entry,
             selected: index == _selected,
             open: entry.id == widget.openEntryId,
@@ -740,8 +742,13 @@ class _FilterChips extends ConsumerWidget {
   }
 }
 
+/// A row's key, so the row moves with its entry (see [indexByKey]): an
+/// entry with no title reads the same as every other one without.
+Key _reviewKey(ReviewEntry entry) => ValueKey(SemanticsIds.reviewRow(entry.id));
+
 class _ReviewRow extends StatelessWidget {
   const _ReviewRow({
+    super.key,
     required this.entry,
     required this.selected,
     required this.open,

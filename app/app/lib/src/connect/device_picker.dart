@@ -256,6 +256,7 @@ class _DevicePickerSheet extends ConsumerWidget {
           ),
           for (final session in elsewhere)
             WaxOptionRow(
+              key: ValueKey(SemanticsIds.session(session.id)),
               title: session.currentEntry?.title ?? l10n.devicesPlaying,
               subtitle: l10n.devicesOnEndpoint(
                 session.endpointName ?? session.endpointId,
@@ -305,6 +306,10 @@ class _DevicePickerSheet extends ConsumerWidget {
       for (final endpoint in members) {
         rows.add(
           WaxOptionRow(
+            // Keyed, as every device row here: two devices can carry one
+            // name, and a row handed another device by position would
+            // keep the old one's identifier.
+            key: ValueKey(SemanticsIds.endpoint(endpoint.id)),
             title: endpoint.name,
             // The reason, where there is one that overrides the rest: a
             // row saying "volume control" under a device nothing can be

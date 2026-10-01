@@ -16,6 +16,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'row_nodes.dart';
 
 const _user = WaxDeckUser(
   id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
@@ -269,6 +270,37 @@ void main() {
         find.bySemanticsIdentifier(SemanticsIds.deviceRow('se-1')),
         findsOneWidget,
       );
+    });
+
+    testWidgets('signing a device out leaves the next one its own controls', (
+      tester,
+    ) async {
+      _tallWindow(tester);
+      final repo = _signedInRepo(
+        sessions: [
+          testSession('se-1', current: true, deviceName: 'This one'),
+          testSession('se-2', deviceName: 'Pixel 9'),
+          testSession('se-3', deviceName: 'Kitchen radio'),
+        ],
+      );
+      await tester.pumpWidget(_section(repo, SettingsSection.account));
+      await tester.pumpAndSettle();
+      final revoke = find.bySemanticsIdentifier(
+        SemanticsIds.deviceRevoke('se-2'),
+      );
+      await _show(tester, revoke);
+
+      await expectRowsKeepTheirNodes(
+        tester,
+        [SemanticsIds.deviceRow('se-3'), SemanticsIds.deviceRevoke('se-3')],
+        () async {
+          await tester.tap(revoke);
+          await tester.pumpAndSettle();
+          await tester.tap(find.byKey(const Key('device-revoke-confirm')));
+          await tester.pumpAndSettle();
+        },
+      );
+      expect(repo.revokedSessionIds, ['se-2']);
     });
 
     testWidgets('renaming a device sends the trimmed name', (tester) async {

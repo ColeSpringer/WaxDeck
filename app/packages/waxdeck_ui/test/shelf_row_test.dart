@@ -286,6 +286,50 @@ void main() {
     expect(_menus, <String>['Card 1']);
   });
 
+  testWidgets('a card that lands in front leaves the others their nodes', (
+    tester,
+  ) async {
+    // Two editions of one album read alike, so a card handed to the next
+    // item by position would keep the first one's handle where e2e reads
+    // it: Flutter resends a node only when more than its identifier changed.
+    MediaTileData tile(String id) => MediaTileData(
+      title: 'Abbey Road',
+      subtitle: 'Nightjar',
+      semanticsId: 'shelf-test-card-$id',
+    );
+    final items = ValueNotifier<List<MediaTileData>>(<MediaTileData>[
+      tile('a'),
+      tile('b'),
+    ]);
+    addTearDown(items.dispose);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildWaxTheme(),
+        home: Scaffold(
+          body: ValueListenableBuilder<List<MediaTileData>>(
+            valueListenable: items,
+            builder: (context, value, _) => ShelfRow(
+              title: 'Recently added',
+              cardWidth: _cardWidth,
+              items: value,
+            ),
+          ),
+        ),
+      ),
+    );
+    int node(String id) =>
+        tester.getSemantics(find.bySemanticsIdentifier(id)).id;
+    const ids = <String>['shelf-test-card-a', 'shelf-test-card-b'];
+    final before = <String, int>{for (final id in ids) id: node(id)};
+
+    items.value = <MediaTileData>[tile('c'), ...items.value];
+    await tester.pump();
+
+    for (final id in ids) {
+      expect(node(id), before[id], reason: '$id keeps its node');
+    }
+  });
+
   testWidgets('a secondary tap in the halo reaches the card menu', (
     tester,
   ) async {

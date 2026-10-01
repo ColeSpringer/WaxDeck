@@ -363,6 +363,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
       ),
       sliver: SliverList.builder(
         itemCount: visible.length + (footer ? 1 : 0),
+        findChildIndexCallback: indexByKey(visible, _episodeKey),
         itemBuilder: (context, index) {
           if (index >= visible.length) {
             return Padding(
@@ -382,6 +383,7 @@ class _ShowScreenState extends ConsumerState<ShowScreen> {
           }
           final episode = visible[index];
           return _EpisodeRow(
+            key: _episodeKey(episode),
             showPid: widget.pid,
             episode: episode,
             progress: progress[episode.pid],
@@ -753,9 +755,14 @@ class _CollapsibleNotesState extends ConsumerState<CollapsibleNotes> {
   }
 }
 
+/// A row's key, so the row moves with its episode (see [indexByKey]).
+Key _episodeKey(EpisodeSummary episode) =>
+    ValueKey(SemanticsIds.episode(episode.pid));
+
 /// One episode in a show's list.
 class _EpisodeRow extends ConsumerWidget {
   const _EpisodeRow({
+    super.key,
     required this.showPid,
     required this.episode,
     required this.progress,

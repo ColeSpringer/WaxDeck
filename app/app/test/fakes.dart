@@ -6624,8 +6624,14 @@ class FakeRepository implements WaxDeckRepository {
     queueDepth: 0,
   );
 
+  /// Held open, [getSimilarityStatus] waits on it.
+  Completer<void>? similarityStatusGate;
+
   @override
-  Future<SimilarityStatus> getSimilarityStatus() async => similarityStatus;
+  Future<SimilarityStatus> getSimilarityStatus() async {
+    await similarityStatusGate?.future;
+    return similarityStatus;
+  }
 }
 
 /// Handy device-session factory for tests.

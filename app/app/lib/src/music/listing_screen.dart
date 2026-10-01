@@ -20,6 +20,9 @@ import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
 import 'music_controllers.dart';
 
+/// A row's key, so the row moves with its item (see [indexByKey]).
+Key _itemKey(ItemSummary item) => ValueKey(SemanticsIds.item(item.pid));
+
 /// A list of tracks: everything in the library, or everything in one
 /// bucket of one dimension.
 ///
@@ -367,6 +370,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
     }
     return SliverList.builder(
       itemCount: state.items.length + (state.loadingMore ? 1 : 0),
+      findChildIndexCallback: indexByKey(state.items, _itemKey),
       itemBuilder: (context, index) {
         if (index >= state.items.length) {
           return const Padding(
@@ -376,6 +380,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
         }
         final item = state.items[index];
         return QueueDraggable(
+          key: _itemKey(item),
           drop: QueueDrop.item(item),
           child: MediaListRow(
             data: MediaTileData(

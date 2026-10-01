@@ -126,6 +126,7 @@ class _PinnedRows extends ConsumerWidget {
         ),
         for (final station in dial)
           Padding(
+            key: ValueKey(SemanticsIds.radioPinned(station.pid)),
             padding: gutter.copyWith(top: WaxSpace.s4, bottom: WaxSpace.s4),
             child: _PinnedRow(station: station, playback: playback),
           ),
@@ -338,10 +339,12 @@ class _StationGrid extends ConsumerWidget {
               mainAxisExtent: MediaCard.heightFor(context, width: grid.width),
             ),
             itemCount: stations.length,
+            findChildIndexCallback: indexByKey(stations, _stationKey),
             itemBuilder: (context, index) {
               final station = stations[index];
               final playing = station.pid == playback.station?.pid;
               return _StationTile(
+                key: _stationKey(station),
                 station: station,
                 width: grid.width,
                 playing: playing,
@@ -361,9 +364,14 @@ class _StationGrid extends ConsumerWidget {
   }
 }
 
+/// A tile's key, so the tile moves with its station (see [indexByKey]).
+Key _stationKey(RadioStation station) =>
+    ValueKey(SemanticsIds.radio(station.pid));
+
 /// One station: its logo, its name, the pin, and its menu.
 class _StationTile extends ConsumerWidget {
   const _StationTile({
+    super.key,
     required this.station,
     required this.width,
     required this.playing,

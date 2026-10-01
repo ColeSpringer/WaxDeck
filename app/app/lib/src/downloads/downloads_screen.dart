@@ -243,6 +243,7 @@ class _Transfers extends ConsumerWidget {
           ),
           for (final entry in entries)
             MediaListRow(
+              key: ValueKey(SemanticsIds.downloadRow(entry.pid)),
               data: MediaTileData(
                 title: entry.title,
                 subtitle: entry.subtitle,
@@ -354,6 +355,7 @@ class _Groups extends ConsumerWidget {
             ),
             for (final entry in group.entries)
               MediaListRow(
+                key: ValueKey(SemanticsIds.downloadRow(entry.pid)),
                 data: MediaTileData(
                   title: entry.title,
                   subtitle: entry.subtitle,

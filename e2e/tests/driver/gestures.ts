@@ -126,6 +126,9 @@ export async function clickUntil(
   const { button = 'left' } = press;
   await expect(async () => {
     if (!landed()) {
+      // A forced press lands where the rect was read, so never mid-move:
+      // a re-press would reach whatever slid under it.
+      await rectAtRest(trigger);
       await trigger.click({ timeout: 2_000, force: true, button }).catch(() => {});
     }
     await expect

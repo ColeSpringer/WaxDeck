@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
@@ -13,6 +14,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'row_nodes.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
   overrides: [
@@ -534,6 +536,73 @@ void main() {
       tester.getTopLeft(scan).dy,
       lessThan(tester.getTopLeft(_job('jb-2')).dy),
     );
+  });
+
+  testWidgets('a job that lands above the others leaves them their rows', (
+    tester,
+  ) async {
+    final at = DateTime.utc(2026, 9, 29, 10);
+    Job scan(String pid, int minutes) => Job(
+      pid: pid,
+      kind: 'scan',
+      state: 'done',
+      startedAt: at,
+      finishedAt: at.add(Duration(minutes: minutes)),
+    );
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+    )..jobs = [scan('jb-2', 2), scan('jb-1', 1)];
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await expectRowsKeepTheirNodes(
+      tester,
+      [SemanticsIds.jobRow('jb-1'), SemanticsIds.jobRow('jb-2')],
+      () async {
+        repo.jobs = [scan('jb-3', 3), ...repo.jobs];
+        ProviderScope.containerOf(
+          tester.element(find.byType(WaxScaffold).first),
+        ).invalidate(adminJobsProvider);
+        await tester.pumpAndSettle();
+      },
+    );
+    expect(_job('jb-3'), findsOneWidget);
+  });
+
+  testWidgets('a task that lands above the others leaves them their rows', (
+    tester,
+  ) async {
+    ToolTask merge(String id, int hour) => ToolTask(
+      id: id,
+      type: 'book-merge',
+      state: 'done',
+      itemPid: 'bk-1',
+      createdAt: DateTime.utc(2026, 7, 1, hour),
+      finishedAt: DateTime.utc(2026, 7, 1, hour, 30),
+    );
+    final repo = FakeRepository();
+    repo.toolTasksById
+      ..['tt-2'] = merge('tt-2', 2)
+      ..['tt-1'] = merge('tt-1', 1);
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await expectRowsKeepTheirNodes(
+      tester,
+      [SemanticsIds.taskRow('tt-1'), SemanticsIds.taskRow('tt-2')],
+      () async {
+        final older = repo.toolTasksById.values.toList();
+        repo.toolTasksById
+          ..clear()
+          ..['tt-3'] = merge('tt-3', 3)
+          ..addAll({for (final task in older) task.id: task});
+        ProviderScope.containerOf(
+          tester.element(find.byType(WaxScaffold).first),
+        ).invalidate(toolTasksProvider);
+        await tester.pumpAndSettle();
+      },
+    );
+    expect(_row('tt-3'), findsOneWidget);
   });
 
   testWidgets("a listener's tasks read no jobs", (tester) async {

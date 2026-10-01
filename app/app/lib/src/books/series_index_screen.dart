@@ -57,6 +57,10 @@ class BookSeriesIndexScreen extends ConsumerWidget {
   }
 }
 
+/// A card's key, so the card moves with its series (see [indexByKey]).
+Key _seriesKey(BookSeries series) =>
+    ValueKey(SemanticsIds.bookSeriesCard(series.pid));
+
 class _SeriesGrid extends ConsumerWidget {
   const _SeriesGrid({required this.series});
 
@@ -82,9 +86,11 @@ class _SeriesGrid extends ConsumerWidget {
               mainAxisExtent: MediaCard.heightFor(context, width: grid.width),
             ),
             itemCount: series.length,
+            findChildIndexCallback: indexByKey(series, _seriesKey),
             itemBuilder: (context, index) {
               final row = series[index];
               return MediaCard(
+                key: _seriesKey(row),
                 data: MediaTileData(
                   title: row.name,
                   // Zero is what a restricted account reads, and a "0

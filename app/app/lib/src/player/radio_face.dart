@@ -99,7 +99,13 @@ class RadioFace extends ConsumerWidget {
           artworkCaptionReserved: true,
           onCollapse: () => leavePlayer(context),
           trailingHeaderActions: <Widget>[
-            _FavoriteButton(station: station),
+            // A new button for a new station: its name reads the same on
+            // every station, and an identifier changing on its own is
+            // never resent.
+            _FavoriteButton(
+              key: ValueKey(SemanticsIds.radioFavorite(station.pid)),
+              station: station,
+            ),
             _StationMenu(station: station),
           ],
           // Follows the shape: the ring traces a circle's edge and reads
@@ -342,7 +348,7 @@ Future<void> saveNowPlayingSong(BuildContext context, WidgetRef ref) async {
 }
 
 class _FavoriteButton extends ConsumerWidget {
-  const _FavoriteButton({required this.station});
+  const _FavoriteButton({super.key, required this.station});
 
   final RadioStation station;
 

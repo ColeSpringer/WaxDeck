@@ -20,7 +20,7 @@
   "commonStop": "Detener",
   "consoleCancel": "Cancelar",
   "consoleConfirmHint": "Escribe {word} para confirmar",
-  "consoleDetailsFor": "Detalles de {id}",
+  "consoleDetailsFor": "Detalles de {name}",
   "consoleStat": "{label}, {value}",
   "controlsBusy": "En curso",
   "controlsMute": "Silenciar",

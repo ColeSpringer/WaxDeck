@@ -15,6 +15,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'row_nodes.dart';
 
 /// A picker resolving to fixed reader-backed files, mirroring the web
 /// port's lazy-reference shape.
@@ -194,6 +195,46 @@ void main() {
     expect(find.text('Uploaded together, 2 files'), findsOneWidget);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadRow('up-a')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a batch that lands above another leaves it its rows', (
+    tester,
+  ) async {
+    UploadSession staged(String id, String batchId) =>
+        testUpload(id, fileName: '$id.flac', batchId: batchId, state: 'staged');
+    final repo = FakeRepository();
+    repo.uploadsById
+      ..['up-1'] = staged('up-1', 'ub-1')
+      ..['up-2'] = staged('up-2', 'ub-1');
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    // Both headers read "2 files" and every discard button the same, so
+    // nothing but the identifier tells the rows apart.
+    await expectRowsKeepTheirNodes(
+      tester,
+      [
+        SemanticsIds.uploadBatch('ub-1'),
+        SemanticsIds.uploadRow('up-1'),
+        SemanticsIds.uploadDelete('up-1'),
+      ],
+      () async {
+        final older = repo.uploadsById.values.toList();
+        repo.uploadsById
+          ..clear()
+          ..['up-3'] = staged('up-3', 'ub-2')
+          ..['up-4'] = staged('up-4', 'ub-2')
+          ..addAll({for (final upload in older) upload.id: upload});
+        ProviderScope.containerOf(
+          tester.element(find.byType(AsyncBoxFace<UploadsState>)),
+        ).invalidate(uploadsProvider);
+        await tester.pumpAndSettle();
+      },
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadDelete('up-3')),
       findsOneWidget,
     );
   });

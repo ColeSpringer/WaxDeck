@@ -250,6 +250,20 @@ Every entry carries a gate tag saying what actually blocks it:
   disabled and inert, so it never changes role. Any other identified
   control whose actions come and go loses its handle the same way.
   Wanted from Flutter: re-apply every field when a role is swapped.
+- `[third-party]` **A node whose only change is its identifier keeps
+  its old one.** Flutter decides a semantics node needs resending by
+  comparing every annotation but the identifier, so a node handed a new
+  identifier and nothing else is never resent, and the platform keeps
+  the old `flt-semantics-identifier`. A list matched by position does it
+  whenever it shifts under an open screen: a label-less row, or a button
+  that reads the same on every row ("Revoke link"), keeps the previous
+  item's handle, and e2e finds the wrong row or none. Rows in lists that
+  change while open are keyed by what they show (`WaxTable` and
+  `ShelfRow` key their own), lazy lists find them with `indexByKey`
+  (`app/packages/waxdeck_ui/lib/src/components/keyed_rows.dart`), and
+  `app/app/test/flutter_test_config.dart` fails any widget test that
+  leaves such a change. Wanted from Flutter: compare the identifier with
+  the rest.
 - `[in-repo]` **Help under a Material `TextField` cannot be selected.**
   `WaxProse` makes the design system's help selectable, the
   `WaxTextField` helper line included, but a field built on Material's

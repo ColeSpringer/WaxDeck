@@ -52,11 +52,14 @@ class AdminDashboardScreen extends ConsumerWidget {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
+                  // The actions first: all below them lands late or comes
+                  // and goes with a scan, and a press on a button that
+                  // moved reaches whatever took its place.
+                  const _QuickActions(),
+                  const SizedBox(height: WaxSpace.s24),
                   const _ReadOnlyBanner(),
                   const _WarmingUp(),
                   const _StatusTiles(),
-                  const SizedBox(height: WaxSpace.s24),
-                  const _QuickActions(),
                   if (!sizeClass.hasSidebar) ...<Widget>[
                     const SizedBox(height: WaxSpace.s32),
                     const _SectionCards(),
@@ -168,7 +171,8 @@ class _StatusTiles extends ConsumerWidget {
     final jobs = ref.watch(adminJobsProvider).value ?? const <Job>[];
     final backups = ref.watch(backupsProvider).value ?? const <Backup>[];
     final schedules = ref.watch(schedulesProvider).value ?? const <Schedule>[];
-    final similarity = ref.watch(similarityStatusProvider).value;
+    final similarityStatus = ref.watch(similarityStatusProvider);
+    final similarity = similarityStatus.value;
     final sessions = ref.watch(playbackSessionsProvider).value;
     final thumbs = ref.watch(thumbnailCacheProvider).value;
 
@@ -256,13 +260,20 @@ class _StatusTiles extends ConsumerWidget {
             onTap: () => context.go(WaxRoute.backups),
           ),
         ),
-        if (similarity != null && similarity.enabled)
+        // Held while its status loads, like every other tile, so the tiles
+        // after it stay put: analysis is on by default. A server with it
+        // off loses the slot, and so does a status that failed for good.
+        if (similarity?.enabled ?? similarityStatus is! AsyncError)
           _tile(
             width: 220,
             child: StatTile(
               label: l10n.adminTileSimilarity,
-              value: '${similarity.coveragePct.round()}%',
-              caption: similarity.queueDepth > 0
+              value: similarity == null
+                  ? '--'
+                  : '${similarity.coveragePct.round()}%',
+              caption: similarity == null
+                  ? l10n.adminTileLoading
+                  : similarity.queueDepth > 0
                   ? l10n.adminTileTracksQueued(similarity.queueDepth)
                   : l10n.adminTileTracksEmbedded(similarity.embeddedTracks),
               glyph: WaxIcons.stats,

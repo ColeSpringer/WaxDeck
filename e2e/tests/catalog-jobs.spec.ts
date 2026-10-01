@@ -1,5 +1,6 @@
+import type { Request } from '@playwright/test';
 import { test, expect } from './fixtures';
-import { App, J, T } from './driver';
+import { App, J, T, clickUntilRequested } from './driver';
 import { SemanticsIds } from './semantics-ids';
 
 // The catalog's own jobs and the health fixes, driven from the screens an
@@ -54,11 +55,19 @@ async function inboxRow(app: App, event: string, targetPid: string): Promise<str
 test('a scan started from the dashboard runs in Tasks and ends in the bell', async ({ app }) => {
   await catalogIdle(app);
   await app.nav.enter('admin');
-  const started = app.page.waitForResponse(
-    (r) => r.url().endsWith('/library/rescan') && r.request().method() === 'POST',
-    { timeout: T.action },
+  const isRescan = (r: Request) =>
+    r.url().endsWith('/library/rescan') && r.method() === 'POST';
+  // Outlasts the click's own retries, which run to T.nav.
+  const started = app.page.waitForResponse((r) => isRescan(r.request()), {
+    timeout: T.fetch,
+  });
+  // The request is the only sign the press landed, and a canvas press
+  // can be swallowed while the dashboard is still settling.
+  await clickUntilRequested(
+    app.page,
+    app.admin.control(SemanticsIds.adminAction('scan')),
+    isRescan,
   );
-  await app.admin.control(SemanticsIds.adminAction('scan')).click();
   const job = (await (await started).json()) as { pid: string };
   expect(job.pid).toMatch(/^jb-/);
 
@@ -106,11 +115,16 @@ test('a rule the server cannot fix says why, and one it can runs as a job', asyn
     data: { sources: saved.map((s) => ({ ...s, enabled: s.name === 'stubtapes-lyrics' })) },
   });
   try {
-    const fixed = app.page.waitForResponse(
-      (r) => r.url().endsWith('/library/health/fix') && r.request().method() === 'POST',
-      { timeout: T.action },
+    const isFix = (r: Request) =>
+      r.url().endsWith('/library/health/fix') && r.method() === 'POST';
+    const fixed = app.page.waitForResponse((r) => isFix(r.request()), {
+      timeout: T.fetch,
+    });
+    await clickUntilRequested(
+      app.page,
+      app.admin.control(SemanticsIds.healthFix('missing-lyrics')),
+      isFix,
     );
-    await app.admin.control(SemanticsIds.healthFix('missing-lyrics')).click();
     const start = (await (await fixed).json()) as { jobPid?: string; queued: number };
     expect(start.jobPid).toMatch(/^jb-/);
     expect(start.queued).toBe(lyrics!.failing);

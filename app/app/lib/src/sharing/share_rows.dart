@@ -23,6 +23,10 @@ class ShareRows extends StatelessWidget {
   final Future<void> Function(Share share) onCopy;
   final Future<void> Function(Share share) onRevoke;
 
+  /// A row's key, so the row and its buttons, which read alike on every
+  /// share, move with their share (see [indexByKey]).
+  static Key _keyOf(Share share) => ValueKey(SemanticsIds.shareRow(share.pid));
+
   /// A share's target reads as its own medium, so the row's glyph says
   /// what the link opens rather than that it is a link. A playlist has
   /// no domain of its own and takes the music glyph, which is what it is
@@ -63,9 +67,11 @@ class ShareRows extends StatelessWidget {
       padding: sizeClass.gutter,
       sliver: SliverList.builder(
         itemCount: rows.length,
+        findChildIndexCallback: indexByKey(rows, _keyOf),
         itemBuilder: (context, index) {
           final share = rows[index];
           return WaxOptionRow(
+            key: _keyOf(share),
             glyph: glyphFor(share.targetKind),
             title: share.targetTitle,
             subtitle: captionFor(l10n, share),

@@ -419,6 +419,9 @@ class _SeriesShelf extends ConsumerWidget {
   }
 }
 
+/// A card's key, so the card moves with its book (see [indexByKey]).
+Key _bookKey(ItemSummary book) => ValueKey(SemanticsIds.book(book.pid));
+
 /// Every book, as covers.
 class _BookGrid extends ConsumerWidget {
   const _BookGrid({required this.books, required this.progress});
@@ -448,10 +451,12 @@ class _BookGrid extends ConsumerWidget {
               mainAxisExtent: MediaCard.heightFor(context, width: grid.width),
             ),
             itemCount: books.length,
+            findChildIndexCallback: indexByKey(books, _bookKey),
             itemBuilder: (context, index) {
               final book = books[index];
               final state = progress[book.pid];
               return MediaCard(
+                key: _bookKey(book),
                 data: MediaTileData(
                   title: book.title,
                   subtitle: book.artist,

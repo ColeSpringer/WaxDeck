@@ -25,6 +25,7 @@ export 'src/components/entity_header.dart';
 export 'src/components/fast_scroll.dart';
 export 'src/components/indicators.dart';
 export 'src/components/inputs.dart';
+export 'src/components/keyed_rows.dart';
 export 'src/components/lyrics.dart';
 export 'src/components/marquee.dart';
 export 'src/components/media_split.dart';

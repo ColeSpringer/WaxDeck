@@ -86,8 +86,8 @@ class WaxLocalizationsEs extends WaxLocalizations {
   }
 
   @override
-  String consoleDetailsFor(String id) {
-    return 'Detalles de $id';
+  String consoleDetailsFor(String name) {
+    return 'Detalles de $name';
   }
 
   @override

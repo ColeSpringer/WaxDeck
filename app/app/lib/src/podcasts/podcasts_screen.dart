@@ -412,8 +412,12 @@ class _ShowGrid extends ConsumerWidget {
             mainAxisExtent: MediaCard.heightFor(context, width: grid.width),
           ),
           itemCount: subscriptions.length,
-          itemBuilder: (context, index) =>
-              _ShowTile(subscription: subscriptions[index], width: grid.width),
+          findChildIndexCallback: indexByKey(subscriptions, _showKey),
+          itemBuilder: (context, index) => _ShowTile(
+            key: _showKey(subscriptions[index]),
+            subscription: subscriptions[index],
+            width: grid.width,
+          ),
         );
       },
     );
@@ -449,16 +453,24 @@ class _ShowGridBox extends ConsumerWidget {
             mainAxisExtent: MediaCard.heightFor(context, width: grid.width),
           ),
           itemCount: subscriptions.length,
-          itemBuilder: (context, index) =>
-              _ShowTile(subscription: subscriptions[index], width: grid.width),
+          findChildIndexCallback: indexByKey(subscriptions, _showKey),
+          itemBuilder: (context, index) => _ShowTile(
+            key: _showKey(subscriptions[index]),
+            subscription: subscriptions[index],
+            width: grid.width,
+          ),
         );
       },
     );
   }
 }
 
+/// A tile's key, so the tile moves with its show (see [indexByKey]).
+Key _showKey(Subscription subscription) =>
+    ValueKey(SemanticsIds.podcast(subscription.show.pid));
+
 class _ShowTile extends ConsumerWidget {
-  const _ShowTile({required this.subscription, required this.width});
+  const _ShowTile({super.key, required this.subscription, required this.width});
 
   final Subscription subscription;
 
@@ -522,6 +534,7 @@ class _LatestEpisodes extends ConsumerWidget {
           SectionHeader(title: l10n.podcastLatestTitle),
           for (final row in latest)
             MediaListRow(
+              key: ValueKey(SemanticsIds.episode(row.episode.pid)),
               data: MediaTileData(
                 title: row.episode.title,
                 subtitle: row.showTitle,

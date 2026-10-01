@@ -42,3 +42,12 @@ func (d *DB) LibraryRootsUpsert(ctx context.Context, r LibraryRoot) error {
 	}
 	return nil
 }
+
+// LibraryRootsDelete drops the name stored for path; an unknown path is
+// not an error.
+func (d *DB) LibraryRootsDelete(ctx context.Context, path string) error {
+	if _, err := d.w.ExecContext(ctx, `DELETE FROM library_roots WHERE path = ?`, path); err != nil {
+		return fmt.Errorf("db: dropping library root: %w", err)
+	}
+	return nil
+}

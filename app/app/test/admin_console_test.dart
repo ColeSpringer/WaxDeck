@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/admin/admin_console.dart';
+import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/dashboard_screen.dart';
 import 'package:waxdeck/src/admin/genres_screen.dart';
 import 'package:waxdeck/src/app.dart';
@@ -240,6 +243,96 @@ void main() {
       shellMessageText(container.read(shellMessengerProvider)),
       'Scan started',
     );
+  });
+
+  // A tile that landed after the page drew would push the actions down
+  // under a press already on its way.
+  testWidgets('a scan that starts leaves the actions where they were', (
+    tester,
+  ) async {
+    // The warming card arrives the moment a scan runs, and the press that
+    // started it may be followed by another on the same spot.
+    final repo = FakeRepository();
+    final container = _container(repo);
+    await _pump(tester, container, const AdminDashboardScreen());
+    final scan = find.bySemanticsIdentifier(SemanticsIds.adminAction('scan'));
+    final before = tester.getTopLeft(scan);
+
+    repo.jobs = <Job>[
+      Job(
+        pid: 'jb-1',
+        kind: 'scan',
+        state: 'running',
+        startedAt: DateTime.utc(2026, 10, 1),
+      ),
+    ];
+    container.invalidate(adminJobsProvider);
+    // Not settled: the running scan's spinner never stops.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Scanning your library'), findsOneWidget);
+    expect(tester.getTopLeft(scan), before);
+  });
+
+  testWidgets('the tiles hold still while the similarity status loads', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..similarityStatusGate = Completer<void>()
+      ..similarityStatus = const SimilarityStatus(
+        enabled: true,
+        embeddedTracks: 3,
+        totalTracks: 4,
+        coveragePct: 75,
+        queueDepth: 0,
+      );
+    final container = _container(repo);
+    // Three tiles to a row, as a desktop console beside its section list.
+    await _pump(
+      tester,
+      container,
+      const AdminDashboardScreen(),
+      size: const Size(831, 1600),
+    );
+    final after = <Finder>[
+      find.bySemanticsIdentifier(SemanticsIds.adminTile('thumbnails')),
+      find.bySemanticsIdentifier(SemanticsIds.adminTile('sessions')),
+    ];
+    final before = after.map(tester.getTopLeft).toList();
+
+    repo.similarityStatusGate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.adminTile('similarity')),
+        matching: find.text('75%'),
+      ),
+      findsOneWidget,
+    );
+    expect(after.map(tester.getTopLeft), before);
+  });
+
+  testWidgets('a similarity status that fails for good gives up its tile', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..similarityStatusGate = Completer<void>();
+    final container = _container(repo);
+    await _pump(tester, container, const AdminDashboardScreen());
+    final tile = find.bySemanticsIdentifier(
+      SemanticsIds.adminTile('similarity'),
+    );
+    expect(tile, findsOneWidget, reason: 'held while it loads');
+
+    repo.similarityStatusGate!.completeError(Exception('offline'));
+    await tester.pump();
+    expect(tile, findsOneWidget, reason: 'held while it is retried');
+
+    // Past Riverpod's ten retries, about 38 seconds of backoff.
+    await tester.pump(const Duration(minutes: 1));
+    await tester.pumpAndSettle();
+    expect(tile, findsNothing);
   });
 
   testWidgets('the genre editor edits a draft and saves it whole', (

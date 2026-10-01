@@ -119,6 +119,10 @@ class _Sections extends StatelessWidget {
   }
 }
 
+/// A card's key, so the card moves with its playlist (see [indexByKey]).
+Key _playlistKey(Playlist playlist) =>
+    ValueKey(SemanticsIds.playlist(playlist.pid));
+
 class _PlaylistGrid extends ConsumerWidget {
   const _PlaylistGrid({required this.playlists});
 
@@ -143,9 +147,11 @@ class _PlaylistGrid extends ConsumerWidget {
             mainAxisExtent: MediaCard.heightFor(context, width: grid.width),
           ),
           itemCount: playlists.length,
+          findChildIndexCallback: indexByKey(playlists, _playlistKey),
           itemBuilder: (context, index) {
             final playlist = playlists[index];
             return MediaCard(
+              key: _playlistKey(playlist),
               data: MediaTileData(
                 title: playlist.name,
                 subtitle: playlistByline(l10n, playlist),

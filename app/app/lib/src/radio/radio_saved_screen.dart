@@ -109,6 +109,10 @@ class _RadioSavedScreenState extends ConsumerState<RadioSavedScreen> {
   }
 }
 
+/// A row's key, so the row moves with its song (see [indexByKey]).
+Key _songKey(RadioSavedSong song) =>
+    ValueKey(SemanticsIds.radioSavedEntry(song.pid));
+
 class _SavedList extends ConsumerWidget {
   const _SavedList({required this.rows, required this.onRemove});
 
@@ -137,6 +141,7 @@ class _SavedList extends ConsumerWidget {
       padding: sizeClass.gutter,
       sliver: SliverList.builder(
         itemCount: rows.length,
+        findChildIndexCallback: indexByKey(rows, _songKey),
         itemBuilder: (context, index) {
           final song = rows[index];
           // The announced line is what the listener saw, so it is what
@@ -152,6 +157,7 @@ class _SavedList extends ConsumerWidget {
               ? song.nowPlaying
               : '${song.artist} ${song.title}';
           return MediaListRow(
+            key: _songKey(song),
             data: MediaTileData(
               title: title,
               subtitle: _caption(l10n, song),

@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:waxdeck/src/app.dart';
+import 'package:waxdeck/src/connectivity/connectivity_linux.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
@@ -149,6 +150,9 @@ void main() {
     // The dispose must run inside the body: addTearDown callbacks fire
     // after the framework's end-of-test handle check.
     ensureAudioEngineInitialized();
+    // As main() does, before the downloader subscribes: a runner with no
+    // NetworkManager makes the stock plugin throw where nothing catches it.
+    installTolerantConnectivity();
     final semantics = tester.ensureSemantics();
     try {
       await _run(tester);

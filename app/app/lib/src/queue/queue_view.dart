@@ -528,6 +528,9 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
         metaData: QueueRowTarget(queue.currentEntry!.queueId, splits: false),
         behavior: HitTestBehavior.opaque,
         child: QueueRow(
+          // A new row for a new entry: two entries can read alike, and a
+          // node whose only change is its identifier is never resent.
+          key: ValueKey(SemanticsIds.queueEntry(queue.currentEntry!.queueId)),
           entry: queue.currentEntry!,
           playing: true,
           onTap: () => context.push(WaxRoute.nowPlaying),
@@ -666,7 +669,9 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
       if (showHistory)
         SliverList.builder(
           itemCount: played.length,
+          findChildIndexCallback: indexByKey(played, _historyKey),
           itemBuilder: (context, index) => QueueRow(
+            key: _historyKey(played[index]),
             entry: played[index],
             onTap: () => notifier.jumpTo(index),
             onRemove: () => notifier.removeAt(index),
@@ -678,6 +683,10 @@ List<Widget> queueSlivers(BuildContext context, WidgetRef ref) {
     const SliverToBoxAdapter(child: SizedBox(height: WaxSpace.s24)),
   ];
 }
+
+/// A played row's key, so the row moves with its entry (see [indexByKey]).
+Key _historyKey(QueueEntry entry) =>
+    ValueKey(SemanticsIds.queueHistoryEntry(entry.queueId));
 
 /// What a tap on an up-next row means.
 ///

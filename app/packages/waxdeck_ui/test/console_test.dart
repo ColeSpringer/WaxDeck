@@ -245,6 +245,113 @@ void main() {
     expect(opened?.id, 'lb-2');
   });
 
+  for (final (layout, width) in <(String, double)>[
+    ('table', 1000),
+    ('cards', 420),
+  ]) {
+    testWidgets('a row that lands above another leaves it its nodes '
+        '($layout)', (tester) async {
+      // Flutter resends a node only when something besides its identifier
+      // changed, so a control that read alike on every row and passed to
+      // the next one by position would keep the old row's handle.
+      final rows = ValueNotifier<List<_Row>>(_rows);
+      addTearDown(rows.dispose);
+      await _pump(
+        tester,
+        ValueListenableBuilder<List<_Row>>(
+          valueListenable: rows,
+          builder: (context, value, _) => WaxTable<_Row>(
+            columns: _columns(),
+            rows: value,
+            rowId: (r) => r.id,
+            rowSemanticsId: (id) => 'library-row-$id',
+            trailing: (context, r) => WaxIconButton(
+              glyph: WaxIcons.close,
+              label: 'Remove',
+              semanticsId: 'remove-${r.id}',
+              onPressed: () {},
+            ),
+          ),
+        ),
+        width: width,
+      );
+      int node(String id) =>
+          tester.getSemantics(find.bySemanticsIdentifier(id)).id;
+      final ids = <String>[
+        for (final row in _rows) ...[
+          'library-row-${row.id}',
+          'remove-${row.id}',
+        ],
+      ];
+      final before = <String, int>{for (final id in ids) id: node(id)};
+
+      rows.value = <_Row>[
+        const _Row('lb-0', 'podcasts', '/srv/media/podcasts', 12),
+        ..._rows,
+      ];
+      await tester.pump();
+
+      for (final id in ids) {
+        expect(node(id), before[id], reason: '$id keeps its node');
+      }
+    });
+  }
+
+  for (final (layout, width) in <(String, double)>[
+    ('table', 1000),
+    ('cards', 420),
+  ]) {
+    testWidgets('a tappable row reads out its name, not its id ($layout)', (
+      tester,
+    ) async {
+      // A tappable row is one node that excludes its cells, so its label
+      // is all a screen reader has to say.
+      await _pump(
+        tester,
+        WaxTable<_Row>(
+          columns: _columns(),
+          rows: _rows,
+          rowId: (r) => r.id,
+          rowSemanticsId: (id) => 'library-row-$id',
+          rowDetailSemanticsId: (id) => 'library-detail-$id',
+          onRowTap: (_) {},
+        ),
+        width: width,
+      );
+
+      expect(
+        tester.getSemantics(find.bySemanticsIdentifier('library-row-lb-2')),
+        isSemantics(label: 'audiobooks', isButton: true),
+      );
+      if (layout == 'cards') {
+        expect(
+          tester.getSemantics(
+            find.bySemanticsIdentifier('library-detail-lb-2'),
+          ),
+          isSemantics(label: 'Details for audiobooks', isButton: true),
+        );
+      }
+    });
+  }
+
+  testWidgets('rows sharing an id still draw', (tester) async {
+    // A file with two diagnostics is two rows under one path.
+    await _pump(
+      tester,
+      WaxTable<_Row>(
+        columns: _columns(),
+        rows: const <_Row>[
+          _Row('lb-1', 'music', '/srv/media/music', 4210),
+          _Row('lb-1', 'music again', '/srv/media/music', 4210),
+        ],
+        rowId: (r) => r.id,
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('music again'), findsOneWidget);
+  });
+
   testWidgets('an empty table draws its empty state, not a bare header', (
     tester,
   ) async {

@@ -23,4 +23,14 @@ func TestLibraryRootsRoundTrip(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, want) {
 		t.Fatalf("roots = %+v (%v), want %+v", got, err, want)
 	}
+	for _, path := range []string{"/a", "/missing"} {
+		if err := d.LibraryRootsDelete(ctx, path); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err = d.LibraryRootsList(ctx)
+	want = []LibraryRoot{{Path: "/b", Name: "Bee", CreatedAtNS: 2}}
+	if err != nil || !reflect.DeepEqual(got, want) {
+		t.Fatalf("roots after delete = %+v (%v), want %+v", got, err, want)
+	}
 }

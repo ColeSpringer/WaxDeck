@@ -304,34 +304,40 @@ class _MusicIndexScreenState extends ConsumerState<MusicIndexScreen> {
     }
     // A re-anchored window's earlier buckets are unreachable by
     // scrolling, so the floor needs a way back. An empty window from a
-    // seek past the end needs it most.
-    final header = state.hasFloor ? 1 : 0;
-    return SliverList.builder(
-      itemCount: header + state.buckets.length + (state.loadingMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (header == 1 && index == 0) {
-          return _StartOfIndex(
-            dimension: dimension,
-            onTap: () {
-              ref.read(musicIndexProvider(_key).notifier).reset();
-              setState(() => _letter = null);
-            },
-          );
-        }
-        final at = index - header;
-        if (at >= state.buckets.length) {
-          return const Padding(
-            padding: EdgeInsets.all(WaxSpace.s16),
-            child: Center(child: CircularProgressIndicator()),
-          );
-        }
-        return _BucketRow(
-          dimension: dimension,
-          bucket: state.buckets[at],
-          index: at,
-          onTap: () => _open(state.buckets[at]),
-        );
-      },
+    // seek past the end needs it most. It is a sliver of its own, so a
+    // bucket row's position is always its index, which is what its
+    // identifier says: in one list, the floor arriving would push every
+    // row down a slot, each node keeping the identifier of the one above.
+    return SliverMainAxisGroup(
+      slivers: <Widget>[
+        if (state.hasFloor)
+          SliverToBoxAdapter(
+            child: _StartOfIndex(
+              dimension: dimension,
+              onTap: () {
+                ref.read(musicIndexProvider(_key).notifier).reset();
+                setState(() => _letter = null);
+              },
+            ),
+          ),
+        SliverList.builder(
+          itemCount: state.buckets.length + (state.loadingMore ? 1 : 0),
+          itemBuilder: (context, at) {
+            if (at >= state.buckets.length) {
+              return const Padding(
+                padding: EdgeInsets.all(WaxSpace.s16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            return _BucketRow(
+              dimension: dimension,
+              bucket: state.buckets[at],
+              index: at,
+              onTap: () => _open(state.buckets[at]),
+            );
+          },
+        ),
+      ],
     );
   }
 }

@@ -141,6 +141,7 @@ class UploadsScreen extends ConsumerWidget {
         else ...<Widget>[
           for (final group in _grouped(state))
             _BatchGroup(
+              key: group.key,
               group: group,
               failed: state.failed,
               onRetry: (id) => _retry(l10n, ref, id),
@@ -197,10 +198,20 @@ class _Batch {
   final String? id;
 
   final List<UploadSession> uploads;
+
+  /// The group's key, so its rows move with it when another lands above:
+  /// Flutter resends a semantics node only when something besides its
+  /// identifier changed, and every header and discard button reads alike.
+  Key get key => ValueKey(
+    id == null
+        ? SemanticsIds.uploadRow(uploads.single.id)
+        : SemanticsIds.uploadBatch(id!),
+  );
 }
 
 class _BatchGroup extends StatelessWidget {
   const _BatchGroup({
+    super.key,
     required this.group,
     required this.failed,
     required this.onRetry,
@@ -247,6 +258,7 @@ class _BatchGroup extends StatelessWidget {
             ),
           for (final upload in group.uploads)
             _UploadRow(
+              key: ValueKey(SemanticsIds.uploadRow(upload.id)),
               upload: upload,
               failed: failed.contains(upload.id),
               onRetry: () => onRetry(upload.id),
@@ -335,6 +347,7 @@ class _QuotaHeader extends StatelessWidget {
 
 class _UploadRow extends StatelessWidget {
   const _UploadRow({
+    super.key,
     required this.upload,
     required this.failed,
     required this.onRetry,

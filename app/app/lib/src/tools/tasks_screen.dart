@@ -104,7 +104,9 @@ class TasksScreen extends ConsumerWidget {
             ),
             SliverList.builder(
               itemCount: jobs.length,
-              itemBuilder: (context, index) => _JobRow(job: jobs[index]),
+              findChildIndexCallback: indexByKey(jobs, _jobKey),
+              itemBuilder: (context, index) =>
+                  _JobRow(key: _jobKey(jobs[index]), job: jobs[index]),
             ),
             SliverToBoxAdapter(
               child: Padding(
@@ -134,6 +136,7 @@ class TasksScreen extends ConsumerWidget {
               padding: const EdgeInsets.symmetric(vertical: WaxSpace.s8),
               sliver: SliverList.builder(
                 itemCount: value.tasks.length + (value.loadingMore ? 1 : 0),
+                findChildIndexCallback: indexByKey(value.tasks, _taskKey),
                 itemBuilder: (context, index) {
                   if (index >= value.tasks.length) {
                     return const SkeletonShapes(
@@ -141,7 +144,8 @@ class TasksScreen extends ConsumerWidget {
                       count: 1,
                     );
                   }
-                  return _TaskRow(task: value.tasks[index]);
+                  final task = value.tasks[index];
+                  return _TaskRow(key: _taskKey(task), task: task);
                 },
               ),
             ),
@@ -169,7 +173,7 @@ class TasksScreen extends ConsumerWidget {
 }
 
 class _TaskRow extends ConsumerWidget {
-  const _TaskRow({required this.task});
+  const _TaskRow({super.key, required this.task});
 
   final ToolTask task;
 
@@ -582,6 +586,11 @@ List<Job> _visibleJobs(List<Job> jobs) {
   ];
 }
 
+/// The rows' keys, so a row moves with its job or task (see [indexByKey]).
+Key _jobKey(Job job) => ValueKey(SemanticsIds.jobRow(job.pid));
+
+Key _taskKey(ToolTask task) => ValueKey(SemanticsIds.taskRow(task.id));
+
 /// A job's name, and what it ran on when that is known.
 String _jobTitle(AppLocalizations l10n, Job job) {
   final label = _jobLabel(l10n, job.kind);
@@ -607,7 +616,7 @@ String _jobLabel(AppLocalizations l10n, String kind) => switch (kind) {
 /// One catalog job: what it is, how far along, what it said, and once
 /// finished what it did.
 class _JobRow extends StatelessWidget {
-  const _JobRow({required this.job});
+  const _JobRow({super.key, required this.job});
 
   final Job job;
 

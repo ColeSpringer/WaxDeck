@@ -9,6 +9,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'routed_host.dart';
+import 'row_nodes.dart';
 
 Widget _host(FakeRepository repo) => ProviderScope(
   overrides: [repositoryProvider.overrideWithValue(repo)],
@@ -121,6 +122,28 @@ void main() {
     expect(repo.revokeShareCalls, ['sh-1']);
     expect(_byId(SemanticsIds.shareRow('sh-1')), findsNothing);
     expect(_byId(SemanticsIds.sharesEmpty), findsOneWidget);
+  });
+
+  testWidgets('revoking a share leaves the next one its own controls', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..shares.addAll([
+        _share('sh-1'),
+        _share('sh-2', targetTitle: 'Road Trip'),
+      ]);
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await expectRowsKeepTheirNodes(
+      tester,
+      [SemanticsIds.shareRow('sh-2'), SemanticsIds.shareRevoke('sh-2')],
+      () async {
+        await tester.tap(_byId(SemanticsIds.shareRevoke('sh-1')));
+        await tester.pumpAndSettle();
+      },
+    );
+    expect(_byId(SemanticsIds.shareRow('sh-1')), findsNothing);
   });
 
   testWidgets('copy puts the absolute URL on the clipboard', (tester) async {

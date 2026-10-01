@@ -325,6 +325,10 @@ class _DeviceSessions extends ConsumerWidget {
             children: <Widget>[
               for (final session in value)
                 WaxOptionRow(
+                  // Keyed, so the row and its buttons, which read alike on
+                  // every device, move with their session when one above
+                  // signs out.
+                  key: ValueKey(SemanticsIds.deviceRow(session.id)),
                   title: session.current
                       ? l10n.settingsDeviceThisDevice(session.label)
                       : session.label,

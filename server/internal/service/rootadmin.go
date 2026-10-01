@@ -33,6 +33,14 @@ func rootKey(path string) string {
 	return filepath.Clean(path)
 }
 
+// samePath reports whether two cleaned absolute paths name one location by
+// the rule the catalog matches roots with: filepath.Rel's, which folds case
+// on Windows only.
+func samePath(a, b string) bool {
+	rel, err := filepath.Rel(a, b)
+	return err == nil && rel == "."
+}
+
 // refreshLibraryState rebuilds the root table from the catalog's libraries,
 // naming each root uniquely and keeping the name: it is the streaming
 // engine's address for the root.
@@ -411,7 +419,7 @@ func (l *Library) teachFlowRoot(ctx context.Context, flow FlowRootSync, name, pa
 
 // registerRoot catalogs a root at a free path under a name nothing uses,
 // the bridge's included (it mounts the podcast dir). rootsMu spans the
-// checks, the add and the stored name, so two creates cannot both pass.
+// checks, the stored name and the add, so two creates cannot both pass.
 func (l *Library) registerRoot(ctx context.Context, name, path string, mode model.Mode, media model.MediaType) (*model.Library, error) {
 	l.rootsMu.Lock()
 	defer l.rootsMu.Unlock()
@@ -423,8 +431,11 @@ func (l *Library) registerRoot(ctx context.Context, name, path string, mode mode
 	for _, lib := range libs {
 		held[rootKey(lib.DisplayRoot)] = true
 	}
-	if held[rootKey(path)] {
-		return nil, &Error{Kind: KindConflict, Msg: "a library at " + path + " already exists"}
+	key := rootKey(path)
+	for _, lib := range libs {
+		if samePath(rootKey(lib.DisplayRoot), key) {
+			return nil, &Error{Kind: KindConflict, Msg: "a library at " + path + " already exists"}
+		}
 	}
 	taken := []string{l.podcastRootName}
 	for _, r := range l.roots {
@@ -446,16 +457,23 @@ func (l *Library) registerRoot(ctx context.Context, name, path string, mode mode
 	if slices.Contains(taken, name) {
 		return nil, &Error{Kind: KindConflict, Msg: "a library named " + name + " already exists"}
 	}
+	// The catalog keeps the root and its policy; the name is WaxDeck's, and
+	// it goes in first. The feed refreshes the table the moment the root
+	// lands, naming any root without a stored name after its directory,
+	// and the bridge would be taught that name beside this one.
+	if err := l.db.LibraryRootsUpsert(ctx, wdb.LibraryRoot{
+		Path: key, Name: name, CreatedAtNS: time.Now().UnixNano(),
+	}); err != nil {
+		return nil, &Error{Kind: KindInternal, Err: err}
+	}
 	lib, err := l.lib.AddRoot(ctx, config.Root{Path: path, Mode: mode, Media: media})
 	if err != nil {
+		// Not on the request's context: a client gone mid-create is a likely
+		// reason the add failed, and the name must not outlive it.
+		if derr := l.db.LibraryRootsDelete(context.WithoutCancel(ctx), key); derr != nil {
+			l.log.Warn("dropping the name of a library the catalog refused", "library", name, "err", derr)
+		}
 		return nil, classify(err)
-	}
-	// The catalog keeps the root and its policy; the name is WaxDeck's.
-	if err := l.db.LibraryRootsUpsert(ctx, wdb.LibraryRoot{
-		Path: lib.DisplayRoot, Name: name, CreatedAtNS: time.Now().UnixNano(),
-	}); err != nil {
-		l.log.Warn("storing a library's name failed; it reads as its directory",
-			"library", name, "err", err)
 	}
 	return lib, nil
 }

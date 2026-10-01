@@ -62,6 +62,7 @@ class SessionHistorySection extends ConsumerWidget {
           const SizedBox(height: WaxSpace.s8),
           for (final session in restorable)
             Padding(
+              key: ValueKey(SemanticsIds.queueRestoreSession(session.id)),
               padding: const EdgeInsets.only(bottom: WaxSpace.s8),
               child: WaxTappable(
                 label: context.l10n.queueRestoreSession(_title(session)),

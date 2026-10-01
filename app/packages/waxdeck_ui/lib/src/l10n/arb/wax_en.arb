@@ -112,13 +112,13 @@
       }
     }
   },
-  "consoleDetailsFor": "Details for {id}",
+  "consoleDetailsFor": "Details for {name}",
   "@consoleDetailsFor": {
-    "description": "Accessible name of the button that opens one table row's detail sheet. {id} names the row.",
+    "description": "Accessible name of the button that opens one table row's detail sheet. {name} is what the row is read out as: its primary fields.",
     "placeholders": {
-      "id": {
+      "name": {
         "type": "String",
-        "example": "tr-01H8"
+        "example": "audiobooks"
       }
     }
   },

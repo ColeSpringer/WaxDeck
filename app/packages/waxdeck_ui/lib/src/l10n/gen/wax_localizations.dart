@@ -213,11 +213,11 @@ abstract class WaxLocalizations {
   /// **'Type {word} to confirm'**
   String consoleConfirmHint(String word);
 
-  /// Accessible name of the button that opens one table row's detail sheet. {id} names the row.
+  /// Accessible name of the button that opens one table row's detail sheet. {name} is what the row is read out as: its primary fields.
   ///
   /// In en, this message translates to:
-  /// **'Details for {id}'**
-  String consoleDetailsFor(String id);
+  /// **'Details for {name}'**
+  String consoleDetailsFor(String name);
 
   /// A dashboard tile read as one node: what is being counted, then the count.
   ///

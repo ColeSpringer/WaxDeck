@@ -95,6 +95,8 @@ class WaxTable<T> extends StatelessWidget {
   final List<T> rows;
 
   /// A stable identity per row, for keys and for the row's own handle.
+  /// Rows may share one (a file with two diagnostics), and then share the
+  /// handle too.
   final String Function(T row) rowId;
 
   /// The e2e handle for one row, given its id.
@@ -200,12 +202,13 @@ class WaxTable<T> extends StatelessWidget {
               ],
             ),
           ),
-          for (final (index, row) in rows.indexed)
+          for (final (index, (key, id, row)) in _keyed().indexed)
             _TableRow<T>(
+              key: key,
               columns: shown,
               row: row,
-              id: rowId(row),
-              semanticsId: rowSemanticsId?.call(rowId(row)),
+              name: _nameOf(row, id),
+              semanticsId: rowSemanticsId?.call(id),
               onTap: onRowTap,
               trailing: trailing,
               striped: index.isOdd,
@@ -213,6 +216,31 @@ class WaxTable<T> extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Each row with its id and a key from it, numbered among the rows that
+  /// share the id. A row moves with its record rather than handing its
+  /// place, and its semantics node, to whatever lands there: Flutter
+  /// resends a node only when something besides its identifier changed.
+  Iterable<(Key, String, T)> _keyed() sync* {
+    final seen = <String, int>{};
+    for (final row in rows) {
+      final id = rowId(row);
+      final n = seen[id] = (seen[id] ?? -1) + 1;
+      yield (ValueKey<(String, int)>((id, n)), id, row);
+    }
+  }
+
+  /// What a row is read out as: its primary fields, or its id where no
+  /// primary column has text. A tappable row is one node over its cells,
+  /// so this is all a screen reader says of it.
+  String _nameOf(T row, String id) {
+    final fields = <String>[
+      for (final column in columns)
+        if (column.priority == WaxColumnPriority.primary)
+          if (column.text case final text?) text(row),
+    ];
+    return fields.isEmpty ? id : fields.join(', ');
   }
 
   Widget _headerCell(WaxColors colors, WaxColumn<T> column) {
@@ -231,15 +259,16 @@ class WaxTable<T> extends StatelessWidget {
   Widget _cards(BuildContext context, WaxColors colors) {
     return Column(
       children: <Widget>[
-        for (final row in rows)
+        for (final (key, id, row) in _keyed())
           Padding(
+            key: key,
             padding: const EdgeInsets.only(bottom: WaxSpace.s8),
             child: _RowCard<T>(
               columns: columns,
               row: row,
-              id: rowId(row),
-              semanticsId: rowSemanticsId?.call(rowId(row)),
-              detailSemanticsId: rowDetailSemanticsId?.call(rowId(row)),
+              name: _nameOf(row, id),
+              semanticsId: rowSemanticsId?.call(id),
+              detailSemanticsId: rowDetailSemanticsId?.call(id),
               onTap: onRowTap,
               trailing: trailing,
             ),
@@ -257,16 +286,17 @@ class _TableRow<T> extends StatelessWidget {
   const _TableRow({
     required this.columns,
     required this.row,
-    required this.id,
+    required this.name,
     required this.striped,
     this.semanticsId,
     this.onTap,
     this.trailing,
+    super.key,
   });
 
   final List<WaxColumn<T>> columns;
   final T row;
-  final String id;
+  final String name;
   final bool striped;
   final String? semanticsId;
   final void Function(T row)? onTap;
@@ -293,7 +323,7 @@ class _TableRow<T> extends StatelessWidget {
       // WaxTappable adds no gesture by design, so the ink is ours or
       // the row announces as a button and answers no pointer.
       body = WaxTappable(
-        label: id,
+        label: name,
         semanticsId: semanticsId,
         borderRadius: BorderRadius.zero,
         surface: striped ? colors.surface1 : colors.canvas,
@@ -342,7 +372,7 @@ class _RowCard<T> extends StatelessWidget {
   const _RowCard({
     required this.columns,
     required this.row,
-    required this.id,
+    required this.name,
     this.semanticsId,
     this.detailSemanticsId,
     this.onTap,
@@ -351,7 +381,7 @@ class _RowCard<T> extends StatelessWidget {
 
   final List<WaxColumn<T>> columns;
   final T row;
-  final String id;
+  final String name;
   final String? semanticsId;
   final String? detailSemanticsId;
   final void Function(T row)? onTap;
@@ -408,7 +438,7 @@ class _RowCard<T> extends StatelessWidget {
       body = Semantics(identifier: semanticsId, container: true, child: fields);
     } else {
       body = WaxTappable(
-        label: id,
+        label: name,
         semanticsId: semanticsId,
         borderRadius: WaxRadius.card,
         surface: colors.canvas,
@@ -442,7 +472,7 @@ class _RowCard<T> extends StatelessWidget {
               padding: const EdgeInsets.only(top: WaxSpace.s12),
               child: WaxIconButton(
                 glyph: WaxIcons.info,
-                label: context.waxL10n.consoleDetailsFor(id),
+                label: context.waxL10n.consoleDetailsFor(name),
                 size: 16,
                 semanticsId: detailSemanticsId,
                 onPressed: () => _showDetails(context, colors),

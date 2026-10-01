@@ -21,6 +21,7 @@ import 'artwork.dart';
 import 'controls.dart';
 import 'edge_fade.dart';
 import 'indicators.dart';
+import 'keyed_rows.dart';
 import 'secondary_tap.dart';
 import 'sheet.dart';
 import 'snap_physics.dart';
@@ -1203,7 +1204,9 @@ class ShelfRow extends StatefulWidget {
   /// cards differ. Null reaches every card.
   final bool Function(MediaTileData item)? itemHasActions;
 
-  /// Each card's overflow chip identifier, by position.
+  /// Each card's overflow chip identifier, by position, for cards whose
+  /// own handles are positional too: a card keyed by its item carries its
+  /// chip when it moves, and the chip's label would not change with it.
   final String Function(int index)? moreSemanticsIdAt;
 
   /// Chevron handles, as plain strings: the package takes no registry
@@ -1319,6 +1322,16 @@ class _ShelfRowState extends State<ShelfRow> {
       leadingInset: gutter.left,
     );
     final items = widget.items;
+    // Each card keyed by its handle, numbered among the cards sharing it,
+    // so it moves with its item, node and all, when the shelf reorders.
+    final seen = <String, int>{};
+    final keys = <Key?>[
+      for (final item in items)
+        if (item.semanticsId case final id?)
+          ValueKey<(String, int)>((id, seen[id] = (seen[id] ?? -1) + 1))
+        else
+          null,
+    ];
     // The carets are direction-fixed glyphs, so RTL swaps the pair.
     final rtl = Directionality.of(context) == TextDirection.rtl;
     return Column(
@@ -1374,6 +1387,7 @@ class _ShelfRowState extends State<ShelfRow> {
                           padding: gutter,
                           physics: physics,
                           itemCount: items.length,
+                          findItemIndexCallback: indexByKey(keys, (key) => key),
                           separatorBuilder: (_, _) =>
                               const SizedBox(width: WaxShellMetrics.gridGap),
                           itemBuilder: (context, index) {
@@ -1384,6 +1398,7 @@ class _ShelfRowState extends State<ShelfRow> {
                             final onPlay = acts ? widget.onPlayItem : null;
                             final onMore = acts ? widget.onMoreItem : null;
                             return MediaCard(
+                              key: keys[index],
                               data: item,
                               width: width,
                               onTap: onTap == null ? null : () => onTap(item),
