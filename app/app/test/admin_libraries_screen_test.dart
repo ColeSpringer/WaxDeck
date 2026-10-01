@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/admin/admin_providers.dart';
 import 'package:waxdeck/src/admin/libraries_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -159,18 +162,42 @@ void main() {
 
   testWidgets('the per-library switches reach the server', (tester) async {
     final repo = FakeRepository();
-    repo.libraries.add(
-      const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
-    );
+    repo.libraries.addAll(const [
+      LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
+      LibraryInfo(
+        pid: 'lb-2',
+        name: 'vinyl',
+        path: '/srv/vinyl',
+        readOnly: true,
+      ),
+    ]);
     final container = _container(repo);
     await _pump(tester, _host(container));
+    WaxSwitch readOnlySwitch(String pid) => tester.widget<WaxSwitch>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.libraryReadOnly(pid)),
+        matching: find.byType(WaxSwitch),
+      ),
+    );
+    expect(
+      readOnlySwitch('lb-2').value,
+      isTrue,
+      reason: 'the listing carries the flag',
+    );
 
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.libraryReadOnly('lb-1')),
       warnIfMissed: false,
     );
     await tester.pumpAndSettle();
-    expect(repo.libraryReadOnlyByPid['lb-1'], isTrue);
+    expect(repo.setLibraryReadOnlyCalls, [
+      (libraryPid: 'lb-1', readOnly: true),
+    ]);
+    expect(
+      readOnlySwitch('lb-1').value,
+      isTrue,
+      reason: 'the reloaded listing',
+    );
 
     // Rescanning covers every root: the contract has one scan verb, and
     // the row's button is where somebody looks for it - which is why a
@@ -187,6 +214,107 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.rescans, 1);
     expect(repo.rescanForces, [false]);
+  });
+
+  testWidgets('the podcast library offers no read-only switch', (tester) async {
+    final repo = FakeRepository();
+    repo.libraries.add(
+      const LibraryInfo(
+        pid: 'lb-9',
+        name: 'podcasts',
+        media: 'podcast',
+        path: '/srv/podcasts',
+      ),
+    );
+    await _pump(tester, _host(_container(repo)));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRow('lb-9')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryReadOnly('lb-9')),
+      findsNothing,
+      reason: 'episode fetching needs the library writable',
+    );
+  });
+
+  testWidgets('a flag answered after its row left still refreshes', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository()..libraryWriteGate = gate;
+    repo.libraries.add(
+      const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
+    );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryReadOnly('lb-1')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const SizedBox()),
+    );
+    final reads = repo.listLibrariesCalls.length;
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    await container.read(libraryCountsProvider.future);
+    expect(repo.listLibrariesCalls.length, reads + 1);
+  });
+
+  testWidgets('a managed library\'s profile choice reaches the server', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..organizeProfiles = const [
+        OrganizeProfile(name: 'waxbin-native', builtIn: true),
+        OrganizeProfile(name: 'flat'),
+      ];
+    repo.libraries.addAll(const [
+      LibraryInfo(
+        pid: 'lb-1',
+        name: 'music',
+        path: '/srv/music',
+        managed: true,
+        profile: 'waxbin-native',
+      ),
+      LibraryInfo(pid: 'lb-2', name: 'vinyl', path: '/srv/vinyl'),
+    ]);
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryProfile('lb-2')),
+      findsNothing,
+      reason: 'an in-place library is never laid out',
+    );
+    expect(find.text('In place'), findsOneWidget);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryProfile('lb-1')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('flat').last);
+    await tester.pumpAndSettle();
+    expect(repo.setLibraryProfileCalls, [
+      (libraryPid: 'lb-1', profile: 'flat'),
+    ]);
+    expect(
+      tester
+          .widget<WaxChoice<String>>(
+            find.ancestor(
+              of: find.bySemanticsIdentifier(
+                SemanticsIds.libraryProfile('lb-1'),
+              ),
+              matching: find.byType(WaxChoice<String>),
+            ),
+          )
+          .value,
+      'flat',
+      reason: 'the reloaded listing',
+    );
   });
 
   testWidgets('the rescan dialog carries the repair pass', (tester) async {

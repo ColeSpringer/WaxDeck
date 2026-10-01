@@ -16,6 +16,9 @@ part 'model_library.g.dart';
 /// * [media] - Content class the library holds. Currently `music`, `audiobook`, `podcast`, or `mixed`; new values may appear. 
 /// * [path] - Absolute filesystem path of the root, for the administrative surface that manages it. Absent where the catalog cannot render the stored path as text (roots on non-UTF8 filesystems are stored as raw bytes). 
 /// * [itemCount] - Playable items the catalog holds under this root. Present only where the caller asked for counts, and counted at read time, so it lags a running scan. 
+/// * [readOnly] - The catalog keeps the library's files as they are.
+/// * [managed] - The catalog may place and move files in the library.
+/// * [profile] - The organize profile a managed library is laid out by.
 @BuiltValue(instantiable: false)
 abstract class ModelLibrary  {
   /// Library PID.
@@ -37,6 +40,18 @@ abstract class ModelLibrary  {
   /// Playable items the catalog holds under this root. Present only where the caller asked for counts, and counted at read time, so it lags a running scan. 
   @BuiltValueField(wireName: r'itemCount')
   int? get itemCount;
+
+  /// The catalog keeps the library's files as they are.
+  @BuiltValueField(wireName: r'readOnly')
+  bool get readOnly;
+
+  /// The catalog may place and move files in the library.
+  @BuiltValueField(wireName: r'managed')
+  bool get managed;
+
+  /// The organize profile a managed library is laid out by.
+  @BuiltValueField(wireName: r'profile')
+  String? get profile;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<ModelLibrary> get serializer => _$ModelLibrarySerializer();
@@ -83,6 +98,23 @@ class _$ModelLibrarySerializer implements PrimitiveSerializer<ModelLibrary> {
       yield serializers.serialize(
         object.itemCount,
         specifiedType: const FullType(int),
+      );
+    }
+    yield r'readOnly';
+    yield serializers.serialize(
+      object.readOnly,
+      specifiedType: const FullType(bool),
+    );
+    yield r'managed';
+    yield serializers.serialize(
+      object.managed,
+      specifiedType: const FullType(bool),
+    );
+    if (object.profile != null) {
+      yield r'profile';
+      yield serializers.serialize(
+        object.profile,
+        specifiedType: const FullType(String),
       );
     }
   }
@@ -186,6 +218,28 @@ class _$$ModelLibrarySerializer implements PrimitiveSerializer<$ModelLibrary> {
           ) as int?;
           if (valueDes == null) continue;
           result.itemCount = valueDes;
+          break;
+        case r'readOnly':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.readOnly = valueDes;
+          break;
+        case r'managed':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.managed = valueDes;
+          break;
+        case r'profile':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.profile = valueDes;
           break;
         default:
           unhandled.add(key);

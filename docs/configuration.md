@@ -107,7 +107,9 @@ Read by compose itself, not the server.
 
 - `WAXDECK_LIBRARY_ROOTS`: library roots as `name=path` pairs, comma
   separated. Root names must match the WaxFlow roots serving the same
-  directories; under compose this is pinned to `lib=/library`.
+  directories; under compose this is pinned to `lib=/library`. A root
+  overlapping a library added in the console is left out, with a
+  warning in the log.
 - `WAXDECK_MANAGED_ROOTS`: root names (comma separated) the catalog
   may place files into - uploads import there and the organizer may
   move files there; unlisted roots stay strictly in place. The compose

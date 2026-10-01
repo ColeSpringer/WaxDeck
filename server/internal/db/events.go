@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -143,6 +144,26 @@ func (d *DB) SyncStateSet(ctx context.Context, key, value string) error {
 		return fmt.Errorf("db: writing sync state %s: %w", key, err)
 	}
 	return nil
+}
+
+// PeekSyncState reads one sync_state value from the database at path
+// without opening it as a store: no baseline check, no writes. Empty when
+// the file, the table or the key is missing.
+func PeekSyncState(ctx context.Context, path, key string) (string, error) {
+	if _, err := os.Stat(path); err != nil {
+		return "", nil
+	}
+	conn, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	if err != nil {
+		return "", fmt.Errorf("db: opening %s to read: %w", path, err)
+	}
+	defer conn.Close()
+	var v string
+	err = conn.QueryRowContext(ctx, `SELECT value FROM sync_state WHERE key = ?`, key).Scan(&v)
+	if err != nil {
+		return "", nil
+	}
+	return v, nil
 }
 
 // ClearSyncState drops every sync_state row. The restore path calls it

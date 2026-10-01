@@ -105,8 +105,9 @@ type EnrichmentLastRunDTO struct {
 	Deferred int
 	// Images handed to the catalog, and album fronts reused from the group's.
 	ArtFetched, AuxArtFetched, ArtReused int
-	// Zero unless the run wrote tags.
-	TagsWritten, TagsFailed, TagsUnrepresented, TagsSkipped int
+	// Zero unless the run wrote tags. TagsReadOnly counts files a
+	// read-only library kept unwritten.
+	TagsWritten, TagsFailed, TagsUnrepresented, TagsSkipped, TagsReadOnly int
 	// Stalled names, by API phase, what ended early for want of a source.
 	Stalled []string
 	// 0 means no pass has finished, so the zeros above mean "not yet".
@@ -130,7 +131,7 @@ func lastRunFrom(r enrich.Result, finishedAtNS int64) *EnrichmentLastRunDTO {
 		Retried: r.Retried, Deferred: r.Deferred,
 		ArtFetched: r.ArtFetched, AuxArtFetched: r.AuxArtFetched, ArtReused: r.ArtReused,
 		TagsWritten: r.TagsWritten, TagsFailed: r.TagsFailed,
-		TagsUnrepresented: r.TagsUnrepresented, TagsSkipped: r.TagsSkipped,
+		TagsUnrepresented: r.TagsUnrepresented, TagsSkipped: r.TagsSkipped, TagsReadOnly: r.TagsReadOnly,
 		Stalled:      apiNames(r.Stalled),
 		FinishedAtNS: finishedAtNS,
 	}
@@ -293,10 +294,7 @@ var catalogBuiltins = []catalogBuiltin{
 // markers with and drops an injected provider for taking, so startup
 // refuses a custom provider under one rather than list it here and lose it
 // there.
-var ReservedEnrichNames = []string{
-	enrich.ProviderMusicBrainz, "musicbrainz:edition", enrich.ProviderCoverArt,
-	enrich.ProviderListenBrainz, enrich.ProviderLRCLIB, "none",
-}
+var ReservedEnrichNames = enrich.ReservedProviderNames()
 
 // builtinFor names the built-in that fills a per-item want, if any.
 func builtinFor(want string) (string, bool) {
@@ -421,8 +419,8 @@ func (l *Library) enrichmentProgress(ctx context.Context) (EnrichmentStatusDTO, 
 				continue
 			}
 			// Newest first, so the first that parses wins; a run with no
-			// summary is skipped rather than read as a pass that did nothing.
-			if out.LastRun == nil && j.Result != "" {
+			// summary, or on one target, is not a pass's.
+			if out.LastRun == nil && j.Result != "" && j.TargetType == "" {
 				var r enrich.Result
 				if json.Unmarshal([]byte(j.Result), &r) == nil {
 					out.LastRun = lastRunFrom(r, j.FinishedAt)
@@ -447,6 +445,15 @@ func (l *Library) forcedPhases(force bool, names []string) ([]model.EnrichPhase,
 	if force {
 		return nil, errInvalid("force already re-asks every phase; send it or forcePhases, not both")
 	}
+	return l.phasesByName(names)
+}
+
+// phasesByName maps API phase names onto the catalog's phases, refusing a
+// name the API does not know and a phase this server does not run.
+func (l *Library) phasesByName(names []string) ([]model.EnrichPhase, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
 	// One read, so every name is checked against the same order.
 	catalog := l.lib.EnrichmentPhases()
 	var out []model.EnrichPhase
@@ -470,18 +477,22 @@ func (l *Library) forcedPhases(force bool, names []string) ([]model.EnrichPhase,
 
 // RunEnrichment starts the whole-library pass as a job on the process
 // context, so it outlives the 202 that reported it; forcePhases re-asks
-// those phases alone.
-func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool, forcePhases []string) (string, error) {
+// those phases alone, and phases limits the pass to the ones named.
+func (l *Library) RunEnrichment(ctx context.Context, uc *UserCtx, force bool, forcePhases, phases []string) (string, error) {
 	if !uc.Admin {
 		return "", &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	phases, err := l.forcedPhases(force, forcePhases)
+	forced, err := l.forcedPhases(force, forcePhases)
 	if err != nil {
 		return "", err
 	}
-	pid, err := l.startEnrichJob(ctx, uc, waxbin.EnrichOptions{Force: force, ForcePhases: phases}, "")
+	walk, err := l.phasesByName(phases)
 	if err != nil {
-		return "", l.explainEnrichRefusal(err, forcePhases)
+		return "", err
+	}
+	pid, err := l.startEnrichJob(ctx, uc, waxbin.EnrichOptions{Force: force, ForcePhases: forced, Phases: walk}, "")
+	if err != nil {
+		return "", l.explainEnrichRefusal(err, slices.Concat(forcePhases, phases))
 	}
 	return apiPID(PrefixJob, pid), nil
 }
@@ -655,10 +666,17 @@ func (l *Library) enrichItemCatalogPass(ctx context.Context, it *model.ItemView,
 	if len(builtinWants) == 0 {
 		return
 	}
+	phases := itemPassPhases(builtinWants, l.lib.EnrichmentPhases())
+	if phases != nil && len(phases) == 0 {
+		for _, w := range builtinWants {
+			*skipped = append(*skipped, w+": no provider hit")
+		}
+		return
+	}
 	// Item-scoped, fill-when-empty: the engine enriches this item's own
 	// entities and never overwrites, so a provider only fills real gaps. It
 	// runs synchronously under the engine's shared enrich lease.
-	_, err := l.lib.Enrich(ctx, waxbin.EnrichOptions{ItemPID: it.PID})
+	_, err := l.lib.Enrich(ctx, waxbin.EnrichOptions{ItemPID: it.PID, Phases: phases})
 	if err != nil {
 		if KindOf(classify(err)) == KindConflict {
 			// A concurrent enrich (a whole-catalog pass, or another fetch)

@@ -11,12 +11,15 @@ class _$EnrichmentRunRequest extends EnrichmentRunRequest {
   final bool? force;
   @override
   final BuiltList<EnrichmentPhase>? forcePhases;
+  @override
+  final BuiltList<EnrichmentPhase>? phases;
 
   factory _$EnrichmentRunRequest([
     void Function(EnrichmentRunRequestBuilder)? updates,
   ]) => (EnrichmentRunRequestBuilder()..update(updates))._build();
 
-  _$EnrichmentRunRequest._({this.force, this.forcePhases}) : super._();
+  _$EnrichmentRunRequest._({this.force, this.forcePhases, this.phases})
+    : super._();
   @override
   EnrichmentRunRequest rebuild(
     void Function(EnrichmentRunRequestBuilder) updates,
@@ -31,7 +34,8 @@ class _$EnrichmentRunRequest extends EnrichmentRunRequest {
     if (identical(other, this)) return true;
     return other is EnrichmentRunRequest &&
         force == other.force &&
-        forcePhases == other.forcePhases;
+        forcePhases == other.forcePhases &&
+        phases == other.phases;
   }
 
   @override
@@ -39,6 +43,7 @@ class _$EnrichmentRunRequest extends EnrichmentRunRequest {
     var _$hash = 0;
     _$hash = $jc(_$hash, force.hashCode);
     _$hash = $jc(_$hash, forcePhases.hashCode);
+    _$hash = $jc(_$hash, phases.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -47,7 +52,8 @@ class _$EnrichmentRunRequest extends EnrichmentRunRequest {
   String toString() {
     return (newBuiltValueToStringHelper(r'EnrichmentRunRequest')
           ..add('force', force)
-          ..add('forcePhases', forcePhases))
+          ..add('forcePhases', forcePhases)
+          ..add('phases', phases))
         .toString();
   }
 }
@@ -66,6 +72,11 @@ class EnrichmentRunRequestBuilder
   set forcePhases(ListBuilder<EnrichmentPhase>? forcePhases) =>
       _$this._forcePhases = forcePhases;
 
+  ListBuilder<EnrichmentPhase>? _phases;
+  ListBuilder<EnrichmentPhase> get phases =>
+      _$this._phases ??= ListBuilder<EnrichmentPhase>();
+  set phases(ListBuilder<EnrichmentPhase>? phases) => _$this._phases = phases;
+
   EnrichmentRunRequestBuilder() {
     EnrichmentRunRequest._defaults(this);
   }
@@ -75,6 +86,7 @@ class EnrichmentRunRequestBuilder
     if ($v != null) {
       _force = $v.force;
       _forcePhases = $v.forcePhases?.toBuilder();
+      _phases = $v.phases?.toBuilder();
       _$v = null;
     }
     return this;
@@ -101,12 +113,15 @@ class EnrichmentRunRequestBuilder
           _$EnrichmentRunRequest._(
             force: force,
             forcePhases: _forcePhases?.build(),
+            phases: _phases?.build(),
           );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'forcePhases';
         _forcePhases?.build();
+        _$failedField = 'phases';
+        _phases?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'EnrichmentRunRequest',

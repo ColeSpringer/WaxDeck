@@ -301,6 +301,12 @@ func (s *Server) ListTrash(ctx context.Context, req ListTrashRequestObject) (Lis
 		if e.RestoredNS > 0 {
 			row.RestoredAt = ptr(time.Unix(0, e.RestoredNS).UTC())
 		}
+		if e.LibraryPID != "" {
+			row.LibraryPid = ptr(e.LibraryPID)
+		}
+		if e.LibraryName != "" {
+			row.LibraryName = ptr(e.LibraryName)
+		}
 		out.Entries = append(out.Entries, row)
 	}
 	return ListTrash200JSONResponse(out), nil
@@ -341,9 +347,10 @@ func (s *Server) EmptyTrash(ctx context.Context, _ EmptyTrashRequestObject) (Emp
 		return nil, err
 	}
 	return EmptyTrash200JSONResponse(TrashEmptyResult{
-		Purged:         rep.Purged,
-		Errored:        rep.Errored,
-		ReclaimedBytes: rep.ReclaimedBytes,
+		Purged:          rep.Purged,
+		Errored:         rep.Errored,
+		ReclaimedBytes:  rep.ReclaimedBytes,
+		SkippedReadOnly: rep.SkippedReadOnly,
 	}), nil
 }
 
@@ -554,22 +561,6 @@ func (s *Server) ListJobs(ctx context.Context, req ListJobsRequestObject) (ListJ
 
 // --- library read-only -------------------------------------------------------------
 
-func (s *Server) GetLibraryReadOnly(ctx context.Context, req GetLibraryReadOnlyRequestObject) (GetLibraryReadOnlyResponseObject, error) {
-	p, ok := principalFromContext(ctx)
-	if !ok || !p.IsAdmin() {
-		return GetLibraryReadOnly403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
-	}
-	ro, err := s.svc.LibraryReadOnlyGet(ctx, req.Pid)
-	if err != nil {
-		switch service.KindOf(err) {
-		case service.KindNotFound, service.KindInvalid:
-			return GetLibraryReadOnly404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no library with pid "+req.Pid))}, nil
-		}
-		return nil, err
-	}
-	return GetLibraryReadOnly200JSONResponse(LibraryReadOnly{ReadOnly: ro, LibraryPid: ptr(req.Pid)}), nil
-}
-
 func (s *Server) SetLibraryReadOnly(ctx context.Context, req SetLibraryReadOnlyRequestObject) (SetLibraryReadOnlyResponseObject, error) {
 	uc, p, err := s.requireUserCtx(ctx)
 	if err != nil {
@@ -583,12 +574,37 @@ func (s *Server) SetLibraryReadOnly(ctx context.Context, req SetLibraryReadOnlyR
 	}
 	if err := s.svc.LibraryReadOnlySet(ctx, uc, req.Pid, req.Body.ReadOnly); err != nil {
 		switch service.KindOf(err) {
-		case service.KindNotFound, service.KindInvalid:
+		case service.KindNotFound:
 			return SetLibraryReadOnly404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no library with pid "+req.Pid))}, nil
+		case service.KindInvalid:
+			return SetLibraryReadOnly400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 		}
 		return nil, err
 	}
 	return SetLibraryReadOnly200JSONResponse(LibraryReadOnly{ReadOnly: req.Body.ReadOnly, LibraryPid: ptr(req.Pid)}), nil
+}
+
+func (s *Server) SetLibraryProfile(ctx context.Context, req SetLibraryProfileRequestObject) (SetLibraryProfileResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return SetLibraryProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	lib, err := s.svc.SetLibraryProfile(ctx, uc, req.Pid, req.Body.Profile)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return SetLibraryProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return SetLibraryProfile403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		case service.KindNotFound:
+			return SetLibraryProfile404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return SetLibraryProfile200JSONResponse(libraryDTO(lib)), nil
 }
 
 func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObject) (CreateLibraryResponseObject, error) {
@@ -631,6 +647,9 @@ func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObje
 		Media:     base.Media,
 		Path:      base.Path,
 		ItemCount: base.ItemCount,
+		ReadOnly:  base.ReadOnly,
+		Managed:   base.Managed,
+		Profile:   base.Profile,
 	}
 	if lib.StreamingWarning != "" {
 		out.StreamingWarning = ptr(lib.StreamingWarning)
@@ -643,7 +662,10 @@ func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObje
 // is omitted rather than sent as zero where nothing counted it (a
 // create), so a client can tell "nothing here yet" from "not asked".
 func libraryDTO(lib service.LibraryInfo) Library {
-	out := Library{Pid: lib.PID, Name: lib.Name}
+	out := Library{Pid: lib.PID, Name: lib.Name, ReadOnly: lib.ReadOnly, Managed: lib.Managed}
+	if lib.Managed && lib.Profile != "" {
+		out.Profile = ptr(lib.Profile)
+	}
 	if lib.Media != "" {
 		out.Media = ptr(lib.Media)
 	}

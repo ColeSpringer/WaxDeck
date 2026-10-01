@@ -47,6 +47,9 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
   // this is a settings-only save; an edited one rebinds.
   String _seededUrl = '';
 
+  /// A refused action: the shell's toast would sit under this sheet.
+  String? _refusal;
+
   static const _intervals = [1, 3, 6, 12, 24];
 
   /// The exports a binding can name, which leaves out M3U and NSP (see
@@ -126,16 +129,27 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
   }) async {
     final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _refusal = null;
+    });
+    void refused(String message) {
+      if (mounted) {
+        setState(() => _refusal = message);
+      } else {
+        messenger.show(message);
+      }
+    }
+
     try {
       await action();
     } on FormatException catch (e) {
       // A pasted export the parser could not read. Its own sentence,
       // for the same reason a server refusal keeps the server's: the
       // subject is what somebody just typed.
-      messenger.show(e.message);
+      refused(e.message);
     } on Object catch (e) {
-      messenger.show(refusal ? explainRefusal(l10n, e) : explainError(l10n, e));
+      refused(refusal ? explainRefusal(l10n, e) : explainError(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -252,6 +266,10 @@ class _PlaylistSyncSheetState extends ConsumerState<_PlaylistSyncSheet> {
                 style: WaxType.headline.copyWith(color: colors.textPrimary),
               ),
               const SizedBox(height: WaxSpace.s12),
+              if (_refusal case final refusal?) ...<Widget>[
+                WaxBanner(message: refusal, tone: WaxBannerTone.caution),
+                const SizedBox(height: WaxSpace.s12),
+              ],
               // Nothing to save until the read has answered. An unbound
               // playlist answers as data (null), so anything else here
               // is a read that has not landed or one that failed - and

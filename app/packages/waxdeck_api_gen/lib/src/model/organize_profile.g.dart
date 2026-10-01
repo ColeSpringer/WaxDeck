@@ -10,23 +10,32 @@ class _$OrganizeProfile extends OrganizeProfile {
   @override
   final String name;
   @override
-  final String? musicTemplate;
+  final String musicTemplate;
   @override
-  final String? audiobookTemplate;
+  final String audiobookTemplate;
   @override
-  final String? podcastTemplate;
+  final String podcastTemplate;
   @override
-  final bool? tagWrite;
+  final bool tagWrite;
+  @override
+  final bool builtIn;
+  @override
+  final OrganizeSample sample;
+  @override
+  final OrganizeTemplates? saved;
 
   factory _$OrganizeProfile([void Function(OrganizeProfileBuilder)? updates]) =>
       (OrganizeProfileBuilder()..update(updates))._build();
 
   _$OrganizeProfile._({
     required this.name,
-    this.musicTemplate,
-    this.audiobookTemplate,
-    this.podcastTemplate,
-    this.tagWrite,
+    required this.musicTemplate,
+    required this.audiobookTemplate,
+    required this.podcastTemplate,
+    required this.tagWrite,
+    required this.builtIn,
+    required this.sample,
+    this.saved,
   }) : super._();
   @override
   OrganizeProfile rebuild(void Function(OrganizeProfileBuilder) updates) =>
@@ -43,7 +52,10 @@ class _$OrganizeProfile extends OrganizeProfile {
         musicTemplate == other.musicTemplate &&
         audiobookTemplate == other.audiobookTemplate &&
         podcastTemplate == other.podcastTemplate &&
-        tagWrite == other.tagWrite;
+        tagWrite == other.tagWrite &&
+        builtIn == other.builtIn &&
+        sample == other.sample &&
+        saved == other.saved;
   }
 
   @override
@@ -54,6 +66,9 @@ class _$OrganizeProfile extends OrganizeProfile {
     _$hash = $jc(_$hash, audiobookTemplate.hashCode);
     _$hash = $jc(_$hash, podcastTemplate.hashCode);
     _$hash = $jc(_$hash, tagWrite.hashCode);
+    _$hash = $jc(_$hash, builtIn.hashCode);
+    _$hash = $jc(_$hash, sample.hashCode);
+    _$hash = $jc(_$hash, saved.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -65,7 +80,10 @@ class _$OrganizeProfile extends OrganizeProfile {
           ..add('musicTemplate', musicTemplate)
           ..add('audiobookTemplate', audiobookTemplate)
           ..add('podcastTemplate', podcastTemplate)
-          ..add('tagWrite', tagWrite))
+          ..add('tagWrite', tagWrite)
+          ..add('builtIn', builtIn)
+          ..add('sample', sample)
+          ..add('saved', saved))
         .toString();
   }
 }
@@ -97,6 +115,20 @@ class OrganizeProfileBuilder
   bool? get tagWrite => _$this._tagWrite;
   set tagWrite(bool? tagWrite) => _$this._tagWrite = tagWrite;
 
+  bool? _builtIn;
+  bool? get builtIn => _$this._builtIn;
+  set builtIn(bool? builtIn) => _$this._builtIn = builtIn;
+
+  OrganizeSampleBuilder? _sample;
+  OrganizeSampleBuilder get sample =>
+      _$this._sample ??= OrganizeSampleBuilder();
+  set sample(OrganizeSampleBuilder? sample) => _$this._sample = sample;
+
+  OrganizeTemplatesBuilder? _saved;
+  OrganizeTemplatesBuilder get saved =>
+      _$this._saved ??= OrganizeTemplatesBuilder();
+  set saved(OrganizeTemplatesBuilder? saved) => _$this._saved = saved;
+
   OrganizeProfileBuilder() {
     OrganizeProfile._defaults(this);
   }
@@ -109,6 +141,9 @@ class OrganizeProfileBuilder
       _audiobookTemplate = $v.audiobookTemplate;
       _podcastTemplate = $v.podcastTemplate;
       _tagWrite = $v.tagWrite;
+      _builtIn = $v.builtIn;
+      _sample = $v.sample.toBuilder();
+      _saved = $v.saved?.toBuilder();
       _$v = null;
     }
     return this;
@@ -128,19 +163,60 @@ class OrganizeProfileBuilder
   OrganizeProfile build() => _build();
 
   _$OrganizeProfile _build() {
-    final _$result =
-        _$v ??
-        _$OrganizeProfile._(
-          name: BuiltValueNullFieldError.checkNotNull(
-            name,
-            r'OrganizeProfile',
-            'name',
-          ),
-          musicTemplate: musicTemplate,
-          audiobookTemplate: audiobookTemplate,
-          podcastTemplate: podcastTemplate,
-          tagWrite: tagWrite,
+    _$OrganizeProfile _$result;
+    try {
+      _$result =
+          _$v ??
+          _$OrganizeProfile._(
+            name: BuiltValueNullFieldError.checkNotNull(
+              name,
+              r'OrganizeProfile',
+              'name',
+            ),
+            musicTemplate: BuiltValueNullFieldError.checkNotNull(
+              musicTemplate,
+              r'OrganizeProfile',
+              'musicTemplate',
+            ),
+            audiobookTemplate: BuiltValueNullFieldError.checkNotNull(
+              audiobookTemplate,
+              r'OrganizeProfile',
+              'audiobookTemplate',
+            ),
+            podcastTemplate: BuiltValueNullFieldError.checkNotNull(
+              podcastTemplate,
+              r'OrganizeProfile',
+              'podcastTemplate',
+            ),
+            tagWrite: BuiltValueNullFieldError.checkNotNull(
+              tagWrite,
+              r'OrganizeProfile',
+              'tagWrite',
+            ),
+            builtIn: BuiltValueNullFieldError.checkNotNull(
+              builtIn,
+              r'OrganizeProfile',
+              'builtIn',
+            ),
+            sample: sample.build(),
+            saved: _saved?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'sample';
+        sample.build();
+        _$failedField = 'saved';
+        _saved?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'OrganizeProfile',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

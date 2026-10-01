@@ -128,12 +128,10 @@ func KindOf(err error) ErrorKind {
 }
 
 func kindFromWaxErr(err error) ErrorKind {
-	// While the CLI holds the catalog for a maintenance operation the
-	// suspended store answers every read with a closed-database error.
-	// This is the one place that string shows up as a signal; the API
-	// layer turns it into the typed catalog-maintenance error clients
-	// render as a banner.
-	if err != nil && strings.Contains(err.Error(), "database is closed") {
+	// A store suspended for a hand-off answers reads with a closed pool
+	// and writes with a closed store; the text is the only signal.
+	if err != nil && (strings.Contains(err.Error(), "database is closed") ||
+		strings.Contains(err.Error(), "store is closed")) {
 		return KindMaintenance
 	}
 	switch waxerr.CodeOf(err) {
@@ -144,6 +142,10 @@ func kindFromWaxErr(err error) ErrorKind {
 	case waxerr.CodeConflict:
 		return KindConflict
 	case waxerr.CodeLocked:
+		// The catalog's refusals of a read-only library all say so.
+		if strings.Contains(err.Error(), "read-only") {
+			return KindReadOnly
+		}
 		return KindLocked
 	case waxerr.CodeUnsupported:
 		return KindUnsupported
@@ -158,7 +160,11 @@ func classify(err error) error {
 	if err == nil {
 		return nil
 	}
-	return &Error{Kind: kindFromWaxErr(err), Err: err}
+	e := &Error{Kind: kindFromWaxErr(err), Err: err}
+	if e.Kind == KindReadOnly {
+		e.Msg = errReadOnly("this library").Error()
+	}
+	return e
 }
 
 // errNotFound builds a caller-facing not-found error.

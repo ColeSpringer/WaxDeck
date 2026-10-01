@@ -256,6 +256,7 @@ class _RunPassState extends ConsumerState<_RunPass> {
           .run(
             force: _mode == 'all',
             forcePhases: _mode == 'phases' ? _offered : const [],
+            phases: _mode == 'phases' ? _offered : const [],
           );
       messenger.show(l10n.adminEnrichmentRunStarted);
     } on WaxDeckApiException catch (error) {
@@ -619,6 +620,7 @@ class _LastRun extends StatelessWidget {
       (l10n.adminEnrichmentTagsFailed, run.tagsFailed),
       (l10n.adminEnrichmentTagsUnrepresented, run.tagsUnrepresented),
       (l10n.adminEnrichmentTagsSkipped, run.tagsSkipped),
+      (l10n.adminEnrichmentTagsReadOnly, run.tagsReadOnly),
     ];
     final finished = run.finishedAt;
     return Column(

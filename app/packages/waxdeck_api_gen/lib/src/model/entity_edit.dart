@@ -12,17 +12,17 @@ part 'entity_edit.g.dart';
 /// Entity field edits.
 ///
 /// Properties:
-/// * [edits] - Field name to new value, from the entity type's vocabulary; empty clears. 
-/// * [writeBack] - Push tag-formed values into member files.
+/// * [edits] - Field name to new value (empty clears): `sort` and `mbid` for any entity, `type` for release groups, and `barcode`, `label`, `catalog_number`, `media` and `country` for albums. 
+/// * [writeBack] - Push tag-formed values into member files; an `mbid` clear strips the id from them. 
 /// * [lock] - Lock the edited entity fields.
 /// * [force] - Override existing locks.
 @BuiltValue()
 abstract class EntityEdit implements Built<EntityEdit, EntityEditBuilder> {
-  /// Field name to new value, from the entity type's vocabulary; empty clears. 
+  /// Field name to new value (empty clears): `sort` and `mbid` for any entity, `type` for release groups, and `barcode`, `label`, `catalog_number`, `media` and `country` for albums. 
   @BuiltValueField(wireName: r'edits')
   BuiltMap<String, String> get edits;
 
-  /// Push tag-formed values into member files.
+  /// Push tag-formed values into member files; an `mbid` clear strips the id from them. 
   @BuiltValueField(wireName: r'writeBack')
   bool? get writeBack;
 

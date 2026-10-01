@@ -40,29 +40,159 @@ void main() {
     );
   });
 
-  testWidgets('a lone profile is named as the built-in one', (tester) async {
+  testWidgets('the picker offers each library\'s own and every profile', (
+    tester,
+  ) async {
     final repo = FakeRepository()
-      ..organizeProfiles = const [OrganizeProfile(name: 'waxbin-native')];
+      ..organizeProfiles = const [
+        OrganizeProfile(
+          name: 'waxbin-native',
+          builtIn: true,
+          sample: OrganizeSample(music: 'Artist/Album/01 - Title.flac'),
+        ),
+        OrganizeProfile(
+          name: 'flat',
+          sample: OrganizeSample(music: 'Title.flac'),
+        ),
+      ];
     await _pump(tester, _host(repo));
+    expect(find.text("Each library's own profile"), findsOneWidget);
+    expect(find.text('waxbin-native (built in)'), findsOneWidget);
+    expect(find.text('Artist/Album/01 - Title.flac'), findsOneWidget);
+    expect(find.text('Title.flac'), findsOneWidget);
     expect(
-      find.text('This server has only the built-in profile.'),
-      findsOneWidget,
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileEdit('flat')),
+      findsNothing,
+      reason: 'nothing to edit until a profile is chosen',
     );
 
-    repo.organizeProfiles = const [
-      OrganizeProfile(name: 'waxbin-native'),
-      OrganizeProfile(name: 'classical'),
-    ];
-    await _pump(
-      tester,
-      ProviderScope(
-        key: UniqueKey(),
-        overrides: [repositoryProvider.overrideWithValue(repo)],
-        child: localizedHost(const OrganizeScreen()),
-      ),
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
+    await tester.pumpAndSettle();
+    expect(repo.previewOrganizeCalls.single.profile, 'flat');
     expect(
-      find.text('This server has only the built-in profile.'),
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileEdit('flat')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a new profile is saved with its samples on show', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    await _pump(tester, _host(repo));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileName),
+      'flat',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileMusic),
+      '{title}.{ext}',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    expect(find.text('Track: {title}.{ext}'), findsOneWidget);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileSave),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.putOrganizeProfileCalls.single.name, 'flat');
+    expect(repo.putOrganizeProfileCalls.single.musicTemplate, '{title}.{ext}');
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
+      findsOneWidget,
+      reason: 'the listing is read again',
+    );
+  });
+
+  testWidgets('a save still lands once its sheet is dismissed', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository()..organizeProfileGate = gate;
+    await _pump(tester, _host(repo));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileName),
+      'flat',
+    );
+    await tester.pump();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileSave),
+    );
+    await tester.pump();
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileSheet),
+      findsNothing,
+    );
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
+      findsOneWidget,
+      reason: 'the listing is read again',
+    );
+  });
+
+  testWidgets('a profile is deleted behind a confirmation', (tester) async {
+    final repo = FakeRepository()
+      ..organizeProfiles = const [
+        OrganizeProfile(name: 'default', builtIn: true),
+        OrganizeProfile(name: 'flat'),
+      ];
+    await _pump(tester, _host(repo));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileEdit('flat')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileDelete('flat')),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.deleteOrganizeProfileCalls, isEmpty);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileDeleteConfirm),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.deleteOrganizeProfileCalls, ['flat']);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a built-in profile offers no delete', (tester) async {
+    final repo = FakeRepository()
+      ..organizeProfiles = const [
+        OrganizeProfile(name: 'default', builtIn: true),
+      ];
+    await _pump(tester, _host(repo));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('default')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileEdit('default')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileDelete('default')),
       findsNothing,
     );
   });
@@ -98,7 +228,7 @@ void main() {
     );
   });
 
-  testWidgets('a preview says what a read-only library holds back', (
+  testWidgets('a preview says what a read-only server holds back', (
     tester,
   ) async {
     final repo = FakeRepository()
@@ -112,15 +242,49 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      find.text('2 files stay where they are: their libraries are read-only.'),
+      find.text('2 files stay where they are while the server is read-only.'),
       findsOneWidget,
     );
     expect(find.text('Everything is already in place'), findsNothing);
   });
 
-  testWidgets('a run counts what a read-only library held back', (
+  testWidgets('a preview and a run name the read-only libraries left out', (
     tester,
   ) async {
+    final repo = FakeRepository()
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'default',
+        totalActions: 1,
+        readOnlyLibraries: 2,
+        actions: [
+          OrganizeAction(itemPid: 'tr-1', from: '/old/a.flac', to: '/a.flac'),
+        ],
+      )
+      ..organizeReportResult = const OrganizeReport(
+        moved: 1,
+        skipped: 0,
+        readOnlyLibraries: 2,
+        failed: 0,
+      );
+    await _pump(tester, _host(repo));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
+    await tester.pumpAndSettle();
+    const line = '2 read-only libraries are left as they are.';
+    expect(find.text(line), findsOneWidget);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'ORGANIZE',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
+    await tester.pumpAndSettle();
+    expect(find.text(line), findsOneWidget);
+  });
+
+  testWidgets('a run counts what a read-only server held back', (tester) async {
     final repo = FakeRepository()
       ..organizePlanResult = const OrganizePlan(
         profile: 'default',
@@ -143,7 +307,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.confirmField),
-      'default',
+      'ORGANIZE',
     );
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
@@ -196,6 +360,275 @@ void main() {
     expect(repo.applyOrganizeCalls, isEmpty);
   });
 
+  testWidgets('an edit or a deletion drops the preview laid out by it', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..organizeProfiles = const [
+        OrganizeProfile(name: 'default', builtIn: true),
+        OrganizeProfile(name: 'flat'),
+      ]
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'flat',
+        totalActions: 1,
+        actions: [
+          OrganizeAction(itemPid: 'tr-1', from: '/old/a.flac', to: '/a.flac'),
+        ],
+      );
+    await _pump(tester, _host(repo));
+    Future<void> previewFlat() async {
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.organizePreview),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.organizePlan),
+        findsOneWidget,
+      );
+    }
+
+    await previewFlat();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileEdit('flat')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileMusic),
+      '{title}.{ext}',
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileSave),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizePlan),
+      findsNothing,
+      reason: 'the edit changed what Apply would do',
+    );
+
+    await previewFlat();
+    repo.organizeProfiles = const [
+      OrganizeProfile(name: 'default', builtIn: true),
+    ];
+    final element = tester.element(find.byType(OrganizeScreen));
+    ProviderScope.containerOf(element).invalidate(organizeProfilesProvider);
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizePlan),
+      findsNothing,
+      reason: 'deleted elsewhere, the profile no longer lays anything out',
+    );
+  });
+
+  testWidgets('a save landing after its sheet is gone drops the preview', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..organizeProfiles = const [
+        OrganizeProfile(name: 'default', builtIn: true),
+        OrganizeProfile(name: 'flat'),
+      ]
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'flat',
+        totalActions: 1,
+        actions: [
+          OrganizeAction(itemPid: 'tr-1', from: '/old/a.flac', to: '/a.flac'),
+        ],
+      );
+    await _pump(tester, _host(repo));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileEdit('flat')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileMusic),
+      '{title}.{ext}',
+    );
+    repo.organizeProfileGate = gate;
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileSave),
+    );
+    await tester.pump();
+    await tester.tapAt(const Offset(20, 20));
+    await tester.pumpAndSettle();
+
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.organizePlan),
+      findsNothing,
+      reason: 'Apply would lay out by the new templates',
+    );
+  });
+
+  testWidgets('a new profile cannot take a name already used', (tester) async {
+    final repo = FakeRepository()
+      ..organizeProfiles = const [
+        OrganizeProfile(name: 'default', builtIn: true),
+        OrganizeProfile(name: 'flat'),
+      ];
+    await _pump(tester, _host(repo));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileName),
+      'flat',
+    );
+    await tester.pump();
+    expect(find.textContaining('edit it instead'), findsOneWidget);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileSave),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    expect(repo.putOrganizeProfileCalls, isEmpty);
+  });
+
+  testWidgets('the editor starts from what the profile sets itself', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..organizeProfiles = const [
+        OrganizeProfile(
+          name: 'flat',
+          musicTemplate: '{title}.{ext}',
+          audiobookTemplate: 'Inherited/{title}.{ext}',
+          saved: OrganizeTemplates(music: '{title}.{ext}'),
+        ),
+      ];
+    await _pump(tester, _host(repo));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileEdit('flat')),
+    );
+    await tester.pumpAndSettle();
+    TextField field(String id) => tester.widget<TextField>(
+      find.descendant(
+        of: find.bySemanticsIdentifier(id),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(
+      field(SemanticsIds.organizeProfileMusic).controller!.text,
+      '{title}.{ext}',
+    );
+    expect(
+      field(SemanticsIds.organizeProfileAudiobook).controller!.text,
+      isEmpty,
+    );
+    expect(
+      find.text('Inherited/{title}.{ext}'),
+      findsOneWidget,
+      reason: 'the inherited template as the hint',
+    );
+  });
+
+  testWidgets('a sample the template cannot place says so', (tester) async {
+    final repo = FakeRepository()
+      ..organizeProfiles = const [
+        OrganizeProfile(
+          name: 'flat',
+          sample: OrganizeSample(audiobook: 'a', podcast: 'b'),
+        ),
+      ];
+    await _pump(tester, _host(repo));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileOption('flat')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileEdit('flat')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('no path for this sample'), findsOneWidget);
+  });
+
+  testWidgets('an older sample answer never replaces a newer one', (
+    tester,
+  ) async {
+    final first = Completer<OrganizeSample>();
+    final repo = FakeRepository()
+      ..organizeSampleAnswer = (music) => music == '{ti'
+          ? first.future
+          : Future.value(
+              OrganizeSample(music: music, audiobook: 'a', podcast: 'b'),
+            );
+    await _pump(tester, _host(repo));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
+    );
+    await tester.pumpAndSettle();
+    final music = find.bySemanticsIdentifier(SemanticsIds.organizeProfileMusic);
+    await tester.enterText(music, '{ti');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.enterText(music, '{title}.{ext}');
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    first.completeError(
+      const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'unterminated',
+        statusCode: 400,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Track: {title}.{ext}'), findsOneWidget);
+    expect(find.text('unterminated'), findsNothing);
+  });
+
+  testWidgets('a refused save is said inside the sheet', (tester) async {
+    final repo = FakeRepository()
+      ..putOrganizeProfileError = const WaxDeckApiException(
+        code: 'invalid-request',
+        message: 'a template is at most 1024 characters',
+        statusCode: 400,
+      );
+    await _pump(tester, _host(repo));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileNew),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileName),
+      'long',
+    );
+    await tester.pump();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.organizeProfileSave),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.organizeProfileSheet),
+        matching: find.textContaining('at most 1024 characters'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the picker names its group', (tester) async {
+    final repo = FakeRepository()
+      ..organizeProfiles = const [OrganizeProfile(name: 'flat')];
+    await _pump(tester, _host(repo));
+    expect(find.bySemanticsLabel('Organize profile'), findsOneWidget);
+  });
+
   testWidgets('preview renders the plan', (tester) async {
     final repo = FakeRepository();
     repo.organizePlanResult = const OrganizePlan(
@@ -220,7 +653,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.previewOrganizeCalls, hasLength(1));
-    expect(repo.previewOrganizeCalls.single.profile, 'default');
+    expect(
+      repo.previewOrganizeCalls.single.profile,
+      isNull,
+      reason: "each library's own profile by default",
+    );
     expect(
       find.bySemanticsIdentifier(SemanticsIds.organizePlan),
       findsOneWidget,
@@ -230,7 +667,7 @@ void main() {
     expect(find.text('/library/waves/b.flac'), findsOneWidget);
   });
 
-  testWidgets('apply requires typing the profile name', (tester) async {
+  testWidgets('apply requires typing the confirm word', (tester) async {
     final repo = FakeRepository();
     repo.organizePlanResult = const OrganizePlan(
       profile: 'default',
@@ -265,21 +702,21 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeApply));
     await tester.pumpAndSettle();
 
-    // Confirm stays disabled until the exact profile name is typed.
+    // Confirm stays disabled until the exact word is typed.
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
     await tester.pumpAndSettle();
     expect(repo.applyOrganizeCalls, isEmpty);
 
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.confirmField),
-      'default',
+      'ORGANIZE',
     );
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));
     await tester.pumpAndSettle();
 
     expect(repo.applyOrganizeCalls, hasLength(1));
-    expect(repo.applyOrganizeCalls.single.profile, 'default');
+    expect(repo.applyOrganizeCalls.single.profile, isNull);
     expect(
       find.bySemanticsIdentifier(SemanticsIds.organizeReport),
       findsOneWidget,
@@ -312,7 +749,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(
       find.bySemanticsIdentifier(SemanticsIds.confirmField),
-      'default',
+      'ORGANIZE',
     );
     await tester.pumpAndSettle();
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizeConfirm));

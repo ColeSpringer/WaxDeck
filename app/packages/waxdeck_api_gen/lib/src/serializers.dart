@@ -154,6 +154,7 @@ import 'package:waxdeck_api_gen/src/model/item_permissions.dart';
 import 'package:waxdeck_api_gen/src/model/item_summary.dart';
 import 'package:waxdeck_api_gen/src/model/job.dart';
 import 'package:waxdeck_api_gen/src/model/job_list.dart';
+import 'package:waxdeck_api_gen/src/model/job_target.dart';
 import 'package:waxdeck_api_gen/src/model/kind_fields.dart';
 import 'package:waxdeck_api_gen/src/model/lastfm_connect_start.dart';
 import 'package:waxdeck_api_gen/src/model/libraries.dart';
@@ -161,6 +162,7 @@ import 'package:waxdeck_api_gen/src/model/library_access.dart';
 import 'package:waxdeck_api_gen/src/model/library_create.dart';
 import 'package:waxdeck_api_gen/src/model/library_created.dart';
 import 'package:waxdeck_api_gen/src/model/library_matching.dart';
+import 'package:waxdeck_api_gen/src/model/library_profile.dart';
 import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/linked_identity.dart';
 import 'package:waxdeck_api_gen/src/model/listen_brainz_connect.dart';
@@ -220,9 +222,13 @@ import 'package:waxdeck_api_gen/src/model/organize_action.dart';
 import 'package:waxdeck_api_gen/src/model/organize_failure.dart';
 import 'package:waxdeck_api_gen/src/model/organize_plan.dart';
 import 'package:waxdeck_api_gen/src/model/organize_profile.dart';
+import 'package:waxdeck_api_gen/src/model/organize_profile_input.dart';
+import 'package:waxdeck_api_gen/src/model/organize_profile_preview.dart';
 import 'package:waxdeck_api_gen/src/model/organize_profiles.dart';
 import 'package:waxdeck_api_gen/src/model/organize_report.dart';
 import 'package:waxdeck_api_gen/src/model/organize_request.dart';
+import 'package:waxdeck_api_gen/src/model/organize_sample.dart';
+import 'package:waxdeck_api_gen/src/model/organize_templates.dart';
 import 'package:waxdeck_api_gen/src/model/password_change.dart';
 import 'package:waxdeck_api_gen/src/model/permissions.dart';
 import 'package:waxdeck_api_gen/src/model/play_info.dart';
@@ -547,6 +553,7 @@ part 'serializers.g.dart';
   ItemSummary,$ItemSummary,
   Job,
   JobList,
+  JobTarget,
   KindFields,
   LastfmConnectStart,
   Libraries,
@@ -554,6 +561,7 @@ part 'serializers.g.dart';
   LibraryCreate,
   LibraryCreated,
   LibraryMatching,
+  LibraryProfile,
   LibraryReadOnly,
   LinkedIdentity,
   ListenBrainzConnect,
@@ -613,9 +621,13 @@ part 'serializers.g.dart';
   OrganizeFailure,
   OrganizePlan,
   OrganizeProfile,
+  OrganizeProfileInput,
+  OrganizeProfilePreview,
   OrganizeProfiles,
   OrganizeReport,
   OrganizeRequest,
+  OrganizeSample,
+  OrganizeTemplates,
   PasswordChange,
   Permissions,
   PlayInfo,

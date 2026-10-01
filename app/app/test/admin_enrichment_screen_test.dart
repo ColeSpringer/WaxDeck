@@ -165,6 +165,9 @@ void main() {
     await _tap(tester, SemanticsIds.enrichmentPhase('lyrics'));
     await _tap(tester, SemanticsIds.enrichmentRun);
     expect(repo.runEnrichmentCalls.last.forcePhases, ['lyrics']);
+    expect(repo.runEnrichmentCalls.last.phases, [
+      'lyrics',
+    ], reason: 'only the chosen phases walk');
 
     await _tap(tester, SemanticsIds.enrichmentRunMode('all'));
     await _tap(tester, SemanticsIds.enrichmentRun);
@@ -284,6 +287,7 @@ void main() {
           artistsEnriched: 314,
           artistsMatched: 271,
           artFetched: 58,
+          tagsReadOnly: 9,
           finishedAt: DateTime.utc(2026, 9, 27, 3, 45),
         ),
       ),
@@ -291,6 +295,14 @@ void main() {
     expect(find.text('314'), findsOneWidget);
     expect(find.text('271'), findsOneWidget);
     expect(find.text('58'), findsOneWidget);
+    final readOnly = find.ancestor(
+      of: find.text('Files in read-only libraries'),
+      matching: find.byType(StatTile),
+    );
+    expect(
+      find.descendant(of: readOnly, matching: find.text('9')),
+      findsOneWidget,
+    );
     expect(find.text('No pass has finished yet.'), findsNothing);
   });
 

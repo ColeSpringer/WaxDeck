@@ -93,11 +93,15 @@ class TrashScreen extends ConsumerWidget {
       () async {
         try {
           final result = await container.read(trashProvider.notifier).empty();
+          final size = l10n.formatBytes(result.reclaimedBytes);
           messenger.show(
-            l10n.adminTrashEmptied(
-              result.purged,
-              l10n.formatBytes(result.reclaimedBytes),
-            ),
+            result.skippedReadOnly > 0
+                ? l10n.adminTrashEmptiedKept(
+                    result.purged,
+                    size,
+                    result.skippedReadOnly,
+                  )
+                : l10n.adminTrashEmptied(result.purged, size),
           );
         } on WaxDeckApiException catch (error) {
           messenger.show(explainError(l10n, error));
@@ -171,6 +175,18 @@ class TrashScreen extends ConsumerWidget {
                         color: entry.restoredAt == null
                             ? colors.textPrimary
                             : colors.textTertiary,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  WaxColumn<TrashEntry>(
+                    label: l10n.adminTrashColumnLibrary,
+                    width: 120,
+                    text: (entry) => entry.libraryName ?? '',
+                    cell: (context, entry) => Text(
+                      entry.libraryName ?? '',
+                      style: WaxType.bodySmall.copyWith(
+                        color: colors.textSecondary,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),

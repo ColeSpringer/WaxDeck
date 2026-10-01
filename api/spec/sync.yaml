@@ -280,7 +280,8 @@ components:
             trash, was first seen, crossed another five percent of progress
             or changed its message, a message marked at most every fifteen
             seconds; refetch `GET /jobs` or `GET /jobs/{pid}`). `job`
-            reaches administrators only.
+            reaches administrators; a targeted job's, while it runs, only
+            whoever started it.
 
 
             `health` carries no `pid`: the library's health moved (a sweep
@@ -288,6 +289,10 @@ components:
             so re-read
             `GET /library/health`. It reaches every signed-in account,
             since every account can read health.
+
+
+            `libraries` carries no `pid`: a library was added, restored or
+            changed, from anywhere, so re-read `GET /libraries`.
 
 
             Further markers are announcements rather than refetch
@@ -320,7 +325,7 @@ components:
           type: string
           description: >
             The item, show, book, playlist, or job the event is about
-            (absent for `prefs`, `account`, and `health`).
+            (absent for `prefs`, `account`, `health`, and `libraries`).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         playState:
           $ref: "#/components/schemas/PlayState"

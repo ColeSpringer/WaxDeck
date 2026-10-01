@@ -173,6 +173,12 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     firstBuilds: firstBuilds,
     providers: [toolTasksProvider],
   );
+  // A library added, restored or flagged anywhere, the CLI included.
+  final librariesFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    providers: [librariesProvider, libraryCountsProvider],
+  );
 
   // Both transports hand their hints to the same pacers: the fan-out
   // is what a hint costs, and running it on every one of them is what
@@ -190,6 +196,10 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   final tasks = PacedRefresh(
     fanOut: tasksFanOut.sweep,
     retry: tasksFanOut.retry,
+  );
+  final libraries = PacedRefresh(
+    fanOut: librariesFanOut.sweep,
+    retry: librariesFanOut.retry,
   );
   // Paced like the other two: a station whose stream announces a new
   // title every few minutes can land two rungs of artwork for it, and
@@ -209,6 +219,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     jobs.dispose();
     health.dispose();
     tasks.dispose();
+    libraries.dispose();
     radio.dispose();
   });
 
@@ -225,6 +236,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
         health.hint();
       case 'task-progress':
         tasks.hint();
+      case 'libraries':
+        libraries.hint();
       case 'play-state' || 'entity-state' || 'bookmarks' when engine != null:
         break;
       default:
@@ -237,6 +250,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     user.hint();
     jobs.hint();
     health.hint();
+    libraries.hint();
   });
   ref.onDispose(resetSub.cancel);
   final connect = ref.watch(connectBinderProvider);
@@ -329,6 +343,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
         user.hint();
         jobs.hint();
         health.hint();
+        libraries.hint();
         tick.bump();
       },
     );

@@ -26,7 +26,12 @@ Widget _host(FakeRepository repo, [ProviderContainer? container]) =>
       child: localizedHost(const TrashScreen()),
     );
 
-TrashEntry _entry(String id, {DateTime? restoredAt}) => TrashEntry(
+TrashEntry _entry(
+  String id, {
+  DateTime? restoredAt,
+  String libraryPid = 'lb-1',
+  String libraryName = 'music',
+}) => TrashEntry(
   id: id,
   itemPid: 'tr-1',
   name: 'Music/Bree Trio/pony.flac',
@@ -34,6 +39,8 @@ TrashEntry _entry(String id, {DateTime? restoredAt}) => TrashEntry(
   sizeBytes: 2 * 1024 * 1024,
   trashedAt: DateTime.utc(2026, 7, 10),
   restoredAt: restoredAt,
+  libraryPid: libraryPid,
+  libraryName: libraryName,
 );
 
 void main() {
@@ -51,6 +58,7 @@ void main() {
     expect(find.bySemanticsIdentifier('trash-row-ts-1'), findsOneWidget);
     expect(find.text('2.0 MB'), findsWidgets);
     expect(find.text('delete'), findsWidgets);
+    expect(find.text('music'), findsWidgets, reason: 'the library column');
     expect(find.bySemanticsIdentifier('trash-row-ts-2'), findsNothing);
 
     await tester.tap(
@@ -156,6 +164,39 @@ void main() {
       shellMessageText(container.read(shellMessengerProvider)),
       'Purged 2 files, reclaimed 4.0 MB',
     );
+  });
+
+  testWidgets('emptying says what read-only libraries kept', (tester) async {
+    final repo = FakeRepository()..readOnlyTrashLibraries.add('lb-2');
+    repo.trashEntries.addAll([
+      _entry('ts-1'),
+      _entry('ts-2', libraryPid: 'lb-2', libraryName: 'vinyl'),
+    ]);
+    final container = _container(repo);
+    await tester.pumpWidget(_host(repo, container));
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.bySemanticsIdentifier('trash-empty'),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.confirmField),
+      'EMPTY',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.confirmAccept),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Purged 1 file, reclaimed 2.0 MB; 1 file stays in read-only libraries',
+    );
+    expect(repo.trashEntries.map((e) => e.id), ['ts-2']);
   });
 
   testWidgets('the artwork cache card reports the census and clears it', (

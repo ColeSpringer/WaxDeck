@@ -909,10 +909,75 @@ void main() {
           (b) => b
             ..pid = 'lb-01JZX5N8QW3F4V9T2B7KDEXAMPL'
             ..name = 'extra'
+            ..readOnly = false
+            ..managed = true
+            ..profile = 'waxbin-native'
             ..scanStarted = false,
         ),
       );
       expect(lib.scanStarted, isFalse);
+      expect(lib.managed, isTrue);
+      expect(lib.profile, 'waxbin-native');
+    });
+
+    test('a targeted job names its target', () {
+      final job = jobFromGen(
+        gen.Job(
+          (b) => b
+            ..pid = 'jb-01JZX5N8QW3F4V9T2B7KDEXAMPL'
+            ..kind = 'enrich'
+            ..state = 'running'
+            ..target.type = 'item'
+            ..target.pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPL'
+            ..target.name = 'Amber Waves',
+        ),
+      );
+      expect(job.target?.type, 'item');
+      expect(job.target?.pid, 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPL');
+      expect(job.target?.name, 'Amber Waves');
+    });
+  });
+
+  group('organize and trash mapping', () {
+    test('a profile carries its templates and samples', () {
+      final profile = organizeProfileFromGen(
+        gen.OrganizeProfile(
+          (b) => b
+            ..name = 'flat'
+            ..musicTemplate = '{title}.{ext}'
+            ..audiobookTemplate = '{title}/{title}.{ext}'
+            ..podcastTemplate = '{podcast}/{episode}.{ext}'
+            ..tagWrite = true
+            ..builtIn = false
+            ..sample.music = 'Amber Waves.flac'
+            ..sample.audiobook = 'The Long Harbor/The Long Harbor.m4b'
+            ..sample.podcast = 'Night Shift Radio/The Lighthouse Keeper.mp3',
+        ),
+      );
+      expect(profile.musicTemplate, '{title}.{ext}');
+      expect(profile.tagWrite, isTrue);
+      expect(profile.builtIn, isFalse);
+      expect(
+        profile.sample.podcast,
+        'Night Shift Radio/The Lighthouse Keeper.mp3',
+      );
+    });
+
+    test('a trash entry names its library', () {
+      final entry = trashEntryFromGen(
+        gen.TrashEntry(
+          (b) => b
+            ..id = 'th-01JZX5N8QW3F4V9T2B7KDEXAMPL'
+            ..name = 'Album/01 Track.flac'
+            ..reason = 'user'
+            ..sizeBytes = 10
+            ..trashedAt = DateTime.utc(2026, 9, 30)
+            ..libraryPid = 'lb-01JZX5N8QW3F4V9T2B7KDEXAMPL'
+            ..libraryName = 'music',
+        ),
+      );
+      expect(entry.libraryPid, 'lb-01JZX5N8QW3F4V9T2B7KDEXAMPL');
+      expect(entry.libraryName, 'music');
     });
   });
 

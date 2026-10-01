@@ -322,13 +322,21 @@ func TestHealthFlagsAHeaderThatMisstatesTheAudio(t *testing.T) {
 		t.Errorf("a track's own file named part %v, whole file %v", d.PartIndex, d.WholeFile)
 	}
 
-	// A header fixed since the sweep: the row stands until the next one,
-	// but no longer shows lengths that now agree.
+	// A header fixed since the sweep: the row and the lengths the sweep
+	// saw stand until the next one, which clears them.
 	understateFLAC(t, paths[0], 2, 1)
 	h.rescanAndWait(t)
 	page = decode[HealthIssuePage](t, get(t, h.ts, "/api/v1/library/health/issues?rule=duration-mismatch", h.token))
-	if len(page.Items) != 1 || page.Items[0].Detail != nil {
-		t.Fatalf("after the fix, issues = %+v, want the stale row without a detail", page.Items)
+	if len(page.Items) != 1 || page.Items[0].Detail == nil || *page.Items[0].Detail.HeaderMs != 4000 {
+		t.Fatalf("after the fix, issues = %+v, want the swept row with its lengths", page.Items)
+	}
+	analyzeAndWait(t, h)
+	if err := h.svc.SweepHealth(ctx); err != nil {
+		t.Fatalf("sweeping: %v", err)
+	}
+	page = decode[HealthIssuePage](t, get(t, h.ts, "/api/v1/library/health/issues?rule=duration-mismatch", h.token))
+	if len(page.Items) != 0 {
+		t.Fatalf("after the next sweep, issues = %+v, want none", page.Items)
 	}
 }
 
@@ -397,6 +405,14 @@ func TestHealthNamesTheWholeFileACarvedTrackIsCutFrom(t *testing.T) {
 	page := decode[HealthIssuePage](t, get(t, h.ts, "/api/v1/library/health/issues?rule=duration-mismatch", h.token))
 	if len(page.Items) != 2 {
 		t.Fatalf("duration-mismatch issues = %+v, want both carved tracks", page.Items)
+	}
+	// The lengths are the sweep's: a header fixed since changes nothing
+	// until the next one.
+	understateFLAC(t, paths[0], 2, 1)
+	h.rescanAndWait(t)
+	page = decode[HealthIssuePage](t, get(t, h.ts, "/api/v1/library/health/issues?rule=duration-mismatch", h.token))
+	if len(page.Items) != 2 {
+		t.Fatalf("duration-mismatch issues after the fix = %+v, want both swept rows", page.Items)
 	}
 	for _, it := range page.Items {
 		d := it.Detail

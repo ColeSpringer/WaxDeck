@@ -12,13 +12,13 @@ part 'organize_request.g.dart';
 /// The scope of an organize pass.
 ///
 /// Properties:
-/// * [profile] - The profile to apply.
+/// * [profile] - The profile to apply; absent lays out each library by its own.
 /// * [itemPids] - Restrict to these items; absent means every managed library.
 @BuiltValue()
 abstract class OrganizeRequest implements Built<OrganizeRequest, OrganizeRequestBuilder> {
-  /// The profile to apply.
+  /// The profile to apply; absent lays out each library by its own.
   @BuiltValueField(wireName: r'profile')
-  String get profile;
+  String? get profile;
 
   /// Restrict to these items; absent means every managed library.
   @BuiltValueField(wireName: r'itemPids')
@@ -47,11 +47,13 @@ class _$OrganizeRequestSerializer implements PrimitiveSerializer<OrganizeRequest
     OrganizeRequest object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
-    yield r'profile';
-    yield serializers.serialize(
-      object.profile,
-      specifiedType: const FullType(String),
-    );
+    if (object.profile != null) {
+      yield r'profile';
+      yield serializers.serialize(
+        object.profile,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.itemPids != null) {
       yield r'itemPids';
       yield serializers.serialize(
@@ -85,8 +87,9 @@ class _$OrganizeRequestSerializer implements PrimitiveSerializer<OrganizeRequest
         case r'profile':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.profile = valueDes;
           break;
         case r'itemPids':

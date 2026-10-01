@@ -184,6 +184,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 
 	hub := events.New(svc)
 	svc.SetRadioInvalidator(hub.MarkRadio)
+	svc.SetCatalogResyncer(hub.MarkCatalogReplaced)
 	group.Go(ctx, "event-hub", hub.Run)
 
 	connectSvc, err := connect.New(ctx, connect.Config{
@@ -222,7 +223,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	apiHandler := HandlerWithOptions(
 		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  RequestErrorHandler,
-			ResponseErrorHandlerFunc: ResponseErrorHandler,
+			ResponseErrorHandlerFunc: srv.ResponseErrorHandler,
 		}),
 		StdHTTPServerOptions{
 			BaseURL:     "/api/v1",

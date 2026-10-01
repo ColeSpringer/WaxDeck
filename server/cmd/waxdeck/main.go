@@ -193,6 +193,8 @@ func run() error {
 	// marker survives any failure here, so a crash retries at the next
 	// start and a refusing error leaves the operator in charge.
 	restoreCasualties := stagedCasualties(*dataDir)
+	// Read before the swap: the restored database carries an older count.
+	liveMints := service.PeekCatalogMints(*dataDir)
 	restoreApplied, restoreReport, err := restore.Apply(*dataDir, log)
 	if err != nil {
 		return fmt.Errorf("applying staged restore: %w", err)
@@ -222,7 +224,7 @@ func run() error {
 		// Fresh stream generations mint at open; every outstanding
 		// client cursor answers sync-reset instead of silently reading
 		// the restored history.
-		if err := store.ClearSyncState(ctx); err != nil {
+		if err := service.ResetSyncAfterRestore(ctx, store, liveMints); err != nil {
 			return err
 		}
 	}
@@ -498,6 +500,8 @@ func run() error {
 	// A station's new song or cover wakes the faces tuned to it, which
 	// would otherwise wait out a poll interval.
 	svc.SetRadioInvalidator(hub.MarkRadio)
+	// A replaced catalog (a restore) sends every client back to a snapshot.
+	svc.SetCatalogResyncer(hub.MarkCatalogReplaced)
 	group.Go(ctx, "event-hub", hub.Run)
 
 	// One media-token instance signs both streaming and download URLs.
@@ -622,10 +626,16 @@ func run() error {
 	// fast on a bad setup.
 	var bridge *flow.Bridge
 	if *flowURL != "" {
-		flowRoots := make([]flow.Root, len(roots))
-		for i, r := range roots {
-			flowRoots[i] = flow.Root{Name: r.Name, Path: r.Path}
+		// The catalog's roots the sidecar serves: the configured ones, and
+		// the runtime ones it has accepted.
+		var configured, table []flow.Root
+		for _, r := range roots {
+			configured = append(configured, flow.Root{Name: r.Name, Path: r.Path})
 		}
+		for _, r := range svc.RootTable() {
+			table = append(table, flow.Root{Name: r.Name, Path: r.Path})
+		}
+		flowRoots := flow.SeedRoots(configured, table, *flowConfig)
 		if *podcastDir != "" {
 			// The podcast dir is its own root pair: the catalog refuses a
 			// download dir inside a user root, and the sidecar streams
@@ -743,6 +753,10 @@ func run() error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case now := <-tick.C:
+				// Mid-hand-off every kind waits a tick, its window kept.
+				if svc.Maintenance() {
+					continue
+				}
 				// Order matters: prune, scan, analyze and enrich finish
 				// fast (the three passes are async catalog jobs), so the
 				// one long-running kind, backup, goes last and can only
@@ -1283,7 +1297,7 @@ func run() error {
 	apiHandler := api.HandlerWithOptions(
 		api.NewStrictHandlerWithOptions(srv, nil, api.StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  api.RequestErrorHandler,
-			ResponseErrorHandlerFunc: api.ResponseErrorHandler,
+			ResponseErrorHandlerFunc: srv.ResponseErrorHandler,
 		}),
 		api.StdHTTPServerOptions{
 			BaseURL:     "/api/v1",

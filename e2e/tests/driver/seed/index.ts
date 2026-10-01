@@ -440,6 +440,15 @@ export class Seed {
     return eps?.items ?? [];
   }
 
+  /// A track a test may briefly take away: the tail of a wide page, clear
+  /// of the fixtures other specs name by title, and of a reused stack's
+  /// earlier uploads.
+  async disposableTrack(): Promise<string> {
+    const rows = (await this.api.get('/library/items', { query: { limit: 100, mediaType: 'music' } })).items ?? [];
+    expect(rows.length, 'the fixture library holds tracks').toBeGreaterThan(0);
+    return rows[rows.length - 1].pid;
+  }
+
   /// One item by title, for a test that means a specific fixture.
   ///
   /// Polled rather than read once. `libraryReady` proves the scan found

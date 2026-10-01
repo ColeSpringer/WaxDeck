@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/read"
+	"github.com/colespringer/waxbin/waxerr"
 	"github.com/oklog/ulid/v2"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -225,7 +227,39 @@ const (
 	// finished or failed, a fix started or finished. Pid-less, and for
 	// every account.
 	eventHealth = "health"
+	// eventLibraries marks the root table moving, wherever the change came
+	// from. Pid-less, and for every account.
+	eventLibraries = "libraries"
 )
+
+// PeekCatalogMints reads the mint count from the waxdeck.db in dataDir
+// without opening it, for a staged restore about to replace that file.
+func PeekCatalogMints(dataDir string) int64 {
+	raw, err := wdb.PeekSyncState(context.Background(), filepath.Join(dataDir, "waxdeck.db"), syncKeyCatalogMints)
+	if err != nil {
+		return 0
+	}
+	n, _ := strconv.ParseInt(raw, 10, 64)
+	return n
+}
+
+// ResetSyncAfterRestore drops a restored database's stream positions, so
+// every client cursor answers sync-reset, and keeps the larger of the two
+// databases' mint counts: the catalog key only grows.
+func ResetSyncAfterRestore(ctx context.Context, store *wdb.DB, liveMints int64) error {
+	raw, err := store.SyncStateGet(ctx, syncKeyCatalogMints)
+	if err != nil {
+		return err
+	}
+	restored, _ := strconv.ParseInt(raw, 10, 64)
+	if err := store.ClearSyncState(ctx); err != nil {
+		return err
+	}
+	if m := max(liveMints, restored); m > 0 {
+		return store.SyncStateSet(ctx, syncKeyCatalogMints, strconv.FormatInt(m, 10))
+	}
+	return nil
+}
 
 // ErrSyncReset marks a cursor the stream can no longer serve
 // contiguously; the API layer maps it to 410 sync-reset.
@@ -244,11 +278,24 @@ type syncFeed struct {
 	// has gaps and a rebuilt catalog reuses low seqs).
 	tailTS      int64
 	lastPersist time.Time
+	// mints counts the generations ever minted, persisted, so the key
+	// CatalogTailSeq packs it into never goes back.
+	mints int64
+	// resetKey is the catalog row the last replacement resumed from.
+	resetKey feedKey
+	// bootTS stamps the head at a boot that could not continue its
+	// cursor: catalog rows no later predate the generation it minted.
+	bootTS int64
 }
+
+// feedKey names a change row across catalogs: a replaced catalog reuses
+// seqs, so the timestamp tells two rows at one seq apart.
+type feedKey struct{ seq, ts int64 }
 
 // Sync-state keys in waxdeck.db.
 const (
 	syncKeyCatalogGen    = "catalog_gen"
+	syncKeyCatalogMints  = "catalog_mints"
 	syncKeyCatalogCursor = "catalog_cursor"
 	syncKeyServerGen     = "server_gen"
 	syncKeyGrantEpoch    = "grant_epoch:"  // + user id
@@ -282,6 +329,11 @@ func (l *Library) initSync(ctx context.Context) error {
 		return err
 	}
 	seq, ts := parseFeedCursor(cur)
+	rawMints, err := l.db.SyncStateGet(ctx, syncKeyCatalogMints)
+	if err != nil {
+		return err
+	}
+	mints, _ := strconv.ParseInt(rawMints, 10, 64)
 
 	first, err := l.lib.Changes(ctx, 0)
 	if err != nil {
@@ -294,24 +346,35 @@ func (l *Library) initSync(ctx context.Context) error {
 
 	continuous := false
 	if gen != "" && seq > 0 {
+		// A cursor the log cannot serve (a replaced or pruned catalog) is
+		// not continuous.
 		probe, err := l.lib.Changes(ctx, seq-1)
-		if err != nil {
+		if err != nil && waxerr.CodeOf(err) != waxerr.CodeNotFound {
 			return classify(err)
 		}
 		continuous = len(probe) > 0 && probe[0].Seq == seq && probe[0].TS == ts
 	}
+	var bootTS int64
 	if !continuous {
 		gen = ulid.Make().String()
-		if err := l.db.SyncStateSet(ctx, syncKeyCatalogGen, gen); err != nil {
+		mints++
+		if err := l.persistGeneration(ctx, gen, mints); err != nil {
 			return err
 		}
 		seq, ts = 0, 0
 		if minSurviving > 0 {
 			seq = minSurviving - 1
 		}
+		head, err := l.lib.LatestChangeSeq(ctx)
+		if err != nil {
+			return classify(err)
+		}
+		bootTS = l.tsOf(ctx, head)
 	}
 	l.feed.mu.Lock()
 	l.feed.gen = gen
+	l.feed.mints = mints
+	l.feed.bootTS = bootTS
 	l.feed.tail = seq
 	l.feed.tailTS = ts
 	if minSurviving > 0 {
@@ -348,9 +411,9 @@ func (l *Library) runCatalogFeed(ctx context.Context) error {
 			if l.feedSkipped(ch.Seq) && l.redrainCatalog(ctx) {
 				continue
 			}
-			l.advanceFeed(ch)
+			l.advanceFeed(ctx, ch)
 		case <-ticker.C:
-			if len(sub) == 0 {
+			if len(sub) == 0 && !l.Maintenance() {
 				l.redrainCatalog(ctx)
 			}
 			l.persistFeedCursor(ctx, false)
@@ -370,7 +433,7 @@ func (l *Library) feedSkipped(seq int64) bool {
 // whether it could.
 func (l *Library) redrainCatalog(ctx context.Context) bool {
 	if err := l.drainCatalog(ctx); err != nil {
-		if ctx.Err() == nil {
+		if ctx.Err() == nil && !l.Maintenance() {
 			l.log.Warn("catalog feed: reading missed changes", "err", err)
 		}
 		return false
@@ -386,6 +449,9 @@ func (l *Library) drainCatalog(ctx context.Context) error {
 		since := l.feed.tail
 		l.feed.mu.Unlock()
 		rows, err := l.lib.Changes(ctx, since)
+		if waxerr.CodeOf(err) == waxerr.CodeNotFound {
+			return l.feedPastTheLog(ctx)
+		}
 		if err != nil {
 			return classify(err)
 		}
@@ -393,14 +459,45 @@ func (l *Library) drainCatalog(ctx context.Context) error {
 			return nil
 		}
 		for _, ch := range rows {
-			l.advanceFeed(ch)
+			l.advanceFeed(ctx, ch)
 		}
 	}
 }
 
+// feedPastTheLog answers a feed position the log cannot serve: the
+// catalog was replaced, whose head is its catalog row, or pruned past it.
+// Mid-hand-off the reopen hook is about to reset, so it waits for that.
+func (l *Library) feedPastTheLog(ctx context.Context) error {
+	if l.Maintenance() {
+		return nil
+	}
+	head, err := l.lib.LatestChangeSeq(ctx)
+	if err != nil {
+		return classify(err)
+	}
+	ts := l.tsOf(ctx, head)
+	if l.catalogReplaced(ctx, head, ts) {
+		return nil
+	}
+	// Reset from this row already; a stray row carried the position past it.
+	l.feed.mu.Lock()
+	if l.feed.tail > head {
+		l.feed.tail, l.feed.tailTS = head, ts
+	}
+	l.feed.mu.Unlock()
+	return nil
+}
+
 // advanceFeed tracks one change row and wakes the hub when a summary
 // mirror could care.
-func (l *Library) advanceFeed(ch model.Change) {
+func (l *Library) advanceFeed(ctx context.Context, ch model.Change) {
+	l.feed.mu.Lock()
+	history := ch.TS <= l.feed.bootTS
+	l.feed.mu.Unlock()
+	if ch.EntityType == model.ChangeCatalog && !history {
+		l.catalogReplaced(ctx, ch.Seq, ch.TS)
+		return
+	}
 	l.feed.mu.Lock()
 	if ch.Seq > l.feed.tail {
 		l.feed.tail = ch.Seq
@@ -409,6 +506,11 @@ func (l *Library) advanceFeed(ch model.Change) {
 	l.feed.mu.Unlock()
 	if ch.EntityType == "job" {
 		l.followJob(ch.EntityPID)
+	}
+	// A root added or re-flagged elsewhere (the CLI, a restore) reaches
+	// the root table here; mid-hand-off the reopen hook rebuilds it.
+	if ch.EntityType == "library" && !l.Maintenance() {
+		l.refreshLibraryState(ctx)
 	}
 	// Items feed summary mirrors; podcast rows feed show lists. Both
 	// travel the catalog stream (a show is not per-user state).
@@ -792,6 +894,9 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 	budgetHit := false
 	for !budgetHit {
 		rows, err := l.lib.Changes(ctx, seq)
+		if waxerr.CodeOf(err) == waxerr.CodeNotFound {
+			return CatalogDelta{}, ErrSyncReset
+		}
 		if err != nil {
 			return CatalogDelta{}, classify(err)
 		}
@@ -1028,7 +1133,7 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 		case eventReview, eventUpload, eventTask, eventTaskProgress, eventEntityState,
 			eventFeedDisabled, eventImportCompleted, eventEpisodeDownloaded,
 			eventPlaylistSynced, eventAccount, eventNotification,
-			eventJob, eventHealth:
+			eventJob, eventHealth, eventLibraries:
 			// Marker kinds hydrate nothing: the pid names what to
 			// refetch and the surfaces are live reads.
 			key := e.Kind + "\x00" + e.ItemPID

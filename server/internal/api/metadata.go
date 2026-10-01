@@ -372,19 +372,9 @@ func chapterMarkDTO(ch ChapterMark) service.ChapterMark {
 	}
 }
 
-// partRefusal projects a service error onto the Error one refused part
-// carries. The service's error kinds are the contract's own codes, so
-// this adds none: it is the same table ResponseErrorHandler uses, minus
-// the status.
-//
-// The message is the error's own, exactly as the per-part endpoints
-// send it (`errObj("field-locked", err.Error())` and its siblings) -
-// the catalog's sentence names which field is locked, and the editor
-// draws it in front of the person who typed the value. A generic
-// fallback here would have the same refusal read differently depending
-// on which save path the session took, which is the property the
-// sequential fallback rests on. Internal is the exception: nothing
-// wrapped is surfaced there, because it may name internals.
+// partRefusal is responseError's table without the status. It keeps the
+// error's own message, as the per-part endpoints do, so a refusal reads the
+// same on either save path; an internal error may name internals, so not it.
 func partRefusal(err error) Error {
 	kind := service.KindOf(err)
 	if kind == "" || kind == service.KindInternal {

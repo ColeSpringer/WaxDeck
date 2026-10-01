@@ -50,6 +50,28 @@ func TestMarkRespectsSubscription(t *testing.T) {
 	}
 }
 
+// A replaced catalog asks every connection to re-mirror both streams,
+// ahead of its invalidations: what the user stream hydrates moved too.
+func TestMarkCatalogReplacedReachesEveryConnection(t *testing.T) {
+	h := New(nil)
+	a := h.Register("u1", nil)
+	b := h.Register("u2", []string{TopicUser})
+	a.Mark(TypeInvalidate, TopicCatalog)
+	h.MarkCatalogReplaced()
+	frames := a.TakePending()
+	if len(frames) != 2 || frames[0] != (Frame{Type: TypeResync}) || frames[1] != (Frame{Type: TypeInvalidate, Topic: TopicCatalog}) {
+		t.Fatalf("frames = %+v, want the resync of every stream then the invalidate", frames)
+	}
+	if frames := b.TakePending(); len(frames) != 1 || frames[0] != (Frame{Type: TypeResync}) {
+		t.Fatalf("frames = %+v, want the resync of every stream", frames)
+	}
+	b.Mark(TypeResync, TopicCatalog)
+	b.Mark(TypeResync, "")
+	if frames := b.TakePending(); len(frames) != 1 || frames[0] != (Frame{Type: TypeResync}) {
+		t.Fatalf("frames = %+v, want the one resync of every stream", frames)
+	}
+}
+
 // idleSource is a wakeSource that never wakes, so a test can run the
 // coalescer without catalog or user traffic crossing it.
 type idleSource struct{}

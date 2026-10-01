@@ -1239,7 +1239,7 @@ func (l *Library) SetEntityArtwork(ctx context.Context, uc *UserCtx, entityType,
 	// catalog-only.
 	writeBack = writeBack && art == model.ArtRoleFront
 	if writeBack {
-		if err := l.checkFanOutWritable(ctx); err != nil {
+		if err := l.CheckWritable(ctx, ""); err != nil {
 			return EditOutcomeDTO{}, err
 		}
 	}
@@ -1494,7 +1494,7 @@ func (l *Library) EditEntity(ctx context.Context, entityType, apiEntityPID strin
 		}
 	}
 	if p.WriteBack {
-		if err := l.checkFanOutWritable(ctx); err != nil {
+		if err := l.CheckWritable(ctx, ""); err != nil {
 			return EditOutcomeDTO{}, err
 		}
 	}
@@ -1553,7 +1553,7 @@ func (l *Library) RenameEntity(ctx context.Context, entityType, apiEntityPID str
 		return EntityRenameOutcomeDTO{}, errInvalid("at least one field is required")
 	}
 	if p.WriteBack {
-		if err := l.checkFanOutWritable(ctx); err != nil {
+		if err := l.CheckWritable(ctx, ""); err != nil {
 			return EntityRenameOutcomeDTO{}, err
 		}
 	}

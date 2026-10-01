@@ -4,6 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:built_collection/built_collection.dart';
+import 'package:waxdeck_api_gen/src/model/job_target.dart';
 import 'package:built_value/json_object.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
@@ -22,6 +23,7 @@ part 'job.g.dart';
 /// * [startedAt] - When the job started.
 /// * [finishedAt] - When the job reached a terminal state; absent while running.
 /// * [result] - What a finished job did, once it records a summary: a `scan` reports `filesSeen`, `created`, `updated`, `relinked`, `unchanged`, `missing`, `skipped` and `errored` (files); an `analyze` pass `analyzed`, `loudnessMeasured`, `measureFailed`, `skipped` and `errored`; an `enrich` pass the same tallies as the enrichment status's `lastRun`; an `organize` run `profile`, `moved`, `skipped`, `errored` and `sidecarsMoved`. Absent while running and for kinds that record none. Shapes may grow fields. 
+/// * [target] 
 @BuiltValue()
 abstract class Job implements Built<Job, JobBuilder> {
   /// Job PID.
@@ -59,6 +61,9 @@ abstract class Job implements Built<Job, JobBuilder> {
   /// What a finished job did, once it records a summary: a `scan` reports `filesSeen`, `created`, `updated`, `relinked`, `unchanged`, `missing`, `skipped` and `errored` (files); an `analyze` pass `analyzed`, `loudnessMeasured`, `measureFailed`, `skipped` and `errored`; an `enrich` pass the same tallies as the enrichment status's `lastRun`; an `organize` run `profile`, `moved`, `skipped`, `errored` and `sidecarsMoved`. Absent while running and for kinds that record none. Shapes may grow fields. 
   @BuiltValueField(wireName: r'result')
   BuiltMap<String, JsonObject?>? get result;
+
+  @BuiltValueField(wireName: r'target')
+  JobTarget? get target;
 
   Job._();
 
@@ -138,6 +143,13 @@ class _$JobSerializer implements PrimitiveSerializer<Job> {
       yield serializers.serialize(
         object.result,
         specifiedType: const FullType(BuiltMap, [FullType(String), FullType.nullable(JsonObject)]),
+      );
+    }
+    if (object.target != null) {
+      yield r'target';
+      yield serializers.serialize(
+        object.target,
+        specifiedType: const FullType(JobTarget),
       );
     }
   }
@@ -231,6 +243,14 @@ class _$JobSerializer implements PrimitiveSerializer<Job> {
           ) as BuiltMap<String, JsonObject?>?;
           if (valueDes == null) continue;
           result.result.replace(valueDes);
+          break;
+        case r'target':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(JobTarget),
+          ) as JobTarget?;
+          if (valueDes == null) continue;
+          result.target.replace(valueDes);
           break;
         default:
           unhandled.add(key);

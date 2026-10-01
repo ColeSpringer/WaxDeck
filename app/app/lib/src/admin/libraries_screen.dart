@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../organize/organize_screen.dart';
 import '../providers.dart';
 import '../shell/pending_actions.dart';
 import '../shell/semantics_ids.dart';
@@ -125,9 +126,24 @@ class _LibraryTable extends ConsumerWidget {
           cell: (context, library) => _MatchingChoice(library: library),
         ),
         WaxColumn<LibraryInfo>(
+          label: l10n.adminLibrariesColumnProfile,
+          width: 148,
+          cell: (context, library) => library.managed
+              ? _ProfileChoice(library: library)
+              : Text(
+                  l10n.adminLibraryProfileInPlace,
+                  style: WaxType.bodySmall.copyWith(
+                    color: colors.textSecondary,
+                  ),
+                ),
+        ),
+        WaxColumn<LibraryInfo>(
           label: l10n.adminLibrariesColumnReadOnly,
           width: 108,
-          cell: (context, library) => _ReadOnlySwitch(library: library),
+          // Episode fetching needs the podcast library writable.
+          cell: (context, library) => library.media == 'podcast'
+              ? const SizedBox.shrink()
+              : _ReadOnlySwitch(library: library),
         ),
       ],
       trailing: (context, library) => _RescanButton(library: library),
@@ -187,33 +203,96 @@ class _MatchingChoice extends ConsumerWidget {
   }
 }
 
-class _ReadOnlySwitch extends ConsumerWidget {
-  const _ReadOnlySwitch({required this.library});
+/// The organize profile a managed library is laid out by.
+class _ProfileChoice extends ConsumerWidget {
+  const _ProfileChoice({required this.library});
 
   final LibraryInfo library;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final readOnly = ref.watch(libraryReadOnlyProvider(library.pid));
-    return WaxSwitch(
-      label: context.l10n.adminLibraryReadOnlyLabel(library.name),
-      value: readOnly.value ?? false,
-      semanticsId: SemanticsIds.libraryReadOnly(library.pid),
-      onChanged: readOnly.value == null
-          ? null
-          : (value) => _set(context, ref, value),
+    final l10n = context.l10n;
+    final current = library.profile ?? '';
+    final names = <String>[
+      for (final p
+          in ref.watch(organizeProfilesProvider).value?.profiles ??
+              const <OrganizeProfile>[])
+        p.name,
+    ];
+    return WaxChoice<String>(
+      label: l10n.adminLibraryProfileLabel(library.name),
+      value: current,
+      semanticsId: SemanticsIds.libraryProfile(library.pid),
+      options: names.contains(current) ? names : <String>[current, ...names],
+      labelFor: (name) => name,
+      onChanged: names.isEmpty ? null : (name) => _set(context, ref, name),
     );
   }
 
-  Future<void> _set(BuildContext context, WidgetRef ref, bool readOnly) async {
+  Future<void> _set(BuildContext context, WidgetRef ref, String name) async {
     final l10n = context.l10n;
+    // The row can be gone by the answer; the container outlives it.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = container.read(shellMessengerProvider.notifier);
     try {
-      await ref
-          .read(libraryReadOnlyProvider(library.pid).notifier)
-          .set(readOnly);
+      await container
+          .read(repositoryProvider)
+          .setLibraryProfile(library.pid, name);
+      container
+        ..invalidate(libraryCountsProvider)
+        ..invalidate(librariesProvider);
     } on WaxDeckApiException catch (error) {
-      ref.read(shellMessengerProvider.notifier).show(explainError(l10n, error));
+      messenger.show(explainError(l10n, error));
     }
+  }
+}
+
+class _ReadOnlySwitch extends ConsumerStatefulWidget {
+  const _ReadOnlySwitch({required this.library});
+
+  final LibraryInfo library;
+
+  @override
+  ConsumerState<_ReadOnlySwitch> createState() => _ReadOnlySwitchState();
+}
+
+class _ReadOnlySwitchState extends ConsumerState<_ReadOnlySwitch> {
+  /// The value set here, shown until the reloaded listing carries it.
+  bool? _set;
+
+  @override
+  void didUpdateWidget(covariant _ReadOnlySwitch oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.library.readOnly == _set) _set = null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return WaxSwitch(
+      label: context.l10n.adminLibraryReadOnlyLabel(widget.library.name),
+      value: _set ?? widget.library.readOnly,
+      semanticsId: SemanticsIds.libraryReadOnly(widget.library.pid),
+      onChanged: _flip,
+    );
+  }
+
+  Future<void> _flip(bool readOnly) async {
+    final l10n = context.l10n;
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = container.read(shellMessengerProvider.notifier);
+    setState(() => _set = readOnly);
+    try {
+      await container
+          .read(repositoryProvider)
+          .setLibraryReadOnly(widget.library.pid, readOnly);
+    } on WaxDeckApiException catch (error) {
+      if (mounted) setState(() => _set = null);
+      messenger.show(explainError(l10n, error));
+      return;
+    }
+    container
+      ..invalidate(libraryCountsProvider)
+      ..invalidate(librariesProvider);
   }
 }
 

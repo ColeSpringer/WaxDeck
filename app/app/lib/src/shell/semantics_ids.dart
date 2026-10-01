@@ -76,6 +76,7 @@ abstract final class SemanticsIds {
   static const String libraryMedia = 'library-media';
   static const String libraryName = 'library-name';
   static const String libraryPath = 'library-path';
+  static String libraryProfile(Object id) => 'library-profile-$id';
   static String libraryReadOnly(Object id) => 'library-read-only-$id';
   static String libraryRescan(Object id) => 'library-rescan-$id';
   static const String libraryRescanConfirm = 'library-rescan-confirm';
@@ -523,7 +524,24 @@ abstract final class SemanticsIds {
   static const String organizeDiscard = 'organize-discard';
   static const String organizePlan = 'organize-plan';
   static const String organizePreview = 'organize-preview';
-  static const String organizeProfile = 'organize-profile';
+  static const String organizeProfileAudiobook = 'organize-profile-audiobook';
+  static String organizeProfileDelete(Object name) =>
+      'organize-profile-delete-$name';
+  static const String organizeProfileDeleteConfirm =
+      'organize-profile-delete-confirm';
+  static String organizeProfileEdit(Object name) =>
+      'organize-profile-edit-$name';
+  static const String organizeProfileMusic = 'organize-profile-music';
+  static const String organizeProfileName = 'organize-profile-name';
+  static const String organizeProfileNew = 'organize-profile-new';
+  static String organizeProfileOption(Object name) =>
+      'organize-profile-option-$name';
+  static const String organizeProfileOwn = 'organize-profile-own';
+  static const String organizeProfilePodcast = 'organize-profile-podcast';
+  static const String organizeProfileSample = 'organize-profile-sample';
+  static const String organizeProfileSave = 'organize-profile-save';
+  static const String organizeProfileSheet = 'organize-profile-sheet';
+  static const String organizeProfileTagWrite = 'organize-profile-tag-write';
   static const String organizeReport = 'organize-report';
   static String organizeRow(Object from) => 'organize-row-$from';
   static String organizeRowDetail(Object from) => 'organize-row-detail-$from';

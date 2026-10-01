@@ -473,7 +473,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminEnrichmentRunPhasesHelp =>
-      'Only the phases switched on below';
+      'Only the phases switched on below, asking again about everything they reach';
 
   @override
   String get adminEnrichmentRunStarted => 'Enrichment pass started';
@@ -540,6 +540,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get adminEnrichmentTagsFailed => 'Tag writes failed';
+
+  @override
+  String get adminEnrichmentTagsReadOnly => 'Files in read-only libraries';
 
   @override
   String get adminEnrichmentTagsSkipped => 'Book parts skipped';
@@ -795,6 +798,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminLibrariesColumnPath => 'Path';
 
   @override
+  String get adminLibrariesColumnProfile => 'Profile';
+
+  @override
   String get adminLibrariesColumnReadOnly => 'Read-only';
 
   @override
@@ -888,6 +894,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get adminLibraryPathRule =>
       'The path must be absolute, and must not overlap an existing root, the upload inbox, or the podcast download directory.';
+
+  @override
+  String get adminLibraryProfileInPlace => 'In place';
+
+  @override
+  String adminLibraryProfileLabel(String name) {
+    return 'Organize profile: $name';
+  }
 
   @override
   String adminLibraryReadOnlyLabel(String name) {
@@ -1553,6 +1567,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get adminTrashColumnFile => 'File';
 
   @override
+  String get adminTrashColumnLibrary => 'Library';
+
+  @override
   String get adminTrashColumnReason => 'Reason';
 
   @override
@@ -1573,11 +1590,28 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String adminTrashEmptiedKept(int count, String size, int kept) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files',
+      one: '1 file',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      kept,
+      locale: localeName,
+      other: '$kept files stay',
+      one: '1 file stays',
+    );
+    return 'Purged $_temp0, reclaimed $size; $_temp1 in read-only libraries';
+  }
+
+  @override
   String get adminTrashEmptyAction => 'Empty trash';
 
   @override
   String get adminTrashEmptyBody =>
-      'Every trashed file is deleted for good, including the ones still restorable. This cannot be undone.';
+      'Every trashed file outside read-only libraries is deleted for good, including the ones still restorable. This cannot be undone.';
 
   @override
   String get adminTrashEmptyStateMessage =>
@@ -5542,6 +5576,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeApply => 'Apply';
 
   @override
+  String organizeBuiltInProfile(String name) {
+    return '$name (built in)';
+  }
+
+  @override
   String get organizeColumnFrom => 'Now at';
 
   @override
@@ -5550,6 +5589,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get organizeConfirmMessage =>
       'Files move to their new locations on the server. The catalog follows them, but anything else pointing at the old paths does not.';
+
+  @override
+  String get organizeConfirmOwnWord => 'ORGANIZE';
 
   @override
   String get organizeConfirmTitle => 'Apply organize profile?';
@@ -5572,8 +5614,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count files stay where they are: their libraries are read-only.',
-      one: '1 file stays where it is: its library is read-only.',
+      other: '$count files stay where they are while the server is read-only.',
+      one: '1 file stays where it is while the server is read-only.',
     );
     return '$_temp0';
   }
@@ -5605,8 +5647,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizeNothingTitle => 'Everything is already in place';
 
   @override
-  String get organizeOnlyBuiltIn =>
-      'This server has only the built-in profile.';
+  String get organizeOwnProfiles => 'Each library\'s own profile';
+
+  @override
+  String get organizeOwnProfilesHelp =>
+      'Each managed library by the profile set on the Libraries screen';
 
   @override
   String organizePlannedMoves(int count) {
@@ -5623,13 +5668,108 @@ class AppLocalizationsEn extends AppLocalizations {
   String get organizePreview => 'Preview';
 
   @override
+  String get organizeProfileAudiobookLabel => 'Audiobook template';
+
+  @override
+  String get organizeProfileDelete => 'Delete profile';
+
+  @override
+  String get organizeProfileDeleteBody =>
+      'A library laid out by it has to move to another profile first.';
+
+  @override
+  String organizeProfileDeleteTitle(String name) {
+    return 'Delete $name?';
+  }
+
+  @override
+  String organizeProfileDeleted(String name) {
+    return 'Deleted $name';
+  }
+
+  @override
+  String get organizeProfileEdit => 'Edit profile';
+
+  @override
+  String organizeProfileEditTitle(String name) {
+    return 'Edit $name';
+  }
+
+  @override
   String get organizeProfileLabel => 'Organize profile';
+
+  @override
+  String get organizeProfileMusicLabel => 'Music template';
+
+  @override
+  String get organizeProfileNameLabel => 'Name';
+
+  @override
+  String organizeProfileNameTaken(String name) {
+    return 'A profile named $name exists; edit it instead.';
+  }
+
+  @override
+  String get organizeProfileNew => 'New profile';
 
   @override
   String get organizeProfileOverline => 'The naming scheme to move into';
 
   @override
+  String get organizeProfilePodcastLabel => 'Podcast template';
+
+  @override
+  String organizeProfileSampleBook(String path) {
+    return 'Book: $path';
+  }
+
+  @override
+  String organizeProfileSampleMusic(String path) {
+    return 'Track: $path';
+  }
+
+  @override
+  String get organizeProfileSampleNone => 'no path for this sample';
+
+  @override
+  String organizeProfileSamplePodcast(String path) {
+    return 'Episode: $path';
+  }
+
+  @override
+  String get organizeProfileSampleTitle => 'Where the samples land';
+
+  @override
+  String get organizeProfileSave => 'Save';
+
+  @override
+  String organizeProfileSaved(String name) {
+    return 'Saved $name';
+  }
+
+  @override
+  String get organizeProfileTagWrite => 'Write tags while organizing';
+
+  @override
+  String get organizeProfileTagWriteHelp =>
+      'Rewrites unlocked tags from the catalog as files move';
+
+  @override
+  String get organizeProfileTemplateHint => 'Empty keeps the built-in layout';
+
+  @override
   String get organizeProfileTitle => 'Profile';
+
+  @override
+  String organizeReadOnlyLibraries(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count read-only libraries are left as they are.',
+      one: '1 read-only library is left as it is.',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get organizeResultTitle => 'Result';
@@ -11160,6 +11300,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get toolsJobScan => 'Library scan';
+
+  @override
+  String toolsJobTargeted(String job, String target) {
+    return '$job: $target';
+  }
 
   @override
   String get toolsJobsTitle => 'Library jobs';

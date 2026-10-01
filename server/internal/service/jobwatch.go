@@ -10,6 +10,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/colespringer/waxbin/enrich"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/organize"
+	"github.com/colespringer/waxbin/read"
 	"github.com/colespringer/waxbin/scan"
 	"github.com/colespringer/waxbin/waxerr"
 
@@ -27,6 +29,13 @@ import (
 // jobFollowInterval is how often the follower reads the running jobs,
 // whose heartbeats never reach the feed.
 const jobFollowInterval = 2 * time.Second
+
+// The job list reads past the finished targeted jobs it leaves out, by
+// this factor and at most this many rows.
+const (
+	jobsOverfetch = 4
+	jobsFetchCap  = 800
+)
 
 // jobProgressKinds are the jobs whose progress is announced; the rest (a
 // delete, a restore, an upload's imports) announce only their end.
@@ -56,6 +65,15 @@ func (w *jobWatch) saw(pid model.PID) {
 	w.changed[pid] = struct{}{}
 }
 
+// forget drops every job followed, which a replaced catalog does not hold.
+func (w *jobWatch) forget() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	clear(w.changed)
+	clear(w.running)
+	clear(w.read)
+}
+
 // followJob hands a job to the follower, which reads it at once.
 func (l *Library) followJob(pid model.PID) {
 	l.jobs.saw(pid)
@@ -65,12 +83,13 @@ func (l *Library) followJob(pid model.PID) {
 	}
 }
 
-// pending reports whether a read is owed: a job ran at the last read, or a
-// read found something the follower has not taken.
+// pending reports whether a read is owed: the feed saw a job change, a job
+// ran at the last read, or a read found something the follower has not
+// taken.
 func (w *jobWatch) pending() bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return len(w.running) > 0 || len(w.read) > 0
+	return len(w.changed) > 0 || len(w.running) > 0 || len(w.read) > 0
 }
 
 // takeRead hands the follower what reads found since it last asked.
@@ -266,6 +285,9 @@ func (l *Library) runJobFollower(ctx context.Context) error {
 				continue
 			}
 		}
+		if l.Maintenance() {
+			continue
+		}
 		if err := l.refreshFollowed(ctx); err != nil {
 			l.log.Warn("following catalog jobs", "err", err)
 			continue
@@ -305,7 +327,7 @@ func (l *Library) announceJobs(ctx context.Context, seen map[model.PID]jobSeen, 
 		l.log.Warn("listing administrators for job news", "err", err)
 	}
 	for _, j := range news {
-		for _, id := range admins {
+		for _, id := range l.jobAudience(ctx, j, admins) {
 			l.emitUserEvent(ctx, id, eventJob, apiPID(PrefixJob, j.PID))
 		}
 		if j.State == model.JobRunning {
@@ -317,6 +339,29 @@ func (l *Library) announceJobs(ctx context.Context, seen map[model.PID]jobSeen, 
 			l.settleLater(func(ctx context.Context) { l.onJobFinished(ctx, &j) })
 		}
 	}
+}
+
+// jobAudience is who hears of a job: every administrator of a whole
+// pass; of a targeted one, its starter while it runs, and every
+// administrator too at its end, which retires it from a list showing it.
+func (l *Library) jobAudience(ctx context.Context, j model.Job, admins []string) []string {
+	if j.TargetType == "" {
+		return admins
+	}
+	var out []string
+	if o, err := l.db.JobOriginGet(ctx, string(j.PID)); err == nil {
+		out = append(out, o.UserID)
+	} else if !errors.Is(err, wdb.ErrNotFound) {
+		l.log.Warn("reading a targeted job's origin", "job", string(j.PID), "err", err)
+	}
+	if j.State != model.JobRunning {
+		for _, id := range admins {
+			if !slices.Contains(out, id) {
+				out = append(out, id)
+			}
+		}
+	}
+	return out
 }
 
 // jobHasOrigin reports whether someone waits to hear a job ended.
@@ -399,7 +444,9 @@ func (l *Library) settleJobOrigin(ctx context.Context, j *model.Job) {
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
-	l.notifyJobEnd(ctx, o.UserID, jobDTO(j))
+	ended := []Job{jobDTO(j)}
+	l.nameJobTargets(ctx, ended)
+	l.notifyJobEnd(ctx, o.UserID, ended[0])
 	l.dropJobOrigin(ctx, o.PID)
 }
 
@@ -462,8 +509,63 @@ func jobDTO(j *model.Job) Job {
 	if j.FinishedAt > 0 {
 		out.FinishedAt = time.Unix(0, j.FinishedAt).UTC()
 	}
+	if j.TargetType != "" && j.TargetPID != "" {
+		out.Target = &JobTargetDTO{Type: j.TargetType, PID: string(j.TargetPID)}
+		if prefix, ok := jobTargetPrefixes[j.TargetType]; ok {
+			out.Target.PID = apiPID(prefix, j.TargetPID)
+		}
+	}
 	out.readResult(j.Result)
 	return out
+}
+
+// jobTargetPrefixes are the API prefixes of the targets a job names; an
+// item's is its kind's, which nameJobTargets reads.
+var jobTargetPrefixes = map[string]string{
+	"item": PrefixTrack, "artist": PrefixArtist, "release_group": PrefixReleaseGroup,
+	"album": PrefixAlbum, "library": PrefixLibrary, "trash": PrefixTrash,
+}
+
+// nameJobTargets names the jobs' targets, and gives an item its kind's
+// prefix, best effort.
+func (l *Library) nameJobTargets(ctx context.Context, jobs []Job) {
+	var trashed map[model.PID]string
+	for i := range jobs {
+		t := jobs[i].Target
+		if t == nil {
+			continue
+		}
+		_, bare, ok := parseAPIPID(t.PID)
+		if !ok {
+			continue
+		}
+		switch t.Type {
+		case "item":
+			if it, err := l.lib.Get(ctx, bare); err == nil {
+				t.PID, t.Name = itemAPIPID(it), it.Title
+			}
+		case "artist", "release_group", "album":
+			if info, err := l.lib.EntityByPID(ctx, read.EntityKind(t.Type), bare); err == nil {
+				t.Name = info.Name
+			}
+		case "library":
+			for _, r := range l.libraryRoots() {
+				if r.PID == string(bare) {
+					t.Name = r.Name
+				}
+			}
+		case "trash":
+			if trashed == nil {
+				trashed = map[model.PID]string{}
+				if entries, err := l.lib.Trash(ctx, true, 0); err == nil {
+					for _, e := range entries {
+						trashed[e.PID] = e.OrigDisplay
+					}
+				}
+			}
+			t.Name = trashed[bare]
+		}
+	}
 }
 
 // sortJobsNewestFirst orders jobs by start, newest first.

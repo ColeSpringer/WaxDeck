@@ -362,6 +362,10 @@ func (l *Library) DrainHealthFixes(ctx context.Context) bool {
 }
 
 func (l *Library) drainToolTasks(ctx context.Context, types wdb.TaskTypes) bool {
+	// A task run against a suspended catalog spends an attempt on nothing.
+	if l.Maintenance() {
+		return false
+	}
 	now := time.Now().UnixNano()
 	if ids, err := l.db.FailExhaustedToolTasks(ctx, now, toolTaskMaxAttempts); err != nil {
 		l.log.Warn("retiring exhausted tool tasks", "err", err)

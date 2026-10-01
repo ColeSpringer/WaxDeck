@@ -82,7 +82,7 @@ func enrichmentLastRun(r *service.EnrichmentLastRunDTO) *EnrichmentLastRun {
 		Retried: r.Retried, Deferred: r.Deferred,
 		ArtFetched: r.ArtFetched, AuxArtFetched: r.AuxArtFetched, ArtReused: r.ArtReused,
 		TagsWritten: r.TagsWritten, TagsFailed: r.TagsFailed,
-		TagsUnrepresented: r.TagsUnrepresented, TagsSkipped: r.TagsSkipped,
+		TagsUnrepresented: r.TagsUnrepresented, TagsSkipped: r.TagsSkipped, TagsReadOnly: r.TagsReadOnly,
 		Stalled: make([]EnrichmentPhase, 0, len(r.Stalled)),
 	}
 	for _, ph := range r.Stalled {
@@ -108,7 +108,13 @@ func (s *Server) RunEnrichment(ctx context.Context, req RunEnrichmentRequestObje
 			phases = append(phases, string(p))
 		}
 	}
-	jobPid, err := s.svc.RunEnrichment(ctx, uc, force, phases)
+	var walk []string
+	if req.Body != nil && req.Body.Phases != nil {
+		for _, p := range *req.Body.Phases {
+			walk = append(walk, string(p))
+		}
+	}
+	jobPid, err := s.svc.RunEnrichment(ctx, uc, force, phases, walk)
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:

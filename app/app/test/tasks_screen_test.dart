@@ -470,6 +470,17 @@ void main() {
               message: 'Reading tags',
               startedAt: started.subtract(const Duration(hours: 1)),
             ),
+            Job(
+              pid: 'jb-5',
+              kind: 'enrich',
+              state: 'running',
+              startedAt: started,
+              target: const JobTarget(
+                type: 'item',
+                pid: 'tr-1',
+                name: 'Amber Waves',
+              ),
+            ),
           ];
     await tester.pumpWidget(_host(repo));
     // A running job's bar animates forever: frames, not a settle, while
@@ -510,6 +521,14 @@ void main() {
       findsOneWidget,
     );
     expect(_job('jb-3'), findsNothing, reason: 'a finished import is noise');
+    expect(
+      find.descendant(
+        of: _job('jb-5'),
+        matching: find.text('Enrichment: Amber Waves'),
+      ),
+      findsOneWidget,
+      reason: 'a running targeted job names its target',
+    );
     // Running first, whatever its age.
     expect(
       tester.getTopLeft(scan).dy,

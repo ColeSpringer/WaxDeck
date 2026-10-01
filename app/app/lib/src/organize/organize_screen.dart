@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -7,6 +10,7 @@ import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import 'profile_editor_sheet.dart';
 
 /// The server's file organization profiles, and how many libraries
 /// they can lay out.
@@ -24,8 +28,13 @@ class OrganizeScreen extends ConsumerStatefulWidget {
 }
 
 class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
-  String? _profile;
+  /// The chosen profile; empty lays out each library by its own.
+  var _profile = '';
   OrganizePlan? _plan;
+
+  /// The profiles the plan was laid out under: once they change, Apply
+  /// would not do what it shows.
+  String? _planProfiles;
   OrganizeReport? _report;
   var _busy = false;
 
@@ -40,11 +49,17 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     });
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
+    final under = _profilesKey(ref.read(organizeProfilesProvider).value);
     try {
       final plan = await ref
           .read(repositoryProvider)
-          .previewOrganize(profile: profile);
-      if (mounted) setState(() => _plan = plan);
+          .previewOrganize(profile: profile.isEmpty ? null : profile);
+      if (mounted) {
+        setState(() {
+          _plan = plan;
+          _planProfiles = under;
+        });
+      }
     } on WaxDeckApiException catch (e) {
       // The profile came off the server's own list rather than out of a
       // field, so the table's sentence is the right one.
@@ -61,7 +76,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
       context,
       title: l10n.organizeConfirmTitle,
       message: l10n.organizeConfirmMessage,
-      confirmWord: profile,
+      confirmWord: profile.isEmpty ? l10n.organizeConfirmOwnWord : profile,
       confirmLabel: l10n.organizeApply,
       fieldSemanticsId: SemanticsIds.confirmField,
       confirmSemanticsId: SemanticsIds.organizeConfirm,
@@ -73,7 +88,7 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     try {
       final report = await ref
           .read(repositoryProvider)
-          .applyOrganize(profile: profile);
+          .applyOrganize(profile: profile.isEmpty ? null : profile);
       if (mounted) {
         setState(() {
           _report = report;
@@ -114,6 +129,17 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
     );
   }
 
+  static String _profilesKey(OrganizeProfiles? listing) => jsonEncode([
+    for (final p in listing?.profiles ?? const <OrganizeProfile>[])
+      [
+        p.name,
+        p.musicTemplate,
+        p.audiobookTemplate,
+        p.podcastTemplate,
+        p.tagWrite,
+      ],
+  ]);
+
   Widget _body(BuildContext context, OrganizeProfiles listing) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
@@ -134,8 +160,13 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
         message: l10n.organizeNoManagedMessage,
       );
     }
-    final profile = _profile ?? profiles.first.name;
-    final plan = _plan;
+    // A profile deleted since it was chosen falls back to each library's.
+    final chosen = profiles.where((p) => p.name == _profile).firstOrNull;
+    final profile = chosen?.name ?? '';
+    final stale =
+        (_profile.isNotEmpty && chosen == null) ||
+        _planProfiles != _profilesKey(listing);
+    final plan = stale ? null : _plan;
     final report = _report;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -144,26 +175,65 @@ class _OrganizeScreenState extends ConsumerState<OrganizeScreen> {
           title: l10n.organizeProfileTitle,
           overline: l10n.organizeProfileOverline,
         ),
-        WaxChoice<String>(
+        Semantics(
+          container: true,
           label: l10n.organizeProfileLabel,
-          value: profile,
-          semanticsId: SemanticsIds.organizeProfile,
-          options: <String>[for (final p in profiles) p.name],
-          labelFor: (name) => name,
-          onChanged: (value) => setState(() {
-            _profile = value;
-            _plan = null;
-            _report = null;
-          }),
-        ),
-        // The catalog always lists its built-in, so one is that one.
-        if (profiles.length == 1) ...<Widget>[
-          const SizedBox(height: WaxSpace.s8),
-          Text(
-            l10n.organizeOnlyBuiltIn,
-            style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+          child: WaxRadioGroup<String>(
+            value: profile,
+            onChanged: _busy
+                ? null
+                : (value) => setState(() {
+                    _profile = value;
+                    _plan = null;
+                    _report = null;
+                  }),
+            options: <WaxRadioOption<String>>[
+              WaxRadioOption(
+                value: '',
+                label: l10n.organizeOwnProfiles,
+                help: l10n.organizeOwnProfilesHelp,
+                semanticsId: SemanticsIds.organizeProfileOwn,
+              ),
+              for (final p in profiles)
+                WaxRadioOption(
+                  value: p.name,
+                  label: p.builtIn
+                      ? l10n.organizeBuiltInProfile(p.name)
+                      : p.name,
+                  help: p.sample.music.isEmpty ? null : p.sample.music,
+                  semanticsId: SemanticsIds.organizeProfileOption(p.name),
+                ),
+            ],
           ),
-        ],
+        ),
+        const SizedBox(height: WaxSpace.s8),
+        Wrap(
+          spacing: WaxSpace.s8,
+          runSpacing: WaxSpace.s8,
+          children: <Widget>[
+            WaxButton(
+              label: l10n.organizeProfileNew,
+              kind: WaxButtonKind.text,
+              icon: WaxIcons.add,
+              semanticsId: SemanticsIds.organizeProfileNew,
+              onPressed: _busy
+                  ? null
+                  : () => unawaited(showOrganizeProfileEditor(context)),
+            ),
+            if (chosen != null)
+              WaxButton(
+                label: l10n.organizeProfileEdit,
+                kind: WaxButtonKind.text,
+                icon: WaxIcons.edit,
+                semanticsId: SemanticsIds.organizeProfileEdit(chosen.name),
+                onPressed: _busy
+                    ? null
+                    : () => unawaited(
+                        showOrganizeProfileEditor(context, profile: chosen),
+                      ),
+              ),
+          ],
+        ),
         const SizedBox(height: WaxSpace.s16),
         Row(
           children: <Widget>[
@@ -232,6 +302,13 @@ class _PlanTable extends StatelessWidget {
           if (plan.held > 0) ...<Widget>[
             Text(
               l10n.organizeHeld(plan.held),
+              style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+            ),
+            const SizedBox(height: WaxSpace.s12),
+          ],
+          if (plan.readOnlyLibraries > 0) ...<Widget>[
+            Text(
+              l10n.organizeReadOnlyLibraries(plan.readOnlyLibraries),
               style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
             ),
             const SizedBox(height: WaxSpace.s12),
@@ -316,6 +393,13 @@ class _ReportView extends StatelessWidget {
               ),
             ],
           ),
+          if (report.readOnlyLibraries > 0) ...<Widget>[
+            const SizedBox(height: WaxSpace.s12),
+            Text(
+              l10n.organizeReadOnlyLibraries(report.readOnlyLibraries),
+              style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+            ),
+          ],
           if (report.failures.isNotEmpty) ...<Widget>[
             const SizedBox(height: WaxSpace.s16),
             for (final failure in report.failures)

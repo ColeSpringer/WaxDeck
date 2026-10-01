@@ -903,10 +903,10 @@ abstract class AppLocalizations {
   /// **'Ask again in chosen phases'**
   String get adminEnrichmentRunPhases;
 
-  /// Help under the chosen-phases mode.
+  /// Help under the chosen-phases mode: the pass walks only those phases and re-asks every target in them.
   ///
   /// In en, this message translates to:
-  /// **'Only the phases switched on below'**
+  /// **'Only the phases switched on below, asking again about everything they reach'**
   String get adminEnrichmentRunPhasesHelp;
 
   /// Said when an enrichment pass has started.
@@ -1016,6 +1016,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tag writes failed'**
   String get adminEnrichmentTagsFailed;
+
+  /// Tile: files a read-only library kept unwritten; a later pass writes them once the flag clears.
+  ///
+  /// In en, this message translates to:
+  /// **'Files in read-only libraries'**
+  String get adminEnrichmentTagsReadOnly;
 
   /// Tile: book parts left unwritten after their primary part failed.
   ///
@@ -1467,6 +1473,12 @@ abstract class AppLocalizations {
   /// **'Path'**
   String get adminLibrariesColumnPath;
 
+  /// Column heading for the organize profile a managed library is laid out by.
+  ///
+  /// In en, this message translates to:
+  /// **'Profile'**
+  String get adminLibrariesColumnProfile;
+
   /// Column heading for whether a library refuses changes.
   ///
   /// In en, this message translates to:
@@ -1634,6 +1646,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The path must be absolute, and must not overlap an existing root, the upload inbox, or the podcast download directory.'**
   String get adminLibraryPathRule;
+
+  /// Profile cell of a library that is not managed: organizing never moves its files.
+  ///
+  /// In en, this message translates to:
+  /// **'In place'**
+  String get adminLibraryProfileInPlace;
+
+  /// Accessible name of a library's profile picker. {name} is the library.
+  ///
+  /// In en, this message translates to:
+  /// **'Organize profile: {name}'**
+  String adminLibraryProfileLabel(String name);
 
   /// Accessible name of the read-only switch on one library's row. {name} is the library's own name.
   ///
@@ -2703,6 +2727,12 @@ abstract class AppLocalizations {
   /// **'File'**
   String get adminTrashColumnFile;
 
+  /// Column heading for the library a trashed file came from.
+  ///
+  /// In en, this message translates to:
+  /// **'Library'**
+  String get adminTrashColumnLibrary;
+
   /// Column heading for why a file was deleted.
   ///
   /// In en, this message translates to:
@@ -2727,6 +2757,12 @@ abstract class AppLocalizations {
   /// **'Purged {count, plural, =1{1 file} other{{count} files}}, reclaimed {size}'**
   String adminTrashEmptied(int count, String size);
 
+  /// Message after the trash was emptied when read-only libraries kept some entries. {size} is an already-formatted file size.
+  ///
+  /// In en, this message translates to:
+  /// **'Purged {count, plural, =1{1 file} other{{count} files}}, reclaimed {size}; {kept, plural, =1{1 file stays} other{{kept} files stay}} in read-only libraries'**
+  String adminTrashEmptiedKept(int count, String size, int kept);
+
   /// Button that empties the trash, in the screen's action bar and as the confirming button of its dialog.
   ///
   /// In en, this message translates to:
@@ -2736,7 +2772,7 @@ abstract class AppLocalizations {
   /// Body of the dialog confirming that every trashed file is deleted for good.
   ///
   /// In en, this message translates to:
-  /// **'Every trashed file is deleted for good, including the ones still restorable. This cannot be undone.'**
+  /// **'Every trashed file outside read-only libraries is deleted for good, including the ones still restorable. This cannot be undone.'**
   String get adminTrashEmptyBody;
 
   /// Empty state of the trash list, saying what the screen is for.
@@ -8799,6 +8835,12 @@ abstract class AppLocalizations {
   /// **'Apply'**
   String get organizeApply;
 
+  /// A built-in profile in the picker. {name} is its name.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} (built in)'**
+  String organizeBuiltInProfile(String name);
+
   /// Column of the dry-run table: where a file is today.
   ///
   /// In en, this message translates to:
@@ -8816,6 +8858,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Files move to their new locations on the server. The catalog follows them, but anything else pointing at the old paths does not.'**
   String get organizeConfirmMessage;
+
+  /// The word typed to confirm an apply that lays out each library by its own profile; typed as shown, so keep it one plain word.
+  ///
+  /// In en, this message translates to:
+  /// **'ORGANIZE'**
+  String get organizeConfirmOwnWord;
 
   /// Title of the typed confirmation before files are moved.
   ///
@@ -8847,13 +8895,13 @@ abstract class AppLocalizations {
   /// **'Failed'**
   String get organizeFailed;
 
-  /// Under the dry run: files out of place that a read-only library keeps where they are.
+  /// Under the dry run: files out of place that a read-only server keeps where they are.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 file stays where it is: its library is read-only.} other{{count} files stay where they are: their libraries are read-only.}}'**
+  /// **'{count, plural, =1{1 file stays where it is while the server is read-only.} other{{count} files stay where they are while the server is read-only.}}'**
   String organizeHeld(int count);
 
-  /// How many files a finished run left where they were because their library is read-only.
+  /// How many files a finished run left where they were because the server is read-only.
   ///
   /// In en, this message translates to:
   /// **'Read-only'**
@@ -8901,11 +8949,17 @@ abstract class AppLocalizations {
   /// **'Everything is already in place'**
   String get organizeNothingTitle;
 
-  /// Under the profile picker when the built-in profile is the only one.
+  /// Profile picker option that lays out each managed library by the profile set for it.
   ///
   /// In en, this message translates to:
-  /// **'This server has only the built-in profile.'**
-  String get organizeOnlyBuiltIn;
+  /// **'Each library\'s own profile'**
+  String get organizeOwnProfiles;
+
+  /// Help under the each-library option of the profile picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Each managed library by the profile set on the Libraries screen'**
+  String get organizeOwnProfilesHelp;
 
   /// Heading over the dry run, saying how many files it would move.
   ///
@@ -8919,11 +8973,77 @@ abstract class AppLocalizations {
   /// **'Preview'**
   String get organizePreview;
 
+  /// Field for the path template of audiobooks.
+  ///
+  /// In en, this message translates to:
+  /// **'Audiobook template'**
+  String get organizeProfileAudiobookLabel;
+
+  /// Button in the profile editor that deletes the profile.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete profile'**
+  String get organizeProfileDelete;
+
+  /// Body of the dialog confirming a profile delete.
+  ///
+  /// In en, this message translates to:
+  /// **'A library laid out by it has to move to another profile first.'**
+  String get organizeProfileDeleteBody;
+
+  /// Title of the dialog confirming a profile delete.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete {name}?'**
+  String organizeProfileDeleteTitle(String name);
+
+  /// Message after a profile was deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'Deleted {name}'**
+  String organizeProfileDeleted(String name);
+
+  /// Button that opens the profile editor for the chosen profile.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit profile'**
+  String get organizeProfileEdit;
+
+  /// Title of the profile editor for an existing profile.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit {name}'**
+  String organizeProfileEditTitle(String name);
+
   /// Accessible name of the profile picker.
   ///
   /// In en, this message translates to:
   /// **'Organize profile'**
   String get organizeProfileLabel;
+
+  /// Field for the path template of music.
+  ///
+  /// In en, this message translates to:
+  /// **'Music template'**
+  String get organizeProfileMusicLabel;
+
+  /// Field for a new profile's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get organizeProfileNameLabel;
+
+  /// Under the name field of a new profile whose name is already used.
+  ///
+  /// In en, this message translates to:
+  /// **'A profile named {name} exists; edit it instead.'**
+  String organizeProfileNameTaken(String name);
+
+  /// Button that opens the profile editor for a new profile.
+  ///
+  /// In en, this message translates to:
+  /// **'New profile'**
+  String get organizeProfileNew;
 
   /// Overline over the profile picker.
   ///
@@ -8931,11 +9051,83 @@ abstract class AppLocalizations {
   /// **'The naming scheme to move into'**
   String get organizeProfileOverline;
 
+  /// Field for the path template of podcast episodes.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcast template'**
+  String get organizeProfilePodcastLabel;
+
+  /// Sample path of an audiobook.
+  ///
+  /// In en, this message translates to:
+  /// **'Book: {path}'**
+  String organizeProfileSampleBook(String path);
+
+  /// Sample path of a track.
+  ///
+  /// In en, this message translates to:
+  /// **'Track: {path}'**
+  String organizeProfileSampleMusic(String path);
+
+  /// Stands in a sample line when the template renders no path for that sample item.
+  ///
+  /// In en, this message translates to:
+  /// **'no path for this sample'**
+  String get organizeProfileSampleNone;
+
+  /// Sample path of a podcast episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Episode: {path}'**
+  String organizeProfileSamplePodcast(String path);
+
+  /// Heading over the sample paths the profile gives a track, a book and an episode.
+  ///
+  /// In en, this message translates to:
+  /// **'Where the samples land'**
+  String get organizeProfileSampleTitle;
+
+  /// Saves the profile being edited.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get organizeProfileSave;
+
+  /// Message after a profile was saved.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved {name}'**
+  String organizeProfileSaved(String name);
+
+  /// Switch in the profile editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Write tags while organizing'**
+  String get organizeProfileTagWrite;
+
+  /// Help under the tag-write switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Rewrites unlocked tags from the catalog as files move'**
+  String get organizeProfileTagWriteHelp;
+
+  /// Hint in a template field: leaving it empty inherits the built-in template.
+  ///
+  /// In en, this message translates to:
+  /// **'Empty keeps the built-in layout'**
+  String get organizeProfileTemplateHint;
+
   /// Heading over the profile picker.
   ///
   /// In en, this message translates to:
   /// **'Profile'**
   String get organizeProfileTitle;
+
+  /// Under the dry run and the result: managed libraries the organizer left alone because they are read-only.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 read-only library is left as it is.} other{{count} read-only libraries are left as they are.}}'**
+  String organizeReadOnlyLibraries(int count);
 
   /// Heading over what a finished run actually did.
   ///
@@ -17487,6 +17679,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Library scan'**
   String get toolsJobScan;
+
+  /// A catalog job that ran on one thing: {job} is the job name (Enrichment, Library scan), {target} what it ran on (a track, an album, a library).
+  ///
+  /// In en, this message translates to:
+  /// **'{job}: {target}'**
+  String toolsJobTargeted(String job, String target);
 
   /// Heading over the catalog's own jobs (scans, enrichment, analysis) on the tasks screen, shown to administrators.
   ///

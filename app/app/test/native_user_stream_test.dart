@@ -83,6 +83,14 @@ class _CountingRepository extends FakeRepository {
     healthReads++;
     return super.getLibraryHealth();
   }
+
+  int libraryReads = 0;
+
+  @override
+  Future<List<LibraryInfo>> listLibraries({bool counts = false}) {
+    libraryReads++;
+    return super.listLibraries(counts: counts);
+  }
 }
 
 /// The user stream on native is walked by the sync engine, which mirrors
@@ -334,6 +342,33 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 1500));
 
       expect(repo.healthReads, health + 1);
+      expect(repo.prefsReads, prefs);
+    },
+  );
+
+  test(
+    'a libraries marker refreshes the libraries and none of the user surfaces',
+    () async {
+      final b = await _bind(
+        serverPages: [
+          const ServerSyncPage(nextSince: 'scur-1'),
+          const ServerSyncPage(
+            events: [ServerSyncEvent(kind: 'libraries')],
+            nextSince: 'scur-2',
+          ),
+        ],
+      );
+      b.container.listen(libraryCountsProvider, (_, _) {});
+      await b.container.read(libraryCountsProvider.future);
+      await b.engine.pullServer();
+      final repo = b.repo as _CountingRepository;
+      final prefs = repo.prefsReads;
+      final libraries = repo.libraryReads;
+
+      await b.engine.pullServer();
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+
+      expect(repo.libraryReads, libraries + 1);
       expect(repo.prefsReads, prefs);
     },
   );

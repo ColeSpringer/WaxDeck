@@ -191,6 +191,20 @@
   "@toolsJobScan": {
     "description": "Name of a catalog job that scans the library folders."
   },
+  "toolsJobTargeted": "{job}: {target}",
+  "@toolsJobTargeted": {
+    "description": "A catalog job that ran on one thing: {job} is the job name (Enrichment, Library scan), {target} what it ran on (a track, an album, a library).",
+    "placeholders": {
+      "job": {
+        "type": "String",
+        "example": "Enrichment"
+      },
+      "target": {
+        "type": "String",
+        "example": "Amber Waves"
+      }
+    }
+  },
   "toolsJobsTitle": "Library jobs",
   "@toolsJobsTitle": {
     "description": "Heading over the catalog's own jobs (scans, enrichment, analysis) on the tasks screen, shown to administrators."

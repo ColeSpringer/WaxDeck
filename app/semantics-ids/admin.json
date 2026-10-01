@@ -66,6 +66,7 @@
     "libraryMedia": "library-media",
     "libraryName": "library-name",
     "libraryPath": "library-path",
+    "libraryProfile": "library-profile-{id}",
     "libraryReadOnly": "library-read-only-{id}",
     "libraryRescan": "library-rescan-{id}",
     "libraryRescanConfirm": "library-rescan-confirm",

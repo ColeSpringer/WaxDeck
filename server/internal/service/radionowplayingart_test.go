@@ -214,10 +214,7 @@ func TestRadioArtLookupEndsWithTheProcess(t *testing.T) {
 		workers:          group,
 		radioArtResolver: resolver,
 	}
-	l.toggles.Store(&runtimeToggles{
-		readOnlyLibs:     map[string]bool{},
-		radioExternalArt: true,
-	})
+	l.toggles.Store(&runtimeToggles{radioExternalArt: true})
 
 	l.EnsureRadioNowPlayingArt(testStationPID, "Test FM", "Charlie Parker - Ornithology")
 	select {

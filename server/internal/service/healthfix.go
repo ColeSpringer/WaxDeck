@@ -55,16 +55,77 @@ const (
 	fixBlockedReadOnly     = "read-only"
 )
 
-// healthFixPhases are the catalog phases whose forced pass fills each
-// enrichment-backed rule; a fix forces those this install runs. Genres
-// ride the release-group walk, so fixing them re-asks MusicBrainz about
-// every album.
-var healthFixPhases = map[string][]model.EnrichPhase{
-	ruleMissingLyrics:   {model.EnrichPhaseLyrics},
-	ruleMissingArt:      {model.EnrichPhaseGroupArt, model.EnrichPhaseAlbumArt},
-	ruleMissingGenre:    {model.EnrichPhaseReleaseGroup},
-	ruleMissingNarrator: {model.EnrichPhaseBookFields},
-	ruleMissingASIN:     {model.EnrichPhaseBookFields},
+// wantPhases are the catalog phases that fill each per-item want, and a
+// rule's fix forces its want's. Genres ride the release-group walk, so
+// fixing them re-asks MusicBrainz about every album.
+var wantPhases = map[string][]model.EnrichPhase{
+	enrichWantLyrics: {model.EnrichPhaseLyrics},
+	enrichWantCover:  {model.EnrichPhaseGroupArt, model.EnrichPhaseAlbumArt},
+	enrichWantGenres: {model.EnrichPhaseReleaseGroup},
+	enrichWantBook:   {model.EnrichPhaseBookFields},
+}
+
+// phasePrereqs are the identity phases a phase keys on: the album match
+// and the art rungs read the ids these land earlier in the same run.
+var phasePrereqs = map[model.EnrichPhase][]model.EnrichPhase{
+	model.EnrichPhaseReleaseGroup: {model.EnrichPhaseArtist},
+	model.EnrichPhaseAlbumRelease: {model.EnrichPhaseArtist, model.EnrichPhaseReleaseGroup},
+	model.EnrichPhaseGroupArt:     {model.EnrichPhaseArtist, model.EnrichPhaseReleaseGroup},
+	model.EnrichPhaseAlbumArt:     {model.EnrichPhaseArtist, model.EnrichPhaseReleaseGroup, model.EnrichPhaseAlbumRelease},
+	model.EnrichPhaseArtistArt:    {model.EnrichPhaseArtist},
+}
+
+// runningOf keeps the phases of want that run, in the catalog's order.
+func runningOf(want, running []model.EnrichPhase) []model.EnrichPhase {
+	out := []model.EnrichPhase{}
+	for _, p := range model.EnrichPhases() {
+		if slices.Contains(want, p) && slices.Contains(running, p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// withPrereqs adds the identity phases each phase keys on.
+func withPrereqs(phases []model.EnrichPhase) []model.EnrichPhase {
+	out := slices.Clone(phases)
+	for _, p := range phases {
+		for _, q := range phasePrereqs[p] {
+			if !slices.Contains(out, q) {
+				out = append(out, q)
+			}
+		}
+	}
+	return out
+}
+
+// fixPhases are a fix's phases: it forces those filling its rule and
+// walks, unforced, the identity phases they key on.
+func fixPhases(rule string, running []model.EnrichPhase) (walk, force []model.EnrichPhase) {
+	force = runningOf(wantPhases[healthFixWants[rule]], running)
+	if len(force) == 0 {
+		return nil, nil
+	}
+	return runningOf(withPrereqs(force), running), force
+}
+
+// itemPassPhases are what an item's pass walks for its wants: their phases
+// and the identity phases those key on. Nil, walking every phase, when a
+// want maps to none; empty when none of them runs here.
+func itemPassPhases(wants []string, running []model.EnrichPhase) []model.EnrichPhase {
+	var phases []model.EnrichPhase
+	for _, w := range wants {
+		ps, ok := wantPhases[w]
+		if !ok {
+			return nil
+		}
+		phases = append(phases, ps...)
+	}
+	filled := runningOf(phases, running)
+	if len(filled) == 0 {
+		return filled
+	}
+	return runningOf(withPrereqs(filled), running)
 }
 
 // healthFixWants are what a scoped fix asks per item, and fixBlockedSource
@@ -103,10 +164,10 @@ func (l *Library) healthFixability(rule string) (bool, string) {
 		}
 		return true, ""
 	}
-	if _, ok := healthFixPhases[rule]; !ok {
+	if _, ok := healthFixWants[rule]; !ok {
 		return false, ""
 	}
-	if len(l.runningFixPhases(rule)) == 0 {
+	if _, force := fixPhases(rule, l.lib.EnrichmentPhases()); len(force) == 0 {
 		if !l.musicbrainzConfigured && fixBlockedSource[rule] != fixBlockedBookSource {
 			return false, fixBlockedContact
 		}
@@ -118,20 +179,6 @@ func (l *Library) healthFixability(rule string) (bool, string) {
 		return false, fixBlockedGenreSource
 	}
 	return true, ""
-}
-
-// runningFixPhases are the phases among those that fill rule which this
-// install runs: missing art is filled by either of its two pictures'
-// phases, whichever has a source.
-func (l *Library) runningFixPhases(rule string) []model.EnrichPhase {
-	running := l.lib.EnrichmentPhases()
-	var out []model.EnrichPhase
-	for _, p := range healthFixPhases[rule] {
-		if slices.Contains(running, p) {
-			out = append(out, p)
-		}
-	}
-	return out
 }
 
 // sourceServes reports a switched-on source serving capability c at target.
@@ -195,7 +242,7 @@ func (l *Library) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, 
 	if fixing[rule] {
 		return HealthFixStartDTO{}, errFixRunning
 	}
-	_, enrichBacked := healthFixPhases[rule]
+	_, enrichBacked := healthFixWants[rule]
 	if enrichBacked {
 		if _, running, err := l.runningJob(ctx, "enrich", enrichJobWindow); err != nil {
 			return HealthFixStartDTO{}, err
@@ -214,13 +261,13 @@ func (l *Library) StartHealthFix(ctx context.Context, uc *UserCtx, rule string, 
 
 	var out HealthFixStartDTO
 	if enrichBacked && len(scope) == 0 {
-		phases := l.runningFixPhases(rule)
-		pid, err := l.startEnrichJob(ctx, uc, waxbin.EnrichOptions{ForcePhases: phases}, rule)
+		walk, force := fixPhases(rule, l.lib.EnrichmentPhases())
+		pid, err := l.startEnrichJob(ctx, uc, waxbin.EnrichOptions{Phases: walk, ForcePhases: force}, rule)
 		if err != nil {
 			if KindOf(classify(err)) == KindConflict {
 				return HealthFixStartDTO{}, errEnrichBusy
 			}
-			return HealthFixStartDTO{}, l.explainEnrichRefusal(err, apiNames(phases))
+			return HealthFixStartDTO{}, l.explainEnrichRefusal(err, apiNames(force))
 		}
 		out = HealthFixStartDTO{Queued: queued, JobPID: apiPID(PrefixJob, pid)}
 	} else {
@@ -367,21 +414,19 @@ func (l *Library) fixHealthItem(ctx context.Context, rule string, pid model.PID,
 	}
 }
 
-// fixPaths moves one chunk of path-mismatched items where the default
+// fixPaths moves one chunk of path-mismatched items where their library's
 // profile places them, counting items rather than files: a book moves as
 // all its parts, and fails if one of them does.
 func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSummary) {
 	sum.Attempted += len(pids)
 	plan, err := l.lib.PlanOrganize(ctx,
 		query.New(query.EntityItems).WhereValues("pid", query.OpIn, query.Values(pids)...).Build(),
-		l.defaultOrganizeProfile())
-	if err == nil {
-		err = l.holdReadOnly(ctx, plan)
-	}
+		waxbin.OrganizeOptions{})
 	if err != nil {
 		sum.Failed += len(pids)
 		return
 	}
+	l.holdReadOnly(plan)
 	// Nothing to move is no job, and no lease a scan could be holding.
 	var rep *organize.Report
 	if plan.Pending() > 0 {
@@ -422,9 +467,21 @@ func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSum
 			o.held = a.Reason
 		}
 	}
+	var planless []model.PID
+	for _, pid := range pids {
+		if byItem[model.PID(pid)] == nil {
+			planless = append(planless, model.PID(pid))
+		}
+	}
+	var readOnly map[model.PID]bool
+	if plan.ReadOnlyLibraries > 0 {
+		readOnly = l.itemsInReadOnlyLibraries(ctx, planless)
+	}
 	for _, pid := range pids {
 		o := byItem[model.PID(pid)]
 		switch {
+		case o == nil && readOnly[model.PID(pid)]:
+			sum.Skipped[readOnlyReason]++
 		case o == nil:
 			// Planned for nothing: gone, or no longer under a managed root.
 			sum.Skipped["not placed by organize"]++
@@ -436,6 +493,26 @@ func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSum
 			sum.Skipped[cmp.Or(o.held, "already in place")]++
 		}
 	}
+}
+
+// itemsInReadOnlyLibraries answers which items sit in a library the
+// catalog flags read-only.
+func (l *Library) itemsInReadOnlyLibraries(ctx context.Context, pids []model.PID) map[model.PID]bool {
+	out := map[model.PID]bool{}
+	if len(pids) == 0 {
+		return out
+	}
+	items, err := l.lib.GetMany(ctx, pids)
+	if err != nil {
+		l.log.Warn("reading items for their libraries", "err", err)
+		return out
+	}
+	for _, it := range items {
+		if it != nil && l.libraryReadOnly(string(it.LibraryPID)) {
+			out[it.PID] = true
+		}
+	}
+	return out
 }
 
 // skipReason is why a fix left an item alone, from the enrichment's own
@@ -462,9 +539,9 @@ type healthRecheck struct{ passing, failing, gone int }
 // recheckInputs are the bulk reads a rule's re-test looks items up in;
 // a nil lyrics set reads each item's lyrics instead.
 type recheckInputs struct {
-	moves  map[model.PID]bool
-	byPath map[string][]string
-	lyrics map[model.PID]bool
+	moves    map[model.PID]bool
+	findings map[string]*fileFinding
+	lyrics   map[model.PID]bool
 }
 
 // recheckHealthRule re-tests one rule for every item the index holds it
@@ -488,7 +565,7 @@ func (l *Library) recheckHealthRule(ctx context.Context, rule string, scope []st
 			return res, err
 		}
 	case ruleWriteUnsynced:
-		if in.byPath, err = l.fileDiagnosticRules(ctx); err != nil {
+		if in.findings, err = l.fileDiagnosticRules(ctx); err != nil {
 			return res, err
 		}
 	case ruleMissingLyrics:
@@ -568,7 +645,8 @@ func (l *Library) stillFails(ctx context.Context, rule string, it *model.ItemVie
 	case rulePathMismatch:
 		return in.moves[it.PID]
 	case ruleWriteUnsynced:
-		return slices.Contains(l.itemFileRules(ctx, it, in.byPath), ruleWriteUnsynced)
+		rules, _ := l.itemFileRules(ctx, it, in.findings)
+		return slices.Contains(rules, ruleWriteUnsynced)
 	}
 	return true
 }

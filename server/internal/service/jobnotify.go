@@ -50,9 +50,17 @@ func jobSubject(kind string) string {
 	return "Library job"
 }
 
+// jobSubjectOf is jobSubject naming the job's target when it has one.
+func jobSubjectOf(j Job) string {
+	if j.Target != nil && j.Target.Name != "" {
+		return jobSubject(j.Kind) + " of " + j.Target.Name
+	}
+	return jobSubject(j.Kind)
+}
+
 // jobBody says what a finished job did, from its summary.
 func jobBody(j Job) string {
-	subject := jobSubject(j.Kind)
+	subject := jobSubjectOf(j)
 	switch {
 	case j.Scan != nil:
 		r := j.Scan
@@ -85,7 +93,7 @@ func (l *Library) notifyJobEnd(ctx context.Context, userID string, j Job) {
 		return
 	}
 	l.EmitNotificationFor(ctx, "job-failed", jobTitle(j.Kind, true),
-		jobSubject(j.Kind)+": "+jobFailure(j), j.PID, []string{userID})
+		jobSubjectOf(j)+": "+jobFailure(j), j.PID, []string{userID})
 }
 
 // jobFailure says why a job did not finish. A server that stopped under
@@ -106,8 +114,12 @@ func (l *Library) notifyWorkDone(ctx context.Context, uc *UserCtx, j Job) {
 
 // trashBody says what emptying the trash did.
 func trashBody(t TrashEmptyDTO) string {
-	return fmt.Sprintf("Trash: %d files purged, %s reclaimed, %d errored",
+	body := fmt.Sprintf("Trash: %d files purged, %s reclaimed, %d errored",
 		t.Purged, sizeWords(t.ReclaimedBytes), t.Errored)
+	if t.SkippedReadOnly > 0 {
+		body += fmt.Sprintf(", %d kept in read-only libraries", t.SkippedReadOnly)
+	}
+	return body
 }
 
 // sizeWords is a byte count as a person reads it.

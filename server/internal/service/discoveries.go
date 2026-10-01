@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/waxerr"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -72,6 +73,10 @@ type DiscoverySweepReport struct {
 // which is the unit the matching engine scores.
 func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, error) {
 	report := DiscoverySweepReport{}
+	if l.Maintenance() {
+		report.Deferred = true
+		return report, nil
+	}
 	running, err := l.catalogJobRunning(ctx)
 	if err != nil {
 		return report, err
@@ -100,10 +105,7 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 		if err != nil {
 			return report, classify(err)
 		}
-		if err := l.db.SyncStateSet(ctx, discoveryCursorKey, strconv.FormatInt(tail, 10)); err != nil {
-			return report, &Error{Kind: KindInternal, Err: err}
-		}
-		return report, nil
+		return report, l.rewindDiscoverySweep(ctx, tail)
 	}
 	from := since
 
@@ -118,6 +120,15 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 	var added []discoveredItem
 	for len(added) < discoveryChangeBatch {
 		rows, err := l.lib.Changes(ctx, since)
+		if waxerr.CodeOf(err) == waxerr.CodeNotFound {
+			// A replaced or pruned catalog: start over at its tail, the
+			// first run's policy.
+			tail, err := l.lib.LatestChangeSeq(ctx)
+			if err != nil {
+				return report, classify(err)
+			}
+			return DiscoverySweepReport{}, l.rewindDiscoverySweep(ctx, tail)
+		}
 		if err != nil {
 			return report, classify(err)
 		}
@@ -308,6 +319,15 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 // entries never opened at all.
 func discoveryUnitKey(libraryPID, title, artist string) string {
 	return libraryPID + "|" + strings.ToLower(title) + "|" + strings.ToLower(artist)
+}
+
+// rewindDiscoverySweep puts the sweeper at seq, so only what arrives
+// after it is reviewed.
+func (l *Library) rewindDiscoverySweep(ctx context.Context, seq int64) error {
+	if err := l.db.SyncStateSet(ctx, discoveryCursorKey, strconv.FormatInt(seq, 10)); err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	return nil
 }
 
 // storeDiscoveryCursor advances the stored position, writing nothing

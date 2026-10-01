@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -45,6 +46,12 @@ type Root struct {
 	// organizer may rename within it. The conservative default is
 	// in-place: the catalog never moves files it did not place.
 	Managed bool
+	// Media, PID, Profile and ReadOnly are the catalog's, filled when the
+	// table is rebuilt from it.
+	Media    string
+	PID      string
+	Profile  string
+	ReadOnly bool
 }
 
 // Config configures the library service.
@@ -52,6 +59,9 @@ type Config struct {
 	// DataDir holds waxbin.db and its lockfile, and the IPC socket unless
 	// its path would be too long for one.
 	DataDir string
+	// PathPollInterval is the pid path cache's background poll; zero is
+	// its default, negative none (a test driving its own hand-offs).
+	PathPollInterval time.Duration
 	// Roots are the library roots, indexed in place (never moved).
 	Roots []Root
 	// ScanOnStart launches a scan as soon as the service is up.
@@ -206,17 +216,50 @@ type Library struct {
 	// socketDir is the private directory the IPC socket lives in when the
 	// data dir's path is too long for one; Close removes it.
 	socketDir string
-	// catalogUsers maps an account whose stored catalog user a reset
-	// dropped to the one the catalog holds for it. Written only by Open;
-	// read through catalogPID.
-	catalogUsers map[string]model.PID
-	// roots is the service's own root table (name, path, managed policy),
-	// seeded from config and grown at runtime by AddLibrary. rootsMu guards
-	// it; AddLibrary replaces the slice copy-on-write so a reader holding an
-	// old snapshot stays consistent. Read it through libraryRoots().
-	roots   []Root
-	rootsMu sync.RWMutex
-	log     *slog.Logger
+	// catalogUsers maps an account whose stored catalog user a reset or
+	// restore dropped to the one the catalog holds for it; read through
+	// catalogPID.
+	catalogUsers   map[string]model.PID
+	catalogUsersMu sync.RWMutex
+	// usersUnmapped is an account the last mapping could not place,
+	// which the settle after a reopen retries.
+	usersUnmapped atomic.Bool
+	// roots is the root table, rebuilt from the catalog and swapped under
+	// rootsMu (read it through libraryRoots); refreshMu keeps an older read
+	// from landing after a newer one. configRoots are the configured ones.
+	roots       []Root
+	rootsBuilt  bool
+	rootsMu     sync.RWMutex
+	refreshMu   sync.Mutex
+	configRoots []Root
+	// rootsLeftOut are configured roots the catalog refused, warned of once.
+	rootsLeftOut sync.Map
+	// maintenance is a catalog hand-off in progress, between the suspend
+	// and reopen hooks; suspendGen numbers the suspends. watchMu keeps a
+	// suspend out of a watchdog's reopen.
+	maintenance   atomic.Bool
+	suspendGen    atomic.Uint64
+	maintenanceMu sync.Mutex
+	watchMu       sync.Mutex
+	// The watchdog's interval and how many quiet passes it waits before
+	// reopening an abandoned catalog (zero is each constant), and its count
+	// of those passes, under watchMu.
+	maintenanceWatchEvery  time.Duration
+	maintenanceStuckPasses int
+	unownedPasses          int
+	// catalogPath is waxbin.db, whose lockfile names a hand-off's holder.
+	catalogPath string
+	// suspendHook runs inside the suspend hook for a test; nothing in the
+	// server sets it.
+	suspendHook func(context.Context)
+	// resetMu serializes a replaced catalog's reset between the reopen
+	// hook and the feed; profilesMu a saved profile's round trip.
+	resetMu    sync.Mutex
+	profilesMu sync.Mutex
+	// catalogResync tells every client to re-mirror the catalog. Set by
+	// SetCatalogResyncer; unset is a no-op.
+	catalogResync atomic.Pointer[func()]
+	log           *slog.Logger
 	// libDirs caches path-to-library attribution for visibility checks.
 	libDirs libraryDirs
 	// procCtx outlives any one request: async catalog jobs launch on it
@@ -262,7 +305,12 @@ type Library struct {
 	// construction (the bridge needs this service as its resolver);
 	// flowRoots is its runtime-root surface, wired the same way.
 	flowJobs  FlowJobs
-	flowRoots FlowRootSync
+	flowRoots atomic.Pointer[FlowRootSync]
+	// flowSyncMu serializes teaching the bridge: WaxFlow refuses a root
+	// name it already maps, and two teachers could both see one as new.
+	// flowRefused holds the paths it refused by name, not offered again.
+	flowSyncMu  sync.Mutex
+	flowRefused map[string]string
 	// coverSyncing single-flights playlist cover generation per playlist,
 	// so concurrent readers of one shared list do not each composite it.
 	coverSyncing map[model.PID]bool
@@ -411,8 +459,8 @@ type Library struct {
 	jobFollowEvery time.Duration
 	// matchWake nudges the identify worker; lossy, ticker-backstopped.
 	matchWake chan struct{}
-	// toggles is the hot-path settings cache (read-only flags, transcode
-	// limits), swapped whole on every settings write.
+	// toggles is the hot-path settings cache (the server's read-only flag,
+	// transcode limits), swapped whole on every write.
 	toggles atomic.Value
 	// gate is the single transcode session gate, built on first use.
 	gate     *transcodeGate
@@ -496,13 +544,8 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
-	roots := make([]config.Root, 0, len(cfg.Roots))
-	for _, r := range cfg.Roots {
-		mode := model.ModeInPlace
-		if r.Managed {
-			mode = model.ModeManaged
-		}
-		roots = append(roots, config.Root{Path: r.Path, Mode: mode})
+	if a, b, ok := overlappingRoots(cfg.Roots); ok {
+		return nil, fmt.Errorf("service: the configured library roots %s and %s overlap", a, b)
 	}
 	socket, socketDir, madeDir := ipcSocket(cfg.DataDir)
 	opened := false
@@ -516,9 +559,15 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 			"socket", socket)
 	}
 	sources := newEnrichSources(namedEnrichProviders(cfg.EnrichmentProviders, log))
+	profiles, err := savedProfileDefs(ctx, store, log)
+	if err != nil {
+		return nil, fmt.Errorf("service: organize profiles: %w", err)
+	}
+	// The catalog owns each root's policy, so the configured roots are
+	// registered once it is open rather than ensured from the options.
 	opts := waxbin.Options{
 		DBPath:                 filepath.Join(cfg.DataDir, "waxbin.db"),
-		Roots:                  roots,
+		Profiles:               profiles,
 		Logger:                 log,
 		IPCSocket:              socket,
 		SourceProviders:        cfg.SourceProviders,
@@ -528,6 +577,11 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	if cfg.SecretCipher != nil {
 		opts.SecretCipher = cfg.SecretCipher
 		opts.SecretKeyID = "1"
+	}
+	var l *Library // assigned below; a hand-off cannot start before Serve does
+	opts.OnSuspend = func(ctx context.Context) { l.onSuspend(ctx) }
+	opts.OnReopen = func(ctx context.Context, ev waxbin.ReopenEvent) {
+		l.onReopen(context.WithoutCancel(ctx), ev)
 	}
 	if cfg.PodcastDir != "" {
 		opts.Podcasts = config.PodcastConfig{
@@ -595,15 +649,16 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 
 	sources.builtins = lib.EnrichmentBuiltins()
 
-	paths, err := pidpath.New(ctx, lib, pidpath.Options{Logger: log})
+	paths, err := pidpath.New(ctx, lib, pidpath.Options{Logger: log, PollInterval: cfg.PathPollInterval})
 	if err != nil {
 		lib.Close()
 		return nil, fmt.Errorf("service: pid path cache: %w", err)
 	}
 
-	l := &Library{
+	l = &Library{
 		sources: sources,
-		lib:     lib, paths: paths, db: store, roots: cfg.Roots, log: log, procCtx: ctx,
+		lib:     lib, paths: paths, db: store, configRoots: cfg.Roots, log: log, procCtx: ctx,
+		catalogPath:              opts.DBPath,
 		socketDir:                socketDir,
 		catalogWake:              make(chan struct{}, 1),
 		userWake:                 make(chan string, 64),
@@ -649,6 +704,11 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		paths.Close()
 		lib.Close()
 		return nil, fmt.Errorf("service: catalog users: %w", err)
+	}
+	if err := l.settleRoots(ctx); err != nil {
+		paths.Close()
+		lib.Close()
+		return nil, fmt.Errorf("service: library roots: %w", err)
 	}
 	// The ListenBrainz API base is caller-supplied, so its deliveries
 	// ride a dial-guarded client like every other user-pointed fetch;
@@ -891,19 +951,24 @@ func (l *Library) JobStatus(ctx context.Context, apiJobPID string) (Job, error) 
 	if err != nil {
 		return Job{}, classify(err)
 	}
-	return jobDTO(job), nil
+	out := []Job{jobDTO(job)}
+	l.nameJobTargets(ctx, out)
+	return out[0], nil
 }
 
 // Jobs lists recent catalog jobs, newest first, after any still running
-// that newer ones pushed out of the window. Administrators only.
+// that newer ones pushed out. A finished targeted job is left out (read by
+// pid): a burst of them would push the passes out. Administrators only.
 func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, error) {
 	if !uc.Admin {
 		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	jobs, err := l.lib.Jobs(ctx, limit)
+	jobs, err := l.lib.Jobs(ctx, min(limit*jobsOverfetch, jobsFetchCap))
 	if err != nil {
 		return nil, classify(err)
 	}
+	jobs = slices.DeleteFunc(jobs, func(j *model.Job) bool { return j.TargetType != "" && j.State != model.JobRunning })
+	jobs = jobs[:min(len(jobs), limit)]
 	listed := make(map[model.PID]bool, len(jobs))
 	for _, job := range jobs {
 		listed[job.PID] = true
@@ -925,6 +990,7 @@ func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, erro
 	for _, job := range jobs {
 		out = append(out, jobDTO(job))
 	}
+	l.nameJobTargets(ctx, out)
 	return out, nil
 }
 

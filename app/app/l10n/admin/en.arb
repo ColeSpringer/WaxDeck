@@ -547,9 +547,9 @@
   "@adminEnrichmentRunPhases": {
     "description": "Pass mode that re-asks only the phases switched on below it."
   },
-  "adminEnrichmentRunPhasesHelp": "Only the phases switched on below",
+  "adminEnrichmentRunPhasesHelp": "Only the phases switched on below, asking again about everything they reach",
   "@adminEnrichmentRunPhasesHelp": {
-    "description": "Help under the chosen-phases mode."
+    "description": "Help under the chosen-phases mode: the pass walks only those phases and re-asks every target in them."
   },
   "adminEnrichmentRunStarted": "Enrichment pass started",
   "@adminEnrichmentRunStarted": {
@@ -646,6 +646,10 @@
   "adminEnrichmentTagsFailed": "Tag writes failed",
   "@adminEnrichmentTagsFailed": {
     "description": "Tile: files whose tag write failed."
+  },
+  "adminEnrichmentTagsReadOnly": "Files in read-only libraries",
+  "@adminEnrichmentTagsReadOnly": {
+    "description": "Tile: files a read-only library kept unwritten; a later pass writes them once the flag clears."
   },
   "adminEnrichmentTagsSkipped": "Book parts skipped",
   "@adminEnrichmentTagsSkipped": {
@@ -975,6 +979,10 @@
   "@adminLibrariesColumnPath": {
     "description": "Column heading for a library's directory on the server."
   },
+  "adminLibrariesColumnProfile": "Profile",
+  "@adminLibrariesColumnProfile": {
+    "description": "Column heading for the organize profile a managed library is laid out by."
+  },
   "adminLibrariesColumnReadOnly": "Read-only",
   "@adminLibrariesColumnReadOnly": {
     "description": "Column heading for whether a library refuses changes."
@@ -1104,6 +1112,20 @@
   "adminLibraryPathRule": "The path must be absolute, and must not overlap an existing root, the upload inbox, or the podcast download directory.",
   "@adminLibraryPathRule": {
     "description": "Line under the create button, saying what the server will refuse."
+  },
+  "adminLibraryProfileInPlace": "In place",
+  "@adminLibraryProfileInPlace": {
+    "description": "Profile cell of a library that is not managed: organizing never moves its files."
+  },
+  "adminLibraryProfileLabel": "Organize profile: {name}",
+  "@adminLibraryProfileLabel": {
+    "description": "Accessible name of a library's profile picker. {name} is the library.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "music"
+      }
+    }
   },
   "adminLibraryReadOnlyLabel": "Read-only: {name}",
   "@adminLibraryReadOnlyLabel": {
@@ -1994,6 +2016,10 @@
   "@adminTrashColumnFile": {
     "description": "Column heading for a trashed file's path."
   },
+  "adminTrashColumnLibrary": "Library",
+  "@adminTrashColumnLibrary": {
+    "description": "Column heading for the library a trashed file came from."
+  },
   "adminTrashColumnReason": "Reason",
   "@adminTrashColumnReason": {
     "description": "Column heading for why a file was deleted."
@@ -2020,11 +2046,29 @@
       }
     }
   },
+  "adminTrashEmptiedKept": "Purged {count, plural, =1{1 file} other{{count} files}}, reclaimed {size}; {kept, plural, =1{1 file stays} other{{kept} files stay}} in read-only libraries",
+  "@adminTrashEmptiedKept": {
+    "description": "Message after the trash was emptied when read-only libraries kept some entries. {size} is an already-formatted file size.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "12"
+      },
+      "size": {
+        "type": "String",
+        "example": "4.2 MB"
+      },
+      "kept": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
   "adminTrashEmptyAction": "Empty trash",
   "@adminTrashEmptyAction": {
     "description": "Button that empties the trash, in the screen's action bar and as the confirming button of its dialog."
   },
-  "adminTrashEmptyBody": "Every trashed file is deleted for good, including the ones still restorable. This cannot be undone.",
+  "adminTrashEmptyBody": "Every trashed file outside read-only libraries is deleted for good, including the ones still restorable. This cannot be undone.",
   "@adminTrashEmptyBody": {
     "description": "Body of the dialog confirming that every trashed file is deleted for good."
   },

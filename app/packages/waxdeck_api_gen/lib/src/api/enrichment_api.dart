@@ -213,7 +213,7 @@ class EnrichmentApi {
   }
 
   /// Run a whole-library enrichment pass
-  /// Starts the whole-library enrichment pass as a job: &#x60;force&#x60; re-asks everything, &#x60;forcePhases&#x60; the named phases alone. Refuses with &#x60;source-unavailable&#x60; when no phase could run. Administrators only. 
+  /// Starts the whole-library enrichment pass as a job, walking &#x60;phases&#x60; (default all) and re-asking &#x60;forcePhases&#x60;, or everything on &#x60;force&#x60;. &#x60;source-unavailable&#x60; when no phase could run. Administrators only. 
   ///
   /// Parameters:
   /// * [enrichmentRunRequest] 

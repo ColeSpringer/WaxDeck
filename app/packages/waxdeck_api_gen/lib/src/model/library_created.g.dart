@@ -21,6 +21,12 @@ class _$LibraryCreated extends LibraryCreated {
   final String? path;
   @override
   final int? itemCount;
+  @override
+  final bool readOnly;
+  @override
+  final bool managed;
+  @override
+  final String? profile;
 
   factory _$LibraryCreated([void Function(LibraryCreatedBuilder)? updates]) =>
       (LibraryCreatedBuilder()..update(updates))._build();
@@ -33,6 +39,9 @@ class _$LibraryCreated extends LibraryCreated {
     this.media,
     this.path,
     this.itemCount,
+    required this.readOnly,
+    required this.managed,
+    this.profile,
   }) : super._();
   @override
   LibraryCreated rebuild(void Function(LibraryCreatedBuilder) updates) =>
@@ -51,7 +60,10 @@ class _$LibraryCreated extends LibraryCreated {
         name == other.name &&
         media == other.media &&
         path == other.path &&
-        itemCount == other.itemCount;
+        itemCount == other.itemCount &&
+        readOnly == other.readOnly &&
+        managed == other.managed &&
+        profile == other.profile;
   }
 
   @override
@@ -64,6 +76,9 @@ class _$LibraryCreated extends LibraryCreated {
     _$hash = $jc(_$hash, media.hashCode);
     _$hash = $jc(_$hash, path.hashCode);
     _$hash = $jc(_$hash, itemCount.hashCode);
+    _$hash = $jc(_$hash, readOnly.hashCode);
+    _$hash = $jc(_$hash, managed.hashCode);
+    _$hash = $jc(_$hash, profile.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -77,7 +92,10 @@ class _$LibraryCreated extends LibraryCreated {
           ..add('name', name)
           ..add('media', media)
           ..add('path', path)
-          ..add('itemCount', itemCount))
+          ..add('itemCount', itemCount)
+          ..add('readOnly', readOnly)
+          ..add('managed', managed)
+          ..add('profile', profile))
         .toString();
   }
 }
@@ -118,6 +136,18 @@ class LibraryCreatedBuilder
   int? get itemCount => _$this._itemCount;
   set itemCount(covariant int? itemCount) => _$this._itemCount = itemCount;
 
+  bool? _readOnly;
+  bool? get readOnly => _$this._readOnly;
+  set readOnly(covariant bool? readOnly) => _$this._readOnly = readOnly;
+
+  bool? _managed;
+  bool? get managed => _$this._managed;
+  set managed(covariant bool? managed) => _$this._managed = managed;
+
+  String? _profile;
+  String? get profile => _$this._profile;
+  set profile(covariant String? profile) => _$this._profile = profile;
+
   LibraryCreatedBuilder() {
     LibraryCreated._defaults(this);
   }
@@ -132,6 +162,9 @@ class LibraryCreatedBuilder
       _media = $v.media;
       _path = $v.path;
       _itemCount = $v.itemCount;
+      _readOnly = $v.readOnly;
+      _managed = $v.managed;
+      _profile = $v.profile;
       _$v = null;
     }
     return this;
@@ -169,6 +202,17 @@ class LibraryCreatedBuilder
           media: media,
           path: path,
           itemCount: itemCount,
+          readOnly: BuiltValueNullFieldError.checkNotNull(
+            readOnly,
+            r'LibraryCreated',
+            'readOnly',
+          ),
+          managed: BuiltValueNullFieldError.checkNotNull(
+            managed,
+            r'LibraryCreated',
+            'managed',
+          ),
+          profile: profile,
         );
     replace(_$result);
     return _$result;

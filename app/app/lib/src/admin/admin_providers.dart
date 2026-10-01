@@ -151,19 +151,15 @@ final scanRunningProvider = Provider<bool>(
       false,
 );
 
-/// The catalog's libraries: names, paths, and the per-library switches.
-///
-/// No counts. This feeds the permission editor's grant list and the
-/// review screen's matching menu as well as the libraries table, and a
-/// count is a scan per library - see [libraryCountsProvider], which the
-/// one screen that draws the number watches instead.
+/// The catalog's libraries without counts: the permission editor and the
+/// review screen's matching menu read it too, and only the libraries table
+/// draws the number (see [libraryCountsProvider]).
 final librariesProvider = FutureProvider<List<LibraryInfo>>(
   (ref) => ref.watch(repositoryProvider).listLibraries(),
 );
 
-/// The same libraries, with what each holds. Separate because the count
-/// costs a scan per root: the table that shows it asks, and nothing else
-/// pays.
+/// The same libraries, with what each holds: one indexed count per
+/// library, asked for by the table that shows it.
 final libraryCountsProvider = FutureProvider<List<LibraryInfo>>(
   (ref) => ref.watch(repositoryProvider).listLibraries(counts: true),
 );
@@ -338,29 +334,6 @@ final invitesProvider = FutureProvider<List<Invite>>(
   (ref) => ref.watch(repositoryProvider).listInvites(),
 );
 
-/// One library's read-only flag, keyed by pid.
-class LibraryReadOnlyController extends AsyncNotifier<bool> {
-  LibraryReadOnlyController(this.libraryPid);
-
-  final String libraryPid;
-
-  @override
-  Future<bool> build() =>
-      ref.watch(repositoryProvider).getLibraryReadOnly(libraryPid);
-
-  Future<void> set(bool readOnly) async {
-    final stored = await ref
-        .read(repositoryProvider)
-        .setLibraryReadOnly(libraryPid, readOnly);
-    state = AsyncData(stored);
-  }
-}
-
-final libraryReadOnlyProvider =
-    AsyncNotifierProvider.family<LibraryReadOnlyController, bool, String>(
-      LibraryReadOnlyController.new,
-    );
-
 /// How often a running pass is asked after: no event says it ended.
 const enrichmentRunningPoll = Duration(seconds: 5);
 
@@ -420,12 +393,14 @@ class EnrichmentStatusController extends AsyncNotifier<EnrichmentStatus> {
   Future<String> run({
     bool force = false,
     List<String> forcePhases = const [],
+    List<String> phases = const [],
   }) async {
     final repository = ref.read(repositoryProvider);
     try {
       return await repository.runEnrichment(
         force: force,
         forcePhases: forcePhases,
+        phases: phases,
       );
     } finally {
       if (ref.mounted) {

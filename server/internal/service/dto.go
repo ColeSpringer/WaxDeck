@@ -122,6 +122,16 @@ type Job struct {
 	Analyze    *AnalyzeTallyDTO
 	Enrich     *EnrichmentLastRunDTO
 	Organize   *OrganizeTallyDTO
+	// Target is what a targeted job ran on; nil for a whole pass.
+	Target *JobTargetDTO
+}
+
+// JobTargetDTO names a targeted job's target: its type (item, artist,
+// release_group, album, library, trash), prefixed pid, and name if known.
+type JobTargetDTO struct {
+	Type string
+	PID  string
+	Name string
 }
 
 // ScanTallyDTO is what a scan did, in files.

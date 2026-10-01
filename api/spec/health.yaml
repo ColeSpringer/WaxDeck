@@ -114,43 +114,9 @@ paths:
       operationId: fixHealthIssues
       summary: Bulk-fix a health rule
       description: >
-        Starts the fix that matches one rule, across the named items or,
-        when `itemPids` is absent, every item currently failing the rule.
-        Only a rule the summary reports `fixable` has one; any other
-        answers `invalid-request` naming the rule, and the summary's
-        `fixBlocked` says what the install lacks for a rule that could
-        be fixed with it. Administrators only.
-
-
-        An unscoped fix of `missing-art`, `missing-lyrics`,
-        `missing-genre`, `missing-narrator` or `missing-asin` runs the
-        catalog's enrichment pass as a catalog job whose pid is `jobPid`,
-        with those of the phases that fill the rule which this server
-        runs forced to re-ask everything they reach (either of
-        `missing-art`'s two picture phases is enough); the pass's other
-        phases walk their ordinary sweeps, as any pass does.
-        `missing-genre` re-asks MusicBrainz about every album. A scoped
-        fix, and every fix of `path-mismatch` or `write-unsynced`, runs
-        as a `health-fix` tool task whose id is `taskId`, working item
-        by item. Either runs in the background and is listed where its
-        kind is (`GET /jobs`, `GET /tools/tasks`); on finishing it
-        re-checks the items it reached (a pass, every item failing the
-        rule) and files a `health-fix-finished` notification for the
-        administrator who started it, saying what it filled or why it
-        failed. The `health` sync marker goes out when a fix starts
-        and when its re-check lands, and the rule's `fixing` is true in
-        between. The score waits for the next full sweep. `queued` is
-        the number of items the fix set out to reach. While an
-        enrichment pass is running, another fix that needs one answers
-        `conflict`, as does any fix for a rule whose `fixing` is true.
-
-
-        The fixes of `path-mismatch` and `write-unsynced` write files:
-        while the server is read-only they answer `read-only` (and the
-        summary reports them blocked), and a library flagged read-only
-        on its own keeps its files as they are, its items counted as
-        skipped. A fix already running when the server goes read-only
-        skips what it has not reached.
+        Fixes one `fixable` rule across `itemPids` or every failing item. An
+        unscoped metadata fix is an enrichment job (`jobPid`) over its rule's
+        phases; the rest is a `health-fix` task (`taskId`). Administrators only.
       tags: [health]
       requestBody:
         required: true

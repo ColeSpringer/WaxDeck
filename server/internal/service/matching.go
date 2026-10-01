@@ -741,6 +741,9 @@ func (l *Library) libraryByPID(ctx context.Context, pid model.PID) (*model.Libra
 
 // DrainMatchQueue runs one identify job; true means it did work.
 func (l *Library) DrainMatchQueue(ctx context.Context) bool {
+	if l.Maintenance() {
+		return false
+	}
 	now := time.Now()
 	const (
 		lease       = 10 * time.Minute

@@ -68,12 +68,13 @@ type trackFactsCache struct {
 	rows  []TrackFacts
 }
 
-// CatalogTailSeq reports the change-feed position the service has
-// consumed to; cache layers key on it.
+// CatalogTailSeq is the key cache layers and Subsonic's lastModified
+// read: the feed position under the generation mint count, packed high
+// so it only grows, across a replaced catalog too. Holds while tail < 2^40.
 func (l *Library) CatalogTailSeq() int64 {
 	l.feed.mu.Lock()
 	defer l.feed.mu.Unlock()
-	return l.feed.tail
+	return l.feed.mints<<40 | l.feed.tail
 }
 
 // TrackFacts sweeps every music track visible to the caller. Only the

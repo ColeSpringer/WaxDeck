@@ -1867,6 +1867,28 @@ void main() {
     expect(repo.playlistMembers[empty.pid], [_track.pid]);
   });
 
+  // A toast would sit under the sheet, which stays open.
+  testWidgets('a refused add is said inside the sheet', (tester) async {
+    final repo = FakeRepository(items: const [_track]);
+    final gone = await repo.createPlaylist(name: 'Gone', kind: 'static');
+    await tester.pumpWidget(
+      _host(repo, const AddToPlaylistSheet(item: _track)),
+    );
+    await tester.pumpAndSettle();
+    repo.playlistsByPid.remove(gone.pid);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.addToPlaylistTarget(gone.pid)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(AddToPlaylistSheet),
+        matching: find.text('That is not here any more.'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('the sheet makes a new list and drops the item in it', (
     tester,
   ) async {

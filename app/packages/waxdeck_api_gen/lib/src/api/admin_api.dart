@@ -26,9 +26,11 @@ import 'package:waxdeck_api_gen/src/model/job_list.dart';
 import 'package:waxdeck_api_gen/src/model/libraries.dart';
 import 'package:waxdeck_api_gen/src/model/library_create.dart';
 import 'package:waxdeck_api_gen/src/model/library_created.dart';
+import 'package:waxdeck_api_gen/src/model/library_profile.dart';
 import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/migration_create.dart';
 import 'package:waxdeck_api_gen/src/model/migration_export.dart';
+import 'package:waxdeck_api_gen/src/model/model_library.dart';
 import 'package:waxdeck_api_gen/src/model/rescan_options.dart';
 import 'package:waxdeck_api_gen/src/model/restore_plan.dart';
 import 'package:waxdeck_api_gen/src/model/schedule.dart';
@@ -798,7 +800,7 @@ class AdminApi {
   }
 
   /// Empty the trash
-  /// Permanently deletes every active trashed file and reports what was reclaimed. Irreversible. Refused with &#x60;read-only&#x60; while the server is read-only or a read-only library holds a trashed file, since the pass cannot leave one library out; the retention sweep waits the same way. Administrators only. 
+  /// Permanently deletes every trashed file and reports what was reclaimed, skipping and counting a read-only library&#39;s entries; &#x60;read-only&#x60; while the server is read-only. Administrators only. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -1294,92 +1296,6 @@ class AdminApi {
     }
 
     return Response<Job>(
-      data: _responseData,
-      headers: _response.headers,
-      isRedirect: _response.isRedirect,
-      requestOptions: _response.requestOptions,
-      redirects: _response.redirects,
-      statusCode: _response.statusCode,
-      statusMessage: _response.statusMessage,
-      extra: _response.extra,
-    );
-  }
-
-  /// Read a library&#39;s read-only mode
-  /// Whether the library refuses writes. The effective state is this flag or the server-wide &#x60;readOnly&#x60; setting; the response reports the per-library flag only. Administrators only. 
-  ///
-  /// Parameters:
-  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
-  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
-  /// * [headers] - Can be used to add additional headers to the request
-  /// * [extras] - Can be used to add flags to the request
-  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
-  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
-  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
-  ///
-  /// Returns a [Future] containing a [Response] with a [LibraryReadOnly] as data
-  /// Throws [DioException] if API call or serialization fails
-  Future<Response<LibraryReadOnly>> getLibraryReadOnly({ 
-    required String pid,
-    CancelToken? cancelToken,
-    Map<String, dynamic>? headers,
-    Map<String, dynamic>? extra,
-    ValidateStatus? validateStatus,
-    ProgressCallback? onSendProgress,
-    ProgressCallback? onReceiveProgress,
-  }) async {
-    final _path = r'/libraries/{pid}/read-only'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
-    final _options = Options(
-      method: r'GET',
-      headers: <String, dynamic>{
-        ...?headers,
-      },
-      extra: <String, dynamic>{
-        'secure': <Map<String, String>>[
-          {
-            'type': 'apiKey',
-            'name': 'cookieAuth',
-            'keyName': 'waxdeck_session',
-            'where': '',
-          },{
-            'type': 'http',
-            'scheme': 'bearer',
-            'name': 'bearerAuth',
-          },
-        ],
-        ...?extra,
-      },
-      validateStatus: validateStatus,
-    );
-
-    final _response = await _dio.request<Object>(
-      _path,
-      options: _options,
-      cancelToken: cancelToken,
-      onSendProgress: onSendProgress,
-      onReceiveProgress: onReceiveProgress,
-    );
-
-    LibraryReadOnly? _responseData;
-
-    try {
-      final rawResponse = _response.data;
-      _responseData = rawResponse == null ? null : _serializers.deserialize(
-        rawResponse,
-        specifiedType: const FullType(LibraryReadOnly),
-      ) as LibraryReadOnly;
-
-    } catch (error, stackTrace) {
-      throw DioException(
-        requestOptions: _response.requestOptions,
-        response: _response,
-        type: DioExceptionType.unknown,
-        error: error,
-        stackTrace: stackTrace,
-      );
-    }
-
-    return Response<LibraryReadOnly>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,
@@ -2104,7 +2020,7 @@ class AdminApi {
   }
 
   /// List recent catalog jobs
-  /// Recent server-run catalog jobs (scans, analysis, enrichment, organize runs, deletes), newest first. Bounded by &#x60;limit&#x60; rather than cursor-paged (a recent-history window, not a mirrorable list), except that a job still running is always listed, first, however many newer jobs have pushed it out of the window. The live counterpart of the tool task log for engine-side work; the &#x60;job&#x60; sync marker says when to read it again. Administrators only. 
+  /// Recent catalog jobs, newest first: &#x60;limit&#x60; of them, after any still running. A finished targeted job is left out; read it by pid. The &#x60;job&#x60; sync marker says when to read again. Administrators only. 
   ///
   /// Parameters:
   /// * [limit] - Maximum jobs returned.
@@ -2676,7 +2592,7 @@ class AdminApi {
   }
 
   /// Purge one trashed file
-  /// Permanently deletes a single trashed file and reports the bytes it reclaimed. Irreversible; the age-based retention sweep (&#x60;trashRetentionDays&#x60;) purges the same way in bulk. A read-only library&#39;s entry is refused with &#x60;read-only&#x60;. Administrators only. 
+  /// Permanently deletes one trashed file and reports the bytes it reclaimed; the &#x60;trashRetentionDays&#x60; sweep does the same in bulk. A read-only library&#39;s entry answers &#x60;read-only&#x60;. Administrators only. 
   ///
   /// Parameters:
   /// * [trashId] - Trash entry PID (e.g. `th-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -3400,7 +3316,7 @@ class AdminApi {
   }
 
   /// Restore a trashed file
-  /// Moves the file back to its original path and re-catalogs it, un-archiving its item. Refuses when the original path is occupied (&#x60;conflict&#x60;), and when it points into the internal podcast download tree, which owns its own files: entries left there by older versions come back by re-downloading the episode, and purge and expiry still apply to them. The trash sits under each library&#39;s root, so a read-only library&#39;s entries are refused with &#x60;read-only&#x60;. Administrators only. 
+  /// Moves the file back to its path and re-catalogs it; an entry from the podcast download tree comes back by re-downloading its episode instead. Administrators only. 
   ///
   /// Parameters:
   /// * [trashId] - Trash entry PID (e.g. `th-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -3457,8 +3373,116 @@ class AdminApi {
     return _response;
   }
 
+  /// Set a managed library&#39;s organize profile
+  /// The organize profile a managed library is laid out by when a pass names none. An unmanaged library or an unknown profile is &#x60;invalid-request&#x60;. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [libraryProfile] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ModelLibrary] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ModelLibrary>> setLibraryProfile({ 
+    required String pid,
+    required LibraryProfile libraryProfile,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/libraries/{pid}/profile'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'PUT',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(LibraryProfile);
+      _bodyData = _serializers.serialize(libraryProfile, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ModelLibrary? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ModelLibrary),
+      ) as ModelLibrary;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ModelLibrary>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Set a library&#39;s read-only mode
-  /// A read-only library refuses uploads, file write-back, deletion, restoring or purging its trash, and the file tools with code &#x60;read-only&#x60;, while reads, playback, and per-user state (stars, progress, playlists) keep working. For media mounted read-only on principle. Organizing and the path and tag health fixes leave its files where they are, and edits that write into every member file of an album, a release group or an artist are refused with &#x60;read-only&#x60; while any library is read-only, since they can reach every library. Podcast libraries need a writable root for episode fetching: the flag refuses fetches and download removal, and holds the fetch queue and download retention until it clears. Administrators only. 
+  /// Uploads, deletion, the file tools and its trash entries answer &#x60;read-only&#x60;; write-back, organizing and emptying the trash skip its files. The podcast library is &#x60;invalid-request&#x60;. Administrators only. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

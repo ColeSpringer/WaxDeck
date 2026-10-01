@@ -44,9 +44,9 @@ understand, or declares none for a target type it knows, is skipped
 with a log line instead - that is version skew,
 not misconfiguration.
 
-The catalog's own names are taken: its built-ins' `musicbrainz`,
-`coverartarchive`, `listenbrainz` and `lrclib`, and the marker labels
-`musicbrainz:edition` and `none`.
+The names the catalog reserves are taken, read from the catalog itself:
+today its built-ins' `musicbrainz`, `coverartarchive`, `listenbrainz`
+and `lrclib`, and the marker labels `musicbrainz:edition` and `none`.
 
 ## Semantics worth knowing
 

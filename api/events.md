@@ -87,8 +87,9 @@ Resync:
 ```
 
 Continuity was lost for the named stream, or for every stream when `topic`
-is absent (this connection's bounded send queue overflowed, or retained
-change history no longer reaches the client's cursor). The client drops the
+is absent (this connection's bounded send queue overflowed, retained
+change history no longer reaches the client's cursor, or the catalog was
+replaced by a restore, which moves what the user stream hydrates too). The client drops the
 affected mirror halves, re-mirrors through the sync endpoints (snapshot for
 `catalog`, re-mint and re-hydrate for `user`), then closes the socket,
 reconnects, and resubscribes with the fresh cursors. Change-log pruning and
@@ -122,9 +123,12 @@ plus two cursorless topics:
   which is not news; job markers go to the administrators once when a job
   ends and, for a scan, analysis, enrichment, organize run or emptying the
   trash, when it is first seen, crosses another five percent of progress
-  or changes its message (at most every fifteen seconds). The pid-less
-  `health` marker reaches every account when a sweep is queued, finishes
-  or fails, and when a fix starts or finishes.
+  or changes its message (at most every fifteen seconds); a targeted
+  job's markers go only to whoever started it while it runs, and its end
+  to every administrator as well. The pid-less `health` marker reaches
+  every account when a sweep is queued, finishes or fails, and when a fix
+  starts or finishes; the pid-less `libraries` marker reaches every
+  account when a library is added, restored or changed, from anywhere.
 - `player` (no cursor): the caller's visible player-endpoint and
   playback-session *lists* changed (an endpoint appeared or went offline,
   a session started, ended, or moved to another endpoint, or a session's

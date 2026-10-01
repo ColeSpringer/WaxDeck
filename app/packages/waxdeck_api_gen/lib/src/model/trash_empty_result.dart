@@ -14,6 +14,7 @@ part 'trash_empty_result.g.dart';
 /// * [purged] - Files permanently deleted.
 /// * [errored] - Files that could not be purged (retry later).
 /// * [reclaimedBytes] - Disk space reclaimed.
+/// * [skippedReadOnly] - Entries left in the trash because their library is read-only.
 @BuiltValue()
 abstract class TrashEmptyResult implements Built<TrashEmptyResult, TrashEmptyResultBuilder> {
   /// Files permanently deleted.
@@ -27,6 +28,10 @@ abstract class TrashEmptyResult implements Built<TrashEmptyResult, TrashEmptyRes
   /// Disk space reclaimed.
   @BuiltValueField(wireName: r'reclaimedBytes')
   int get reclaimedBytes;
+
+  /// Entries left in the trash because their library is read-only.
+  @BuiltValueField(wireName: r'skippedReadOnly')
+  int get skippedReadOnly;
 
   TrashEmptyResult._();
 
@@ -64,6 +69,11 @@ class _$TrashEmptyResultSerializer implements PrimitiveSerializer<TrashEmptyResu
     yield r'reclaimedBytes';
     yield serializers.serialize(
       object.reclaimedBytes,
+      specifiedType: const FullType(int),
+    );
+    yield r'skippedReadOnly';
+    yield serializers.serialize(
+      object.skippedReadOnly,
       specifiedType: const FullType(int),
     );
   }
@@ -109,6 +119,13 @@ class _$TrashEmptyResultSerializer implements PrimitiveSerializer<TrashEmptyResu
             specifiedType: const FullType(int),
           ) as int;
           result.reclaimedBytes = valueDes;
+          break;
+        case r'skippedReadOnly':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.skippedReadOnly = valueDes;
           break;
         default:
           unhandled.add(key);

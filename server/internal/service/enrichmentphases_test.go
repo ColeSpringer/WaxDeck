@@ -182,7 +182,7 @@ func TestEnrichmentPhasesFollowTheCatalogsOwnRule(t *testing.T) {
 			// The library is empty, so an accepted force walks nothing.
 			for _, name := range apiPhases() {
 				if !slices.Contains(st.Phases, name) {
-					_, err := svc.RunEnrichment(ctx, uc, false, []string{name})
+					_, err := svc.RunEnrichment(ctx, uc, false, []string{name}, nil)
 					if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), "the "+name+" phase") {
 						t.Errorf("forcing %s, not listed = %v, want it refused by name", name, err)
 					}
@@ -263,15 +263,15 @@ func TestRunEnrichmentForcePhases(t *testing.T) {
 	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
 		c.EnrichmentProviders = []enrich.Provider{fakeCapProvider{name: "faces", caps: enrich.CapArtistArt}}
 	})
-	if _, err := svc.RunEnrichment(ctx, uc, true, []string{"artist-art"}); KindOf(err) != KindInvalid {
+	if _, err := svc.RunEnrichment(ctx, uc, true, []string{"artist-art"}, nil); KindOf(err) != KindInvalid {
 		t.Errorf("force beside forcePhases = %v, want invalid", err)
 	}
-	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"everything"}); KindOf(err) != KindInvalid {
+	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"everything"}, nil); KindOf(err) != KindInvalid {
 		t.Errorf("an unknown phase = %v, want invalid", err)
 	}
 	// A phase this server does not run is refused in its own knobs'
 	// words, not the catalog's.
-	_, err := svc.RunEnrichment(ctx, uc, false, []string{"releases"})
+	_, err := svc.RunEnrichment(ctx, uc, false, []string{"releases"}, nil)
 	if KindOf(err) != KindUnsupported {
 		t.Fatalf("an unrunnable phase = %v, want unsupported", err)
 	}
@@ -288,13 +288,13 @@ func TestRunEnrichmentForcePhases(t *testing.T) {
 	// Both art backfills open on covers or auxiliary art, and the
 	// refusal says both.
 	for _, phase := range []string{"group-art", "album-art"} {
-		_, err = svc.RunEnrichment(ctx, uc, false, []string{phase})
+		_, err = svc.RunEnrichment(ctx, uc, false, []string{phase}, nil)
 		if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), "WAXDECK_ENRICHMENT_CONTACT") ||
 			!strings.Contains(err.Error(), "auxiliary art") {
 			t.Errorf("%s refusal = %v", phase, err)
 		}
 	}
-	pid, err := svc.RunEnrichment(ctx, uc, false, []string{"artist-art"})
+	pid, err := svc.RunEnrichment(ctx, uc, false, []string{"artist-art"}, nil)
 	if err != nil || !strings.HasPrefix(pid, PrefixJob+"-") {
 		t.Fatalf("a runnable phase = %q, %v; want a job", pid, err)
 	}
@@ -440,7 +440,7 @@ func TestAPhaseRefusalWithTheContactSetDoesNotAskForIt(t *testing.T) {
 		"lyrics":   "switched off",
 		"releases": "WAXDECK_ENRICHMENT_MATCH_RELEASES",
 	} {
-		_, err := svc.RunEnrichment(ctx, uc, false, []string{phase})
+		_, err := svc.RunEnrichment(ctx, uc, false, []string{phase}, nil)
 		if KindOf(err) != KindUnsupported || !strings.Contains(err.Error(), want) ||
 			strings.Contains(err.Error(), "WAXDECK_ENRICHMENT_CONTACT") {
 			t.Errorf("forcing %s = %v; want it to say %s and not ask for the contact", phase, err, want)
@@ -490,7 +490,7 @@ func TestARefusalBlamesOnlySwitchesThatMatter(t *testing.T) {
 	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", false}, {"b", true}, {"fanart", true}}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := svc.RunEnrichment(ctx, uc, false, []string{"book-fields"})
+	_, err := svc.RunEnrichment(ctx, uc, false, []string{"book-fields"}, nil)
 	if KindOf(err) != KindUnsupported || strings.Contains(err.Error(), "switched off") {
 		t.Errorf("forcing book-fields with a lyrics source off = %v, want no blame on the switch", err)
 	}

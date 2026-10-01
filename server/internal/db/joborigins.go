@@ -61,6 +61,22 @@ func (d *DB) DeleteJobOrigin(ctx context.Context, pid string) (string, error) {
 	return rule, nil
 }
 
+// JobOriginGet reads a job's origin without claiming it; ErrNotFound
+// when there is none.
+func (d *DB) JobOriginGet(ctx context.Context, pid string) (JobOrigin, error) {
+	var o JobOrigin
+	err := d.r.QueryRowContext(ctx, `
+		SELECT pid, user_id, rule, created_at_ns FROM job_origins WHERE pid = ?`, pid).Scan(
+		&o.PID, &o.UserID, &o.Rule, &o.CreatedAtNS)
+	if errors.Is(err, sql.ErrNoRows) {
+		return JobOrigin{}, ErrNotFound
+	}
+	if err != nil {
+		return JobOrigin{}, fmt.Errorf("db: reading job origin: %w", err)
+	}
+	return o, nil
+}
+
 // HasJobOrigin reports whether anyone waits to hear a job ended.
 func (d *DB) HasJobOrigin(ctx context.Context, pid string) (bool, error) {
 	var n int

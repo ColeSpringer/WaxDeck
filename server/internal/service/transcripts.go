@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/source"
 	"github.com/colespringer/waxbin/waxerr"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -176,13 +177,13 @@ func (l *Library) fetchTranscript(ctx context.Context, showPID model.PID, rawURL
 	return parseTranscript(body, declaredType, resp.Header.Get("Content-Type"), rawURL)
 }
 
-// hostFailure classes a failure to read a feed-side host as that host's,
-// the class a provider gives its own, or canceled once the caller is.
+// hostFailure marks a failure to read a feed-side host as the feed's, the
+// way the catalog marks its providers', or canceled once the caller is.
 func hostFailure(ctx context.Context, op string, err error) error {
 	if ctx.Err() != nil {
 		return waxerr.FromContext(op, err, waxerr.CodeCanceled)
 	}
-	return waxerr.Wrap(waxerr.CodeIO, op, err)
+	return &source.ProviderError{SourceType: model.SourceRSS, Op: "fetch", Err: waxerr.Wrap(waxerr.CodeIO, op, err)}
 }
 
 // transcriptClient builds the guarded HTTP client once: redirects

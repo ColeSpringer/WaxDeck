@@ -5,11 +5,9 @@ paths:
       operationId: listOrganizeProfiles
       summary: List organize profiles
       description: >
-        The organize profiles the server offers: the catalog's
-        built-in `waxbin-native` layout. Organizing moves files within
-        managed libraries only, so the listing also counts them; with
-        none, a preview or an apply answers `invalid-request`.
-        Read-only.
+        The built-in `waxbin-native` layout and the saved profiles, each
+        with sample paths, and how many libraries are managed (with none,
+        organizing answers `invalid-request`). Administrators only.
       tags: [organize]
       responses:
         "200":
@@ -25,23 +23,106 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /organize/profiles/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        description: The profile name, without `/`, `\`, `?` or `#`.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+    put:
+      operationId: putOrganizeProfile
+      summary: Save an organize profile
+      description: >
+        Saves the profile, replacing one of the same name; a built-in's
+        name overrides it. The catalog takes it at once. A template that
+        does not parse is `invalid-request`. Administrators only.
+      tags: [organize]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizeProfileInput"
+      responses:
+        "200":
+          description: The saved profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizeProfile"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: deleteOrganizeProfile
+      summary: Delete an organize profile
+      description: >
+        Deletes a saved profile or a built-in's override. A built-in is
+        `invalid-request`, and a profile a managed library uses is
+        `conflict`. Administrators only.
+      tags: [organize]
+      responses:
+        "204":
+          description: Deleted.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /organize/profiles/preview:
+    post:
+      operationId: previewOrganizeProfile
+      summary: Render an unsaved profile's samples
+      description: >
+        Where the profile would lay out the sample track, book and episode,
+        without saving it. A template that does not parse is
+        `invalid-request`. Administrators only.
+      tags: [organize]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizeProfilePreview"
+      responses:
+        "200":
+          description: The sample paths.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizeSample"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /organize/preview:
     post:
       operationId: previewOrganize
       summary: Dry-run an organize pass
       description: >
-        Plans the moves and renames a profile would make for the
-        named items (or every managed library when `itemPids` is
-        absent) without touching anything. A move out of a read-only
-        library, or any move while the server is read-only, is held
-        back rather than planned, and `held` counts those. The
-        response carries the first
-        five hundred actions plus the total, so a whole-library
-        preview stays a bounded page; sidecars (covers, lyrics, cue
-        sheets) ride along with their file and are not listed
-        separately. Path templates are sandboxed upstream (per
-        segment sanitizing; a template cannot escape the library
-        root).
+        Plans a profile's moves for `itemPids`, or every managed library,
+        touching nothing; read-only files are counted rather than planned.
+        Lists the first 500 actions and the total. Administrators only.
       tags: [organize]
       requestBody:
         required: true
@@ -70,15 +151,9 @@ paths:
       operationId: applyOrganize
       summary: Apply an organize pass
       description: >
-        Plans and applies the moves in one call (the plan is always
-        recomputed server-side; a stale preview cannot apply). Moves
-        are crash-safe per file and locked fields are respected. A
-        read-only library's files stay where they are and count as
-        `held`; while the whole server is read-only the apply is
-        refused with `read-only`.
-        Whole-library passes on large libraries take a while; the
-        request runs synchronously and reports the full outcome.
-        Administrators only.
+        Recomputes the plan and applies it synchronously, crash-safe per file
+        and respecting locked fields; read-only libraries stay put, and a
+        read-only server answers `read-only`. Administrators only.
       tags: [organize]
       requestBody:
         required: true
@@ -124,33 +199,109 @@ components:
 
     OrganizeProfile:
       type: object
-      description: One organize profile.
-      required: [name]
+      description: One organize profile, its templates after inheritance.
+      required: [name, musicTemplate, audiobookTemplate, podcastTemplate, tagWrite, builtIn, sample]
       properties:
         name:
           type: string
           description: The profile name organize requests reference.
         musicTemplate:
           type: string
-          description: Path template for music, when set.
+          description: Path template for music.
         audiobookTemplate:
           type: string
-          description: Path template for audiobooks, when set.
+          description: Path template for audiobooks.
         podcastTemplate:
           type: string
-          description: Path template for podcast files, when set.
+          description: Path template for podcast files.
         tagWrite:
           type: boolean
           description: Whether organizing also writes tags.
+        builtIn:
+          type: boolean
+          description: A built-in no saved profile overrides; it cannot be deleted.
+        sample:
+          $ref: "#/components/schemas/OrganizeSample"
+        saved:
+          $ref: "#/components/schemas/OrganizeTemplates"
+
+    OrganizeTemplates:
+      type: object
+      description: >
+        The templates a saved profile sets itself; an empty one inherits.
+        Absent for a built-in nothing overrides.
+      required: [musicTemplate, audiobookTemplate, podcastTemplate]
+      properties:
+        musicTemplate:
+          type: string
+        audiobookTemplate:
+          type: string
+        podcastTemplate:
+          type: string
+
+    OrganizeSample:
+      type: object
+      description: >
+        Where a profile lays out a fixed sample track, book and episode; an
+        empty path is a template that renders none for that sample.
+      required: [music, audiobook, podcast]
+      properties:
+        music:
+          type: string
+          example: Test Ensemble/Signal Garden (2024)/1-03 - Amber Waves.flac
+        audiobook:
+          type: string
+        podcast:
+          type: string
+
+    OrganizeProfileInput:
+      type: object
+      description: >
+        A profile to save. An empty or absent template inherits the
+        built-in of the same name, or the native layout.
+      properties:
+        musicTemplate:
+          type: string
+          maxLength: 1024
+        audiobookTemplate:
+          type: string
+          maxLength: 1024
+        podcastTemplate:
+          type: string
+          maxLength: 1024
+        tagWrite:
+          type: boolean
+          default: false
+
+    OrganizeProfilePreview:
+      type: object
+      description: >
+        A profile to render samples for; `name` picks what an empty
+        template inherits.
+      properties:
+        name:
+          type: string
+          maxLength: 64
+        musicTemplate:
+          type: string
+          maxLength: 1024
+        audiobookTemplate:
+          type: string
+          maxLength: 1024
+        podcastTemplate:
+          type: string
+          maxLength: 1024
+        tagWrite:
+          type: boolean
+          default: false
 
     OrganizeRequest:
       type: object
       description: The scope of an organize pass.
-      required: [profile]
       properties:
         profile:
           type: string
-          description: The profile to apply.
+          description: The profile to apply; absent lays out each library by its own.
         itemPids:
           type: array
           maxItems: 1000
@@ -161,7 +312,7 @@ components:
     OrganizePlan:
       type: object
       description: A dry-run organize plan.
-      required: [profile, totalActions, held, actions]
+      required: [profile, totalActions, held, readOnlyLibraries, actions]
       properties:
         profile:
           type: string
@@ -172,8 +323,11 @@ components:
         held:
           type: integer
           description: >
-            Moves held back because their library, or the whole server,
-            is read-only. Not in `actions` or `totalActions`.
+            Moves held back because the whole server is read-only. Not in
+            `actions` or `totalActions`.
+        readOnlyLibraries:
+          type: integer
+          description: Managed libraries left out because they are read-only.
         actions:
           type: array
           description: The first five hundred actions.
@@ -201,7 +355,7 @@ components:
     OrganizeReport:
       type: object
       description: The outcome of an applied organize pass.
-      required: [moved, skipped, held, failed]
+      required: [moved, skipped, held, readOnlyLibraries, failed]
       properties:
         moved:
           type: integer
@@ -211,7 +365,10 @@ components:
           description: Files already in place.
         held:
           type: integer
-          description: Files left where they are because their library is read-only.
+          description: Files left where they are because the whole server is read-only.
+        readOnlyLibraries:
+          type: integer
+          description: Managed libraries left alone because they are read-only.
         failed:
           type: integer
           description: Files that could not move.

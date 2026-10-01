@@ -45,3 +45,27 @@ func TestDropHealthRuleKeepsWhatASweepWrote(t *testing.T) {
 		t.Fatalf("pruned %d (%v), want the swept rows kept", n, err)
 	}
 }
+
+// A row's detail travels with it and a re-sweep that finds none clears it.
+func TestHealthRowCarriesItsDetail(t *testing.T) {
+	ctx := context.Background()
+	d := openTest(t)
+	r := HealthRow{ItemPID: "x", MediaType: "music", Rules: `["duration-mismatch"]`, RuleCount: 1, SweptAtNS: 1,
+		Detail: `{"headerMs":1000,"decodedMs":2000}`}
+	if err := d.UpsertHealthRow(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := d.HealthRowByItem(ctx, "x"); err != nil || got.Detail != r.Detail {
+		t.Fatalf("row = %+v (%v), want detail %s", got, err, r.Detail)
+	}
+	if rows, err := d.ListHealthRows(ctx, "", 0, "", "", 10); err != nil || len(rows) != 1 || rows[0].Detail != r.Detail {
+		t.Fatalf("listed %+v (%v), want the detail", rows, err)
+	}
+	r.Detail, r.SweptAtNS = "", 2
+	if err := d.UpsertHealthRow(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := d.HealthRowByItem(ctx, "x"); err != nil || got.Detail != "" {
+		t.Fatalf("row = %+v (%v), want the detail cleared", got, err)
+	}
+}

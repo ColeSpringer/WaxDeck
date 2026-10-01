@@ -15,7 +15,8 @@ part 'organize_plan.g.dart';
 /// Properties:
 /// * [profile] - The profile planned with.
 /// * [totalActions] - Moves the pass would make in total.
-/// * [held] - Moves held back because their library, or the whole server, is read-only. Not in `actions` or `totalActions`. 
+/// * [held] - Moves held back because the whole server is read-only. Not in `actions` or `totalActions`. 
+/// * [readOnlyLibraries] - Managed libraries left out because they are read-only.
 /// * [actions] - The first five hundred actions.
 /// * [tagWrite] - Whether applying would also write tags.
 @BuiltValue()
@@ -28,9 +29,13 @@ abstract class OrganizePlan implements Built<OrganizePlan, OrganizePlanBuilder> 
   @BuiltValueField(wireName: r'totalActions')
   int get totalActions;
 
-  /// Moves held back because their library, or the whole server, is read-only. Not in `actions` or `totalActions`. 
+  /// Moves held back because the whole server is read-only. Not in `actions` or `totalActions`. 
   @BuiltValueField(wireName: r'held')
   int get held;
+
+  /// Managed libraries left out because they are read-only.
+  @BuiltValueField(wireName: r'readOnlyLibraries')
+  int get readOnlyLibraries;
 
   /// The first five hundred actions.
   @BuiltValueField(wireName: r'actions')
@@ -76,6 +81,11 @@ class _$OrganizePlanSerializer implements PrimitiveSerializer<OrganizePlan> {
     yield r'held';
     yield serializers.serialize(
       object.held,
+      specifiedType: const FullType(int),
+    );
+    yield r'readOnlyLibraries';
+    yield serializers.serialize(
+      object.readOnlyLibraries,
       specifiedType: const FullType(int),
     );
     yield r'actions';
@@ -133,6 +143,13 @@ class _$OrganizePlanSerializer implements PrimitiveSerializer<OrganizePlan> {
             specifiedType: const FullType(int),
           ) as int;
           result.held = valueDes;
+          break;
+        case r'readOnlyLibraries':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.readOnlyLibraries = valueDes;
           break;
         case r'actions':
           final valueDes = serializers.deserialize(

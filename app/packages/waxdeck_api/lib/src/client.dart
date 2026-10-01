@@ -1492,16 +1492,41 @@ abstract interface class WaxDeckRepository {
   /// many libraries they can lay out.
   Future<OrganizeProfiles> listOrganizeProfiles();
 
-  /// `POST /organize/preview`: dry-runs a profile over [itemPids] or
-  /// every managed library.
+  /// `PUT /organize/profiles/{name}`: saves a profile; an empty
+  /// template inherits.
+  Future<OrganizeProfile> putOrganizeProfile(
+    String name, {
+    String musicTemplate = '',
+    String audiobookTemplate = '',
+    String podcastTemplate = '',
+    bool tagWrite = false,
+  });
+
+  /// `DELETE /organize/profiles/{name}`: deletes a saved profile.
+  Future<void> deleteOrganizeProfile(String name);
+
+  /// `POST /organize/profiles/preview`: an unsaved profile's samples.
+  Future<OrganizeSample> previewOrganizeProfile({
+    String? name,
+    String musicTemplate = '',
+    String audiobookTemplate = '',
+    String podcastTemplate = '',
+  });
+
+  /// `PUT /libraries/{pid}/profile`: the profile a managed library is
+  /// laid out by.
+  Future<LibraryInfo> setLibraryProfile(String libraryPid, String profile);
+
+  /// `POST /organize/preview`: dry-runs [profile], or each library's
+  /// own when null, over [itemPids] or every managed library.
   Future<OrganizePlan> previewOrganize({
-    required String profile,
+    String? profile,
     List<String>? itemPids,
   });
 
-  /// `POST /organize/apply`: applies a profile's moves.
+  /// `POST /organize/apply`: applies the moves, as [previewOrganize].
   Future<OrganizeReport> applyOrganize({
-    required String profile,
+    String? profile,
     List<String>? itemPids,
   });
 
@@ -1541,10 +1566,11 @@ abstract interface class WaxDeckRepository {
 
   /// `POST /library/enrichment/run`: starts a library-wide enrichment
   /// pass, returning the job pid. [force] re-asks everything,
-  /// [forcePhases] the named phases alone.
+  /// [forcePhases] the named phases alone, and [phases] walks only those.
   Future<String> runEnrichment({
     bool force = false,
     List<String> forcePhases = const [],
+    List<String> phases = const [],
   });
 
   /// `PUT /library/enrichment/sources`: the order this server's own
@@ -1860,10 +1886,6 @@ abstract interface class WaxDeckRepository {
 
   /// `GET /jobs/{pid}`: one catalog job's state and progress.
   Future<Job> getJob(String pid);
-
-  /// `GET /libraries/{pid}/read-only`: whether one library refuses
-  /// content mutations (administrators).
-  Future<bool> getLibraryReadOnly(String libraryPid);
 
   /// `PUT /libraries/{pid}/read-only`: sets one library's read-only
   /// flag, returning the stored value (administrators).
@@ -4701,8 +4723,66 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
+  Future<OrganizeProfile> putOrganizeProfile(
+    String name, {
+    String musicTemplate = '',
+    String audiobookTemplate = '',
+    String podcastTemplate = '',
+    bool tagWrite = false,
+  }) => _guard(() async {
+    // The generated client puts a path parameter in as typed.
+    final response = await _gen.getOrganizeApi().putOrganizeProfile(
+      name: Uri.encodeComponent(name),
+      organizeProfileInput: gen.OrganizeProfileInput(
+        (b) => b
+          ..musicTemplate = musicTemplate
+          ..audiobookTemplate = audiobookTemplate
+          ..podcastTemplate = podcastTemplate
+          ..tagWrite = tagWrite,
+      ),
+    );
+    return organizeProfileFromGen(_require(response.data));
+  });
+
+  @override
+  Future<void> deleteOrganizeProfile(String name) => _guard(() async {
+    await _gen.getOrganizeApi().deleteOrganizeProfile(
+      name: Uri.encodeComponent(name),
+    );
+  });
+
+  @override
+  Future<OrganizeSample> previewOrganizeProfile({
+    String? name,
+    String musicTemplate = '',
+    String audiobookTemplate = '',
+    String podcastTemplate = '',
+  }) => _guard(() async {
+    final response = await _gen.getOrganizeApi().previewOrganizeProfile(
+      organizeProfilePreview: gen.OrganizeProfilePreview(
+        (b) => b
+          ..name = name
+          ..musicTemplate = musicTemplate
+          ..audiobookTemplate = audiobookTemplate
+          ..podcastTemplate = podcastTemplate,
+      ),
+    );
+    return organizeSampleFromGen(_require(response.data));
+  });
+
+  @override
+  Future<LibraryInfo> setLibraryProfile(String libraryPid, String profile) =>
+      _guard(() async {
+        final response = await _gen.getAdminApi().setLibraryProfile(
+          pid: libraryPid,
+          libraryProfile: gen.LibraryProfile((b) => b..profile = profile),
+        );
+        return libraryInfoFromGen(_require(response.data));
+      });
+
+  @override
   Future<OrganizePlan> previewOrganize({
-    required String profile,
+    String? profile,
     List<String>? itemPids,
   }) => _guard(() async {
     final response = await _gen.getOrganizeApi().previewOrganize(
@@ -4717,7 +4797,7 @@ class WaxDeckClient implements WaxDeckRepository {
 
   @override
   Future<OrganizeReport> applyOrganize({
-    required String profile,
+    String? profile,
     List<String>? itemPids,
   }) => _guard(() async {
     final response = await _gen.getOrganizeApi().applyOrganize(
@@ -4808,12 +4888,16 @@ class WaxDeckClient implements WaxDeckRepository {
   Future<String> runEnrichment({
     bool force = false,
     List<String> forcePhases = const [],
+    List<String> phases = const [],
   }) => _guard(() async {
     final response = await _gen.getEnrichmentApi().runEnrichment(
       enrichmentRunRequest: gen.EnrichmentRunRequest((b) {
         b.force = force;
         if (forcePhases.isNotEmpty) {
           b.forcePhases.addAll(forcePhases.map(enrichmentPhaseToGen));
+        }
+        if (phases.isNotEmpty) {
+          b.phases.addAll(phases.map(enrichmentPhaseToGen));
         }
       }),
     );
@@ -5311,6 +5395,7 @@ class WaxDeckClient implements WaxDeckRepository {
       purged: body.purged,
       errored: body.errored,
       reclaimedBytes: body.reclaimedBytes,
+      skippedReadOnly: body.skippedReadOnly,
     );
   });
 
@@ -5428,14 +5513,6 @@ class WaxDeckClient implements WaxDeckRepository {
   Future<Job> getJob(String pid) => _guard(() async {
     final response = await _gen.getAdminApi().getJob(pid: pid);
     return jobFromGen(_require(response.data));
-  });
-
-  @override
-  Future<bool> getLibraryReadOnly(String libraryPid) => _guard(() async {
-    final response = await _gen.getAdminApi().getLibraryReadOnly(
-      pid: libraryPid,
-    );
-    return _require(response.data).readOnly;
   });
 
   @override

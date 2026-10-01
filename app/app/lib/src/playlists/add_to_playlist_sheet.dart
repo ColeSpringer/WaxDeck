@@ -39,6 +39,17 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
   Set<String>? _holding;
   var _busy = false;
 
+  /// A refused add: the shell's toast would sit under this sheet.
+  String? _refusal;
+
+  void _refused(ShellMessenger messenger, String message) {
+    if (mounted) {
+      setState(() => _refusal = message);
+    } else {
+      messenger.show(message, channel: ShellChannel.playlists);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -63,7 +74,10 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
 
   Future<void> _add(Playlist playlist) async {
     if (_busy) return;
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _refusal = null;
+    });
     final navigator = Navigator.of(context);
     final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
@@ -79,7 +93,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
         channel: ShellChannel.playlists,
       );
     } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e), channel: ShellChannel.playlists);
+      _refused(messenger, explainError(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -97,7 +111,10 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
     );
     if (name == null || name.isEmpty || !mounted) return;
     // Held across the create so a second confirm posts nothing.
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _refusal = null;
+    });
     try {
       await ref
           .read(playlistsProvider.notifier)
@@ -113,7 +130,7 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
       );
     } on WaxDeckApiException catch (e) {
       // A name somebody just typed, so the server's own refusal.
-      messenger.show(explainRefusal(l10n, e), channel: ShellChannel.playlists);
+      _refused(messenger, explainRefusal(l10n, e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -145,6 +162,19 @@ class _AddToPlaylistSheetState extends ConsumerState<AddToPlaylistSheet> {
               ),
             ),
             const SizedBox(height: WaxSpace.s8),
+            if (_refusal case final refusal?)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  WaxSpace.s16,
+                  0,
+                  WaxSpace.s16,
+                  WaxSpace.s8,
+                ),
+                child: Text(
+                  refusal,
+                  style: WaxType.bodySmall.copyWith(color: colors.error),
+                ),
+              ),
             switch (playlists) {
               AsyncData() when targets.isEmpty => Padding(
                 padding: const EdgeInsets.fromLTRB(

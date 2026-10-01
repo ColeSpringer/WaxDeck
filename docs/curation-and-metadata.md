@@ -414,9 +414,10 @@ and ASINs on books, genres outside the canonical tree, files whose
 paths disagree with the organize template, files whose tags lag the
 catalog, legacy-only tag values, and corrupt audio. Files whose
 header states a length the audio does not have (off by more than two
-seconds and two percent) are listed with both lengths, naming the part
-of a book or, for a cue-carved track, the whole file; the check reads
-the analyze pass's measurements, so it covers analyzed files only. The
+seconds and two percent) are listed with both lengths as the sweep
+found them, naming the part of a book or, for a cue-carved track, the
+whole file; the check reads the analyze pass's measurements, so it
+covers analyzed files only. The
 file rules (corrupt audio, tags lagging the catalog, legacy-only tags,
 a misstated length) look at every part of a multi-file book, so one
 damaged part flags the book. Items marked unofficial are exempt from
@@ -425,12 +426,14 @@ An administrator can fix a rule in bulk where this install has what
 the fix needs; a rule it cannot fix says what is missing: the
 enrichment contact, a lyrics, artwork, genre or book source, or a
 managed library. Fixing missing art, lyrics, genres, narrators or
-ASINs across the library runs the catalog's enrichment pass as a job,
-with the phases that fill them forced to re-ask every item (a source
-for either the album's or the release group's cover is enough for
-missing art); the rest of the pass runs as an uncapped pass would,
-asking whatever lookups are pending (fixing genres re-asks MusicBrainz
-about every album). Fixing named items, paths that disagree with the
+ASINs across the library runs the catalog's enrichment pass as a job
+that walks only the phases that fill them, forced to re-ask every item,
+and the identity phases those key on (a source for either the album's or
+the release group's cover is enough for missing art; fixing genres
+re-asks MusicBrainz about every album). Fixing one item asks only the
+phases its missing pieces need, and theirs. A read-only library is left
+out of the path rule, as an in-place one is: nothing lays it out. Fixing
+named items, paths that disagree with the
 template, or tags that lag the catalog runs a health-fix task that
 works item by item, on a worker of its own so a long fix holds up no
 other task. Either is listed in Tasks while it runs. When it ends, the
@@ -457,18 +460,26 @@ recoverable within the trash window.
 
 ## Organizer
 
-Template-driven renames and moves with a dry-run preview. The profile
-on offer is the catalog's built-in `waxbin-native` layout: music by
-album artist, album and numbered track; audiobooks by author, series
-and title; podcasts by show. Custom profiles are not available yet.
-Organizing works within managed libraries only (`WAXDECK_MANAGED_ROOTS`
-names them); with none, the screen says so rather than offering a
-preview. Preview checks every managed library against the profile, so
+Template-driven renames and moves with a dry-run preview. A profile
+lays out music, audiobooks and podcasts by a path template each; the
+catalog's built-in `waxbin-native` profile files music by album artist,
+album and numbered track, audiobooks by author, series and title, and
+podcasts by show. **New profile** and **Edit profile** open an editor
+for the three templates and tag writing, showing as you type where the
+profile would put a sample track, book and episode; an empty template
+keeps the built-in's, and saving a profile under the built-in's name
+overrides it. Each managed library is laid out by a profile of its own,
+chosen on the Libraries screen, and a pass either uses each library's
+own or one profile for all of them. A profile a library is laid out by
+cannot be deleted until the library moves to another. Organizing works
+within managed libraries only (`WAXDECK_MANAGED_ROOTS` names them);
+with none, the screen says so rather than offering a preview. Preview checks every managed library against the profile, so
 it is worth running even when nothing was changed on purpose: files
 added or moved by hand since the last run show up as moves. A
-read-only library's files stay where they are, and the preview and the
-result count them apart. Discard preview drops the plan, and nothing
-moves until Apply is confirmed by typing the profile's name. Sidecars (covers, lyrics, cue sheets) ride along with
+read-only library is left as it is and the preview and the result say
+how many were; while the server is read-only every move is held back. Discard preview drops the plan, and nothing
+moves until Apply is confirmed by typing the profile's name, or
+ORGANIZE for each library's own. Sidecars (covers, lyrics, cue sheets) ride along with
 their files, moves are crash safe, and templates are sandboxed per path
 segment so they cannot escape the library root. WaxDeck never fights an
 externally managed library: organizing is always explicit.

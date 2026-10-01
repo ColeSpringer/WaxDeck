@@ -594,8 +594,7 @@ func (s *Server) ListLibraries(ctx context.Context, req ListLibrariesRequestObje
 	if !ok || !p.IsAdmin() {
 		return ListLibraries403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
-	// Counting is a scan per library, so it happens only where it was
-	// asked for. Everything else here is a name and a pid.
+	// A count per library, taken only where it was asked for.
 	libs, err := s.svc.Libraries(ctx)
 	if derefBool(req.Params.Counts) {
 		libs, err = s.svc.LibrariesWithCounts(ctx)

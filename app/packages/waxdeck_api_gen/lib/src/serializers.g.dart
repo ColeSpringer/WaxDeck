@@ -158,6 +158,7 @@ Serializers _$serializers =
           ..add(ItemPermissions.serializer)
           ..add(Job.serializer)
           ..add(JobList.serializer)
+          ..add(JobTarget.serializer)
           ..add(KindFields.serializer)
           ..add(LastfmConnectStart.serializer)
           ..add(Libraries.serializer)
@@ -168,6 +169,7 @@ Serializers _$serializers =
           ..add(LibraryCreated.serializer)
           ..add(LibraryMatching.serializer)
           ..add(LibraryMatchingModeEnum.serializer)
+          ..add(LibraryProfile.serializer)
           ..add(LibraryReadOnly.serializer)
           ..add(LinkedIdentity.serializer)
           ..add(ListenBrainzConnect.serializer)
@@ -236,9 +238,13 @@ Serializers _$serializers =
           ..add(OrganizeFailure.serializer)
           ..add(OrganizePlan.serializer)
           ..add(OrganizeProfile.serializer)
+          ..add(OrganizeProfileInput.serializer)
+          ..add(OrganizeProfilePreview.serializer)
           ..add(OrganizeProfiles.serializer)
           ..add(OrganizeReport.serializer)
           ..add(OrganizeRequest.serializer)
+          ..add(OrganizeSample.serializer)
+          ..add(OrganizeTemplates.serializer)
           ..add(PasswordChange.serializer)
           ..add(Permissions.serializer)
           ..add(PlayInfo.serializer)
@@ -564,6 +570,10 @@ Serializers _$serializers =
               const FullType(EnrichmentCacheKind),
             ]),
             () => ListBuilder<EnrichmentCacheKind>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(EnrichmentPhase)]),
+            () => ListBuilder<EnrichmentPhase>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(EnrichmentPhase)]),

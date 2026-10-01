@@ -10,6 +10,7 @@ package service
 // whose decoded dimensions come with it.
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -22,7 +23,6 @@ import (
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
-	"github.com/colespringer/waxbin/organize"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
 
@@ -164,10 +164,10 @@ type HealthIssueDTO struct {
 // DurationMismatchDTO is a file's header length beside its decoded one:
 // a book's part PartIndex, or the whole file a carved track is cut from.
 type DurationMismatchDTO struct {
-	HeaderMS  int64
-	DecodedMS int64
-	PartIndex *int
-	WholeFile bool
+	HeaderMS  int64 `json:"headerMs"`
+	DecodedMS int64 `json:"decodedMs"`
+	PartIndex *int  `json:"partIndex,omitempty"`
+	WholeFile bool  `json:"wholeFile,omitempty"`
 }
 
 func (d *DurationMismatchDTO) gap() int64 {
@@ -262,7 +262,8 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 			return classify(err)
 		}
 		for _, it := range page.Items {
-			rules := l.itemHealthRules(ctx, it, unofficial[it.PID], l.itemFileRules(ctx, it, fileRules), moves[it.PID], lyricsPresent, norm)
+			fromFiles, duration := l.itemFileRules(ctx, it, fileRules)
+			rules := l.itemHealthRules(ctx, it, unofficial[it.PID], fromFiles, moves[it.PID], lyricsPresent, norm)
 			evaluated++
 			if len(rules) == 0 {
 				continue
@@ -276,6 +277,12 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 			if err != nil {
 				return &Error{Kind: KindInternal, Err: err}
 			}
+			detail := ""
+			if duration != nil && slices.Contains(rules, ruleDurationMismatch) {
+				if b, err := json.Marshal(duration); err == nil {
+					detail = string(b)
+				}
+			}
 			if err := l.db.UpsertHealthRow(ctx, wdb.HealthRow{
 				ItemPID:   string(it.PID),
 				MediaType: mediaTypeForKind(it.Kind),
@@ -284,6 +291,7 @@ func (l *Library) SweepHealth(ctx context.Context) error {
 				Rules:     string(raw),
 				RuleCount: len(rules),
 				SweptAtNS: sweepStart,
+				Detail:    detail,
 			}); err != nil {
 				return &Error{Kind: KindInternal, Err: err}
 			}
@@ -444,14 +452,17 @@ func (l *Library) unofficialItems(ctx context.Context) (map[model.PID]bool, erro
 	return out, nil
 }
 
-// fileDiagnosticRules runs the audit's persisted-diagnostic checks once
-// per sweep and buckets the findings by file path (these findings carry
-// the path, not the item pid, so the sweep matches them against each
-// item's display path). The finding message is "code: path[: detail]"
-// by upstream construction (audit diagMessage), so the leading code
-// word selects the rule. Sample is raised well past the audit default
-// of fifty so a large library is not truncated.
-func (l *Library) fileDiagnosticRules(ctx context.Context) (map[string][]string, error) {
+// fileFinding is what the audit found about one file: the rules it
+// fails and, for duration-mismatch, both lengths.
+type fileFinding struct {
+	rules               []string
+	headerMS, decodedMS int64
+}
+
+// fileDiagnosticRules runs the audit's per-file checks once per sweep, keyed
+// by file pid (or path for a finding naming none). A finding's message is
+// "code: path[: detail]" upstream, so its leading word selects the rule.
+func (l *Library) fileDiagnosticRules(ctx context.Context) (map[string]*fileFinding, error) {
 	rep, err := l.lib.Audit(ctx, waxbin.AuditOptions{
 		Only:   []model.AuditCheck{model.CheckFileDiagnostic, model.CheckCorruptAudio, model.CheckDurationMismatch},
 		Sample: 1 << 20,
@@ -459,56 +470,94 @@ func (l *Library) fileDiagnosticRules(ctx context.Context) (map[string][]string,
 	if err != nil {
 		return nil, classify(err)
 	}
-	out := map[string][]string{}
-	add := func(path, rule string) {
-		for _, r := range out[path] {
-			if r == rule {
-				return
-			}
-		}
-		out[path] = append(out[path], rule)
-	}
+	out := map[string]*fileFinding{}
 	for _, f := range rep.Findings {
-		if f.Path == "" {
-			continue // capped-summary rows carry no path
+		key := cmp.Or(string(f.FilePID), f.Path)
+		if key == "" {
+			continue // capped-summary rows name no file
+		}
+		ff := out[key]
+		if ff == nil {
+			ff = &fileFinding{}
+			out[key] = ff
+		}
+		add := func(rule string) {
+			if !slices.Contains(ff.rules, rule) {
+				ff.rules = append(ff.rules, rule)
+			}
 		}
 		switch f.Check {
 		case model.CheckCorruptAudio:
-			add(f.Path, ruleCorruptAudio)
+			add(ruleCorruptAudio)
 		case model.CheckDurationMismatch:
-			add(f.Path, ruleDurationMismatch)
+			add(ruleDurationMismatch)
+			ff.headerMS, ff.decodedMS = f.HeaderMS, f.DecodedMS
 		case model.CheckFileDiagnostic:
 			code, _, _ := strings.Cut(f.Message, ":")
 			switch model.DiagnosticCode(strings.TrimSpace(code)) {
 			case model.DiagTagWriteUnsynced, model.DiagTagWriteLost:
-				add(f.Path, ruleWriteUnsynced)
+				add(ruleWriteUnsynced)
 			case model.DiagLegacyOnlyTags:
-				add(f.Path, ruleLegacyTags)
+				add(ruleLegacyTags)
 			}
 		}
 	}
 	return out, nil
 }
 
-// itemFileRules gathers an item's file findings, which the sweep keys by
-// path: its own file's, or every part's for a multi-file book.
-func (l *Library) itemFileRules(ctx context.Context, it *model.ItemView, byPath map[string][]string) []string {
-	if it.Kind != model.KindBook || len(byPath) == 0 {
-		return byPath[it.DisplayPath]
+// findingFor is a file's finding, by pid or else by path.
+func findingFor(findings map[string]*fileFinding, filePID model.PID, path string) *fileFinding {
+	if ff := findings[string(filePID)]; filePID != "" && ff != nil {
+		return ff
 	}
-	parts, err := l.lib.ItemFiles(ctx, it.PID)
-	if err != nil || len(parts) < 2 {
-		return byPath[it.DisplayPath]
+	return findings[path]
+}
+
+// duration is the finding's two lengths, nil when it has none.
+func (ff *fileFinding) duration() *DurationMismatchDTO {
+	if ff.headerMS <= 0 && ff.decodedMS <= 0 {
+		return nil
 	}
-	var out []string
-	for _, p := range parts {
-		for _, r := range byPath[p.DisplayPath] {
-			if !slices.Contains(out, r) {
-				out = append(out, r)
+	return &DurationMismatchDTO{HeaderMS: ff.headerMS, DecodedMS: ff.decodedMS}
+}
+
+// itemFileRules gathers an item's file findings, its own file's or every
+// part's for a multi-file book, and the lengths of the file furthest off.
+func (l *Library) itemFileRules(ctx context.Context, it *model.ItemView, findings map[string]*fileFinding) ([]string, *DurationMismatchDTO) {
+	if len(findings) == 0 {
+		return nil, nil
+	}
+	if it.Kind == model.KindBook {
+		if parts, err := l.lib.ItemFiles(ctx, it.PID); err == nil && len(parts) > 1 {
+			var rules []string
+			var worst *DurationMismatchDTO
+			for i, p := range parts {
+				ff := findingFor(findings, p.FilePID, p.DisplayPath)
+				if ff == nil {
+					continue
+				}
+				for _, r := range ff.rules {
+					if !slices.Contains(rules, r) {
+						rules = append(rules, r)
+					}
+				}
+				if d := ff.duration(); d != nil && (worst == nil || d.gap() > worst.gap()) {
+					d.PartIndex = &i
+					worst = d
+				}
 			}
+			return rules, worst
 		}
 	}
-	return out
+	ff := findingFor(findings, it.FilePID, it.DisplayPath)
+	if ff == nil {
+		return nil, nil
+	}
+	d := ff.duration()
+	if d != nil {
+		d.WholeFile = it.Virtual
+	}
+	return ff.rules, d
 }
 
 // plannedMoves plans the default organize profile across the library
@@ -524,16 +573,11 @@ func (l *Library) plannedMoves(ctx context.Context) map[model.PID]bool {
 	return moves
 }
 
-// errNoOrganizeProfile is a plan asked of a catalog with no profile.
-var errNoOrganizeProfile = errInvalid("no organize profile to plan with")
-
 // readPlannedMoves is plannedMoves with its failure, for a re-check that
-// must not read a plan it could not make as nothing to move.
+// must not read a plan it could not make as nothing to move. Each library
+// plans under its own profile.
 func (l *Library) readPlannedMoves(ctx context.Context) (map[model.PID]bool, error) {
-	if len(l.lib.Profiles()) == 0 {
-		return nil, errNoOrganizeProfile
-	}
-	plan, err := l.lib.PlanOrganize(ctx, query.New(query.EntityItems).Build(), l.defaultOrganizeProfile())
+	plan, err := l.lib.PlanOrganize(ctx, query.New(query.EntityItems).Build(), waxbin.OrganizeOptions{})
 	if err != nil {
 		return nil, classify(err)
 	}
@@ -545,22 +589,6 @@ func (l *Library) readPlannedMoves(ctx context.Context) (map[model.PID]bool, err
 		}
 	}
 	return out, nil
-}
-
-// defaultOrganizeProfile picks the profile the sweep and the per-item
-// path fix plan with: the upstream default when present, else the first
-// name the catalog lists.
-func (l *Library) defaultOrganizeProfile() string {
-	names := l.lib.Profiles()
-	for _, n := range names {
-		if n == organize.DefaultProfileName {
-			return n
-		}
-	}
-	if len(names) > 0 {
-		return names[0]
-	}
-	return ""
 }
 
 // HealthSummaryFor reads the dashboard aggregate: the stored sweep
@@ -633,7 +661,6 @@ func (l *Library) ListHealthIssuesFor(ctx context.Context, rule, cursor string, 
 		next = encodeHealthCursor(last.RuleCount, last.Title, last.ItemPID)
 	}
 	out := make([]HealthIssueDTO, 0, len(rows))
-	byFile := map[model.PID]*DurationMismatchDTO{}
 	for _, r := range rows {
 		var rules []string
 		if jerr := json.Unmarshal([]byte(r.Rules), &rules); jerr != nil {
@@ -646,82 +673,15 @@ func (l *Library) ListHealthIssuesFor(ctx context.Context, rule, cursor string, 
 			Artist:    r.Artist,
 			Rules:     rules,
 		}
-		if slices.Contains(rules, ruleDurationMismatch) {
-			issue.Duration = l.durationMismatch(ctx, model.PID(r.ItemPID), byFile)
+		if slices.Contains(rules, ruleDurationMismatch) && r.Detail != "" {
+			var d DurationMismatchDTO
+			if json.Unmarshal([]byte(r.Detail), &d) == nil {
+				issue.Duration = &d
+			}
 		}
 		out = append(out, issue)
 	}
 	return out, next, nil
-}
-
-// durationMismatch reads the lengths duration-mismatch compares, as the
-// catalog's check does, for the item's file furthest off, or nil once none
-// is. byFile shares a file's reading among the carved tracks on a page.
-func (l *Library) durationMismatch(ctx context.Context, itemPID model.PID, byFile map[model.PID]*DurationMismatchDTO) *DurationMismatchDTO {
-	it, err := l.lib.Get(ctx, itemPID)
-	if err != nil {
-		return nil
-	}
-	if parts, err := l.itemParts(ctx, it); err == nil && len(parts) > 1 {
-		return l.bookDurationMismatch(ctx, it.PID, parts)
-	}
-	d, ok := byFile[it.FilePID]
-	if !ok {
-		d = l.fileDurationMismatch(ctx, it.FilePID)
-		byFile[it.FilePID] = d
-	}
-	if d == nil {
-		return nil
-	}
-	out := *d
-	out.WholeFile = it.Virtual
-	return &out
-}
-
-// bookDurationMismatch reads every part's lengths at once: the header's
-// from the book, the decoded one from its waveforms.
-func (l *Library) bookDurationMismatch(ctx context.Context, itemPID model.PID, parts []model.BookPart) *DurationMismatchDTO {
-	stored, err := l.lib.PeaksForItem(ctx, itemPID)
-	if err != nil {
-		return nil
-	}
-	decoded := make(map[model.PID]int64, len(stored))
-	for _, p := range stored {
-		decoded[p.FilePID] = p.Peaks.DurationMS()
-	}
-	var worst *DurationMismatchDTO
-	for i, part := range parts {
-		if d := mismatchOf(part.DurationMS, decoded[part.FilePID]); d != nil && (worst == nil || d.gap() > worst.gap()) {
-			d.PartIndex = &i
-			worst = d
-		}
-	}
-	return worst
-}
-
-func (l *Library) fileDurationMismatch(ctx context.Context, filePID model.PID) *DurationMismatchDTO {
-	f, err := l.lib.File(ctx, filePID)
-	if err != nil {
-		return nil
-	}
-	pk, err := l.lib.PeaksForFile(ctx, filePID)
-	if err != nil || pk == nil {
-		return nil
-	}
-	return mismatchOf(f.DurationMS, pk.DurationMS())
-}
-
-// mismatchOf is the catalog's check on one file's lengths: off by more
-// than two seconds and two percent of the header's.
-func mismatchOf(headerMS, decodedMS int64) *DurationMismatchDTO {
-	if headerMS <= 0 || decodedMS <= 0 {
-		return nil
-	}
-	d := &DurationMismatchDTO{HeaderMS: headerMS, DecodedMS: decodedMS}
-	if d.gap() <= max(2000, headerMS/50) {
-		return nil
-	}
-	return d
 }
 
 // healthAPIPID renders a stored bare item pid with the API prefix its
@@ -805,13 +765,11 @@ func (l *Library) RunHealthSweep(ctx context.Context) error {
 	return err
 }
 
-// sweepEnded settles a sweep that answered req (empty when none asked).
-// A failure answers the request too: kept, it would run again every
-// minute and read as sweeping until one landed. One cut short by the
-// server stopping keeps it for the next start. Accounts hear of a landed
-// sweep, a requested one's end, and the first failure in a run of them.
+// sweepEnded settles a sweep that answered req (empty when none asked): a
+// failure answers it too, one cut short by a stop or a hand-off keeps it.
+// Accounts hear of a landing, a requested end, and a run's first failure.
 func (l *Library) sweepEnded(ctx context.Context, req string, err error) {
-	stopping := err != nil && ctx.Err() != nil
+	stopping := err != nil && (ctx.Err() != nil || KindOf(err) == KindMaintenance)
 	if req != "" && !stopping {
 		if derr := l.db.SettingDeleteIf(ctx, healthSweepReqKey, req); derr != nil {
 			l.log.Warn("health: clearing sweep request", "err", derr)
@@ -832,6 +790,9 @@ func (l *Library) sweepEnded(ctx context.Context, req string, err error) {
 // ticker loop calls this, then RunHealthSweep, synchronously on the
 // supervised worker.
 func (l *Library) HealthSweepDue(ctx context.Context) bool {
+	if l.Maintenance() {
+		return false
+	}
 	if l.SweepRequested(ctx) {
 		return true
 	}

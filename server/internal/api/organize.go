@@ -25,11 +25,96 @@ func (s *Server) ListOrganizeProfiles(ctx context.Context, _ ListOrganizeProfile
 		ManagedLibraries: profiles.ManagedLibraries,
 	}
 	for _, p := range profiles.Profiles {
-		// Templates and the tag-write flag are not readable through the
-		// catalog facade, so the listing carries names only.
-		out.Profiles = append(out.Profiles, OrganizeProfile{Name: p.Name})
+		out.Profiles = append(out.Profiles, organizeProfileJSON(p))
 	}
 	return ListOrganizeProfiles200JSONResponse(out), nil
+}
+
+func organizeProfileJSON(p service.OrganizeProfileDTO) OrganizeProfile {
+	out := OrganizeProfile{
+		Name: p.Name, MusicTemplate: p.Music, AudiobookTemplate: p.Audiobook, PodcastTemplate: p.Podcast,
+		TagWrite: p.TagWrite, BuiltIn: p.BuiltIn, Sample: organizeSampleJSON(p.Sample),
+	}
+	if p.Saved != nil {
+		out.Saved = &OrganizeTemplates{MusicTemplate: p.Saved.Music, AudiobookTemplate: p.Saved.Audiobook,
+			PodcastTemplate: p.Saved.Podcast}
+	}
+	return out
+}
+
+func organizeSampleJSON(s service.OrganizeSampleDTO) OrganizeSample {
+	return OrganizeSample{Music: s.Music, Audiobook: s.Audiobook, Podcast: s.Podcast}
+}
+
+func (s *Server) PutOrganizeProfile(ctx context.Context, req PutOrganizeProfileRequestObject) (PutOrganizeProfileResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return PutOrganizeProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a profile body is required"))}, nil
+	}
+	in := service.OrganizeProfileInput{
+		Music: deref(req.Body.MusicTemplate), Audiobook: deref(req.Body.AudiobookTemplate),
+		Podcast: deref(req.Body.PodcastTemplate), TagWrite: derefBool(req.Body.TagWrite),
+	}
+	p, err := s.svc.PutOrganizeProfile(ctx, uc, req.Name, in)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return PutOrganizeProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return PutOrganizeProfile403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return PutOrganizeProfile200JSONResponse(organizeProfileJSON(p)), nil
+}
+
+func (s *Server) DeleteOrganizeProfile(ctx context.Context, req DeleteOrganizeProfileRequestObject) (DeleteOrganizeProfileResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.svc.DeleteOrganizeProfile(ctx, uc, req.Name); err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return DeleteOrganizeProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return DeleteOrganizeProfile403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		case service.KindNotFound:
+			return DeleteOrganizeProfile404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
+		case service.KindConflict:
+			return DeleteOrganizeProfile409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return DeleteOrganizeProfile204Response{}, nil
+}
+
+func (s *Server) PreviewOrganizeProfile(ctx context.Context, req PreviewOrganizeProfileRequestObject) (PreviewOrganizeProfileResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return PreviewOrganizeProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a profile body is required"))}, nil
+	}
+	in := service.OrganizeProfileInput{
+		Music: deref(req.Body.MusicTemplate), Audiobook: deref(req.Body.AudiobookTemplate),
+		Podcast: deref(req.Body.PodcastTemplate), TagWrite: derefBool(req.Body.TagWrite),
+	}
+	sample, err := s.svc.PreviewOrganizeProfile(ctx, uc, deref(req.Body.Name), in)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return PreviewOrganizeProfile400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return PreviewOrganizeProfile403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return PreviewOrganizeProfile200JSONResponse(organizeSampleJSON(sample)), nil
 }
 
 func (s *Server) PreviewOrganize(ctx context.Context, req PreviewOrganizeRequestObject) (PreviewOrganizeResponseObject, error) {
@@ -44,7 +129,7 @@ func (s *Server) PreviewOrganize(ctx context.Context, req PreviewOrganizeRequest
 	if req.Body.ItemPids != nil {
 		pids = *req.Body.ItemPids
 	}
-	plan, err := s.svc.PreviewOrganize(ctx, uc, req.Body.Profile, pids)
+	plan, err := s.svc.PreviewOrganize(ctx, uc, deref(req.Body.Profile), pids)
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
@@ -55,11 +140,12 @@ func (s *Server) PreviewOrganize(ctx context.Context, req PreviewOrganizeRequest
 		return nil, err
 	}
 	out := OrganizePlan{
-		Profile:      plan.Profile,
-		TotalActions: plan.TotalActions,
-		Held:         plan.Held,
-		TagWrite:     ptr(plan.TagWrite),
-		Actions:      make([]OrganizeAction, 0, len(plan.Actions)),
+		Profile:           plan.Profile,
+		TotalActions:      plan.TotalActions,
+		Held:              plan.Held,
+		ReadOnlyLibraries: plan.ReadOnlyLibraries,
+		TagWrite:          ptr(plan.TagWrite),
+		Actions:           make([]OrganizeAction, 0, len(plan.Actions)),
 	}
 	for _, a := range plan.Actions {
 		out.Actions = append(out.Actions, OrganizeAction{ItemPid: a.ItemPID, From: a.From, To: a.To})
@@ -79,7 +165,7 @@ func (s *Server) ApplyOrganize(ctx context.Context, req ApplyOrganizeRequestObje
 	if req.Body.ItemPids != nil {
 		pids = *req.Body.ItemPids
 	}
-	rep, err := s.svc.ApplyOrganize(ctx, uc, req.Body.Profile, pids)
+	rep, err := s.svc.ApplyOrganize(ctx, uc, deref(req.Body.Profile), pids)
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
@@ -89,7 +175,8 @@ func (s *Server) ApplyOrganize(ctx context.Context, req ApplyOrganizeRequestObje
 		}
 		return nil, err
 	}
-	out := OrganizeReport{Moved: rep.Moved, Skipped: rep.Skipped, Held: rep.Held, Failed: rep.Failed}
+	out := OrganizeReport{Moved: rep.Moved, Skipped: rep.Skipped, Held: rep.Held,
+		ReadOnlyLibraries: rep.ReadOnlyLibraries, Failed: rep.Failed}
 	if len(rep.Failures) > 0 {
 		failures := make([]OrganizeFailure, 0, len(rep.Failures))
 		for _, f := range rep.Failures {

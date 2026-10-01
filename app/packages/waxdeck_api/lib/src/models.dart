@@ -4239,10 +4239,22 @@ class LibraryInfo {
     this.itemCount,
     this.streamingWarning,
     this.scanStarted,
+    this.readOnly = false,
+    this.managed = false,
+    this.profile,
   });
 
   final String pid;
   final String name;
+
+  /// The catalog keeps the library's files as they are.
+  final bool readOnly;
+
+  /// The catalog may place and move files in the library.
+  final bool managed;
+
+  /// The organize profile a managed library is laid out by.
+  final String? profile;
 
   /// The content class the library holds (`music`, `audiobook`,
   /// `mixed`), when declared.
@@ -4382,19 +4394,58 @@ class UpgradeGroup {
 class OrganizeProfile {
   const OrganizeProfile({
     required this.name,
-    this.musicTemplate,
-    this.audiobookTemplate,
-    this.podcastTemplate,
+    this.musicTemplate = '',
+    this.audiobookTemplate = '',
+    this.podcastTemplate = '',
     this.tagWrite = false,
+    this.builtIn = false,
+    this.sample = const OrganizeSample(),
+    this.saved,
   });
 
   final String name;
-  final String? musicTemplate;
-  final String? audiobookTemplate;
-  final String? podcastTemplate;
+  final String musicTemplate;
+  final String audiobookTemplate;
+  final String podcastTemplate;
 
   /// True when applying the profile also rewrites tags.
   final bool tagWrite;
+
+  /// A built-in no saved profile overrides; it cannot be deleted.
+  final bool builtIn;
+
+  /// Where the profile lays out a fixed sample track, book and episode.
+  final OrganizeSample sample;
+
+  /// What a saved profile sets itself, an empty template inheriting; null
+  /// for a built-in nothing overrides.
+  final OrganizeTemplates? saved;
+}
+
+/// A profile's three path templates.
+class OrganizeTemplates {
+  const OrganizeTemplates({
+    this.music = '',
+    this.audiobook = '',
+    this.podcast = '',
+  });
+
+  final String music;
+  final String audiobook;
+  final String podcast;
+}
+
+/// Where a profile lays out a sample track, book and episode.
+class OrganizeSample {
+  const OrganizeSample({
+    this.music = '',
+    this.audiobook = '',
+    this.podcast = '',
+  });
+
+  final String music;
+  final String audiobook;
+  final String podcast;
 }
 
 /// The server's organize profiles, and how many libraries they can lay
@@ -4425,6 +4476,7 @@ class OrganizePlan {
     required this.profile,
     required this.totalActions,
     this.held = 0,
+    this.readOnlyLibraries = 0,
     this.actions = const [],
     this.tagWrite = false,
   });
@@ -4434,9 +4486,11 @@ class OrganizePlan {
   /// Total planned moves; [actions] may be a truncated preview.
   final int totalActions;
 
-  /// Moves a read-only library, or a read-only server, holds back; not
-  /// in [totalActions].
+  /// Moves a read-only server holds back; not in [totalActions].
   final int held;
+
+  /// Managed libraries left out because they are read-only.
+  final int readOnlyLibraries;
   final List<OrganizeAction> actions;
   final bool tagWrite;
 }
@@ -4455,6 +4509,7 @@ class OrganizeReport {
     required this.moved,
     required this.skipped,
     this.held = 0,
+    this.readOnlyLibraries = 0,
     required this.failed,
     this.failures = const [],
   });
@@ -4464,8 +4519,11 @@ class OrganizeReport {
   /// Files already in place.
   final int skipped;
 
-  /// Files left where they are because their library is read-only.
+  /// Files left where they are because the server is read-only.
   final int held;
+
+  /// Managed libraries left alone because they are read-only.
+  final int readOnlyLibraries;
   final int failed;
   final List<OrganizeFailure> failures;
 }
@@ -4578,6 +4636,7 @@ class EnrichmentLastRun {
     this.tagsFailed = 0,
     this.tagsUnrepresented = 0,
     this.tagsSkipped = 0,
+    this.tagsReadOnly = 0,
     this.stalled = const [],
     this.finishedAt,
   });
@@ -4613,6 +4672,9 @@ class EnrichmentLastRun {
   final int tagsFailed;
   final int tagsUnrepresented;
   final int tagsSkipped;
+
+  /// Files a read-only library kept unwritten.
+  final int tagsReadOnly;
 
   /// Phases, in wire spelling, that ended early because every source
   /// serving them sat out the pass.
@@ -5146,11 +5208,15 @@ class Job {
     this.startedAt,
     this.finishedAt,
     this.result,
+    this.target,
   });
 
   final String pid;
   final String kind;
   final String state;
+
+  /// What a targeted job ran on; null for a whole pass.
+  final JobTarget? target;
 
   /// 0 to 1 when the job can estimate progress.
   final double? progress;
@@ -5165,6 +5231,16 @@ class Job {
   /// `missing`, `errored`, ...); null while running and for kinds that
   /// record none.
   final Map<String, Object?>? result;
+}
+
+/// What a targeted job ran on: its type (`item`, `artist`, `library`,
+/// `trash`, ...), pid, and name when the server could read one.
+class JobTarget {
+  const JobTarget({required this.type, required this.pid, this.name});
+
+  final String type;
+  final String pid;
+  final String? name;
 }
 
 /// One audit-log event, newest first in listings.
@@ -5218,10 +5294,16 @@ class TrashEntry {
     required this.sizeBytes,
     required this.trashedAt,
     this.restoredAt,
+    this.libraryPid,
+    this.libraryName,
   });
 
   final String id;
   final String? itemPid;
+
+  /// The library the file was trashed from, when the journal names one.
+  final String? libraryPid;
+  final String? libraryName;
 
   /// The original library-relative path.
   final String name;
@@ -5248,11 +5330,15 @@ class TrashEmptyResult {
     required this.purged,
     required this.errored,
     required this.reclaimedBytes,
+    this.skippedReadOnly = 0,
   });
 
   final int purged;
   final int errored;
   final int reclaimedBytes;
+
+  /// Entries left in the trash because their library is read-only.
+  final int skippedReadOnly;
 }
 
 /// One fully-addressed request a client can hand to the platform on

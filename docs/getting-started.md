@@ -271,9 +271,14 @@ log; the CLI finds it there the same way, through the catalog's
 lockfile. Operations that need the
 lock itself (rebuild, restore) put the server into a maintenance mode:
 already-playing streams keep flowing, authentication and settings stay
-live, and catalog reads answer with a typed `catalog-maintenance`
-error until the hand-off ends. The socket is a local admin plane,
-created 0600 for the server's own user.
+live, and catalog reads and writes answer with a typed
+`catalog-maintenance` error until the hand-off ends. `waxbin restore`
+takes the hand-off itself. When it replaces the catalog, the server
+maps every account to the restored catalog's users, rebuilds its
+library roots (registering a configured root the backup lacks), drops
+what it cached from the old catalog and starts a new sync generation,
+so every client re-mirrors. The socket is a local admin plane, created
+0600 for the server's own user.
 
 Build the CLI from the `waxbin` pseudo-version pinned in
 `server/go.mod`. The socket protocol is versioned and a mismatch is a

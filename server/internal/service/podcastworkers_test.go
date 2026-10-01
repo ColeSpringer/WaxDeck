@@ -42,8 +42,8 @@ func (s *failingSource) Fetch(context.Context, source.FetchRequest, io.Writer) (
 }
 
 // Only the feed's own failure walks the disable counter; the catalog's
-// trouble, a switched-off integration or a canceled sync answers by its
-// own kind. Either way the attempt is stamped, spacing the next one out.
+// trouble or a canceled sync answers by its own kind. Either way the
+// attempt is stamped, spacing the next one out.
 func TestASyncFailureCountsOnlyWhenTheFeedIsAtFault(t *testing.T) {
 	cases := []struct {
 		url    string
@@ -57,12 +57,6 @@ func TestASyncFailureCountsOnlyWhenTheFeedIsAtFault(t *testing.T) {
 		{"https://tube.example/provider", waxerr.Wrap(waxerr.CodeIO, "waxtapsource.Enumerate", errors.New("channel does not exist")), true, KindUpstream},
 		// Neither a feed nor not-modified, which the catalog refuses as IO.
 		{"https://tube.example/empty", nil, true, KindUpstream},
-		// The catalog's store classes its own failures IO, like a feed's,
-		// or returns them raw, and may join one to another.
-		{"https://tube.example/catalog", waxerr.Wrap(waxerr.CodeIO, "store.writeTx", errors.New("database or disk is full")), false, KindInternal},
-		{"https://tube.example/raw", errors.New("database or disk is full"), false, KindInternal},
-		{"https://tube.example/joined", errors.Join(waxerr.Wrap(waxerr.CodeIO, "store.UpsertFeed", errors.New("disk I/O error")), errors.New("rollback failed")), false, KindInternal},
-		{"https://tube.example/off", waxerr.New(waxerr.CodeUnsupported, "podcast", "no provider for youtube"), false, KindUnsupported},
 		{"https://tube.example/canceled", context.Canceled, false, KindInternal},
 		{"https://tube.example/maintenance", errors.New("sql: database is closed"), false, KindMaintenance},
 	}
@@ -109,6 +103,41 @@ func TestASyncFailureCountsOnlyWhenTheFeedIsAtFault(t *testing.T) {
 	}
 }
 
+// A failure is the feed's when its provider raised it; the catalog's own,
+// a switched-off source, a suspended store or a cancellation is not.
+func TestFeedAtFaultIsTheProvidersFailure(t *testing.T) {
+	t.Parallel()
+	pe := func(err error) error {
+		return &source.ProviderError{SourceType: model.SourceRSS, Op: "enumerate", Err: err}
+	}
+	for _, c := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"a host that does not answer", pe(waxerr.Wrap(waxerr.CodeIO, "netsafe.Do", errors.New("connection refused"))), true},
+		{"a document that is not a feed", pe(waxerr.New(waxerr.CodeInvalid, "podcast.ParseFeed", "not a feed")), true},
+		{"the catalog's store", waxerr.Wrap(waxerr.CodeIO, "store.writeTx", errors.New("database or disk is full")), false},
+		{"a raw database error", errors.New("database or disk is full"), false},
+		{"the catalog's own IO outside its store", waxerr.Wrap(waxerr.CodeIO, "podcast.ingestImage", errors.New("no space left on device")), false},
+		{"a provider refusing the source", pe(waxerr.New(waxerr.CodeUnsupported, "waxtapsource.Enumerate", "not a channel url")), true},
+		{"a joined store error", errors.Join(waxerr.Wrap(waxerr.CodeIO, "store.UpsertFeed", errors.New("disk I/O error")), errors.New("rollback failed")), false},
+		{"a switched-off source", waxerr.New(waxerr.CodeUnsupported, "podcast", "no acquisition provider registered for source type youtube"), false},
+		{"a suspended store", waxerr.New(waxerr.CodeUnsupported, "store.writeTx", "store is closed"), false},
+		{"a provider call canceled", pe(waxerr.Classify(waxerr.CodeCanceled, "podcast.Sync", context.Canceled)), false},
+		{"a provider answering canceled", pe(context.Canceled), false},
+	} {
+		if got := feedAtFault(context.Background(), c.err); got != c.want {
+			t.Errorf("%s: at fault = %v, want %v", c.name, got, c.want)
+		}
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if feedAtFault(ctx, pe(waxerr.New(waxerr.CodeIO, "fetch", "reset"))) {
+		t.Error("a sync whose context ended is not the feed's fault")
+	}
+}
+
 // openSyncFixture opens a service over an empty library with src as its
 // only source provider, releasing everything it opened however it ends.
 func openSyncFixture(t *testing.T, src source.Provider) (context.Context, *Library, *wdb.DB) {
@@ -151,14 +180,17 @@ func openSyncFixture(t *testing.T, src source.Provider) (context.Context, *Libra
 func TestFeedErrorsAnswerByWhoseFaultTheyAre(t *testing.T) {
 	t.Parallel()
 	l := &Library{}
+	feedErr := func(err error) error {
+		return &source.ProviderError{SourceType: model.SourceRSS, Op: "enumerate", Err: err}
+	}
 	for _, c := range []struct {
 		name string
 		err  error
 		want ErrorKind
 	}{
-		{"a host that does not answer", waxerr.Wrap(waxerr.CodeIO, "netsafe.Do", errors.New("connection refused")), KindUpstream},
-		{"a feed that is gone", waxerr.New(waxerr.CodeNotFound, "netsafe.Do", "returned HTTP 404"), KindUpstream},
-		{"a document that is not a feed", waxerr.New(waxerr.CodeInvalid, "podcast.ParseFeed", "not a recognizable RSS podcast feed"), KindInvalid},
+		{"a host that does not answer", feedErr(waxerr.Wrap(waxerr.CodeIO, "netsafe.Do", errors.New("connection refused"))), KindUpstream},
+		{"a feed that is gone", feedErr(waxerr.New(waxerr.CodeNotFound, "netsafe.Do", "returned HTTP 404")), KindUpstream},
+		{"a document that is not a feed", feedErr(waxerr.New(waxerr.CodeInvalid, "podcast.ParseFeed", "not a recognizable RSS podcast feed")), KindInvalid},
 		{"the catalog's store", waxerr.Wrap(waxerr.CodeIO, "store.UpsertFeed", errors.New("disk I/O error")), KindInternal},
 		{"a raw database error", errors.New("database or disk is full"), KindInternal},
 		{"a switched-off source", waxerr.New(waxerr.CodeUnsupported, "podcast", "no provider for youtube"), KindUnsupported},

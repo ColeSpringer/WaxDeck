@@ -13,6 +13,8 @@ class _$TrashEmptyResult extends TrashEmptyResult {
   final int errored;
   @override
   final int reclaimedBytes;
+  @override
+  final int skippedReadOnly;
 
   factory _$TrashEmptyResult([
     void Function(TrashEmptyResultBuilder)? updates,
@@ -22,6 +24,7 @@ class _$TrashEmptyResult extends TrashEmptyResult {
     required this.purged,
     required this.errored,
     required this.reclaimedBytes,
+    required this.skippedReadOnly,
   }) : super._();
   @override
   TrashEmptyResult rebuild(void Function(TrashEmptyResultBuilder) updates) =>
@@ -37,7 +40,8 @@ class _$TrashEmptyResult extends TrashEmptyResult {
     return other is TrashEmptyResult &&
         purged == other.purged &&
         errored == other.errored &&
-        reclaimedBytes == other.reclaimedBytes;
+        reclaimedBytes == other.reclaimedBytes &&
+        skippedReadOnly == other.skippedReadOnly;
   }
 
   @override
@@ -46,6 +50,7 @@ class _$TrashEmptyResult extends TrashEmptyResult {
     _$hash = $jc(_$hash, purged.hashCode);
     _$hash = $jc(_$hash, errored.hashCode);
     _$hash = $jc(_$hash, reclaimedBytes.hashCode);
+    _$hash = $jc(_$hash, skippedReadOnly.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -55,7 +60,8 @@ class _$TrashEmptyResult extends TrashEmptyResult {
     return (newBuiltValueToStringHelper(r'TrashEmptyResult')
           ..add('purged', purged)
           ..add('errored', errored)
-          ..add('reclaimedBytes', reclaimedBytes))
+          ..add('reclaimedBytes', reclaimedBytes)
+          ..add('skippedReadOnly', skippedReadOnly))
         .toString();
   }
 }
@@ -77,6 +83,11 @@ class TrashEmptyResultBuilder
   set reclaimedBytes(int? reclaimedBytes) =>
       _$this._reclaimedBytes = reclaimedBytes;
 
+  int? _skippedReadOnly;
+  int? get skippedReadOnly => _$this._skippedReadOnly;
+  set skippedReadOnly(int? skippedReadOnly) =>
+      _$this._skippedReadOnly = skippedReadOnly;
+
   TrashEmptyResultBuilder() {
     TrashEmptyResult._defaults(this);
   }
@@ -87,6 +98,7 @@ class TrashEmptyResultBuilder
       _purged = $v.purged;
       _errored = $v.errored;
       _reclaimedBytes = $v.reclaimedBytes;
+      _skippedReadOnly = $v.skippedReadOnly;
       _$v = null;
     }
     return this;
@@ -123,6 +135,11 @@ class TrashEmptyResultBuilder
             reclaimedBytes,
             r'TrashEmptyResult',
             'reclaimedBytes',
+          ),
+          skippedReadOnly: BuiltValueNullFieldError.checkNotNull(
+            skippedReadOnly,
+            r'TrashEmptyResult',
+            'skippedReadOnly',
           ),
         );
     replace(_$result);

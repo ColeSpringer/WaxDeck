@@ -534,6 +534,22 @@ const baselineSchema = `
 		value      TEXT NOT NULL,
 		updated_at_ns INTEGER NOT NULL
 	);
+	-- Names of the library roots added at runtime; the catalog owns
+	-- each root's policy. organize_profiles are the admin's layout
+	-- profiles, handed to the catalog at open.
+	CREATE TABLE library_roots (
+		path          TEXT    PRIMARY KEY,
+		name          TEXT    NOT NULL,
+		created_at_ns INTEGER NOT NULL
+	);
+	CREATE TABLE organize_profiles (
+		name          TEXT    PRIMARY KEY,
+		music         TEXT    NOT NULL DEFAULT '',
+		audiobook     TEXT    NOT NULL DEFAULT '',
+		podcast       TEXT    NOT NULL DEFAULT '',
+		tag_write     INTEGER NOT NULL DEFAULT 0,
+		updated_at_ns INTEGER NOT NULL
+	);
 
 	-- Player endpoints and playback sessions. Device endpoints (cast,
 	-- DLNA, jukebox) persist across discovery sweeps under a stable
@@ -753,7 +769,8 @@ const baselineSchema = `
 		artist      TEXT    NOT NULL DEFAULT '',
 		rules       TEXT    NOT NULL DEFAULT '[]',
 		rule_count  INTEGER NOT NULL DEFAULT 0,
-		swept_at_ns INTEGER NOT NULL
+		swept_at_ns INTEGER NOT NULL,
+		detail      TEXT    NOT NULL DEFAULT ''
 	);
 	CREATE INDEX health_index_worst ON health_index (rule_count DESC, title, item_pid);
 

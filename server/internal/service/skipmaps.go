@@ -367,14 +367,13 @@ func (l *Library) usableSource(path string) (string, error) {
 	return path, nil
 }
 
-// storageRootFor answers the configured root a path sits under, longest
-// match, or "" when none does. Read from the roots WaxDeck was given
-// rather than the catalog's attribution, which only carries roots the
-// catalog records a display path for.
+// storageRootFor answers the library root a path sits under, longest match,
+// or "" for none: the root table and podcast dir, not the catalog's
+// attribution, which only carries roots with a display path.
 func (l *Library) storageRootFor(path string) string {
 	clean := filepath.Clean(path)
 	best := ""
-	for _, dir := range append([]string{l.podcastDir}, rootPaths(l.roots)...) {
+	for _, dir := range append([]string{l.podcastDir}, rootPaths(l.libraryRoots())...) {
 		if dir == "" {
 			continue
 		}

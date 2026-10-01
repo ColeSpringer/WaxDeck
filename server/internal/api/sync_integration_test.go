@@ -1051,3 +1051,48 @@ func TestJobMarkersReachAdmins(t *testing.T) {
 		t.Fatalf("finished scan result = %v, want its counts", job.Result)
 	}
 }
+
+// A job on one target names it: restoring a trash entry names the entry,
+// and a whole scan names none. The finished targeted job leaves the list,
+// and its end reaches every administrator.
+func TestAJobListsItsTarget(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	scan := h.rescanAndWait(t)
+	pid := h.items(t, "?mediaType=music").Items[0].Pid
+	wantStatus(t, h.postJSON(t, "/api/v1/library/items/delete", map[string]any{"pids": []string{pid}, "mode": "trash"}),
+		200, "delete to trash")
+	entry := decode[TrashList](t, get(t, h.ts, "/api/v1/admin/trash", h.token)).Entries[0]
+	since := decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server", h.token)).NextSince
+	wantStatus(t, h.postJSON(t, "/api/v1/admin/trash/"+entry.Id+"/restore", nil), 204, "restore")
+
+	var restore *Job
+	for deadline := time.Now().Add(10 * time.Second); restore == nil; time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("no job marker named the restore")
+		}
+		for _, ev := range decode[ServerSyncPage](t, get(t, h.ts, "/api/v1/sync/server?since="+since, h.token)).Events {
+			if ev.Kind == "job" && ev.Pid != nil {
+				if j := decode[Job](t, get(t, h.ts, "/api/v1/jobs/"+*ev.Pid, h.token)); j.Kind == "restore" {
+					restore = &j
+				}
+			}
+		}
+	}
+	if restore.Target == nil || restore.Target.Type != "trash" || restore.Target.Pid != entry.Id ||
+		deref(restore.Target.Name) != entry.Name {
+		t.Fatalf("restore job = %+v, want the entry as its target", restore)
+	}
+	var whole *Job
+	for _, j := range decode[JobList](t, get(t, h.ts, "/api/v1/jobs?limit=50", h.token)).Jobs {
+		if j.Pid == restore.Pid {
+			t.Errorf("the finished restore is listed: %+v", j)
+		}
+		if j.Pid == scan {
+			whole = &j
+		}
+	}
+	if whole == nil || whole.Target != nil {
+		t.Fatalf("scan job = %+v, want no target", whole)
+	}
+}

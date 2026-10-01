@@ -70,6 +70,8 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
   @override
   final int tagsSkipped;
   @override
+  final int tagsReadOnly;
+  @override
   final BuiltList<EnrichmentPhase> stalled;
   @override
   final DateTime? finishedAt;
@@ -110,6 +112,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
     required this.tagsFailed,
     required this.tagsUnrepresented,
     required this.tagsSkipped,
+    required this.tagsReadOnly,
     required this.stalled,
     this.finishedAt,
   }) : super._();
@@ -156,6 +159,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
         tagsFailed == other.tagsFailed &&
         tagsUnrepresented == other.tagsUnrepresented &&
         tagsSkipped == other.tagsSkipped &&
+        tagsReadOnly == other.tagsReadOnly &&
         stalled == other.stalled &&
         finishedAt == other.finishedAt;
   }
@@ -194,6 +198,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
     _$hash = $jc(_$hash, tagsFailed.hashCode);
     _$hash = $jc(_$hash, tagsUnrepresented.hashCode);
     _$hash = $jc(_$hash, tagsSkipped.hashCode);
+    _$hash = $jc(_$hash, tagsReadOnly.hashCode);
     _$hash = $jc(_$hash, stalled.hashCode);
     _$hash = $jc(_$hash, finishedAt.hashCode);
     _$hash = $jf(_$hash);
@@ -234,6 +239,7 @@ class _$EnrichmentLastRun extends EnrichmentLastRun {
           ..add('tagsFailed', tagsFailed)
           ..add('tagsUnrepresented', tagsUnrepresented)
           ..add('tagsSkipped', tagsSkipped)
+          ..add('tagsReadOnly', tagsReadOnly)
           ..add('stalled', stalled)
           ..add('finishedAt', finishedAt))
         .toString();
@@ -391,6 +397,10 @@ class EnrichmentLastRunBuilder
   int? get tagsSkipped => _$this._tagsSkipped;
   set tagsSkipped(int? tagsSkipped) => _$this._tagsSkipped = tagsSkipped;
 
+  int? _tagsReadOnly;
+  int? get tagsReadOnly => _$this._tagsReadOnly;
+  set tagsReadOnly(int? tagsReadOnly) => _$this._tagsReadOnly = tagsReadOnly;
+
   ListBuilder<EnrichmentPhase>? _stalled;
   ListBuilder<EnrichmentPhase> get stalled =>
       _$this._stalled ??= ListBuilder<EnrichmentPhase>();
@@ -439,6 +449,7 @@ class EnrichmentLastRunBuilder
       _tagsFailed = $v.tagsFailed;
       _tagsUnrepresented = $v.tagsUnrepresented;
       _tagsSkipped = $v.tagsSkipped;
+      _tagsReadOnly = $v.tagsReadOnly;
       _stalled = $v.stalled.toBuilder();
       _finishedAt = $v.finishedAt;
       _$v = null;
@@ -619,6 +630,11 @@ class EnrichmentLastRunBuilder
               tagsSkipped,
               r'EnrichmentLastRun',
               'tagsSkipped',
+            ),
+            tagsReadOnly: BuiltValueNullFieldError.checkNotNull(
+              tagsReadOnly,
+              r'EnrichmentLastRun',
+              'tagsReadOnly',
             ),
             stalled: stalled.build(),
             finishedAt: finishedAt,

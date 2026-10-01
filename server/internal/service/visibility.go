@@ -280,6 +280,10 @@ type LibraryInfo struct {
 	// ScanStarted is AddLibrary's scan starting; false when another job
 	// held the catalog, so the root waits for the next scan.
 	ScanStarted bool
+	// ReadOnly, Managed and Profile are the catalog's policy for the root.
+	ReadOnly bool
+	Managed  bool
+	Profile  string
 }
 
 // Libraries lists the catalog's libraries with their configured root
@@ -305,29 +309,39 @@ func (l *Library) libraries(ctx context.Context, counts bool) ([]LibraryInfo, er
 	if err != nil {
 		return nil, classify(err)
 	}
-	roots := l.libraryRoots()
-	byPath := make(map[string]string, len(roots))
-	for _, r := range roots {
-		byPath[filepath.Clean(r.Path)] = r.Name
-	}
 	out := make([]LibraryInfo, 0, len(libs))
 	for _, lib := range libs {
-		name := byPath[filepath.Clean(lib.DisplayRoot)]
-		if name == "" {
-			name = filepath.Base(lib.DisplayRoot)
-		}
-		info := LibraryInfo{
-			PID:   apiPID(PrefixLibrary, lib.PID),
-			Name:  name,
-			Media: string(lib.MediaType()),
-			Path:  lib.DisplayRoot,
-		}
+		info := l.libraryInfo(lib)
 		if counts {
 			info.ItemCount = l.libraryItemCount(ctx, lib.PID)
 		}
 		out = append(out, info)
 	}
 	return out, nil
+}
+
+// libraryInfo maps a catalog library, named as the root table names it.
+// The catalog stores no media for the podcast library.
+func (l *Library) libraryInfo(lib *model.Library) LibraryInfo {
+	name := filepath.Base(lib.DisplayRoot)
+	for _, r := range l.libraryRoots() {
+		if rootKey(r.Path) == rootKey(lib.DisplayRoot) {
+			name = r.Name
+		}
+	}
+	media := string(lib.MediaType())
+	if lib.Mode == model.ModePodcast {
+		media = "podcast"
+	}
+	return LibraryInfo{
+		PID:      apiPID(PrefixLibrary, lib.PID),
+		Name:     name,
+		Media:    media,
+		Path:     lib.DisplayRoot,
+		ReadOnly: lib.ReadOnly,
+		Managed:  lib.Mode == model.ModeManaged,
+		Profile:  lib.Profile,
+	}
 }
 
 // libraryItemCount counts the playable items a root holds, keyed on the

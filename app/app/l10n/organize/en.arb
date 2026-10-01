@@ -5,6 +5,16 @@
   "@organizeApply": {
     "description": "Runs the move. Both the confirming button and the button that opens the confirmation."
   },
+  "organizeBuiltInProfile": "{name} (built in)",
+  "@organizeBuiltInProfile": {
+    "description": "A built-in profile in the picker. {name} is its name.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "waxbin-native"
+      }
+    }
+  },
   "organizeColumnFrom": "Now at",
   "@organizeColumnFrom": {
     "description": "Column of the dry-run table: where a file is today."
@@ -16,6 +26,10 @@
   "organizeConfirmMessage": "Files move to their new locations on the server. The catalog follows them, but anything else pointing at the old paths does not.",
   "@organizeConfirmMessage": {
     "description": "Body of the typed confirmation before files are moved."
+  },
+  "organizeConfirmOwnWord": "ORGANIZE",
+  "@organizeConfirmOwnWord": {
+    "description": "The word typed to confirm an apply that lays out each library by its own profile; typed as shown, so keep it one plain word."
   },
   "organizeConfirmTitle": "Apply organize profile?",
   "@organizeConfirmTitle": {
@@ -37,9 +51,9 @@
   "@organizeFailed": {
     "description": "How many files a finished run could not move."
   },
-  "organizeHeld": "{count, plural, =1{1 file stays where it is: its library is read-only.} other{{count} files stay where they are: their libraries are read-only.}}",
+  "organizeHeld": "{count, plural, =1{1 file stays where it is while the server is read-only.} other{{count} files stay where they are while the server is read-only.}}",
   "@organizeHeld": {
-    "description": "Under the dry run: files out of place that a read-only library keeps where they are.",
+    "description": "Under the dry run: files out of place that a read-only server keeps where they are.",
     "placeholders": {
       "count": {
         "type": "int",
@@ -49,7 +63,7 @@
   },
   "organizeHeldTile": "Read-only",
   "@organizeHeldTile": {
-    "description": "How many files a finished run left where they were because their library is read-only."
+    "description": "How many files a finished run left where they were because the server is read-only."
   },
   "organizeHint": "Preview checks every managed library against this profile, so it finds files added or moved since the last run even when nothing else changed. Nothing moves until you apply.",
   "@organizeHint": {
@@ -79,9 +93,13 @@
   "@organizeNothingTitle": {
     "description": "Empty state of a dry run that would move nothing."
   },
-  "organizeOnlyBuiltIn": "This server has only the built-in profile.",
-  "@organizeOnlyBuiltIn": {
-    "description": "Under the profile picker when the built-in profile is the only one."
+  "organizeOwnProfiles": "Each library's own profile",
+  "@organizeOwnProfiles": {
+    "description": "Profile picker option that lays out each managed library by the profile set for it."
+  },
+  "organizeOwnProfilesHelp": "Each managed library by the profile set on the Libraries screen",
+  "@organizeOwnProfilesHelp": {
+    "description": "Help under the each-library option of the profile picker."
   },
   "organizePlannedMoves": "{count, plural, =1{1 planned move} other{{count} planned moves}}",
   "@organizePlannedMoves": {
@@ -97,17 +115,163 @@
   "@organizePreview": {
     "description": "Shows where the chosen profile would move files, without moving any."
   },
+  "organizeProfileAudiobookLabel": "Audiobook template",
+  "@organizeProfileAudiobookLabel": {
+    "description": "Field for the path template of audiobooks."
+  },
+  "organizeProfileDelete": "Delete profile",
+  "@organizeProfileDelete": {
+    "description": "Button in the profile editor that deletes the profile."
+  },
+  "organizeProfileDeleteBody": "A library laid out by it has to move to another profile first.",
+  "@organizeProfileDeleteBody": {
+    "description": "Body of the dialog confirming a profile delete."
+  },
+  "organizeProfileDeleteTitle": "Delete {name}?",
+  "@organizeProfileDeleteTitle": {
+    "description": "Title of the dialog confirming a profile delete.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "flat"
+      }
+    }
+  },
+  "organizeProfileDeleted": "Deleted {name}",
+  "@organizeProfileDeleted": {
+    "description": "Message after a profile was deleted.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "flat"
+      }
+    }
+  },
+  "organizeProfileEdit": "Edit profile",
+  "@organizeProfileEdit": {
+    "description": "Button that opens the profile editor for the chosen profile."
+  },
+  "organizeProfileEditTitle": "Edit {name}",
+  "@organizeProfileEditTitle": {
+    "description": "Title of the profile editor for an existing profile.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "flat"
+      }
+    }
+  },
   "organizeProfileLabel": "Organize profile",
   "@organizeProfileLabel": {
     "description": "Accessible name of the profile picker."
+  },
+  "organizeProfileMusicLabel": "Music template",
+  "@organizeProfileMusicLabel": {
+    "description": "Field for the path template of music."
+  },
+  "organizeProfileNameLabel": "Name",
+  "@organizeProfileNameLabel": {
+    "description": "Field for a new profile's name."
+  },
+  "organizeProfileNameTaken": "A profile named {name} exists; edit it instead.",
+  "@organizeProfileNameTaken": {
+    "description": "Under the name field of a new profile whose name is already used.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "flat"
+      }
+    }
+  },
+  "organizeProfileNew": "New profile",
+  "@organizeProfileNew": {
+    "description": "Button that opens the profile editor for a new profile."
   },
   "organizeProfileOverline": "The naming scheme to move into",
   "@organizeProfileOverline": {
     "description": "Overline over the profile picker."
   },
+  "organizeProfilePodcastLabel": "Podcast template",
+  "@organizeProfilePodcastLabel": {
+    "description": "Field for the path template of podcast episodes."
+  },
+  "organizeProfileSampleBook": "Book: {path}",
+  "@organizeProfileSampleBook": {
+    "description": "Sample path of an audiobook.",
+    "placeholders": {
+      "path": {
+        "type": "String",
+        "example": "Author/Title/Title.m4b"
+      }
+    }
+  },
+  "organizeProfileSampleMusic": "Track: {path}",
+  "@organizeProfileSampleMusic": {
+    "description": "Sample path of a track.",
+    "placeholders": {
+      "path": {
+        "type": "String",
+        "example": "Artist/Album/01 - Title.flac"
+      }
+    }
+  },
+  "organizeProfileSampleNone": "no path for this sample",
+  "@organizeProfileSampleNone": {
+    "description": "Stands in a sample line when the template renders no path for that sample item."
+  },
+  "organizeProfileSamplePodcast": "Episode: {path}",
+  "@organizeProfileSamplePodcast": {
+    "description": "Sample path of a podcast episode.",
+    "placeholders": {
+      "path": {
+        "type": "String",
+        "example": "Show/Episode.mp3"
+      }
+    }
+  },
+  "organizeProfileSampleTitle": "Where the samples land",
+  "@organizeProfileSampleTitle": {
+    "description": "Heading over the sample paths the profile gives a track, a book and an episode."
+  },
+  "organizeProfileSave": "Save",
+  "@organizeProfileSave": {
+    "description": "Saves the profile being edited."
+  },
+  "organizeProfileSaved": "Saved {name}",
+  "@organizeProfileSaved": {
+    "description": "Message after a profile was saved.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "flat"
+      }
+    }
+  },
+  "organizeProfileTagWrite": "Write tags while organizing",
+  "@organizeProfileTagWrite": {
+    "description": "Switch in the profile editor."
+  },
+  "organizeProfileTagWriteHelp": "Rewrites unlocked tags from the catalog as files move",
+  "@organizeProfileTagWriteHelp": {
+    "description": "Help under the tag-write switch."
+  },
+  "organizeProfileTemplateHint": "Empty keeps the built-in layout",
+  "@organizeProfileTemplateHint": {
+    "description": "Hint in a template field: leaving it empty inherits the built-in template."
+  },
   "organizeProfileTitle": "Profile",
   "@organizeProfileTitle": {
     "description": "Heading over the profile picker."
+  },
+  "organizeReadOnlyLibraries": "{count, plural, =1{1 read-only library is left as it is.} other{{count} read-only libraries are left as they are.}}",
+  "@organizeReadOnlyLibraries": {
+    "description": "Under the dry run and the result: managed libraries the organizer left alone because they are read-only.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
   },
   "organizeResultTitle": "Result",
   "@organizeResultTitle": {

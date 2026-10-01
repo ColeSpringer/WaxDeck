@@ -17,6 +17,9 @@ part 'library_created.g.dart';
 /// * [media] - Content class the library holds. Currently `music`, `audiobook`, `podcast`, or `mixed`; new values may appear. 
 /// * [path] - Absolute filesystem path of the root, for the administrative surface that manages it. Absent where the catalog cannot render the stored path as text (roots on non-UTF8 filesystems are stored as raw bytes). 
 /// * [itemCount] - Playable items the catalog holds under this root. Present only where the caller asked for counts, and counted at read time, so it lags a running scan. 
+/// * [readOnly] - The catalog keeps the library's files as they are.
+/// * [managed] - The catalog may place and move files in the library.
+/// * [profile] - The organize profile a managed library is laid out by.
 /// * [streamingWarning] - Present when the library exists but streaming from it does not work yet, saying what an administrator still has to do. Creating a root reconciles the WaxFlow sidecar so it serves the same directory; where that cannot happen (a sidecar too old to reload, a path it cannot open) browsing, downloading, and direct playback still work and streaming waits for a sidecar restart. Absent means streaming works now. 
 /// * [scanStarted] - Whether creating the library started a scan of every root. False when another catalog job was already running: that job began before this root existed, so the root is indexed by the next scan, which an administrator can start from the rescan endpoint once the running job ends. 
 @BuiltValue()
@@ -66,6 +69,18 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
         specifiedType: const FullType(bool),
       );
     }
+    yield r'managed';
+    yield serializers.serialize(
+      object.managed,
+      specifiedType: const FullType(bool),
+    );
+    if (object.profile != null) {
+      yield r'profile';
+      yield serializers.serialize(
+        object.profile,
+        specifiedType: const FullType(String),
+      );
+    }
     yield r'name';
     yield serializers.serialize(
       object.name,
@@ -75,6 +90,11 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
     yield serializers.serialize(
       object.pid,
       specifiedType: const FullType(String),
+    );
+    yield r'readOnly';
+    yield serializers.serialize(
+      object.readOnly,
+      specifiedType: const FullType(bool),
     );
     if (object.media != null) {
       yield r'media';
@@ -136,6 +156,21 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
           if (valueDes == null) continue;
           result.scanStarted = valueDes;
           break;
+        case r'managed':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.managed = valueDes;
+          break;
+        case r'profile':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.profile = valueDes;
+          break;
         case r'name':
           final valueDes = serializers.deserialize(
             value,
@@ -149,6 +184,13 @@ class _$LibraryCreatedSerializer implements PrimitiveSerializer<LibraryCreated> 
             specifiedType: const FullType(String),
           ) as String;
           result.pid = valueDes;
+          break;
+        case r'readOnly':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(bool),
+          ) as bool;
+          result.readOnly = valueDes;
           break;
         case r'media':
           final valueDes = serializers.deserialize(

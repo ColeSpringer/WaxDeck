@@ -10,26 +10,33 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/enrich"
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/organize"
 	"github.com/colespringer/waxbin/query"
 
 	"github.com/colespringer/waxdeck/fixtures"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
-// Every phase a fix asks for is one the catalog has.
+// Every phase a want or a prerequisite names is one the catalog has.
 func TestHealthFixPhasesAreTheCatalogs(t *testing.T) {
 	t.Parallel()
-	for rule, phases := range healthFixPhases {
-		for _, p := range phases {
-			if !slices.Contains(model.EnrichPhases(), p) {
-				t.Errorf("%s asks for phase %q, which the catalog does not have", rule, p)
-			}
+	var named []model.EnrichPhase
+	for _, phases := range wantPhases {
+		named = append(named, phases...)
+	}
+	for p, prereqs := range phasePrereqs {
+		named = append(named, append(prereqs, p)...)
+	}
+	for _, p := range named {
+		if !slices.Contains(model.EnrichPhases(), p) {
+			t.Errorf("phase %q is not one the catalog has", p)
 		}
 	}
 }
@@ -519,12 +526,12 @@ func TestAFixTaskThatGaveUpTellsItsStarter(t *testing.T) {
 	if !ruleFixing(t, ctx, svc, ruleWriteUnsynced) {
 		t.Fatal("a running fix task does not read as fixing")
 	}
-	markers := healthMarkers(t, ctx, svc, uc)
+	seen := markers(t, ctx, svc, uc.ID, eventHealth, "")
 	svc.DrainHealthFixes(ctx)
 	if task, err := svc.GetToolTaskFor(ctx, uc, id); err != nil || task.State != taskStateFailed {
 		t.Fatalf("task = %+v (%v), want it retired", task, err)
 	}
-	if n := healthMarkers(t, ctx, svc, uc); n <= markers {
+	if n := markers(t, ctx, svc, uc.ID, eventHealth, ""); n <= seen {
 		t.Fatal("every account should hear the rule is no longer being fixed")
 	}
 	row := waitForInbox(t, ctx, svc, uc, "health-fix-finished")
@@ -768,7 +775,7 @@ func TestAPathFixRunningOnAReadOnlyServerMovesNothing(t *testing.T) {
 func TestAHeldPlanRunsNoOrganizeJob(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _, pid := readOnlyFixture(t)
-	if _, err := svc.ApplyOrganize(ctx, uc, svc.defaultOrganizeProfile(), nil); err != nil {
+	if _, err := svc.ApplyOrganize(ctx, uc, organize.DefaultProfileName, nil); err != nil {
 		t.Fatal(err)
 	}
 	start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, []string{pid})
@@ -783,6 +790,73 @@ func TestAHeldPlanRunsNoOrganizeJob(t *testing.T) {
 	for _, j := range jobs {
 		if j.Kind == "organize" {
 			t.Fatalf("an organize job ran with nothing to move: %+v", j)
+		}
+	}
+}
+
+// painter is a cover source that counts what it was asked.
+func painter(asked *atomic.Int32) enrich.Provider {
+	return &enrich.Mock{ProviderName: "painter", Caps: enrich.CapCover,
+		EnrichFunc: func(context.Context, enrich.Request) (*enrich.Candidate, error) {
+			asked.Add(1)
+			return nil, nil
+		}}
+}
+
+// A fix runs only its rule's phases: the lyrics fix asks the lyricist and
+// never the artwork source a whole pass would ask too.
+func TestAnUnscopedFixRunsOnlyItsPhases(t *testing.T) {
+	t.Parallel()
+	var painted atomic.Int32
+	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"}, painter(&painted))
+	if err := svc.RunHealthSweep(ctx); err != nil {
+		t.Fatal(err)
+	}
+	start, err := svc.StartHealthFix(ctx, uc, ruleMissingLyrics, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if row := waitForInbox(t, ctx, svc, uc, "health-fix-finished"); row.TargetPID != start.JobPID {
+		t.Fatalf("row = %+v, want the fix's job", row)
+	}
+	if n := painted.Load(); n != 0 {
+		t.Errorf("the lyrics fix asked the artwork source %d times", n)
+	}
+	if counts, err := svc.db.HealthRuleCounts(ctx); err != nil || counts[ruleMissingLyrics] != 0 {
+		t.Fatalf("missing lyrics = %d (%v), want the fix to have filled it", counts[ruleMissingLyrics], err)
+	}
+}
+
+// A narrowed pass keeps the identity phases its phases key on (the art
+// rungs read the ids those land), forcing only what fills the want, and
+// nothing this install does not run.
+func TestNarrowedPassesKeepTheirIdentityPhases(t *testing.T) {
+	t.Parallel()
+	all := model.EnrichPhases()
+	art := []model.EnrichPhase{model.EnrichPhaseArtist, model.EnrichPhaseReleaseGroup,
+		model.EnrichPhaseAlbumRelease, model.EnrichPhaseGroupArt, model.EnrichPhaseAlbumArt}
+	if walk, force := fixPhases(ruleMissingArt, all); !slices.Equal(walk, art) ||
+		!slices.Equal(force, []model.EnrichPhase{model.EnrichPhaseGroupArt, model.EnrichPhaseAlbumArt}) {
+		t.Errorf("missing-art walks %v forcing %v", walk, force)
+	}
+	if walk, force := fixPhases(ruleMissingLyrics, all); !slices.Equal(walk, force) || len(force) != 1 {
+		t.Errorf("missing-lyrics walks %v forcing %v, want the lyrics phase alone", walk, force)
+	}
+	noContact := slices.DeleteFunc(slices.Clone(all), func(p model.EnrichPhase) bool {
+		return p == model.EnrichPhaseArtist || p == model.EnrichPhaseReleaseGroup || p == model.EnrichPhaseAlbumRelease
+	})
+	for _, c := range []struct {
+		wants   []string
+		running []model.EnrichPhase
+		want    []model.EnrichPhase
+	}{
+		{[]string{enrichWantCover}, all, art},
+		{[]string{enrichWantCover}, noContact, []model.EnrichPhase{model.EnrichPhaseGroupArt, model.EnrichPhaseAlbumArt}},
+		{[]string{enrichWantBook}, []model.EnrichPhase{model.EnrichPhaseLyrics}, []model.EnrichPhase{}},
+		{[]string{enrichWantLyrics, "unmapped"}, all, nil},
+	} {
+		if got := itemPassPhases(c.wants, c.running); !slices.Equal(got, c.want) || (got == nil) != (c.want == nil) {
+			t.Errorf("itemPassPhases(%v) = %v, want %v", c.wants, got, c.want)
 		}
 	}
 }

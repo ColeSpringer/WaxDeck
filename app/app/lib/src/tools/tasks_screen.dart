@@ -566,7 +566,8 @@ const _perItemJobKinds = {'import', 'delete', 'restore', 'purge-trash'};
 const _finishedJobsShown = 20;
 
 /// The jobs worth a row: every running one first, then the finished
-/// ones newest first, per-item kinds left out.
+/// ones newest first, per-item kinds left out. The server already leaves
+/// finished targeted jobs out of the list.
 List<Job> _visibleJobs(List<Job> jobs) {
   DateTime at(Job j) =>
       j.finishedAt ?? j.startedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
@@ -579,6 +580,15 @@ List<Job> _visibleJobs(List<Job> jobs) {
       if (job.state == 'running') job,
     ...finished.take(_finishedJobsShown),
   ];
+}
+
+/// A job's name, and what it ran on when that is known.
+String _jobTitle(AppLocalizations l10n, Job job) {
+  final label = _jobLabel(l10n, job.kind);
+  final name = job.target?.name;
+  return name == null || name.isEmpty
+      ? label
+      : l10n.toolsJobTargeted(label, name);
 }
 
 String _jobLabel(AppLocalizations l10n, String kind) => switch (kind) {
@@ -700,7 +710,7 @@ class _JobRow extends StatelessWidget {
                     children: <Widget>[
                       Expanded(
                         child: Text(
-                          _jobLabel(l10n, job.kind),
+                          _jobTitle(l10n, job),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: WaxType.titleItem.copyWith(

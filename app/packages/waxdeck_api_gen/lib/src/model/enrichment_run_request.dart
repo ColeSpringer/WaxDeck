@@ -15,6 +15,7 @@ part 'enrichment_run_request.g.dart';
 /// Properties:
 /// * [force] - Re-enrich entities that already enriched once.
 /// * [forcePhases] - Re-ask these phases alone, marked or not, while the rest walk as usual. Refused beside `force` (400), and with `source-unavailable` for a phase this server does not run. 
+/// * [phases] - Walk only these phases. `forcePhases` must be among them (400 otherwise), and a phase this server does not run is `source-unavailable`. 
 @BuiltValue()
 abstract class EnrichmentRunRequest implements Built<EnrichmentRunRequest, EnrichmentRunRequestBuilder> {
   /// Re-enrich entities that already enriched once.
@@ -24,6 +25,10 @@ abstract class EnrichmentRunRequest implements Built<EnrichmentRunRequest, Enric
   /// Re-ask these phases alone, marked or not, while the rest walk as usual. Refused beside `force` (400), and with `source-unavailable` for a phase this server does not run. 
   @BuiltValueField(wireName: r'forcePhases')
   BuiltList<EnrichmentPhase>? get forcePhases;
+
+  /// Walk only these phases. `forcePhases` must be among them (400 otherwise), and a phase this server does not run is `source-unavailable`. 
+  @BuiltValueField(wireName: r'phases')
+  BuiltList<EnrichmentPhase>? get phases;
 
   EnrichmentRunRequest._();
 
@@ -60,6 +65,13 @@ class _$EnrichmentRunRequestSerializer implements PrimitiveSerializer<Enrichment
       yield r'forcePhases';
       yield serializers.serialize(
         object.forcePhases,
+        specifiedType: const FullType(BuiltList, [FullType(EnrichmentPhase)]),
+      );
+    }
+    if (object.phases != null) {
+      yield r'phases';
+      yield serializers.serialize(
+        object.phases,
         specifiedType: const FullType(BuiltList, [FullType(EnrichmentPhase)]),
       );
     }
@@ -101,6 +113,14 @@ class _$EnrichmentRunRequestSerializer implements PrimitiveSerializer<Enrichment
           ) as BuiltList<EnrichmentPhase>?;
           if (valueDes == null) continue;
           result.forcePhases.replace(valueDes);
+          break;
+        case r'phases':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltList, [FullType(EnrichmentPhase)]),
+          ) as BuiltList<EnrichmentPhase>?;
+          if (valueDes == null) continue;
+          result.phases.replace(valueDes);
           break;
         default:
           unhandled.add(key);

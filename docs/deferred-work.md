@@ -270,25 +270,6 @@ Every entry carries a gate tag saying what actually blocks it:
 
 ## Curation and metadata
 
-- `[upstream]` **Organize profiles cannot be defined or edited.** The
-  organize screen offers only the catalog's built-in `waxbin-native`
-  layout. The editor wanted: profile create, edit and delete in the
-  console, stored in `waxdeck.db` and handed to WaxBin; a profile picker
-  with a rendered sample path on the organize screen; and a default
-  profile per library. Waits on the organize-profiles ask in
-  upstream-requests.md.
-
-- `[upstream]` **Writes that span every library stop for all of them
-  while one is read-only.** The enrichment pass writes no tags into
-  files, entity write-back (an album, release group or artist edit, an
-  album's front cover) is refused, and emptying the trash, by hand or
-  by the retention sweep, waits while a read-only library holds a file
-  it would purge, since the catalog cannot leave one library out of any
-  of them. A pass already running when a library is flagged keeps
-  writing to its end. Restore each for the writable libraries, and stop
-  a running pass at the flag, once the library-scoping ask in
-  upstream-requests.md lands.
-
 - `[in-repo]` **The MusicBrainz and Cover Art Archive base overrides
   stop short of enrichment.** `WAXDECK_MUSICBRAINZ_BASE` and
   `WAXDECK_COVERART_BASE` reach matching and radio artwork (the Cover
@@ -331,17 +312,18 @@ Every entry carries a gate tag saying what actually blocks it:
 
 ## Infrastructure
 
-- `[upstream]` **Accounts are mapped to catalog users only at start.** A
-  CLI restore or rebuild through the running server can replace the
-  catalog's users without a restart, and an account whose user the new
-  catalog lacks then fails every read it scopes until the next start.
-  Re-run `reconcileCatalogUsers` when the catalog says it reopened; waits
-  on the reopen-notification ask in upstream-requests.md.
-
-- `[upstream]` **Two reserved provider names are copied from the
-  catalog.** `service.ReservedEnrichNames` spells out
-  `musicbrainz:edition` and `none`, which WaxBin does not export; take
-  them from WaxBin once the reserved-names ask lands.
+- `[in-repo]` **A library cannot be removed.** Neither the console, the
+  API nor the `waxbin` CLI has a verb for it, so a library added by
+  mistake, or one a configured root now overlaps (which then boots left
+  out with a warning), stays until the catalog is reset. Removal needs
+  the catalog to drop the root and its items, WaxDeck to forget its
+  stored name, and the streaming bridge to unmount it.
+- `[in-repo]` **A live catalog restore leaves server rows naming the old
+  catalog's pids.** Podcast subscriptions and feed state keep shows the
+  restored catalog may lack, so the feed refresh keeps asking the
+  catalog for them; health rows wait for the next sweep. Reconciling
+  them at the replacement (dropping what the new catalog lacks, after
+  telling each subscriber) is the fix.
 
 - `[in-repo]` **The Android build turns Kotlin's incremental compiler
   off on Windows, and should stop having to.** Kotlin 2.3.20 opens a

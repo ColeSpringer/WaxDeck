@@ -11,6 +11,8 @@ import (
 )
 
 // TrashEntryDTO is one deletion undo-journal row for the admin surface.
+// LibraryPID is the library the file was trashed from, empty when the
+// journal names none, and LibraryName its root's name.
 type TrashEntryDTO struct {
 	ID          string
 	ItemPID     string
@@ -19,13 +21,17 @@ type TrashEntryDTO struct {
 	SizeBytes   int64
 	TrashedAtNS int64
 	RestoredNS  int64
+	LibraryPID  string
+	LibraryName string
 }
 
-// TrashEmptyDTO reports an empty-trash pass.
+// TrashEmptyDTO reports an empty-trash pass; SkippedReadOnly counts the
+// entries a read-only library kept.
 type TrashEmptyDTO struct {
-	Purged         int
-	Errored        int
-	ReclaimedBytes int64
+	Purged          int
+	Errored         int
+	ReclaimedBytes  int64
+	SkippedReadOnly int
 }
 
 // TrashEntries lists the catalog trash, newest first. Administrators
@@ -38,6 +44,10 @@ func (l *Library) TrashEntries(ctx context.Context, uc *UserCtx, includeRestored
 	if err != nil {
 		return nil, classify(err)
 	}
+	names := map[string]string{}
+	for _, r := range l.libraryRoots() {
+		names[r.PID] = r.Name
+	}
 	out := make([]TrashEntryDTO, 0, len(entries))
 	for _, e := range entries {
 		dto := TrashEntryDTO{
@@ -47,6 +57,10 @@ func (l *Library) TrashEntries(ctx context.Context, uc *UserCtx, includeRestored
 			SizeBytes:   e.Size,
 			TrashedAtNS: e.TrashedAt,
 			RestoredNS:  e.RestoredAt,
+		}
+		if e.LibraryPID != "" {
+			dto.LibraryPID = apiPID(PrefixLibrary, e.LibraryPID)
+			dto.LibraryName = names[string(e.LibraryPID)]
 		}
 		if string(e.ItemPID) != "" {
 			// The trashed file's item kind is not journaled; resolve it
@@ -72,7 +86,7 @@ func (l *Library) RestoreTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID
 	if !ok || prefix != PrefixTrash {
 		return errInvalid("bad trash id " + apiTrashID)
 	}
-	if err := l.checkTrashWritable(ctx, pid, 0); err != nil {
+	if err := l.CheckWritable(ctx, ""); err != nil {
 		return err
 	}
 	if err := l.lib.RestoreTrash(ctx, pid); err != nil {
@@ -87,16 +101,17 @@ func (l *Library) EmptyTrash(ctx context.Context, uc *UserCtx) (TrashEmptyDTO, e
 	if !uc.Admin {
 		return TrashEmptyDTO{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	if err := l.checkTrashWritable(ctx, "", 0); err != nil {
+	if err := l.CheckWritable(ctx, ""); err != nil {
 		return TrashEmptyDTO{}, err
 	}
 	rep, err := l.lib.EmptyTrash(ctx, waxbin.EmptyTrashOptions{})
 	if err != nil {
 		return TrashEmptyDTO{}, classify(err)
 	}
-	out := TrashEmptyDTO{Purged: rep.Purged, Errored: rep.Errored, ReclaimedBytes: rep.ReclaimedBytes}
+	out := trashEmptyDTO(rep)
 	l.Audit(ctx, uc, "trash.empty", AuditTarget{Kind: "trash"},
-		map[string]any{"purged": out.Purged, "errored": out.Errored, "reclaimedBytes": out.ReclaimedBytes})
+		map[string]any{"purged": out.Purged, "errored": out.Errored, "reclaimedBytes": out.ReclaimedBytes,
+			"skippedReadOnly": out.SkippedReadOnly})
 	l.EmitNotificationFor(ctx, "job-finished", jobTitle("empty-trash", false), trashBody(out), "", []string{uc.ID})
 	return out, nil
 }
@@ -111,7 +126,7 @@ func (l *Library) PurgeTrashEntry(ctx context.Context, uc *UserCtx, apiTrashID s
 	if !ok || prefix != PrefixTrash {
 		return 0, errInvalid("bad trash id " + apiTrashID)
 	}
-	if err := l.checkTrashWritable(ctx, pid, 0); err != nil {
+	if err := l.CheckWritable(ctx, ""); err != nil {
 		return 0, err
 	}
 	reclaimed, err := l.lib.PurgeTrash(ctx, pid)
@@ -131,11 +146,8 @@ func (l *Library) PurgeTrashOlderThan(ctx context.Context, olderThan time.Durati
 	if olderThan <= 0 {
 		return TrashEmptyDTO{}, nil
 	}
-	if err := l.checkTrashWritable(ctx, "", olderThan); err != nil {
+	if err := l.CheckWritable(ctx, ""); err != nil {
 		if KindOf(err) == KindReadOnly {
-			// The next sweep tries again; the catalog cannot leave the
-			// read-only library's trash out of this one.
-			l.log.Info("trash retention waits for a read-only library", "err", err)
 			return TrashEmptyDTO{}, nil
 		}
 		return TrashEmptyDTO{}, err
@@ -144,7 +156,7 @@ func (l *Library) PurgeTrashOlderThan(ctx context.Context, olderThan time.Durati
 	if err != nil {
 		return TrashEmptyDTO{}, classify(err)
 	}
-	out := TrashEmptyDTO{Purged: rep.Purged, Errored: rep.Errored, ReclaimedBytes: rep.ReclaimedBytes}
+	out := trashEmptyDTO(rep)
 	// The retention sweep has no human actor; audit it with a nil actor the
 	// way backup retention does, but only when it actually reclaimed
 	// something so a routine no-op pass never floods the log.
@@ -160,36 +172,15 @@ func (l *Library) PurgeTrashOlderThan(ctx context.Context, olderThan time.Durati
 // when retention is disabled (0 days) it purges nothing.
 func (l *Library) SweepTrashRetention(ctx context.Context) (TrashEmptyDTO, error) {
 	days := l.TrashRetentionDays(ctx)
-	if days <= 0 {
+	if days <= 0 || l.Maintenance() {
 		return TrashEmptyDTO{}, nil
 	}
 	return l.PurgeTrashOlderThan(ctx, time.Duration(days)*24*time.Hour)
 }
 
-// checkTrashWritable refuses touching a read-only library's trash, which
-// sits under its root: the entry pid names, or else every entry trashed
-// over olderThan ago (zero: all), which is what an empty purges.
-func (l *Library) checkTrashWritable(ctx context.Context, pid model.PID, olderThan time.Duration) error {
-	if err := l.CheckWritable(ctx, ""); err != nil {
-		return err
-	}
-	if len(l.currentToggles().readOnlyLibs) == 0 {
-		return nil
-	}
-	entries, err := l.lib.Trash(ctx, false, 0)
-	if err != nil {
-		return classify(err)
-	}
-	cutoff := time.Now().Add(-olderThan).UnixNano()
-	for _, e := range entries {
-		if pid != "" && e.PID != pid || olderThan > 0 && e.TrashedAt >= cutoff {
-			continue
-		}
-		if err := l.checkPathWritable(ctx, e.OrigDisplay); err != nil {
-			return err
-		}
-	}
-	return nil
+func trashEmptyDTO(rep *waxbin.EmptyReport) TrashEmptyDTO {
+	return TrashEmptyDTO{Purged: rep.Purged, Errored: rep.Errored, ReclaimedBytes: rep.ReclaimedBytes,
+		SkippedReadOnly: rep.SkippedReadOnly}
 }
 
 // DeletePlanDTO is one item's share of a deletion.

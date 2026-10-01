@@ -1416,6 +1416,9 @@ LibraryInfo libraryInfoFromGen(gen.ModelLibrary l) => LibraryInfo(
   media: l.media,
   path: l.path,
   itemCount: l.itemCount,
+  readOnly: l.readOnly,
+  managed: l.managed,
+  profile: l.profile,
 );
 
 /// The create response is the same library plus what creating it left
@@ -1428,6 +1431,9 @@ LibraryInfo libraryCreatedFromGen(gen.LibraryCreated l) => LibraryInfo(
   itemCount: l.itemCount,
   streamingWarning: l.streamingWarning,
   scanStarted: l.scanStarted,
+  readOnly: l.readOnly,
+  managed: l.managed,
+  profile: l.profile,
 );
 
 GenreNode genreNodeFromGen(gen.GenreNode n) => GenreNode(
@@ -2031,9 +2037,26 @@ OrganizeProfile organizeProfileFromGen(gen.OrganizeProfile profile) {
     musicTemplate: profile.musicTemplate,
     audiobookTemplate: profile.audiobookTemplate,
     podcastTemplate: profile.podcastTemplate,
-    tagWrite: profile.tagWrite ?? false,
+    tagWrite: profile.tagWrite,
+    builtIn: profile.builtIn,
+    sample: organizeSampleFromGen(profile.sample),
+    saved: switch (profile.saved) {
+      final saved? => OrganizeTemplates(
+        music: saved.musicTemplate,
+        audiobook: saved.audiobookTemplate,
+        podcast: saved.podcastTemplate,
+      ),
+      null => null,
+    },
   );
 }
+
+OrganizeSample organizeSampleFromGen(gen.OrganizeSample sample) =>
+    OrganizeSample(
+      music: sample.music,
+      audiobook: sample.audiobook,
+      podcast: sample.podcast,
+    );
 
 OrganizeProfiles organizeProfilesFromGen(gen.OrganizeProfiles listing) {
   return OrganizeProfiles(
@@ -2047,6 +2070,7 @@ OrganizePlan organizePlanFromGen(gen.OrganizePlan plan) {
     profile: plan.profile,
     totalActions: plan.totalActions,
     held: plan.held,
+    readOnlyLibraries: plan.readOnlyLibraries,
     actions: plan.actions
         .map((a) => OrganizeAction(itemPid: a.itemPid, from: a.from, to: a.to))
         .toList(),
@@ -2059,6 +2083,7 @@ OrganizeReport organizeReportFromGen(gen.OrganizeReport report) {
     moved: report.moved,
     skipped: report.skipped,
     held: report.held,
+    readOnlyLibraries: report.readOnlyLibraries,
     failed: report.failed,
     failures:
         report.failures
@@ -2182,6 +2207,7 @@ EnrichmentLastRun enrichmentLastRunFromGen(gen.EnrichmentLastRun r) =>
       tagsFailed: r.tagsFailed,
       tagsUnrepresented: r.tagsUnrepresented,
       tagsSkipped: r.tagsSkipped,
+      tagsReadOnly: r.tagsReadOnly,
       stalled: _enrichmentPhasesWire(r.stalled),
       finishedAt: r.finishedAt,
     );
@@ -2528,6 +2554,10 @@ Job jobFromGen(gen.Job job) {
     result: job.result?.toMap().map<String, Object?>(
       (key, value) => MapEntry(key, value?.value),
     ),
+    target: switch (job.target) {
+      final t? => JobTarget(type: t.type, pid: t.pid, name: t.name),
+      null => null,
+    },
   );
 }
 
@@ -2565,6 +2595,8 @@ TrashEntry trashEntryFromGen(gen.TrashEntry entry) {
     sizeBytes: entry.sizeBytes,
     trashedAt: entry.trashedAt.toUtc(),
     restoredAt: entry.restoredAt?.toUtc(),
+    libraryPid: entry.libraryPid,
+    libraryName: entry.libraryName,
   );
 }
 

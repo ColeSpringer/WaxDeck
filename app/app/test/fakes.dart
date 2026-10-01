@@ -4641,9 +4641,9 @@ class FakeRepository implements WaxDeckRepository {
     failed: 0,
   );
 
-  final List<({String profile, List<String>? itemPids})> previewOrganizeCalls =
+  final List<({String? profile, List<String>? itemPids})> previewOrganizeCalls =
       [];
-  final List<({String profile, List<String>? itemPids})> applyOrganizeCalls =
+  final List<({String? profile, List<String>? itemPids})> applyOrganizeCalls =
       [];
 
   @override
@@ -4652,19 +4652,126 @@ class FakeRepository implements WaxDeckRepository {
     managedLibraries: organizeManagedLibraries,
   );
 
+  /// Each saved profile, and each deleted name.
+  final List<OrganizeProfile> putOrganizeProfileCalls = [];
+  final List<String> deleteOrganizeProfileCalls = [];
+
+  /// Thrown by [deleteOrganizeProfile] when set, as a library in use.
+  WaxDeckApiException? deleteOrganizeProfileError;
+
+  /// What [putOrganizeProfile] refuses with, when set.
+  WaxDeckApiException? putOrganizeProfileError;
+
+  /// What [previewOrganizeProfile] answers, from the music template.
+  OrganizeSample Function(String musicTemplate) organizeSampleFor = (music) =>
+      OrganizeSample(
+        music: music.isEmpty ? 'Artist/Album/01 - Title.flac' : music,
+        audiobook: 'Author/Title/Title.m4b',
+        podcast: 'Show/Episode.mp3',
+      );
+
+  /// Holds profile saves and deletes in flight while a test dismisses
+  /// what started them.
+  Completer<void>? organizeProfileGate;
+
+  @override
+  Future<OrganizeProfile> putOrganizeProfile(
+    String name, {
+    String musicTemplate = '',
+    String audiobookTemplate = '',
+    String podcastTemplate = '',
+    bool tagWrite = false,
+  }) async {
+    await organizeProfileGate?.future;
+    if (putOrganizeProfileError case final error?) throw error;
+    final saved = OrganizeProfile(
+      name: name,
+      musicTemplate: musicTemplate,
+      audiobookTemplate: audiobookTemplate,
+      podcastTemplate: podcastTemplate,
+      tagWrite: tagWrite,
+      sample: organizeSampleFor(musicTemplate),
+      saved: OrganizeTemplates(
+        music: musicTemplate,
+        audiobook: audiobookTemplate,
+        podcast: podcastTemplate,
+      ),
+    );
+    putOrganizeProfileCalls.add(saved);
+    organizeProfiles = [
+      for (final p in organizeProfiles)
+        if (p.name != name) p,
+      saved,
+    ];
+    return saved;
+  }
+
+  @override
+  Future<void> deleteOrganizeProfile(String name) async {
+    await organizeProfileGate?.future;
+    if (deleteOrganizeProfileError case final error?) throw error;
+    deleteOrganizeProfileCalls.add(name);
+    organizeProfiles = [
+      for (final p in organizeProfiles)
+        if (p.name != name) p,
+    ];
+  }
+
+  @override
+  Future<OrganizeSample> previewOrganizeProfile({
+    String? name,
+    String musicTemplate = '',
+    String audiobookTemplate = '',
+    String podcastTemplate = '',
+  }) async {
+    previewOrganizeProfileCalls.add(musicTemplate);
+    if (organizeSampleAnswer case final answer?) return answer(musicTemplate);
+    return organizeSampleFor(musicTemplate);
+  }
+
+  /// Every previewed music template, in call order.
+  final List<String> previewOrganizeProfileCalls = [];
+
+  /// Answers a preview in the test's own time, when set.
+  Future<OrganizeSample> Function(String musicTemplate)? organizeSampleAnswer;
+
+  final List<({String libraryPid, String profile})> setLibraryProfileCalls = [];
+
+  /// Names the profile on the listed library, as the catalog would.
+  @override
+  Future<LibraryInfo> setLibraryProfile(
+    String libraryPid,
+    String profile,
+  ) async {
+    await libraryWriteGate?.future;
+    setLibraryProfileCalls.add((libraryPid: libraryPid, profile: profile));
+    final i = libraries.indexWhere((l) => l.pid == libraryPid);
+    final l = libraries[i];
+    return libraries[i] = LibraryInfo(
+      pid: l.pid,
+      name: l.name,
+      media: l.media,
+      path: l.path,
+      itemCount: l.itemCount,
+      readOnly: l.readOnly,
+      managed: l.managed,
+      profile: profile,
+    );
+  }
+
   @override
   Future<OrganizePlan> previewOrganize({
-    required String profile,
+    String? profile,
     List<String>? itemPids,
   }) async {
     previewOrganizeCalls.add((profile: profile, itemPids: itemPids));
     return organizePlanResult ??
-        OrganizePlan(profile: profile, totalActions: 0);
+        OrganizePlan(profile: profile ?? '', totalActions: 0);
   }
 
   @override
   Future<OrganizeReport> applyOrganize({
-    required String profile,
+    String? profile,
     List<String>? itemPids,
   }) async {
     applyOrganizeCalls.add((profile: profile, itemPids: itemPids));
@@ -4802,7 +4909,8 @@ class FakeRepository implements WaxDeckRepository {
   );
 
   /// What each [runEnrichment] asked for, in order.
-  final List<({bool force, List<String> forcePhases})> runEnrichmentCalls = [];
+  final List<({bool force, List<String> forcePhases, List<String> phases})>
+  runEnrichmentCalls = [];
 
   /// Each saved source order, in order.
   final List<List<EnrichmentSource>> putEnrichmentSourcesCalls = [];
@@ -4842,8 +4950,13 @@ class FakeRepository implements WaxDeckRepository {
   Future<String> runEnrichment({
     bool force = false,
     List<String> forcePhases = const [],
+    List<String> phases = const [],
   }) async {
-    runEnrichmentCalls.add((force: force, forcePhases: forcePhases));
+    runEnrichmentCalls.add((
+      force: force,
+      forcePhases: forcePhases,
+      phases: phases,
+    ));
     await runEnrichmentGate?.future;
     if (runEnrichmentError case final error?) throw error;
     return 'jb-FAKEENRICH';
@@ -5654,14 +5767,20 @@ class FakeRepository implements WaxDeckRepository {
     if (error != null) throw error;
     emptyTrashCalls++;
     await emptyTrashGate?.future;
-    final purgeable = trashEntries.where((e) => e.restoredAt == null).toList();
-    trashEntries.removeWhere((e) => e.restoredAt == null);
+    bool kept(TrashEntry e) => readOnlyTrashLibraries.contains(e.libraryPid);
+    final active = trashEntries.where((e) => e.restoredAt == null).toList();
+    final purgeable = active.where((e) => !kept(e)).toList();
+    trashEntries.removeWhere((e) => e.restoredAt == null && !kept(e));
     return TrashEmptyResult(
       purged: purgeable.length,
       errored: 0,
       reclaimedBytes: purgeable.fold(0, (sum, e) => sum + e.sizeBytes),
+      skippedReadOnly: active.length - purgeable.length,
     );
   }
+
+  /// Libraries whose trash entries an empty leaves, as read-only ones.
+  final Set<String> readOnlyTrashLibraries = {};
 
   final List<String> purgeTrashCalls = [];
 
@@ -5796,21 +5915,32 @@ class FakeRepository implements WaxDeckRepository {
     );
   }
 
-  /// Per-library read-only flags; absent means false.
-  final Map<String, bool> libraryReadOnlyByPid = {};
-
   final List<({String libraryPid, bool readOnly})> setLibraryReadOnlyCalls = [];
 
-  @override
-  Future<bool> getLibraryReadOnly(String libraryPid) async =>
-      libraryReadOnlyByPid[libraryPid] ?? false;
+  /// Holds a library's flag or profile write in flight.
+  Completer<void>? libraryWriteGate;
 
+  /// Flips the flag on the listed library, as the catalog would.
   @override
   Future<bool> setLibraryReadOnly(String libraryPid, bool readOnly) async {
+    await libraryWriteGate?.future;
     final error = adminError;
     if (error != null) throw error;
     setLibraryReadOnlyCalls.add((libraryPid: libraryPid, readOnly: readOnly));
-    libraryReadOnlyByPid[libraryPid] = readOnly;
+    final i = libraries.indexWhere((l) => l.pid == libraryPid);
+    if (i >= 0) {
+      final l = libraries[i];
+      libraries[i] = LibraryInfo(
+        pid: l.pid,
+        name: l.name,
+        media: l.media,
+        path: l.path,
+        itemCount: l.itemCount,
+        readOnly: readOnly,
+        managed: l.managed,
+        profile: l.profile,
+      );
+    }
     return readOnly;
   }
 

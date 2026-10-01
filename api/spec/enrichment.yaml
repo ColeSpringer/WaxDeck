@@ -61,8 +61,8 @@ paths:
       operationId: runEnrichment
       summary: Run a whole-library enrichment pass
       description: >
-        Starts the whole-library enrichment pass as a job: `force` re-asks
-        everything, `forcePhases` the named phases alone. Refuses with
+        Starts the whole-library enrichment pass as a job, walking `phases`
+        (default all) and re-asking `forcePhases`, or everything on `force`.
         `source-unavailable` when no phase could run. Administrators only.
       tags: [enrichment]
       requestBody:
@@ -250,6 +250,7 @@ components:
           tagsFailed,
           tagsUnrepresented,
           tagsSkipped,
+          tagsReadOnly,
           stalled,
         ]
       properties:
@@ -386,6 +387,11 @@ components:
           description: >
             Book parts left unwritten because their book's primary part
             failed.
+        tagsReadOnly:
+          type: integer
+          description: >
+            Files left unwritten because their library is read-only; a
+            later pass writes them once the flag clears.
         stalled:
           type: array
           description: >
@@ -446,6 +452,14 @@ components:
             Re-ask these phases alone, marked or not, while the rest walk as
             usual. Refused beside `force` (400), and with `source-unavailable` for
             a phase this server does not run.
+          items:
+            $ref: "#/components/schemas/EnrichmentPhase"
+        phases:
+          type: array
+          description: >
+            Walk only these phases. `forcePhases` must be among them (400
+            otherwise), and a phase this server does not run is
+            `source-unavailable`.
           items:
             $ref: "#/components/schemas/EnrichmentPhase"
 

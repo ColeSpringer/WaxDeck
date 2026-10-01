@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -93,6 +94,7 @@ func resetStaleCatalog(ctx context.Context, dbPath string, configuredRoots []Roo
 func (l *Library) reconcileCatalogUsers(ctx context.Context) error {
 	users, err := l.lib.Users(ctx)
 	if err != nil {
+		l.usersUnmapped.Store(true)
 		return err
 	}
 	known := make(map[model.PID]bool, len(users))
@@ -101,8 +103,9 @@ func (l *Library) reconcileCatalogUsers(ctx context.Context) error {
 		known[u.PID] = true
 		byName[u.Name] = u.PID
 	}
-	l.catalogUsers = map[string]model.PID{}
+	mapped := map[string]model.PID{}
 	created := 0
+	var failed error
 	err = l.db.EachUser(ctx, func(a *wdb.User) error {
 		if known[model.PID(a.WaxbinUserPID)] {
 			return nil
@@ -111,27 +114,37 @@ func (l *Library) reconcileCatalogUsers(ctx context.Context) error {
 		if !ok {
 			u, err := l.lib.CreateUser(ctx, a.ID)
 			if err != nil {
-				return err
+				// One account's failure leaves the others mapped.
+				failed = errors.Join(failed, fmt.Errorf("account %s: %w", a.ID, err))
+				return nil
 			}
 			pid = u.PID
 			created++
 		}
-		l.catalogUsers[a.ID] = pid
+		mapped[a.ID] = pid
 		return nil
 	})
 	if err != nil {
+		l.usersUnmapped.Store(true)
 		return err
 	}
+	l.catalogUsersMu.Lock()
+	l.catalogUsers = mapped
+	l.catalogUsersMu.Unlock()
+	l.usersUnmapped.Store(failed != nil)
 	if created > 0 {
 		l.log.Info("gave accounts a user in the new catalog", "accounts", created)
 	}
-	return nil
+	return failed
 }
 
 // catalogPID names the catalog user an account acts as: its stored one,
 // unless a reset dropped that and the account now has another.
 func (l *Library) catalogPID(u *wdb.User) string {
-	if pid, ok := l.catalogUsers[u.ID]; ok {
+	l.catalogUsersMu.RLock()
+	pid, ok := l.catalogUsers[u.ID]
+	l.catalogUsersMu.RUnlock()
+	if ok {
 		return string(pid)
 	}
 	return u.WaxbinUserPID

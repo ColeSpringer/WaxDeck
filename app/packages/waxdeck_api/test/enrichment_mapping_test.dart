@@ -36,6 +36,7 @@ Map<String, Object?> _lastRun() => <String, Object?>{
     'tagsFailed',
     'tagsUnrepresented',
     'tagsSkipped',
+    'tagsReadOnly',
   ])
     key: 0,
   'artistsEnriched': 12,
@@ -43,6 +44,7 @@ Map<String, Object?> _lastRun() => <String, Object?>{
   'groupArtEnriched': 9,
   'deferred': 4,
   'tagsSkipped': 3,
+  'tagsReadOnly': 2,
   'stalled': <Object?>['lyrics', 'identity'],
   'finishedAt': '2026-09-27T03:45:00Z',
 };
@@ -104,6 +106,7 @@ void main() {
     expect(run.groupArtEnriched, 9);
     expect(run.deferred, 4);
     expect(run.tagsSkipped, 3);
+    expect(run.tagsReadOnly, 2);
     expect(run.stalled, ['lyrics', 'identity']);
     expect(run.finishedAt, DateTime.utc(2026, 9, 27, 3, 45));
   });

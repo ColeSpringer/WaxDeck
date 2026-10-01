@@ -14,6 +14,8 @@ class _$OrganizePlan extends OrganizePlan {
   @override
   final int held;
   @override
+  final int readOnlyLibraries;
+  @override
   final BuiltList<OrganizeAction> actions;
   @override
   final bool? tagWrite;
@@ -25,6 +27,7 @@ class _$OrganizePlan extends OrganizePlan {
     required this.profile,
     required this.totalActions,
     required this.held,
+    required this.readOnlyLibraries,
     required this.actions,
     this.tagWrite,
   }) : super._();
@@ -42,6 +45,7 @@ class _$OrganizePlan extends OrganizePlan {
         profile == other.profile &&
         totalActions == other.totalActions &&
         held == other.held &&
+        readOnlyLibraries == other.readOnlyLibraries &&
         actions == other.actions &&
         tagWrite == other.tagWrite;
   }
@@ -52,6 +56,7 @@ class _$OrganizePlan extends OrganizePlan {
     _$hash = $jc(_$hash, profile.hashCode);
     _$hash = $jc(_$hash, totalActions.hashCode);
     _$hash = $jc(_$hash, held.hashCode);
+    _$hash = $jc(_$hash, readOnlyLibraries.hashCode);
     _$hash = $jc(_$hash, actions.hashCode);
     _$hash = $jc(_$hash, tagWrite.hashCode);
     _$hash = $jf(_$hash);
@@ -64,6 +69,7 @@ class _$OrganizePlan extends OrganizePlan {
           ..add('profile', profile)
           ..add('totalActions', totalActions)
           ..add('held', held)
+          ..add('readOnlyLibraries', readOnlyLibraries)
           ..add('actions', actions)
           ..add('tagWrite', tagWrite))
         .toString();
@@ -86,6 +92,11 @@ class OrganizePlanBuilder
   int? get held => _$this._held;
   set held(int? held) => _$this._held = held;
 
+  int? _readOnlyLibraries;
+  int? get readOnlyLibraries => _$this._readOnlyLibraries;
+  set readOnlyLibraries(int? readOnlyLibraries) =>
+      _$this._readOnlyLibraries = readOnlyLibraries;
+
   ListBuilder<OrganizeAction>? _actions;
   ListBuilder<OrganizeAction> get actions =>
       _$this._actions ??= ListBuilder<OrganizeAction>();
@@ -106,6 +117,7 @@ class OrganizePlanBuilder
       _profile = $v.profile;
       _totalActions = $v.totalActions;
       _held = $v.held;
+      _readOnlyLibraries = $v.readOnlyLibraries;
       _actions = $v.actions.toBuilder();
       _tagWrite = $v.tagWrite;
       _$v = null;
@@ -146,6 +158,11 @@ class OrganizePlanBuilder
               held,
               r'OrganizePlan',
               'held',
+            ),
+            readOnlyLibraries: BuiltValueNullFieldError.checkNotNull(
+              readOnlyLibraries,
+              r'OrganizePlan',
+              'readOnlyLibraries',
             ),
             actions: actions.build(),
             tagWrite: tagWrite,

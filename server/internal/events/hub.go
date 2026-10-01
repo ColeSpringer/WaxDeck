@@ -84,6 +84,8 @@ type Conn struct {
 		player  bool
 		radio   bool
 		resync  bool
+		// resyncCatalog is a resync of the catalog stream alone.
+		resyncCatalog bool
 	}
 	wake chan struct{}
 }
@@ -153,14 +155,17 @@ func (c *Conn) tunedTo(stations map[string]struct{}) bool {
 	return ok
 }
 
-// Mark queues an invalidation (or, for TypeResync, a resync) and wakes
-// the writer. Invalidations for unsubscribed topics are dropped.
+// Mark queues an invalidation, or for TypeResync a resync of the catalog
+// stream or of every stream (an empty topic), and wakes the writer.
+// Invalidations for unsubscribed topics are dropped.
 func (c *Conn) Mark(frameType, topic string) {
 	if frameType == TypeInvalidate && !c.wants(topic) {
 		return
 	}
 	c.mu.Lock()
 	switch {
+	case frameType == TypeResync && topic == TopicCatalog:
+		c.pending.resyncCatalog = true
 	case frameType == TypeResync:
 		c.pending.resync = true
 	case topic == TopicCatalog:
@@ -189,6 +194,8 @@ func (c *Conn) TakePending() []Frame {
 	var out []Frame
 	if c.pending.resync {
 		out = append(out, Frame{Type: TypeResync})
+	} else if c.pending.resyncCatalog {
+		out = append(out, Frame{Type: TypeResync, Topic: TopicCatalog})
 	}
 	if c.pending.catalog {
 		out = append(out, Frame{Type: TypeInvalidate, Topic: TopicCatalog})
@@ -203,7 +210,7 @@ func (c *Conn) TakePending() []Frame {
 		out = append(out, Frame{Type: TypeInvalidate, Topic: TopicRadio})
 	}
 	c.pending.catalog, c.pending.user, c.pending.player = false, false, false
-	c.pending.radio, c.pending.resync = false, false
+	c.pending.radio, c.pending.resync, c.pending.resyncCatalog = false, false, false
 	return out
 }
 
@@ -264,7 +271,14 @@ func (h *Hub) takeRadio() map[string]struct{} {
 	return stations
 }
 
-func (h *Hub) markAll(topic string) {
+// MarkCatalogReplaced asks every connection to re-mirror both streams:
+// a replaced catalog breaks the catalog stream and moves what the user
+// stream hydrates (play states, stars, playlists).
+func (h *Hub) MarkCatalogReplaced() { h.markAllAs(TypeResync, "") }
+
+func (h *Hub) markAll(topic string) { h.markAllAs(TypeInvalidate, topic) }
+
+func (h *Hub) markAllAs(frameType, topic string) {
 	h.mu.Lock()
 	conns := make([]*Conn, 0, len(h.conns))
 	for c := range h.conns {
@@ -272,7 +286,7 @@ func (h *Hub) markAll(topic string) {
 	}
 	h.mu.Unlock()
 	for _, c := range conns {
-		c.Mark(TypeInvalidate, topic)
+		c.Mark(frameType, topic)
 	}
 }
 

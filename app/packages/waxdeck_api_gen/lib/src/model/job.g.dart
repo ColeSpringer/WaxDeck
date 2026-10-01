@@ -25,6 +25,8 @@ class _$Job extends Job {
   final DateTime? finishedAt;
   @override
   final BuiltMap<String, JsonObject?>? result;
+  @override
+  final JobTarget? target;
 
   factory _$Job([void Function(JobBuilder)? updates]) =>
       (JobBuilder()..update(updates))._build();
@@ -39,6 +41,7 @@ class _$Job extends Job {
     this.startedAt,
     this.finishedAt,
     this.result,
+    this.target,
   }) : super._();
   @override
   Job rebuild(void Function(JobBuilder) updates) =>
@@ -59,7 +62,8 @@ class _$Job extends Job {
         error == other.error &&
         startedAt == other.startedAt &&
         finishedAt == other.finishedAt &&
-        result == other.result;
+        result == other.result &&
+        target == other.target;
   }
 
   @override
@@ -74,6 +78,7 @@ class _$Job extends Job {
     _$hash = $jc(_$hash, startedAt.hashCode);
     _$hash = $jc(_$hash, finishedAt.hashCode);
     _$hash = $jc(_$hash, result.hashCode);
+    _$hash = $jc(_$hash, target.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -89,7 +94,8 @@ class _$Job extends Job {
           ..add('error', error)
           ..add('startedAt', startedAt)
           ..add('finishedAt', finishedAt)
-          ..add('result', result))
+          ..add('result', result)
+          ..add('target', target))
         .toString();
   }
 }
@@ -135,6 +141,10 @@ class JobBuilder implements Builder<Job, JobBuilder> {
   set result(MapBuilder<String, JsonObject?>? result) =>
       _$this._result = result;
 
+  JobTargetBuilder? _target;
+  JobTargetBuilder get target => _$this._target ??= JobTargetBuilder();
+  set target(JobTargetBuilder? target) => _$this._target = target;
+
   JobBuilder() {
     Job._defaults(this);
   }
@@ -151,6 +161,7 @@ class JobBuilder implements Builder<Job, JobBuilder> {
       _startedAt = $v.startedAt;
       _finishedAt = $v.finishedAt;
       _result = $v.result?.toBuilder();
+      _target = $v.target?.toBuilder();
       _$v = null;
     }
     return this;
@@ -188,12 +199,15 @@ class JobBuilder implements Builder<Job, JobBuilder> {
             startedAt: startedAt,
             finishedAt: finishedAt,
             result: _result?.build(),
+            target: _target?.build(),
           );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'result';
         _result?.build();
+        _$failedField = 'target';
+        _target?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(r'Job', _$failedField, e.toString());
       }

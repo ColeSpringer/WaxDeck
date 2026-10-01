@@ -367,15 +367,7 @@ test('signup requests await approval and invites pre-approve', async ({ app }) =
 });
 
 test('deleted items land in the trash and restore cleanly', async ({ app }) => {
-  // The tail of a wide page: the round trip briefly removes a file, and
-  // a reused stack carries earlier runs' uploads, so this keeps clear of
-  // the fixtures other specs name by title.
-  const items = await app.api.get('/library/items', {
-    query: { limit: 100, mediaType: 'music' },
-  });
-  const rows = items.items ?? [];
-  expect(rows.length).toBeGreaterThan(0);
-  const pid = rows[rows.length - 1].pid;
+  const pid = await app.seed.disposableTrack();
 
   const plan = await app.api.post('/library/items/delete', {
     // `mode` and `dryRun` spelled out because the contract marks them

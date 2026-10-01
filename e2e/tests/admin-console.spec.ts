@@ -1,16 +1,12 @@
+import type { Request } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { T } from './driver';
+import { clickThrough, clickToward, clickUntilRequested, typeInto } from './driver/gestures';
 import { SemanticsIds } from './semantics-ids';
 
-// The console's oversight surfaces, over the real stack: the share
-// links every account has minted, and the transcoding limits read
-// beside what the engine is actually running.
-//
-// Read-mostly on purpose. The only write is a share this test minted
-// itself and then revokes, so nothing here is a server-global switch
-// and the file stays in the parallel project. The listing is everyone's
-// by construction, so every assertion is scoped to this account's own
-// pid: a sibling worker's link is legitimately on the same page.
+// The console's oversight surfaces over the real stack. Each write is a
+// test's own (a share it revokes, a profile it deletes), so the file stays
+// parallel; listings are everyone's, so assertions scope to their own pids.
 
 test('a share link is listed with its owner and revoked from the console', async ({
   app,
@@ -102,4 +98,54 @@ test('a role granted mid-session reaches the app that is already open', async ({
   // No reload anywhere: the server marks the account changed, the app
   // re-reads its session, and the gates that watch it follow.
   await expect(theirs.settings.section('server')).toBeVisible({ timeout: T.fetch });
+});
+
+// An organize profile made in the console lists with its sample, lays out
+// a preview, and goes again. The name is this test's, so a profile a
+// failed run left behind is cleared first rather than assumed absent.
+test('an organize profile is made, previewed under and deleted', async ({ app }) => {
+  const name = 'e2e-flat';
+  await app.api.raw.delete('/organize/profiles/{name}', { path: { name } });
+  const page = app.page;
+  const control = (id: string) => app.admin.control(id);
+  await app.nav.enter('adminOrganize');
+  await clickThrough(control(SemanticsIds.organizeProfileNew), control(SemanticsIds.organizeProfileName));
+  await typeInto(page, control(SemanticsIds.organizeProfileName), name);
+  await typeInto(page, control(SemanticsIds.organizeProfileMusic), '{title}.{ext}');
+  await expect(app.admin.text('Track: Amber Waves.flac')).toBeVisible({ timeout: T.fetch });
+  await expect(async () => {
+    await clickToward(control(SemanticsIds.organizeProfileSave), {
+      gone: control(SemanticsIds.organizeProfileSheet),
+    });
+  }).toPass({ timeout: T.nav });
+
+  const option = control(SemanticsIds.organizeProfileOption(name));
+  await clickThrough(option, control(SemanticsIds.organizeProfileEdit(name)));
+  const previewed = page.waitForResponse((r) => r.url().includes('/organize/preview'), {
+    timeout: T.fetch,
+  });
+  await clickUntilRequested(page, control(SemanticsIds.organizePreview), (r) =>
+    r.url().includes('/organize/preview'),
+  );
+  const response = await previewed;
+  expect(response.status()).toBe(200);
+  expect(response.request().postDataJSON().profile).toBe(name);
+
+  await clickThrough(
+    control(SemanticsIds.organizeProfileEdit(name)),
+    control(SemanticsIds.organizeProfileDelete(name)),
+  );
+  await clickThrough(
+    control(SemanticsIds.organizeProfileDelete(name)),
+    control(SemanticsIds.organizeProfileDeleteConfirm),
+  );
+  // Not a wait for the option to go: the sheet already hides it.
+  const isDelete = (r: Request) =>
+    r.method() === 'DELETE' && r.url().endsWith(`/organize/profiles/${name}`);
+  const deleted = page.waitForResponse((r) => isDelete(r.request()), { timeout: T.fetch });
+  await clickUntilRequested(page, control(SemanticsIds.organizeProfileDeleteConfirm), isDelete);
+  expect((await deleted).status()).toBe(204);
+  await expect(option).toBeHidden({ timeout: T.fetch });
+  const listed = await app.api.get('/organize/profiles');
+  expect(listed.profiles.map((p) => p.name)).not.toContain(name);
 });

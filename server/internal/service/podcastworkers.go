@@ -7,10 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/source"
 	"github.com/colespringer/waxbin/waxerr"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -50,6 +50,9 @@ func queueRetryDelay(attempts int) time.Duration {
 // older than interval, skipping disabled feeds. One failing feed never
 // stops the others.
 func (l *Library) RefreshDueFeeds(ctx context.Context, interval time.Duration) {
+	if l.Maintenance() {
+		return
+	}
 	shows, err := l.db.SubscribedShowPIDs(ctx)
 	if err != nil {
 		l.log.Warn("listing subscribed shows", "err", err)
@@ -226,40 +229,14 @@ func (l *Library) syncWithoutVerdict(ctx context.Context, showPID model.PID, ori
 	}
 }
 
-// feedAtFault reports whether a sync failed on the feed itself: its host,
-// its content, or its provider, which classes its failures as the source's.
+// feedAtFault reports whether a sync failed on the feed itself: the catalog
+// marks every failure of a feed's provider, and any other is its own.
 func feedAtFault(ctx context.Context, err error) bool {
-	if ctx.Err() != nil || errors.Is(err, context.Canceled) || kindFromWaxErr(err) == KindMaintenance || fromCatalogStore(err) {
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) || waxerr.CodeOf(err) == waxerr.CodeCanceled ||
+		kindFromWaxErr(err) == KindMaintenance {
 		return false
 	}
-	var classed *waxerr.Error
-	if !errors.As(err, &classed) {
-		return false
-	}
-	switch waxerr.CodeOf(err) {
-	case waxerr.CodeIO, waxerr.CodeNotFound, waxerr.CodeInvalid:
-		return true
-	}
-	return false
-}
-
-// fromCatalogStore reports whether the catalog's store raised err: its ops
-// are named store.*, and it classes its own failures IO like a feed's.
-func fromCatalogStore(err error) bool {
-	if we, ok := err.(*waxerr.Error); ok && strings.HasPrefix(we.Op, "store.") {
-		return true
-	}
-	switch e := err.(type) {
-	case interface{ Unwrap() error }:
-		return fromCatalogStore(e.Unwrap())
-	case interface{ Unwrap() []error }:
-		for _, inner := range e.Unwrap() {
-			if fromCatalogStore(inner) {
-				return true
-			}
-		}
-	}
-	return false
+	return source.IsProviderError(err)
 }
 
 // autoDownloadArrivals queues enclosure fetches for the episodes a sync
@@ -331,10 +308,10 @@ func anyFilterAdmits(filters []EpisodeFilter, title string) bool {
 }
 
 // DrainFetchQueue works one queued enclosure download; returns false
-// when the queue is idle so the caller can sleep. A read-only podcast
-// library leaves the queue waiting for it.
+// when the queue is idle so the caller can sleep. A hand-off or a
+// read-only server leaves the queue waiting for it.
 func (l *Library) DrainFetchQueue(ctx context.Context) bool {
-	if l.checkPodcastWritable(ctx) != nil {
+	if l.Maintenance() || l.checkPodcastWritable(ctx) != nil {
 		return false
 	}
 	row, err := l.db.LeaseFetch(ctx, time.Now().UnixNano(), fetchLease.Nanoseconds(), fetchMaxAttempts)
@@ -405,6 +382,10 @@ func (l *Library) notifyEpisodeDownloaded(ctx context.Context, episodePID model.
 // pinning, and applies retention only when no candidate file is in
 // use. Deferred shows re-queue for the next cycle.
 func (l *Library) SweepRetention(ctx context.Context) {
+	// Taken, the queue is gone; a hand-off would fail every show in it.
+	if l.Maintenance() {
+		return
+	}
 	shows, err := l.db.TakeRetentionQueue(ctx)
 	if err != nil {
 		l.log.Warn("draining retention queue", "err", err)
@@ -487,7 +468,7 @@ func (l *Library) sweepShowRetention(ctx context.Context, showPID model.PID) err
 			}
 		}
 	}
-	// A read-only podcast library defers the show the same way.
+	// A read-only server defers the show the same way.
 	if inUse || l.checkPodcastWritable(ctx) != nil {
 		if err := l.db.EnqueueRetention(ctx, string(showPID), time.Now().UnixNano()); err != nil {
 			l.log.Warn("re-queuing deferred retention", "show", string(showPID), "err", err)

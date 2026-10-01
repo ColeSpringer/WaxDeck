@@ -21,6 +21,10 @@ class _$TrashEntry extends TrashEntry {
   final DateTime trashedAt;
   @override
   final DateTime? restoredAt;
+  @override
+  final String? libraryPid;
+  @override
+  final String? libraryName;
 
   factory _$TrashEntry([void Function(TrashEntryBuilder)? updates]) =>
       (TrashEntryBuilder()..update(updates))._build();
@@ -33,6 +37,8 @@ class _$TrashEntry extends TrashEntry {
     required this.sizeBytes,
     required this.trashedAt,
     this.restoredAt,
+    this.libraryPid,
+    this.libraryName,
   }) : super._();
   @override
   TrashEntry rebuild(void Function(TrashEntryBuilder) updates) =>
@@ -51,7 +57,9 @@ class _$TrashEntry extends TrashEntry {
         reason == other.reason &&
         sizeBytes == other.sizeBytes &&
         trashedAt == other.trashedAt &&
-        restoredAt == other.restoredAt;
+        restoredAt == other.restoredAt &&
+        libraryPid == other.libraryPid &&
+        libraryName == other.libraryName;
   }
 
   @override
@@ -64,6 +72,8 @@ class _$TrashEntry extends TrashEntry {
     _$hash = $jc(_$hash, sizeBytes.hashCode);
     _$hash = $jc(_$hash, trashedAt.hashCode);
     _$hash = $jc(_$hash, restoredAt.hashCode);
+    _$hash = $jc(_$hash, libraryPid.hashCode);
+    _$hash = $jc(_$hash, libraryName.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -77,7 +87,9 @@ class _$TrashEntry extends TrashEntry {
           ..add('reason', reason)
           ..add('sizeBytes', sizeBytes)
           ..add('trashedAt', trashedAt)
-          ..add('restoredAt', restoredAt))
+          ..add('restoredAt', restoredAt)
+          ..add('libraryPid', libraryPid)
+          ..add('libraryName', libraryName))
         .toString();
   }
 }
@@ -113,6 +125,14 @@ class TrashEntryBuilder implements Builder<TrashEntry, TrashEntryBuilder> {
   DateTime? get restoredAt => _$this._restoredAt;
   set restoredAt(DateTime? restoredAt) => _$this._restoredAt = restoredAt;
 
+  String? _libraryPid;
+  String? get libraryPid => _$this._libraryPid;
+  set libraryPid(String? libraryPid) => _$this._libraryPid = libraryPid;
+
+  String? _libraryName;
+  String? get libraryName => _$this._libraryName;
+  set libraryName(String? libraryName) => _$this._libraryName = libraryName;
+
   TrashEntryBuilder() {
     TrashEntry._defaults(this);
   }
@@ -127,6 +147,8 @@ class TrashEntryBuilder implements Builder<TrashEntry, TrashEntryBuilder> {
       _sizeBytes = $v.sizeBytes;
       _trashedAt = $v.trashedAt;
       _restoredAt = $v.restoredAt;
+      _libraryPid = $v.libraryPid;
+      _libraryName = $v.libraryName;
       _$v = null;
     }
     return this;
@@ -172,6 +194,8 @@ class TrashEntryBuilder implements Builder<TrashEntry, TrashEntryBuilder> {
             'trashedAt',
           ),
           restoredAt: restoredAt,
+          libraryPid: libraryPid,
+          libraryName: libraryName,
         );
     replace(_$result);
     return _$result;

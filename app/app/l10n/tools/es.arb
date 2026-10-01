@@ -29,6 +29,7 @@
   "toolsJobPurgeTrash": "Purga de la papelera",
   "toolsJobRestore": "Restauración",
   "toolsJobScan": "Escaneo de la biblioteca",
+  "toolsJobTargeted": "{job}: {target}",
   "toolsJobsTitle": "Trabajos de la biblioteca",
   "toolsLoadError": "No se han podido cargar las tareas de herramientas",
   "toolsOpenReviewQueue": "Abrir la cola de revisión",

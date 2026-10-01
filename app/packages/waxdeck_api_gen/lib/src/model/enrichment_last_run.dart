@@ -44,6 +44,7 @@ part 'enrichment_last_run.g.dart';
 /// * [tagsFailed] - Files whose write failed. The catalog kept the values either way.
 /// * [tagsUnrepresented] - Files whose format cannot store a key that was filled. Not a failure: the bytes are unchanged and correct. 
 /// * [tagsSkipped] - Book parts left unwritten because their book's primary part failed. 
+/// * [tagsReadOnly] - Files left unwritten because their library is read-only; a later pass writes them once the flag clears. 
 /// * [stalled] - Phases that ended early because every source serving them failed three times in a row and sat out the pass. The lookups they owe are asked once more on the next pass. 
 /// * [finishedAt] - When the pass finished.
 @BuiltValue()
@@ -171,6 +172,10 @@ abstract class EnrichmentLastRun implements Built<EnrichmentLastRun, EnrichmentL
   /// Book parts left unwritten because their book's primary part failed. 
   @BuiltValueField(wireName: r'tagsSkipped')
   int get tagsSkipped;
+
+  /// Files left unwritten because their library is read-only; a later pass writes them once the flag clears. 
+  @BuiltValueField(wireName: r'tagsReadOnly')
+  int get tagsReadOnly;
 
   /// Phases that ended early because every source serving them failed three times in a row and sat out the pass. The lookups they owe are asked once more on the next pass. 
   @BuiltValueField(wireName: r'stalled')
@@ -356,6 +361,11 @@ class _$EnrichmentLastRunSerializer implements PrimitiveSerializer<EnrichmentLas
     yield r'tagsSkipped';
     yield serializers.serialize(
       object.tagsSkipped,
+      specifiedType: const FullType(int),
+    );
+    yield r'tagsReadOnly';
+    yield serializers.serialize(
+      object.tagsReadOnly,
       specifiedType: const FullType(int),
     );
     yield r'stalled';
@@ -609,6 +619,13 @@ class _$EnrichmentLastRunSerializer implements PrimitiveSerializer<EnrichmentLas
             specifiedType: const FullType(int),
           ) as int;
           result.tagsSkipped = valueDes;
+          break;
+        case r'tagsReadOnly':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.tagsReadOnly = valueDes;
           break;
         case r'stalled':
           final valueDes = serializers.deserialize(

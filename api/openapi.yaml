@@ -609,24 +609,32 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
-  /libraries/{pid}/read-only:
+  /libraries/{pid}/profile:
     parameters:
       - $ref: "#/components/parameters/Pid"
-    get:
-      operationId: getLibraryReadOnly
-      summary: Read a library's read-only mode
+    put:
+      operationId: setLibraryProfile
+      summary: Set a managed library's organize profile
       description: >
-        Whether the library refuses writes. The effective state is
-        this flag or the server-wide `readOnly` setting; the response
-        reports the per-library flag only. Administrators only.
+        The organize profile a managed library is laid out by when a pass
+        names none. An unmanaged library or an unknown profile is
+        `invalid-request`. Administrators only.
       tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryProfile"
       responses:
         "200":
-          description: The flag.
+          description: The library.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LibraryReadOnly"
+                $ref: "#/components/schemas/Library"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
         "403":
@@ -635,23 +643,17 @@ paths:
           $ref: "#/components/responses/NotFound"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
+
+  /libraries/{pid}/read-only:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
     put:
       operationId: setLibraryReadOnly
       summary: Set a library's read-only mode
       description: >
-        A read-only library refuses uploads, file write-back,
-        deletion, restoring or purging its trash, and the file tools
-        with code `read-only`, while reads, playback, and per-user
-        state (stars, progress, playlists) keep working. For media
-        mounted read-only on principle. Organizing and the path and
-        tag health fixes leave its files where they are, and edits
-        that write into every member file of an album, a release
-        group or an artist are refused with `read-only` while any
-        library is read-only, since they can reach every library.
-        Podcast libraries need a writable root for episode fetching:
-        the flag refuses fetches and download removal, and holds the
-        fetch queue and download retention until it clears.
-        Administrators only.
+        Uploads, deletion, the file tools and its trash entries answer
+        `read-only`; write-back, organizing and emptying the trash skip its
+        files. The podcast library is `invalid-request`. Administrators only.
       tags: [admin]
       requestBody:
         required: true
@@ -682,14 +684,9 @@ paths:
       operationId: listJobs
       summary: List recent catalog jobs
       description: >
-        Recent server-run catalog jobs (scans, analysis, enrichment,
-        organize runs, deletes), newest first. Bounded by `limit`
-        rather than cursor-paged (a recent-history window, not a
-        mirrorable list), except that a job still running is always
-        listed, first, however many newer jobs have pushed it out of
-        the window. The live counterpart of the tool task log for
-        engine-side work; the `job` sync marker says when to read it
-        again. Administrators only.
+        Recent catalog jobs, newest first: `limit` of them, after any still
+        running. A finished targeted job is left out; read it by pid. The
+        `job` sync marker says when to read again. Administrators only.
       tags: [admin]
       parameters:
         - name: limit
@@ -1415,14 +1412,9 @@ paths:
       operationId: restoreTrashEntry
       summary: Restore a trashed file
       description: >
-        Moves the file back to its original path and re-catalogs it,
-        un-archiving its item. Refuses when the original path is
-        occupied (`conflict`), and when it points into the internal
-        podcast download tree, which owns its own files: entries left
-        there by older versions come back by re-downloading the
-        episode, and purge and expiry still apply to them. The trash
-        sits under each library's root, so a read-only library's
-        entries are refused with `read-only`. Administrators only.
+        Moves the file back to its path and re-catalogs it; an entry from the
+        podcast download tree comes back by re-downloading its episode
+        instead. Administrators only.
       tags: [admin]
       parameters:
         - $ref: "#/components/parameters/TrashId"
@@ -1452,11 +1444,9 @@ paths:
       operationId: emptyTrash
       summary: Empty the trash
       description: >
-        Permanently deletes every active trashed file and reports
-        what was reclaimed. Irreversible. Refused with `read-only`
-        while the server is read-only or a read-only library holds a
-        trashed file, since the pass cannot leave one library out; the
-        retention sweep waits the same way. Administrators only.
+        Permanently deletes every trashed file and reports what was
+        reclaimed, skipping and counting a read-only library's entries;
+        `read-only` while the server is read-only. Administrators only.
       tags: [admin]
       responses:
         "200":
@@ -1481,11 +1471,9 @@ paths:
       operationId: purgeTrashEntry
       summary: Purge one trashed file
       description: >
-        Permanently deletes a single trashed file and reports the bytes
-        it reclaimed. Irreversible; the age-based retention sweep
-        (`trashRetentionDays`) purges the same way in bulk. A
-        read-only library's entry is refused with `read-only`.
-        Administrators only.
+        Permanently deletes one trashed file and reports the bytes it
+        reclaimed; the `trashRetentionDays` sweep does the same in bulk. A
+        read-only library's entry answers `read-only`. Administrators only.
       tags: [admin]
       responses:
         "200":
@@ -2678,8 +2666,8 @@ paths:
       operationId: runEnrichment
       summary: Run a whole-library enrichment pass
       description: >
-        Starts the whole-library enrichment pass as a job: `force` re-asks
-        everything, `forcePhases` the named phases alone. Refuses with
+        Starts the whole-library enrichment pass as a job, walking `phases`
+        (default all) and re-asking `forcePhases`, or everything on `force`.
         `source-unavailable` when no phase could run. Administrators only.
       tags: [enrichment]
       requestBody:
@@ -2822,43 +2810,9 @@ paths:
       operationId: fixHealthIssues
       summary: Bulk-fix a health rule
       description: >
-        Starts the fix that matches one rule, across the named items or,
-        when `itemPids` is absent, every item currently failing the rule.
-        Only a rule the summary reports `fixable` has one; any other
-        answers `invalid-request` naming the rule, and the summary's
-        `fixBlocked` says what the install lacks for a rule that could
-        be fixed with it. Administrators only.
-
-
-        An unscoped fix of `missing-art`, `missing-lyrics`,
-        `missing-genre`, `missing-narrator` or `missing-asin` runs the
-        catalog's enrichment pass as a catalog job whose pid is `jobPid`,
-        with those of the phases that fill the rule which this server
-        runs forced to re-ask everything they reach (either of
-        `missing-art`'s two picture phases is enough); the pass's other
-        phases walk their ordinary sweeps, as any pass does.
-        `missing-genre` re-asks MusicBrainz about every album. A scoped
-        fix, and every fix of `path-mismatch` or `write-unsynced`, runs
-        as a `health-fix` tool task whose id is `taskId`, working item
-        by item. Either runs in the background and is listed where its
-        kind is (`GET /jobs`, `GET /tools/tasks`); on finishing it
-        re-checks the items it reached (a pass, every item failing the
-        rule) and files a `health-fix-finished` notification for the
-        administrator who started it, saying what it filled or why it
-        failed. The `health` sync marker goes out when a fix starts
-        and when its re-check lands, and the rule's `fixing` is true in
-        between. The score waits for the next full sweep. `queued` is
-        the number of items the fix set out to reach. While an
-        enrichment pass is running, another fix that needs one answers
-        `conflict`, as does any fix for a rule whose `fixing` is true.
-
-
-        The fixes of `path-mismatch` and `write-unsynced` write files:
-        while the server is read-only they answer `read-only` (and the
-        summary reports them blocked), and a library flagged read-only
-        on its own keeps its files as they are, its items counted as
-        skipped. A fix already running when the server goes read-only
-        skips what it has not reached.
+        Fixes one `fixable` rule across `itemPids` or every failing item. An
+        unscoped metadata fix is an enrichment job (`jobPid`) over its rule's
+        phases; the rest is a `health-fix` task (`taskId`). Administrators only.
       tags: [health]
       requestBody:
         required: true
@@ -4470,20 +4424,9 @@ paths:
       operationId: setEntityArtwork
       summary: Set entity artwork
       description: >
-        Stores the raw image bytes in one artwork slot (`role`, default
-        `front`) of an album, artist, release group, genre, playlist, or
-        podcast entity. Album front covers may additionally embed into
-        member files with `writeBack=true`, which is refused with
-        `read-only` while the server or any library is read-only;
-        other slots and entity types are catalog-only. An artist portrait lands under `front` - the
-        slot the artist screen and index tiles resolve, and the one
-        enrichment's artist walk fills; `background` is the scenic
-        slot, which no surface draws yet. Catalog entities are
-        administrators-only, with two exceptions: a playlist cover is set
-        by its owner, and replaces the cover the server generates from the
-        members until it is cleared, and a podcast show cover is set by
-        `managePodcasts` holders as well, replacing the feed's image until
-        it is cleared.
+        Stores the image in one artwork slot (`role`; an artist's portrait is
+        its `front`), and with `writeBack` embeds an album front in its files.
+        Administrators; a playlist's owner, and `managePodcasts` for a show.
       tags: [metadata]
       parameters:
         - name: role
@@ -4922,34 +4865,9 @@ paths:
       operationId: editEntity
       summary: Edit entity fields
       description: >
-        Edits an entity's own fields: `sort` and `mbid` for artists;
-        `sort`, `mbid`, and `type` for release groups; `sort`, `mbid`,
-        `barcode`, `label`, `catalog_number`, `media`, and `country`
-        for albums. Entity edits carry their own provenance, readable
-        below. `writeBack` pushes the values that have tag forms into
-        member files.
-
-
-        `barcode` and `country` are normalized on the way in, where a
-        scan stores the tag verbatim, so an edit refuses values
-        `GET /albums/{pid}` will happily show ("US &amp; Europe" is a
-        country a scan can store and an edit cannot). `media` has no
-        normalizer and is stored as typed.
-
-
-        Clearing an `mbid` re-keys the entity, which is the one edit
-        that can move it: the chain falls back to the heuristic key, so
-        the entity may merge into a twin that already held it
-        (`mergedInto`) or, on a release group, shed differently titled
-        albums into groups of their own (`movedAlbums`). With
-        `writeBack` an album's or release group's `mbid` clear also
-        strips that id from the member files, which is what stops the
-        next scan putting the linkage back. A clear that merges is
-        refused alongside any other field with code `conflict`, whose
-        message names the survivor to edit instead, because the merge
-        deletes the row those other values would be written to.
-        `writeBack` can reach every library, so it is refused with
-        `read-only` while the server or any library is read-only.
+        Edits an entity's own fields, normalizing `barcode` and `country`.
+        Clearing an `mbid` re-keys the entity, which may merge it into a twin
+        (`mergedInto`) or move albums out of a release group (`movedAlbums`).
       tags: [metadata]
       requestBody:
         required: true
@@ -4974,11 +4892,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            The edit was refused. `field-locked`: the field is locked
-            and the request did not set `force`. `conflict`: an `mbid`
-            clear that merges was sent with other fields; the message
-            names the survivor. `read-only`: `writeBack` was asked for
-            while the server or any library is read-only.
+            `field-locked`: the field is locked and `force` was not set.
+            `conflict`: a merging `mbid` clear came with other fields.
+            `read-only`: `writeBack` while the server is read-only.
           content:
             application/json:
               schema:
@@ -5045,15 +4961,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            A member's keying field or a moved credit is locked and the
-            request did not set `force` (code `field-locked`); the
-            rename would split the entity rather than move it (code
-            `conflict`: members landing on different keys, an archived
-            member, a release group titled apart, a reference the batch
-            does not cover); or `writeBack` was asked for while the
-            server or any library is read-only (code `read-only`),
-            since the rename can reach every library. The message names
-            the case.
+            `field-locked`: a member's keying field or credit is locked;
+            `conflict`: the rename would split the entity; `read-only`:
+            `writeBack` while the server is read-only. The message says which.
           content:
             application/json:
               schema:
@@ -5823,11 +5733,9 @@ paths:
       operationId: listOrganizeProfiles
       summary: List organize profiles
       description: >
-        The organize profiles the server offers: the catalog's
-        built-in `waxbin-native` layout. Organizing moves files within
-        managed libraries only, so the listing also counts them; with
-        none, a preview or an apply answers `invalid-request`.
-        Read-only.
+        The built-in `waxbin-native` layout and the saved profiles, each
+        with sample paths, and how many libraries are managed (with none,
+        organizing answers `invalid-request`). Administrators only.
       tags: [organize]
       responses:
         "200":
@@ -5843,23 +5751,106 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /organize/profiles/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        description: The profile name, without `/`, `\`, `?` or `#`.
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 64
+    put:
+      operationId: putOrganizeProfile
+      summary: Save an organize profile
+      description: >
+        Saves the profile, replacing one of the same name; a built-in's
+        name overrides it. The catalog takes it at once. A template that
+        does not parse is `invalid-request`. Administrators only.
+      tags: [organize]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizeProfileInput"
+      responses:
+        "200":
+          description: The saved profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizeProfile"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+    delete:
+      operationId: deleteOrganizeProfile
+      summary: Delete an organize profile
+      description: >
+        Deletes a saved profile or a built-in's override. A built-in is
+        `invalid-request`, and a profile a managed library uses is
+        `conflict`. Administrators only.
+      tags: [organize]
+      responses:
+        "204":
+          description: Deleted.
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /organize/profiles/preview:
+    post:
+      operationId: previewOrganizeProfile
+      summary: Render an unsaved profile's samples
+      description: >
+        Where the profile would lay out the sample track, book and episode,
+        without saving it. A template that does not parse is
+        `invalid-request`. Administrators only.
+      tags: [organize]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrganizeProfilePreview"
+      responses:
+        "200":
+          description: The sample paths.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrganizeSample"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
   /organize/preview:
     post:
       operationId: previewOrganize
       summary: Dry-run an organize pass
       description: >
-        Plans the moves and renames a profile would make for the
-        named items (or every managed library when `itemPids` is
-        absent) without touching anything. A move out of a read-only
-        library, or any move while the server is read-only, is held
-        back rather than planned, and `held` counts those. The
-        response carries the first
-        five hundred actions plus the total, so a whole-library
-        preview stays a bounded page; sidecars (covers, lyrics, cue
-        sheets) ride along with their file and are not listed
-        separately. Path templates are sandboxed upstream (per
-        segment sanitizing; a template cannot escape the library
-        root).
+        Plans a profile's moves for `itemPids`, or every managed library,
+        touching nothing; read-only files are counted rather than planned.
+        Lists the first 500 actions and the total. Administrators only.
       tags: [organize]
       requestBody:
         required: true
@@ -5888,15 +5879,9 @@ paths:
       operationId: applyOrganize
       summary: Apply an organize pass
       description: >
-        Plans and applies the moves in one call (the plan is always
-        recomputed server-side; a stale preview cannot apply). Moves
-        are crash-safe per file and locked fields are respected. A
-        read-only library's files stay where they are and count as
-        `held`; while the whole server is read-only the apply is
-        refused with `read-only`.
-        Whole-library passes on large libraries take a while; the
-        request runs synchronously and reports the full outcome.
-        Administrators only.
+        Recomputes the plan and applies it synchronously, crash-safe per file
+        and respecting locked fields; read-only libraries stay put, and a
+        read-only server answers `read-only`. Administrators only.
       tags: [organize]
       requestBody:
         required: true
@@ -8816,14 +8801,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            The removal was refused. `conflict`: the episode is being
-            listened to right now and removing the file would kill the
-            stream; it clears only when playback stops, so retrying by
-            itself does not help. `catalog-busy`: another job holds the
-            podcast download tree's shared file-mutation scope, which
-            clears on its own, so an unattended retry is worth something.
-            `read-only`: the podcast library, or the whole server, is
-            read-only.
+            `conflict`: the episode is playing (retry after playback stops).
+            `catalog-busy`: another job holds the download tree; retry later.
+            `read-only`: the server is read-only.
           content:
             application/json:
               schema:
@@ -12506,7 +12486,7 @@ components:
     Library:
       type: object
       description: One catalog library (a scanned root).
-      required: [pid, name]
+      required: [pid, name, readOnly, managed]
       properties:
         pid:
           type: string
@@ -12537,6 +12517,16 @@ components:
             Playable items the catalog holds under this root. Present
             only where the caller asked for counts, and counted at read
             time, so it lags a running scan.
+        readOnly:
+          type: boolean
+          description: The catalog keeps the library's files as they are.
+        managed:
+          type: boolean
+          description: The catalog may place and move files in the library.
+        profile:
+          type: string
+          description: The organize profile a managed library is laid out by.
+          example: waxbin-native
 
     LibraryCreated:
       allOf:
@@ -12665,6 +12655,30 @@ components:
             the enrichment status's `lastRun`; an `organize` run `profile`,
             `moved`, `skipped`, `errored` and `sidecarsMoved`. Absent while
             running and for kinds that record none. Shapes may grow fields.
+        target:
+          $ref: "#/components/schemas/JobTarget"
+
+    JobTarget:
+      type: object
+      description: >
+        What a targeted job ran on; absent for a whole pass. A targeted job
+        is announced only to whoever started it.
+      required: [type, pid]
+      properties:
+        type:
+          type: string
+          description: >
+            `item`, `artist`, `release_group`, `album`, `library` or
+            `trash`; new types may appear.
+          example: item
+        pid:
+          type: string
+          description: The target's PID.
+          example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: The target's name, when it can still be read.
+          example: Amber Waves
 
     AuditEvent:
       type: object
@@ -12687,15 +12701,9 @@ components:
         action:
           type: string
           description: >
-            Dotted action name, resource first: `user.create`,
-            `user.update`, `user.delete`, `user.approve`,
-            `user.reject`, `invite.create`, `invite.revoke`,
-            `playlist.delete`, `items.delete`, `entity.merge`,
-            `trash.restore`, `trash.empty`, `backup.create`,
-            `backup.delete`, `restore.stage`, `restore.apply`,
-            `settings.update`, `schedule.update`, `library.create`,
-            `library.read-only`, `transcoding.update`, `migration.run`,
-            and more as surfaces grow. Open vocabulary; filter by prefix.
+            Dotted action name, resource first, such as `user.create`,
+            `trash.restore` or `library.read-only`. Open vocabulary; filter by
+            prefix.
         targetKind:
           type: string
           description: What kind of thing was acted on (`user`, `playlist`, ...).
@@ -12764,31 +12772,9 @@ components:
         enrichmentWriteTags:
           type: boolean
           description: >
-            Whether the whole-library enrichment pass writes what it
-            filled back into the files, which is what makes enrichment
-            survive a rescan: the catalog is authoritative either way,
-            but a rescan re-reads the tags and would otherwise clear
-            values only the catalog held.
-
-
-            Off by default, because it modifies the listener's own
-            files. Files whose format cannot store a key are counted
-            in `enrichmentStatus.lastRun.tagsUnrepresented` and left
-            byte-identical, which is not a failure. A pass that starts
-            while the server or any library is read-only writes nothing
-            back, whatever this says, since it cannot keep its writes
-            out of one library. Applies to the next pass; a run already
-            in flight keeps what it started under, the read-only state
-            included. Optional on PUT so settings writers predating this
-            field never change it: absent keeps the current value.
-            Always present in responses.
-
-
-            Switching it on catches up: an unlimited pass writes every
-            value the catalog holds that is not yet on disk, including
-            ones filled by earlier passes that ran with it off. A pass
-            that was capped or scoped writes only within its own reach,
-            so the nightly schedule catches up a night at a time.
+            Whether enrichment writes what it filled into the files, off by
+            default (turning it on catches earlier values up; a read-only
+            server writes nothing). Optional on PUT, always in responses.
         radioExternalArt:
           type: boolean
           description: >
@@ -13161,6 +13147,14 @@ components:
           type: string
           format: date-time
           description: When it was restored; absent while trashed.
+        libraryPid:
+          type: string
+          description: The library the file was trashed from, when the journal names one.
+          example: lb-01JZX5N8QW3F4V9T2B7KD3M9R6
+        libraryName:
+          type: string
+          description: That library's name, when it still has one.
+          example: music
 
     TrashList:
       type: object
@@ -13380,7 +13374,7 @@ components:
     TrashEmptyResult:
       type: object
       description: What an empty-trash pass did.
-      required: [purged, errored, reclaimedBytes]
+      required: [purged, errored, reclaimedBytes, skippedReadOnly]
       properties:
         purged:
           type: integer
@@ -13392,6 +13386,9 @@ components:
           type: integer
           format: int64
           description: Disk space reclaimed.
+        skippedReadOnly:
+          type: integer
+          description: Entries left in the trash because their library is read-only.
 
     TrashPurgeResult:
       type: object
@@ -13632,6 +13629,16 @@ components:
           description: Jobs, newest first.
           items:
             $ref: "#/components/schemas/Job"
+
+    LibraryProfile:
+      type: object
+      description: The organize profile a managed library is laid out by.
+      required: [profile]
+      properties:
+        profile:
+          type: string
+          description: A profile name from the organize profiles listing.
+          example: waxbin-native
 
     LibraryReadOnly:
       type: object
@@ -14433,6 +14440,7 @@ components:
           tagsFailed,
           tagsUnrepresented,
           tagsSkipped,
+          tagsReadOnly,
           stalled,
         ]
       properties:
@@ -14569,6 +14577,11 @@ components:
           description: >
             Book parts left unwritten because their book's primary part
             failed.
+        tagsReadOnly:
+          type: integer
+          description: >
+            Files left unwritten because their library is read-only; a
+            later pass writes them once the flag clears.
         stalled:
           type: array
           description: >
@@ -14629,6 +14642,14 @@ components:
             Re-ask these phases alone, marked or not, while the rest walk as
             usual. Refused beside `force` (400), and with `source-unavailable` for
             a phase this server does not run.
+          items:
+            $ref: "#/components/schemas/EnrichmentPhase"
+        phases:
+          type: array
+          description: >
+            Walk only these phases. `forcePhases` must be among them (400
+            otherwise), and a phase this server does not run is
+            `source-unavailable`.
           items:
             $ref: "#/components/schemas/EnrichmentPhase"
 
@@ -14709,7 +14730,7 @@ components:
         can cover many changes, and carry no data, so a redundant pull
         is harmless. A `resync` frame means continuity was lost for the
         named stream, or for every stream when `topic` is absent
-        (client queue overflow, pruned history): drop the affected
+        (client queue overflow, pruned history, a replaced catalog): drop the affected
         mirror halves, re-mirror through the sync endpoints, then close
         the socket, reconnect, and resubscribe with the fresh cursors.
         `resync` never names `player` or `radio` (there is nothing to
@@ -17272,12 +17293,15 @@ components:
           additionalProperties:
             type: string
           description: >
-            Field name to new value, from the entity type's
-            vocabulary; empty clears.
+            Field name to new value (empty clears): `sort` and `mbid` for any
+            entity, `type` for release groups, and `barcode`, `label`,
+            `catalog_number`, `media` and `country` for albums.
         writeBack:
           type: boolean
           default: false
-          description: Push tag-formed values into member files.
+          description: >
+            Push tag-formed values into member files; an `mbid` clear strips
+            the id from them.
         lock:
           type: boolean
           default: true
@@ -17981,33 +18005,109 @@ components:
 
     OrganizeProfile:
       type: object
-      description: One organize profile.
-      required: [name]
+      description: One organize profile, its templates after inheritance.
+      required: [name, musicTemplate, audiobookTemplate, podcastTemplate, tagWrite, builtIn, sample]
       properties:
         name:
           type: string
           description: The profile name organize requests reference.
         musicTemplate:
           type: string
-          description: Path template for music, when set.
+          description: Path template for music.
         audiobookTemplate:
           type: string
-          description: Path template for audiobooks, when set.
+          description: Path template for audiobooks.
         podcastTemplate:
           type: string
-          description: Path template for podcast files, when set.
+          description: Path template for podcast files.
         tagWrite:
           type: boolean
           description: Whether organizing also writes tags.
+        builtIn:
+          type: boolean
+          description: A built-in no saved profile overrides; it cannot be deleted.
+        sample:
+          $ref: "#/components/schemas/OrganizeSample"
+        saved:
+          $ref: "#/components/schemas/OrganizeTemplates"
+
+    OrganizeTemplates:
+      type: object
+      description: >
+        The templates a saved profile sets itself; an empty one inherits.
+        Absent for a built-in nothing overrides.
+      required: [musicTemplate, audiobookTemplate, podcastTemplate]
+      properties:
+        musicTemplate:
+          type: string
+        audiobookTemplate:
+          type: string
+        podcastTemplate:
+          type: string
+
+    OrganizeSample:
+      type: object
+      description: >
+        Where a profile lays out a fixed sample track, book and episode; an
+        empty path is a template that renders none for that sample.
+      required: [music, audiobook, podcast]
+      properties:
+        music:
+          type: string
+          example: Test Ensemble/Signal Garden (2024)/1-03 - Amber Waves.flac
+        audiobook:
+          type: string
+        podcast:
+          type: string
+
+    OrganizeProfileInput:
+      type: object
+      description: >
+        A profile to save. An empty or absent template inherits the
+        built-in of the same name, or the native layout.
+      properties:
+        musicTemplate:
+          type: string
+          maxLength: 1024
+        audiobookTemplate:
+          type: string
+          maxLength: 1024
+        podcastTemplate:
+          type: string
+          maxLength: 1024
+        tagWrite:
+          type: boolean
+          default: false
+
+    OrganizeProfilePreview:
+      type: object
+      description: >
+        A profile to render samples for; `name` picks what an empty
+        template inherits.
+      properties:
+        name:
+          type: string
+          maxLength: 64
+        musicTemplate:
+          type: string
+          maxLength: 1024
+        audiobookTemplate:
+          type: string
+          maxLength: 1024
+        podcastTemplate:
+          type: string
+          maxLength: 1024
+        tagWrite:
+          type: boolean
+          default: false
 
     OrganizeRequest:
       type: object
       description: The scope of an organize pass.
-      required: [profile]
       properties:
         profile:
           type: string
-          description: The profile to apply.
+          description: The profile to apply; absent lays out each library by its own.
         itemPids:
           type: array
           maxItems: 1000
@@ -18018,7 +18118,7 @@ components:
     OrganizePlan:
       type: object
       description: A dry-run organize plan.
-      required: [profile, totalActions, held, actions]
+      required: [profile, totalActions, held, readOnlyLibraries, actions]
       properties:
         profile:
           type: string
@@ -18029,8 +18129,11 @@ components:
         held:
           type: integer
           description: >
-            Moves held back because their library, or the whole server,
-            is read-only. Not in `actions` or `totalActions`.
+            Moves held back because the whole server is read-only. Not in
+            `actions` or `totalActions`.
+        readOnlyLibraries:
+          type: integer
+          description: Managed libraries left out because they are read-only.
         actions:
           type: array
           description: The first five hundred actions.
@@ -18058,7 +18161,7 @@ components:
     OrganizeReport:
       type: object
       description: The outcome of an applied organize pass.
-      required: [moved, skipped, held, failed]
+      required: [moved, skipped, held, readOnlyLibraries, failed]
       properties:
         moved:
           type: integer
@@ -18068,7 +18171,10 @@ components:
           description: Files already in place.
         held:
           type: integer
-          description: Files left where they are because their library is read-only.
+          description: Files left where they are because the whole server is read-only.
+        readOnlyLibraries:
+          type: integer
+          description: Managed libraries left alone because they are read-only.
         failed:
           type: integer
           description: Files that could not move.
@@ -22711,7 +22817,8 @@ components:
             trash, was first seen, crossed another five percent of progress
             or changed its message, a message marked at most every fifteen
             seconds; refetch `GET /jobs` or `GET /jobs/{pid}`). `job`
-            reaches administrators only.
+            reaches administrators; a targeted job's, while it runs, only
+            whoever started it.
 
 
             `health` carries no `pid`: the library's health moved (a sweep
@@ -22719,6 +22826,10 @@ components:
             so re-read
             `GET /library/health`. It reaches every signed-in account,
             since every account can read health.
+
+
+            `libraries` carries no `pid`: a library was added, restored or
+            changed, from anywhere, so re-read `GET /libraries`.
 
 
             Further markers are announcements rather than refetch
@@ -22751,7 +22862,7 @@ components:
           type: string
           description: >
             The item, show, book, playlist, or job the event is about
-            (absent for `prefs`, `account`, and `health`).
+            (absent for `prefs`, `account`, `health`, and `libraries`).
           example: tr-01JZX5N8QW3F4V9T2B7KD3M9R6
         playState:
           $ref: "#/components/schemas/PlayState"

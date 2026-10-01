@@ -438,3 +438,21 @@ func TestRootsConfigMergesByName(t *testing.T) {
 		t.Errorf("roots = %v, want exactly the three", got.Roots)
 	}
 }
+
+// A restart seeds the configured roots and, of the rest, only those the
+// sidecar's file holds: a root it refused would ride every later reload.
+func TestSeedRootsLeavesOutARefusedRoot(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "waxflow.json")
+	if err := os.WriteFile(path, []byte(`{"roots":[{"name":"lib","path":"/x"},{"name":"books","path":"/b"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configured := []Root{{Name: "lib", Path: "/library"}}
+	table := []Root{{Name: "lib", Path: "/library"}, {Name: "books", Path: "/books"}, {Name: "usb", Path: "/mnt/usb"}}
+	got := SeedRoots(configured, table, path)
+	if len(got) != 2 || got[0].Name != "lib" || got[1].Name != "books" {
+		t.Errorf("seed = %v, want the configured root and the accepted one", got)
+	}
+	if got := SeedRoots(configured, table, ""); len(got) != 3 {
+		t.Errorf("seed without a sidecar file = %v, want every root", got)
+	}
+}

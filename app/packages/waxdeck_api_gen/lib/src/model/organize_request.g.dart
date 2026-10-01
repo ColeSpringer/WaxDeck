@@ -8,14 +8,14 @@ part of 'organize_request.dart';
 
 class _$OrganizeRequest extends OrganizeRequest {
   @override
-  final String profile;
+  final String? profile;
   @override
   final BuiltList<String>? itemPids;
 
   factory _$OrganizeRequest([void Function(OrganizeRequestBuilder)? updates]) =>
       (OrganizeRequestBuilder()..update(updates))._build();
 
-  _$OrganizeRequest._({required this.profile, this.itemPids}) : super._();
+  _$OrganizeRequest._({this.profile, this.itemPids}) : super._();
   @override
   OrganizeRequest rebuild(void Function(OrganizeRequestBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -94,14 +94,7 @@ class OrganizeRequestBuilder
     try {
       _$result =
           _$v ??
-          _$OrganizeRequest._(
-            profile: BuiltValueNullFieldError.checkNotNull(
-              profile,
-              r'OrganizeRequest',
-              'profile',
-            ),
-            itemPids: _itemPids?.build(),
-          );
+          _$OrganizeRequest._(profile: profile, itemPids: _itemPids?.build());
     } catch (_) {
       late String _$failedField;
       try {

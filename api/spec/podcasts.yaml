@@ -619,14 +619,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            The removal was refused. `conflict`: the episode is being
-            listened to right now and removing the file would kill the
-            stream; it clears only when playback stops, so retrying by
-            itself does not help. `catalog-busy`: another job holds the
-            podcast download tree's shared file-mutation scope, which
-            clears on its own, so an unattended retry is worth something.
-            `read-only`: the podcast library, or the whole server, is
-            read-only.
+            `conflict`: the episode is playing (retry after playback stops).
+            `catalog-busy`: another job holds the download tree; retry later.
+            `read-only`: the server is read-only.
           content:
             application/json:
               schema:

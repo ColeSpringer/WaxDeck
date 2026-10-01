@@ -15,6 +15,7 @@ import (
 	"github.com/colespringer/waxbin/podcast"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
+	"github.com/colespringer/waxbin/source"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -429,7 +430,7 @@ func (l *Library) removeShowDownloads(ctx context.Context, showPID model.PID) {
 		return
 	}
 	if err := l.checkPodcastWritable(ctx); err != nil {
-		l.log.Info("cleanup keeps the downloads of a read-only podcast library", "show", string(showPID))
+		l.log.Info("cleanup keeps the downloads while the server is read-only", "show", string(showPID))
 		return
 	}
 	// The unsubscribe already committed and this runs inside its request,
@@ -896,15 +897,9 @@ func (l *Library) RefreshPodcast(ctx context.Context, uc *UserCtx, apiShowPID st
 }
 
 // checkPodcastWritable refuses writing into the podcast download tree
-// while the server, or the library holding the tree, is read-only.
+// while the server is read-only; the catalog never flags that library.
 func (l *Library) checkPodcastWritable(ctx context.Context) error {
-	pid := ""
-	if l.podcastDir != "" {
-		if p, err := l.libraryForPath(ctx, l.podcastDir); err == nil {
-			pid = p
-		}
-	}
-	return l.CheckWritable(ctx, pid)
+	return l.CheckWritable(ctx, "")
 }
 
 // QueueEpisodeFetch queues a server-side enclosure download. The
@@ -1487,6 +1482,10 @@ func (l *Library) classifyFeedErr(ctx context.Context, err error, feedURL string
 // detail and all of the detail withheld for a private show.
 func (l *Library) feedUnreachable(err error, feedURL string, private bool) error {
 	msg := err.Error()
+	// The catalog's provider label is for the log, not the listener.
+	if pe := (*source.ProviderError)(nil); errors.As(err, &pe) && pe.Err != nil {
+		msg = pe.Err.Error()
+	}
 	if private {
 		msg = "the feed could not be fetched; detail withheld for a private feed (see the server log)"
 		l.log.Warn("private feed fetch failed", "err", err)

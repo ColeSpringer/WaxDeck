@@ -18,6 +18,8 @@ part 'trash_entry.g.dart';
 /// * [sizeBytes] - File size.
 /// * [trashedAt] - When it was deleted.
 /// * [restoredAt] - When it was restored; absent while trashed.
+/// * [libraryPid] - The library the file was trashed from, when the journal names one.
+/// * [libraryName] - That library's name, when it still has one.
 @BuiltValue()
 abstract class TrashEntry implements Built<TrashEntry, TrashEntryBuilder> {
   /// Trash entry PID.
@@ -47,6 +49,14 @@ abstract class TrashEntry implements Built<TrashEntry, TrashEntryBuilder> {
   /// When it was restored; absent while trashed.
   @BuiltValueField(wireName: r'restoredAt')
   DateTime? get restoredAt;
+
+  /// The library the file was trashed from, when the journal names one.
+  @BuiltValueField(wireName: r'libraryPid')
+  String? get libraryPid;
+
+  /// That library's name, when it still has one.
+  @BuiltValueField(wireName: r'libraryName')
+  String? get libraryName;
 
   TrashEntry._();
 
@@ -108,6 +118,20 @@ class _$TrashEntrySerializer implements PrimitiveSerializer<TrashEntry> {
       yield serializers.serialize(
         object.restoredAt,
         specifiedType: const FullType(DateTime),
+      );
+    }
+    if (object.libraryPid != null) {
+      yield r'libraryPid';
+      yield serializers.serialize(
+        object.libraryPid,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.libraryName != null) {
+      yield r'libraryName';
+      yield serializers.serialize(
+        object.libraryName,
+        specifiedType: const FullType(String),
       );
     }
   }
@@ -183,6 +207,22 @@ class _$TrashEntrySerializer implements PrimitiveSerializer<TrashEntry> {
           ) as DateTime?;
           if (valueDes == null) continue;
           result.restoredAt = valueDes;
+          break;
+        case r'libraryPid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.libraryPid = valueDes;
+          break;
+        case r'libraryName':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.libraryName = valueDes;
           break;
         default:
           unhandled.add(key);

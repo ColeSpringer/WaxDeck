@@ -18,17 +18,20 @@ type HealthRow struct {
 	Rules     string
 	RuleCount int
 	SweptAtNS int64
+	// Detail is the rules' JSON measurements, '' when they carry none.
+	Detail string
 }
 
 // UpsertHealthRow stores an item's current issues, replacing its row.
 func (d *DB) UpsertHealthRow(ctx context.Context, r HealthRow) error {
 	_, err := d.w.ExecContext(ctx, `
-		INSERT INTO health_index (item_pid, media_type, title, artist, rules, rule_count, swept_at_ns)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO health_index (item_pid, media_type, title, artist, rules, rule_count, swept_at_ns, detail)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (item_pid) DO UPDATE SET media_type = excluded.media_type,
 			title = excluded.title, artist = excluded.artist, rules = excluded.rules,
-			rule_count = excluded.rule_count, swept_at_ns = excluded.swept_at_ns`,
-		r.ItemPID, r.MediaType, r.Title, r.Artist, r.Rules, r.RuleCount, r.SweptAtNS)
+			rule_count = excluded.rule_count, swept_at_ns = excluded.swept_at_ns,
+			detail = excluded.detail`,
+		r.ItemPID, r.MediaType, r.Title, r.Artist, r.Rules, r.RuleCount, r.SweptAtNS, r.Detail)
 	if err != nil {
 		return fmt.Errorf("db: upserting health row: %w", err)
 	}
@@ -77,9 +80,9 @@ func (d *DB) PruneHealthRows(ctx context.Context, sweptBeforeNS int64) (int64, e
 func (d *DB) HealthRowByItem(ctx context.Context, itemPID string) (HealthRow, error) {
 	var r HealthRow
 	err := d.r.QueryRowContext(ctx, `
-		SELECT item_pid, media_type, title, artist, rules, rule_count, swept_at_ns
+		SELECT item_pid, media_type, title, artist, rules, rule_count, swept_at_ns, detail
 		FROM health_index WHERE item_pid = ?`, itemPID).Scan(
-		&r.ItemPID, &r.MediaType, &r.Title, &r.Artist, &r.Rules, &r.RuleCount, &r.SweptAtNS)
+		&r.ItemPID, &r.MediaType, &r.Title, &r.Artist, &r.Rules, &r.RuleCount, &r.SweptAtNS, &r.Detail)
 	if errors.Is(err, sql.ErrNoRows) {
 		return HealthRow{}, ErrNotFound
 	}
@@ -94,7 +97,7 @@ func (d *DB) HealthRowByItem(ctx context.Context, itemPID string) (HealthRow, er
 // list contains the named rule. The cursor is the previous page's last
 // (rule_count, title, item_pid).
 func (d *DB) ListHealthRows(ctx context.Context, rule string, afterCount int, afterTitle, afterPID string, limit int) ([]HealthRow, error) {
-	q := `SELECT item_pid, media_type, title, artist, rules, rule_count, swept_at_ns
+	q := `SELECT item_pid, media_type, title, artist, rules, rule_count, swept_at_ns, detail
 		FROM health_index WHERE 1=1`
 	args := []any{}
 	if rule != "" {
@@ -115,7 +118,7 @@ func (d *DB) ListHealthRows(ctx context.Context, rule string, afterCount int, af
 	var out []HealthRow
 	for rows.Next() {
 		var r HealthRow
-		if err := rows.Scan(&r.ItemPID, &r.MediaType, &r.Title, &r.Artist, &r.Rules, &r.RuleCount, &r.SweptAtNS); err != nil {
+		if err := rows.Scan(&r.ItemPID, &r.MediaType, &r.Title, &r.Artist, &r.Rules, &r.RuleCount, &r.SweptAtNS, &r.Detail); err != nil {
 			return nil, fmt.Errorf("db: scanning health row: %w", err)
 		}
 		out = append(out, r)

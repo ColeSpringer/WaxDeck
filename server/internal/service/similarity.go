@@ -428,7 +428,7 @@ func (l *Library) persistEdges(ctx context.Context, essence string, edges []simi
 // version has not moved since the last sweep. Returns true when it did
 // meaningful work (the worker loop uses that to pace itself).
 func (l *Library) SimilaritySweep(ctx context.Context) (bool, error) {
-	if !l.SonicAnalysisEnabled() && !l.workerAPIConfigured {
+	if (!l.SonicAnalysisEnabled() && !l.workerAPIConfigured) || l.Maintenance() {
 		return false, nil
 	}
 	if err := l.warmSimilarity(ctx); err != nil {

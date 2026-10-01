@@ -72,3 +72,21 @@ func TestInsertHealthFixTaskOnlyOncePerRule(t *testing.T) {
 		t.Fatalf("another rule = (%v, %v), want inserted", ok, err)
 	}
 }
+
+// Reading an origin leaves it for the job's end to claim.
+func TestJobOriginGetDoesNotClaim(t *testing.T) {
+	ctx := context.Background()
+	d := openTest(t)
+	if _, err := d.JobOriginGet(ctx, "jb"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("absent origin = %v, want not found", err)
+	}
+	if err := d.InsertJobOrigin(ctx, JobOrigin{PID: "jb", UserID: "us-1", CreatedAtNS: 5}); err != nil {
+		t.Fatal(err)
+	}
+	if o, err := d.JobOriginGet(ctx, "jb"); err != nil || o.UserID != "us-1" || o.CreatedAtNS != 5 {
+		t.Fatalf("origin = %+v (%v), want us-1's", o, err)
+	}
+	if _, err := d.ClaimJobOrigin(ctx, "jb", 10, 1); err != nil {
+		t.Fatalf("claiming after a read: %v", err)
+	}
+}

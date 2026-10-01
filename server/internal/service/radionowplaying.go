@@ -55,6 +55,14 @@ func (l *Library) cachedNowPlayingItem(userID, apiStationPID, title string) (str
 	return entry.pid, true
 }
 
+// forgetNowPlayingMemos drops every memo, whose pids name a catalog that
+// was replaced.
+func (l *Library) forgetNowPlayingMemos() {
+	l.nowPlayingMemoMu.Lock()
+	defer l.nowPlayingMemoMu.Unlock()
+	l.nowPlayingMemos = nil
+}
+
 func (l *Library) memoNowPlayingItem(userID, apiStationPID, title, pid string) {
 	l.nowPlayingMemoMu.Lock()
 	defer l.nowPlayingMemoMu.Unlock()

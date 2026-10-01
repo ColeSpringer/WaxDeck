@@ -1,6 +1,7 @@
 package service
 
 import (
+	"sync/atomic"
 	"testing"
 
 	"github.com/colespringer/waxbin/enrich"
@@ -116,5 +117,28 @@ func TestBookEnrichEditsRespectsLocksAndExisting(t *testing.T) {
 	}
 	if len(edits) != 0 {
 		t.Fatalf("expected no edits, got %v", edits)
+	}
+}
+
+// A run limited to some phases cannot force one it does not walk, and a
+// name the API does not know is refused before the catalog is asked.
+func TestARunForcesOnlyPhasesItWalks(t *testing.T) {
+	t.Parallel()
+	var painted atomic.Int32
+	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"}, painter(&painted))
+	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"lyrics"}, []string{"group-art"}); KindOf(err) != KindInvalid {
+		t.Errorf("forcing a phase the run does not walk = %v, want invalid", err)
+	}
+	if _, err := svc.RunEnrichment(ctx, uc, false, nil, []string{"nonsense"}); KindOf(err) != KindInvalid {
+		t.Errorf("walking an unknown phase = %v, want invalid", err)
+	}
+	pid, err := svc.RunEnrichment(ctx, uc, false, []string{"lyrics"}, []string{"lyrics"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, bare, _ := parseAPIPID(pid)
+	waitForJob(t, ctx, svc, bare)
+	if n := painted.Load(); n != 0 {
+		t.Errorf("a lyrics-only run asked the artwork source %d times", n)
 	}
 }

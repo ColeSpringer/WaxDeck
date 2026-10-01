@@ -51,7 +51,6 @@ const (
 	settingEnrichWriteTags  = "enrichment:write-tags"
 	settingRadioExternalArt = "radio:external-art"
 	settingTaskRetention    = "tasks:retention-days"
-	readOnlyLibPrefix       = "read-only:"
 
 	// maxRetentionDays bounds both retention windows at 100 years, far
 	// under the ~106752 days where days*24h overflows time.Duration.
@@ -67,9 +66,8 @@ const (
 // request (read-only checks on every write surface, transcode limits on
 // every stream). Loaded at Open, swapped whole on every settings write.
 type runtimeToggles struct {
-	readOnly     bool
-	readOnlyLibs map[string]bool // bare library pid -> read-only
-	limits       TranscodingLimits
+	readOnly bool
+	limits   TranscodingLimits
 	// sonicAnalysis is nil until an administrator has saved the
 	// setting; the boot default (WAXDECK_SONIC_ANALYSIS) applies then.
 	sonicAnalysis *bool
@@ -82,41 +80,17 @@ type runtimeToggles struct {
 	radioExternalArt bool
 }
 
-// enrichWritesTags is whether an enrichment pass writes into files. It
-// cannot keep its writes out of one library, so any live read-only
-// library stops them all.
-func (l *Library) enrichWritesTags(ctx context.Context) bool {
+// enrichWritesTags is whether an enrichment pass writes into files; the
+// catalog leaves a read-only library's files out itself.
+func (l *Library) enrichWritesTags(context.Context) bool {
 	t := l.currentToggles()
-	if !t.enrichWriteTags || t.readOnly {
-		return false
-	}
-	readOnly, err := l.anyLibraryReadOnly(ctx)
-	return err == nil && !readOnly
-}
-
-// anyLibraryReadOnly reports a live library flagged read-only; a flag
-// outliving its library, which a catalog reset leaves, does not count.
-func (l *Library) anyLibraryReadOnly(ctx context.Context) (bool, error) {
-	t := l.currentToggles()
-	if len(t.readOnlyLibs) == 0 {
-		return false, nil
-	}
-	libs, err := l.lib.Libraries(ctx)
-	if err != nil {
-		return false, classify(err)
-	}
-	for _, lib := range libs {
-		if t.readOnlyLibs[string(lib.PID)] {
-			return true, nil
-		}
-	}
-	return false, nil
+	return t.enrichWriteTags && !t.readOnly
 }
 
 // loadRuntimeToggles primes the settings cache; called at Open and
 // after every settings mutation.
 func (l *Library) loadRuntimeToggles(ctx context.Context) {
-	t := &runtimeToggles{readOnlyLibs: map[string]bool{}}
+	t := &runtimeToggles{}
 	if v, err := l.db.SettingGet(ctx, settingReadOnly); err == nil {
 		t.readOnly = v == "true"
 	}
@@ -138,13 +112,6 @@ func (l *Library) loadRuntimeToggles(ctx context.Context) {
 			t.limits = lim
 		}
 	}
-	if pids, err := l.db.SettingsWithPrefix(ctx, readOnlyLibPrefix); err == nil {
-		for key, v := range pids {
-			if v == "true" {
-				t.readOnlyLibs[key[len(readOnlyLibPrefix):]] = true
-			}
-		}
-	}
 	l.toggles.Store(t)
 	l.loadEnrichSources(ctx)
 }
@@ -155,7 +122,7 @@ func (l *Library) currentToggles() *runtimeToggles {
 	if t, ok := l.toggles.Load().(*runtimeToggles); ok && t != nil {
 		return t
 	}
-	return &runtimeToggles{readOnlyLibs: map[string]bool{}}
+	return &runtimeToggles{}
 }
 
 // AdminSettingsGet reads the runtime settings.
@@ -317,55 +284,21 @@ func (l *Library) TranscodingLimitsPut(ctx context.Context, actor *UserCtx, lim 
 	return lim, nil
 }
 
-// LibraryReadOnlyGet reads one library's read-only flag; the library
-// must exist.
-func (l *Library) LibraryReadOnlyGet(ctx context.Context, apiLibraryPID string) (bool, error) {
-	pid, err := l.libraryPIDOf(ctx, apiLibraryPID)
-	if err != nil {
-		return false, err
-	}
-	return l.currentToggles().readOnlyLibs[pid], nil
-}
-
-// LibraryReadOnlySet flips one library's read-only flag.
+// LibraryReadOnlySet flips one library's read-only flag, which the
+// catalog keeps and enforces file by file.
 func (l *Library) LibraryReadOnlySet(ctx context.Context, actor *UserCtx, apiLibraryPID string, readOnly bool) error {
-	pid, err := l.libraryPIDOf(ctx, apiLibraryPID)
-	if err != nil {
-		return err
+	prefix, pid, ok := parseAPIPID(apiLibraryPID)
+	if !ok || prefix != PrefixLibrary {
+		return errInvalid("bad library pid " + apiLibraryPID)
 	}
-	if readOnly {
-		if err := l.db.SettingSet(ctx, readOnlyLibPrefix+pid, "true", time.Now().UnixNano()); err != nil {
-			return &Error{Kind: KindInternal, Err: err}
-		}
-	} else {
-		if err := l.db.SettingDelete(ctx, readOnlyLibPrefix+pid); err != nil {
-			return &Error{Kind: KindInternal, Err: err}
-		}
+	if _, err := l.lib.SetLibraryReadOnly(ctx, pid, readOnly); err != nil {
+		return classify(err)
 	}
-	l.loadRuntimeToggles(ctx)
+	l.refreshLibraryState(ctx)
 	l.Audit(ctx, actor, "library.read-only",
 		AuditTarget{Kind: "library", PID: apiLibraryPID},
 		map[string]any{"readOnly": readOnly})
 	return nil
-}
-
-// libraryPIDOf validates an API library pid against the catalog and
-// returns the bare pid.
-func (l *Library) libraryPIDOf(ctx context.Context, apiLibraryPID string) (string, error) {
-	prefix, pid, ok := parseAPIPID(apiLibraryPID)
-	if !ok || prefix != PrefixLibrary {
-		return "", errInvalid("bad library pid " + apiLibraryPID)
-	}
-	libs, err := l.lib.Libraries(ctx)
-	if err != nil {
-		return "", classify(err)
-	}
-	for _, lib := range libs {
-		if string(lib.PID) == string(pid) {
-			return string(pid), nil
-		}
-	}
-	return "", errNotFound("no library with pid " + apiLibraryPID)
 }
 
 // errReadOnly is the uniform refusal for writes into read-only scope.
@@ -381,25 +314,8 @@ func (l *Library) CheckWritable(ctx context.Context, bareLibraryPID string) erro
 	if t.readOnly {
 		return errReadOnly("the library")
 	}
-	if bareLibraryPID != "" && t.readOnlyLibs[bareLibraryPID] {
+	if bareLibraryPID != "" && l.libraryReadOnly(bareLibraryPID) {
 		return errReadOnly("this library")
-	}
-	return nil
-}
-
-// checkFanOutWritable refuses a write the catalog fans out over every
-// library it reaches, an entity's member files say: it cannot keep the
-// write out of one, so any read-only library refuses it.
-func (l *Library) checkFanOutWritable(ctx context.Context) error {
-	if err := l.CheckWritable(ctx, ""); err != nil {
-		return err
-	}
-	readOnly, err := l.anyLibraryReadOnly(ctx)
-	if err != nil {
-		return err
-	}
-	if readOnly {
-		return errReadOnly("a library")
 	}
 	return nil
 }

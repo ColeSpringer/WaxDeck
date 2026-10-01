@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -147,11 +149,11 @@ func TestAJobTheCatalogLostLetsGoOfItsOrigin(t *testing.T) {
 	if !ruleFixing(t, ctx, svc, ruleMissingLyrics) {
 		t.Fatal("the rule does not read as fixing while its job's origin stands")
 	}
-	markers := healthMarkers(t, ctx, svc, uc)
+	seen := markers(t, ctx, svc, uc.ID, eventHealth, "")
 	svc.followJob(lost)
 	waitFor(t, func() bool { return !ruleFixing(t, ctx, svc, ruleMissingLyrics) },
 		"the rule should stop reading as fixing once its job is gone")
-	waitFor(t, func() bool { return healthMarkers(t, ctx, svc, uc) > markers },
+	waitFor(t, func() bool { return markers(t, ctx, svc, uc.ID, eventHealth, "") > seen },
 		"every account should hear the rule is no longer being fixed")
 }
 
@@ -203,4 +205,123 @@ func TestTheFeedRereadsWhatTheSubscriptionDropped(t *testing.T) {
 	svc.jobs.mu.Unlock()
 
 	waitFor(t, followed, "the feed should read the dropped rows from the log")
+}
+
+// announced waits until a whole scan's end has reached userID, by which
+// point the follower has read every job that ended before it.
+func announced(t *testing.T, ctx context.Context, svc *Library, userID string) {
+	t.Helper()
+	res, err := svc.lib.Scan(ctx, waxbin.ScanRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return markers(t, ctx, svc, userID, eventJob, apiPID(PrefixJob, res.JobPID)) > 0 },
+		"a whole scan announced to every administrator")
+}
+
+// A run on one item is its starter's business while it runs; its end
+// reaches every administrator, whose job list may show it running. The
+// listing names its target.
+func TestATargetedJobsEndReachesEveryAdministrator(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, track := openLyricsFixture(t, &lyricist{name: "a"})
+	other := addAdmin(t, ctx, svc, "other").ID
+	started, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{ItemPID: track})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.adoptJob(ctx, started, uc.ID, "")
+	waitForJob(t, ctx, svc, started)
+	unowned, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{ItemPID: track})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForJob(t, ctx, svc, unowned)
+	waitFor(t, func() bool { return markers(t, ctx, svc, uc.ID, eventJob, apiPID(PrefixJob, started)) > 0 }, "the starter hearing of their run")
+	announced(t, ctx, svc, other)
+	announced(t, ctx, svc, uc.ID)
+	if n := markers(t, ctx, svc, other, eventJob, apiPID(PrefixJob, started)); n != 1 {
+		t.Errorf("another administrator heard of the run %d times, want its end once", n)
+	}
+	if a, b := markers(t, ctx, svc, uc.ID, eventJob, apiPID(PrefixJob, unowned)), markers(t, ctx, svc, other, eventJob, apiPID(PrefixJob, unowned)); a != 1 || b != 1 {
+		t.Errorf("a run nobody started was announced %d and %d times, want its end once each", a, b)
+	}
+	job, err := svc.JobStatus(ctx, apiPID(PrefixJob, started))
+	if err != nil || job.Target == nil || job.Target.Type != "item" || job.Target.PID != apiPID(PrefixTrack, track) || job.Target.Name != "Amber Waves" {
+		t.Errorf("target = %+v (%v), want the track by name", job.Target, err)
+	}
+}
+
+// A finished targeted job leaves the list, read by pid instead: a burst
+// of them would push the whole passes out of the window.
+func TestAFinishedTargetedJobLeavesTheList(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, track := openLyricsFixture(t, &lyricist{name: "a"})
+	whole, err := svc.lib.Scan(ctx, waxbin.ScanRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		pid, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{ItemPID: track})
+		if err != nil {
+			t.Fatal(err)
+		}
+		waitForJob(t, ctx, svc, pid)
+	}
+	jobs, err := svc.Jobs(ctx, uc, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) == 0 || !slices.ContainsFunc(jobs, func(j Job) bool { return j.PID == apiPID(PrefixJob, whole.JobPID) }) {
+		t.Errorf("jobs = %+v, want the whole scan listed", jobs)
+	}
+	for _, j := range jobs {
+		if j.Target != nil && j.State != "running" {
+			t.Errorf("a finished targeted job is listed: %+v", j)
+		}
+	}
+}
+
+// The watcher's scan of one library is targeted: nobody started it, so
+// only its end is told, to every administrator.
+func TestAScanOfOneLibraryAnnouncesItsEnd(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _ := openLyricsFixture(t, &lyricist{name: "a"})
+	lib := svc.libraryRoots()[0]
+	res, err := svc.lib.Scan(ctx, waxbin.ScanRequest{LibraryPID: model.PID(lib.PID)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	announced(t, ctx, svc, uc.ID)
+	if n := markers(t, ctx, svc, uc.ID, eventJob, apiPID(PrefixJob, res.JobPID)); n != 1 {
+		t.Errorf("a one-library scan was announced %d times, want its end once", n)
+	}
+	job, err := svc.JobStatus(ctx, apiPID(PrefixJob, res.JobPID))
+	if err != nil || job.Target == nil || job.Target.Type != "library" || job.Target.PID != apiPID(PrefixLibrary, model.PID(lib.PID)) || job.Target.Name != lib.Name {
+		t.Errorf("job = %+v (%v), want the library as its target", job.Target, err)
+	}
+}
+
+// The status's last run is the newest whole pass, not an item's.
+func TestTheLastRunIsAWholePass(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, track := openLyricsFixture(t, &lyricist{name: "a"})
+	whole, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForJob(t, ctx, svc, whole)
+	item, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{ItemPID: track})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForJob(t, ctx, svc, item)
+	j, err := svc.lib.Job(ctx, whole)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := svc.EnrichmentStatusFor(ctx, uc)
+	if err != nil || st.LastRun == nil || st.LastRun.FinishedAtNS != j.FinishedAt {
+		t.Fatalf("last run = %+v (%v), want the whole pass finished at %d", st.LastRun, err, j.FinishedAt)
+	}
 }

@@ -144,7 +144,7 @@ func newOidcTestServer(t *testing.T, idp *fakeIdP) *httptest.Server {
 	h := HandlerWithOptions(
 		NewStrictHandlerWithOptions(srv, nil, StrictHTTPServerOptions{
 			RequestErrorHandlerFunc:  RequestErrorHandler,
-			ResponseErrorHandlerFunc: ResponseErrorHandler,
+			ResponseErrorHandlerFunc: srv.ResponseErrorHandler,
 		}),
 		StdHTTPServerOptions{
 			BaseURL:     "/api/v1",

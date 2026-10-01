@@ -534,20 +534,9 @@ paths:
       operationId: setEntityArtwork
       summary: Set entity artwork
       description: >
-        Stores the raw image bytes in one artwork slot (`role`, default
-        `front`) of an album, artist, release group, genre, playlist, or
-        podcast entity. Album front covers may additionally embed into
-        member files with `writeBack=true`, which is refused with
-        `read-only` while the server or any library is read-only;
-        other slots and entity types are catalog-only. An artist portrait lands under `front` - the
-        slot the artist screen and index tiles resolve, and the one
-        enrichment's artist walk fills; `background` is the scenic
-        slot, which no surface draws yet. Catalog entities are
-        administrators-only, with two exceptions: a playlist cover is set
-        by its owner, and replaces the cover the server generates from the
-        members until it is cleared, and a podcast show cover is set by
-        `managePodcasts` holders as well, replacing the feed's image until
-        it is cleared.
+        Stores the image in one artwork slot (`role`; an artist's portrait is
+        its `front`), and with `writeBack` embeds an album front in its files.
+        Administrators; a playlist's owner, and `managePodcasts` for a show.
       tags: [metadata]
       parameters:
         - name: role
@@ -986,34 +975,9 @@ paths:
       operationId: editEntity
       summary: Edit entity fields
       description: >
-        Edits an entity's own fields: `sort` and `mbid` for artists;
-        `sort`, `mbid`, and `type` for release groups; `sort`, `mbid`,
-        `barcode`, `label`, `catalog_number`, `media`, and `country`
-        for albums. Entity edits carry their own provenance, readable
-        below. `writeBack` pushes the values that have tag forms into
-        member files.
-
-
-        `barcode` and `country` are normalized on the way in, where a
-        scan stores the tag verbatim, so an edit refuses values
-        `GET /albums/{pid}` will happily show ("US &amp; Europe" is a
-        country a scan can store and an edit cannot). `media` has no
-        normalizer and is stored as typed.
-
-
-        Clearing an `mbid` re-keys the entity, which is the one edit
-        that can move it: the chain falls back to the heuristic key, so
-        the entity may merge into a twin that already held it
-        (`mergedInto`) or, on a release group, shed differently titled
-        albums into groups of their own (`movedAlbums`). With
-        `writeBack` an album's or release group's `mbid` clear also
-        strips that id from the member files, which is what stops the
-        next scan putting the linkage back. A clear that merges is
-        refused alongside any other field with code `conflict`, whose
-        message names the survivor to edit instead, because the merge
-        deletes the row those other values would be written to.
-        `writeBack` can reach every library, so it is refused with
-        `read-only` while the server or any library is read-only.
+        Edits an entity's own fields, normalizing `barcode` and `country`.
+        Clearing an `mbid` re-keys the entity, which may merge it into a twin
+        (`mergedInto`) or move albums out of a release group (`movedAlbums`).
       tags: [metadata]
       requestBody:
         required: true
@@ -1038,11 +1002,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            The edit was refused. `field-locked`: the field is locked
-            and the request did not set `force`. `conflict`: an `mbid`
-            clear that merges was sent with other fields; the message
-            names the survivor. `read-only`: `writeBack` was asked for
-            while the server or any library is read-only.
+            `field-locked`: the field is locked and `force` was not set.
+            `conflict`: a merging `mbid` clear came with other fields.
+            `read-only`: `writeBack` while the server is read-only.
           content:
             application/json:
               schema:
@@ -1109,15 +1071,9 @@ paths:
           $ref: "#/components/responses/NotFound"
         "409":
           description: >
-            A member's keying field or a moved credit is locked and the
-            request did not set `force` (code `field-locked`); the
-            rename would split the entity rather than move it (code
-            `conflict`: members landing on different keys, an archived
-            member, a release group titled apart, a reference the batch
-            does not cover); or `writeBack` was asked for while the
-            server or any library is read-only (code `read-only`),
-            since the rename can reach every library. The message names
-            the case.
+            `field-locked`: a member's keying field or credit is locked;
+            `conflict`: the rename would split the entity; `read-only`:
+            `writeBack` while the server is read-only. The message says which.
           content:
             application/json:
               schema:
@@ -2496,12 +2452,15 @@ components:
           additionalProperties:
             type: string
           description: >
-            Field name to new value, from the entity type's
-            vocabulary; empty clears.
+            Field name to new value (empty clears): `sort` and `mbid` for any
+            entity, `type` for release groups, and `barcode`, `label`,
+            `catalog_number`, `media` and `country` for albums.
         writeBack:
           type: boolean
           default: false
-          description: Push tag-formed values into member files.
+          description: >
+            Push tag-formed values into member files; an `mbid` clear strips
+            the id from them.
         lock:
           type: boolean
           default: true

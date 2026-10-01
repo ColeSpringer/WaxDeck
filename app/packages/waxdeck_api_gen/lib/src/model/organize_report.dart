@@ -15,7 +15,8 @@ part 'organize_report.g.dart';
 /// Properties:
 /// * [moved] - Files moved.
 /// * [skipped] - Files already in place.
-/// * [held] - Files left where they are because their library is read-only.
+/// * [held] - Files left where they are because the whole server is read-only.
+/// * [readOnlyLibraries] - Managed libraries left alone because they are read-only.
 /// * [failed] - Files that could not move.
 /// * [failures] - The failures, path and reason each.
 @BuiltValue()
@@ -28,9 +29,13 @@ abstract class OrganizeReport implements Built<OrganizeReport, OrganizeReportBui
   @BuiltValueField(wireName: r'skipped')
   int get skipped;
 
-  /// Files left where they are because their library is read-only.
+  /// Files left where they are because the whole server is read-only.
   @BuiltValueField(wireName: r'held')
   int get held;
+
+  /// Managed libraries left alone because they are read-only.
+  @BuiltValueField(wireName: r'readOnlyLibraries')
+  int get readOnlyLibraries;
 
   /// Files that could not move.
   @BuiltValueField(wireName: r'failed')
@@ -76,6 +81,11 @@ class _$OrganizeReportSerializer implements PrimitiveSerializer<OrganizeReport> 
     yield r'held';
     yield serializers.serialize(
       object.held,
+      specifiedType: const FullType(int),
+    );
+    yield r'readOnlyLibraries';
+    yield serializers.serialize(
+      object.readOnlyLibraries,
       specifiedType: const FullType(int),
     );
     yield r'failed';
@@ -133,6 +143,13 @@ class _$OrganizeReportSerializer implements PrimitiveSerializer<OrganizeReport> 
             specifiedType: const FullType(int),
           ) as int;
           result.held = valueDes;
+          break;
+        case r'readOnlyLibraries':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.readOnlyLibraries = valueDes;
           break;
         case r'failed':
           final valueDes = serializers.deserialize(

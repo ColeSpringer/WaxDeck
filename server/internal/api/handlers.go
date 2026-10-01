@@ -1283,6 +1283,12 @@ func jobJSON(j service.Job) Job {
 	if r := jobResultJSON(j); r != nil {
 		out.Result = &r
 	}
+	if t := j.Target; t != nil {
+		out.Target = &JobTarget{Type: t.Type, Pid: t.PID}
+		if t.Name != "" {
+			out.Target.Name = ptr(t.Name)
+		}
+	}
 	return out
 }
 
@@ -1591,16 +1597,30 @@ func RequestErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
 	writeError(w, http.StatusBadRequest, "invalid-request", err.Error())
 }
 
-// ResponseErrorHandler reports handler-returned errors as structured
-// responses: catalog maintenance as the typed 503 clients render as a
-// banner, everything else as an opaque 500. Handlers map expected kinds
-// to typed responses themselves; the not-found and invalid fallbacks
-// here keep the status honest when one slips through.
-func ResponseErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
+// ResponseErrorHandler reports handler-returned errors by kind. While the
+// CLI holds the catalog, a failure the service could not class is the
+// hand-off too: it answers the maintenance 503 and is logged.
+func (s *Server) ResponseErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
+	if service.KindOf(err) == service.KindInternal && s.svc != nil && s.svc.Maintenance() {
+		s.log.Warn("a request failed during catalog maintenance", "path", r.URL.Path, "err", err)
+		writeMaintenance(w)
+		return
+	}
+	responseError(w, err)
+}
+
+func writeMaintenance(w http.ResponseWriter) {
+	writeError(w, http.StatusServiceUnavailable, "catalog-maintenance",
+		"the catalog is temporarily under maintenance; retry shortly")
+}
+
+// responseError maps an error by kind. Handlers map expected kinds to
+// typed responses themselves; the not-found and invalid fallbacks here
+// keep the status honest when one slips through.
+func responseError(w http.ResponseWriter, err error) {
 	switch service.KindOf(err) {
 	case service.KindMaintenance:
-		writeError(w, http.StatusServiceUnavailable, "catalog-maintenance",
-			"the catalog is temporarily under maintenance; retry shortly")
+		writeMaintenance(w)
 	case service.KindNotFound:
 		writeError(w, http.StatusNotFound, "not-found", kindMessage(err, "not found"))
 	case service.KindInvalid:

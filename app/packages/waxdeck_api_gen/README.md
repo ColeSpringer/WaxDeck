@@ -371,7 +371,6 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**getEnrichmentCache**](doc/AdminApi.md#getenrichmentcache) | **GET** /admin/enrichment-cache | Census the enrichment response cache
 [*AdminApi*](doc/AdminApi.md) | [**getGenreTree**](doc/AdminApi.md#getgenretree) | **GET** /admin/genre-tree | Read the canonical genre vocabulary
 [*AdminApi*](doc/AdminApi.md) | [**getJob**](doc/AdminApi.md#getjob) | **GET** /jobs/{pid} | Get one job&#39;s state
-[*AdminApi*](doc/AdminApi.md) | [**getLibraryReadOnly**](doc/AdminApi.md#getlibraryreadonly) | **GET** /libraries/{pid}/read-only | Read a library&#39;s read-only mode
 [*AdminApi*](doc/AdminApi.md) | [**getScrobblingConfig**](doc/AdminApi.md#getscrobblingconfig) | **GET** /admin/scrobbling | Read the server&#39;s scrobbling credentials state
 [*AdminApi*](doc/AdminApi.md) | [**getStagedRestore**](doc/AdminApi.md#getstagedrestore) | **GET** /admin/backups/restore | Inspect the staged restore
 [*AdminApi*](doc/AdminApi.md) | [**getThumbnailCache**](doc/AdminApi.md#getthumbnailcache) | **GET** /admin/thumbnails | Census the generated thumbnail cache
@@ -394,6 +393,7 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**putTranscodingLimits**](doc/AdminApi.md#puttranscodinglimits) | **PUT** /admin/transcoding | Replace the transcoding limits
 [*AdminApi*](doc/AdminApi.md) | [**rescanLibrary**](doc/AdminApi.md#rescanlibrary) | **POST** /library/rescan | Start a library rescan
 [*AdminApi*](doc/AdminApi.md) | [**restoreTrashEntry**](doc/AdminApi.md#restoretrashentry) | **POST** /admin/trash/{trashId}/restore | Restore a trashed file
+[*AdminApi*](doc/AdminApi.md) | [**setLibraryProfile**](doc/AdminApi.md#setlibraryprofile) | **PUT** /libraries/{pid}/profile | Set a managed library&#39;s organize profile
 [*AdminApi*](doc/AdminApi.md) | [**setLibraryReadOnly**](doc/AdminApi.md#setlibraryreadonly) | **PUT** /libraries/{pid}/read-only | Set a library&#39;s read-only mode
 [*AdminApi*](doc/AdminApi.md) | [**stageMigrationExport**](doc/AdminApi.md#stagemigrationexport) | **POST** /admin/migrations/exports | Upload an account data export to import from
 [*AdminApi*](doc/AdminApi.md) | [**stageRestore**](doc/AdminApi.md#stagerestore) | **POST** /admin/backups/{backupId}/restore | Stage a restore from a backup
@@ -495,8 +495,11 @@ Class | Method | HTTP request | Description
 [*NotificationsApi*](doc/NotificationsApi.md) | [**updateMyNotificationTarget**](doc/NotificationsApi.md#updatemynotificationtarget) | **PUT** /users/me/notification-targets/{targetId} | Update a personal notification target
 [*NotificationsApi*](doc/NotificationsApi.md) | [**updateServerNotificationTarget**](doc/NotificationsApi.md#updateservernotificationtarget) | **PUT** /admin/notification-targets/{targetId} | Update a server-scope notification target
 [*OrganizeApi*](doc/OrganizeApi.md) | [**applyOrganize**](doc/OrganizeApi.md#applyorganize) | **POST** /organize/apply | Apply an organize pass
+[*OrganizeApi*](doc/OrganizeApi.md) | [**deleteOrganizeProfile**](doc/OrganizeApi.md#deleteorganizeprofile) | **DELETE** /organize/profiles/{name} | Delete an organize profile
 [*OrganizeApi*](doc/OrganizeApi.md) | [**listOrganizeProfiles**](doc/OrganizeApi.md#listorganizeprofiles) | **GET** /organize/profiles | List organize profiles
 [*OrganizeApi*](doc/OrganizeApi.md) | [**previewOrganize**](doc/OrganizeApi.md#previeworganize) | **POST** /organize/preview | Dry-run an organize pass
+[*OrganizeApi*](doc/OrganizeApi.md) | [**previewOrganizeProfile**](doc/OrganizeApi.md#previeworganizeprofile) | **POST** /organize/profiles/preview | Render an unsaved profile&#39;s samples
+[*OrganizeApi*](doc/OrganizeApi.md) | [**putOrganizeProfile**](doc/OrganizeApi.md#putorganizeprofile) | **PUT** /organize/profiles/{name} | Save an organize profile
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getAlbumPlayState**](doc/PlaybackApi.md#getalbumplaystate) | **GET** /albums/{pid}/play-state | Get the caller&#39;s star and rating for an album
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getArtistPlayState**](doc/PlaybackApi.md#getartistplaystate) | **GET** /artists/{pid}/play-state | Get the caller&#39;s star and rating for an artist
 [*PlaybackApi*](doc/PlaybackApi.md) | [**getDownloadInfo**](doc/PlaybackApi.md#getdownloadinfo) | **GET** /items/{pid}/download-info | Resolve an offline download for an item
@@ -789,6 +792,7 @@ Class | Method | HTTP request | Description
  - [ItemSummary](doc/ItemSummary.md)
  - [Job](doc/Job.md)
  - [JobList](doc/JobList.md)
+ - [JobTarget](doc/JobTarget.md)
  - [KindFields](doc/KindFields.md)
  - [LastfmConnectStart](doc/LastfmConnectStart.md)
  - [Libraries](doc/Libraries.md)
@@ -796,6 +800,7 @@ Class | Method | HTTP request | Description
  - [LibraryCreate](doc/LibraryCreate.md)
  - [LibraryCreated](doc/LibraryCreated.md)
  - [LibraryMatching](doc/LibraryMatching.md)
+ - [LibraryProfile](doc/LibraryProfile.md)
  - [LibraryReadOnly](doc/LibraryReadOnly.md)
  - [LinkedIdentity](doc/LinkedIdentity.md)
  - [ListenBrainzConnect](doc/ListenBrainzConnect.md)
@@ -855,9 +860,13 @@ Class | Method | HTTP request | Description
  - [OrganizeFailure](doc/OrganizeFailure.md)
  - [OrganizePlan](doc/OrganizePlan.md)
  - [OrganizeProfile](doc/OrganizeProfile.md)
+ - [OrganizeProfileInput](doc/OrganizeProfileInput.md)
+ - [OrganizeProfilePreview](doc/OrganizeProfilePreview.md)
  - [OrganizeProfiles](doc/OrganizeProfiles.md)
  - [OrganizeReport](doc/OrganizeReport.md)
  - [OrganizeRequest](doc/OrganizeRequest.md)
+ - [OrganizeSample](doc/OrganizeSample.md)
+ - [OrganizeTemplates](doc/OrganizeTemplates.md)
  - [PasswordChange](doc/PasswordChange.md)
  - [Permissions](doc/Permissions.md)
  - [PlayInfo](doc/PlayInfo.md)

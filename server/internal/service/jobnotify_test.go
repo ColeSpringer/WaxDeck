@@ -211,16 +211,17 @@ func TestSynchronousWorkTellsTheAdministratorToo(t *testing.T) {
 	}
 }
 
-// healthMarkers counts the health markers on an account's stream.
-func healthMarkers(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) int {
+// markers counts the kind's markers on an account's stream, those naming
+// pid when one is given.
+func markers(t *testing.T, ctx context.Context, svc *Library, userID, kind, pid string) int {
 	t.Helper()
-	evs, _, err := svc.db.EventsSince(ctx, uc.ID, 0, 1000)
+	evs, _, err := svc.db.EventsSince(ctx, userID, 0, 1000)
 	if err != nil {
 		t.Fatal(err)
 	}
 	n := 0
 	for _, e := range evs {
-		if e.Kind == eventHealth {
+		if e.Kind == kind && (pid == "" || e.ItemPID == pid) {
 			n++
 		}
 	}
@@ -239,7 +240,7 @@ func TestAFailedSweepAnswersItsRequestAndSaysSo(t *testing.T) {
 	if err := svc.QueueHealthSweep(ctx, a); err != nil {
 		t.Fatal(err)
 	}
-	markers := healthMarkers(t, ctx, svc, a)
+	seen := markers(t, ctx, svc, a.ID, eventHealth, "")
 	req := svc.sweepRequest(ctx)
 	svc.sweeping.Store(true)
 	svc.sweepEnded(ctx, req, errors.New("the disk went away"))
@@ -248,32 +249,32 @@ func TestAFailedSweepAnswersItsRequestAndSaysSo(t *testing.T) {
 		t.Fatalf("after a failed sweep: sweeping %v, failed %v, due %v (%v); want failed alone",
 			sum.Sweeping, sum.SweepFailed, svc.HealthSweepDue(ctx), err)
 	}
-	if n := healthMarkers(t, ctx, svc, a); n != markers+1 {
-		t.Fatalf("markers = %d, want the failure told once (%d)", n, markers+1)
+	if n := markers(t, ctx, svc, a.ID, eventHealth, ""); n != seen+1 {
+		t.Fatalf("markers = %d, want the failure told once (%d)", n, seen+1)
 	}
 	svc.sweepEnded(ctx, "", errors.New("the disk is still gone"))
-	if n := healthMarkers(t, ctx, svc, a); n != markers+1 {
-		t.Fatalf("markers = %d after a second failure, want no more (%d)", n, markers+1)
+	if n := markers(t, ctx, svc, a.ID, eventHealth, ""); n != seen+1 {
+		t.Fatalf("markers = %d after a second failure, want no more (%d)", n, seen+1)
 	}
 	// A request that fails in the same run still ends, and clients
 	// reading it as sweeping have to hear so.
 	if err := svc.QueueHealthSweep(ctx, a); err != nil {
 		t.Fatal(err)
 	}
-	markers = healthMarkers(t, ctx, svc, a)
+	seen = markers(t, ctx, svc, a.ID, eventHealth, "")
 	svc.sweeping.Store(true)
 	svc.sweepEnded(ctx, svc.sweepRequest(ctx), errors.New("the disk is gone for good"))
-	if n := healthMarkers(t, ctx, svc, a); n != markers+1 {
-		t.Fatalf("markers = %d after a requested sweep failed again, want its end told (%d)", n, markers+1)
+	if n := markers(t, ctx, svc, a.ID, eventHealth, ""); n != seen+1 {
+		t.Fatalf("markers = %d after a requested sweep failed again, want its end told (%d)", n, seen+1)
 	}
-	markers = healthMarkers(t, ctx, svc, a)
+	seen = markers(t, ctx, svc, a.ID, eventHealth, "")
 	if err := svc.RunHealthSweep(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if sum, err := svc.HealthSummaryFor(ctx); err != nil || sum.SweepFailed {
 		t.Fatalf("after a sweep that landed: failed %v (%v), want cleared", sum.SweepFailed, err)
 	}
-	if n := healthMarkers(t, ctx, svc, a); n != markers+1 {
-		t.Fatalf("markers = %d, want the landing told (%d)", n, markers+1)
+	if n := markers(t, ctx, svc, a.ID, eventHealth, ""); n != seen+1 {
+		t.Fatalf("markers = %d, want the landing told (%d)", n, seen+1)
 	}
 }

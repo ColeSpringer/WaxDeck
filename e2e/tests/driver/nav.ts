@@ -260,6 +260,7 @@ export const DEST = {
   adminBackups: adminSection('backups', '/admin/backups', SemanticsIds.adminBackups),
   adminSchedules: adminSection('schedules', '/admin/schedules', SemanticsIds.adminSchedules),
   adminGenres: adminSection('genres', '/admin/genres', SemanticsIds.adminGenres),
+  adminOrganize: adminSection('organize', '/admin/organize', SemanticsIds.adminOrganize),
   health: adminSection('health', '/admin/health', SemanticsIds.adminHealth),
 } satisfies Record<string, Dest>;
 

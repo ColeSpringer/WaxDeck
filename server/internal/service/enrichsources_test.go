@@ -251,7 +251,7 @@ func TestARunWithEverySourceOffSaysSo(t *testing.T) {
 	if _, err := svc.PutEnrichmentSources(ctx, uc, off); err != nil {
 		t.Fatal(err)
 	}
-	_, err := svc.RunEnrichment(ctx, uc, false, nil)
+	_, err := svc.RunEnrichment(ctx, uc, false, nil, nil)
 	if KindOf(err) != KindUnsupported {
 		t.Fatalf("err = %v, want unsupported", err)
 	}
@@ -393,7 +393,7 @@ func TestAPassAfterAReorderCreditsTheNewFirstSource(t *testing.T) {
 	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}}); err != nil {
 		t.Fatal(err)
 	}
-	api, err := svc.RunEnrichment(ctx, uc, false, nil)
+	api, err := svc.RunEnrichment(ctx, uc, false, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,7 +413,7 @@ func TestAForcedRunDuringAPassIsAConflict(t *testing.T) {
 	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"fanart", false}}); err != nil {
 		t.Fatal(err)
 	}
-	api, err := svc.RunEnrichment(ctx, uc, false, nil)
+	api, err := svc.RunEnrichment(ctx, uc, false, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -423,7 +423,7 @@ func TestAForcedRunDuringAPassIsAConflict(t *testing.T) {
 	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"fanart", true}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"group-art"}); KindOf(err) != KindConflict {
+	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"group-art"}, nil); KindOf(err) != KindConflict {
 		t.Fatalf("a forced run during a pass = %v, want conflict", err)
 	}
 }
@@ -468,7 +468,7 @@ func TestASwitchedOffSourceIsCalledThat(t *testing.T) {
 	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", false}, {"b", true}, {"fanart", false}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"group-art"}); err == nil || !strings.Contains(err.Error(), "switched off") {
+	if _, err := svc.RunEnrichment(ctx, uc, false, []string{"group-art"}, nil); err == nil || !strings.Contains(err.Error(), "switched off") {
 		t.Fatalf("forcing a switched-off source's phase = %v, want it called switched off", err)
 	}
 	proposal := EnrichProposalDTO{Fields: []EnrichFieldProposalDTO{{Name: "publisher", Proposed: "x", Provider: "a"}}}
@@ -483,7 +483,7 @@ func TestTheStatusNamesTheRunningPass(t *testing.T) {
 	t.Parallel()
 	a := &lyricist{name: "a", asked: make(chan struct{}, 1), gate: make(chan struct{})}
 	ctx, svc, uc, _ := openLyricsFixture(t, a)
-	api, err := svc.RunEnrichment(ctx, uc, false, nil)
+	api, err := svc.RunEnrichment(ctx, uc, false, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

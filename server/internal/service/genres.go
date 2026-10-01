@@ -40,6 +40,7 @@ import (
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
+	"github.com/colespringer/waxbin/waxerr"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/genre"
@@ -293,6 +294,9 @@ func (l *Library) rewindGenreSweep(ctx context.Context) (int64, error) {
 // rather than waiting for a manual full pass. The supervised
 // genre-normalize worker calls it on its ticker, never a bare goroutine.
 func (l *Library) SweepGenres(ctx context.Context) (GenreSweepReport, error) {
+	if l.Maintenance() {
+		return GenreSweepReport{}, nil
+	}
 	norm, err := l.genreNormalizer(ctx)
 	if err != nil {
 		return GenreSweepReport{}, err
@@ -322,6 +326,12 @@ func (l *Library) SweepGenres(ctx context.Context) (GenreSweepReport, error) {
 	report := GenreSweepReport{}
 	for len(pids) < genreSweepBatch {
 		rows, err := l.lib.Changes(ctx, since)
+		if waxerr.CodeOf(err) == waxerr.CodeNotFound {
+			// A replaced or pruned catalog: start over at the oldest
+			// change it retains.
+			_, err := l.rewindGenreSweep(ctx)
+			return GenreSweepReport{}, err
+		}
 		if err != nil {
 			return GenreSweepReport{}, classify(err)
 		}

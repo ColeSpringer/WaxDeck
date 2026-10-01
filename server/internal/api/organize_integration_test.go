@@ -1,6 +1,10 @@
 package api
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/colespringer/waxdeck/server/internal/service"
+)
 
 // TestOrganizeProfilesAndPreview covers the profile listing (the
 // upstream built-in ships in every profile set) and the preview and
@@ -77,11 +81,58 @@ func TestOrganizeAdminGates(t *testing.T) {
 	if resp := get(t, h.ts, "/api/v1/organize/profiles", sam); resp.StatusCode != 403 {
 		t.Fatalf("profiles as non-admin: status %d, want 403", resp.StatusCode)
 	}
-	for _, path := range []string{"/api/v1/organize/preview", "/api/v1/organize/apply"} {
+	for _, path := range []string{"/api/v1/organize/preview", "/api/v1/organize/apply", "/api/v1/organize/profiles/preview"} {
 		resp := reqAs(t, h, "POST", path, sam, map[string]any{"profile": "waxbin-native"})
 		if resp.StatusCode != 403 {
 			t.Fatalf("%s as non-admin: status %d, want 403", path, resp.StatusCode)
 		}
 		resp.Body.Close()
 	}
+	for _, method := range []string{"PUT", "DELETE"} {
+		resp := reqAs(t, h, method, "/api/v1/organize/profiles/flat", sam, map[string]any{})
+		if resp.StatusCode != 403 {
+			t.Fatalf("%s a profile as non-admin: status %d, want 403", method, resp.StatusCode)
+		}
+		resp.Body.Close()
+	}
+}
+
+// A saved profile lists with its sample, a managed library can be laid
+// out by it, and it cannot be deleted while one is.
+func TestOrganizeProfilesAreEditedAtRuntime(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+	resp := h.putJSON(t, "/api/v1/organize/profiles/flat", map[string]any{"musicTemplate": "{title}.{ext}"})
+	if saved := decode[OrganizeProfile](t, resp); resp.StatusCode != 200 || saved.MusicTemplate != "{title}.{ext}" ||
+		saved.BuiltIn || saved.Sample.Music != "Amber Waves.flac" || saved.AudiobookTemplate == "" {
+		t.Fatalf("saved = %d %+v, want the profile with its sample", resp.StatusCode, saved)
+	}
+	builtIn := map[string]bool{}
+	for _, p := range decode[OrganizeProfiles](t, get(t, h.ts, "/api/v1/organize/profiles", h.token)).Profiles {
+		builtIn[p.Name] = p.BuiltIn
+	}
+	if b, ok := builtIn["flat"]; !ok || b || !builtIn["waxbin-native"] {
+		t.Fatalf("listed = %v, want flat saved beside the built-in", builtIn)
+	}
+	resp = h.postJSON(t, "/api/v1/organize/profiles/preview", map[string]any{"podcastTemplate": "{podcast}/{episode}.{ext}"})
+	if sample := decode[OrganizeSample](t, resp); resp.StatusCode != 200 || sample.Podcast != "Night Shift Radio/The Lighthouse Keeper.mp3" {
+		t.Fatalf("preview = %d %+v, want the podcast sample", resp.StatusCode, sample)
+	}
+	wantStatus(t, h.putJSON(t, "/api/v1/organize/profiles/bad", map[string]any{"musicTemplate": "{nope}"}), 400, "a bad template")
+
+	lib := decode[Libraries](t, get(t, h.ts, "/api/v1/libraries", h.token)).Libraries[0]
+	resp = h.putJSON(t, "/api/v1/libraries/"+lib.Pid+"/profile", map[string]any{"profile": "flat"})
+	if got := decode[Library](t, resp); resp.StatusCode != 200 || deref(got.Profile) != "flat" {
+		t.Fatalf("library profile = %d %+v, want flat", resp.StatusCode, got)
+	}
+	wantStatus(t, h.deleteReq(t, "/api/v1/organize/profiles/flat"), 409, "delete a profile in use")
+	wantStatus(t, h.putJSON(t, "/api/v1/libraries/"+lib.Pid+"/profile", map[string]any{"profile": "waxbin-native"}), 200, "move the library back")
+	wantStatus(t, h.deleteReq(t, "/api/v1/organize/profiles/flat"), 204, "delete a profile nothing uses")
+	wantStatus(t, h.deleteReq(t, "/api/v1/organize/profiles/waxbin-native"), 400, "delete the built-in")
+	wantStatus(t, h.deleteReq(t, "/api/v1/organize/profiles/gone"), 404, "delete an unknown profile")
+	wantStatus(t, h.putJSON(t, "/api/v1/libraries/"+lib.Pid+"/profile", map[string]any{"profile": "gone"}), 400, "an unknown profile")
 }

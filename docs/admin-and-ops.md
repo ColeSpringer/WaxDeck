@@ -139,6 +139,16 @@ it, restart. Without the old keyfile everything restores except sealed
 credentials (app passwords, scrobbling connections, private feed
 logins, notification target configurations), which need re-entering.
 
+The catalog alone can be restored live with the CLI:
+`waxbin restore --force <backup.db>` runs through the server's socket
+as a maintenance hand-off, during which catalog reads and writes answer
+`catalog-maintenance`. The server then maps every account to the
+restored catalog's users, rebuilds its library roots and asks every
+client to re-mirror. The server database stays as it is, so health
+issues and podcast subscriptions naming items or shows the restored
+catalog lacks linger until the next health sweep or an unsubscribe, and
+a library new to the server takes the default matching mode.
+
 ## Upgrades that reset the catalog
 
 Before 1.0 the catalog's schema baseline is edited in place rather
@@ -221,8 +231,9 @@ and switched on, none can) and whether one is running, then how much of
 the library is covered: lyrics count the tracks holding them, whatever
 supplied them, with the ones looked up and found to have none beside
 that. A pass started from here can fill only
-what is missing, ask again about everything, or ask again in the phases
-you pick; only the phases this server can run are offered.
+what is missing, ask again about everything, or walk only the phases
+you pick, asking again about everything they reach; only the phases
+this server can run are offered.
 
 **Sources** lists the providers in the order they are asked, the
 catalog's built-ins among them. Each can be moved up or down and
@@ -236,18 +247,21 @@ leaves out its genres only; the identity lookups still run.
 **Last run** shows what the newest finished pass looked up and what some
 source answered, walk by walk, how many lookups a failing source left
 owed for the next pass, and which phases stopped early because every
-source serving them failed three times in a row. **Response cache**
+source serving them failed three times in a row, and with tag
+write-back on, how many files a read-only library kept unwritten.
+**Response cache**
 holds the census and prune described under scheduled jobs.
 
 ## The trash
 
 Deletions go to the catalog's reversible trash - a same-volume
 `.waxbin-trash` directory the scanner skips. The admin trash surface
-lists every trashed file with where it lived, restores files back into
-the catalog (re-scanned and un-archived), and empties the trash
-permanently, reporting the space reclaimed. Deleting items from the
-item page previews what will be deleted (files, bytes) before anything
-moves.
+lists every trashed file with where it lived and the library it came
+from, restores files back into the catalog (re-scanned and
+un-archived), and empties the trash permanently, reporting the space
+reclaimed and how many entries read-only libraries kept. Deleting items
+from the item page previews what will be deleted (files, bytes) before
+anything moves.
 
 ## Upload oversight
 
@@ -290,35 +304,43 @@ staging its failures reserved.
 ## Read-only mode
 
 For media mounted read-only on principle: per library, or server-wide
-(the console's Server settings). A read-only library refuses uploads,
-file write-back, deletion (a quality upgrade's included), restoring or
-purging its trash, and the file tools with the `read-only` error code,
-while playback, browsing, and per-user state (stars, progress,
-playlists) keep working. Organizing and the health fixes that write
-files (paths off the template, tags lagging the catalog) leave a
-read-only library's files where they are, counted apart, and are
-refused while the whole server is read-only; a fix already running
-when the server goes read-only skips what it has not reached.
+(the console's Server settings). The per-library flag lives in the
+catalog, which enforces it file by file, so `waxbin library set <pid>
+--read-only` from the CLI does the same as the console's switch and
+shows there as soon as it lands. A read-only library refuses uploads,
+deletion (a quality upgrade's included), restoring or purging its trash
+entries, and the file tools with the `read-only` error code, while
+playback, browsing, and per-user state (stars, progress, playlists)
+keep working.
 
-Some writes span every library and cannot leave one out, so while any
-library is read-only they stop for all of them: the enrichment pass
-writes no tags into files (a pass already running keeps what it
-started with), an album, release group or artist edit is refused its
-write-back, and emptying the trash, by hand or by the retention sweep,
-waits while a read-only library holds a file it would purge. The
-podcast download tree needs a writable root: while the server is
-read-only, episode fetches and download removal are refused, and the
-fetch queue and download retention wait for the flag to clear.
+Writes that reach many libraries go on and leave the read-only ones
+alone: the enrichment pass writes no tags into their files (counted,
+and written by the first pass after the flag clears), an album, release
+group or artist edit writes back everywhere else and reports each
+refused file, organizing and the health fixes that write files (paths
+off the template, tags lagging the catalog) leave them where they are,
+counted apart, and emptying the trash, by hand or by the retention
+sweep, keeps their entries. The server-wide flag refuses all of these;
+a fix already running when the server goes read-only skips what it has
+not reached. The podcast download tree needs a writable root: while the
+server is read-only, episode fetches and download removal are refused,
+and the fetch queue and download retention wait for the flag to clear.
 
 ## Adding a library at runtime
 
 The console's Libraries section lists every root with its path, what it
-holds, how many items the catalog has under it, its read-only flag, and
-its matching mode (automatic, ask me, or leave alone). Adding one there
+holds, how many items the catalog has under it, the organize profile a
+managed root is laid out by, its read-only flag, and its matching mode
+(automatic, ask me, or leave alone). Adding one there
 creates a library root without restarting the server: the path is validated (absolute, not overlapping an existing
 root, the inbox, or the podcast download dir), cataloged, and scanned in
 the background. Browsing and downloading its files work as soon as the
-scan indexes them. The library name doubles as the streaming engine's
+scan indexes them. The catalog keeps the root with its managed policy
+and the server keeps its name, so after a restart it is still watched,
+still an upload target, and still named as it was. A root added with the
+`waxbin` CLI shows up as soon as the catalog reports it, named after its
+directory, and the streaming engine is taught it the same way as one
+added here. The library name doubles as the streaming engine's
 root name, so it also has to be free there - including the podcast root
 name, which the engine mounts but the library list never shows.
 
@@ -486,7 +508,10 @@ organize runs, emptying the trash) with their progress and, once they
 end, what they did. A running job is listed however many newer ones
 came after it; finished per-item jobs (an upload's imports, deletes,
 restores, trash purges) are left out, and only the 20 newest finished
-jobs are shown. Task and job progress streams live over the
+jobs are shown. A job on one target, such as an enrichment of one item
+or the watcher's scan of one library, is listed by that target's name
+only while it runs, and only its starter hears of it (the watcher's
+scans notify nobody). Task and job progress streams live over the
 WebSocket channel; `GET /api/v1/tools/tasks/{id}/events` serves a
 task's lifecycle as server-sent events for anything that prefers a
 plain HTTP stream.

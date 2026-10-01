@@ -248,6 +248,34 @@ void main() {
     );
   });
 
+  // A toast would sit under the sheet, which stays open.
+  testWidgets('a refused sync is said inside the sheet', (tester) async {
+    final repo =
+        FakeRepository(
+            sessionState: const SessionState(authenticated: true, user: _admin),
+          )
+          ..playlistSyncError = const WaxDeckApiException(
+            code: 'not-found',
+            message: 'no binding',
+            statusCode: 404,
+          );
+    final pl = await _manualPlaylist(repo);
+    repo.playlistSources[pl.pid] = _bound;
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: pl.pid)));
+    await tester.pumpAndSettle();
+    await _openSheet(tester);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncNow));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.playlistSyncSheet),
+        matching: find.text('That is not here any more.'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a bound playlist wears a sync chip; an unbound one does not', (
     tester,
   ) async {
@@ -368,8 +396,11 @@ void main() {
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.playlistSyncSave));
     await tester.pumpAndSettle();
     expect(
-      shellMessageText(raisedMessage(tester)),
-      'bind a url or a source export',
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.playlistSyncSheet),
+        matching: find.text('bind a url or a source export'),
+      ),
+      findsOneWidget,
     );
     expect(
       find.bySemanticsIdentifier(SemanticsIds.playlistSyncNow),
@@ -579,8 +610,11 @@ void main() {
     // Sent as a bind with a blank url, and refused as one.
     expect(repo.setPlaylistSourceCalls.single.url, '');
     expect(
-      shellMessageText(raisedMessage(tester)),
-      'bind a url or a source export',
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.playlistSyncSheet),
+        matching: find.text('bind a url or a source export'),
+      ),
+      findsOneWidget,
     );
     // The stored binding is untouched.
     expect(repo.playlistSources[pl.pid]?.url, _bound.url);
