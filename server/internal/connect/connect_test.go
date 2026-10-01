@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -78,9 +80,18 @@ func (d *fakeDriver) Close() error {
 	d.closed = true
 	return nil
 }
+func (d *fakeDriver) isClosed() bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.closed
+}
 func (d *fakeDriver) verb(v string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	if d.closed {
+		// Nothing left to carry it, as with a real driver.
+		return errors.New("driver closed")
+	}
 	d.verbs = append(d.verbs, v)
 	return nil
 }
@@ -434,6 +445,225 @@ func TestDriverEventsAdvanceSession(t *testing.T) {
 		_, err := svc.Session("us-alice", snap.ID)
 		return errors.Is(err, ErrNotFound)
 	})
+}
+
+// TestShutdownReleasesDevices: a driven device's workers run under the
+// group a shutdown waits out, and a device that stays connected never
+// ends them itself, so shutting down waited for as long as anything was
+// playing. The end of Run's context lets every device go, the way the
+// device going offline would, and keeps the listener's place.
+func TestShutdownReleasesDevices(t *testing.T) {
+	svc, sink, driver := newTestService(t)
+	group := svc.cfg.Group
+	ctx, cancel := context.WithCancel(context.Background())
+	group.Go(ctx, "connect", svc.Run)
+	bg := context.Background()
+	snap, err := svc.CreateSession(bg, "us-alice", "Alice", SessionRequest{EndpointID: deviceEndpointID(t, svc, "us-alice"), PIDs: []string{"tr-one"}, PositionMS: 20000, Play: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cancel()
+	waitDrained(t, group)
+	if !driver.isClosed() {
+		t.Fatal("shutdown left the device's driver open")
+	}
+	driver.mu.Lock()
+	stopped := slices.Contains(driver.verbs, "stop")
+	driver.mu.Unlock()
+	if stopped {
+		t.Fatal("shutdown stopped the device rather than letting it go")
+	}
+	history, err := svc.SessionHistory(bg, "us-alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].ID != snap.ID || history[0].PositionMS < 20000 {
+		t.Fatalf("history %+v, want the session ended where it was", history)
+	}
+	sink.mu.Lock()
+	checkpointed := slices.Contains(sink.checkpoints, "tr-one")
+	sink.mu.Unlock()
+	if !checkpointed {
+		t.Fatal("shutdown lost the listener's place")
+	}
+
+	// Nothing starts on a device afterwards: nothing would let it go.
+	late := newFakeDriver()
+	lateEp := deviceOnline(t, svc, "cast-dev-2", late)
+	if _, err := svc.CreateSession(bg, "us-alice", "Alice", SessionRequest{EndpointID: lateEp, PIDs: []string{"tr-two"}, Play: true}); !errors.Is(err, ErrEndpointOffline) {
+		t.Fatalf("a session start after shutdown answered %v, want endpoint offline", err)
+	}
+	late.mu.Lock()
+	loads := len(late.loads)
+	late.mu.Unlock()
+	if loads != 0 {
+		t.Fatal("a session start after shutdown loaded the device")
+	}
+}
+
+// TestShutdownWaitsOutSessionStart: a session start a shutdown lands
+// in the middle of finishes first, and its session ends like any other.
+// Torn down halfway, it would be recorded active with its device let go.
+func TestShutdownWaitsOutSessionStart(t *testing.T) {
+	svc, _, _ := newTestService(t)
+	group := svc.cfg.Group
+	ctx, cancel := context.WithCancel(context.Background())
+	group.Go(ctx, "connect", svc.Run)
+	gate := newLoadGate()
+	epID := deviceOnline(t, svc, "cast-dev-2", gate)
+	started := make(chan error, 1)
+	go func() {
+		_, err := svc.CreateSession(context.Background(), "us-alice", "Alice", SessionRequest{EndpointID: epID, PIDs: []string{"tr-two"}, Play: true})
+		started <- err
+	}()
+	gate.waitReached(t)
+
+	cancel()
+	waitStopping(t, svc)
+	close(gate.proceed)
+	if err := <-started; err != nil {
+		t.Fatal(err)
+	}
+	waitDrained(t, group)
+	if !gate.isClosed() {
+		t.Fatal("the started session's driver outlived the shutdown")
+	}
+	history, err := svc.SessionHistory(context.Background(), "us-alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].EndpointID != epID {
+		t.Fatalf("history %+v, want the started session ended", history)
+	}
+}
+
+// TestShutdownWaitsOutTransfer: a transfer a shutdown lands in the
+// middle of finishes first, stopping its source, and the session ends
+// on the target. Torn down halfway, the source would be let go unstopped
+// and play on beside the target.
+func TestShutdownWaitsOutTransfer(t *testing.T) {
+	svc, _, source := newTestService(t)
+	group := svc.cfg.Group
+	ctx, cancel := context.WithCancel(context.Background())
+	group.Go(ctx, "connect", svc.Run)
+	bg := context.Background()
+	moving, err := svc.CreateSession(bg, "us-alice", "Alice", SessionRequest{EndpointID: deviceEndpointID(t, svc, "us-alice"), PIDs: []string{"tr-one"}, Play: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := newLoadGate()
+	targetEp := deviceOnline(t, svc, "cast-dev-2", target)
+	moved := make(chan error, 1)
+	go func() {
+		_, err := svc.Transfer(bg, "us-alice", moving.ID, targetEp)
+		moved <- err
+	}()
+	target.waitReached(t)
+
+	cancel()
+	waitStopping(t, svc)
+	close(target.proceed)
+	if err := <-moved; err != nil {
+		t.Fatal(err)
+	}
+	waitDrained(t, group)
+	source.mu.Lock()
+	stopped := slices.Contains(source.verbs, "stop")
+	source.mu.Unlock()
+	if !stopped {
+		t.Fatal("the transfer's source was let go without being stopped")
+	}
+	if !source.isClosed() || !target.isClosed() {
+		t.Fatal("a device driver outlived the shutdown")
+	}
+	history, err := svc.SessionHistory(bg, "us-alice")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 1 || history[0].ID != moving.ID || history[0].EndpointID != targetEp {
+		t.Fatalf("history %+v, want the session ended on its target", history)
+	}
+}
+
+// TestShutdownReleasesDevicesWhileRunRestarts: the release hangs off
+// Run's context rather than Run's loop, so a Run that panicked and is
+// waiting out its restart when the server stops still lets devices go.
+func TestShutdownReleasesDevicesWhileRunRestarts(t *testing.T) {
+	svc, _, driver := newTestService(t)
+	var trip atomic.Bool
+	svc.cfg.Now = func() time.Time {
+		if trip.CompareAndSwap(true, false) {
+			panic("housekeeping tripped")
+		}
+		return time.Now()
+	}
+	group := svc.cfg.Group
+	ctx, cancel := context.WithCancel(context.Background())
+	group.Go(ctx, "connect", svc.Run)
+	if _, err := svc.CreateSession(context.Background(), "us-alice", "Alice", SessionRequest{EndpointID: deviceEndpointID(t, svc, "us-alice"), PIDs: []string{"tr-one"}, Play: true}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run's next tick panics, and the group waits a second before
+	// restarting it.
+	trip.Store(true)
+	waitFor(t, func() bool { return !trip.Load() })
+	cancel()
+	waitDrained(t, group)
+	if !driver.isClosed() {
+		t.Fatal("shutdown during Run's restart left the device's driver open")
+	}
+}
+
+// waitStopping waits for the release to begin.
+func waitStopping(t *testing.T, svc *Service) {
+	t.Helper()
+	waitFor(t, func() bool {
+		svc.mu.Lock()
+		defer svc.mu.Unlock()
+		return svc.stopped
+	})
+}
+
+// deviceOnline registers a cast endpoint driven by d.
+func deviceOnline(t *testing.T, svc *Service, key string, d Driver) string {
+	t.Helper()
+	ep, err := svc.EndpointOnline(context.Background(), KindCast, key, key, "192.0.2.51:8009", true, false,
+		func(context.Context) (Driver, error) { return d, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ep.ID
+}
+
+// loadGate holds Load until the test lets it land: a device load in
+// flight.
+type loadGate struct {
+	*fakeDriver
+	reached, proceed chan struct{}
+}
+
+func newLoadGate() *loadGate {
+	return &loadGate{fakeDriver: newFakeDriver(), reached: make(chan struct{}, 1), proceed: make(chan struct{})}
+}
+
+func (d *loadGate) Load(ctx context.Context, items []MediaItem, index int, positionMS int64, play bool) error {
+	select {
+	case d.reached <- struct{}{}:
+	default:
+	}
+	<-d.proceed
+	return d.fakeDriver.Load(ctx, items, index, positionMS, play)
+}
+
+func (d *loadGate) waitReached(t *testing.T) {
+	t.Helper()
+	select {
+	case <-d.reached:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the load never reached the device")
+	}
 }
 
 func TestRemoteCommands(t *testing.T) {
@@ -1023,6 +1253,21 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("condition never held")
+}
+
+// waitDrained fails unless every worker in the group ends promptly.
+func waitDrained(t *testing.T, group *supervise.Group) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		group.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("the group never drained")
+	}
 }
 
 // clientLinkAnsweringLoads builds a link that behaves like a real

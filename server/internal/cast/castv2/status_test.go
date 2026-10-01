@@ -1,8 +1,11 @@
-// Status-ordering tests are internal: what they pin is the order the
-// pump reads observations in, which nothing outside the package sees.
+// Pump tests are internal: what they pin is how the pump reads what
+// the connection hands it - observations in arrival order, and the
+// connection's end - which nothing outside the package sees.
 package castv2
 
 import (
+	"context"
+	"errors"
 	"slices"
 	"testing"
 
@@ -103,5 +106,34 @@ func TestDispatchStampsArrivalOrder(t *testing.T) {
 	}
 	if got := c.observed(); got != 2 {
 		t.Errorf("observed = %d after two messages, want 2", got)
+	}
+}
+
+// TestDeathIsFatalWhicheverCaseWakesThePump: fail closes dead and then
+// cancels the run context, so a pump busy when the connection died
+// comes back to find both ready, and select takes either. The context's
+// case returned without the fatal event, and the session stayed up on a
+// device nothing was driving.
+func TestDeathIsFatalWhicheverCaseWakesThePump(t *testing.T) {
+	for _, closed := range []bool{false, true} {
+		for range 64 {
+			ctx, cancel := context.WithCancel(context.Background())
+			c := &conn{
+				dead:     make(chan struct{}),
+				statuses: make(chan statusUpdate),
+				closed:   closed,
+				deadErr:  errors.New("reading: EOF"),
+			}
+			close(c.dead)
+			cancel()
+			d := &driver{conn: c, events: make(chan connect.DriverEvent, 1)}
+			d.pump(ctx)
+			switch {
+			case closed && len(d.events) != 0:
+				t.Fatalf("Close was reported as a death: %+v", <-d.events)
+			case !closed && (len(d.events) == 0 || !(<-d.events).Fatal):
+				t.Fatal("the connection died and the pump ended without a fatal event")
+			}
+		}
 	}
 }

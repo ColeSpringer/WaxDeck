@@ -141,6 +141,9 @@ const (
 type Service struct {
 	cfg Config
 	reg *Registry
+	// releaseOnce starts the release worker once, however often the
+	// group restarts Run.
+	releaseOnce sync.Once
 
 	mu         sync.Mutex
 	sessions   map[string]*session
@@ -161,6 +164,12 @@ type Service struct {
 	driverGen map[string]int // session id -> driver generation
 	listen    map[string]*listenTrack
 	routeSeq  uint64
+	// driving counts the session starts and transfers in flight
+	// (beginDriving), which release waits out on drained; stopped
+	// refuses new ones once it has begun.
+	driving int
+	drained *sync.Cond
+	stopped bool
 }
 
 // watchState tracks one connection's watch and the queue version it
@@ -228,6 +237,7 @@ func New(ctx context.Context, cfg Config) (*Service, error) {
 		driverGen:    make(map[string]int),
 		listen:       make(map[string]*listenTrack),
 	}
+	s.drained = sync.NewCond(&s.mu)
 	return s, nil
 }
 
@@ -236,8 +246,18 @@ func (s *Service) Registry() *Registry { return s.reg }
 
 // Run is the service's supervised housekeeping loop: watcher pushes
 // and periodic checkpoints for playing sessions, and session-history
-// pruning. Returns nil on context cancel.
+// pruning. Returns nil on context cancel. The context's end also
+// releases every device the service drives, from a worker of its own:
+// a Run waiting out a restart when the context ends would never get
+// to it.
 func (s *Service) Run(ctx context.Context) error {
+	s.releaseOnce.Do(func() {
+		s.cfg.Group.GoOnce(ctx, "connect-release", func(ctx context.Context) error {
+			<-ctx.Done()
+			s.release()
+			return nil
+		})
+	})
 	tick := time.NewTicker(watcherTick)
 	defer tick.Stop()
 	lastCheckpoint := s.cfg.Now()
@@ -261,6 +281,49 @@ func (s *Service) Run(ctx context.Context) error {
 			}
 		}
 	}
+}
+
+// release ends every device session the way the device going offline
+// would: a driver's workers run under the group a shutdown waits out,
+// and a device that stays connected never ends them itself. Session
+// starts and transfers in flight finish first - halfway through, a
+// transfer's source would be let go unstopped, playing beside its
+// target - and later ones are refused.
+func (s *Service) release() {
+	ctx := context.Background()
+	s.mu.Lock()
+	s.stopped = true
+	for s.driving > 0 {
+		s.drained.Wait()
+	}
+	for _, sess := range s.sessions {
+		if sess.driver != nil {
+			s.endSessionLocked(ctx, sess, false)
+		}
+	}
+	s.mu.Unlock()
+	s.cfg.InvalidatePlayer()
+}
+
+// beginDriving registers a session start or transfer, which can hand a
+// session a device, for release to wait out; endDriving ends it.
+func (s *Service) beginDriving() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stopped {
+		return fmt.Errorf("%w: the server is shutting down", ErrEndpointOffline)
+	}
+	s.driving++
+	return nil
+}
+
+func (s *Service) endDriving() {
+	s.mu.Lock()
+	s.driving--
+	if s.driving == 0 {
+		s.drained.Broadcast()
+	}
+	s.mu.Unlock()
 }
 
 // sharedAllowed consults the shared-outputs permission gate.
@@ -566,6 +629,10 @@ func (s *Service) CreateSession(ctx context.Context, userID, userName string, re
 		s.endHandoffSource(ctx, userID, handoffSource, sess.id)
 		return snap, nil
 	}
+	if err := s.beginDriving(); err != nil {
+		return Session{}, err
+	}
+	defer s.endDriving()
 	if err := s.loadOnDevice(ctx, sess, ep, entries, req.Index, req.PositionMS, req.Play); err != nil {
 		return Session{}, err
 	}
@@ -944,6 +1011,10 @@ func shuffledEntries(entries []QueueEntry, currentIndex int) []QueueEntry {
 
 // Transfer moves a session's live playback to another endpoint.
 func (s *Service) Transfer(ctx context.Context, userID, sessionID, targetEndpointID string) (Session, error) {
+	if err := s.beginDriving(); err != nil {
+		return Session{}, err
+	}
+	defer s.endDriving()
 	s.mu.Lock()
 	sess, ok := s.sessions[sessionID]
 	if !ok || !s.visibleSessionLocked(userID, sess) {

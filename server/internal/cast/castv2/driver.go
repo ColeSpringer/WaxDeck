@@ -410,12 +410,14 @@ func (d *driver) pump(ctx context.Context) error {
 	defer ticker.Stop()
 	for {
 		select {
+		// Both are the connection ending: fail closes dead and then
+		// cancels the run context, so a pump busy when it died finds
+		// both ready, and select takes either.
 		case <-ctx.Done():
+			d.reportDeath()
 			return nil
 		case <-d.conn.dead:
-			if err := d.conn.deathErr(); !errors.Is(err, errConnClosed) {
-				d.emit(connect.DriverEvent{At: time.Now(), Fatal: true, Err: err})
-			}
+			d.reportDeath()
 			return nil
 		case u := <-d.conn.statuses:
 			d.handleStatus(u)
@@ -429,6 +431,14 @@ func (d *driver) pump(ctx context.Context) error {
 				d.conn.pollMediaStatus(transport)
 			}
 		}
+	}
+}
+
+// reportDeath emits the fatal event that ends the session, unless
+// Close was the cause.
+func (d *driver) reportDeath() {
+	if err := d.conn.deathErr(); !errors.Is(err, errConnClosed) {
+		d.emit(connect.DriverEvent{At: time.Now(), Fatal: true, Err: err})
 	}
 }
 
