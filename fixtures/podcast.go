@@ -206,11 +206,10 @@ That is all for today.
 const defaultFeedChapters = `{"version":"1.2.0","chapters":[{"startTime":0,"title":"Intro"},{"startTime":2,"title":"Body"}]}`
 
 // DefaultPodcastFeed is the preset feed the end-to-end harness serves:
-// three MP3 episodes with silence-padded audio and distinct tone lengths
-// (so essence dedup cannot merge them), descending publish dates from a
-// fixed base so goldens stay stable, and a transcript plus chapters
-// document on the first episode. baseURL becomes the channel link; the
-// enclosure URLs come from the baseURL passed to GeneratePodcastFeed.
+// three MP3 episodes of silence-padded tones of distinct lengths, on fixed
+// descending dates so goldens stay stable, the first with a transcript and
+// chapters. baseURL becomes the channel link; the enclosure URLs come from
+// the baseURL passed to GeneratePodcastFeed.
 func DefaultPodcastFeed(baseURL string) FeedSpec {
 	base := time.Date(2026, 1, 15, 9, 30, 0, 0, time.UTC)
 	episode := func(n int, title, guid, desc string, tone time.Duration) EpisodeSpec {

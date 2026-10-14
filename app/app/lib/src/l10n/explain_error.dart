@@ -25,7 +25,7 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   // Every code the spec's `Error` currently defines. A code added there
   // and not here fails `error_table_test.dart`, which reads the list out
   // of the committed bundle rather than out of a second copy of it.
-  'invalid-request' => l.errorInvalidRequest,
+  'invalid-request' => _invalidRequest(l, e) ?? l.errorInvalidRequest,
   'unauthenticated' => l.errorUnauthenticated,
   'forbidden' => l.errorForbidden,
   'not-found' => l.errorNotFound,
@@ -96,6 +96,7 @@ String explainRefusal(AppLocalizations l10n, Object error) {
   if (error is! WaxDeckApiException || error.message.trim().isEmpty) {
     return explainError(l10n, error);
   }
+  if (_invalidRequest(l10n, error) case final refined?) return refined;
   if (const {
     'invalid-request',
     'conflict',
@@ -117,6 +118,17 @@ String explainRefusal(AppLocalizations l10n, Object error) {
   }
   return explainError(l10n, error);
 }
+
+/// The sentence for an `invalid-request` whose `reason` this client words
+/// itself, or null for a plain one.
+String? _invalidRequest(AppLocalizations l, WaxDeckApiException e) =>
+    e.code != 'invalid-request'
+    ? null
+    : switch (e.params?['reason']) {
+        'cue-rip' => l.errorCueRipDelete,
+        'incompatible-schema' => l.errorIncompatibleBackup,
+        _ => null,
+      };
 
 /// `feature-unavailable` is an umbrella, and its `params` are what say
 /// which refusal it is.

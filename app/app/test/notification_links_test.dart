@@ -39,6 +39,7 @@ void main() {
     'signup-requested': WaxRoute.users,
     'backup-completed': WaxRoute.backups,
     'backup-failed': WaxRoute.backups,
+    'catalog-reset': WaxRoute.libraries,
     'import-completed': WaxRoute.review,
     'feed-disabled': WaxRoute.podcasts,
     'episode-downloaded': WaxRoute.podcasts,

@@ -48,6 +48,14 @@ const _second = ItemSummary(
   durationMs: 180000,
 );
 
+const _third = ItemSummary(
+  pid: 'tr-01JZX5N8QW3F4V9T2B7KD3M9R8',
+  mediaType: MediaType.music,
+  title: 'Weathertop Waltz',
+  artist: 'The Bree Trio',
+  durationMs: 150000,
+);
+
 Widget _host(FakeRepository repo, Widget home, {FilePickerPort? picker}) =>
     ProviderScope(
       overrides: [
@@ -430,6 +438,109 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.playlistMembers[created.pid], isEmpty);
+  });
+
+  testWidgets('removing members in turn names each by position and item', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track, _second]);
+    final created = await repo.createPlaylist(
+      name: 'Twice',
+      kind: 'static',
+      itemPids: [_track.pid, _second.pid, _track.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+
+    for (var i = 0; i < 2; i++) {
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.playlistEntryRemove(0)),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    expect(repo.removedPlaylistEntries, [
+      (position: 0, itemPid: _track.pid),
+      (position: 0, itemPid: _second.pid),
+    ]);
+    expect(repo.playlistMembers[created.pid], [_track.pid]);
+  });
+
+  testWidgets('a removal from a stale list says so and reloads it', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track, _second, _third]);
+    final created = await repo.createPlaylist(
+      name: 'Stale',
+      kind: 'static',
+      itemPids: [_track.pid, _second.pid, _third.pid],
+    );
+    await tester.pumpWidget(_host(repo, PlaylistScreen(pid: created.pid)));
+    await tester.pumpAndSettle();
+    // Another device took the first member out after this screen read
+    // the list, so the last row here is past the server's end.
+    repo.playlistMembers[created.pid]!.removeAt(0);
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistEntryRemove(2)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.playlistConflict),
+      findsOneWidget,
+    );
+    // The server's sentence and the banner's own read as two sentences.
+    expect(find.textContaining('retry. Nothing was changed'), findsOneWidget);
+    expect(repo.playlistMembers[created.pid], [_second.pid, _third.pid]);
+    // The server's list, not the optimistic one that kept the first.
+    expect(find.text(_track.title), findsNothing);
+    expect(find.text(_third.title), findsOneWidget);
+  });
+
+  testWidgets('a removal refused after the screen closed touches nothing', (
+    tester,
+  ) async {
+    final repo = FakeRepository(items: const [_track, _second]);
+    final created = await repo.createPlaylist(
+      name: 'Left',
+      kind: 'static',
+      itemPids: [_track.pid, _second.pid],
+    );
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+    final keepAlive = container.listen(
+      playlistDetailProvider(created.pid),
+      (_, _) {},
+    );
+    addTearDown(keepAlive.close);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(PlaylistScreen(pid: created.pid), pushed: true),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final gate = repo.removePlaylistItemGate = Completer<void>();
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.playlistEntryRemove(0)),
+    );
+    await tester.pump();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const SizedBox.shrink(),
+      ),
+    );
+    repo.playlistMembers[created.pid]!.removeAt(0);
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(repo.playlistMembers[created.pid], [_second.pid]);
   });
 
   testWidgets('a member row opens the item menu from its kebab', (
@@ -1914,6 +2025,36 @@ void main() {
     );
     expect(repo.playlistMembers[made.pid], [_track.pid]);
   });
+
+  // The guard is the item the caller names, never the one the
+  // controller's own state holds at that position.
+  test(
+    'a removal names the item the caller saw, not the one held now',
+    () async {
+      final repo = FakeRepository(items: const [_track, _second]);
+      final created = await repo.createPlaylist(
+        name: 'Raced',
+        kind: 'static',
+        itemPids: [_track.pid, _second.pid],
+      );
+      final container = ProviderContainer(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+      await container.read(playlistDetailProvider(created.pid).future);
+
+      await expectLater(
+        container
+            .read(playlistDetailProvider(created.pid).notifier)
+            .removeAt(0, itemPid: _second.pid),
+        throwsA(isA<WaxDeckApiException>()),
+      );
+      expect(repo.removedPlaylistEntries, [
+        (position: 0, itemPid: _second.pid),
+      ]);
+      expect(repo.playlistMembers[created.pid], [_track.pid, _second.pid]);
+    },
+  );
 
   group('rule summaries', () {
     // The date symbols come with it: nothing here loads the global

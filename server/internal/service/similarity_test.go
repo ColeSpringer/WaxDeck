@@ -331,11 +331,12 @@ func TestAWorkerThatCannotReadAWindowIsNotHandedOne(t *testing.T) {
 }
 
 // Trashing a rip trashes one file, which the journal logs against one of
-// its tracks: every sibling's vector stays for the restore.
+// its tracks: every sibling's vector stays for the restore. The delete
+// names both tracks, since a rip goes whole or not at all.
 func TestTrashingACarvedRipKeepsEverySiblingsVector(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc := newCueFixture(t)
-	one, _, _ := carvedTracks(t, ctx, svc, uc)
+	one, two, _ := carvedTracks(t, ctx, svc, uc)
 	if _, err := svc.SimilaritySweep(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +348,7 @@ func TestTrashingACarvedRipKeepsEverySiblingsVector(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := svc.DeleteItems(ctx, uc, []string{one}, "trash", false); err != nil {
+	if _, err := svc.DeleteItems(ctx, uc, []string{one, two}, "trash", false); err != nil {
 		t.Fatal(err)
 	}
 	svc.simSweepVersion.Store(0)

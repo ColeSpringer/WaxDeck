@@ -3,6 +3,7 @@ package api
 import (
 	"io"
 	"net/url"
+	"slices"
 	"testing"
 )
 
@@ -92,4 +93,64 @@ func subsonicPlaylistEntryIDs(t *testing.T, h *harness, secret, pid string) []st
 		out = append(out, e.ID)
 	}
 	return out
+}
+
+// The report's steps: removing index 0, then 1, then 0 from each re-read
+// takes exactly those rows. Sparse positions once made the second call
+// take the row above and the third answer "no such playlist".
+func TestSubsonicRemoveSequence(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	items := h.items(t, "")
+	a, b, c, d := items.Items[0].Pid, items.Items[1].Pid, items.Items[2].Pid, items.Items[3].Pid
+	created := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Five", "kind": "static", "itemPids": []string{a, b, c, d, a},
+	})
+	if created.StatusCode != 201 {
+		t.Fatalf("playlist create status = %d", created.StatusCode)
+	}
+	pl := decode[Playlist](t, created)
+	removeAndRead := func(query string) []string {
+		t.Helper()
+		subsonicJSON(t, h, "updatePlaylist", secret,
+			"&playlistId="+url.QueryEscape(pl.Pid)+query, &struct{}{})
+		return subsonicPlaylistEntryIDs(t, h, secret, pl.Pid)
+	}
+	ids := subsonicPlaylistEntryIDs(t, h, secret, pl.Pid)
+	if len(ids) != 5 {
+		t.Fatalf("rendered membership = %v, want five entries", ids)
+	}
+	if got, want := removeAndRead("&songIndexToRemove=0"), ids[1:]; !slices.Equal(got, want) {
+		t.Fatalf("after removing 0: %v, want %v", got, want)
+	}
+	if got, want := removeAndRead("&songIndexToRemove=1"), []string{ids[1], ids[3], ids[4]}; !slices.Equal(got, want) {
+		t.Fatalf("after removing 1: %v, want %v", got, want)
+	}
+	if got, want := removeAndRead("&songIndexToRemove=0"), []string{ids[3], ids[4]}; !slices.Equal(got, want) {
+		t.Fatalf("after removing 0 again: %v, want %v", got, want)
+	}
+}
+
+// Several indexes in one call all name the listing the client read, and
+// go in one write: 1 and 3 of four take the second and the fourth.
+func TestSubsonicRemoveSeveralIndexesAtOnce(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	items := h.items(t, "")
+	pids := []string{items.Items[0].Pid, items.Items[1].Pid, items.Items[2].Pid, items.Items[3].Pid}
+	created := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Four", "kind": "static", "itemPids": pids,
+	})
+	if created.StatusCode != 201 {
+		t.Fatalf("playlist create status = %d", created.StatusCode)
+	}
+	pl := decode[Playlist](t, created)
+	ids := subsonicPlaylistEntryIDs(t, h, secret, pl.Pid)
+	subsonicJSON(t, h, "updatePlaylist", secret,
+		"&playlistId="+url.QueryEscape(pl.Pid)+"&songIndexToRemove=1&songIndexToRemove=3", &struct{}{})
+	if got, want := subsonicPlaylistEntryIDs(t, h, secret, pl.Pid), []string{ids[0], ids[2]}; !slices.Equal(got, want) {
+		t.Fatalf("after removing 1 and 3: %v, want %v", got, want)
+	}
 }

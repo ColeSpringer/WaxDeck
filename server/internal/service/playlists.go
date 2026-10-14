@@ -13,6 +13,7 @@ import (
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
+	"github.com/colespringer/waxbin/waxerr"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -1438,8 +1439,17 @@ func (l *Library) AddPlaylistItems(ctx context.Context, uc *UserCtx, apiPlaylist
 	return nil
 }
 
-// RemovePlaylistItemAt removes the member at one stored position.
-func (l *Library) RemovePlaylistItemAt(ctx context.Context, uc *UserCtx, apiPlaylistPID string, position int) error {
+// RemovePlaylistItemAt removes the member at one listing position.
+// expectAPIPID is the item the caller saw there; empty removes unguarded.
+func (l *Library) RemovePlaylistItemAt(ctx context.Context, uc *UserCtx, apiPlaylistPID string, position int, expectAPIPID string) error {
+	return l.RemovePlaylistItemsAt(ctx, uc, apiPlaylistPID, []int{position}, []string{expectAPIPID})
+}
+
+// RemovePlaylistItemsAt removes the members at several positions in one
+// write, each naming the listing as it stood before any of them went and
+// guarded by the item it must still hold ("" skips that check), so a
+// listing gone stale removes nothing.
+func (l *Library) RemovePlaylistItemsAt(ctx context.Context, uc *UserCtx, apiPlaylistPID string, positions []int, expectAPIPIDs []string) error {
 	pl, err := l.resolveOwnedPlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return err
@@ -1447,7 +1457,29 @@ func (l *Library) RemovePlaylistItemAt(ctx context.Context, uc *UserCtx, apiPlay
 	if pl.Kind != model.PlaylistStatic {
 		return errInvalid("a smart playlist's membership is its rule")
 	}
-	if err := l.lib.Playlists().RemoveAt(ctx, pl.PID, position); err != nil {
+	for _, p := range positions {
+		if p < 0 {
+			return errInvalid("a position is 0 or more")
+		}
+	}
+	expect := make([]model.PID, len(expectAPIPIDs))
+	for i, raw := range expectAPIPIDs {
+		if raw == "" {
+			continue
+		}
+		prefix, pid, ok := parseAPIPID(raw)
+		if !ok || !itemPrefix(prefix) {
+			return errInvalid("itemPid is not an item pid")
+		}
+		expect[i] = pid
+	}
+	if err := l.lib.Playlists().RemoveAtMany(ctx, pl.PID, positions, expect); err != nil {
+		switch {
+		case waxerr.Is(err, waxerr.CodeConflict):
+			return &Error{Kind: KindConflict, Msg: "the playlist changed since its members were read; refetch and retry", Err: err}
+		case waxerr.Is(err, waxerr.CodeNotFound) && len(positions) == 1:
+			return &Error{Kind: KindNotFound, Msg: fmt.Sprintf("no member at position %d", positions[0]), Err: err}
+		}
 		return classify(err)
 	}
 	// Same as the reorder: the caller is in the member list and re-reads

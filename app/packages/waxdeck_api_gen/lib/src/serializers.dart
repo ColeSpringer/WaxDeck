@@ -1199,6 +1199,10 @@ Serializers serializers = (_$serializers.toBuilder()
         () => ListBuilder<Backup>(),
       )
       ..addBuilderFactory(
+        const FullType(BuiltMap, [FullType(String), FullType(int)]),
+        () => MapBuilder<String, int>(),
+      )
+      ..addBuilderFactory(
         const FullType(BuiltList, [FullType(RadioSavedSong)]),
         () => ListBuilder<RadioSavedSong>(),
       )

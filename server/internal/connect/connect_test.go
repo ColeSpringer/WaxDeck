@@ -502,6 +502,25 @@ func TestShutdownReleasesDevices(t *testing.T) {
 	}
 }
 
+// TestShutdownBeforeRunStillReleasesDevices: a shutdown landing before
+// Run's first statement still lets the devices go; Run releases them
+// itself when the group will not start a worker under an ended context.
+func TestShutdownBeforeRunStillReleasesDevices(t *testing.T) {
+	svc, _, driver := newTestService(t)
+	if _, err := svc.CreateSession(context.Background(), "us-alice", "Alice", SessionRequest{EndpointID: deviceEndpointID(t, svc, "us-alice"), PIDs: []string{"tr-one"}, Play: true}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := svc.Run(ctx); err != nil {
+		t.Fatal(err)
+	}
+	waitDrained(t, svc.cfg.Group)
+	if !driver.isClosed() {
+		t.Fatal("a shutdown before Run started left the device's driver open")
+	}
+}
+
 // TestShutdownWaitsOutSessionStart: a session start a shutdown lands
 // in the middle of finishes first, and its session ends like any other.
 // Torn down halfway, it would be recorded active with its device let go.

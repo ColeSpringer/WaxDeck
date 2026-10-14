@@ -205,7 +205,7 @@ func TestPlaylistCustomCoverWinsAndClearsBack(t *testing.T) {
 	}
 
 	// A membership change must not take the owner's cover away.
-	if err := svc.RemovePlaylistItemAt(ctx, uc, plPID, len(pids)-1); err != nil {
+	if err := svc.RemovePlaylistItemAt(ctx, uc, plPID, len(pids)-1, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := playlistArt(t, ctx, svc, uc, plPID); !bytes.Equal(got.Bytes, custom) {

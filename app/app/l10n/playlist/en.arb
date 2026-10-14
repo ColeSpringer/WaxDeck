@@ -45,9 +45,9 @@
   "@playlistAlreadyIn": {
     "description": "Under a row in the add-to-playlist sheet whose playlist already holds the item. Said rather than only ticked."
   },
-  "playlistConflictBanner": "{reason} Nothing was changed; this is the list as it stands.",
+  "playlistConflictBanner": "{reason}. Nothing was changed; this is the list as it stands.",
   "@playlistConflictBanner": {
-    "description": "Banner after a reorder the server refused. {reason} is the server's own sentence, which is the only thing that knows which of three refusals it was.",
+    "description": "Banner after a reorder or a removal the server refused. {reason} is the server's own sentence, unpunctuated, which is the only thing that knows which refusal it was.",
     "placeholders": {
       "reason": {
         "type": "String",

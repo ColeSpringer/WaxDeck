@@ -34,8 +34,8 @@ func openServiceAt(t *testing.T, dataDir string, mutate func(*Config)) (context.
 		cancel()
 		t.Fatal(err)
 	}
-	// No background path poll: its reads race the catalog's reopen
-	// upstream, and these tests drive hand-offs.
+	// No background path poll: these tests drive hand-offs step by step,
+	// and its reads would land between the steps.
 	cfg := Config{DataDir: dataDir, Roots: []Root{{Name: "configured", Path: filepath.Join(dataDir, "configured")}},
 		Logger: log, PathPollInterval: -1}
 	if err := os.MkdirAll(cfg.Roots[0].Path, 0o755); err != nil {
@@ -120,7 +120,7 @@ func backupOf(t *testing.T, fill func(context.Context, *waxbin.Library)) string 
 	lib := openBareCatalog(t, waxbin.Options{})
 	fill(ctx, lib)
 	out := filepath.Join(t.TempDir(), "backup.db")
-	if err := lib.Backup(ctx, out, false); err != nil {
+	if err := lib.Backup(ctx, out, port.BackupOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	return out

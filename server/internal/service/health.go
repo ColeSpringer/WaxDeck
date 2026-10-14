@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strconv"
@@ -23,6 +24,7 @@ import (
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/organize"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
 
@@ -583,12 +585,26 @@ func (l *Library) readPlannedMoves(ctx context.Context) (map[model.PID]bool, err
 	}
 	out := map[model.PID]bool{}
 	for i := range plan.Actions {
-		a := &plan.Actions[i]
-		if !a.Skip && a.ItemPID != "" {
+		if a := &plan.Actions[i]; a.ItemPID != "" && misplaced(a) {
 			out[a.ItemPID] = true
 		}
 	}
 	return out, nil
+}
+
+// misplaced reports whether the profile wants a's file elsewhere: a move,
+// or one held for how the disk and catalog stand now, which an unmounted
+// folder turns every move into.
+func misplaced(a *organize.Action) bool {
+	if a.Dst == "" || filepath.Clean(a.Src) == filepath.Clean(a.Dst) {
+		return false
+	}
+	switch a.Code {
+	case "", organize.HoldCollision, organize.HoldOccupied, organize.HoldOccupiedCase,
+		organize.HoldMissing, organize.HoldBookHeld:
+		return true
+	}
+	return false
 }
 
 // HealthSummaryFor reads the dashboard aggregate: the stored sweep

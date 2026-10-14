@@ -15,7 +15,7 @@ part 'organize_report.g.dart';
 /// Properties:
 /// * [moved] - Files moved.
 /// * [skipped] - Files already in place.
-/// * [held] - Files left where they are because the whole server is read-only.
+/// * [held] - Files held back where they are, for any of the causes a plan's `held` counts. 
 /// * [readOnlyLibraries] - Managed libraries left alone because they are read-only.
 /// * [failed] - Files that could not move.
 /// * [failures] - The failures, path and reason each.
@@ -29,7 +29,7 @@ abstract class OrganizeReport implements Built<OrganizeReport, OrganizeReportBui
   @BuiltValueField(wireName: r'skipped')
   int get skipped;
 
-  /// Files left where they are because the whole server is read-only.
+  /// Files held back where they are, for any of the causes a plan's `held` counts. 
   @BuiltValueField(wireName: r'held')
   int get held;
 

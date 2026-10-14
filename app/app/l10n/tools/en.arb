@@ -237,13 +237,13 @@
       }
     }
   },
-  "toolsStateCanceled": "Canceled",
+  "toolsStateCanceled": "Stopped",
   "@toolsStateCanceled": {
-    "description": "State of a job an administrator canceled. Agrees with the word for a task in this language."
+    "description": "State of a job the server stopped before it finished, as it shut down or restarted. Agrees with the word for a task in this language."
   },
   "toolsStateCrashed": "Crashed",
   "@toolsStateCrashed": {
-    "description": "State of a job the server stopped in the middle of, a restart or a crash. Agrees with the word for a task in this language."
+    "description": "State of a job the server was running when it crashed or lost power. Agrees with the word for a task in this language."
   },
   "toolsStateDone": "Done",
   "@toolsStateDone": {

@@ -47,7 +47,7 @@ const (
 
 func discordColorFor(event string) int {
 	switch event {
-	case "backup-failed", "feed-disabled":
+	case "backup-failed", "catalog-reset", "feed-disabled":
 		return discordRed
 	case "backup-completed", "episode-downloaded", "import-completed", "playlist-synced":
 		return discordGreen

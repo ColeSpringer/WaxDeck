@@ -195,7 +195,7 @@ func run() error {
 	restoreCasualties := stagedCasualties(*dataDir)
 	// Read before the swap: the restored database carries an older count.
 	liveMints := service.PeekCatalogMints(*dataDir)
-	restoreApplied, restoreReport, err := restore.Apply(*dataDir, log)
+	restoreApplied, restoreReport, err := restore.Apply(*dataDir, log, service.VetRestore)
 	if err != nil {
 		return fmt.Errorf("applying staged restore: %w", err)
 	}

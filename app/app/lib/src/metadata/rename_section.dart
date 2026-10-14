@@ -227,7 +227,6 @@ class _EntityRenameSectionState extends ConsumerState<EntityRenameSection> {
               WaxTextField(
                 label: _labelOf(l10n, field),
                 controller: _controllerFor(field, seeds[field] ?? ''),
-                digitsOnly: field == 'year',
                 semanticsId: widget.ids.field(field),
               ),
               const SizedBox(height: WaxSpace.s12),

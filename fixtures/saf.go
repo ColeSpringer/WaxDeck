@@ -37,10 +37,6 @@ func GenerateSafProbe(dir string) (string, error) {
 			},
 		}
 	}
-	// Durations distinct from each other and from every other fixture
-	// set's: the tone is deterministic, so two MP3s of the same length
-	// decode to the same audio and share a fingerprint however their
-	// tags differ.
 	if _, err := Generate(root,
 		track("lantern-one", "Lantern One", 5100*time.Millisecond),
 		track("lantern-two", "Lantern Two", 5600*time.Millisecond),

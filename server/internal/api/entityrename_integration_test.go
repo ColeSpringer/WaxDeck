@@ -2,6 +2,7 @@ package api
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -175,6 +176,18 @@ func TestRenameEntityRefusesWhatCannotBeRenamed(t *testing.T) {
 		"fields": map[string]string{"album": "   "},
 	})
 	wantStatus(t, resp, 400, "renaming to nothing")
+
+	// A year keys no album: it follows the tracks, and the refusal says
+	// where to edit it instead.
+	resp = h.postJSON(t, "/api/v1/entities/album/"+album+"/rename", map[string]any{
+		"fields": map[string]string{"album": "Renamed", "year": "1999"},
+	})
+	if resp.StatusCode != 400 {
+		t.Fatalf("renaming an album's year status = %d, want 400", resp.StatusCode)
+	}
+	if e := decode[Error](t, resp); !strings.Contains(e.Message, "tracks") {
+		t.Fatalf("renaming an album's year says %q, want it pointed at the tracks", e.Message)
+	}
 }
 
 // mbidTwinSpecs are two members of one album in one folder, alike in

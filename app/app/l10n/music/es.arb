@@ -35,7 +35,7 @@
   "musicAlbumRewriteMerged": "La edición se fusionó con la que ya tenía este nombre.",
   "musicAlbumRewriteOverline": "En las pistas",
   "musicAlbumRewriteRenamed": "{count, plural, =1{Se reescribió 1 pista} other{Se reescribieron {count} pistas}}",
-  "musicAlbumRewriteTitle": "Álbum, artista y año",
+  "musicAlbumRewriteTitle": "Álbum y artista del álbum",
   "musicAlbumTitle": "Álbum",
   "musicAllMusicSource": "Toda la música",
   "musicArtistAppearsOn": "Aparece en",

@@ -63,8 +63,8 @@ func run(out string, items, perFile int, covers bool) error {
 		// content hash, every thumbnail request in the house would hit
 		// the same cache entry.
 		dir := filepath.Join(out, name)
-		// Distinct durations keep essences distinct, so fingerprint
-		// dedup never merges corpus files into one item.
+		// Each file's audio follows its name; varied lengths make two of
+		// a thousand landing on one audio rarer still.
 		dur := 3000*time.Millisecond + time.Duration(f%1000)*time.Millisecond
 		if _, err := fixtures.Generate(dir, fixtures.Spec{
 			Name:     name,

@@ -577,8 +577,14 @@ abstract interface class WaxDeckRepository {
   Future<void> addPlaylistItems(String pid, List<String> itemPids);
 
   /// `DELETE /playlists/{pid}/items/{position}`: removes the member at
-  /// one stored position.
-  Future<void> removePlaylistItemAt(String pid, int position);
+  /// one stored position. [itemPid] is the item the caller saw there;
+  /// when the position holds another item, or none, the answer is
+  /// `conflict` and nothing is removed.
+  Future<void> removePlaylistItemAt(
+    String pid,
+    int position, {
+    String? itemPid,
+  });
 
   /// `POST /playlists/preview`: evaluates a rule without storing it.
   Future<PlaylistPreview> previewSmartRule(SmartRule rule, {int? limit});
@@ -3035,13 +3041,17 @@ class WaxDeckClient implements WaxDeckRepository {
       });
 
   @override
-  Future<void> removePlaylistItemAt(String pid, int position) =>
-      _guard(() async {
-        await _gen.getPlaylistsApi().removePlaylistItemAt(
-          pid: pid,
-          position: position,
-        );
-      });
+  Future<void> removePlaylistItemAt(
+    String pid,
+    int position, {
+    String? itemPid,
+  }) => _guard(() async {
+    await _gen.getPlaylistsApi().removePlaylistItemAt(
+      pid: pid,
+      position: position,
+      itemPid: itemPid,
+    );
+  });
 
   @override
   Future<PlaylistPreview> previewSmartRule(SmartRule rule, {int? limit}) =>

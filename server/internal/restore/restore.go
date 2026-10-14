@@ -57,8 +57,9 @@ type Report struct {
 // (false, nil, nil) when nothing is staged. On error the marker is left
 // in place: the boot that failed to restore must not quietly come up on
 // the old data while the operator believes the restore happened; they
-// remove restore-staged.json to boot without it.
-func Apply(dataDir string, log *slog.Logger) (applied bool, report *Report, err error) {
+// remove restore-staged.json to boot without it. vet, when set, judges
+// the extracted waxdeck.db and catalog before the live ones are set aside.
+func Apply(dataDir string, log *slog.Logger, vet func(waxdeckDB, catalogDB string) error) (applied bool, report *Report, err error) {
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
@@ -82,6 +83,13 @@ func Apply(dataDir string, log *slog.Logger) (applied bool, report *Report, err 
 	if err != nil {
 		removeTemps(tmps)
 		return false, nil, fmt.Errorf("restore: extracting %s: %w", m.FileName, err)
+	}
+	if vet != nil {
+		if err := vet(tmps[entryWaxdeck], tmps[entryWaxbin]); err != nil {
+			removeTemps(tmps)
+			return false, nil, fmt.Errorf("restore: %s cannot be restored here: %w; restore it under the version "+
+				"it was taken with, or remove %s to start without it", m.FileName, err, filepath.Join(dataDir, markerFileName))
+		}
 	}
 
 	ts := time.Now().UTC().Format("20060102-150405")

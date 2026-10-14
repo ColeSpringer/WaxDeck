@@ -2070,6 +2070,7 @@ OrganizePlan organizePlanFromGen(gen.OrganizePlan plan) {
     profile: plan.profile,
     totalActions: plan.totalActions,
     held: plan.held,
+    heldByCode: plan.heldByCode?.toMap() ?? const {},
     readOnlyLibraries: plan.readOnlyLibraries,
     actions: plan.actions
         .map((a) => OrganizeAction(itemPid: a.itemPid, from: a.from, to: a.to))

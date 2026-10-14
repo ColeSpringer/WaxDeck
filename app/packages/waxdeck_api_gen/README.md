@@ -151,7 +151,10 @@ Conventions:
   running without the streaming engine), and other refusals under
   that code carry no params yet. Under `conflict`, a bookmark create
   replaying the id of a removed bookmark carries `reason: removed`,
-  and a client drops its copy. Values are
+  and a client drops its copy. Under `invalid-request`, `reason` names
+  two refusals a client words itself: `incompatible-schema` (a backup
+  whose schema this server cannot open) and `cue-rip` (a delete
+  naming some tracks of a cue rip but not all). Values are
   strings even when they read as numbers. Clients must ignore keys
   they do not know, and an absent `params` means the plain code.
 - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the

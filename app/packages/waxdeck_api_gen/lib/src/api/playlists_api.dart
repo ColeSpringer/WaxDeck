@@ -1135,7 +1135,7 @@ class PlaylistsApi {
   }
 
   /// List a playlist&#39;s items
-  /// The playlist&#39;s members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner&#39;s user state for shared lists, the caller&#39;s for their own). Items outside the caller&#39;s library visibility are omitted, so a static playlist&#39;s &#x60;position&#x60; values are not guaranteed contiguous for restricted viewers; use &#x60;position&#x60;, never the row index, when removing members. Keyset-paginated within one evaluation; a membership change between pages may shift entries. 
+  /// The playlist&#39;s members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner&#39;s user state for shared lists, the caller&#39;s for their own). Entries outside the caller&#39;s visibility are omitted, so a restricted viewer&#39;s &#x60;position&#x60; values can skip numbers. &#x60;position&#x60; is the entry&#39;s index in the full stored order, kept contiguous from 0 by every change to the list; pass it, with the entry&#39;s item pid as &#x60;itemPid&#x60;, to the removal endpoint, never the row index of a filtered page. Keyset-paginated within one evaluation; a membership change between pages may shift entries. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -1550,11 +1550,12 @@ class PlaylistsApi {
   }
 
   /// Remove one member by position
-  /// Removes the member at the given zero-based position in the stored order. Owner only; static playlists only. Positions are the unfiltered stored order (visibility filtering never shifts them); take them from the item listing&#39;s &#x60;position&#x60; field, not from a rendered row index. 
+  /// Removes the member at a zero-based &#x60;position&#x60; of the full stored order (the listing&#39;s &#x60;position&#x60;); owner only, static playlists only. Later entries renumber down by one, so re-read the listing (or shift your copy) before a second removal. Pass &#x60;itemPid&#x60; so a listing another device changed answers &#x60;conflict&#x60;, removing nothing. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [position] - Zero-based position in the stored member order.
+  /// * [itemPid] - The item the caller saw at that position. When the position holds another item, or none, nothing is removed and the answer is `conflict`. 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -1567,6 +1568,7 @@ class PlaylistsApi {
   Future<Response<void>> removePlaylistItemAt({ 
     required String pid,
     required int position,
+    String? itemPid,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -1598,9 +1600,14 @@ class PlaylistsApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (itemPid != null) r'itemPid': encodeQueryParameter(_serializers, itemPid, const FullType(String)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,

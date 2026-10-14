@@ -2014,13 +2014,36 @@ class FakeRepository implements WaxDeckRepository {
     (playlistMembers[pid] ??= []).addAll(itemPids);
   }
 
+  /// What [removePlaylistItemAt] was asked, in order.
+  final List<({int position, String? itemPid})> removedPlaylistEntries = [];
+
+  /// Holds [removePlaylistItemAt] until completed.
+  Completer<void>? removePlaylistItemGate;
+
   @override
-  Future<void> removePlaylistItemAt(String pid, int position) async {
+  Future<void> removePlaylistItemAt(
+    String pid,
+    int position, {
+    String? itemPid,
+  }) async {
+    await removePlaylistItemGate?.future;
     await getPlaylist(pid);
+    removedPlaylistEntries.add((position: position, itemPid: itemPid));
     final members = playlistMembers[pid];
-    if (members != null && position >= 0 && position < members.length) {
-      members.removeAt(position);
+    // The server's guard: the slot still holds the item the caller saw.
+    final held = members != null && position >= 0 && position < members.length
+        ? members[position]
+        : null;
+    if (itemPid != null && held != itemPid) {
+      throw const WaxDeckApiException(
+        code: 'conflict',
+        message:
+            'the playlist changed since its members were read; refetch '
+            'and retry',
+        statusCode: 409,
+      );
     }
+    if (held != null) members!.removeAt(position);
   }
 
   /// Rules passed to [previewSmartRule], newest last.

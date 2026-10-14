@@ -227,10 +227,8 @@ func TestSearchFillsItsGroupsAroundTrashedHits(t *testing.T) {
 	const term = "Widening"
 	for i := range 8 {
 		if _, err := fixtures.Generate(h.library, fixtures.Spec{
-			Name:  fmt.Sprintf("widen-%02d", i),
-			Codec: fixtures.CodecMP3,
-			// A distinct length each, so eight files are eight essences:
-			// identical audio would dedupe to one item.
+			Name:     fmt.Sprintf("widen-%02d", i),
+			Codec:    fixtures.CodecMP3,
 			Duration: time.Duration(1200+100*i) * time.Millisecond,
 			Tags: map[string]string{
 				"TITLE":  fmt.Sprintf("%s %02d", term, i),

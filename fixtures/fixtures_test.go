@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -243,12 +244,13 @@ func TestSilenceZeroBytesIdentical(t *testing.T) {
 	// the specs are otherwise identical - and Generate memoizes an
 	// encode per spec, which would hand the second call the first
 	// call's bytes and compare a slice against itself. Different names
-	// are different cache entries, so both are really encoded, and
-	// what this then pins is the property the memo rests on: the same
-	// audio always renders the same bytes.
+	// are different cache entries, so both are really encoded (one
+	// audio between them, through SameAudioAs), and what this then pins
+	// is the property the memo rests on: the same audio always renders
+	// the same bytes.
 	plain := fixtures.Spec{Name: "plain", Codec: fixtures.CodecFLAC, Duration: time.Second}
 	padded := plain
-	padded.Name = "padded"
+	padded.Name, padded.SameAudioAs = "padded", "plain"
 	padded.LeadSilence, padded.TrailSilence = 0, 0
 	dirA, dirB := t.TempDir(), t.TempDir()
 	pa, err := fixtures.Generate(dirA, plain)
@@ -480,5 +482,46 @@ func TestOversizeTagsRefusedByName(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), spec.Filename()) {
 		t.Errorf("error does not name the fixture: %v", err)
+	}
+}
+
+// decodedPCM decodes a lossless fixture's first channel.
+func decodedPCM(t *testing.T, path string) []int32 {
+	t.Helper()
+	med := openFixture(t, path)
+	buf := audio.Get(med.Info().Default().Fmt, audio.StandardChunk)
+	defer audio.Put(buf)
+	var out []int32
+	for {
+		err := med.ReadChunk(buf)
+		if errors.Is(err, io.EOF) {
+			return out
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, buf.ChanI(0)[:buf.N]...)
+	}
+}
+
+// Specs alike but for their names synthesize different audio, so a
+// catalog keying items by audio keeps them apart; SameAudioAs asks for
+// one recording twice.
+func TestAudioFollowsTheName(t *testing.T) {
+	base := fixtures.Spec{Codec: fixtures.CodecFLAC, Duration: 500 * time.Millisecond}
+	alpha, beta, again := base, base, base
+	alpha.Name, beta.Name = "alpha", "beta"
+	again.Name, again.SameAudioAs = "alpha-again", "alpha"
+	again.Tags = map[string]string{"TITLE": "Another Title"}
+	paths, err := fixtures.Generate(t.TempDir(), alpha, beta, again)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b, c := decodedPCM(t, paths[0]), decodedPCM(t, paths[1]), decodedPCM(t, paths[2])
+	if slices.Equal(a, b) {
+		t.Error("two names synthesized the same audio")
+	}
+	if !slices.Equal(a, c) {
+		t.Error("SameAudioAs synthesized other audio than the spec it names")
 	}
 }

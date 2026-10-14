@@ -187,6 +187,24 @@ void main() {
     expect(find.text('Long Exposure'), findsNothing);
   });
 
+  // An album's year follows its tracks rather than keying the release,
+  // and the server refuses one in a rename, so the section offers the
+  // two fields that key it and nothing it would only refuse.
+  testWidgets('the rewrite section offers the keying fields alone', (
+    tester,
+  ) async {
+    await _pump(tester, _repo());
+    await tester.ensureVisible(_byId(SemanticsIds.albumRewriteField('album')));
+    await tester.pumpAndSettle();
+    expect(_byId(SemanticsIds.albumRewriteField('album')), findsOneWidget);
+    expect(
+      _byId(SemanticsIds.albumRewriteField('album_artist')),
+      findsOneWidget,
+    );
+    expect(_byId(SemanticsIds.albumRewriteField('year')), findsNothing);
+    expect(find.text('Album and album artist'), findsOneWidget);
+  });
+
   testWidgets('a rewrite onto a taken name merges, and the workbench '
       'follows the survivor', (tester) async {
     final repo = _repo();

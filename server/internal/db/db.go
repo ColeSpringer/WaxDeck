@@ -189,6 +189,10 @@ const baselineSchema = `
 	-- epochs, and the schema baseline fingerprint. app_passwords hold
 	-- the recoverable per-client secrets the Subsonic scheme demands,
 	-- sealed with the server key; secret_hash serves apiKey lookup.
+	-- subsonic_music_folders gives each music library the stable folder
+	-- id a Subsonic client keeps, assigned the first time it is listed;
+	-- subsonic_bookmarks hold the protocol's bookmarks for any kind of
+	-- item, beside the spoken-word resume positions the catalog keeps.
 	CREATE TABLE event_log (
 		id            INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id       TEXT    NOT NULL,
@@ -217,6 +221,19 @@ const baselineSchema = `
 		last_used_ns  INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE INDEX app_passwords_by_user ON app_passwords (user_id, created_at_ns);
+	CREATE TABLE subsonic_music_folders (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		library_pid TEXT    NOT NULL UNIQUE
+	);
+	CREATE TABLE subsonic_bookmarks (
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		item_pid      TEXT    NOT NULL,
+		position_ms   INTEGER NOT NULL,
+		comment       TEXT    NOT NULL DEFAULT '',
+		created_at_ns INTEGER NOT NULL,
+		updated_at_ns INTEGER NOT NULL,
+		PRIMARY KEY (user_id, item_pid)
+	);
 
 	-- Podcasts and audiobooks. Shows, episodes, and files are
 	-- cataloged globally in waxbin.db; everything per user lives here.
@@ -231,7 +248,12 @@ const baselineSchema = `
 	-- The three queue tables are durable work queues drained by
 	-- supervised workers with row leases; the gpodder tables serve the
 	-- compatibility adapter, whose protocol speaks feed URLs and epoch
-	-- seconds.
+	-- seconds. A gpodder session is one login's cookie, gone with its
+	-- app password or its account. gpodder_holds say who keeps a show
+	-- subscribed - holder '' for the first-party apps, else a device
+	-- id - so one device's list releases only its own holds;
+	-- gpodder_pending parks a feed a device added that could not be
+	-- fetched for a reason that may pass, for a supervised retry.
 	CREATE TABLE podcast_subscriptions (
 		user_id          TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		show_pid         TEXT    NOT NULL,
@@ -385,6 +407,34 @@ const baselineSchema = `
 		uploaded_sec INTEGER NOT NULL
 	);
 	CREATE INDEX gpodder_actions_by_user ON gpodder_actions (user_id, id);
+	CREATE TABLE gpodder_sessions (
+		id              TEXT    PRIMARY KEY,
+		user_id         TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		app_password_id TEXT    NOT NULL REFERENCES app_passwords(id) ON DELETE CASCADE,
+		token_hash      BLOB    NOT NULL UNIQUE,
+		created_at_ns   INTEGER NOT NULL,
+		expires_at_ns   INTEGER NOT NULL
+	);
+	CREATE INDEX gpodder_sessions_by_user ON gpodder_sessions (user_id);
+	CREATE INDEX gpodder_sessions_by_password ON gpodder_sessions (app_password_id, created_at_ns);
+	CREATE TABLE gpodder_holds (
+		user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		show_pid TEXT NOT NULL,
+		holder   TEXT NOT NULL,
+		PRIMARY KEY (user_id, show_pid, holder)
+	);
+	CREATE INDEX gpodder_holds_by_holder ON gpodder_holds (user_id, holder);
+	CREATE TABLE gpodder_pending (
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		feed_url      TEXT    NOT NULL,
+		device_id     TEXT    NOT NULL,
+		created_at_ns INTEGER NOT NULL,
+		attempts      INTEGER NOT NULL DEFAULT 0,
+		next_try_ns   INTEGER NOT NULL,
+		last_error    TEXT    NOT NULL DEFAULT '',
+		PRIMARY KEY (user_id, feed_url)
+	);
+	CREATE INDEX gpodder_pending_due ON gpodder_pending (next_try_ns);
 
 	-- Internet radio stations, scrobbling connections and their
 	-- durable delivery queue, notification targets with their outbox,
@@ -536,7 +586,9 @@ const baselineSchema = `
 	);
 	-- Names of the library roots added at runtime; the catalog owns
 	-- each root's policy. organize_profiles are the admin's layout
-	-- profiles, handed to the catalog at open.
+	-- profiles, handed to the catalog at open; a NULL
+	-- compilation_folder takes the catalog's default, and an empty one
+	-- files compilations under their tagged album artist.
 	CREATE TABLE library_roots (
 		path          TEXT    PRIMARY KEY,
 		name          TEXT    NOT NULL,
@@ -548,7 +600,8 @@ const baselineSchema = `
 		audiobook     TEXT    NOT NULL DEFAULT '',
 		podcast       TEXT    NOT NULL DEFAULT '',
 		tag_write     INTEGER NOT NULL DEFAULT 0,
-		updated_at_ns INTEGER NOT NULL
+		updated_at_ns INTEGER NOT NULL,
+		compilation_folder TEXT
 	);
 
 	-- Player endpoints and playback sessions. Device endpoints (cast,
@@ -1014,30 +1067,23 @@ func Open(ctx context.Context, path string) (*DB, error) {
 }
 
 func (d *DB) migrate(ctx context.Context) error {
-	var version int
-	if err := d.w.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
-		return fmt.Errorf("db: reading schema version: %w", err)
+	s, err := readStamps(ctx, d.w)
+	if err != nil {
+		return err
 	}
-	if version > len(migrations) {
-		// While the whole schema is one in-place-edited baseline, no
-		// build ever stamps a version above 1, so a higher version is
-		// a database from the old pre-squash migration chain, not a
-		// newer build's; steer it to the same delete-and-restart
-		// answer as a fingerprint mismatch. Once appended migrations
-		// resume (post-release, len > 1), the newer-build reading
-		// becomes the true one again.
-		if len(migrations) == 1 {
-			return errStaleBaseline
-		}
-		return fmt.Errorf("db: schema version %d is newer than this build understands (%d); refusing to open", version, len(migrations))
+	if err := baselineVerdict(len(migrations), s); err != nil {
+		return err
 	}
-	baselineHash := fmt.Sprintf("%x", sha256.Sum256([]byte(migrations[0])))
-	if version >= 1 {
-		if err := d.checkBaselineFingerprint(ctx, baselineHash); err != nil {
-			return err
+	baselineHash := baselineFingerprint()
+	if s.version >= 1 && !s.found {
+		// Adopted rather than refused, so the guard cannot brick a
+		// database it has simply never seen before.
+		if _, err := d.w.ExecContext(ctx,
+			"INSERT INTO sync_state (key, value) VALUES (?, ?)", baselineFingerprintKey, baselineHash); err != nil {
+			return fmt.Errorf("db: storing baseline fingerprint: %w", err)
 		}
 	}
-	for i := version; i < len(migrations); i++ {
+	for i := s.version; i < len(migrations); i++ {
 		tx, err := d.w.BeginTx(ctx, nil)
 		if err != nil {
 			return fmt.Errorf("db: migration %d: %w", i+1, err)
@@ -1076,43 +1122,90 @@ func (d *DB) migrate(ctx context.Context) error {
 // freezes.
 const baselineFingerprintKey = "schema.baseline"
 
-// errStaleBaseline is the delete-and-restart refusal every stale
-// pre-release database lands on, whatever gave it away (a version
-// from the old migration chain, a missing sync_state table, or a
-// fingerprint from a different baseline script).
-var errStaleBaseline = errors.New("db: this database was created by a different pre-release schema baseline; delete the waxdeck.db file (with its -wal and -shm siblings) and restart to recreate it")
+// baselineFingerprint is the sha256 of the baseline script, which a
+// database records when the script creates it.
+func baselineFingerprint() string {
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(migrations[0])))
+}
 
-// checkBaselineFingerprint refuses to run against a database created
-// by a different baseline script. A missing hash row on an otherwise
-// plausible database is adopted rather than refused, so the guard
-// cannot brick a database it has simply never seen before.
-func (d *DB) checkBaselineFingerprint(ctx context.Context, want string) error {
+// stamps is what a database records about the schema that made it.
+type stamps struct {
+	version   int
+	syncState bool // the sync_state table exists
+	stored    string
+	found     bool // stored holds a baseline fingerprint
+}
+
+type queryer interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+func readStamps(ctx context.Context, q queryer) (stamps, error) {
+	var s stamps
+	if err := q.QueryRowContext(ctx, "PRAGMA user_version").Scan(&s.version); err != nil {
+		return s, fmt.Errorf("db: reading schema version: %w", err)
+	}
 	var n int
-	if err := d.w.QueryRowContext(ctx,
+	if err := q.QueryRowContext(ctx,
 		"SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sync_state'").Scan(&n); err != nil {
-		return fmt.Errorf("db: checking baseline fingerprint: %w", err)
+		return s, fmt.Errorf("db: checking baseline fingerprint: %w", err)
 	}
-	if n == 0 {
-		// Old enough that sync_state does not exist: certainly stale.
-		return errStaleBaseline
+	if s.syncState = n > 0; !s.syncState {
+		return s, nil
 	}
-	var stored string
-	err := d.w.QueryRowContext(ctx,
-		"SELECT value FROM sync_state WHERE key = ?", baselineFingerprintKey).Scan(&stored)
+	err := q.QueryRowContext(ctx,
+		"SELECT value FROM sync_state WHERE key = ?", baselineFingerprintKey).Scan(&s.stored)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		_, err := d.w.ExecContext(ctx,
-			"INSERT INTO sync_state (key, value) VALUES (?, ?)", baselineFingerprintKey, want)
-		if err != nil {
-			return fmt.Errorf("db: storing baseline fingerprint: %w", err)
-		}
 	case err != nil:
-		return fmt.Errorf("db: checking baseline fingerprint: %w", err)
-	case stored != want:
-		return errStaleBaseline
+		return s, fmt.Errorf("db: checking baseline fingerprint: %w", err)
+	default:
+		s.found = true
+	}
+	return s, nil
+}
+
+// baselineVerdict is Open's answer to a database's stamps under a build
+// with n migrations: nil to open it, ErrStaleBaseline or ErrNewerSchema.
+func baselineVerdict(n int, s stamps) error {
+	switch {
+	case s.version > n && n == 1:
+		// No build stamps above 1 while the schema is one in-place-edited
+		// baseline, so this is the old pre-squash chain, not a newer build.
+		return ErrStaleBaseline
+	case s.version > n:
+		return fmt.Errorf("%w (version %d, this build %d)", ErrNewerSchema, s.version, n)
+	case s.version == 0:
+		return nil
+	case !s.syncState || s.found && s.stored != baselineFingerprint():
+		return ErrStaleBaseline
 	}
 	return nil
 }
+
+// CheckBaseline answers without writing whether Open would refuse the
+// database at path: nil, ErrStaleBaseline, ErrNewerSchema, or what kept
+// it from reading the file.
+func CheckBaseline(ctx context.Context, path string) error {
+	conn, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	if err != nil {
+		return fmt.Errorf("db: opening %s: %w", path, err)
+	}
+	defer conn.Close()
+	s, err := readStamps(ctx, conn)
+	if err != nil {
+		return err
+	}
+	return baselineVerdict(len(migrations), s)
+}
+
+// ErrStaleBaseline is the delete-and-restart refusal every stale
+// pre-release database lands on: a version from the old migration chain,
+// no sync_state table, or another baseline script's fingerprint.
+var ErrStaleBaseline = errors.New("db: this database was created by a different pre-release schema baseline; delete the waxdeck.db file (with its -wal and -shm siblings) and restart to recreate it")
+
+// ErrNewerSchema refuses a database a newer build migrated.
+var ErrNewerSchema = errors.New("db: this database's schema is newer than this build understands; refusing to open")
 
 // Writer returns the single-connection write handle.
 func (d *DB) Writer() *sql.DB { return d.w }

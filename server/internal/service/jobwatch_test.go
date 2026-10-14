@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"sync"
 	"testing"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/organize"
+	"github.com/colespringer/waxbin/scan"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -323,5 +326,45 @@ func TestTheLastRunIsAWholePass(t *testing.T) {
 	st, err := svc.EnrichmentStatusFor(ctx, uc)
 	if err != nil || st.LastRun == nil || st.LastRun.FinishedAtNS != j.FinishedAt {
 		t.Fatalf("last run = %+v (%v), want the whole pass finished at %d", st.LastRun, err, j.FinishedAt)
+	}
+}
+
+// A scan records its total over every library with each library's own
+// run beside it, and the tally reads the total.
+func TestReadResultReadsTheScanTotal(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(struct {
+		scan.Result
+		Runs []scan.Result
+	}{
+		Result: scan.Result{FilesSeen: 3, ItemsCreated: 2, Unchanged: 1},
+		Runs: []scan.Result{
+			{FilesSeen: 3, ItemsCreated: 2, Unchanged: 1, LibraryName: "/music"},
+			{LibraryName: "/unmounted", RootUnreachable: true, WalkErrors: 1},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := Job{Kind: "scan"}
+	j.readResult(string(raw))
+	if j.Scan == nil || j.Scan.FilesSeen != 3 || j.Scan.Created != 2 || j.Scan.Unchanged != 1 {
+		t.Fatalf("tally = %+v, want the total", j.Scan)
+	}
+}
+
+// An organize run's tally keeps what did not move in one count: files in
+// place and moves the catalog held back, which it reports apart.
+func TestReadResultCountsHeldMovesAsSkipped(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(organize.RunResult{Profile: "default",
+		Report: organize.Report{Moved: 3, Skipped: 1, Held: 2}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := Job{Kind: "organize"}
+	j.readResult(string(raw))
+	if j.Organize == nil || j.Organize.Moved != 3 || j.Organize.Skipped != 3 {
+		t.Fatalf("tally = %+v, want 3 moved and 3 left where they were", j.Organize)
 	}
 }

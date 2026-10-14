@@ -129,6 +129,37 @@ table gpodder_devices
   column user_id|TEXT|notnull=1|default=<none>|pk=1
   fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
   autoindex pk|unique=1|(user_id,device_id)
+table gpodder_holds
+  column holder|TEXT|notnull=1|default=<none>|pk=3
+  column show_pid|TEXT|notnull=1|default=<none>|pk=2
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,show_pid,holder)
+  index gpodder_holds_by_holder|unique=0|partial=0|(user_id,holder)
+table gpodder_pending
+  column attempts|INTEGER|notnull=1|default=0|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column device_id|TEXT|notnull=1|default=<none>|pk=0
+  column feed_url|TEXT|notnull=1|default=<none>|pk=2
+  column last_error|TEXT|notnull=1|default=''|pk=0
+  column next_try_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,feed_url)
+  index gpodder_pending_due|unique=0|partial=0|(next_try_ns)
+table gpodder_sessions
+  column app_password_id|TEXT|notnull=1|default=<none>|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column expires_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column id|TEXT|notnull=0|default=<none>|pk=1
+  column token_hash|BLOB|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=0
+  fk app_password_id->app_passwords.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(id)
+  autoindex u|unique=1|(token_hash)
+  index gpodder_sessions_by_password|unique=0|partial=0|(app_password_id,created_at_ns)
+  index gpodder_sessions_by_user|unique=0|partial=0|(user_id)
 table gpodder_sub_events
   column action|TEXT|notnull=1|default=<none>|pk=0
   column device_id|TEXT|notnull=1|default=''|pk=0
@@ -300,6 +331,7 @@ table oidc_codes
   autoindex pk|unique=1|(code_hash)
 table organize_profiles
   column audiobook|TEXT|notnull=1|default=''|pk=0
+  column compilation_folder|TEXT|notnull=0|default=<none>|pk=0
   column music|TEXT|notnull=1|default=''|pk=0
   column name|TEXT|notnull=0|default=<none>|pk=1
   column podcast|TEXT|notnull=1|default=''|pk=0
@@ -569,6 +601,19 @@ table starter_playlists
   column user_id|TEXT|notnull=1|default=<none>|pk=1
   fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
   autoindex pk|unique=1|(user_id,kind)
+table subsonic_bookmarks
+  column comment|TEXT|notnull=1|default=''|pk=0
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column item_pid|TEXT|notnull=1|default=<none>|pk=2
+  column position_ms|INTEGER|notnull=1|default=<none>|pk=0
+  column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,item_pid)
+table subsonic_music_folders
+  column id|INTEGER|notnull=0|default=<none>|pk=1
+  column library_pid|TEXT|notnull=1|default=<none>|pk=0
+  autoindex u|unique=1|(library_pid)
 table sync_state
   column key|TEXT|notnull=0|default=<none>|pk=1
   column value|TEXT|notnull=1|default=<none>|pk=0

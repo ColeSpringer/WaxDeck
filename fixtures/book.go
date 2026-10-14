@@ -47,8 +47,7 @@ func GenerateM4B(dir string, spec Spec) (string, error) {
 // holding parts "01 - Part One.m4b" through "03 - Part Three.m4b". The
 // parts share ALBUM and ALBUMARTIST and carry track numbers, so a
 // WaxBin scan groups them into one book item with three files in
-// reading order. Tone durations are distinct per part so fingerprint
-// dedup cannot merge them. It returns the book's directory.
+// reading order. It returns the book's directory.
 func GenerateBook(dir string) (string, error) {
 	bookDir := filepath.Join(dir, bookAuthor, bookTitle)
 	parts := []struct {
@@ -82,9 +81,8 @@ func GenerateBook(dir string) (string, error) {
 
 // GenerateChapteredBook writes a single-file audiobook into dir: one
 // .m4b whose MP4 container embeds three chapter markers, with book tags
-// (album is the book title, album-artist the author). The tone duration
-// differs from every GenerateBook part so the two books never share an
-// essence. It returns the file's path.
+// (album is the book title, album-artist the author). It returns the
+// file's path.
 func GenerateChapteredBook(dir string) (string, error) {
 	spec := Spec{
 		Name:     chapteredBookTitle,
@@ -122,8 +120,7 @@ const seriesNarrator = "Vale Reader"
 // into a name and a sequence, and the only way to carry one, since no
 // editor writes a sequence - and the MP4 muxer has no atom for that
 // key. A Vorbis comment block takes the key it is given, and a narrator
-// credit is a book signal in its own right. Tone durations step per
-// book so fingerprint dedup cannot merge them.
+// credit is a book signal in its own right.
 func GenerateSeriesBooks(dir, series string, n int) ([]string, error) {
 	if n <= 0 {
 		return nil, fmt.Errorf("fixtures: series needs at least one book")

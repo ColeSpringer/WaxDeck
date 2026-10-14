@@ -23,8 +23,7 @@ const (
 
 // newCatalogFixture is a real Library over a small scanned catalog of
 // tagged tracks, plus an admin context: enough for the import resolve
-// ladder and the discovery metadata fallback. Durations are distinct so
-// the catalog's fingerprint dedup never merges the synthesized tones.
+// ladder and the discovery metadata fallback.
 func newCatalogFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 	t.Helper()
 	return newCatalogFixtureWith(t, catalogFixtureOptions{})
@@ -35,12 +34,18 @@ func newCatalogFixture(t *testing.T) (context.Context, *Library, *UserCtx) {
 type catalogFixtureOptions struct {
 	extra            func(t *testing.T, libDir string)
 	workerLocalPaths bool
+	// logs receives the service's log; nil discards it.
+	logs io.Writer
 }
 
 func newCatalogFixtureWith(t *testing.T, opts catalogFixtureOptions) (context.Context, *Library, *UserCtx) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	if opts.logs != nil {
+		// Debug too: a test reading the log checks what was not said.
+		log = slog.New(slog.NewTextHandler(opts.logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	}
 
 	track := func(name, title, artist, genre string, d time.Duration) fixtures.Spec {
 		return fixtures.Spec{

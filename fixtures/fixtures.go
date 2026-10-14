@@ -138,6 +138,10 @@ type Spec struct {
 	// Chapters are chapter markers, embedded where the container
 	// supports them.
 	Chapters []Chapter
+	// SameAudioAs names another spec whose audio this one synthesizes, for
+	// two files of one recording; codec, duration, silence, rate and
+	// channels must agree too.
+	SameAudioAs string
 }
 
 // MaxDuration bounds a Spec's synthesized audio, silence included.
@@ -377,10 +381,7 @@ func DefaultLibrary() []Spec {
 
 // DemoLibrary is a small tagged album: one track per commonly streamed
 // codec, titled so tests and humans can find them by name. End-to-end
-// harnesses scan it alongside DefaultLibrary. Durations are distinct on
-// purpose: a catalog's fingerprint dedup would otherwise merge these
-// with the matrix files, which synthesize the same tone at the same
-// length.
+// harnesses scan it alongside DefaultLibrary.
 func DemoLibrary() []Spec {
 	track := func(name, title string, codec Codec, d time.Duration) Spec {
 		return Spec{
@@ -408,9 +409,7 @@ func DemoLibrary() []Spec {
 // them uniquely against the scanned library. The single is the
 // declined-identify journey's own file - declining imports on arrival,
 // so a file another upload test imports would race it for the
-// destination and flag it as a duplicate. Durations are distinct from
-// every other preset for the same fingerprint-dedup reason as
-// DemoLibrary.
+// destination and flag it as a duplicate.
 func UploadSources() []Spec {
 	track := func(name, title, trackNo string, d time.Duration) Spec {
 		return Spec{
@@ -446,7 +445,6 @@ func UploadSources() []Spec {
 // which has to be its own album: the folder test and the file test run
 // against one server, and reusing UploadSources would have each one
 // importing the other's release and racing it for the destination.
-// Distinct durations again, for the fingerprint-dedup reason.
 //
 // Written under a disc subdirectory by the e2e stack, so what the pick
 // walks is a tree rather than a flat folder - which is the half of a
@@ -476,7 +474,6 @@ func UploadFolderSources() []Spec {
 // then renames a release, and had it reused the lantern album its
 // import would hold the destination the manual-upload journey's own
 // import needs (the rename regroups the catalog but moves no files).
-// Distinct durations, same fingerprint-dedup reason as everywhere.
 func UploadWorkbenchSources() []Spec {
 	track := func(name, title, trackNo string, d time.Duration) Spec {
 		return Spec{

@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
+	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
@@ -220,25 +223,38 @@ func rootsNotConfigured(catalogRoots []string, configured []Root) []string {
 	return out
 }
 
-// logCatalogReset states what the reset discarded. It logs rather than
-// returning a string because the only caller is startup, where this is the one
-// record that the state is gone.
-func (l *Library) logCatalogReset(rep *CatalogResetReport) {
-	if rep.SavedTo == "" {
-		l.log.Warn("catalog was built from a different schema baseline; created a fresh one (nothing to move aside)")
-		return
-	}
-	if rep.Partial {
-		// Zeros here would read as "the catalog was empty".
-		l.log.Warn("catalog was built from a different schema baseline; moved it aside and created a fresh one",
-			"savedTo", rep.SavedTo, "discarded", "unknown (the previous catalog could not be read)")
-	} else {
-		l.log.Warn("catalog was built from a different schema baseline; moved it aside and created a fresh one",
-			"savedTo", rep.SavedTo, "items", rep.Items, "playStates", rep.PlayStates,
-			"playlists", rep.Playlists, "podcasts", rep.Podcasts, "trashEntries", rep.TrashEntries)
+// recordCatalogReset says what a reset discarded in the log, the audit
+// log and every administrator's inbox, which can reach a chat service
+// and so counts the dropped libraries rather than naming their folders.
+func (l *Library) recordCatalogReset(ctx context.Context, rep *CatalogResetReport) {
+	detail := map[string]any{"savedTo": rep.SavedTo}
+	switch {
+	case rep.Partial:
+		// Zeros would read as "the catalog was empty".
+		detail["discarded"] = "unknown"
+	case rep.SavedTo != "":
+		detail["items"], detail["playStates"], detail["playlists"] = rep.Items, rep.PlayStates, rep.Playlists
+		detail["podcasts"], detail["trashEntries"] = rep.Podcasts, rep.TrashEntries
 	}
 	if len(rep.UnconfiguredRoots) > 0 {
-		l.log.Warn("the previous catalog held library roots this configuration does not name; re-add them to bring them back",
-			"roots", rep.UnconfiguredRoots)
+		detail["droppedRoots"] = rep.UnconfiguredRoots
 	}
+	attrs := make([]any, 0, 2*len(detail))
+	for _, k := range slices.Sorted(maps.Keys(detail)) {
+		attrs = append(attrs, k, detail[k])
+	}
+	l.log.Warn("catalog was built from a different schema baseline; set it aside and created a fresh one", attrs...)
+	l.Audit(ctx, nil, "catalog.reset", AuditTarget{Kind: "catalog", Name: filepath.Base(l.catalogPath)}, detail)
+
+	body := "The catalog was built by a release with another schema, so the server built a new one " +
+		"from the library folders. Play positions, ratings, stars, playlists, curation edits, " +
+		"podcast subscriptions and the trash did not carry over."
+	if rep.SavedTo != "" {
+		body += " The previous catalog is kept as " + filepath.Base(rep.SavedTo) + " in the data directory."
+	}
+	if n := len(rep.UnconfiguredRoots); n > 0 {
+		body += fmt.Sprintf(" Libraries added from the console were not restored (%d); the audit log names "+
+			"their folders, to add again under Libraries.", n)
+	}
+	l.EmitServerNotification(ctx, "catalog-reset", "Catalog recreated", body)
 }

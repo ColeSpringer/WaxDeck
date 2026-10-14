@@ -3,6 +3,7 @@ package restore
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -87,7 +88,7 @@ func TestRestoreApplyRoundTrip(t *testing.T) {
 		}
 	}
 
-	applied, rep, err := Apply(dataDir, nil)
+	applied, rep, err := Apply(dataDir, nil, nil)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
@@ -122,7 +123,7 @@ func TestRestoreApplyRoundTrip(t *testing.T) {
 		t.Fatal("marker survived a successful Apply")
 	}
 	// Nothing staged now: the next boot is a no-op.
-	applied, rep, err = Apply(dataDir, nil)
+	applied, rep, err = Apply(dataDir, nil, nil)
 	if err != nil || applied || rep != nil {
 		t.Fatalf("second Apply = (%v, %v, %v), want (false, nil, nil)", applied, rep, err)
 	}
@@ -130,7 +131,7 @@ func TestRestoreApplyRoundTrip(t *testing.T) {
 
 func TestRestoreApplyNewHost(t *testing.T) {
 	dataDir := stage(t)
-	applied, rep, err := Apply(dataDir, nil)
+	applied, rep, err := Apply(dataDir, nil, nil)
 	if err != nil || !applied {
 		t.Fatalf("Apply = (%v, %v)", applied, err)
 	}
@@ -143,7 +144,7 @@ func TestRestoreApplyNewHost(t *testing.T) {
 }
 
 func TestRestoreApplyNoMarker(t *testing.T) {
-	applied, rep, err := Apply(t.TempDir(), nil)
+	applied, rep, err := Apply(t.TempDir(), nil, nil)
 	if err != nil || applied || rep != nil {
 		t.Fatalf("Apply = (%v, %v, %v), want (false, nil, nil)", applied, rep, err)
 	}
@@ -155,12 +156,55 @@ func TestRestoreApplyMissingArchiveKeepsMarker(t *testing.T) {
 		t.Fatal(err)
 	}
 	writeMarker(t, dataDir)
-	applied, _, err := Apply(dataDir, nil)
+	applied, _, err := Apply(dataDir, nil, nil)
 	if err == nil || applied {
 		t.Fatalf("Apply with a missing archive = (%v, %v), want an error", applied, err)
 	}
 	if !markerPresent(t, dataDir) {
 		t.Fatal("marker was removed on failure; a failed restore must stay staged")
+	}
+}
+
+// A refused archive stops before anything moves: the live pair stays,
+// so does the marker for the operator, and no extracted copy is left.
+func TestRestoreApplyRefusalKeepsTheLiveDatabases(t *testing.T) {
+	dataDir := stage(t)
+	for name, content := range map[string]string{"waxdeck.db": "OLD-WAXDECK", "waxbin.db": "OLD-WAXBIN"} {
+		if err := os.WriteFile(filepath.Join(dataDir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var vetted []string
+	_, _, err := Apply(dataDir, nil, func(waxdeckDB, catalogDB string) error {
+		for _, p := range []string{waxdeckDB, catalogDB} {
+			raw, err := os.ReadFile(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			vetted = append(vetted, string(raw))
+		}
+		return errors.New("another baseline made it")
+	})
+	if err == nil {
+		t.Fatal("Apply swapped in an archive its vet refused")
+	}
+	if strings.Join(vetted, ",") != newWaxdeck+","+newWaxbin {
+		t.Errorf("vetted %v, want the extracted copies", vetted)
+	}
+	if readLive(t, dataDir, "waxdeck.db") != "OLD-WAXDECK" || readLive(t, dataDir, "waxbin.db") != "OLD-WAXBIN" {
+		t.Error("the live databases moved")
+	}
+	if !markerPresent(t, dataDir) {
+		t.Error("the marker went with a refused restore")
+	}
+	entries, err := os.ReadDir(dataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".restore-") {
+			t.Errorf("extracted copy %s left behind", e.Name())
+		}
 	}
 }
 
@@ -170,7 +214,7 @@ func TestRestoreApplyBadMarkerFileName(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dataDir, markerFileName), []byte(m), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := Apply(dataDir, nil); err == nil {
+	if _, _, err := Apply(dataDir, nil, nil); err == nil {
 		t.Fatal("Apply accepted a path-traversing archive name")
 	}
 }
@@ -207,7 +251,7 @@ func TestRestoreCrashOrdering(t *testing.T) {
 	// The re-run a post-swap crash would trigger: Apply extracts the
 	// same archive again, sets the already-restored files aside, swaps
 	// in identical bytes, and only then removes the marker.
-	applied, _, err := Apply(dataDir, nil)
+	applied, _, err := Apply(dataDir, nil, nil)
 	if err != nil || !applied {
 		t.Fatalf("re-run Apply = (%v, %v)", applied, err)
 	}

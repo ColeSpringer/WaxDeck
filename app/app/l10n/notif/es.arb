@@ -6,6 +6,8 @@
   "notifBackupCompletedTitle": "Copia de seguridad terminada",
   "notifBackupFailedHelp": "Ha fallado un intento de copia de seguridad.",
   "notifBackupFailedTitle": "Copia de seguridad fallida",
+  "notifCatalogResetHelp": "Una actualización cambió el esquema del catálogo y el servidor creó un catálogo nuevo; las bibliotecas añadidas desde la consola deben añadirse de nuevo.",
+  "notifCatalogResetTitle": "Catálogo recreado",
   "notifEpisodeArrivedHelp": "Un programa al que estás suscrito ha publicado un episodio nuevo.",
   "notifEpisodeArrivedTitle": "Episodio nuevo",
   "notifEpisodeDownloadedHelp": "Un episodio que pediste ha terminado de descargarse.",

@@ -136,6 +136,33 @@ void main() {
       );
       expect(explainError(en, later), en.errorFeatureUnavailable);
     });
+
+    test('invalid-request is refined by its reason, refusal or not', () {
+      const cueRip = WaxDeckApiException(
+        code: 'invalid-request',
+        message: _serverMessage,
+        params: <String, String>{'reason': 'cue-rip'},
+      );
+      expect(explainError(en, cueRip), en.errorCueRipDelete);
+      expect(explainError(es, cueRip), es.errorCueRipDelete);
+      expect(explainRefusal(en, cueRip), en.errorCueRipDelete);
+
+      const schema = WaxDeckApiException(
+        code: 'invalid-request',
+        message: _serverMessage,
+        params: <String, String>{'reason': 'incompatible-schema'},
+      );
+      expect(explainError(en, schema), en.errorIncompatibleBackup);
+      expect(explainError(es, schema), es.errorIncompatibleBackup);
+
+      const later = WaxDeckApiException(
+        code: 'invalid-request',
+        message: _serverMessage,
+        params: <String, String>{'reason': 'holo-projection'},
+      );
+      expect(explainError(en, later), en.errorInvalidRequest);
+      expect(explainRefusal(en, later), _serverMessage);
+    });
   });
 
   group('explainRefusal', () {

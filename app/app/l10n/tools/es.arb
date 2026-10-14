@@ -35,7 +35,7 @@
   "toolsOpenReviewQueue": "Abrir la cola de revisión",
   "toolsProduced": "ha producido {pids}",
   "toolsReadyForReview": "{count, plural, =1{1 lista para revisar} other{{count} listas para revisar}}",
-  "toolsStateCanceled": "Cancelada",
+  "toolsStateCanceled": "Detenida",
   "toolsStateCrashed": "Interrumpida",
   "toolsStateDone": "Terminada",
   "toolsStateFailed": "Fallida",

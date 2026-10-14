@@ -132,7 +132,10 @@ instead of surfacing as scattered errors). At the next start the
 current databases are set aside - not deleted - the archive's
 databases move into place, and every client's sync cursor resets
 cleanly. A staged restore can be cancelled any time before the
-restart.
+restart. Staging refuses an archive this server's schema cannot open,
+and so does the start itself, for one staged before an upgrade: it
+sets nothing aside and stops with the reason, and removing
+`restore-staged.json` from the data directory starts without it.
 
 Restoring onto a new host: upload the archive (Backups > import), stage
 it, restart. Without the old keyfile everything restores except sealed
@@ -177,28 +180,56 @@ that moved back looks the same from here as one that moved forward.
 That reset would be silent and automatic. Set it for the upgrade,
 restart, take it out.
 
+With the compose stack that is four steps: add
+`WAXDECK_RESET_CATALOG=true` to `deploy/.env`, run `make up` (it
+rebuilds both images; the server sets the old catalog aside, builds a
+new one and rescans, and the streaming sidecar may restart once or
+twice until the new catalog exists), then delete the line and run
+`make up` again so the server is recreated without it. A bare binary
+takes the flag for one start: `WAXDECK_RESET_CATALOG=true waxdeck ...`
+or `-reset-catalog`. A catalog reset alone needs no `make reset`,
+which would drop the accounts as well.
+
 What a reset discards is everything the catalog holds that is not on
 disk: play positions, ratings, stars, playlists, curation edits,
 podcast subscriptions, and trash. Media files are untouched, and the
 startup scan re-indexes them. Accounts live in WaxDeck's own database
 and carry over, each given a user in the new catalog at startup.
 Library roots added at runtime rather than through configuration are
-the part startup will not put back - the reset report names them.
+the part startup will not put back. The reset says so three times:
+a WARN in the server log and a `catalog.reset` entry in the audit log,
+both naming the roots to add again, and a `catalog-reset`
+notification to every administrator that counts them (it can reach a
+chat service, so it leaves the folders to the audit log).
 
-Two things worth knowing before you take the upgrade this note is
+Things worth knowing before you take the upgrade this note is
 attached to:
 
-- **A byte-copy backup taken before the upgrade carries the old
-  baseline**, so restoring one under the new build hits the same
-  refusal the reset exists for. Restore it under the version it was
-  taken with. WaxDeck's own backup archives are not affected.
-- **The rebuild runs longer on some libraries.** This baseline's scan
-  decodes WMA Lossless, Pro and Voice; G.711 and ADPCM in WAV, AIFF-C
-  and MP4; MP3 inside WAV, AIFF-C and MP4; and PCM inside MP4 and MOV,
-  beside the HE-AAC, WavPack, Monkey's Audio, WMA and Musepack an
-  earlier baseline added. A library holding many of those spends real
-  time on them that it did not before, and every file's loudness and
-  audio hash are measured afresh.
+- **This upgrade also recreates the server database.** WaxDeck's own
+  `waxdeck.db` moved its baseline in the same release, and the server
+  refuses to start on the old one, flag or no flag. Accounts, app
+  passwords, sessions, notification targets, settings, and the names of
+  libraries added at runtime do not carry over: on the compose stack
+  `make reset` is the one step (it drops both databases and leaves the
+  library alone). A bare binary deletes `waxdeck.db` with its `-wal`
+  and `-shm` files and starts once with the reset flag, which sets the
+  old catalog aside. With no accounts left, the first-run setup creates
+  the administrator again, and no `catalog-reset` notification has
+  anyone to reach.
+- **A backup taken before the upgrade carries the old baseline.**
+  Restoring a byte copy under the new build hits the same refusal the
+  reset exists for, and staging a WaxDeck backup archive from before
+  the upgrade is refused for the same reason. Restore either under the
+  version it was taken with.
+- **The new catalog files some things differently.** Files with the
+  same audio become copies of one item rather than items of their own
+  (the first one found is the item; the rest are its alternates), a
+  library declared as audiobooks catalogs every file in it as part of
+  a book, and albums are keyed without the track year: an album's year
+  follows the years of its tracks, so a year edit no longer splits a
+  release. Kind locks set by hand are among what the reset drops, so
+  a file you had re-filed as a book or as music goes back to automatic
+  classification.
 
 ## Scheduled jobs
 
@@ -261,7 +292,8 @@ from, restores files back into the catalog (re-scanned and
 un-archived), and empties the trash permanently, reporting the space
 reclaimed and how many entries read-only libraries kept. Deleting items
 from the item page previews what will be deleted (files, bytes) before
-anything moves.
+anything moves. The tracks a cue sheet cuts from one file share it, so
+they are deleted together or not at all: one alone is refused.
 
 ## Upload oversight
 
@@ -332,7 +364,8 @@ The console's Libraries section lists every root with its path, what it
 holds, how many items the catalog has under it, the organize profile a
 managed root is laid out by, its read-only flag, and its matching mode
 (automatic, ask me, or leave alone). Adding one there
-creates a library root without restarting the server: the path is validated (absolute, not overlapping an existing
+creates a library root without restarting the server: the path is
+validated (an existing folder, absolute, not overlapping an existing
 root, the inbox, or the podcast download dir), cataloged, and scanned in
 the background. Browsing and downloading its files work as soon as the
 scan indexes them. The catalog keeps the root with its managed policy

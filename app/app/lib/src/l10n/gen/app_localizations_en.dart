@@ -2456,6 +2456,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bellSurfaceImports => 'Imports';
 
   @override
+  String get bellSurfaceLibraries => 'Libraries';
+
+  @override
   String get bellSurfacePlaylists => 'Playlists';
 
   @override
@@ -3383,6 +3386,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Something else changed this first. Take another look and try again.';
 
   @override
+  String get errorCueRipDelete =>
+      'This track is part of a larger file that holds other tracks too, so it can only be deleted together with them.';
+
+  @override
   String get errorDirectoryUnavailable =>
       'The directory service did not answer. Try again later.';
 
@@ -3415,6 +3422,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get errorForbidden => 'Your account is not allowed to do that.';
+
+  @override
+  String get errorIncompatibleBackup =>
+      'This backup was made by a WaxDeck version whose databases this server can\'t open. Restore it with the version that made it.';
 
   @override
   String get errorInternal =>
@@ -4978,7 +4989,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get musicAlbumRewriteTitle => 'Album, artist, and year';
+  String get musicAlbumRewriteTitle => 'Album and album artist';
 
   @override
   String get musicAlbumTitle => 'Album';
@@ -5504,6 +5515,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notifBackupFailedTitle => 'Backup failed';
 
   @override
+  String get notifCatalogResetHelp =>
+      'An upgrade moved the catalog\'s schema and the server built a new catalog; libraries added from the console have to be added again.';
+
+  @override
+  String get notifCatalogResetTitle => 'Catalog recreated';
+
+  @override
   String get notifEpisodeArrivedHelp =>
       'A subscribed show published a new episode.';
 
@@ -5621,7 +5639,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get organizeHeldTile => 'Read-only';
+  String organizeHeldBack(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count files are held back and stay where they are.',
+      one: '1 file is held back and stays where it is.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get organizeHeldTile => 'Held back';
 
   @override
   String get organizeHint =>
@@ -6270,7 +6299,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String playlistConflictBanner(String reason) {
-    return '$reason Nothing was changed; this is the list as it stands.';
+    return '$reason. Nothing was changed; this is the list as it stands.';
   }
 
   @override
@@ -11332,7 +11361,7 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get toolsStateCanceled => 'Canceled';
+  String get toolsStateCanceled => 'Stopped';
 
   @override
   String get toolsStateCrashed => 'Crashed';

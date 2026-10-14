@@ -43,17 +43,17 @@ paths:
       summary: Create a library at runtime
       description: >
         Registers a new library root without a server restart. The path is
-        validated (absolute, and non-overlapping with existing roots, the
-        inbox folders, and the podcast download dir), cataloged, and scanned
-        in the background; browsing and downloading its files work as soon as
-        the scan indexes them. Streaming through the WaxFlow sidecar also
-        needs the sidecar to mount the same-named root, so a runtime-added
-        root streams once the sidecar learns it, while downloads and direct
-        playback do not wait on that; when the sidecar cannot be brought to
-        the new root the 201 carries `streamingWarning` saying so, rather
-        than reporting a plain success. `name` is the display name and the
-        WaxFlow root name the same directory is served under. Administrators
-        only.
+        validated (an existing folder, absolute, and non-overlapping with
+        existing roots, the inbox folders, and the podcast download dir),
+        cataloged, and scanned in the background; browsing and downloading
+        its files work as soon as the scan indexes them. Streaming through
+        the WaxFlow sidecar also needs the sidecar to mount the same-named
+        root, so a runtime-added root streams once the sidecar learns it,
+        while downloads and direct playback do not wait on that; when the
+        sidecar cannot be brought to the new root the 201 carries
+        `streamingWarning` saying so, rather than reporting a plain success.
+        `name` is the display name and the WaxFlow root name the same
+        directory is served under. Administrators only.
       tags: [admin]
       requestBody:
         required: true
@@ -913,8 +913,11 @@ paths:
         matches the one the archive's credentials were sealed under,
         and exactly which credentials break when it does not. Staging
         replaces any previously staged restore. Answers `conflict`
-        for a backup still being written or one that failed.
-        Administrators only.
+        for a backup still being written or one that failed, and
+        `invalid-request` for an archive this server cannot open, with
+        `params.reason` `incompatible-schema` when its schema is not
+        this server's (an upgrade since moved a database's baseline, or
+        a newer server made it). Administrators only.
       tags: [admin]
       parameters:
         - $ref: "#/components/parameters/BackupId"

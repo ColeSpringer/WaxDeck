@@ -15,7 +15,8 @@ part 'organize_plan.g.dart';
 /// Properties:
 /// * [profile] - The profile planned with.
 /// * [totalActions] - Moves the pass would make in total.
-/// * [held] - Moves held back because the whole server is read-only. Not in `actions` or `totalActions`. 
+/// * [held] - Moves held back, whatever the cause (`heldByCode` says which). Not in `actions` or `totalActions`. 
+/// * [heldByCode] - `held` by hold code: `collision` (another move of the pass claims the destination), `occupied` (a file the pass does not move holds it), `occupied-case` (one named apart from it only by case or Unicode form stands beside it), `untagged`, `missing`, `virtual` (a cue rip's shared file), `book-held` (another part of the book is held) and `read-only` (the server or the library). A code with nothing held is absent. 
 /// * [readOnlyLibraries] - Managed libraries left out because they are read-only.
 /// * [actions] - The first five hundred actions.
 /// * [tagWrite] - Whether applying would also write tags.
@@ -29,9 +30,13 @@ abstract class OrganizePlan implements Built<OrganizePlan, OrganizePlanBuilder> 
   @BuiltValueField(wireName: r'totalActions')
   int get totalActions;
 
-  /// Moves held back because the whole server is read-only. Not in `actions` or `totalActions`. 
+  /// Moves held back, whatever the cause (`heldByCode` says which). Not in `actions` or `totalActions`. 
   @BuiltValueField(wireName: r'held')
   int get held;
+
+  /// `held` by hold code: `collision` (another move of the pass claims the destination), `occupied` (a file the pass does not move holds it), `occupied-case` (one named apart from it only by case or Unicode form stands beside it), `untagged`, `missing`, `virtual` (a cue rip's shared file), `book-held` (another part of the book is held) and `read-only` (the server or the library). A code with nothing held is absent. 
+  @BuiltValueField(wireName: r'heldByCode')
+  BuiltMap<String, int>? get heldByCode;
 
   /// Managed libraries left out because they are read-only.
   @BuiltValueField(wireName: r'readOnlyLibraries')
@@ -83,6 +88,13 @@ class _$OrganizePlanSerializer implements PrimitiveSerializer<OrganizePlan> {
       object.held,
       specifiedType: const FullType(int),
     );
+    if (object.heldByCode != null) {
+      yield r'heldByCode';
+      yield serializers.serialize(
+        object.heldByCode,
+        specifiedType: const FullType(BuiltMap, [FullType(String), FullType(int)]),
+      );
+    }
     yield r'readOnlyLibraries';
     yield serializers.serialize(
       object.readOnlyLibraries,
@@ -143,6 +155,14 @@ class _$OrganizePlanSerializer implements PrimitiveSerializer<OrganizePlan> {
             specifiedType: const FullType(int),
           ) as int;
           result.held = valueDes;
+          break;
+        case r'heldByCode':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltMap, [FullType(String), FullType(int)]),
+          ) as BuiltMap<String, int>?;
+          if (valueDes == null) continue;
+          result.heldByCode.replace(valueDes);
           break;
         case r'readOnlyLibraries':
           final valueDes = serializers.deserialize(

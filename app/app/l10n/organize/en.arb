@@ -61,9 +61,19 @@
       }
     }
   },
-  "organizeHeldTile": "Read-only",
+  "organizeHeldBack": "{count, plural, =1{1 file is held back and stays where it is.} other{{count} files are held back and stay where they are.}}",
+  "@organizeHeldBack": {
+    "description": "Under the dry run: files out of place that cannot move, for any cause other than a read-only server alone (a destination another file holds, an item with nothing to file it under, a missing file).",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
+  "organizeHeldTile": "Held back",
   "@organizeHeldTile": {
-    "description": "How many files a finished run left where they were because the server is read-only."
+    "description": "How many files a finished run held back where they were, for any cause."
   },
   "organizeHint": "Preview checks every managed library against this profile, so it finds files added or moved since the last run even when nothing else changed. Nothing moves until you apply.",
   "@organizeHint": {

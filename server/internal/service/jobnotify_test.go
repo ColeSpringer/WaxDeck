@@ -142,6 +142,7 @@ func TestAFailedJobSaysWhy(t *testing.T) {
 		{model.JobFailed, "the disk went away", "Analysis: the disk went away"},
 		{model.JobFailed, "analyze: canceled: context canceled", "Analysis: the server stopped before it finished"},
 		{model.JobCrashed, "reclaimed: owner not live", "Analysis: the server stopped before it finished"},
+		{model.JobCanceled, "interrupted before it finished", "Analysis: the server stopped before it finished"},
 	} {
 		pid := model.NewPID()
 		if err := svc.db.InsertJobOrigin(ctx, wdb.JobOrigin{PID: string(pid), UserID: a.ID, CreatedAtNS: 1}); err != nil {

@@ -4233,6 +4233,12 @@ abstract class AppLocalizations {
   /// **'Imports'**
   String get bellSurfaceImports;
 
+  /// Overline of a bell row about the libraries an administrator manages: the catalog was recreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Libraries'**
+  String get bellSurfaceLibraries;
+
   /// Overline on bell rows about playlists.
   ///
   /// In en, this message translates to:
@@ -5607,6 +5613,12 @@ abstract class AppLocalizations {
   /// **'Something else changed this first. Take another look and try again.'**
   String get errorConflict;
 
+  /// Error sentence for `invalid-request` when the params' reason is cue-rip: a delete named one of the tracks a cue sheet cuts from one file, without the rest.
+  ///
+  /// In en, this message translates to:
+  /// **'This track is part of a larger file that holds other tracks too, so it can only be deleted together with them.'**
+  String get errorCueRipDelete;
+
   /// Error sentence for the spec code `directory-unavailable`, such as the radio station directory.
   ///
   /// In en, this message translates to:
@@ -5660,6 +5672,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your account is not allowed to do that.'**
   String get errorForbidden;
+
+  /// Error sentence for `invalid-request` when the params' reason is incompatible-schema: staging a restore from a backup another schema made.
+  ///
+  /// In en, this message translates to:
+  /// **'This backup was made by a WaxDeck version whose databases this server can\'t open. Restore it with the version that made it.'**
+  String get errorIncompatibleBackup;
 
   /// Error sentence for the spec code `internal`.
   ///
@@ -8115,7 +8133,7 @@ abstract class AppLocalizations {
   /// **'Release'**
   String get musicAlbumReleaseTitle;
 
-  /// Button applying the staged album/artist/year values to every member.
+  /// Button applying the staged album and album-artist values to every member.
   ///
   /// In en, this message translates to:
   /// **'{count, plural, =1{Rewrite 1 track} other{Rewrite {count} tracks}}'**
@@ -8160,7 +8178,7 @@ abstract class AppLocalizations {
   /// Heading over the workbench section that rewrites the release-keying fields on every member track.
   ///
   /// In en, this message translates to:
-  /// **'Album, artist, and year'**
+  /// **'Album and album artist'**
   String get musicAlbumRewriteTitle;
 
   /// Title of the album editor before the album it edits has loaded.
@@ -8709,6 +8727,18 @@ abstract class AppLocalizations {
   /// **'Backup failed'**
   String get notifBackupFailedTitle;
 
+  /// What the `catalog-reset` notification is about, drawn under its switch.
+  ///
+  /// In en, this message translates to:
+  /// **'An upgrade moved the catalog\'s schema and the server built a new catalog; libraries added from the console have to be added again.'**
+  String get notifCatalogResetHelp;
+
+  /// Switch label for the `catalog-reset` notification.
+  ///
+  /// In en, this message translates to:
+  /// **'Catalog recreated'**
+  String get notifCatalogResetTitle;
+
   /// What the new-episode notification is about, in a delivery target's event checklist.
   ///
   /// In en, this message translates to:
@@ -8901,10 +8931,16 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 file stays where it is while the server is read-only.} other{{count} files stay where they are while the server is read-only.}}'**
   String organizeHeld(int count);
 
-  /// How many files a finished run left where they were because the server is read-only.
+  /// Under the dry run: files out of place that cannot move, for any cause other than a read-only server alone (a destination another file holds, an item with nothing to file it under, a missing file).
   ///
   /// In en, this message translates to:
-  /// **'Read-only'**
+  /// **'{count, plural, =1{1 file is held back and stays where it is.} other{{count} files are held back and stay where they are.}}'**
+  String organizeHeldBack(int count);
+
+  /// How many files a finished run held back where they were, for any cause.
+  ///
+  /// In en, this message translates to:
+  /// **'Held back'**
   String get organizeHeldTile;
 
   /// Drawn where the plan or the report goes, before either exists.
@@ -9933,10 +9969,10 @@ abstract class AppLocalizations {
   /// **'Already in this list'**
   String get playlistAlreadyIn;
 
-  /// Banner after a reorder the server refused. {reason} is the server's own sentence, which is the only thing that knows which of three refusals it was.
+  /// Banner after a reorder or a removal the server refused. {reason} is the server's own sentence, unpunctuated, which is the only thing that knows which refusal it was.
   ///
   /// In en, this message translates to:
-  /// **'{reason} Nothing was changed; this is the list as it stands.'**
+  /// **'{reason}. Nothing was changed; this is the list as it stands.'**
   String playlistConflictBanner(String reason);
 
   /// Snackbar after the M3U reached the clipboard.
@@ -17716,13 +17752,13 @@ abstract class AppLocalizations {
   /// **'{count, plural, =1{1 ready for review} other{{count} ready for review}}'**
   String toolsReadyForReview(int count);
 
-  /// State of a job an administrator canceled. Agrees with the word for a task in this language.
+  /// State of a job the server stopped before it finished, as it shut down or restarted. Agrees with the word for a task in this language.
   ///
   /// In en, this message translates to:
-  /// **'Canceled'**
+  /// **'Stopped'**
   String get toolsStateCanceled;
 
-  /// State of a job the server stopped in the middle of, a restart or a crash. Agrees with the word for a task in this language.
+  /// State of a job the server was running when it crashed or lost power. Agrees with the word for a task in this language.
   ///
   /// In en, this message translates to:
   /// **'Crashed'**

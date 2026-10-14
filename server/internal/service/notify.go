@@ -39,6 +39,8 @@ var notifyEventCatalog = []NotifyEvent{
 		Description: "A backup archive finished building."},
 	{Name: "backup-failed", Scope: NotifyScopeServer,
 		Description: "A backup attempt failed."},
+	{Name: "catalog-reset", Scope: NotifyScopeServer,
+		Description: "An upgrade moved the catalog's schema and the server built a new catalog, so what only the catalog held is gone."},
 	{Name: "episode-arrived", Scope: NotifyScopeUser,
 		Description: "A subscribed show published a new episode."},
 	{Name: "episode-downloaded", Scope: NotifyScopeUser,
@@ -661,6 +663,8 @@ func (l *Library) notificationLink(event, targetPID string) string {
 		path = "/admin/users"
 	case "backup-completed", "backup-failed":
 		path = "/admin/backups"
+	case "catalog-reset":
+		path = "/admin/libraries"
 	case "import-completed":
 		if targetPID != "" {
 			path = "/review/" + targetPID

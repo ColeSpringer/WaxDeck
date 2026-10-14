@@ -620,14 +620,17 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 			return nil, fmt.Errorf("service: opening catalog: %w", err)
 		}
 		if !cfg.ResetStaleCatalog {
+			// The catalog's own wording ends in its CLI's cure, so it goes to
+			// the log for diagnosis rather than into the instruction.
+			log.Error("the catalog refused to open", "err", err)
 			return nil, fmt.Errorf("service: opening catalog: the catalog was built from a "+
 				"different schema baseline and this build will not open it. Pre-1.0 the catalog "+
 				"schema is edited in place rather than migrated, so there is no upgrade to run: "+
 				"restart with -reset-catalog (WAXDECK_RESET_CATALOG=true) to move %s aside and "+
 				"start fresh. That discards every play position, rating, star, playlist, curation "+
 				"edit, podcast subscription and trash entry -- the media on disk is untouched and "+
-				"is re-indexed by the startup scan. The previous catalog is renamed, not deleted: %w",
-				opts.DBPath, err)
+				"is re-indexed by the startup scan. The previous catalog is renamed, not deleted.",
+				opts.DBPath)
 		}
 		rep, rerr := resetStaleCatalog(ctx, opts.DBPath, cfg.Roots)
 		if rerr != nil {
@@ -696,7 +699,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 		watchReady:               make(chan struct{}),
 	}
 	if reset != nil {
-		l.logCatalogReset(reset)
+		l.recordCatalogReset(ctx, reset)
 	}
 	// Before anything reads as an account: a reset drops the catalog user
 	// each one is mapped to.

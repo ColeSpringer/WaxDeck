@@ -432,39 +432,49 @@ func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSum
 	if plan.Pending() > 0 {
 		rep, err = l.lib.ApplyOrganize(ctx, plan)
 	}
-	// A run cut short has reached its actions in plan order.
-	reached := len(plan.Actions)
+	// The apply holds again as things then stand, so its report has the
+	// last word on what was held and what failed.
+	held := map[model.PID]organize.HoldCode{}
 	failedFiles := map[model.PID]bool{}
 	if rep != nil {
-		if err != nil {
-			reached = rep.Moved + rep.Skipped + rep.Errored
+		for _, h := range rep.Holds {
+			held[h.FilePID] = h.Code
 		}
 		for _, f := range rep.Failures {
 			failedFiles[f.FilePID] = true
 		}
-	} else if err != nil {
-		reached = 0
 	}
 	type outcome struct {
 		moved, failed bool
 		held          string
 	}
 	byItem := map[model.PID]*outcome{}
-	for i, a := range plan.Actions {
+	for i := range plan.Actions {
+		a := &plan.Actions[i]
 		o := byItem[a.ItemPID]
 		if o == nil {
 			o = &outcome{}
 			byItem[a.ItemPID] = o
 		}
+		code, isHeld := held[a.FilePID]
+		if rep == nil && isHold(a) {
+			code, isHeld = a.Code, true
+		}
 		switch {
-		case i >= reached || failedFiles[a.FilePID]:
+		case failedFiles[a.FilePID]:
 			o.failed = true
-		case !a.Skip:
+		case isHeld:
+			if label := holdLabel(code); o.held == "" || label == holdLabelTaken {
+				o.held = label
+			}
+		case a.Skip && (rep == nil || a.Code == organize.HoldInPlace):
+			// Already in place, which is the default below.
+		case err != nil:
+			// A run cut short cannot say which moves landed, since the
+			// blocked ones run last.
+			o.failed = true
+		default:
 			o.moved = true
-		case strings.HasPrefix(a.Reason, "destination collides"):
-			o.held = "destination taken"
-		case o.held == "":
-			o.held = a.Reason
 		}
 	}
 	var planless []model.PID
@@ -493,6 +503,29 @@ func (l *Library) fixPaths(ctx context.Context, pids []string, sum *healthFixSum
 			sum.Skipped[cmp.Or(o.held, "already in place")]++
 		}
 	}
+}
+
+// holdLabelTaken is the summary's word for a destination another file holds.
+const holdLabelTaken = "destination taken"
+
+// holdLabel words a hold for a fix's summary from its code alone, since a
+// hold's reason can carry a path.
+func holdLabel(c organize.HoldCode) string {
+	switch c {
+	case organize.HoldCollision, organize.HoldOccupied, organize.HoldOccupiedCase:
+		return holdLabelTaken
+	case organize.HoldReadOnly:
+		return readOnlyReason
+	case organize.HoldUntagged:
+		return "missing tags"
+	case organize.HoldMissing:
+		return "file not on disk"
+	case organize.HoldVirtual:
+		return "part of a cue rip"
+	case organize.HoldBookHeld:
+		return "rest of the book held"
+	}
+	return "held back"
 }
 
 // itemsInReadOnlyLibraries answers which items sit in a library the

@@ -794,10 +794,6 @@ Serializers _$serializers =
             () => ListBuilder<OpmlImportEntry>(),
           )
           ..addBuilderFactory(
-            const FullType(BuiltList, const [const FullType(OrganizeAction)]),
-            () => ListBuilder<OrganizeAction>(),
-          )
-          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(OrganizeFailure)]),
             () => ListBuilder<OrganizeFailure>(),
           )
@@ -1481,6 +1477,17 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(WriteBackIssue)]),
             () => ListBuilder<WriteBackIssue>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltMap, const [
+              const FullType(String),
+              const FullType(int),
+            ]),
+            () => MapBuilder<String, int>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(OrganizeAction)]),
+            () => ListBuilder<OrganizeAction>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltMap, const [

@@ -435,6 +435,7 @@ func TestDiscordEmbedCarriesItsFurniture(t *testing.T) {
 		color int
 	}{
 		{"backup-failed", discordRed},
+		{"catalog-reset", discordRed},
 		{"backup-completed", discordGreen},
 		{"signup-requested", discordBlue},
 		{"invented-by-a-newer-server", discordGrey},

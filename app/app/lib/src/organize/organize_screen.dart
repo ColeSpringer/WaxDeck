@@ -298,10 +298,13 @@ class _PlanTable extends StatelessWidget {
             onAction: onDiscard,
             semanticsId: SemanticsIds.organizeDiscard,
           ),
-          // Out of place but not moving, so not "already in place".
+          // Out of place but not moving, so not "already in place". A
+          // read-only server is named only when it is the whole cause.
           if (plan.held > 0) ...<Widget>[
             Text(
-              l10n.organizeHeld(plan.held),
+              plan.heldByCode['read-only'] == plan.held
+                  ? l10n.organizeHeld(plan.held)
+                  : l10n.organizeHeldBack(plan.held),
               style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
             ),
             const SizedBox(height: WaxSpace.s12),

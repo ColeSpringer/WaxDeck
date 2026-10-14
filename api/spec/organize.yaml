@@ -323,8 +323,20 @@ components:
         held:
           type: integer
           description: >
-            Moves held back because the whole server is read-only. Not in
-            `actions` or `totalActions`.
+            Moves held back, whatever the cause (`heldByCode` says
+            which). Not in `actions` or `totalActions`.
+        heldByCode:
+          type: object
+          description: >
+            `held` by hold code: `collision` (another move of the pass
+            claims the destination), `occupied` (a file the pass does not
+            move holds it), `occupied-case` (one named apart from it only
+            by case or Unicode form stands beside it), `untagged`,
+            `missing`, `virtual` (a cue rip's shared file), `book-held`
+            (another part of the book is held) and `read-only` (the server
+            or the library). A code with nothing held is absent.
+          additionalProperties:
+            type: integer
         readOnlyLibraries:
           type: integer
           description: Managed libraries left out because they are read-only.
@@ -365,7 +377,9 @@ components:
           description: Files already in place.
         held:
           type: integer
-          description: Files left where they are because the whole server is read-only.
+          description: >
+            Files held back where they are, for any of the causes a
+            plan's `held` counts.
         readOnlyLibraries:
           type: integer
           description: Managed libraries left alone because they are read-only.

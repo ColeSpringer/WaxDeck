@@ -510,7 +510,11 @@ func (s *Server) DeleteLibraryItems(ctx context.Context, req DeleteLibraryItemsR
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
-			return DeleteLibraryItems400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+			e := errObj("invalid-request", err.Error())
+			if errors.Is(err, service.ErrCueRipPart) {
+				e.Params = &map[string]string{"reason": "cue-rip"}
+			}
+			return DeleteLibraryItems400JSONResponse{InvalidRequestJSONResponse(e)}, nil
 		case service.KindForbidden:
 			return DeleteLibraryItems403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindNotFound:
@@ -1105,6 +1109,12 @@ func (s *Server) StageRestore(ctx context.Context, req StageRestoreRequestObject
 	plan, err := s.backups.StageRestore(ctx, uc, string(req.BackupId))
 	if err != nil {
 		switch service.KindOf(err) {
+		case service.KindInvalid:
+			e := errObj("invalid-request", err.Error())
+			if errors.Is(err, service.ErrArchiveSchema) {
+				e.Params = &map[string]string{"reason": "incompatible-schema"}
+			}
+			return StageRestore400JSONResponse{InvalidRequestJSONResponse(e)}, nil
 		case service.KindNotFound:
 			return StageRestore404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no backup with id "+string(req.BackupId)))}, nil
 		case service.KindConflict:

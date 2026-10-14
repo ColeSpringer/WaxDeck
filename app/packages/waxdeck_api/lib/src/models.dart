@@ -4476,6 +4476,7 @@ class OrganizePlan {
     required this.profile,
     required this.totalActions,
     this.held = 0,
+    this.heldByCode = const {},
     this.readOnlyLibraries = 0,
     this.actions = const [],
     this.tagWrite = false,
@@ -4486,8 +4487,12 @@ class OrganizePlan {
   /// Total planned moves; [actions] may be a truncated preview.
   final int totalActions;
 
-  /// Moves a read-only server holds back; not in [totalActions].
+  /// Moves held back, for any cause; not in [totalActions].
   final int held;
+
+  /// [held] by hold code: `read-only`, `collision`, `occupied`,
+  /// `untagged` and the rest the server names.
+  final Map<String, int> heldByCode;
 
   /// Managed libraries left out because they are read-only.
   final int readOnlyLibraries;
@@ -4519,7 +4524,7 @@ class OrganizeReport {
   /// Files already in place.
   final int skipped;
 
-  /// Files left where they are because the server is read-only.
+  /// Files held back where they are, for any cause.
   final int held;
 
   /// Managed libraries left alone because they are read-only.

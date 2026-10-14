@@ -26,13 +26,14 @@ import 'rename_section.dart';
 /// `...RegroupsOnPartialCoverage`. The rewrite section still warns
 /// before it writes, because a rename onto a name another release owns
 /// merges the two, and the workbench still follows the pid the response
-/// reports.
-const albumRewriteFields = ['album', 'album_artist', 'year'];
+/// reports. A year keys nothing - the album's follows its tracks - and a
+/// rename refuses one, so it is edited on the tracks instead.
+const albumRewriteFields = ['album', 'album_artist'];
 
 /// The release-keying fields as the first member's tags carry them,
-/// which is what the rewrite section seeds its inputs with. The three
-/// agree across members by construction - they are the key the release
-/// groups on - so one read answers for the album without walking it.
+/// which is what the rewrite section seeds its inputs with. They agree
+/// across members by construction - they are the key the release groups
+/// on - so one read answers for the album without walking it.
 final _rewriteSeedProvider = FutureProvider.autoDispose
     .family<Map<String, String>, String>((ref, albumPid) async {
       final members = await ref.watch(
@@ -55,8 +56,7 @@ final _rewriteSeedProvider = FutureProvider.autoDispose
 /// The album half of the release workbench: what the album editor
 /// screen used to be, as a pane. The release before the form - the
 /// cover, the title, and what is on it - then the entity's own fields,
-/// and last the rewrite section for the three values that live on the
-/// tracks.
+/// and last the rewrite section for the values that live on the tracks.
 ///
 /// The entity fields and the track rewrite keep separate Save buttons
 /// deliberately: they write through different endpoints with
@@ -431,11 +431,10 @@ class _AlbumPaneState extends ConsumerState<AlbumPane> {
     }
   }
 
-  /// The three fields the album bug asked for and the entity edit
-  /// endpoint cannot take: they live on the member tracks. The rename
-  /// verb moves them on every member in one transaction, so the release
-  /// keeps its row - a name another release owns is the one case that
-  /// moves the page, and the confirm says so before it writes.
+  /// The keying fields, which live on the member tracks: the rename verb
+  /// moves them on every member in one transaction, so the release keeps
+  /// its row unless the name is another release's, which merges the two
+  /// and moves the page (the confirm says so before it writes).
   Widget _rewriteSection() {
     final l10n = context.l10n;
     // The count the button shows is the release's own, not the loaded

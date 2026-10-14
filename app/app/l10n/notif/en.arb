@@ -17,6 +17,14 @@
   "@notifBackupFailedTitle": {
     "description": "Switch label for the `backup-failed` notification."
   },
+  "notifCatalogResetHelp": "An upgrade moved the catalog's schema and the server built a new catalog; libraries added from the console have to be added again.",
+  "@notifCatalogResetHelp": {
+    "description": "What the `catalog-reset` notification is about, drawn under its switch."
+  },
+  "notifCatalogResetTitle": "Catalog recreated",
+  "@notifCatalogResetTitle": {
+    "description": "Switch label for the `catalog-reset` notification."
+  },
   "notifEpisodeArrivedHelp": "A subscribed show published a new episode.",
   "@notifEpisodeArrivedHelp": {
     "description": "What the new-episode notification is about, in a delivery target's event checklist."

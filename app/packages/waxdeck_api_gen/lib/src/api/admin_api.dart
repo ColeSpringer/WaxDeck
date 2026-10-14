@@ -388,7 +388,7 @@ class AdminApi {
   }
 
   /// Create a library at runtime
-  /// Registers a new library root without a server restart. The path is validated (absolute, and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that; when the sidecar cannot be brought to the new root the 201 carries &#x60;streamingWarning&#x60; saying so, rather than reporting a plain success. &#x60;name&#x60; is the display name and the WaxFlow root name the same directory is served under. Administrators only. 
+  /// Registers a new library root without a server restart. The path is validated (an existing folder, absolute, and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that; when the sidecar cannot be brought to the new root the 201 carries &#x60;streamingWarning&#x60; saying so, rather than reporting a plain success. &#x60;name&#x60; is the display name and the WaxFlow root name the same directory is served under. Administrators only. 
   ///
   /// Parameters:
   /// * [libraryCreate] 
@@ -3695,7 +3695,7 @@ class AdminApi {
   }
 
   /// Stage a restore from a backup
-  /// Validates the archive and stages it for restore. The restore applies at the next server start: the current databases are set aside (not deleted), the archive&#39;s databases are moved into place, cross-database references are swept back to consistency, and credentials sealed under a key this host does not hold are marked pending re-auth. The response is the plan: whether the encryption keyfile this server holds matches the one the archive&#39;s credentials were sealed under, and exactly which credentials break when it does not. Staging replaces any previously staged restore. Answers &#x60;conflict&#x60; for a backup still being written or one that failed. Administrators only. 
+  /// Validates the archive and stages it for restore. The restore applies at the next server start: the current databases are set aside (not deleted), the archive&#39;s databases are moved into place, cross-database references are swept back to consistency, and credentials sealed under a key this host does not hold are marked pending re-auth. The response is the plan: whether the encryption keyfile this server holds matches the one the archive&#39;s credentials were sealed under, and exactly which credentials break when it does not. Staging replaces any previously staged restore. Answers &#x60;conflict&#x60; for a backup still being written or one that failed, and &#x60;invalid-request&#x60; for an archive this server cannot open, with &#x60;params.reason&#x60; &#x60;incompatible-schema&#x60; when its schema is not this server&#39;s (an upgrade since moved a database&#39;s baseline, or a newer server made it). Administrators only. 
   ///
   /// Parameters:
   /// * [backupId] - Backup PID (e.g. `bu-01JZX5N8QW3F4V9T2B7KD3M9R6`).

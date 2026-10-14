@@ -573,6 +573,24 @@ func sortJobsNewestFirst(jobs []Job) {
 	sort.SliceStable(jobs, func(a, b int) bool { return jobs[a].StartedAt.After(jobs[b].StartedAt) })
 }
 
+// organizeTally is what an organize run did, in files: skipped is what
+// did not move, in place or held back.
+func organizeTally(profile string, r *organize.Report) *OrganizeTallyDTO {
+	return &OrganizeTallyDTO{
+		Profile: profile, Moved: r.Moved, Skipped: r.Skipped + r.Held,
+		Errored: r.Errored, SidecarsMoved: r.SidecarsMoved,
+	}
+}
+
+// scanTally is what a scan did, in files.
+func scanTally(r scan.Result) ScanTallyDTO {
+	return ScanTallyDTO{
+		FilesSeen: r.FilesSeen, Created: r.ItemsCreated, Updated: r.ItemsUpdated,
+		Relinked: r.Relinked, Unchanged: r.Unchanged, Missing: r.Missing,
+		Skipped: r.Skipped, Errored: r.Errored,
+	}
+}
+
 // readResult reads the summary a finished job recorded, by kind; a kind
 // that records none, or a summary that does not parse, leaves it unset.
 func (j *Job) readResult(raw string) {
@@ -581,13 +599,12 @@ func (j *Job) readResult(raw string) {
 	}
 	switch j.Kind {
 	case "scan":
+		// The total over every library; each library's run beside it
+		// waits for the surface that names them.
 		var r scan.Result
 		if json.Unmarshal([]byte(raw), &r) == nil {
-			j.Scan = &ScanTallyDTO{
-				FilesSeen: r.FilesSeen, Created: r.ItemsCreated, Updated: r.ItemsUpdated,
-				Relinked: r.Relinked, Unchanged: r.Unchanged, Missing: r.Missing,
-				Skipped: r.Skipped, Errored: r.Errored,
-			}
+			total := scanTally(r)
+			j.Scan = &total
 		}
 	case "analyze":
 		var r analyze.Result
@@ -605,10 +622,7 @@ func (j *Job) readResult(raw string) {
 	case "organize":
 		var r organize.RunResult
 		if json.Unmarshal([]byte(raw), &r) == nil {
-			j.Organize = &OrganizeTallyDTO{
-				Profile: r.Profile, Moved: r.Report.Moved, Skipped: r.Report.Skipped,
-				Errored: r.Report.Errored, SidecarsMoved: r.Report.SidecarsMoved,
-			}
+			j.Organize = organizeTally(r.Profile, &r.Report)
 		}
 	}
 }

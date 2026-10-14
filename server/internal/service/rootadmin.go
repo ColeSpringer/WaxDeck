@@ -2,12 +2,16 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/config"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/organize"
@@ -219,7 +223,12 @@ func (l *Library) registerConfiguredRoots(ctx context.Context) error {
 		if row != nil {
 			spec.Media, spec.Profile = row.Media, row.Profile
 		}
-		_, err := l.lib.AddRoot(ctx, spec)
+		// A folder not there yet (a drive mounted later, or the first boot
+		// of a catalog a reset just recreated) registers and scans as
+		// unreachable rather than staying out until a restart. Logged first,
+		// since the catalog stats the folder and a hung mount never answers.
+		l.log.Info("registering a configured library root", "root", r.Path)
+		_, err := l.lib.AddRoot(ctx, spec, waxbin.AllowAbsent())
 		if waxerr.Is(err, waxerr.CodeInvalid) {
 			if _, warned := l.rootsLeftOut.LoadOrStore(rootKey(r.Path), true); !warned {
 				l.log.Warn("a configured library root is left out; change the configuration to resolve it",
@@ -267,7 +276,7 @@ func (l *Library) defaultUndefinedProfiles(ctx context.Context) {
 		l.log.Warn("a library names an organize profile that is not defined; it uses the default",
 			"root", lib.DisplayRoot, "profile", lib.Profile)
 		spec := config.Root{Path: lib.DisplayRoot, Mode: lib.Mode, Media: lib.Media}
-		if _, err := l.lib.AddRoot(ctx, spec); err != nil {
+		if _, err := l.lib.AddRoot(ctx, spec, waxbin.AllowAbsent()); err != nil {
 			l.log.Warn("moving a library to the default profile", "root", lib.DisplayRoot, "err", err)
 			continue
 		}
@@ -456,6 +465,12 @@ func (l *Library) registerRoot(ctx context.Context, name, path string, mode mode
 	}
 	if slices.Contains(taken, name) {
 		return nil, &Error{Kind: KindConflict, Msg: "a library named " + name + " already exists"}
+	}
+	switch st, err := os.Stat(path); {
+	case errors.Is(err, fs.ErrNotExist):
+		return nil, errInvalid("there is no folder at " + path + " on the server")
+	case err == nil && !st.IsDir():
+		return nil, errInvalid(path + " is a file, not a folder")
 	}
 	// The catalog keeps the root and its policy; the name is WaxDeck's, and
 	// it goes in first. The feed refreshes the table the moment the root

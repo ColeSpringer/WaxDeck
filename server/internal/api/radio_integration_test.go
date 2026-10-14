@@ -971,3 +971,31 @@ func TestRadioFirstTitleEndsWithTheLookupsCoverWhenTheStationImageRepeats(t *tes
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// A refusal the client can act on says what it is: a second station on
+// a stream URL the library already holds is a conflict, and the protocol
+// error carries the service's sentence instead of "the operation failed".
+func TestSubsonicDuplicateStationSaysWhy(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	create := "&name=Deck+FM&streamUrl=" + "http%3A%2F%2F198.51.100.9%2Fstream"
+	var env struct {
+		Status string `json:"status"`
+		Error  *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	subsonicJSON(t, h, "createInternetRadioStation", secret, create, &env)
+	if env.Status != "ok" {
+		t.Fatalf("first create = %+v", env)
+	}
+	subsonicJSON(t, h, "createInternetRadioStation", secret, create, &env)
+	if env.Status != "failed" || env.Error == nil {
+		t.Fatalf("duplicate create = %+v, want a refusal", env)
+	}
+	if !strings.Contains(env.Error.Message, "already exists") {
+		t.Fatalf("duplicate create says %q, want the conflict's own sentence", env.Error.Message)
+	}
+}

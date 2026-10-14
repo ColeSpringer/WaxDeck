@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -91,8 +92,14 @@ func newStaleCatalogWith(t *testing.T, setup func(context.Context, *Library)) (d
 // returned service; err is theirs to assert on.
 func openCatalog(t *testing.T, dataDir, libDir string, reset bool) (*Library, func(), error) {
 	t.Helper()
+	return openCatalogLogging(t, dataDir, libDir, reset, io.Discard)
+}
+
+// openCatalogLogging is openCatalog with the service's log written to w.
+func openCatalogLogging(t *testing.T, dataDir, libDir string, reset bool, w io.Writer) (*Library, func(), error) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	log := slog.New(slog.NewTextHandler(w, nil))
 	store, err := wdb.Open(ctx, filepath.Join(dataDir, "waxdeck.db"))
 	if err != nil {
 		cancel()
@@ -123,7 +130,8 @@ func TestStaleBaselineCatalogIsRefusedWithAWaxDeckRecovery(t *testing.T) {
 	t.Parallel()
 	dataDir, libDir := newStaleCatalog(t)
 
-	svc, stop, err := openCatalog(t, dataDir, libDir, false)
+	var logged strings.Builder
+	svc, stop, err := openCatalogLogging(t, dataDir, libDir, false, &logged)
 	defer stop()
 	if err == nil {
 		t.Fatal("opening a stale-baseline catalog succeeded, want a refusal")
@@ -137,6 +145,14 @@ func TestStaleBaselineCatalogIsRefusedWithAWaxDeckRecovery(t *testing.T) {
 	}
 	if !strings.Contains(msg, "WAXDECK_RESET_CATALOG") {
 		t.Errorf("refusal does not name the env form of the recovery: %s", msg)
+	}
+	// The catalog's own refusal goes to the log for diagnosis, not into the
+	// sentence: its cure is a CLI the operator does not have.
+	if strings.Contains(msg, "waxbin db reset") {
+		t.Errorf("refusal repeats the catalog's CLI advice: %s", msg)
+	}
+	if !strings.Contains(logged.String(), "this build") {
+		t.Errorf("the catalog's refusal is not in the log: %s", logged.String())
 	}
 
 	// The catalog is left where it was: refusing must not discard anything.
@@ -424,5 +440,57 @@ func TestRootsNotConfiguredNamesOnlyTheRootsStartupWillNotRestore(t *testing.T) 
 	}
 	if got := rootsNotConfigured(nil, []Root{{Path: "/music"}}); len(got) != 0 {
 		t.Fatalf("rootsNotConfigured with no catalog roots = %v, want empty", got)
+	}
+}
+
+// The startup WARN scrolls away, so a reset also lands where an
+// administrator looks: the audit log names the libraries startup will not
+// put back, and the inbox, which can reach a chat service, counts them.
+func TestResetCatalogTellsTheAdministratorsWhatItDropped(t *testing.T) {
+	t.Parallel()
+	added := t.TempDir()
+	dataDir, libDir := newStaleCatalogWith(t, func(ctx context.Context, svc *Library) {
+		uc := addAdmin(t, ctx, svc, "admin")
+		if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "added", Path: added}); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	svc, stop, err := openCatalog(t, dataDir, libDir, true)
+	defer stop()
+	if err != nil {
+		t.Fatalf("opening with -reset-catalog: %v", err)
+	}
+	ctx := context.Background()
+
+	page, err := svc.AuditEvents(ctx, wdb.AuditFilter{Action: "catalog.reset"}, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Events) != 1 {
+		t.Fatalf("catalog.reset audit entries = %d, want 1", len(page.Events))
+	}
+	if dropped := fmt.Sprint(page.Events[0].Detail["droppedRoots"]); !strings.Contains(dropped, added) {
+		t.Errorf("the audit entry's droppedRoots = %s, want it to name %s", dropped, added)
+	}
+
+	u, err := svc.UserByName(ctx, "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc, err := svc.UserCtx(ctx, u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := inboxOf(t, ctx, svc, uc, "catalog-reset")
+	if len(rows) != 1 {
+		t.Fatalf("catalog-reset notifications = %d, want 1", len(rows))
+	}
+	body := rows[0].Body
+	if strings.Contains(body, added) || !strings.Contains(body, "(1)") || !strings.Contains(body, "audit log") {
+		t.Errorf("the notification should count the dropped library and point at the audit log, not name its folder: %s", body)
+	}
+	if strings.Contains(strings.ToLower(body), "upgrade") {
+		t.Errorf("a reset need not follow an upgrade: %s", body)
 	}
 }

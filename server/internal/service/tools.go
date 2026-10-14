@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -642,7 +641,10 @@ func (l *Library) runCueSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskPa
 	if err != nil {
 		return nil, classify(err)
 	}
-	sibs := l.cueSiblings(ctx, seed, p.SrcPath)
+	ripFile, sibs, err := l.cueRip(ctx, seed)
+	if err != nil {
+		return nil, err
+	}
 	jobID, err := l.flowJobs.CreateSplitJob(ctx, p.SrcPath, nil, p.CuePath, p.Format)
 	if err != nil {
 		return nil, err
@@ -710,11 +712,10 @@ func (l *Library) runCueSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskPa
 		}
 	}
 	if !p.KeepOriginals {
-		// Trashing every virtual track retires the shared rip through
-		// the catalog's own trash journal. The sheet is not an item the
-		// journal can carry, and without its rip it names nothing, so
-		// it is removed outright.
-		if err := l.trashToolItems(ctx, sibPIDs); err != nil {
+		// The rip goes to the catalog's trash with every track it carves.
+		// The sheet is not an item the journal can carry, and without its
+		// rip it names nothing, so it is removed outright.
+		if err := l.trashRip(ctx, ripFile); err != nil {
 			return nil, err
 		}
 		if err := os.Remove(p.CuePath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -1131,40 +1132,66 @@ func (l *Library) forEachCatalogUser(ctx context.Context, fn func(model.PID)) {
 	}
 }
 
-// cueSiblings collects every virtual track carved from the same backing
-// file, in rip order. It always includes at least the seed.
-func (l *Library) cueSiblings(ctx context.Context, seed *model.ItemView, srcPath string) []*model.ItemView {
-	var sibs []*model.ItemView
-	b := query.New(query.EntityItems).Where("kind", query.OpIs, string(model.KindTrack)).Limit(1000)
-	if seed.Album != "" {
-		b = b.Where("album", query.OpIs, seed.Album)
-	}
-	items, err := l.lib.Query(ctx, b.Build(), "")
+// cueRip answers the file a carved track plays a window of and every
+// track the catalog carves from it, in start order, which a delete plan of
+// that file lists.
+func (l *Library) cueRip(ctx context.Context, seed *model.ItemView) (model.PID, []*model.ItemView, error) {
+	files, err := l.lib.ItemFiles(ctx, seed.PID)
 	if err != nil {
-		l.log.Warn("listing cue siblings", "err", err)
-		items = nil
+		return "", nil, classify(err)
 	}
-	for _, cand := range items {
-		if !cand.Virtual {
-			continue
+	var file model.PID
+	for _, f := range files {
+		if f.Virtual && f.Role == "primary" {
+			file = f.FilePID
 		}
-		loc, err := l.paths.Locate(ctx, cand.PID)
-		if err != nil || loc.Path != srcPath {
-			continue
+	}
+	if file == "" {
+		return "", nil, fmt.Errorf("%w: the track is no longer cut from a rip", errToolPermanent)
+	}
+	plan, err := l.lib.PlanDeleteFiles(ctx, []model.PID{file}, model.DeleteTrash)
+	if err != nil {
+		return "", nil, classify(err)
+	}
+	var pids []model.PID
+	for _, a := range plan.Actions {
+		pids = append(pids, a.Tracks...)
+	}
+	items, err := l.lib.GetMany(ctx, pids)
+	if err != nil {
+		return "", nil, classify(err)
+	}
+	byPID := map[model.PID]*model.ItemView{}
+	for _, it := range items {
+		if it != nil {
+			byPID[it.PID] = it
 		}
-		sibs = append(sibs, cand)
 	}
-	sort.Slice(sibs, func(i, j int) bool { return sibs[i].StartFrames < sibs[j].StartFrames })
-	if len(sibs) == 0 {
-		sibs = []*model.ItemView{seed}
+	sibs := make([]*model.ItemView, 0, len(pids))
+	for _, pid := range pids {
+		if it := byPID[pid]; it != nil {
+			sibs = append(sibs, it)
+		}
 	}
-	return sibs
+	return file, sibs, nil
+}
+
+// trashRip moves a cue rip's file to the catalog's trash with the tracks
+// it carves as they stand now.
+func (l *Library) trashRip(ctx context.Context, file model.PID) error {
+	plan, err := l.lib.PlanDeleteFiles(ctx, []model.PID{file}, model.DeleteTrash)
+	if err != nil {
+		return classify(err)
+	}
+	if _, err := l.lib.ApplyDelete(ctx, plan); err != nil {
+		return classify(err)
+	}
+	return nil
 }
 
 // trashToolItems moves items to the catalog's reversible trash. No
-// episode guard: every caller is a book merge, book split, or cue split,
-// so only bk- and tr- items reach here and the catalog's own episode
-// refusal is unreachable.
+// episode guard: every caller is a book merge or split, so only books
+// reach here.
 func (l *Library) trashToolItems(ctx context.Context, pids []model.PID) error {
 	plan, err := l.lib.PlanDeletePIDs(ctx, pids, model.DeleteTrash)
 	if err != nil {

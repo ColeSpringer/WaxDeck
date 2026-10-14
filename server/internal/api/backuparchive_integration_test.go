@@ -103,3 +103,41 @@ func TestBackupArchiveServesRanges(t *testing.T) {
 		t.Fatalf("running backup code = %q, want conflict", e.Code)
 	}
 }
+
+// A backup another schema baseline made is refused with a reason the app
+// words itself, since the server's sentence is English.
+func TestStagingAnArchiveFromAnotherSchemaSaysWhy(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := context.Background()
+	setBaseline := func(v string) {
+		t.Helper()
+		if _, err := h.store.Writer().ExecContext(ctx,
+			"UPDATE sync_state SET value = ? WHERE key = 'schema.baseline'", v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var live string
+	if err := h.store.Reader().QueryRowContext(ctx,
+		"SELECT value FROM sync_state WHERE key = 'schema.baseline'").Scan(&live); err != nil {
+		t.Fatal(err)
+	}
+	setBaseline("an-older-baseline")
+	row, err := h.backups.Create(ctx, nil, "manual")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.backups.Run(ctx, row.ID); err != nil {
+		t.Fatal(err)
+	}
+	setBaseline(live)
+
+	resp := h.postJSON(t, "/api/v1/admin/backups/"+row.ID+"/restore", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != 400 {
+		t.Fatalf("status = %d, want 400", resp.StatusCode)
+	}
+	if e := decode[Error](t, resp); e.Code != "invalid-request" || e.Params == nil || (*e.Params)["reason"] != "incompatible-schema" {
+		t.Fatalf("refusal = %+v, want invalid-request with reason incompatible-schema", e)
+	}
+}

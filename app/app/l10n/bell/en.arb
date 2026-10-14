@@ -117,6 +117,10 @@
   "@bellSurfaceImports": {
     "description": "Which surface a bell row is about."
   },
+  "bellSurfaceLibraries": "Libraries",
+  "@bellSurfaceLibraries": {
+    "description": "Overline of a bell row about the libraries an administrator manages: the catalog was recreated."
+  },
   "bellSurfacePlaylists": "Playlists",
   "@bellSurfacePlaylists": {
     "description": "Overline on bell rows about playlists."

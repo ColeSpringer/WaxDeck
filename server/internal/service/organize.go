@@ -25,8 +25,8 @@ import (
 // total still reports the full pass.
 const organizePreviewCap = 500
 
-// A profile name is an API path segment, and the catalog parses a
-// template recursively, one level per '<' group.
+// A profile name is an API path segment, and a template is bounded like
+// any field a request carries; the catalog bounds its group nesting.
 const (
 	maxProfileNameLen = 64
 	maxTemplateLen    = 1024
@@ -72,13 +72,16 @@ type OrganizeActionDTO struct {
 }
 
 // OrganizePlanDTO is a dry-run plan: the first organizePreviewCap
-// pending actions plus the full pending count, the moves a read-only
-// server holds back, and the read-only libraries the plan passed over.
+// pending actions plus the full pending count, the moves held back, and
+// the read-only libraries the plan passed over.
 type OrganizePlanDTO struct {
-	Profile           string
-	TagWrite          bool
-	TotalActions      int
+	Profile      string
+	TagWrite     bool
+	TotalActions int
+	// Held counts the moves held back, and HeldByCode the same by the
+	// catalog's hold code (a read-only server's under "read-only").
 	Held              int
+	HeldByCode        map[string]int
 	ReadOnlyLibraries int
 	Actions           []OrganizeActionDTO
 }
@@ -90,7 +93,7 @@ type OrganizeFailureDTO struct {
 }
 
 // OrganizeReportDTO is an applied pass's outcome. Skipped counts files
-// already in place, Held those a read-only server kept, and
+// already in place, Held the moves held back for any cause, and
 // ReadOnlyLibraries the read-only libraries the pass left alone.
 type OrganizeReportDTO struct {
 	Moved             int
@@ -380,7 +383,9 @@ func (l *Library) SetLibraryProfile(ctx context.Context, uc *UserCtx, apiLibrary
 	if !slices.ContainsFunc(l.lib.Profiles(), func(p organize.Profile) bool { return p.Name == name }) {
 		return LibraryInfo{}, errInvalid("no such organize profile: " + name)
 	}
-	updated, err := l.lib.AddRoot(ctx, config.Root{Path: lib.DisplayRoot, Mode: lib.Mode, Media: lib.Media, Profile: name})
+	// An existing library's folder may be unmounted; the profile is policy.
+	updated, err := l.lib.AddRoot(ctx, config.Root{Path: lib.DisplayRoot, Mode: lib.Mode, Media: lib.Media, Profile: name},
+		waxbin.AllowAbsent())
 	if err != nil {
 		return LibraryInfo{}, classify(err)
 	}
@@ -421,29 +426,38 @@ func (l *Library) organizePlanFor(ctx context.Context, profile string, apiItemPi
 	return plan, nil
 }
 
-// holdReadOnly skips every move while the server is read-only, so
+// holdReadOnly holds every move while the server is read-only, so
 // neither a preview nor an apply moves them; the catalog plans no move
-// in a read-only library.
+// in a read-only library. Every move rather than some: with nothing
+// pending no apply runs, and an apply re-opens a read-only hold and
+// decides it again from the catalog's own flags.
 func (l *Library) holdReadOnly(plan *organize.Plan) {
 	if !l.currentToggles().readOnly {
 		return
 	}
 	for i := range plan.Actions {
 		if a := &plan.Actions[i]; !a.Skip {
-			a.Skip, a.Reason = true, readOnlyReason
+			a.Skip, a.Code, a.Reason = true, organize.HoldReadOnly, readOnlyReason
 		}
 	}
 }
 
-// heldCount is how many of the plan's moves holdReadOnly held back.
-func heldCount(plan *organize.Plan) int {
-	n := 0
-	for _, a := range plan.Actions {
-		if a.Skip && a.Reason == readOnlyReason {
-			n++
+// heldByCode counts the plan's held moves by hold code, and in all.
+func heldByCode(plan *organize.Plan) (map[string]int, int) {
+	out, total := map[string]int{}, 0
+	for i := range plan.Actions {
+		if a := &plan.Actions[i]; isHold(a) {
+			out[string(a.Code)]++
+			total++
 		}
 	}
-	return n
+	return out, total
+}
+
+// isHold reports whether a planned move is held back; a file already in
+// place is not.
+func isHold(a *organize.Action) bool {
+	return a.Skip && a.Code != "" && a.Code != organize.HoldInPlace
 }
 
 // readOnlyReason is how a fix or a plan names what a read-only library
@@ -460,8 +474,9 @@ func (l *Library) PreviewOrganize(ctx context.Context, uc *UserCtx, profile stri
 	if err != nil {
 		return OrganizePlanDTO{}, err
 	}
-	out := OrganizePlanDTO{Profile: plan.Profile, TagWrite: plan.TagWrite, Held: heldCount(plan),
-		ReadOnlyLibraries: plan.ReadOnlyLibraries}
+	byCode, held := heldByCode(plan)
+	out := OrganizePlanDTO{Profile: plan.Profile, TagWrite: plan.TagWrite, Held: held,
+		HeldByCode: byCode, ReadOnlyLibraries: plan.ReadOnlyLibraries}
 	var pending []*organize.Action
 	for i := range plan.Actions {
 		if plan.Actions[i].Skip {
@@ -537,14 +552,14 @@ func (l *Library) ApplyOrganize(ctx context.Context, uc *UserCtx, profile string
 	}
 	// Nothing to move is no job: it would take the file-mutation lease,
 	// and a scan holding it would turn this into a conflict.
-	rep := &organize.Report{Skipped: len(plan.Actions)}
+	_, held := heldByCode(plan)
+	rep := &organize.Report{Skipped: len(plan.Actions) - held, Held: held}
 	if plan.Pending() > 0 {
 		if rep, err = l.lib.ApplyOrganize(ctx, plan); err != nil {
 			return OrganizeReportDTO{}, classify(err)
 		}
 	}
-	held := heldCount(plan)
-	out := OrganizeReportDTO{Moved: rep.Moved, Skipped: rep.Skipped - held, Held: held,
+	out := OrganizeReportDTO{Moved: rep.Moved, Skipped: rep.Skipped, Held: rep.Held,
 		ReadOnlyLibraries: plan.ReadOnlyLibraries, Failed: rep.Errored}
 	for _, f := range rep.Failures {
 		out.Failures = append(out.Failures, OrganizeFailureDTO{
@@ -552,9 +567,6 @@ func (l *Library) ApplyOrganize(ctx context.Context, uc *UserCtx, profile string
 			Reason: f.Err,
 		})
 	}
-	l.notifyWorkDone(ctx, uc, Job{Kind: "organize", Organize: &OrganizeTallyDTO{
-		Profile: plan.Profile, Moved: rep.Moved, Skipped: rep.Skipped,
-		Errored: rep.Errored, SidecarsMoved: rep.SidecarsMoved,
-	}})
+	l.notifyWorkDone(ctx, uc, Job{Kind: "organize", Organize: organizeTally(plan.Profile, rep)})
 	return out, nil
 }

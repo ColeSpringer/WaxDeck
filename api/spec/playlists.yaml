@@ -419,10 +419,12 @@ paths:
         The playlist's members in order: stored order for a static
         playlist, rule order for a smart playlist (evaluated against
         the owner's user state for shared lists, the caller's for
-        their own). Items outside the caller's library visibility are
-        omitted, so a static playlist's `position` values are not
-        guaranteed contiguous for restricted viewers; use `position`,
-        never the row index, when removing members.
+        their own). Entries outside the caller's visibility are
+        omitted, so a restricted viewer's `position` values can skip
+        numbers. `position` is the entry's index in the full stored
+        order, kept contiguous from 0 by every change to the list;
+        pass it, with the entry's item pid as `itemPid`, to the
+        removal endpoint, never the row index of a filtered page.
         Keyset-paginated within one evaluation; a membership change
         between pages may shift entries.
       tags: [playlists]
@@ -535,11 +537,11 @@ paths:
       operationId: removePlaylistItemAt
       summary: Remove one member by position
       description: >
-        Removes the member at the given zero-based position in the
-        stored order. Owner only; static playlists only. Positions are
-        the unfiltered stored order (visibility filtering never shifts
-        them); take them from the item listing's `position` field, not
-        from a rendered row index.
+        Removes the member at a zero-based `position` of the full stored
+        order (the listing's `position`); owner only, static playlists only.
+        Later entries renumber down by one, so re-read the listing (or shift
+        your copy) before a second removal. Pass `itemPid` so a listing
+        another device changed answers `conflict`, removing nothing.
       tags: [playlists]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -550,6 +552,14 @@ paths:
           schema:
             type: integer
             minimum: 0
+        - name: itemPid
+          in: query
+          description: >
+            The item the caller saw at that position. When the
+            position holds another item, or none, nothing is removed
+            and the answer is `conflict`.
+          schema:
+            type: string
       responses:
         "204":
           description: Member removed.
@@ -561,6 +571,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -1570,9 +1582,9 @@ components:
         position:
           type: integer
           description: >
-            Zero-based position in the stored member order. Present
-            only for static playlists; this is the value the removal
-            endpoint takes.
+            Zero-based index in the full stored member order, contiguous
+            after every change (hidden entries leave gaps in a viewer's
+            listing); static playlists only, and what the removal takes.
         item:
           $ref: "#/components/schemas/ItemSummary"
 

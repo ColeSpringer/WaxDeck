@@ -11,23 +11,48 @@ note.
 
 ## WaxBin
 
-- **A reopen swaps the store's connection pools under concurrent reads.**
-  `Store.Reopen` assigns the read and write pools under `wmu`, but reads
-  take `s.read` without it, so a request that reads while a hand-off
-  ends races the reopen (`go test -race` reports it between `Reopen` and
-  `LatestChangeSeq`). WaxDeck keeps serving through a hand-off, and its
-  maintenance watchdog probes the catalog while it waits. Wanted: the
-  pools published safely, as atomic pointers or behind a read lock.
-  Shipped workaround: the watchdog probes at most every ten seconds, and
-  the tests drive it synchronously with the pid path cache's background
-  poll off.
-- **A template's `<` groups recurse without a bound.** `renderNodes`
-  descends one Go frame per `<`, so a template of a few megabytes of
-  nested groups overflows the stack, which no recover catches.
-  `Profile.Validate` renders every template, so a save or a preview is
-  enough. Wanted: a nesting limit, or a length limit, in the grammar.
-  Shipped workaround: WaxDeck refuses a template longer than 1024
-  characters before handing it over.
+- **Concurrent catalog reads stop scaling at a few cores.** Under load
+  the catalog-backed endpoints plateau near one client's throughput
+  (`/items/{pid}` goes from 781 to 987 requests a second between 1 and
+  50 clients, each request costing about three times the CPU), while
+  endpoints that never touch the catalog reach 13k a second. The
+  profile points at modernc.org/sqlite's libc: one allocator mutex
+  around every malloc and free, and one LRU mutex per page fetch. WaxBin
+  opens one writer and eight readers, so the pool is not the limit, and
+  WaxBin owns the dependency. Wanted: a concurrent-read benchmark
+  (`RunParallel` over the read paths) and the report to modernc with it
+  attached. Shipped workaround: WaxDeck keeps the statements per request
+  down (batch reads rather than a point read per row), which lowers the
+  cost without lifting the ceiling.
+- **Leaving thumbnails out of a backup costs a second full rewrite.**
+  `port.TrimBackupFile` follows the `VACUUM INTO` with a `DELETE` and a
+  plain `VACUUM` of the copy, which reads and writes it again and needs
+  scratch space its size in SQLite's temp directory (in a container,
+  usually the image layer rather than the data volume). Wanted: a copy
+  that leaves tables out in one pass. Shipped workaround: WaxDeck's
+  backups copy everything, thumbnails included.
+- **Planning an organize pass stats every file.** `PlanOrganize` runs
+  `Hold`, so a plan Lstats each source and lists each destination
+  folder; on a network share that is minutes for a large library, and
+  an unmounted root turns every move into a `missing` hold. Wanted: a
+  plan without the disk pass, for a caller that needs only where each
+  file belongs. Shipped workaround: WaxDeck's path-mismatch health rule
+  counts a held move that still has a destination as misplaced, and
+  pays the disk pass on its daily sweep.
+- **`AddRoot` stats the root even with `AllowAbsent`, with no
+  deadline.** `config.CheckFolder` stats the path to refuse a file, so
+  a hung network mount blocks the call, and WaxDeck registers its
+  configured roots during startup. Wanted: a bounded check, or none
+  under `AllowAbsent`. Shipped workaround: WaxDeck logs each
+  registration first, so a stalled start names the root it is on.
+- **This build's catalog stamp is not exported.**
+  `sqlite.BaselineFingerprint` is the only way to the value a catalog's
+  `user_version` must hold, and hosts stay off `store/sqlite`. Wanted:
+  the fingerprint, or a header check over a reader, from `port`, so an
+  archived catalog can be judged without extracting it. Shipped
+  workaround: restore staging compares the archived header with the
+  live catalog's stamp, and the start validates the extracted file with
+  `port.ValidateBackup` before swapping it in.
 
 ## WaxTap
 

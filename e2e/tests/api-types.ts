@@ -20,7 +20,7 @@ export interface paths {
         put?: never;
         /**
          * Create a library at runtime
-         * @description Registers a new library root without a server restart. The path is validated (absolute, and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that; when the sidecar cannot be brought to the new root the 201 carries `streamingWarning` saying so, rather than reporting a plain success. `name` is the display name and the WaxFlow root name the same directory is served under. Administrators only.
+         * @description Registers a new library root without a server restart. The path is validated (an existing folder, absolute, and non-overlapping with existing roots, the inbox folders, and the podcast download dir), cataloged, and scanned in the background; browsing and downloading its files work as soon as the scan indexes them. Streaming through the WaxFlow sidecar also needs the sidecar to mount the same-named root, so a runtime-added root streams once the sidecar learns it, while downloads and direct playback do not wait on that; when the sidecar cannot be brought to the new root the 201 carries `streamingWarning` saying so, rather than reporting a plain success. `name` is the display name and the WaxFlow root name the same directory is served under. Administrators only.
          */
         post: operations["createLibrary"];
         delete?: never;
@@ -483,7 +483,7 @@ export interface paths {
         put?: never;
         /**
          * Stage a restore from a backup
-         * @description Validates the archive and stages it for restore. The restore applies at the next server start: the current databases are set aside (not deleted), the archive's databases are moved into place, cross-database references are swept back to consistency, and credentials sealed under a key this host does not hold are marked pending re-auth. The response is the plan: whether the encryption keyfile this server holds matches the one the archive's credentials were sealed under, and exactly which credentials break when it does not. Staging replaces any previously staged restore. Answers `conflict` for a backup still being written or one that failed. Administrators only.
+         * @description Validates the archive and stages it for restore. The restore applies at the next server start: the current databases are set aside (not deleted), the archive's databases are moved into place, cross-database references are swept back to consistency, and credentials sealed under a key this host does not hold are marked pending re-auth. The response is the plan: whether the encryption keyfile this server holds matches the one the archive's credentials were sealed under, and exactly which credentials break when it does not. Staging replaces any previously staged restore. Answers `conflict` for a backup still being written or one that failed, and `invalid-request` for an archive this server cannot open, with `params.reason` `incompatible-schema` when its schema is not this server's (an upgrade since moved a database's baseline, or a newer server made it). Administrators only.
          */
         post: operations["stageRestore"];
         delete?: never;
@@ -1657,7 +1657,7 @@ export interface paths {
         put?: never;
         /**
          * Delete library items
-         * @description Deletes items' files, to the catalog trash by default (reversible from the trash surface) or permanently (`mode` `permanent`, administrators only). `dryRun` answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the `delete` permission or the admin role, and every pid must be visible to the caller (`not-found` otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. A read-only library answers `read-only`. Podcast episodes are not deletable here, and one anywhere in `pids` refuses the whole call (`invalid-request`): the podcast download tree owns its own files, and removing an episode's download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore.
+         * @description Deletes items' files, to the catalog trash by default (reversible from the trash surface) or permanently (`mode` `permanent`, administrators only). `dryRun` answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the `delete` permission or the admin role, and every pid must be visible to the caller (`not-found` otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. A read-only library answers `read-only`. Podcast episodes are not deletable here, and one anywhere in `pids` refuses the whole call (`invalid-request`): the podcast download tree owns its own files, and removing an episode's download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore. The tracks a cue sheet carves out of one file go together: naming some but not all is `invalid-request` with `params.reason` `cue-rip`.
          */
         post: operations["deleteLibraryItems"];
         delete?: never;
@@ -1805,7 +1805,7 @@ export interface paths {
         put?: never;
         /**
          * Edit fields on many items
-         * @description Applies the same scalar field values to many items in one atomic catalog batch (a different value per item needs per-item calls). `skipLocked` skips items with locked target fields and reports them instead of failing the batch; without it a locked item fails the whole batch with `field-locked`. Write-back failures are reported per item and never undo the catalog batch. Every edited field is locked on every edited item, so a repeat edit of the same field needs `force` or `skipLocked`. Editing a release-keying field (`album`, `album_artist`, `year`) moves the edited tracks to a new release identity, and where they land depends on coverage: a batch holding **every** member of the album renames the release in place, so the album keeps its pid along with its artwork, curation and play state, while a batch holding only **some** of them forks those onto a fresh album entity and leaves the rest behind. A rename onto a name another release already owns merges into it. `resultingAlbumPid` reports where the edited items sit either way.
+         * @description Applies the same scalar field values to many items in one atomic catalog batch (a different value per item needs per-item calls). `skipLocked` skips items with locked target fields and reports them instead of failing the batch; without it a locked item fails the whole batch with `field-locked`. Write-back failures are reported per item and never undo the catalog batch. Every edited field is locked on every edited item, so a repeat edit of the same field needs `force` or `skipLocked`. Editing a release-keying field (`album`, `album_artist`) moves the edited tracks to a new release identity, and where they land depends on coverage: a batch holding **every** member of the album renames the release in place, so the album keeps its pid along with its artwork, curation and play state, while a batch holding only **some** of them forks those onto a fresh album entity and leaves the rest behind. A rename onto a name another release already owns merges into it. `resultingAlbumPid` reports where the edited items sit either way. A year keys no release: an album's year follows the years of its tracks, so a `year` edit changes it without moving anything.
          */
         post: operations["bulkEditMetadata"];
         delete?: never;
@@ -2259,7 +2259,7 @@ export interface paths {
          * List the notification event catalog
          * @description Every notification event this server can emit, with its scope: `server` events describe server operations and deliver to server-scope targets (plus admin-owned personal targets that opted in), `user` events concern one user and deliver to that user's personal targets. Clients build the per-target event checklist from this catalog; a target's `enabledEvents` must name events from it. The reserved `test` event never appears here: per-target tests are requested through the target's test endpoint and bypass event selection.
          *
-         *     The current catalog is `signup-requested`, `backup-completed`, `backup-failed`, `episode-arrived`, `episode-downloaded`, `feed-disabled`, `review-ready`, `import-completed`, `playlist-synced`, `job-finished`, `job-failed`, and `health-fix-finished`. The last three reach the administrator who started the work: a catalog job (a scan, an analysis, an enrichment or organize run, emptying the trash) finished or failed, or a health fix finished. Work the server started on its own schedule notifies nobody.
+         *     The current catalog is `signup-requested`, `backup-completed`, `backup-failed`, `catalog-reset`, `episode-arrived`, `episode-downloaded`, `feed-disabled`, `review-ready`, `import-completed`, `playlist-synced`, `job-finished`, `job-failed`, and `health-fix-finished`. The last three reach the administrator who started the work: a catalog job (a scan, an analysis, an enrichment or organize run, emptying the trash) finished or failed, or a health fix finished. Work the server started on its own schedule notifies nobody. `catalog-reset` says the server built a new catalog because the old one's schema was another release's; its body counts the libraries added from the console, which the audit log names.
          */
         get: operations["listNotificationEvents"];
         put?: never;
@@ -3354,7 +3354,7 @@ export interface paths {
         };
         /**
          * List a playlist's items
-         * @description The playlist's members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner's user state for shared lists, the caller's for their own). Items outside the caller's library visibility are omitted, so a static playlist's `position` values are not guaranteed contiguous for restricted viewers; use `position`, never the row index, when removing members. Keyset-paginated within one evaluation; a membership change between pages may shift entries.
+         * @description The playlist's members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner's user state for shared lists, the caller's for their own). Entries outside the caller's visibility are omitted, so a restricted viewer's `position` values can skip numbers. `position` is the entry's index in the full stored order, kept contiguous from 0 by every change to the list; pass it, with the entry's item pid as `itemPid`, to the removal endpoint, never the row index of a filtered page. Keyset-paginated within one evaluation; a membership change between pages may shift entries.
          */
         get: operations["listPlaylistItems"];
         /**
@@ -3385,7 +3385,7 @@ export interface paths {
         post?: never;
         /**
          * Remove one member by position
-         * @description Removes the member at the given zero-based position in the stored order. Owner only; static playlists only. Positions are the unfiltered stored order (visibility filtering never shifts them); take them from the item listing's `position` field, not from a rendered row index.
+         * @description Removes the member at a zero-based `position` of the full stored order (the listing's `position`); owner only, static playlists only. Later entries renumber down by one, so re-read the listing (or shift your copy) before a second removal. Pass `itemPid` so a listing another device changed answers `conflict`, removing nothing.
          */
         delete: operations["removePlaylistItemAt"];
         options?: never;
@@ -7427,7 +7427,7 @@ export interface components {
             pid: string;
             /** @description Display name. */
             name?: string;
-            /** @description Files deleted (or to delete). */
+            /** @description Files deleted (or to delete). A cue rip's file counts once, under one of its tracks. */
             files: number;
             /**
              * Format: int64
@@ -7916,7 +7916,7 @@ export interface components {
             skipped: string[];
             /** @description Files whose tags could not be updated. */
             writeBackFailures?: components["schemas"]["WriteBackFailure"][];
-            /** @description The album entity the edited items now sit on, reported when the edit rewrote a release-keying field (`album`, `album_artist`, `year`) and every edited item landed on one album. It answers "where is the release now", not "did it move": a batch covering every member renames the album in place and this is the pid the caller already had, while a partial batch forks the edited members onto a fresh pid and this is how a caller showing the old album follows them. Absent when no keying field was edited, nothing was edited, or the edited items split across releases. */
+            /** @description The album entity the edited items now sit on, reported when the edit rewrote a release-keying field (`album`, `album_artist`) and every edited item landed on one album. It answers "where is the release now", not "did it move": a batch covering every member renames the album in place and this is the pid the caller already had, while a partial batch forks the edited members onto a fresh pid and this is how a caller showing the old album follows them. Absent when no keying field was edited, nothing was edited, or the edited items split across releases. */
             resultingAlbumPid?: string;
         };
         /** @description Replacement people for one credit role. */
@@ -8060,12 +8060,12 @@ export interface components {
         };
         /** @description An entity rename. */
         EntityRename: {
-            /** @description The keying fields to move the entity onto. An album takes `album`, `album_artist`, and `year`; a release group takes `album` and `album_artist`; an artist takes `name`. A field outside its rung's vocabulary, or a name renamed to nothing, is refused. */
+            /** @description The keying fields to move the entity onto: `album` and `album_artist` for an album or release group, `name` for an artist. Any other field or an empty name is refused, `year` included: an album's year follows its tracks, so edit theirs. */
             fields: {
                 [key: string]: string;
             };
             /**
-             * @description Also write the new values into every member file's tags (`ALBUM`, `ALBUMARTIST`, `DATE`, `ARTIST`, plus the moved contributor credits).
+             * @description Also write the new values into every member file's tags (`ALBUM`, `ALBUMARTIST`, `ARTIST`, plus the moved contributor credits).
              * @default false
              */
             writeBack: boolean;
@@ -8436,8 +8436,12 @@ export interface components {
             profile: string;
             /** @description Moves the pass would make in total. */
             totalActions: number;
-            /** @description Moves held back because the whole server is read-only. Not in `actions` or `totalActions`. */
+            /** @description Moves held back, whatever the cause (`heldByCode` says which). Not in `actions` or `totalActions`. */
             held: number;
+            /** @description `held` by hold code: `collision` (another move of the pass claims the destination), `occupied` (a file the pass does not move holds it), `occupied-case` (one named apart from it only by case or Unicode form stands beside it), `untagged`, `missing`, `virtual` (a cue rip's shared file), `book-held` (another part of the book is held) and `read-only` (the server or the library). A code with nothing held is absent. */
+            heldByCode?: {
+                [key: string]: number;
+            };
             /** @description Managed libraries left out because they are read-only. */
             readOnlyLibraries: number;
             /** @description The first five hundred actions. */
@@ -8460,7 +8464,7 @@ export interface components {
             moved: number;
             /** @description Files already in place. */
             skipped: number;
-            /** @description Files left where they are because the whole server is read-only. */
+            /** @description Files held back where they are, for any of the causes a plan's `held` counts. */
             held: number;
             /** @description Managed libraries left alone because they are read-only. */
             readOnlyLibraries: number;
@@ -9495,7 +9499,7 @@ export interface components {
         };
         /** @description One playlist member. */
         PlaylistEntry: {
-            /** @description Zero-based position in the stored member order. Present only for static playlists; this is the value the removal endpoint takes. */
+            /** @description Zero-based index in the full stored member order, contiguous after every change (hidden entries leave gaps in a viewer's listing); static playlists only, and what the removal takes. */
             position?: number;
             item: components["schemas"]["ItemSummary"];
         };
@@ -17245,7 +17249,10 @@ export interface operations {
     };
     removePlaylistItemAt: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The item the caller saw at that position. When the position holds another item, or none, nothing is removed and the answer is `conflict`. */
+                itemPid?: string;
+            };
             header?: never;
             path: {
                 /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
@@ -17268,6 +17275,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };

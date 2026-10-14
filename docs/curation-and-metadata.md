@@ -334,16 +334,17 @@ them as a derived number, not a field: nothing stores it - it is the
 release's membership counted - so the row shows the count, marks it
 derived, and says that editing the tracks is what changes it.
 
-The album title, album artist, and year live on the tracks rather
-than the release, so the album form ends with a rewrite section that
-applies them to every member in one batch. Because every member moves
-at once, the release is renamed in place: it keeps its entry, and its
-artwork, pins, curation and play history with it. A name another
-release already owns merges the two instead, and the workbench
-follows the pid the response reports either way. Editing only some of
-a release's members is the other case - those fork onto a new entry
-and the rest stay behind - which is what the bulk form over a checked
-subset does.
+The album title and album artist live on the tracks rather than the
+release, so the album form ends with a rewrite section that applies
+them to every member in one batch. Because every member moves at once,
+the release is renamed in place: it keeps its entry, and its artwork,
+pins, curation and play history with it. A name another release
+already owns merges the two instead, and the workbench follows the pid
+the response reports either way. Editing only some of a release's
+members is the other case - those fork onto a new entry and the rest
+stay behind - which is what the bulk form over a checked subset does.
+The year lives on the tracks too but keys nothing: an album's year
+follows its tracks', so editing it on them moves no release.
 
 The bulk form works over any checked set of tracks. A field the
 selection agrees on opens on that value; one it disagrees on opens
@@ -432,7 +433,9 @@ and the identity phases those key on (a source for either the album's or
 the release group's cover is enough for missing art; fixing genres
 re-asks MusicBrainz about every album). Fixing one item asks only the
 phases its missing pieces need, and theirs. A read-only library is left
-out of the path rule, as an in-place one is: nothing lays it out. Fixing
+out of the path rule, as an in-place one is: nothing lays it out. A file
+whose move is held back (its destination taken, or its folder out of
+reach) still counts as misplaced. Fixing
 named items, paths that disagree with the
 template, or tags that lag the catalog runs a health-fix task that
 works item by item, on a worker of its own so a long fix holds up no
@@ -477,7 +480,11 @@ with none, the screen says so rather than offering a preview. Preview checks eve
 it is worth running even when nothing was changed on purpose: files
 added or moved by hand since the last run show up as moves. A
 read-only library is left as it is and the preview and the result say
-how many were; while the server is read-only every move is held back. Discard preview drops the plan, and nothing
+how many were; while the server is read-only every move is held back.
+Moves the catalog cannot make are held back too, and counted: a
+destination another file holds, an item with nothing to file it under,
+a file missing from disk, a cue rip's shared file, a part of a book
+whose other parts cannot move. Discard preview drops the plan, and nothing
 moves until Apply is confirmed by typing the profile's name, or
 ORGANIZE for each library's own. Sidecars (covers, lyrics, cue sheets) ride along with
 their files, moves are crash safe, and templates are sandboxed per path

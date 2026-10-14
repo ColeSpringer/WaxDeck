@@ -376,8 +376,8 @@ func TestWaveformPerPart(t *testing.T) {
 
 	analyzeAndWait(t, h)
 
-	// Distinct tone durations mean distinct essences, so equal hashes
-	// would mean every part answered one file's row.
+	// Each part's audio is its own, so equal hashes would mean every
+	// part answered one file's row.
 	seen := map[string]bool{}
 	for part := range 3 {
 		wf := waveformPart(t, h, book.Pid, part)

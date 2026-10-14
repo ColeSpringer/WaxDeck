@@ -16,6 +16,7 @@ import (
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/config"
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/organize"
 	"github.com/colespringer/waxbin/query"
 
 	"github.com/colespringer/waxdeck/fixtures"
@@ -631,5 +632,69 @@ func TestThePodcastLibraryListsAsPodcasts(t *testing.T) {
 	info := svc.libraryInfo(&model.Library{PID: model.NewPID(), DisplayRoot: "/srv/podcasts", Mode: model.ModePodcast})
 	if info.Media != "podcast" {
 		t.Errorf("media = %q, want podcast", info.Media)
+	}
+}
+
+// A configured root whose folder is not there yet registers anyway, its
+// scan saying the root was unreachable, and a profile change on it is
+// not refused over the folder.
+func TestAConfiguredRootThatIsGoneStillRegisters(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	gone := filepath.Join(dataDir, "unmounted")
+	ctx, svc, uc, _ := openServiceAt(t, dataDir, func(c *Config) {
+		c.Roots = append(c.Roots, Root{Name: "unmounted", Path: gone, Managed: true})
+	})
+	libs, err := svc.lib.Libraries(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lib *model.Library
+	var roots []string
+	for _, l := range libs {
+		roots = append(roots, l.DisplayRoot)
+		if l.DisplayRoot == gone {
+			lib = l
+		}
+	}
+	if lib == nil {
+		t.Fatalf("no library at the absent root %s; the catalog holds %v", gone, roots)
+	}
+	res, err := svc.lib.Scan(ctx, waxbin.ScanRequest{LibraryPID: lib.PID})
+	if err != nil {
+		t.Fatalf("scanning the absent root: %v", err)
+	}
+	if len(res.Runs) != 1 || !res.Runs[0].RootUnreachable {
+		t.Errorf("the scan's runs = %+v, want one reporting the root unreachable", res.Runs)
+	}
+	if _, err := svc.SetLibraryProfile(ctx, uc, apiPID(PrefixLibrary, lib.PID), organize.DefaultProfileName); err != nil {
+		t.Errorf("a profile change on the absent library: %v", err)
+	}
+}
+
+// A library is created at a folder the server can see. A path with
+// nothing there, or a file, is refused in WaxDeck's words rather than
+// with the catalog's advice about an option this endpoint lacks.
+func TestALibraryNeedsAFolderThatIsThere(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _ := managedAt(t, t.TempDir())
+	dir := t.TempDir()
+	file := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []struct{ path, want string }{
+		{filepath.Join(dir, "absent"), "no folder"},
+		{file, "not a folder"},
+	} {
+		_, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "new", Path: c.path})
+		if KindOf(err) != KindInvalid || !strings.Contains(err.Error(), c.want) || strings.Contains(err.Error(), "allow") {
+			t.Errorf("creating at %s = %v, want invalid saying %q", c.path, err, c.want)
+		}
+	}
+	// A taken name is the answer before the folder is looked at.
+	taken := svc.libraryRoots()[0].Name
+	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: taken, Path: filepath.Join(dir, "absent")}); KindOf(err) != KindConflict {
+		t.Errorf("a taken name at a missing folder = %v, want a conflict", err)
 	}
 }

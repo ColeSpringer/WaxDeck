@@ -12,11 +12,11 @@ part 'playlist_entry.g.dart';
 /// One playlist member.
 ///
 /// Properties:
-/// * [position] - Zero-based position in the stored member order. Present only for static playlists; this is the value the removal endpoint takes. 
+/// * [position] - Zero-based index in the full stored member order, contiguous after every change (hidden entries leave gaps in a viewer's listing); static playlists only, and what the removal takes. 
 /// * [item] 
 @BuiltValue()
 abstract class PlaylistEntry implements Built<PlaylistEntry, PlaylistEntryBuilder> {
-  /// Zero-based position in the stored member order. Present only for static playlists; this is the value the removal endpoint takes. 
+  /// Zero-based index in the full stored member order, contiguous after every change (hidden entries leave gaps in a viewer's listing); static playlists only, and what the removal takes. 
   @BuiltValueField(wireName: r'position')
   int? get position;
 

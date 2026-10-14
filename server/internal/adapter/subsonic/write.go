@@ -11,8 +11,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
-	"slices"
-	"sort"
 	"strconv"
 	"time"
 
@@ -28,6 +26,8 @@ func (h *Handler) failFromService(w http.ResponseWriter, r *http.Request, err er
 		h.fail(w, r, 50, "not authorized for this operation")
 	case service.KindInvalid:
 		h.fail(w, r, 10, err.Error())
+	case service.KindConflict:
+		h.fail(w, r, 0, err.Error())
 	case service.KindMaintenance:
 		h.fail(w, r, 0, "the catalog is temporarily under maintenance; retry shortly")
 	default:
@@ -295,12 +295,8 @@ func (h *Handler) updatePlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 			}
 			idxs = append(idxs, n)
 		}
-		// A duplicated index names the same row twice; removing it
-		// twice would take a second, shifted item with it. Compact
-		// wants them adjacent, so sort before mapping.
-		sort.Ints(idxs)
-		idxs = slices.Compact(idxs)
 		positions := make([]int, 0, len(idxs))
+		expects := make([]string, 0, len(idxs))
 		for _, i := range idxs {
 			if entries[i].Position == nil {
 				// Only a static list carries positions, and only a static
@@ -309,15 +305,13 @@ func (h *Handler) updatePlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 				return
 			}
 			positions = append(positions, *entries[i].Position)
+			expects = append(expects, entries[i].Item.PID)
 		}
-		// Removals go position-descending so earlier removals never shift
-		// the positions later ones refer to.
-		sort.Sort(sort.Reverse(sort.IntSlice(positions)))
-		for _, pos := range positions {
-			if err := h.svc.RemovePlaylistItemAt(r.Context(), uc, id, pos); err != nil {
-				h.failFromService(w, r, err, "no such playlist")
-				return
-			}
+		// One write, every position naming the listing read above; the
+		// items it showed guard the window between that read and this.
+		if err := h.svc.RemovePlaylistItemsAt(r.Context(), uc, id, positions, expects); err != nil {
+			h.failFromService(w, r, err, "no such playlist")
+			return
 		}
 	}
 	if adds := r.Form["songIdToAdd"]; len(adds) > 0 {

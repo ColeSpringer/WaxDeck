@@ -140,8 +140,38 @@ test('a manual playlist is filled from its own search row and reordered by hand'
     await expect.poll(stored).toEqual(['Bravo Song', 'Alpha Song']);
 
     // And one row back out, through the affordance a keyboard can reach.
+    // The removal names the item the row shows, so it waits for the list
+    // to draw the new order: a click on the old order's first row is
+    // refused as stale, where it used to take whatever sat there now.
+    await expect(app.playlists.entry(0)).toContainText('Bravo Song');
     await app.playlists.entryRemove(0).click();
     await expect.poll(stored).toEqual(['Alpha Song']);
+  } finally {
+    await app.api.delete('/playlists/{pid}', { path: { pid } });
+  }
+});
+
+test('removing rows one after another takes exactly the rows named', async ({ app }) => {
+  const titles = ['Alpha Song', 'Bravo Song', 'Charlie Song', 'Delta Song'];
+  const pids: string[] = [];
+  for (const title of titles) pids.push((await app.seed.item(title)).pid);
+  const pid = await app.seed.createPlaylist('Trim Twice', pids);
+
+  try {
+    const stored = async () => {
+      const items = await app.api.tryGet('/playlists/{pid}/items', { path: { pid } });
+      return (items?.entries ?? []).map((e) => e.item.title);
+    };
+    await app.nav.enter('playlists');
+    await app.playlists.openShowing(pid, app.playlists.entryRemove(3));
+
+    // Every removal renumbers the rows after it, so the second click
+    // names a row that moved up one; the item it shows rides along and
+    // the server takes exactly that one.
+    await app.playlists.entryRemove(0).click();
+    await expect.poll(stored).toEqual(['Bravo Song', 'Charlie Song', 'Delta Song']);
+    await app.playlists.entryRemove(1).click();
+    await expect.poll(stored).toEqual(['Bravo Song', 'Delta Song']);
   } finally {
     await app.api.delete('/playlists/{pid}', { path: { pid } });
   }
@@ -187,6 +217,19 @@ test('a Subsonic client manages playlists, stars, scrobbles, and radio', async (
     expect(lists.playlists.playlist.map((p: { name: string }) => p.name)).toContain(
       'SubsonicList',
     );
+
+    // Index removal against the listing the client re-read each time:
+    // the first entry twice over takes the first two entries.
+    const alpha = await app.seed.item('Alpha Song');
+    const bravo = await app.seed.item('Bravo Song');
+    await call(
+      'updatePlaylist',
+      `&playlistId=${playlistId}&songIdToAdd=${alpha.pid}&songIdToAdd=${bravo.pid}`,
+    );
+    await call('updatePlaylist', `&playlistId=${playlistId}&songIndexToRemove=0`);
+    await call('updatePlaylist', `&playlistId=${playlistId}&songIndexToRemove=0`);
+    const trimmed = await call('getPlaylist', `&id=${playlistId}`);
+    expect(trimmed.playlist.entry.map((e: { id: string }) => e.id)).toEqual([bravo.pid]);
 
     // Star through /rest and observe it in getStarred2. Exact, because
     // the starred set belongs to this account: it used to be whatever

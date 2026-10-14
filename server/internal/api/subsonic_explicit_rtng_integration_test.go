@@ -27,9 +27,7 @@ func TestSubsonicExplicitStatusFromTheRtngAtom(t *testing.T) {
 	secret := newSubsonicSecret(t, h)
 
 	// Its own album, so the album-level any-member assertion below is
-	// about this file and not the demo release. A duration distinct
-	// from every other preset, for the fingerprint-dedup reason
-	// DemoLibrary gives.
+	// about this file and not the demo release.
 	paths, err := fixtures.Generate(h.library, fixtures.Spec{
 		Name: "advisory", Codec: fixtures.CodecAAC, Container: fixtures.ContainerMP4,
 		Duration: 4300 * time.Millisecond,

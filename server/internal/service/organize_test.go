@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,6 +43,25 @@ func TestOrganizeLeavesAReadOnlyLibraryInPlace(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("the track moved out of a read-only library: %v", err)
+	}
+}
+
+// A pass with nothing left to move still says what it left: held moves
+// apart from files in place in the report, and both as skipped in the
+// administrator's inbox.
+func TestAPassWithNothingToMoveCountsWhatItLeft(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, _ := untaggedBesideStrayFixture(t)
+	profile := organize.DefaultProfileName
+	if rep, err := svc.ApplyOrganize(ctx, uc, profile, nil); err != nil || rep.Moved != 1 || rep.Held != 1 {
+		t.Fatalf("first pass = %+v (%v), want the stray moved and the untagged track held", rep, err)
+	}
+	rep, err := svc.ApplyOrganize(ctx, uc, profile, nil)
+	if err != nil || rep.Moved != 0 || rep.Skipped != 1 || rep.Held != 1 {
+		t.Fatalf("second pass = %+v (%v), want one in place and one held", rep, err)
+	}
+	if row := inboxOf(t, ctx, svc, uc, "job-finished")[0]; !strings.Contains(row.Body, "0 moved, 2 skipped") {
+		t.Errorf("inbox = %q, want both counted as skipped", row.Body)
 	}
 }
 
@@ -236,7 +256,8 @@ func TestARuntimeLibraryOnADeletedProfileStartsUnderTheDefault(t *testing.T) {
 	if _, err := svc.PutOrganizeProfile(ctx, uc, "flat", OrganizeProfileInput{Music: "{title}.{ext}"}); err != nil {
 		t.Fatal(err)
 	}
-	extra, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "extra", Path: t.TempDir(), Managed: true})
+	extraDir := t.TempDir()
+	extra, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "extra", Path: extraDir, Managed: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,6 +265,10 @@ func TestARuntimeLibraryOnADeletedProfileStartsUnderTheDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	stop()
+	// Its folder gone too, as a drive not mounted yet would be.
+	if err := os.Remove(extraDir); err != nil {
+		t.Fatal(err)
+	}
 	store, err := wdb.Open(context.Background(), filepath.Join(dataDir, "waxdeck.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -271,8 +296,8 @@ func TestARuntimeLibraryOnADeletedProfileStartsUnderTheDefault(t *testing.T) {
 	}
 }
 
-// A template the catalog would parse to unbounded depth is refused before
-// it gets there, on save and on preview alike.
+// A template over the request bound is refused before the catalog sees
+// it, on save and on preview alike.
 func TestAnOversizedTemplateIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, _ := managedAt(t, t.TempDir())
@@ -380,5 +405,54 @@ func TestAnEmptyProfilePlansEachLibraryUnderItsOwn(t *testing.T) {
 	}
 	if _, err := svc.PreviewOrganize(ctx, uc, "gone", nil); KindOf(err) != KindInvalid {
 		t.Errorf("an unknown profile = %v, want invalid", err)
+	}
+}
+
+// A preview counts each move the catalog holds back under its code (an
+// untagged item, a second claim on one destination) rather than dropping
+// it, and a read-only server holds the rest under its own.
+func TestAPreviewCarriesHoldsWithTheirCodes(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
+		c.Roots[0].Managed = true
+		specs := []fixtures.Spec{
+			{Name: "stray", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second,
+				Tags: map[string]string{"TITLE": "Stray", "ARTIST": "Nomad", "ALBUM": "Wander", "TRACKNUMBER": "1"}},
+			{Name: "nameless", Codec: fixtures.CodecFLAC, Duration: 2500 * time.Millisecond,
+				Tags: map[string]string{"TITLE": "Nameless"}},
+		}
+		for i, name := range []string{"twin-a", "twin-b"} {
+			specs = append(specs, fixtures.Spec{
+				Name: name, Codec: fixtures.CodecFLAC, Duration: time.Duration(3+i) * time.Second,
+				Tags: map[string]string{"TITLE": "Twin", "ARTIST": "Pair", "ALBUM": "Doubles", "TRACKNUMBER": "1"},
+			})
+		}
+		if _, err := fixtures.Generate(c.Roots[0].Path, specs...); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	profile := organize.DefaultProfileName
+	plan, err := svc.PreviewOrganize(ctx, uc, profile, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]int{string(organize.HoldUntagged): 1, string(organize.HoldCollision): 1}
+	if plan.TotalActions != 2 || plan.Held != 2 || !maps.Equal(plan.HeldByCode, want) {
+		t.Fatalf("preview = total %d, held %d by %v; want 2 moves and %v",
+			plan.TotalActions, plan.Held, plan.HeldByCode, want)
+	}
+
+	setServerReadOnly(t, ctx, svc, true)
+	plan, err = svc.PreviewOrganize(ctx, uc, profile, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want[string(organize.HoldReadOnly)] = 2
+	if plan.TotalActions != 0 || plan.Held != 4 || !maps.Equal(plan.HeldByCode, want) {
+		t.Fatalf("read-only preview = total %d, held %d by %v; want every move held, %v",
+			plan.TotalActions, plan.Held, plan.HeldByCode, want)
 	}
 }

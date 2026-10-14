@@ -7,7 +7,7 @@ import (
 // These two probes pin what happens to a release when a bulk edit
 // rewrites a field that keys it. WaxBin re-resolves entities inside the
 // edit transaction and the album key is mbid-first, else built from the
-// normalized album/album-artist names, the year, and the folder - but a
+// normalized album/album-artist names and the folder - but a
 // rename pre-pass runs first and detects "every member of this entity
 // moves at once to one new key". When it fires the entity chain is
 // rewritten in place, so the album keeps its al- pid along with its
@@ -92,33 +92,40 @@ func TestBulkEditAlbumFieldsRenamesInPlaceOnFullCoverage(t *testing.T) {
 
 	probe("album", "Renamed Fixture Album")
 	probe("album_artist", "Renamed Fixture Artist")
-	probe("year", "1999")
 
 	// A field outside the release key touches no entity, and the
 	// response says nothing about albums: reporting a pid at all would
 	// read as "your release moved" to a caller that only checks
-	// presence.
-	resp = h.postJSON(t, "/api/v1/items/bulk-edit", map[string]any{
-		"itemPids": pids, "fields": map[string]string{"comment": "still here"},
-	})
-	if resp.StatusCode != 200 {
-		t.Fatalf("comment bulk edit status = %d", resp.StatusCode)
-	}
-	flat := decode[BulkEditResult](t, resp)
-	if len(flat.Edited) != 4 {
-		t.Fatalf("comment bulk edit outcome = %+v", flat)
-	}
-	if flat.ResultingAlbumPid != nil {
-		t.Fatalf("comment bulk edit reported resultingAlbumPid = %q", *flat.ResultingAlbumPid)
+	// presence. The year is one of them: an album's year follows its
+	// tracks rather than keying it.
+	for field, value := range map[string]string{"comment": "still here", "year": "1999"} {
+		resp = h.postJSON(t, "/api/v1/items/bulk-edit", map[string]any{
+			"itemPids": pids, "fields": map[string]string{field: value},
+		})
+		if resp.StatusCode != 200 {
+			t.Fatalf("%s bulk edit status = %d", field, resp.StatusCode)
+		}
+		flat := decode[BulkEditResult](t, resp)
+		if len(flat.Edited) != 4 {
+			t.Fatalf("%s bulk edit outcome = %+v", field, flat)
+		}
+		if flat.ResultingAlbumPid != nil {
+			t.Fatalf("%s bulk edit reported resultingAlbumPid = %q", field, *flat.ResultingAlbumPid)
+		}
+		for _, it := range h.items(t, "").Items {
+			if it.AlbumPid == nil || *it.AlbumPid != album {
+				t.Fatalf("%s: item %s left album %s", field, it.Pid, album)
+			}
+		}
 	}
 
 	// A keying edit that changes nothing reports the same pid, which is
 	// what every full-coverage keying edit reports now.
 	resp = h.postJSON(t, "/api/v1/items/bulk-edit", map[string]any{
-		"itemPids": pids, "fields": map[string]string{"year": "1999"}, "force": true,
+		"itemPids": pids, "fields": map[string]string{"album": "Renamed Fixture Album"}, "force": true,
 	})
 	if resp.StatusCode != 200 {
-		t.Fatalf("noop year bulk edit status = %d", resp.StatusCode)
+		t.Fatalf("noop album bulk edit status = %d", resp.StatusCode)
 	}
 	noop := decode[BulkEditResult](t, resp)
 	if noop.ResultingAlbumPid == nil || *noop.ResultingAlbumPid != album {
@@ -138,7 +145,7 @@ func TestBulkEditAlbumFieldsRenamesInPlaceOnFullCoverage(t *testing.T) {
 	})
 	wantStatus(t, resp, 409, "re-edit of a bulk-locked field")
 
-	// Playlist membership rode through all three renames.
+	// Playlist membership rode through every edit.
 	entries := playlistItems(t, h, h.token, pl.Pid)
 	if !samePids(entryPids(entries), []string{pids[0], pids[2]}) {
 		t.Fatalf("playlist members after rename = %v", entryPids(entries))

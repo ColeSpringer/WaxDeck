@@ -307,15 +307,17 @@ paths:
         never undo the catalog batch. Every edited field is locked on
         every edited item, so a repeat edit of the same field needs
         `force` or `skipLocked`. Editing a release-keying field
-        (`album`, `album_artist`, `year`) moves the edited tracks to a
-        new release identity, and where they land depends on coverage:
+        (`album`, `album_artist`) moves the edited tracks to a new
+        release identity, and where they land depends on coverage:
         a batch holding **every** member of the album renames the
         release in place, so the album keeps its pid along with its
         artwork, curation and play state, while a batch holding only
         **some** of them forks those onto a fresh album entity and
         leaves the rest behind. A rename onto a name another release
         already owns merges into it. `resultingAlbumPid` reports where
-        the edited items sit either way.
+        the edited items sit either way. A year keys no release: an
+        album's year follows the years of its tracks, so a `year` edit
+        changes it without moving anything.
       tags: [metadata]
       requestBody:
         required: true
@@ -2291,8 +2293,8 @@ components:
           description: >
             The album entity the edited items now sit on, reported
             when the edit rewrote a release-keying field (`album`,
-            `album_artist`, `year`) and every edited item landed on
-            one album. It answers "where is the release now", not
+            `album_artist`) and every edited item landed on one
+            album. It answers "where is the release now", not
             "did it move": a batch covering every member renames the
             album in place and this is the pid the caller already
             had, while a partial batch forks the edited members onto
@@ -2521,17 +2523,16 @@ components:
           additionalProperties:
             type: string
           description: >
-            The keying fields to move the entity onto. An album takes
-            `album`, `album_artist`, and `year`; a release group takes
-            `album` and `album_artist`; an artist takes `name`. A field
-            outside its rung's vocabulary, or a name renamed to nothing,
-            is refused.
+            The keying fields to move the entity onto: `album` and
+            `album_artist` for an album or release group, `name` for an
+            artist. Any other field or an empty name is refused, `year`
+            included: an album's year follows its tracks, so edit theirs.
         writeBack:
           type: boolean
           default: false
           description: >
             Also write the new values into every member file's tags
-            (`ALBUM`, `ALBUMARTIST`, `DATE`, `ARTIST`, plus the moved
+            (`ALBUM`, `ALBUMARTIST`, `ARTIST`, plus the moved
             contributor credits).
         lock:
           type: boolean

@@ -195,6 +195,48 @@ func TestSubsonicClientDSub(t *testing.T) {
 		fmt.Sprintf("&id=%s&time=%d&submission=true", songID, time.Now().Add(-time.Minute).UnixMilli()))
 }
 
+// TestSubsonicClientDSubEditsAPlaylist replays DSub's playlist editor: it
+// re-reads the list after every edit and removes rows by the index it
+// rendered, singly or several at once, taking exactly the rows swiped.
+func TestSubsonicClientDSubEditsAPlaylist(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	const c = "DSub"
+	page := h.items(t, "")
+	var songs strings.Builder
+	var want []string
+	for _, it := range page.Items[:4] {
+		songs.WriteString("&songId=" + url.QueryEscape(it.Pid))
+		want = append(want, it.Pid)
+	}
+	env := mustOK(t, h, secret, c, "createPlaylist.view", "&name=Road+Mix"+songs.String())
+	id := fmt.Sprintf("%v", jmap(env["playlist"])["id"])
+	read := func() []string {
+		t.Helper()
+		var ids []string
+		for _, e := range jlist(jmap(mustOK(t, h, secret, c, "getPlaylist.view", "&id="+url.QueryEscape(id))["playlist"])["entry"]) {
+			ids = append(ids, fmt.Sprintf("%v", jmap(e)["id"]))
+		}
+		return ids
+	}
+	check := func(step string, got, want []string) {
+		t.Helper()
+		if strings.Join(got, ",") != strings.Join(want, ",") {
+			t.Fatalf("%s: entries = %v, want %v", step, got, want)
+		}
+	}
+	check("created", read(), want)
+	mustOK(t, h, secret, c, "updatePlaylist.view", "&playlistId="+url.QueryEscape(id)+"&songIndexToRemove=0")
+	check("removed the first", read(), want[1:])
+	mustOK(t, h, secret, c, "updatePlaylist.view", "&playlistId="+url.QueryEscape(id)+"&songIndexToRemove=1")
+	check("removed the second of three", read(), []string{want[1], want[3]})
+	mustOK(t, h, secret, c, "updatePlaylist.view",
+		"&playlistId="+url.QueryEscape(id)+"&songIndexToRemove=0&songIndexToRemove=1")
+	check("removed both left", read(), nil)
+	mustOK(t, h, secret, c, "deletePlaylist.view", "&id="+url.QueryEscape(id))
+}
+
 func TestSubsonicClientFeishin(t *testing.T) {
 	t.Parallel()
 	// The tracks index serves the whole library, so the harness carries

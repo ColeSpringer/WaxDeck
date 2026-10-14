@@ -638,6 +638,76 @@ func managedTrackFixture(t *testing.T) (context.Context, *Library, *UserCtx, str
 	return ctx, svc, uc, paths[0], apiPID(PrefixTrack, items[0].PID)
 }
 
+// A fix's summary names its holds in words, never the catalog's codes,
+// and a second pass over a moved track finds it in place.
+func TestAPathFixNamesWhatItHeldBack(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc, scope := untaggedBesideStrayFixture(t)
+	fix := func() healthFixSummary {
+		t.Helper()
+		start, err := svc.StartHealthFix(ctx, uc, rulePathMismatch, scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return fixSummary(t, ctx, svc, uc, start.TaskID)
+	}
+	if sum := fix(); sum.Filled != 1 || sum.Skipped["missing tags"] != 1 || len(sum.Skipped) != 1 {
+		t.Fatalf("first pass %+v, want the stray moved and the untagged track held for its tags", sum)
+	}
+	if sum := fix(); sum.Filled != 0 || sum.Skipped["already in place"] != 1 || sum.Skipped["missing tags"] != 1 {
+		t.Fatalf("second pass %+v, want the moved track found in place", sum)
+	}
+}
+
+// untaggedBesideStrayFixture is a managed library of a misplaced track and
+// one with no tags to file it under, and their api pids.
+func untaggedBesideStrayFixture(t *testing.T) (context.Context, *Library, *UserCtx, []string) {
+	t.Helper()
+	ctx, svc, uc := openEnrichFixture(t, func(c *Config) {
+		c.Roots[0].Managed = true
+		for _, spec := range []fixtures.Spec{
+			{Name: "nameless", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second,
+				Tags: map[string]string{"TITLE": "Nameless"}},
+			{Name: "stray", Codec: fixtures.CodecFLAC, Duration: 3 * time.Second,
+				Tags: map[string]string{"TITLE": "Stray", "ARTIST": "Nomad", "ALBUM": "Wander", "TRACKNUMBER": "1"}},
+		} {
+			if _, err := fixtures.Generate(c.Roots[0].Path, spec); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+	if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	items, err := svc.lib.Query(ctx, query.New(query.EntityItems).Build(), "")
+	if err != nil || len(items) != 2 {
+		t.Fatalf("items = %v (%v), want the two tracks", items, err)
+	}
+	var scope []string
+	for _, it := range items {
+		scope = append(scope, apiPID(PrefixTrack, it.PID))
+	}
+	return ctx, svc, uc, scope
+}
+
+// A move the disk holds back is still a misplaced file: the rule keeps
+// flagging a track whose folder is out of reach, rather than reading the
+// plan's hold as the file being in place.
+func TestAHeldMoveIsStillAPathMismatch(t *testing.T) {
+	t.Parallel()
+	ctx, svc, _, path, pid := managedTrackFixture(t)
+	_, bare, _ := parseAPIPID(pid)
+	if moves, err := svc.readPlannedMoves(ctx); err != nil || !moves[bare] {
+		t.Fatalf("moves = %v (%v), want the misplaced track", moves, err)
+	}
+	if err := os.Rename(path, path+".away"); err != nil {
+		t.Fatal(err)
+	}
+	if moves, err := svc.readPlannedMoves(ctx); err != nil || !moves[bare] {
+		t.Fatalf("moves = %v (%v), want the track flagged while its file is out of reach", moves, err)
+	}
+}
+
 // readOnlyFixture is managedTrackFixture with every library read-only.
 func readOnlyFixture(t *testing.T) (context.Context, *Library, *UserCtx, string, string) {
 	t.Helper()

@@ -791,7 +791,9 @@ paths:
         `pids` refuses the whole call (`invalid-request`): the podcast
         download tree owns its own files, and removing an episode's
         download is its own endpoint, keeping the episode
-        re-fetchable rather than journalling a restore.
+        re-fetchable rather than journalling a restore. The tracks a
+        cue sheet carves out of one file go together: naming some but
+        not all is `invalid-request` with `params.reason` `cue-rip`.
       tags: [library]
       requestBody:
         required: true
@@ -1312,7 +1314,9 @@ components:
           description: Display name.
         files:
           type: integer
-          description: Files deleted (or to delete).
+          description: >
+            Files deleted (or to delete). A cue rip's file counts once,
+            under one of its tracks.
         bytes:
           type: integer
           format: int64

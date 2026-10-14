@@ -128,7 +128,7 @@
   },
   "musicAlbumRewriteApply": "{count, plural, =1{Rewrite 1 track} other{Rewrite {count} tracks}}",
   "@musicAlbumRewriteApply": {
-    "description": "Button applying the staged album/artist/year values to every member.",
+    "description": "Button applying the staged album and album-artist values to every member.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -164,7 +164,7 @@
       }
     }
   },
-  "musicAlbumRewriteTitle": "Album, artist, and year",
+  "musicAlbumRewriteTitle": "Album and album artist",
   "@musicAlbumRewriteTitle": {
     "description": "Heading over the workbench section that rewrites the release-keying fields on every member track."
   },

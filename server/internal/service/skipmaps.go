@@ -302,6 +302,10 @@ func (l *Library) markAudioMissing(ctx context.Context, queueKey string) {
 		// Either the bytes came back, or a sibling part survives: MarkMissing
 		// is item-level and vetoes on any present file.
 		l.log.Info("item keeps at least one present file; not marked missing", "item", itemPID)
+	case model.OutcomePromoted:
+		l.log.Info("a copy took the place of an item's gone file; the item stays present", "item", itemPID)
+	case model.OutcomeDropped:
+		l.log.Info("dropped the rows of an item's gone copies; the item stays present", "item", itemPID)
 	default:
 		l.log.Debug("item was already out of the present state",
 			"item", itemPID, "outcome", string(outcome))

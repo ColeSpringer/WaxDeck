@@ -465,6 +465,14 @@ void main() {
               finishedAt: started,
             ),
             Job(
+              pid: 'jb-6',
+              kind: 'scan',
+              state: 'canceled',
+              error: 'interrupted before it finished',
+              startedAt: started,
+              finishedAt: started,
+            ),
+            Job(
               pid: 'jb-1',
               kind: 'scan',
               state: 'running',
@@ -521,6 +529,11 @@ void main() {
         matching: find.text('the server stopped'),
       ),
       findsOneWidget,
+    );
+    expect(
+      find.descendant(of: _job('jb-6'), matching: find.text('Stopped')),
+      findsOneWidget,
+      reason: 'nobody cancels a job; the server stopped under it',
     );
     expect(_job('jb-3'), findsNothing, reason: 'a finished import is noise');
     expect(

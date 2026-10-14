@@ -9,7 +9,7 @@
   "playlistAdded": "Se ha añadido \"{title}\"",
   "playlistAddedTo": "Se ha añadido \"{title}\" a {playlist}",
   "playlistAlreadyIn": "Ya está en esta lista",
-  "playlistConflictBanner": "{reason} No se ha cambiado nada; esta es la lista tal como está.",
+  "playlistConflictBanner": "{reason}. No se ha cambiado nada; esta es la lista tal como está.",
   "playlistCopiedM3u": "Lista copiada como M3U",
   "playlistCopiedNsp": "Lista copiada como NSP",
   "playlistCopiedPortable": "Lista portátil copiada",

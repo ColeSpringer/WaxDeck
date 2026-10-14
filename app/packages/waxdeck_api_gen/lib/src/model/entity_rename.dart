@@ -12,17 +12,17 @@ part 'entity_rename.g.dart';
 /// An entity rename.
 ///
 /// Properties:
-/// * [fields] - The keying fields to move the entity onto. An album takes `album`, `album_artist`, and `year`; a release group takes `album` and `album_artist`; an artist takes `name`. A field outside its rung's vocabulary, or a name renamed to nothing, is refused. 
-/// * [writeBack] - Also write the new values into every member file's tags (`ALBUM`, `ALBUMARTIST`, `DATE`, `ARTIST`, plus the moved contributor credits). 
+/// * [fields] - The keying fields to move the entity onto: `album` and `album_artist` for an album or release group, `name` for an artist. Any other field or an empty name is refused, `year` included: an album's year follows its tracks, so edit theirs. 
+/// * [writeBack] - Also write the new values into every member file's tags (`ALBUM`, `ALBUMARTIST`, `ARTIST`, plus the moved contributor credits). 
 /// * [lock] - Lock each renamed field on every member, and each moved credit's own `credit.<role>` lock. 
 /// * [force] - Override a locked keying field or credit.
 @BuiltValue()
 abstract class EntityRename implements Built<EntityRename, EntityRenameBuilder> {
-  /// The keying fields to move the entity onto. An album takes `album`, `album_artist`, and `year`; a release group takes `album` and `album_artist`; an artist takes `name`. A field outside its rung's vocabulary, or a name renamed to nothing, is refused. 
+  /// The keying fields to move the entity onto: `album` and `album_artist` for an album or release group, `name` for an artist. Any other field or an empty name is refused, `year` included: an album's year follows its tracks, so edit theirs. 
   @BuiltValueField(wireName: r'fields')
   BuiltMap<String, String> get fields;
 
-  /// Also write the new values into every member file's tags (`ALBUM`, `ALBUMARTIST`, `DATE`, `ARTIST`, plus the moved contributor credits). 
+  /// Also write the new values into every member file's tags (`ALBUM`, `ALBUMARTIST`, `ARTIST`, plus the moved contributor credits). 
   @BuiltValueField(wireName: r'writeBack')
   bool? get writeBack;
 

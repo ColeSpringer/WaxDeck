@@ -174,7 +174,7 @@ func (s *Server) RemovePlaylistItemAt(ctx context.Context, req RemovePlaylistIte
 	if err != nil {
 		return nil, err
 	}
-	if err := s.svc.RemovePlaylistItemAt(ctx, uc, req.Pid, req.Position); err != nil {
+	if err := s.svc.RemovePlaylistItemAt(ctx, uc, req.Pid, req.Position, deref(req.Params.ItemPid)); err != nil {
 		return nil, err
 	}
 	return RemovePlaylistItemAt204Response{}, nil

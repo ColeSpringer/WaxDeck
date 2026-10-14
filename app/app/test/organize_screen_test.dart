@@ -236,6 +236,7 @@ void main() {
         profile: 'default',
         totalActions: 0,
         held: 2,
+        heldByCode: {'read-only': 2},
       );
     await _pump(tester, _host(repo));
     await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
@@ -246,6 +247,33 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Everything is already in place'), findsNothing);
+  });
+
+  // The catalog holds moves back for its own reasons too - an item with
+  // nothing to file it under, a destination another file wants - and a
+  // writable server must not blame those on being read-only.
+  testWidgets('a preview says moves held for other causes are held back', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..organizePlanResult = const OrganizePlan(
+        profile: 'default',
+        totalActions: 1,
+        held: 2,
+        heldByCode: {'untagged': 1, 'collision': 1},
+        actions: [
+          OrganizeAction(itemPid: 'tr-1', from: '/old/a.flac', to: '/a.flac'),
+        ],
+      );
+    await _pump(tester, _host(repo));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.organizePreview));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('2 files are held back and stay where they are.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('read-only'), findsNothing);
   });
 
   testWidgets('a preview and a run name the read-only libraries left out', (
@@ -314,7 +342,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final tile = find.ancestor(
-      of: find.text('Read-only'),
+      of: find.text('Held back'),
       matching: find.byType(StatTile),
     );
     expect(find.descendant(of: tile, matching: find.text('2')), findsOneWidget);

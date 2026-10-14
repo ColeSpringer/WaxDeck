@@ -8,6 +8,7 @@ import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/notifications/notifications_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -152,6 +153,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(repo.cancelStagedRestoreCalls, 1);
     expect(find.byKey(const Key('restore-banner')), findsNothing);
+  });
+
+  testWidgets('a backup this server cannot open says why it did not stage', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.backupsById['ba-1'] = _backup('ba-1');
+    await _pump(tester, repo);
+    repo.adminError = const WaxDeckApiException(
+      code: 'invalid-request',
+      message: 'the archive was built from a different schema baseline',
+      statusCode: 400,
+      params: {'reason': 'incompatible-schema'},
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.backupMenu('ba-1')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Stage restore...'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('backup-restore-confirm')));
+    await tester.pumpAndSettle();
+
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(BackupsScreen)),
+    );
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      startsWith('This backup was made by a WaxDeck version'),
+    );
+    expect(find.byKey(const Key('restore-plan-dialog')), findsNothing);
   });
 
   testWidgets('importing an archive streams it and refreshes the list', (

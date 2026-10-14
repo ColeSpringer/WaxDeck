@@ -2503,6 +2503,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get bellSurfaceImports => 'Importaciones';
 
   @override
+  String get bellSurfaceLibraries => 'Bibliotecas';
+
+  @override
   String get bellSurfacePlaylists => 'Listas de reproducción';
 
   @override
@@ -3434,6 +3437,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Otra cosa ha cambiado esto antes. Vuelve a mirarlo e inténtalo de nuevo.';
 
   @override
+  String get errorCueRipDelete =>
+      'Esta pista es parte de un archivo más grande que también contiene otras pistas, así que solo puede eliminarse junto con ellas.';
+
+  @override
   String get errorDirectoryUnavailable =>
       'El servicio de directorio no ha respondido. Inténtalo más tarde.';
 
@@ -3467,6 +3474,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get errorForbidden => 'Tu cuenta no tiene permiso para hacer eso.';
+
+  @override
+  String get errorIncompatibleBackup =>
+      'Esta copia de seguridad la hizo una versión de WaxDeck cuyas bases de datos este servidor no puede abrir. Restáurala con la versión que la hizo.';
 
   @override
   String get errorInternal =>
@@ -5044,7 +5055,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get musicAlbumRewriteTitle => 'Álbum, artista y año';
+  String get musicAlbumRewriteTitle => 'Álbum y artista del álbum';
 
   @override
   String get musicAlbumTitle => 'Álbum';
@@ -5575,6 +5586,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get notifBackupFailedTitle => 'Copia de seguridad fallida';
 
   @override
+  String get notifCatalogResetHelp =>
+      'Una actualización cambió el esquema del catálogo y el servidor creó un catálogo nuevo; las bibliotecas añadidas desde la consola deben añadirse de nuevo.';
+
+  @override
+  String get notifCatalogResetTitle => 'Catálogo recreado';
+
+  @override
   String get notifEpisodeArrivedHelp =>
       'Un programa al que estás suscrito ha publicado un episodio nuevo.';
 
@@ -5695,7 +5713,18 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get organizeHeldTile => 'Solo lectura';
+  String organizeHeldBack(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos quedan retenidos donde están.',
+      one: '1 archivo queda retenido donde está.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get organizeHeldTile => 'Retenidos';
 
   @override
   String get organizeHint =>
@@ -6348,7 +6377,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String playlistConflictBanner(String reason) {
-    return '$reason No se ha cambiado nada; esta es la lista tal como está.';
+    return '$reason. No se ha cambiado nada; esta es la lista tal como está.';
   }
 
   @override
@@ -11489,7 +11518,7 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get toolsStateCanceled => 'Cancelada';
+  String get toolsStateCanceled => 'Detenida';
 
   @override
   String get toolsStateCrashed => 'Interrumpida';

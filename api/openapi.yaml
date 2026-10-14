@@ -157,7 +157,10 @@ info:
       running without the streaming engine), and other refusals under
       that code carry no params yet. Under `conflict`, a bookmark create
       replaying the id of a removed bookmark carries `reason: removed`,
-      and a client drops its copy. Values are
+      and a client drops its copy. Under `invalid-request`, `reason` names
+      two refusals a client words itself: `incompatible-schema` (a backup
+      whose schema this server cannot open) and `cue-rip` (a delete
+      naming some tracks of a cue rip but not all). Values are
       strings even when they read as numbers. Clients must ignore keys
       they do not know, and an absent `params` means the plain code.
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
@@ -472,17 +475,17 @@ paths:
       summary: Create a library at runtime
       description: >
         Registers a new library root without a server restart. The path is
-        validated (absolute, and non-overlapping with existing roots, the
-        inbox folders, and the podcast download dir), cataloged, and scanned
-        in the background; browsing and downloading its files work as soon as
-        the scan indexes them. Streaming through the WaxFlow sidecar also
-        needs the sidecar to mount the same-named root, so a runtime-added
-        root streams once the sidecar learns it, while downloads and direct
-        playback do not wait on that; when the sidecar cannot be brought to
-        the new root the 201 carries `streamingWarning` saying so, rather
-        than reporting a plain success. `name` is the display name and the
-        WaxFlow root name the same directory is served under. Administrators
-        only.
+        validated (an existing folder, absolute, and non-overlapping with
+        existing roots, the inbox folders, and the podcast download dir),
+        cataloged, and scanned in the background; browsing and downloading
+        its files work as soon as the scan indexes them. Streaming through
+        the WaxFlow sidecar also needs the sidecar to mount the same-named
+        root, so a runtime-added root streams once the sidecar learns it,
+        while downloads and direct playback do not wait on that; when the
+        sidecar cannot be brought to the new root the 201 carries
+        `streamingWarning` saying so, rather than reporting a plain success.
+        `name` is the display name and the WaxFlow root name the same
+        directory is served under. Administrators only.
       tags: [admin]
       requestBody:
         required: true
@@ -1342,8 +1345,11 @@ paths:
         matches the one the archive's credentials were sealed under,
         and exactly which credentials break when it does not. Staging
         replaces any previously staged restore. Answers `conflict`
-        for a backup still being written or one that failed.
-        Administrators only.
+        for a backup still being written or one that failed, and
+        `invalid-request` for an archive this server cannot open, with
+        `params.reason` `incompatible-schema` when its schema is not
+        this server's (an upgrade since moved a database's baseline, or
+        a newer server made it). Administrators only.
       tags: [admin]
       parameters:
         - $ref: "#/components/parameters/BackupId"
@@ -3853,7 +3859,9 @@ paths:
         `pids` refuses the whole call (`invalid-request`): the podcast
         download tree owns its own files, and removing an episode's
         download is its own endpoint, keeping the episode
-        re-fetchable rather than journalling a restore.
+        re-fetchable rather than journalling a restore. The tracks a
+        cue sheet carves out of one file go together: naming some but
+        not all is `invalid-request` with `params.reason` `cue-rip`.
       tags: [library]
       requestBody:
         required: true
@@ -4197,15 +4205,17 @@ paths:
         never undo the catalog batch. Every edited field is locked on
         every edited item, so a repeat edit of the same field needs
         `force` or `skipLocked`. Editing a release-keying field
-        (`album`, `album_artist`, `year`) moves the edited tracks to a
-        new release identity, and where they land depends on coverage:
+        (`album`, `album_artist`) moves the edited tracks to a new
+        release identity, and where they land depends on coverage:
         a batch holding **every** member of the album renames the
         release in place, so the album keeps its pid along with its
         artwork, curation and play state, while a batch holding only
         **some** of them forks those onto a fresh album entity and
         leaves the rest behind. A rename onto a name another release
         already owns merges into it. `resultingAlbumPid` reports where
-        the edited items sit either way.
+        the edited items sit either way. A year keys no release: an
+        album's year follows the years of its tracks, so a `year` edit
+        changes it without moving anything.
       tags: [metadata]
       requestBody:
         required: true
@@ -5239,14 +5249,17 @@ paths:
 
 
         The current catalog is `signup-requested`, `backup-completed`,
-        `backup-failed`, `episode-arrived`, `episode-downloaded`,
-        `feed-disabled`, `review-ready`, `import-completed`,
-        `playlist-synced`, `job-finished`, `job-failed`, and
-        `health-fix-finished`. The last three reach the administrator
-        who started the work: a catalog job (a scan, an analysis, an
-        enrichment or organize run, emptying the trash) finished or
-        failed, or a health fix finished. Work the server started on
-        its own schedule notifies nobody.
+        `backup-failed`, `catalog-reset`, `episode-arrived`,
+        `episode-downloaded`, `feed-disabled`, `review-ready`,
+        `import-completed`, `playlist-synced`, `job-finished`,
+        `job-failed`, and `health-fix-finished`. The last three reach
+        the administrator who started the work: a catalog job (a scan,
+        an analysis, an enrichment or organize run, emptying the
+        trash) finished or failed, or a health fix finished. Work the
+        server started on its own schedule notifies nobody.
+        `catalog-reset` says the server built a new catalog because the
+        old one's schema was another release's; its body counts the
+        libraries added from the console, which the audit log names.
       tags: [notifications]
       responses:
         "200":
@@ -7586,10 +7599,12 @@ paths:
         The playlist's members in order: stored order for a static
         playlist, rule order for a smart playlist (evaluated against
         the owner's user state for shared lists, the caller's for
-        their own). Items outside the caller's library visibility are
-        omitted, so a static playlist's `position` values are not
-        guaranteed contiguous for restricted viewers; use `position`,
-        never the row index, when removing members.
+        their own). Entries outside the caller's visibility are
+        omitted, so a restricted viewer's `position` values can skip
+        numbers. `position` is the entry's index in the full stored
+        order, kept contiguous from 0 by every change to the list;
+        pass it, with the entry's item pid as `itemPid`, to the
+        removal endpoint, never the row index of a filtered page.
         Keyset-paginated within one evaluation; a membership change
         between pages may shift entries.
       tags: [playlists]
@@ -7702,11 +7717,11 @@ paths:
       operationId: removePlaylistItemAt
       summary: Remove one member by position
       description: >
-        Removes the member at the given zero-based position in the
-        stored order. Owner only; static playlists only. Positions are
-        the unfiltered stored order (visibility filtering never shifts
-        them); take them from the item listing's `position` field, not
-        from a rendered row index.
+        Removes the member at a zero-based `position` of the full stored
+        order (the listing's `position`); owner only, static playlists only.
+        Later entries renumber down by one, so re-read the listing (or shift
+        your copy) before a second removal. Pass `itemPid` so a listing
+        another device changed answers `conflict`, removing nothing.
       tags: [playlists]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -7717,6 +7732,14 @@ paths:
           schema:
             type: integer
             minimum: 0
+        - name: itemPid
+          in: query
+          description: >
+            The item the caller saw at that position. When the
+            position holds another item, or none, nothing is removed
+            and the answer is `conflict`.
+          schema:
+            type: string
       responses:
         "204":
           description: Member removed.
@@ -7728,6 +7751,8 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -16091,7 +16116,9 @@ components:
           description: Display name.
         files:
           type: integer
-          description: Files deleted (or to delete).
+          description: >
+            Files deleted (or to delete). A cue rip's file counts once,
+            under one of its tracks.
         bytes:
           type: integer
           format: int64
@@ -17132,8 +17159,8 @@ components:
           description: >
             The album entity the edited items now sit on, reported
             when the edit rewrote a release-keying field (`album`,
-            `album_artist`, `year`) and every edited item landed on
-            one album. It answers "where is the release now", not
+            `album_artist`) and every edited item landed on one
+            album. It answers "where is the release now", not
             "did it move": a batch covering every member renames the
             album in place and this is the pid the caller already
             had, while a partial batch forks the edited members onto
@@ -17362,17 +17389,16 @@ components:
           additionalProperties:
             type: string
           description: >
-            The keying fields to move the entity onto. An album takes
-            `album`, `album_artist`, and `year`; a release group takes
-            `album` and `album_artist`; an artist takes `name`. A field
-            outside its rung's vocabulary, or a name renamed to nothing,
-            is refused.
+            The keying fields to move the entity onto: `album` and
+            `album_artist` for an album or release group, `name` for an
+            artist. Any other field or an empty name is refused, `year`
+            included: an album's year follows its tracks, so edit theirs.
         writeBack:
           type: boolean
           default: false
           description: >
             Also write the new values into every member file's tags
-            (`ALBUM`, `ALBUMARTIST`, `DATE`, `ARTIST`, plus the moved
+            (`ALBUM`, `ALBUMARTIST`, `ARTIST`, plus the moved
             contributor credits).
         lock:
           type: boolean
@@ -18129,8 +18155,20 @@ components:
         held:
           type: integer
           description: >
-            Moves held back because the whole server is read-only. Not in
-            `actions` or `totalActions`.
+            Moves held back, whatever the cause (`heldByCode` says
+            which). Not in `actions` or `totalActions`.
+        heldByCode:
+          type: object
+          description: >
+            `held` by hold code: `collision` (another move of the pass
+            claims the destination), `occupied` (a file the pass does not
+            move holds it), `occupied-case` (one named apart from it only
+            by case or Unicode form stands beside it), `untagged`,
+            `missing`, `virtual` (a cue rip's shared file), `book-held`
+            (another part of the book is held) and `read-only` (the server
+            or the library). A code with nothing held is absent.
+          additionalProperties:
+            type: integer
         readOnlyLibraries:
           type: integer
           description: Managed libraries left out because they are read-only.
@@ -18171,7 +18209,9 @@ components:
           description: Files already in place.
         held:
           type: integer
-          description: Files left where they are because the whole server is read-only.
+          description: >
+            Files held back where they are, for any of the causes a
+            plan's `held` counts.
         readOnlyLibraries:
           type: integer
           description: Managed libraries left alone because they are read-only.
@@ -20043,9 +20083,9 @@ components:
         position:
           type: integer
           description: >
-            Zero-based position in the stored member order. Present
-            only for static playlists; this is the value the removal
-            endpoint takes.
+            Zero-based index in the full stored member order, contiguous
+            after every change (hidden entries leave gaps in a viewer's
+            listing); static playlists only, and what the removal takes.
         item:
           $ref: "#/components/schemas/ItemSummary"
 

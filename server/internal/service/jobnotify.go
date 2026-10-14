@@ -97,10 +97,11 @@ func (l *Library) notifyJobEnd(ctx context.Context, userID string, j Job) {
 }
 
 // jobFailure says why a job did not finish. A server that stopped under
-// it is said plainly: the catalog records that as "reclaimed: owner not
-// live" or a context's "context canceled".
+// it is said plainly: the catalog records that as a crashed or canceled
+// job, or a failure wrapping a context's "context canceled".
 func jobFailure(j Job) string {
-	if model.JobState(j.State) == model.JobCrashed || strings.Contains(j.Error, context.Canceled.Error()) {
+	if s := model.JobState(j.State); s == model.JobCrashed || s == model.JobCanceled ||
+		strings.Contains(j.Error, context.Canceled.Error()) {
 		return "the server stopped before it finished"
 	}
 	return cmp.Or(j.Error, "no reason was recorded")

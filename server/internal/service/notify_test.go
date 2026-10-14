@@ -166,6 +166,7 @@ func TestNotificationLinks(t *testing.T) {
 		{"signup-requested", "", "https://wax.example.com/admin/users"},
 		{"backup-completed", "", "https://wax.example.com/admin/backups"},
 		{"backup-failed", "", "https://wax.example.com/admin/backups"},
+		{"catalog-reset", "", "https://wax.example.com/admin/libraries"},
 		{"import-completed", "rv-1", "https://wax.example.com/review/rv-1"},
 		{"import-completed", "", "https://wax.example.com/review"},
 		{"feed-disabled", "pc-1", "https://wax.example.com/podcasts/pc-1"},

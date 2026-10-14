@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"slices"
 	"strings"
@@ -1877,4 +1878,118 @@ func deref2[T any](p *[]T) []T {
 		return nil
 	}
 	return *p
+}
+
+// Removals by listing index take exactly the rows named, since every
+// change keeps positions contiguous, and a stale itemPid is a conflict.
+// The duplicate is its own entry, as a static list allows.
+func TestPlaylistRemoveAtSequence(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	items := h.items(t, "")
+	a, b, c, d := items.Items[0].Pid, items.Items[1].Pid, items.Items[2].Pid, items.Items[3].Pid
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Five", "kind": "static", "itemPids": []string{a, b, c, d, a},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+	base := "/api/v1/playlists/" + pl.Pid + "/items/"
+	remove := func(path string) *http.Response {
+		t.Helper()
+		return h.deleteReq(t, base+path)
+	}
+	listing := func(want ...string) {
+		t.Helper()
+		entries := playlistItems(t, h, h.token, pl.Pid)
+		if !samePids(entryPids(entries), want) {
+			t.Fatalf("members = %v, want %v", entryPids(entries), want)
+		}
+		for i, e := range entries {
+			if e.Position == nil || *e.Position != i {
+				t.Fatalf("entry %d position = %v, want %d", i, e.Position, i)
+			}
+		}
+	}
+
+	wantStatus(t, remove("0?itemPid="+a), 204, "remove 0")
+	listing(b, c, d, a)
+	wantStatus(t, remove("1?itemPid="+c), 204, "remove 1")
+	listing(b, d, a)
+	wantStatus(t, remove("0?itemPid="+b), 204, "remove 0 again")
+	listing(d, a)
+
+	// The client's listing went stale: index 0 holds d now.
+	resp = remove("0?itemPid=" + a)
+	if resp.StatusCode != 409 {
+		t.Fatalf("stale itemPid status = %d, want 409", resp.StatusCode)
+	}
+	if e := decode[Error](t, resp); e.Code != "conflict" || !strings.Contains(e.Message, "refetch") {
+		t.Fatalf("stale itemPid answer = %+v", e)
+	}
+	listing(d, a)
+	// Stale and shorter: the row the client saw is past the end now.
+	resp = remove("3?itemPid=" + d)
+	if resp.StatusCode != 409 {
+		t.Fatalf("stale past-the-end status = %d, want 409", resp.StatusCode)
+	}
+	resp.Body.Close()
+
+	resp = remove("7")
+	if resp.StatusCode != 404 {
+		t.Fatalf("past-the-end status = %d, want 404", resp.StatusCode)
+	}
+	if e := decode[Error](t, resp); !strings.Contains(e.Message, "position 7") {
+		t.Fatalf("past-the-end message = %q", e.Message)
+	}
+	resp = remove("-1")
+	if resp.StatusCode != 400 {
+		t.Fatalf("negative position status = %d, want 400", resp.StatusCode)
+	}
+	resp.Body.Close()
+	resp = remove("0?itemPid=not-a-pid")
+	if resp.StatusCode != 400 {
+		t.Fatalf("malformed itemPid status = %d, want 400", resp.StatusCode)
+	}
+	resp.Body.Close()
+	listing(d, a)
+}
+
+// A member the caller cannot see keeps its slot, so the listing shows a
+// gap and the position it shows is still the one to remove by.
+func TestPlaylistRemoveAtAcrossAHiddenMember(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	items := h.items(t, "")
+	a, b, c, d := items.Items[0].Pid, items.Items[1].Pid, items.Items[2].Pid, items.Items[3].Pid
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Gap", "kind": "static", "itemPids": []string{a, b, c, d},
+	})
+	if resp.StatusCode != 201 {
+		t.Fatalf("create status = %d", resp.StatusCode)
+	}
+	pl := decode[Playlist](t, resp)
+	wantStatus(t, h.postJSON(t, "/api/v1/library/items/delete", map[string]any{
+		"pids": []string{b}, "mode": "trash",
+	}), 200, "trash b")
+
+	positions := func() map[string]int {
+		t.Helper()
+		out := map[string]int{}
+		for _, e := range playlistItems(t, h, h.token, pl.Pid) {
+			out[e.Item.Pid] = *e.Position
+		}
+		return out
+	}
+	shown := positions()
+	if len(shown) != 3 || shown[a] != 0 || shown[c] != 2 || shown[d] != 3 {
+		t.Fatalf("positions around the hidden member = %v", shown)
+	}
+	wantStatus(t, h.deleteReq(t, fmt.Sprintf("/api/v1/playlists/%s/items/%d?itemPid=%s", pl.Pid, shown[c], c)),
+		204, "remove c by its shown position")
+	shown = positions()
+	if len(shown) != 2 || shown[a] != 0 || shown[d] != 2 {
+		t.Fatalf("positions after the removal = %v, want a at 0 and d at 2", shown)
+	}
 }

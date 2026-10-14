@@ -143,6 +143,7 @@ func (s *Server) PreviewOrganize(ctx context.Context, req PreviewOrganizeRequest
 		Profile:           plan.Profile,
 		TotalActions:      plan.TotalActions,
 		Held:              plan.Held,
+		HeldByCode:        ptr(plan.HeldByCode),
 		ReadOnlyLibraries: plan.ReadOnlyLibraries,
 		TagWrite:          ptr(plan.TagWrite),
 		Actions:           make([]OrganizeAction, 0, len(plan.Actions)),

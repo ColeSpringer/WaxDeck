@@ -208,11 +208,14 @@ class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
     ref.invalidateSelf();
   }
 
-  /// Drops the member at [position] in the stored order.
+  /// Drops the member at [position] in the stored order, guarded by
+  /// [itemPid], the item the row the listener acted on showed there: a
+  /// list another device changed since is refused rather than losing
+  /// another track that moved into the slot.
   ///
   /// Optimistic: a `Dismissible` still in the tree after its own
   /// dismissal throws. A refusal puts the list back from the server.
-  Future<void> removeAt(int position) async {
+  Future<void> removeAt(int position, {required String itemPid}) async {
     final current = state.value;
     final cover = current?.playlist.artUrl;
     if (current != null) {
@@ -233,7 +236,9 @@ class PlaylistDetailController extends AsyncNotifier<PlaylistView> {
       );
     }
     try {
-      await ref.read(repositoryProvider).removePlaylistItemAt(pid, position);
+      await ref
+          .read(repositoryProvider)
+          .removePlaylistItemAt(pid, position, itemPid: itemPid);
       await evictPlaylistCover(ref, cover);
     } finally {
       ref.invalidateSelf();

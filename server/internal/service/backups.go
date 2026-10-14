@@ -3,6 +3,7 @@ package service
 import (
 	"archive/zip"
 	"context"
+	"database/sql"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/colespringer/waxbin/port"
+	"github.com/colespringer/waxbin/waxerr"
 	"github.com/oklog/ulid/v2"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -54,7 +57,7 @@ const (
 // consistent byte copy of waxbin.db written to a path. *waxbin.Library
 // satisfies it; tests substitute a fake.
 type backupCatalog interface {
-	Backup(ctx context.Context, dest string, redact bool) error
+	Backup(ctx context.Context, dest string, opts port.BackupOptions) error
 }
 
 // backupAuditor records backup and restore actions; *Library satisfies
@@ -137,6 +140,9 @@ type Backups struct {
 	log     *slog.Logger
 	dataDir string
 	prober  KeyProber
+	// catalogStamp reads the live catalog's baseline stamp, the one an
+	// archive's catalog must carry to restore.
+	catalogStamp func(context.Context) (uint32, error)
 	// now is the clock, injectable so tests control file names and
 	// retention ordering.
 	now func() time.Time
@@ -154,7 +160,9 @@ type Backups struct {
 // marker at its top level). prober may be nil until the key preflight
 // is wired; staging then reports the gap as a warning.
 func NewBackups(l *Library, dataDir string, prober KeyProber) *Backups {
-	return newBackups(l.db, l.lib, l, l, l.log, dataDir, prober)
+	b := newBackups(l.db, l.lib, l, l, l.log, dataDir, prober)
+	b.catalogStamp = func(ctx context.Context) (uint32, error) { return catalogFileStamp(ctx, l.catalogPath) }
+	return b
 }
 
 func newBackups(store *wdb.DB, catalog backupCatalog, audit backupAuditor, notify backupNotifier, log *slog.Logger, dataDir string, prober KeyProber) *Backups {
@@ -302,7 +310,9 @@ func (b *Backups) buildArchive(ctx context.Context, row wdb.Backup) (int64, erro
 
 	catTmp := filepath.Join(dir, ".waxbin-"+row.ID+".tmp")
 	defer os.Remove(catTmp)
-	if err := b.catalog.Backup(ctx, catTmp, false); err != nil {
+	// A whole copy: leaving thumbnails out costs a second rewrite of it
+	// (docs/upstream-requests.md).
+	if err := b.catalog.Backup(ctx, catTmp, port.BackupOptions{}); err != nil {
 		return 0, fmt.Errorf("catalog snapshot: %w", err)
 	}
 
@@ -478,24 +488,48 @@ func (b *Backups) liveSchemaVersion(ctx context.Context) (int, error) {
 	return v, err
 }
 
-// sqliteUserVersion reads an at-rest database file's schema version
-// straight from the header (offset 60, big endian). The files backups
-// carry come from Backup and VACUUM INTO, so they have no WAL and the
-// header is authoritative; this avoids opening a second connection.
-func sqliteUserVersion(path string) (int, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return 0, err
-	}
-	defer f.Close()
+// sqliteHeaderVersion reads user_version from a database's header,
+// where WaxBin keeps a catalog's baseline stamp.
+func sqliteHeaderVersion(r io.Reader) (uint32, error) {
 	var hdr [100]byte
-	if _, err := io.ReadFull(f, hdr[:]); err != nil {
+	if _, err := io.ReadFull(r, hdr[:]); err != nil {
 		return 0, errors.New("file too small for an sqlite database")
 	}
 	if string(hdr[:16]) != "SQLite format 3\x00" {
 		return 0, errors.New("not an sqlite database")
 	}
-	return int(binary.BigEndian.Uint32(hdr[60:64])), nil
+	return binary.BigEndian.Uint32(hdr[60:64]), nil
+}
+
+// archiveEntryStamp reads an archived database's stamp from its header
+// alone, so a catalog of any size is never extracted to be judged.
+func archiveEntryStamp(archive, entry string) (uint32, error) {
+	zr, err := zip.OpenReader(archive)
+	if err != nil {
+		return 0, err
+	}
+	defer zr.Close()
+	rc, err := zr.Open(entry)
+	if err != nil {
+		return 0, err
+	}
+	defer rc.Close()
+	return sqliteHeaderVersion(rc)
+}
+
+// catalogFileStamp reads a catalog's stamp through SQLite, which also
+// sees a stamp still in the WAL of a catalog just created.
+func catalogFileStamp(ctx context.Context, path string) (uint32, error) {
+	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro")
+	if err != nil {
+		return 0, err
+	}
+	defer db.Close()
+	var v int64
+	if err := db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&v); err != nil {
+		return 0, err
+	}
+	return uint32(int32(v)), nil
 }
 
 // applyRetention prunes finished non-imported backups: newest-first
@@ -737,6 +771,9 @@ func (b *Backups) StageRestore(ctx context.Context, actor *UserCtx, id string) (
 		return RestorePlan{}, &Error{Kind: KindInternal, Err: err}
 	}
 	defer os.Remove(probeDB)
+	if err := b.checkArchiveSchemas(ctx, archive, probeDB); err != nil {
+		return RestorePlan{}, err
+	}
 
 	plan := RestorePlan{BackupID: id, StagedAtNS: b.now().UnixNano()}
 	if b.prober != nil {
@@ -745,13 +782,6 @@ func (b *Backups) StageRestore(ctx context.Context, actor *UserCtx, id string) (
 		plan.Warnings = append(plan.Warnings,
 			"no key prober is wired; sealed credentials were not checked against this host's key")
 	}
-	if archiveVer, err := sqliteUserVersion(probeDB); err != nil {
-		plan.Warnings = append(plan.Warnings,
-			"the archive's waxdeck.db could not be inspected: "+err.Error())
-	} else if liveVer, err := b.liveSchemaVersion(ctx); err == nil && archiveVer > liveVer {
-		plan.Warnings = append(plan.Warnings, fmt.Sprintf(
-			"the archive's schema (v%d) is newer than this server understands (v%d); upgrade the server before restoring", archiveVer, liveVer))
-	}
 	if created, err := time.Parse(time.RFC3339, manifest.CreatedAt); err == nil {
 		if age := b.now().Sub(created); age > backupStaleWarnAge {
 			plan.Warnings = append(plan.Warnings, fmt.Sprintf(
@@ -759,6 +789,10 @@ func (b *Backups) StageRestore(ctx context.Context, actor *UserCtx, id string) (
 		}
 	}
 
+	// Nobody saw this plan, so nothing is staged on it.
+	if err := ctx.Err(); err != nil {
+		return RestorePlan{}, err
+	}
 	marker := stagedMarker{
 		BackupID:         plan.BackupID,
 		FileName:         row.FileName,
@@ -778,6 +812,63 @@ func (b *Backups) StageRestore(ctx context.Context, actor *UserCtx, id string) (
 			"casualties":     len(plan.SealedCasualties),
 			"warnings":       plan.Warnings})
 	return plan, nil
+}
+
+// ErrArchiveSchema marks a refusal of an archive whose databases this
+// server's schema cannot open.
+var ErrArchiveSchema = errors.New("the archive's schema is not this server's")
+
+// checkArchiveSchemas refuses an archive the next start would refuse:
+// applied, it would set the live databases aside for ones this build
+// will not open.
+func (b *Backups) checkArchiveSchemas(ctx context.Context, archive, probeDB string) error {
+	refuse := func(msg string) error { return &Error{Kind: KindInvalid, Msg: msg, Err: ErrArchiveSchema} }
+	stale := refuse("the archive was built from a different schema baseline than this server's, " +
+		"so the server would refuse it at start; restore it under the version it was taken with")
+	switch err := wdb.CheckBaseline(ctx, probeDB); {
+	case errors.Is(err, wdb.ErrStaleBaseline):
+		return stale
+	case errors.Is(err, wdb.ErrNewerSchema):
+		return refuse("the archive comes from a newer server than this one; upgrade this server before restoring it")
+	case ctx.Err() != nil:
+		return ctx.Err()
+	case err != nil:
+		return &Error{Kind: KindInvalid, Msg: "the archive's waxdeck.db is not a database this server can read", Err: err}
+	}
+	got, err := archiveEntryStamp(archive, archiveEntryWaxbin)
+	if err != nil {
+		return &Error{Kind: KindInvalid, Msg: "the archive's catalog is unreadable: " + err.Error()}
+	}
+	want, err := b.catalogStamp(ctx)
+	if err != nil {
+		return &Error{Kind: KindInternal, Err: fmt.Errorf("reading the live catalog's stamp: %w", err)}
+	}
+	if got != want {
+		return stale
+	}
+	return nil
+}
+
+// VetRestore refuses extracted restore databases this build would not
+// open, before the boot-time apply sets the live ones aside; its reasons
+// name the archive, never the files the refusals it wraps advise on.
+func VetRestore(waxdeckDB, catalogDB string) error {
+	ctx := context.Background()
+	switch err := wdb.CheckBaseline(ctx, waxdeckDB); {
+	case errors.Is(err, wdb.ErrStaleBaseline):
+		return errors.New("its waxdeck.db was built from another schema baseline")
+	case errors.Is(err, wdb.ErrNewerSchema):
+		return errors.New("its waxdeck.db comes from a newer server")
+	case err != nil:
+		return errors.New("its waxdeck.db is not a database this server can read")
+	}
+	switch _, err := port.ValidateBackup(ctx, catalogDB); {
+	case waxerr.Is(err, waxerr.CodeUnsupported):
+		return errors.New("its catalog was built from another schema baseline")
+	case err != nil:
+		return errors.New("its catalog is not one this server can read")
+	}
+	return nil
 }
 
 // StagedRestore reports the currently staged restore, if any.

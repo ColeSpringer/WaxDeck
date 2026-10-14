@@ -2,12 +2,14 @@ package service
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/waxerr"
 )
 
 // TrashEntryDTO is one deletion undo-journal row for the admin surface.
@@ -207,6 +209,10 @@ func errEpisodeNotDeletable() error {
 	return errInvalid("podcast episodes cannot be deleted here; remove the episode's download instead")
 }
 
+// ErrCueRipPart marks a delete naming some of a cue rip's tracks and not
+// the rest, which the catalog refuses since their file goes whole.
+var ErrCueRipPart = errors.New("part of a cue rip")
+
 // DeleteItems deletes items' files, to the trash by default. Callers
 // need the delete permission or the admin role; permanent mode is
 // admin-only. Every pid must be visible to the caller, every touched
@@ -237,6 +243,7 @@ func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string
 	pids := make([]model.PID, 0, len(apiPIDs))
 	names := map[string]string{}
 	apiByBare := map[string]string{}
+	carved := false
 	for _, p := range apiPIDs {
 		it, err := l.getVisibleItem(ctx, uc, p)
 		if err != nil {
@@ -251,31 +258,46 @@ func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string
 		pids = append(pids, it.PID)
 		names[string(it.PID)] = it.Title
 		apiByBare[string(it.PID)] = p
+		carved = carved || it.Virtual
 	}
 	plan, err := l.lib.PlanDeletePIDs(ctx, pids, dm)
 	if err != nil {
+		// Episodes and modes are refused above, so an invalid plan with a
+		// carved track named is the catalog's whole-rip rule.
+		if carved && waxerr.Is(err, waxerr.CodeInvalid) {
+			return DeleteItemsResultDTO{}, &Error{Kind: KindInvalid, Err: ErrCueRipPart,
+				Msg: "a cue rip's tracks share one file, so they are deleted together or not at all; name every track of the rip"}
+		}
 		return DeleteItemsResultDTO{}, classify(err)
 	}
-	// The plan is per file; the API reports per item.
+	// The plan is per file; the API reports per item. A cue rip's file
+	// plays every track it lists, so each gets an entry, and the file
+	// counts once, under the item the plan names it for.
 	perItem := map[string]*DeletePlanDTO{}
 	order := []string{}
-	for _, a := range plan.Actions {
-		if a.Skip {
-			continue
-		}
-		bare := string(a.ItemPID)
+	entry := func(bare, src string) *DeletePlanDTO {
 		dto, ok := perItem[bare]
 		if !ok {
 			dto = &DeletePlanDTO{PID: apiByBare[bare], Name: names[bare]}
 			if dto.Name == "" {
-				dto.Name = filepath.Base(a.Src)
+				dto.Name = filepath.Base(src)
 			}
 			perItem[bare] = dto
 			order = append(order, bare)
 		}
+		return dto
+	}
+	for _, a := range plan.Actions {
+		if a.Skip {
+			continue
+		}
+		dto := entry(string(a.ItemPID), a.Src)
 		dto.Files++
 		if st, err := os.Stat(a.Src); err == nil {
 			dto.Bytes += st.Size()
+		}
+		for _, track := range a.Tracks {
+			entry(string(track), a.Src)
 		}
 	}
 	out := DeleteItemsResultDTO{Mode: mode}

@@ -2,10 +2,14 @@
 
 Test-media generator for WaxDeck. The repository policy is **no binary
 media in git**: every audio file a test needs is synthesized at
-test-setup from a `Spec`: a deterministic sine tone (440 Hz per
-channel, times the channel index) encoded into the requested
-codec/container through WaxFlow's own encoders and muxers. No external
-tools are involved, and the same spec always produces the same bytes.
+test-setup from a `Spec`: a deterministic sine tone (one pitch and level
+drawn from the spec's name, the pitch times the channel index on each
+channel) encoded into the requested codec/container through WaxFlow's
+own encoders and muxers. No external tools are involved, and the same
+spec always produces the same bytes. Two specs named apart are as good
+as never the same audio, so a catalog that keys items by their audio
+keeps them apart whatever their lengths; `SameAudioAs` asks for one
+spec's audio under another name, for a test that wants copies.
 
 It is a Go module usable as a library and as a CLI.
 
@@ -30,7 +34,8 @@ paths, err = fixtures.Generate(dir, fixtures.Spec{
 `Spec` fields: `Codec`, `Container` (empty picks the codec's default),
 `Duration` (default 1 s, capped at 10 s), `SampleRate` (default 44100;
 Opus 48000), `Channels` (default 2), `Corrupt`, `Tags`, `Chapters`,
-`Name`. `Spec.Filename()` is the deterministic name `Generate` writes.
+`Name`, `SameAudioAs`. `Spec.Filename()` is the deterministic name
+`Generate` writes.
 
 ## CLI
 

@@ -38,11 +38,11 @@ class PlaylistScreen extends ConsumerStatefulWidget {
 }
 
 class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
-  /// What the server said when it refused a replace, or null.
+  /// What the server said when it refused an edit of the list, or null.
   ///
-  /// Its sentence, not ours: `conflict` covers three different refusals
-  /// and only the server knows which. Widget state because it is about
-  /// the drag this screen just made.
+  /// Its sentence, not ours: `conflict` covers several refusals and only
+  /// the server knows which. Widget state because it is about the edit
+  /// this screen just made.
   String? _conflict;
 
   String get pid => widget.pid;
@@ -572,30 +572,44 @@ class _ReorderableEntries extends ConsumerWidget {
     try {
       await ref.read(playlistDetailProvider(pid).notifier).reorder(pids);
     } on WaxDeckApiException catch (e) {
-      // The list already animated, so it goes back either way. A lost
-      // race gets the banner; anything else is a one-off failure.
-      ref.invalidate(playlistDetailProvider(pid));
-      if (e.code == 'conflict') {
-        onConflict(explainRefusal(l10n, e));
-        return;
-      }
-      messenger.show(explainError(l10n, e), channel: ShellChannel.playlists);
+      _refused(ref, messenger, l10n, e, mounted: context.mounted);
     }
   }
 
   Future<void> _remove(BuildContext context, WidgetRef ref, int index) async {
     // The stored position, never the row index: visibility filtering
-    // leaves a viewer's rows non-contiguous.
-    final position = view.entries[index].position;
+    // leaves a viewer's rows non-contiguous. The row's item rides along
+    // as the guard, so a list redrawn since cannot lend it another.
+    final entry = view.entries[index];
+    final position = entry.position;
     if (position == null) return;
     final messenger = ref.read(shellMessengerProvider.notifier);
     final l10n = context.l10n;
     try {
-      await ref.read(playlistDetailProvider(pid).notifier).removeAt(position);
+      await ref
+          .read(playlistDetailProvider(pid).notifier)
+          .removeAt(position, itemPid: entry.item.pid);
     } on WaxDeckApiException catch (e) {
-      ref.invalidate(playlistDetailProvider(pid));
+      _refused(ref, messenger, l10n, e, mounted: context.mounted);
+    }
+  }
+
+  /// A refused edit: the list goes back to the server's, a race another
+  /// device won gets the banner, and anything else is a one-off failure,
+  /// told even when the screen has gone.
+  void _refused(
+    WidgetRef ref,
+    ShellMessenger messenger,
+    AppLocalizations l10n,
+    WaxDeckApiException e, {
+    required bool mounted,
+  }) {
+    if (e.code != 'conflict') {
       messenger.show(explainError(l10n, e), channel: ShellChannel.playlists);
     }
+    if (!mounted) return;
+    ref.invalidate(playlistDetailProvider(pid));
+    if (e.code == 'conflict') onConflict(explainRefusal(l10n, e));
   }
 }
 

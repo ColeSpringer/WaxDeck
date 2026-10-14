@@ -13,7 +13,7 @@ part 'delete_plan_entry.g.dart';
 /// Properties:
 /// * [pid] - The item.
 /// * [name] - Display name.
-/// * [files] - Files deleted (or to delete).
+/// * [files] - Files deleted (or to delete). A cue rip's file counts once, under one of its tracks. 
 /// * [bytes] - Bytes reclaimed (or to reclaim).
 @BuiltValue()
 abstract class DeletePlanEntry implements Built<DeletePlanEntry, DeletePlanEntryBuilder> {
@@ -25,7 +25,7 @@ abstract class DeletePlanEntry implements Built<DeletePlanEntry, DeletePlanEntry
   @BuiltValueField(wireName: r'name')
   String? get name;
 
-  /// Files deleted (or to delete).
+  /// Files deleted (or to delete). A cue rip's file counts once, under one of its tracks. 
   @BuiltValueField(wireName: r'files')
   int get files;
 

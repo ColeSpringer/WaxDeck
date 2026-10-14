@@ -65,6 +65,7 @@ void main() {
         NotificationKind.signupRequested: 'signup-requested',
         NotificationKind.backupCompleted: 'backup-completed',
         NotificationKind.backupFailed: 'backup-failed',
+        NotificationKind.catalogReset: 'catalog-reset',
         NotificationKind.reviewReady: 'review-ready',
         NotificationKind.feedDisabled: 'feed-disabled',
         NotificationKind.importCompleted: 'import-completed',

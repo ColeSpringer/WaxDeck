@@ -252,11 +252,16 @@ func (s *Service) Registry() *Registry { return s.reg }
 // to it.
 func (s *Service) Run(ctx context.Context) error {
 	s.releaseOnce.Do(func() {
-		s.cfg.Group.GoOnce(ctx, "connect-release", func(ctx context.Context) error {
+		started := s.cfg.Group.GoOnce(ctx, "connect-release", func(ctx context.Context) error {
 			<-ctx.Done()
 			s.release()
 			return nil
 		})
+		// The group starts no worker under a context already ended, so
+		// a shutdown that beat this line is released here.
+		if !started {
+			s.release()
+		}
 	})
 	tick := time.NewTicker(watcherTick)
 	defer tick.Stop()

@@ -548,10 +548,11 @@ func (l *Library) BulkEditMetadata(ctx context.Context, uc *UserCtx, apiPIDs []s
 // resultingAlbum reports the one album the edited items landed on after
 // an edit that rewrote a release-keying field. WaxBin re-resolves
 // entities inside the edit transaction and the album key is built from
-// the normalized album/album-artist names, the year, and the folder,
-// but a rename pre-pass runs first: a batch covering every member of
-// the album rewrites the entity in place and the pid stands, while a
-// partial batch forks the edited members onto a fresh al- pid
+// the normalized album/album-artist names and the folder (a year keys
+// nothing: the album's follows its tracks), but a rename pre-pass runs
+// first: a batch covering every member of the album rewrites the entity
+// in place and the pid stands, while a partial batch forks the edited
+// members onto a fresh al- pid
 // (TestBulkEditAlbumFieldsRenamesInPlaceOnFullCoverage and
 // ...RegroupsOnPartialCoverage pin the two). Either way the caller who
 // asked for the rename needs to know where its tracks are. Empty when
@@ -560,7 +561,7 @@ func (l *Library) BulkEditMetadata(ctx context.Context, uc *UserCtx, apiPIDs []s
 // batch spanning directories can).
 func (l *Library) resultingAlbum(ctx context.Context, fields map[string]string, edited []model.PID) string {
 	keyed := false
-	for _, field := range []string{"album", "album_artist", "year"} {
+	for _, field := range []string{"album", "album_artist"} {
 		if _, ok := fields[field]; ok {
 			keyed = true
 			break
@@ -1551,6 +1552,11 @@ func (l *Library) RenameEntity(ctx context.Context, entityType, apiEntityPID str
 	}
 	if len(fields) == 0 {
 		return EntityRenameOutcomeDTO{}, errInvalid("at least one field is required")
+	}
+	// The catalog refuses it too, in words naming its own vocabulary;
+	// this one says where a year is edited.
+	if _, ok := fields["year"]; ok && (et == model.MergeAlbum || et == model.MergeReleaseGroup) {
+		return EntityRenameOutcomeDTO{}, errInvalid("an album's year follows its tracks rather than keying it; edit the tracks' year instead")
 	}
 	if p.WriteBack {
 		if err := l.CheckWritable(ctx, ""); err != nil {

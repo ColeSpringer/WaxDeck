@@ -1205,8 +1205,6 @@ func TestMetadataAcquisitionOrigin(t *testing.T) {
 	// A SOURCE_URL tag is what makes the scan record origin evidence at
 	// all; the row it writes reads `manual`, since the tag says the item
 	// came from somewhere without saying by what mechanism.
-	// Durations distinct from the demo library's and from each other:
-	// identical essence dedups to one item, as UploadSources notes.
 	specs := []fixtures.Spec{
 		{
 			Name: "acquired", Codec: fixtures.CodecFLAC, Duration: 4 * time.Second,
@@ -1770,8 +1768,6 @@ func TestMetadataAcquisitionEdit(t *testing.T) {
 	// A SOURCE_URL tag is what makes the scan record an origin at all,
 	// and the row it writes reads `manual` with the tag's own url and
 	// id - which is the wrong-origin case this surface exists for.
-	// Duration distinct from every other preset, for the
-	// fingerprint-dedup reason DemoLibrary gives.
 	if _, err := fixtures.Generate(h.library, fixtures.Spec{
 		Name: "misattributed", Codec: fixtures.CodecFLAC, Duration: 6200 * time.Millisecond,
 		Tags: map[string]string{

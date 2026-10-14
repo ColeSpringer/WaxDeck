@@ -31,6 +31,7 @@ enum NotificationKind {
   signupRequested('signup-requested', WaxIcons.add, WaxRoute.users),
   backupCompleted('backup-completed', WaxIcons.success, WaxRoute.backups),
   backupFailed('backup-failed', WaxIcons.warning, WaxRoute.backups),
+  catalogReset('catalog-reset', WaxIcons.warning, WaxRoute.libraries),
   reviewReady('review-ready', WaxIcons.check, WaxRoute.review),
   feedDisabled('feed-disabled', WaxIcons.warning, WaxRoute.podcasts),
   episodeDownloaded('episode-downloaded', WaxIcons.podcasts, WaxRoute.podcasts),
@@ -107,6 +108,7 @@ enum NotificationKind {
     NotificationKind.signupRequested => l10n.bellSurfaceAccounts,
     NotificationKind.backupCompleted ||
     NotificationKind.backupFailed => l10n.bellSurfaceBackups,
+    NotificationKind.catalogReset => l10n.bellSurfaceLibraries,
     NotificationKind.feedDisabled ||
     NotificationKind.episodeArrived ||
     NotificationKind.episodeDownloaded => l10n.bellSurfacePodcasts,

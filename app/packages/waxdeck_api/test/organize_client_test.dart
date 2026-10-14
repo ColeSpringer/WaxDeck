@@ -39,6 +39,33 @@ void main() {
     expect(uri.hasQuery, isFalse);
   });
 
+  test('a playlist removal sends the item the caller saw', () async {
+    final adapter = _RecordingAdapter();
+    final client = WaxDeckClient(
+      baseUrl: 'http://host:4420',
+      dio: Dio()..httpClientAdapter = adapter,
+    );
+    await client.removePlaylistItemAt('pl-1', 2, itemPid: 'tr-9');
+    final uri = adapter.requests.single.uri;
+    expect(adapter.requests.single.method, 'DELETE');
+    expect(uri.path, endsWith('/playlists/pl-1/items/2'));
+    expect(uri.queryParameters['itemPid'], 'tr-9');
+  });
+
+  test('a preview counts its held moves by code', () {
+    final plan = organizePlanFromGen(
+      gen.OrganizePlan(
+        (b) => b
+          ..profile = 'default'
+          ..totalActions = 0
+          ..held = 3
+          ..readOnlyLibraries = 0
+          ..heldByCode.addAll({'read-only': 2, 'occupied': 1}),
+      ),
+    );
+    expect(plan.heldByCode, {'read-only': 2, 'occupied': 1});
+  });
+
   test('a saved profile carries what it sets itself', () {
     final profile = organizeProfileFromGen(
       gen.OrganizeProfile(

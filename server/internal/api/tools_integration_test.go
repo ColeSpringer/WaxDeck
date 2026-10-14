@@ -454,9 +454,10 @@ func TestBookSplitEndToEnd(t *testing.T) {
 	}
 }
 
-func TestCueSplitEndToEnd(t *testing.T) {
-	t.Parallel()
-	h := newToolHarness(t)
+// cueRip lays a two-track rip and its sheet into the harness library and
+// rescans, answering the rip's folder and the carved tracks by title.
+func cueRip(t *testing.T, h *harness) (string, map[string]ItemSummary) {
+	t.Helper()
 	ripDir := filepath.Join(h.library, "Cue Artist", "Cue Album")
 	if _, err := fixtures.Generate(ripDir, fixtures.Spec{
 		Name: "Cue Album", Codec: fixtures.CodecFLAC, Duration: 6 * time.Second,
@@ -482,16 +483,24 @@ func TestCueSplitEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.rescanAndWait(t)
-
 	byTitle := map[string]ItemSummary{}
 	for _, it := range h.items(t, "?mediaType=music").Items {
 		byTitle[it.Title] = it
 	}
-	one, okOne := byTitle["Cue One"]
-	two, okTwo := byTitle["Cue Two"]
-	if !okOne || !okTwo {
+	if _, ok := byTitle["Cue One"]; !ok {
 		t.Fatalf("virtual cue tracks missing from the scan: %v", byTitle)
 	}
+	if _, ok := byTitle["Cue Two"]; !ok {
+		t.Fatalf("virtual cue tracks missing from the scan: %v", byTitle)
+	}
+	return ripDir, byTitle
+}
+
+func TestCueSplitEndToEnd(t *testing.T) {
+	t.Parallel()
+	h := newToolHarness(t)
+	ripDir, byTitle := cueRip(t, h)
+	one, two := byTitle["Cue One"], byTitle["Cue Two"]
 
 	// A non-virtual track refuses the cue split.
 	resp := h.postJSON(t, "/api/v1/items/"+byTitle["Alpha Song"].Pid+"/split-cue", map[string]any{})
@@ -591,6 +600,37 @@ func TestCueSplitEndToEnd(t *testing.T) {
 				t.Fatalf("cue sheet survived: %s", e.Name())
 			}
 		}
+	}
+}
+
+// The rip's tracks come from the catalog, not from a search by album: a
+// track whose album tag was edited still goes with the rip, which the
+// catalog deletes whole or not at all.
+func TestCueSplitRetiresEveryTrackOfTheRip(t *testing.T) {
+	t.Parallel()
+	h := newToolHarness(t)
+	_, byTitle := cueRip(t, h)
+	one, two := byTitle["Cue One"], byTitle["Cue Two"]
+	wantStatus(t, h.patchJSON(t, "/api/v1/items/"+two.Pid+"/metadata", map[string]any{
+		"fields": map[string]string{"album": "Elsewhere"},
+	}), 200, "album edit")
+
+	resp := h.postJSON(t, "/api/v1/items/"+one.Pid+"/split-cue", map[string]any{})
+	if resp.StatusCode != 202 {
+		t.Fatalf("split-cue status = %d", resp.StatusCode)
+	}
+	task := decode[ToolTask](t, resp)
+	drainToolTasks(t, h)
+	if done := h.toolTask(t, task.Id); done.State != "done" {
+		t.Fatalf("task state = %s (error: %v)", done.State, deref(done.Error))
+	}
+	trash := decode[TrashList](t, get(t, h.ts, "/api/v1/admin/trash", h.token)).Entries
+	retired := false
+	for _, e := range trash {
+		retired = retired || strings.HasSuffix(e.Name, "Cue Album.flac")
+	}
+	if !retired {
+		t.Fatalf("the shared rip was not trashed: %+v", trash)
 	}
 }
 

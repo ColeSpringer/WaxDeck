@@ -26,12 +26,7 @@ type discoveryFixture struct {
 	libDir string
 }
 
-// discoveryTrack takes its duration explicitly, and every call site in
-// this file passes a different one. The fixtures synthesize a fixed
-// 440 Hz tone, so duration is the only thing that distinguishes two
-// files' audio - and the catalog keys items by audio essence, so two
-// fixtures of the same length come back as one item with two files and
-// a test written on them measures nothing.
+// discoveryTrack takes its duration explicitly.
 func discoveryTrack(
 	name, title, album string,
 	trackNo int,
