@@ -238,3 +238,121 @@ func unmarshalSubsonic(body []byte, out any) error {
 	}
 	return json.Unmarshal(env, out)
 }
+
+// Another account's shared list shows a tag-deny reader neither the
+// denied track nor a count that includes it, on REST and on /rest alike.
+func TestSharedListHidesTagDeniedTracksOnBothAPIs(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	items := h.items(t, "?mediaType=music").Items
+	flagged, clean := items[0].Pid, items[1].Pid
+	flagExplicit(t, h, flagged)
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Shared", "kind": "static", "visibility": "shared", "itemPids": []string{flagged, clean},
+	})
+	pl := decode[Playlist](t, resp)
+
+	kid := kidAccount(t, h, "kid")
+	entries := decode[PlaylistItemsPage](t, reqAs(t, h, "GET", "/api/v1/playlists/"+pl.Pid+"/items", kid, nil)).Entries
+	if len(entries) != 1 || entries[0].Item.Pid != clean {
+		t.Errorf("REST entries = %+v, want the clean track alone", entries)
+	}
+	if got := decode[Playlist](t, reqAs(t, h, "GET", "/api/v1/playlists/"+pl.Pid, kid, nil)).ItemCount; got == nil || *got != 1 {
+		t.Errorf("REST itemCount = %v, want 1", got)
+	}
+
+	resp = reqAs(t, h, "POST", "/api/v1/users/me/app-passwords", kid, map[string]any{"label": "kid"})
+	if resp.StatusCode != 201 {
+		t.Fatalf("kid app password status = %d", resp.StatusCode)
+	}
+	secret := decode[AppPasswordCreated](t, resp).Secret
+	rest := func(view, extra string, out any) {
+		t.Helper()
+		resp, err := http.Get(h.ts.URL + "/rest/" + view + "?apiKey=" + secret + "&v=1.16.1&c=test&f=json" + extra)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decodeSubsonicBody(t, resp, out)
+	}
+	var one struct {
+		Playlist struct {
+			SongCount int `json:"songCount"`
+			Entries   []struct {
+				ID string `json:"id"`
+			} `json:"entry"`
+		} `json:"playlist"`
+	}
+	rest("getPlaylist", "&id="+url.QueryEscape(pl.Pid), &one)
+	if len(one.Playlist.Entries) != 1 || one.Playlist.Entries[0].ID != clean || one.Playlist.SongCount != 1 {
+		t.Errorf("getPlaylist = %+v, want the clean track alone", one.Playlist)
+	}
+	var all struct {
+		Playlists struct {
+			Playlist []struct {
+				ID        string `json:"id"`
+				SongCount int    `json:"songCount"`
+			} `json:"playlist"`
+		} `json:"playlists"`
+	}
+	rest("getPlaylists", "", &all)
+	for _, p := range all.Playlists.Playlist {
+		if p.ID == pl.Pid && p.SongCount != 1 {
+			t.Errorf("getPlaylists songCount = %d, want 1", p.SongCount)
+		}
+	}
+}
+
+// Subsonic's playlist totals follow the reader's rules: the cache keys
+// on the reader's scope, so a deny rule added between two reads changes
+// the next count rather than leaving the old one up for its minute.
+func TestSubsonicPlaylistTotalsFollowARuleChange(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	items := h.items(t, "?mediaType=music").Items
+	flagged, clean := items[0].Pid, items[1].Pid
+	flagExplicit(t, h, flagged)
+	pl := decode[Playlist](t, h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Shared", "kind": "static", "visibility": "shared", "itemPids": []string{flagged, clean},
+	}))
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{"username": "rowan", "password": testPassword})
+	rowan := decode[UserAccount](t, resp)
+	token := loginAs(t, h.ts, "rowan", testPassword).Token
+	resp = reqAs(t, h, "POST", "/api/v1/users/me/app-passwords", token, map[string]any{"label": "rowan"})
+	secret := decode[AppPasswordCreated](t, resp).Secret
+	count := func() int {
+		t.Helper()
+		resp, err := http.Get(h.ts.URL + "/rest/getPlaylists?apiKey=" + secret + "&v=1.16.1&c=test&f=json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var all struct {
+			Playlists struct {
+				Playlist []struct {
+					ID        string `json:"id"`
+					SongCount int    `json:"songCount"`
+				} `json:"playlist"`
+			} `json:"playlists"`
+		}
+		decodeSubsonicBody(t, resp, &all)
+		for _, p := range all.Playlists.Playlist {
+			if p.ID == pl.Pid {
+				return p.SongCount
+			}
+		}
+		t.Fatal("the shared list is not listed")
+		return 0
+	}
+	if got := count(); got != 2 {
+		t.Fatalf("songCount before the rule = %d, want 2", got)
+	}
+	resp = h.patchJSON(t, "/api/v1/users/"+rowan.Id, map[string]any{
+		"permissions": map[string]any{
+			"download": true, "explicitContent": true, "sharedOutputs": true, "managePodcasts": true,
+			"tagDeny": []map[string]string{{"key": "ITUNESADVISORY", "value": "1"}},
+		},
+	})
+	wantStatus(t, resp, 200, "adding the deny rule")
+	if got := count(); got != 1 {
+		t.Errorf("songCount right after the rule = %d, want 1", got)
+	}
+}

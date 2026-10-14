@@ -2,8 +2,10 @@ package flow
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -26,6 +28,16 @@ func fakeTimelineSidecar(t *testing.T) *httptest.Server {
 	t.Cleanup(srv.Close)
 	return srv
 }
+
+// childDescriptor is a child URL's v parameter as the sidecar writes
+// it: the variant's descriptor, base64url JSON, naming its timeline.
+func childDescriptor(digest string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(`{"ver":1,"tl":"` + digest + `","format":"aac"}`))
+}
+
+// fakeChildV is the descriptor every child URL of the fake's timeline
+// carries.
+var fakeChildV = childDescriptor("digest123")
 
 // timelineSidecarMux is the sidecar's routing table on its own, for a
 // test that wraps it rather than serving it directly.
@@ -87,11 +99,11 @@ func timelineSidecarMux(t *testing.T) *http.ServeMux {
 			return
 		}
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-		w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=160000,CODECS=\"mp4a.40.2\"\nmedia.m3u8?v=abc&sig=child1\n"))
+		w.Write([]byte("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=160000,CODECS=\"mp4a.40.2\"\nmedia.m3u8?v=" + fakeChildV + "&sig=child1\n"))
 	})
 	mux.HandleFunc("/hls/media.m3u8", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-		w.Write([]byte("#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4?v=abc&sig=init1\"\n#EXTINF:4.0,\nseg/0.m4s?v=abc&sig=seg0\n#EXT-X-ENDLIST\n"))
+		w.Write([]byte("#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4?v=" + fakeChildV + "&sig=init1\"\n#EXTINF:4.0,\nseg/0.m4s?v=" + fakeChildV + "&sig=seg0\n#EXT-X-ENDLIST\n"))
 	})
 	mux.HandleFunc("/hls/seg/0.m4s", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("X-API-Key") != "" {
@@ -128,6 +140,7 @@ func newTimelineBridge(t *testing.T) (*Bridge, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	b.SetTranscodeGate(&fakeGate{})
 	return b, path
 }
 
@@ -485,7 +498,7 @@ func TestServeHLSRewritesPlaylistsAndProxiesSegments(t *testing.T) {
 		t.Fatalf("master status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "media.m3u8?v=abc&sig=child1&mt=") {
+	if !strings.Contains(body, "media.m3u8?v="+fakeChildV+"&sig=child1&mt=") {
 		t.Fatalf("child URI not stamped: %s", body)
 	}
 
@@ -501,10 +514,10 @@ func TestServeHLSRewritesPlaylistsAndProxiesSegments(t *testing.T) {
 		t.Fatalf("media status %d: %s", rec.Code, rec.Body.String())
 	}
 	mediaBody := rec.Body.String()
-	if !strings.Contains(mediaBody, "seg/0.m4s?v=abc&sig=seg0&mt=") {
+	if !strings.Contains(mediaBody, "seg/0.m4s?v="+fakeChildV+"&sig=seg0&mt=") {
 		t.Fatalf("segment URI not stamped: %s", mediaBody)
 	}
-	if !strings.Contains(mediaBody, `URI="init.mp4?v=abc&sig=init1&mt=`) {
+	if !strings.Contains(mediaBody, `URI="init.mp4?v=`+fakeChildV+`&sig=init1&mt=`) {
 		t.Fatalf("map URI not stamped: %s", mediaBody)
 	}
 
@@ -530,16 +543,54 @@ func TestServeHLSRewritesPlaylistsAndProxiesSegments(t *testing.T) {
 		t.Fatalf("tokenless master status %d", rec.Code)
 	}
 	otherTokens := auth.NewMediaTokens([]byte("other-secret"), 0)
-	tok, _ := otherTokens.Mint("us-alice", "tl-digest123/aac~off~0")
+	tok, _ := otherTokens.MintFor(auth.MediaClaims{User: "us-alice", Purpose: auth.PurposeHLS, PID: "tl-digest123/aac~off~0"}, 0)
 	rec = get("/media/hls/master.m3u8?tl=digest123&rk=aac~off~0&mt=" + url.QueryEscape(tok))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("forged token status %d", rec.Code)
 	}
-	// A token for a plain item pid does not open the HLS surface.
-	itemTok, _ := b.tokens.Mint("us-alice", "tr-one")
+	// A stream token does not open the HLS surface, and neither does an
+	// hls token that names no timeline.
+	itemTok, _ := b.tokens.MintFor(auth.MediaClaims{User: "us-alice", Purpose: auth.PurposeStream, PID: "tr-one"}, 0)
+	rec = get("/media/hls/master.m3u8?tl=digest123&rk=aac~off~0&mt=" + url.QueryEscape(itemTok))
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("stream token accepted on HLS: %d", rec.Code)
+	}
+	itemTok, _ = b.tokens.MintFor(auth.MediaClaims{User: "us-alice", Purpose: auth.PurposeHLS, PID: "tr-one"}, 0)
 	rec = get("/media/hls/master.m3u8?tl=digest123&rk=aac~off~0&mt=" + url.QueryEscape(itemTok))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("item token accepted on HLS: %d", rec.Code)
+	}
+}
+
+// A child fetch (variant, init, segment) is bound to the timeline its
+// token names: a live token for one timeline does not carry another
+// timeline's signed child URLs, so a listener who lost one queue cannot
+// keep playing it through a token minted for a queue they still hold.
+func TestHLSChildFetchesAreBoundToTheirTimeline(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	res, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}, {PID: "tr-two", Src: Source{Path: path, DurationMS: 90000}}}, TimelineOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, _ := url.Parse(res.URL)
+	mt := u.Query().Get("mt")
+	get := func(u string) int {
+		rec := httptest.NewRecorder()
+		b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, u, nil))
+		return rec.Code
+	}
+	if got := get("/media/hls/seg/0.m4s?v=" + fakeChildV + "&sig=seg0&mt=" + url.QueryEscape(mt)); got != http.StatusOK {
+		t.Fatalf("its own segment = %d, want 200", got)
+	}
+	for name, u := range map[string]string{
+		"another timeline's segment": "/media/hls/seg/0.m4s?v=" + childDescriptor("digest999") + "&sig=seg0&mt=" + url.QueryEscape(mt),
+		"a segment naming none":      "/media/hls/seg/0.m4s?sig=seg0&mt=" + url.QueryEscape(mt),
+		"a garbled descriptor":       "/media/hls/media.m3u8?v=%%%&sig=child1&mt=" + url.QueryEscape(mt),
+	} {
+		if got := get(u); got != http.StatusUnauthorized {
+			t.Errorf("%s = %d, want 401", name, got)
+		}
 	}
 }
 
@@ -572,6 +623,7 @@ func TestTimelineStashSurvivesRestart(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		b.SetTranscodeGate(&fakeGate{})
 		return b
 	}
 
@@ -600,7 +652,7 @@ func TestTimelineStashSurvivesRestart(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("master through the restarted bridge: status %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "media.m3u8?v=abc&sig=child1&mt=") {
+	if !strings.Contains(rec.Body.String(), "media.m3u8?v="+fakeChildV+"&sig=child1&mt=") {
 		t.Fatalf("child URI not stamped: %s", rec.Body.String())
 	}
 
@@ -1163,5 +1215,65 @@ func TestReleaseRefusesARenderingTheCallerIsNotOn(t *testing.T) {
 	}
 	if gate.held != 1 {
 		t.Fatalf("held %d, want alice's alone", gate.held)
+	}
+}
+
+// Every HLS fetch, a segment as much as the master, re-runs the token's
+// mint-time check: hls.js never re-fetches the master, so a check there
+// alone would let a timeline play on for hours after its account lost
+// the right to it.
+func TestServeHLSAsksTheGateOnEveryFetch(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	res, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}},
+		TimelineOptions{Cred: "re:3"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	get := func(u string) *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, u, nil))
+		return rec
+	}
+	rec := get(res.URL)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("master status %d", rec.Code)
+	}
+	var mediaURI string
+	for _, line := range strings.Split(rec.Body.String(), "\n") {
+		if strings.HasPrefix(line, "media.m3u8") {
+			mediaURI = "/media/hls/" + line
+		}
+	}
+	if len(gate.authorized) != 1 || gate.authorized[0].User != "us-alice" ||
+		gate.authorized[0].Cred != "re:3" || gate.authorized[0].Purpose != auth.PurposeHLS {
+		t.Fatalf("the master fetch asked the gate about %+v", gate.authorized)
+	}
+
+	gate.authErr = fmt.Errorf("gone: %w", auth.ErrMediaRevoked)
+	if rec := get(mediaURI); rec.Code != http.StatusUnauthorized {
+		t.Errorf("a child fetch after the account's right ended = %d, want 401", rec.Code)
+	}
+	if rec := get(res.URL); rec.Code != http.StatusUnauthorized {
+		t.Errorf("a master fetch after the account's right ended = %d, want 401", rec.Code)
+	}
+}
+
+// A timeline job answers the account that minted the timeline alone:
+// another account's pid reads as unknown, never as a refusal that says
+// it exists.
+func TestTimelineJobAnswersItsMinterAlone(t *testing.T) {
+	b, _ := newTimelineBridge(t)
+	ts := b.timelines()
+	ts.mu.Lock()
+	ts.jobs["jb-1"] = timelineJob{upstream: "up-1", user: "us-alice"}
+	ts.mu.Unlock()
+	if _, ok := b.TimelineJob(context.Background(), "us-alice", "jb-1"); !ok {
+		t.Error("the minter cannot read its timeline job")
+	}
+	if _, ok := b.TimelineJob(context.Background(), "us-bob", "jb-1"); ok {
+		t.Error("another account reads the minter's timeline job")
 	}
 }

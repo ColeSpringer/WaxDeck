@@ -94,12 +94,13 @@ func (l *Library) RecentlyPositionedItems(ctx context.Context, uc *UserCtx, limi
 	subs := l.newSubscriptionFilter(uc)
 	out := make([]ItemSummary, 0, limit)
 	seen := make(map[string]bool, limit)
-	// Four filters run below - kind, trashed, library visibility,
-	// subscription - and the last three can drop arbitrarily many rows,
-	// so one bare page of stamps comes back short for exactly the
-	// partial-visibility listener who needs the shelf most. Read in
-	// pages until the shelf is full, bounded so a user whose whole
-	// stamp table is music (kind drops every row) cannot walk it.
+	// Five filters run below - kind, trashed, library visibility,
+	// subscription, content rules - and the last four can drop
+	// arbitrarily many rows, so one bare page of stamps comes back short
+	// for exactly the partial-visibility listener who needs the shelf
+	// most. Read in pages until the shelf is full, bounded so a user
+	// whose whole stamp table is music (kind drops every row) cannot
+	// walk it.
 	for scanned := 0; len(out) < limit && scanned < resumeStampScanCap; scanned += resumeStampPage {
 		pids, err := l.db.RecentPositionStamps(ctx, uc.ID, resumeStampPage, scanned)
 		if err != nil {
@@ -136,6 +137,9 @@ func (l *Library) RecentlyPositionedItems(ctx context.Context, uc *UserCtx, limi
 				continue
 			}
 			if !subs.allowsItem(ctx, l, it) {
+				continue
+			}
+			if !l.allowedByContent(ctx, uc, it) {
 				continue
 			}
 			out = append(out, summary(it))

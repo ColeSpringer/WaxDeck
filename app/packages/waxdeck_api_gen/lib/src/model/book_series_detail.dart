@@ -15,7 +15,7 @@ part 'book_series_detail.g.dart';
 /// Properties:
 /// * [pid] - Series PID.
 /// * [name] - The series name, as the books' tags spell it.
-/// * [bookCount] - Books in the series, answered only to an account that can see every library. A restricted account reads the length of `books` instead, which is what it can open. 
+/// * [bookCount] - Books in the series, answered only when this account sees every one of them. A restricted account reads the length of `books` instead, which is what it can open. 
 /// * [totalDurationMs] - Their combined running time, on `bookCount`'s terms. 
 /// * [books] - The books this account can open, in the catalog's sequence order. 
 @BuiltValue()
@@ -28,7 +28,7 @@ abstract class BookSeriesDetail implements Built<BookSeriesDetail, BookSeriesDet
   @BuiltValueField(wireName: r'name')
   String get name;
 
-  /// Books in the series, answered only to an account that can see every library. A restricted account reads the length of `books` instead, which is what it can open. 
+  /// Books in the series, answered only when this account sees every one of them. A restricted account reads the length of `books` instead, which is what it can open. 
   @BuiltValueField(wireName: r'bookCount')
   int? get bookCount;
 

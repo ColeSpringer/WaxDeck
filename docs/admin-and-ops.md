@@ -43,7 +43,10 @@ permission toggles:
   account has contributed: importing a staged upload into the
   library frees the room it held, and nothing here bounds how much
   somebody adds to the library over time.
-- **Download** - fetch original files for offline use.
+- **Download** - fetch original files for offline use: the app's
+  downloads, the Subsonic `download` verb, and a share link's download
+  offer. Streaming a file a client plays natively still sends its
+  original bytes; that is what direct play is.
 - **Delete** - delete visible library items to the trash. Permanent
   deletion is always admin-only.
 - **Explicit content** - see and play content flagged explicit.
@@ -63,7 +66,14 @@ permission toggles:
   mechanism: a kids account with an allow list on `KIDS=yes` sees
   nothing else.
 - **Max transcode bitrate** - a per-account ceiling on transcoded
-  streams, overriding the server default.
+  streams, overriding the server default. It holds every stream the
+  server renders, a cast speaker's included, whether or not the player
+  asks for a lower rate. An original played directly is the file
+  itself and is not held to it, and neither is uncompressed audio for
+  the jukebox or for a speaker that plays nothing else. A stream URL's
+  format and bitrate are part of its credential, so nobody edits their
+  way past it; a lowered ceiling holds a lossy stream already playing
+  at once, and a lossless one started before it plays out.
 
 Administrators hold every permission implicitly. A new account starts
 with everything granted except delete and upload, and no tag rules.
@@ -79,6 +89,19 @@ the console in the nav of an app somebody is already looking at. A
 display name is not on that list: nothing gates on it. The session
 itself is untouched either way - roles are read from the account row on
 every request, so nobody is signed out by a permission change.
+
+Ending a session ends everything it opened. Signing out, revoking a
+device, signing an account out everywhere, resetting its password, and
+disabling or deleting it all close the WebSockets those sessions hold
+at once (status 4401; reconnecting answers 401), and an open socket
+re-checks its session on every keepalive besides, so one that expired
+or vanished closes within half a minute. Media URLs
+(streams, downloads, artwork for casts) re-check on every fetch: one
+minted under a session that has ended, an app password that was
+revoked, or an account that lost the item stops opening, though a
+stream already playing finishes. One account holds
+at most `WAXDECK_SESSION_CAP` sessions; a sign-in past it ends the least
+recently used.
 
 ## Signup requests and invites
 
@@ -100,8 +123,10 @@ be opened:
 
 Every administrative and destructive action is recorded: who did it,
 to what, and the detail of the change - account edits, permission
-changes, playlist deletions, entity merges, item deletions, trash
-operations, backups and restores, settings changes, migration runs.
+changes, password resets, sign-outs everywhere, share links created
+(and revoked by an administrator), playlist deletions, entity merges,
+item deletions, trash operations, backups and restores, settings
+changes, migration runs.
 Names are captured at write time, so "who deleted this playlist" has
 an answer even after the playlist, or the actor, is gone. The log is
 admin-only, filterable by action prefix (`playlist.` matches every
@@ -230,6 +255,10 @@ attached to:
   release. Kind locks set by hand are among what the reset drops, so
   a file you had re-filed as a book or as music goes back to automatic
   classification.
+- **Media URLs and gpodder logins from before the upgrade stop
+  working.** Both changed form: a player asks for a fresh stream URL
+  as it would when one expires, and a podcast client signs in again
+  (with a new app password where the database was recreated).
 
 ## Scheduled jobs
 

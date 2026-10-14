@@ -33,6 +33,7 @@ type env struct {
 	svc    *service.Library
 	uc     *service.UserCtx
 	secret string // the minted app password
+	apID   string // its API id
 	feed   *httptest.Server
 }
 
@@ -88,12 +89,12 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 
-	ts := httptest.NewServer(New(svc, []byte(testKey), log))
+	ts := httptest.NewServer(New(svc, false, log))
 	t.Cleanup(ts.Close)
 
 	return &env{
 		t: t, ctx: ctx, ts: ts, svc: svc, uc: uc,
-		secret: ap.Secret, feed: newFeedServer(t),
+		secret: ap.Secret, apID: ap.ID, feed: newFeedServer(t),
 	}
 }
 
@@ -591,5 +592,191 @@ func TestDevices(t *testing.T) {
 		if d.Subscriptions != 1 {
 			t.Fatalf("device %s subscriptions = %d, want 1", d.ID, d.Subscriptions)
 		}
+	}
+}
+
+// login logs in with Basic credentials and answers the session cookie.
+func (e *env) login(username, secret string) *http.Cookie {
+	e.t.Helper()
+	req, _ := http.NewRequest("POST", e.ts.URL+"/api/2/auth/"+username+"/login.json", nil)
+	req.SetBasicAuth(username, secret)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		e.t.Fatalf("login as %s = %d", username, resp.StatusCode)
+	}
+	for _, c := range resp.Cookies() {
+		if c.Name == "sessionid" {
+			return c
+		}
+	}
+	e.t.Fatal("login set no sessionid cookie")
+	return nil
+}
+
+// withCookie sends one request carrying only the cookie.
+func (e *env) withCookie(c *http.Cookie, method, path, body string) int {
+	e.t.Helper()
+	req, _ := http.NewRequest(method, e.ts.URL+path, strings.NewReader(body))
+	req.AddCookie(c)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	io.Copy(io.Discard, resp.Body)
+	resp.Body.Close()
+	return resp.StatusCode
+}
+
+// A gpodder cookie is a login of one app password: it ends with that app
+// password, and a login on the cookie alone never renews it.
+func TestCookieDiesWithItsAppPassword(t *testing.T) {
+	e := newEnv(t)
+	c := e.login("alice", e.secret)
+	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 200 {
+		t.Fatalf("a fresh cookie = %d", got)
+	}
+	if err := e.svc.RevokeAppPassword(e.ctx, e.uc, e.apID); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 401 {
+		t.Errorf("the cookie after its app password was revoked = %d, want 401", got)
+	}
+	if got := e.withCookie(c, "POST", "/api/2/auth/alice/login.json", ""); got != 401 {
+		t.Errorf("a cookie-only login after the revoke = %d, want 401", got)
+	}
+}
+
+// Logout ends the session it is sent with, and only that one: a second
+// device signed in with the same app password keeps its own.
+func TestLogoutInvalidatesTheCookie(t *testing.T) {
+	e := newEnv(t)
+	phone, tablet := e.login("alice", e.secret), e.login("alice", e.secret)
+	if got := e.withCookie(phone, "POST", "/api/2/auth/alice/logout.json", ""); got != 200 {
+		t.Fatalf("logout = %d", got)
+	}
+	if got := e.withCookie(phone, "GET", "/api/2/devices/alice.json", ""); got != 401 {
+		t.Errorf("the logged-out cookie = %d, want 401", got)
+	}
+	if got := e.withCookie(tablet, "GET", "/api/2/devices/alice.json", ""); got != 200 {
+		t.Errorf("the other device's cookie = %d, want 200", got)
+	}
+}
+
+// A login refused because the path names another account opens nothing,
+// so a client misconfigured with someone else's username cannot crowd
+// the app password's real devices out of its bounded set of logins.
+func TestRefusedLoginsLeaveTheDevicesSignedIn(t *testing.T) {
+	e := newEnv(t)
+	phone := e.login("alice", e.secret)
+	for range 25 {
+		req, _ := http.NewRequest("POST", e.ts.URL+"/api/2/auth/bob/login.json", nil)
+		req.SetBasicAuth("alice", e.secret)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Fatalf("a login naming another account = %d, want 401", resp.StatusCode)
+		}
+	}
+	if got := e.withCookie(phone, "GET", "/api/2/devices/alice.json", ""); got != 200 {
+		t.Errorf("the phone's cookie after refused logins = %d, want 200", got)
+	}
+}
+
+// A cookie names its login, not a username: an account deleted and
+// created again under the same name does not inherit the old cookie.
+func TestCookieDoesNotRebindToARecreatedUsername(t *testing.T) {
+	e := newEnv(t)
+	c := e.login("alice", e.secret)
+	if err := e.svc.DeleteAccount(e.ctx, e.uc.ID); err != nil {
+		t.Fatal(err)
+	}
+	acct, err := e.svc.CreateAccount(e.ctx, service.AccountCreate{Username: "alice", Password: "another-password-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc, err := e.svc.UserCtx(e.ctx, acct.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.CreateAppPassword(e.ctx, uc, "the new alice"); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 401 {
+		t.Errorf("the old cookie on the new account's devices = %d, want 401", got)
+	}
+	if got := e.withCookie(c, "PUT", "/subscriptions/alice/dev.txt", e.feedURL()); got != 401 {
+		t.Errorf("the old cookie writing the new account's subscriptions = %d, want 401", got)
+	}
+}
+
+// A disabled account's cookie is refused, and the disable request ends
+// its gpodder sessions beside its web ones, so re-enabling it does not
+// bring a stale cookie back.
+func TestCookieStopsWhenTheAccountIsDisabled(t *testing.T) {
+	e := newEnv(t)
+	c := e.login("alice", e.secret)
+	off, on := true, false
+	if _, err := e.svc.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{Disabled: &off}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 401 {
+		t.Errorf("the cookie of a disabled account = %d, want 401", got)
+	}
+	// The rest of the disable request (the API's UpdateUser).
+	if err := e.svc.EndGpodderSessions(e.ctx, e.uc.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.UpdateAccount(e.ctx, e.uc.ID, service.AccountUpdate{Disabled: &on}); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 401 {
+		t.Errorf("the cookie after re-enabling = %d, want 401", got)
+	}
+}
+
+// Usernames match case-insensitively everywhere else, so the path
+// compares the same way.
+func TestUsernameMatchIsCaseInsensitive(t *testing.T) {
+	e := newEnv(t)
+	req, _ := http.NewRequest("GET", e.ts.URL+"/api/2/devices/ALICE.json", nil)
+	req.SetBasicAuth("ALICE", e.secret)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Errorf("Basic ALICE on ALICE's path = %d, want 200", resp.StatusCode)
+	}
+	c := e.login("Alice", e.secret)
+	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 200 {
+		t.Errorf("a cookie from Alice's login on alice's path = %d, want 200", got)
+	}
+}
+
+// The cookie carries Secure wherever the server's own does.
+func TestCookieIsSecureBehindHTTPS(t *testing.T) {
+	e := newEnv(t)
+	secure := httptest.NewServer(New(e.svc, true, nil))
+	t.Cleanup(secure.Close)
+	req, _ := http.NewRequest("POST", secure.URL+"/api/2/auth/alice/login.json", nil)
+	req.SetBasicAuth("alice", e.secret)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if !strings.Contains(resp.Header.Get("Set-Cookie"), "Secure") {
+		t.Errorf("the cookie = %q, want Secure", resp.Header.Get("Set-Cookie"))
+	}
+	if strings.Contains(e.login("alice", e.secret).String(), "Secure") {
+		t.Error("the plain-HTTP server's cookie is Secure")
 	}
 }

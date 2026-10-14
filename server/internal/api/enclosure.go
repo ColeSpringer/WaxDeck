@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -21,7 +22,7 @@ import (
 // The facts come from the feed rather than from measured audio, which is
 // what passthrough costs: no analysis, so no silence trim and no voice
 // boost until the episode is fetched.
-func (s *Server) enclosurePlayInfo(ctx context.Context, userID, pid string, cause error) (GetPlayInfo200JSONResponse, bool) {
+func (s *Server) enclosurePlayInfo(ctx context.Context, userID, cred, pid string, cause error) (GetPlayInfo200JSONResponse, bool) {
 	if s.media == nil || !errors.Is(cause, service.ErrEpisodeNotFetched) {
 		return GetPlayInfo200JSONResponse{}, false
 	}
@@ -29,7 +30,7 @@ func (s *Server) enclosurePlayInfo(ctx context.Context, userID, pid string, caus
 	if !ok {
 		return GetPlayInfo200JSONResponse{}, false
 	}
-	token, exp := s.media.Mint(userID, pid)
+	token, exp := s.media.MintFor(auth.MediaClaims{User: userID, Cred: cred, Purpose: auth.PurposeEnclosure, PID: pid}, 0)
 	s.warmEnclosure(pid, src)
 	return GetPlayInfo200JSONResponse{
 		Pid:        pid,
@@ -74,7 +75,7 @@ func (r *ConnectResolver) enclosureItem(ctx context.Context, userID, pid string,
 	if !ok {
 		return "", "", false
 	}
-	token, _ := r.Media.MintFor(userID, pid, ttl)
+	token, _ := r.Media.MintFor(auth.MediaClaims{User: userID, Purpose: auth.PurposeEnclosure, PID: pid}, ttl)
 	return enclosureURL(pid, token), src.MimeType, true
 }
 
@@ -128,13 +129,15 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid-request", "pid is required")
 		return
 	}
-	user, err := s.media.Verify(q.Get("mt"), pid)
+	claims, err := s.media.Verify(q.Get("mt"), auth.MediaWant{Purposes: []string{auth.PurposeEnclosure}, PID: pid})
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "unauthenticated", "missing, expired, or wrong media token")
 		return
 	}
+	user := claims.User
 	// The cap is taken before the catalog read, so a caller already at
-	// the ceiling is refused without a database round trip.
+	// the ceiling is refused without a database round trip; that is why
+	// this route verifies and authorizes in two steps, not verifiedMedia.
 	release, ok := s.relayStreams.acquire(user)
 	if !ok {
 		writeError(w, http.StatusTooManyRequests, "rate-limited",
@@ -142,6 +145,9 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
+	if !s.authorizeMedia(w, r, claims) {
+		return
+	}
 	src, err := s.svc.EnclosureStreamSource(r.Context(), user, pid)
 	if err != nil {
 		switch service.KindOf(err) {

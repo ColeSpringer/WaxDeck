@@ -835,6 +835,9 @@ type memberFilter struct {
 	// applied the predicate, so this only matters for the exempt case;
 	// a static list has no rule and always filters.
 	keepArchived bool
+	// tagsAllowed, when set, is the tag-rule verdict for the members,
+	// read in one pass beforehand (withTagVerdicts); nil asks per item.
+	tagsAllowed map[model.PID]bool
 }
 
 func (l *Library) newMemberFilter(uc *UserCtx, pl *model.Playlist) memberFilter {
@@ -862,18 +865,71 @@ func (l *Library) memberVisible(ctx context.Context, f memberFilter, it *model.I
 	if !l.viewVisible(ctx, f.uc, it) {
 		return false
 	}
-	return f.subs.allowsItem(ctx, l, it)
+	if !f.subs.allowsItem(ctx, l, it) {
+		return false
+	}
+	return l.contentAllows(ctx, f.uc, f.tagsAllowed, it)
 }
 
-// staticMemberNarrow is memberVisible as a query node: the three
-// clauses that decide whether a static list's member is offered to this
-// caller, in the form CountItems takes.
+// withTagVerdicts reads the tag-rule verdict for every member at once,
+// one query per 400, for a caller tag rules narrow: allowedByContent
+// asks the catalog for each member's tags, a read per member of every
+// list such a caller counts, opens or exports. contentRuleNode is the
+// structural mirror of the per-item rule, so the verdicts agree with it.
+// Episodes and trashed members stay per item (the advisory flags are a
+// field on the view; a trashed member is rare and outside the query).
+func (l *Library) withTagVerdicts(ctx context.Context, f memberFilter, members []*model.ItemView) (memberFilter, error) {
+	allowed, err := l.tagVerdicts(ctx, f.uc, members)
+	if err != nil {
+		return f, err
+	}
+	f.tagsAllowed = allowed
+	return f, nil
+}
+
+// tagVerdicts answers which of the items (episodes and trashed items
+// aside) pass the caller's tag rules, one query per 400; nil for a
+// caller no tag rule narrows, who needs no answer.
+func (l *Library) tagVerdicts(ctx context.Context, uc *UserCtx, items []*model.ItemView) (map[model.PID]bool, error) {
+	if !tagRestricted(uc) {
+		return nil, nil
+	}
+	rules := l.contentRuleNode(ctx, uc)
+	if rules == nil {
+		return nil, nil
+	}
+	var pids []model.PID
+	seen := map[model.PID]bool{}
+	for _, it := range items {
+		if it == nil || it.Kind == model.KindEpisode || archived(it) || seen[it.PID] {
+			continue
+		}
+		seen[it.PID] = true
+		pids = append(pids, it.PID)
+	}
+	found, err := l.itemsAmong(ctx, pids, func() *query.Builder { return visibleItems().WhereNode(rules) })
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[model.PID]bool, len(found))
+	for pid := range found {
+		allowed[pid] = true
+	}
+	return allowed, nil
+}
+
+// staticMemberNarrow is memberVisible as a query node: the clauses that
+// decide whether a static list's member is offered to this caller, in
+// the form CountItems takes.
 //
 // It tracks memberVisible clause for clause, which is the invariant that
 // keeps a count and its listing from disagreeing. A static list carries
 // no rule, so keepArchived is never set and the state predicate always
 // applies; the library grants are the allow-list form viewVisible asks
-// for per item; and episodes pass only for a subscriber of their show.
+// for per item; episodes pass only for a subscriber of their show; and
+// the content rules are contentRuleNode plus the advisory flags, which
+// contentRuleNode leaves to the per-item pass (both read 0 off a
+// non-episode).
 //
 // The two empty cases both fail closed on purpose, matching the per-item
 // filter. No grants compiles to `1=0` and counts nothing. No
@@ -883,9 +939,17 @@ func (l *Library) memberVisible(ctx context.Context, f memberFilter, it *model.I
 // same reason, logged rather than propagated so a podcast outage costs a
 // music playlist its episodes rather than its whole count.
 func (l *Library) staticMemberNarrow(ctx context.Context, uc *UserCtx) query.Node {
-	nodes := []query.Node{
+	return query.And{Nodes: []query.Node{
 		query.Cond{Field: "state", Op: query.OpIsNot, Value: string(model.StateArchived)},
-	}
+		l.readerNarrow(ctx, uc),
+	}}
+}
+
+// readerNarrow is staticMemberNarrow without the state clause: what this
+// caller may be offered whatever the item's state, for a query that
+// decides state itself.
+func (l *Library) readerNarrow(ctx context.Context, uc *UserCtx) query.Node {
+	var nodes []query.Node
 	if !uc.AllLibraries {
 		libs := make([]string, 0, len(uc.Libraries))
 		for lib := range uc.Libraries {
@@ -908,7 +972,25 @@ func (l *Library) staticMemberNarrow(ctx context.Context, uc *UserCtx) query.Nod
 		query.Cond{Field: "kind", Op: query.OpIsNot, Value: string(model.KindEpisode)},
 		inSet("podcast_pid", shows),
 	}})
+	nodes = append(nodes, l.contentNarrow(ctx, uc)...)
 	return query.And{Nodes: nodes}
+}
+
+// contentNarrow is the content half of a reader's narrowing: the tag
+// rules (episodes aside, which the advisory flags decide) and, for a
+// caller who hides explicit content, both advisory flags, which read 0
+// off anything that is not an episode. Nil for a caller nothing hides.
+func (l *Library) contentNarrow(ctx context.Context, uc *UserCtx) []query.Node {
+	var nodes []query.Node
+	if rules := l.contentRuleNode(ctx, uc); rules != nil {
+		nodes = append(nodes, rules)
+	}
+	if !uc.Admin && !uc.Explicit {
+		nodes = append(nodes,
+			query.Cond{Field: "explicit", Op: query.OpIs, Value: 0},
+			query.Cond{Field: "podcast_explicit", Op: query.OpIs, Value: 0})
+	}
+	return nodes
 }
 
 // inSet is field membership within the engine's per-condition value cap
@@ -963,7 +1045,10 @@ func (l *Library) visibleMemberCount(ctx context.Context, uc *UserCtx, pl *model
 	if err != nil {
 		return 0, err
 	}
-	f := l.newMemberFilter(uc, pl)
+	f, err := l.withTagVerdicts(ctx, l.newMemberFilter(uc, pl), members)
+	if err != nil {
+		return 0, err
+	}
 	n := 0
 	for _, it := range members {
 		if l.memberVisible(ctx, f, it) {
@@ -1021,7 +1106,7 @@ func (l *Library) Playlists(ctx context.Context, uc *UserCtx, containsItem, curs
 		return all[i].PID < all[j].PID
 	})
 	if containsItem != "" {
-		filtered, err := l.filterPlaylistsByMember(ctx, all, containsItem)
+		filtered, err := l.filterPlaylistsByMember(ctx, uc, all, containsItem)
 		if err != nil {
 			return PlaylistPage{}, err
 		}
@@ -1048,11 +1133,18 @@ func (l *Library) Playlists(ctx context.Context, uc *UserCtx, containsItem, curs
 // filterPlaylistsByMember keeps static playlists whose stored members
 // include the item. Membership scans each candidate's stored list;
 // playlist libraries are small and the filter is an interactive
-// add-to-playlist affordance, not a hot path.
-func (l *Library) filterPlaylistsByMember(ctx context.Context, all []*model.Playlist, apiItemPID string) ([]*model.Playlist, error) {
+// add-to-playlist affordance, not a hot path. An item the caller cannot
+// see is in none of them, the answer an unknown pid gets.
+func (l *Library) filterPlaylistsByMember(ctx context.Context, uc *UserCtx, all []*model.Playlist, apiItemPID string) ([]*model.Playlist, error) {
 	prefix, itemPID, ok := parseAPIPID(apiItemPID)
 	if !ok || !itemPrefix(prefix) {
 		return nil, errInvalid("containsItem must be an item pid")
+	}
+	if _, err := l.getVisibleItem(ctx, uc, apiItemPID); err != nil {
+		if KindOf(err) == KindNotFound {
+			return nil, nil
+		}
+		return nil, err
 	}
 	var out []*model.Playlist
 	for _, pl := range all {
@@ -1105,14 +1197,8 @@ func (l *Library) CreatePlaylist(ctx context.Context, uc *UserCtx, req PlaylistC
 		if err != nil {
 			return Playlist{}, err
 		}
-		pid, err = l.lib.Playlists().CreateStatic(ctx, name, owner, vis)
-		if err != nil {
-			return Playlist{}, classify(err)
-		}
-		if len(items) > 0 {
-			if err := l.lib.Playlists().Add(ctx, pid, items...); err != nil {
-				return Playlist{}, classify(err)
-			}
+		if pid, err = l.createStaticWith(ctx, name, owner, vis, items); err != nil {
+			return Playlist{}, err
 		}
 	case string(model.PlaylistSmart):
 		if req.Rule == nil {
@@ -1331,7 +1417,10 @@ func (l *Library) PlaylistItems(ctx context.Context, uc *UserCtx, apiPlaylistPID
 	// smart list's already left the query filtered. Positions still count
 	// off the full stored list, exactly as they do for members the caller
 	// cannot see, so a restore lands where it was.
-	f := l.newMemberFilter(uc, pl)
+	f, err := l.withTagVerdicts(ctx, l.newMemberFilter(uc, pl), items[min(off, len(items)):])
+	if err != nil {
+		return PlaylistItemsPage{}, err
+	}
 	out := PlaylistItemsPage{Entries: []PlaylistEntry{}}
 	for i := off; i < len(items); i++ {
 		if len(out.Entries) == limit {
@@ -1350,6 +1439,25 @@ func (l *Library) PlaylistItems(ctx context.Context, uc *UserCtx, apiPlaylistPID
 		out.Entries = append(out.Entries, entry)
 	}
 	return out, nil
+}
+
+// createStaticWith creates a static playlist holding items, taking the
+// list back when its members cannot be added: two writes behind one
+// call, so a failure leaves nothing for a retry to duplicate.
+func (l *Library) createStaticWith(ctx context.Context, name string, owner model.PID, vis model.PlaylistVisibility, items []model.PID) (model.PID, error) {
+	pid, err := l.lib.Playlists().CreateStatic(ctx, name, owner, vis)
+	if err != nil {
+		return "", classify(err)
+	}
+	if len(items) > 0 {
+		if err := l.lib.Playlists().Add(ctx, pid, items...); err != nil {
+			if derr := l.lib.Playlists().Delete(ctx, pid); derr != nil {
+				l.log.Warn("removing a half-made playlist", "playlist", pid, "err", derr)
+			}
+			return "", classify(err)
+		}
+	}
+	return pid, nil
 }
 
 // ReplacePlaylistItems replaces a static playlist's full member list;
@@ -1375,9 +1483,9 @@ func (l *Library) ReplacePlaylistItems(ctx context.Context, uc *UserCtx, apiPlay
 	}
 	// A replace built by an owner who cannot currently see every stored
 	// member would silently drop the hidden ones; refuse instead. The
-	// member list hides on three dimensions - library visibility,
-	// unsubscribed shows' episodes, and trashed members - so
-	// the guard covers all three, and the last two apply to
+	// member list hides on four dimensions - library visibility,
+	// unsubscribed shows' episodes, trashed members, and content rules -
+	// so the guard covers all four, and the middle two apply to
 	// full-visibility users too. This path is static-only (refused
 	// above), so pl.Rule is nil and no state-naming rule exempts the
 	// archived arm.
@@ -1395,6 +1503,9 @@ func (l *Library) ReplacePlaylistItems(ctx context.Context, uc *UserCtx, apiPlay
 		}
 		if !subs.allowsItem(ctx, l, it) {
 			return &Error{Kind: KindConflict, Msg: "the playlist holds episodes of shows you are not subscribed to; a replace would drop them"}
+		}
+		if !l.allowedByContent(ctx, uc, it) {
+			return &Error{Kind: KindConflict, Msg: "the playlist holds members your content settings hide; a replace would drop them"}
 		}
 	}
 	items, err := l.resolveItemPIDs(ctx, uc, itemPIDs)
@@ -1500,12 +1611,18 @@ func (l *Library) PreviewRule(ctx context.Context, uc *UserCtx, rule SmartRule, 
 	user := model.PID(uc.CatalogPID)
 	// Total is the condition-match count, ignoring the rule's own limit.
 	// A random or budget mode rejects a zero limit, so count as a plain
-	// match count rather than reusing the rule's mode.
+	// match count rather than reusing the rule's mode. It counts only
+	// what the caller may be offered, or the number would report matches
+	// in libraries and under rules that hide them.
 	qc := q
 	qc.Limit = 0
 	qc.LimitMode = query.LimitCount
 	qc.LimitSeed = 0
 	qc.Sorts = nil
+	qc.Where = l.readerNarrow(ctx, uc)
+	if q.Where != nil {
+		qc.Where = query.And{Nodes: []query.Node{q.Where, qc.Where}}
+	}
 	total, err := l.lib.Count(ctx, qc, user)
 	if err != nil {
 		return PlaylistPreview{}, classify(err)
@@ -1522,16 +1639,18 @@ func (l *Library) PreviewRule(ctx context.Context, uc *UserCtx, rule SmartRule, 
 	if err != nil {
 		return PlaylistPreview{}, classify(err)
 	}
-	subs := l.newSubscriptionFilter(uc)
+	// The page is the rule as a saved list evaluates it, limit first,
+	// then filtered as that list's listing filters it.
+	f, err := l.withTagVerdicts(ctx, memberFilter{uc: uc, subs: l.newSubscriptionFilter(uc), keepArchived: ruleNamesState(q.Where)}, items)
+	if err != nil {
+		return PlaylistPreview{}, err
+	}
 	out := PlaylistPreview{Items: []ItemSummary{}, Total: total}
 	for _, it := range items {
 		if len(out.Items) >= limit {
 			break
 		}
-		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
-			continue
-		}
-		if !subs.allowsItem(ctx, l, it) {
+		if !l.memberVisible(ctx, f, it) {
 			continue
 		}
 		out.Items = append(out.Items, summary(it))
@@ -1539,15 +1658,36 @@ func (l *Library) PreviewRule(ctx context.Context, uc *UserCtx, rule SmartRule, 
 	return out, nil
 }
 
-// ExportPlaylistM3U renders a playlist as an M3U8 document.
+// ExportPlaylistM3U renders the members of a playlist this caller can
+// see as an M3U8 document, in the catalog's own format byte for byte so
+// its importer reads the document back. Written here rather than by
+// ExportM3U8, which writes every stored member for whoever asks.
 func (l *Library) ExportPlaylistM3U(ctx context.Context, uc *UserCtx, apiPlaylistPID string) (string, error) {
 	pl, err := l.resolvePlaylist(ctx, uc, apiPlaylistPID)
 	if err != nil {
 		return "", err
 	}
+	members, err := l.playlistMembers(ctx, pl)
+	if err != nil {
+		return "", err
+	}
+	f, err := l.withTagVerdicts(ctx, l.newMemberFilter(uc, pl), members)
+	if err != nil {
+		return "", err
+	}
+	fold := strings.NewReplacer("\r", " ", "\n", " ")
 	var buf bytes.Buffer
-	if err := l.lib.Playlists().ExportM3U8(ctx, pl.PID, &buf, pl.OwnerPID); err != nil {
-		return "", classify(err)
+	buf.WriteString("#EXTM3U\n")
+	for _, it := range members {
+		if !l.memberVisible(ctx, f, it) {
+			continue
+		}
+		// A line-based format cannot carry a path with a line break.
+		if strings.ContainsAny(it.DisplayPath, "\r\n") {
+			return "", errInvalid("item path contains a newline and cannot be written to M3U8: " + itemAPIPID(it))
+		}
+		fmt.Fprintf(&buf, "#EXTINF:%d,%s - %s\n%s\n", it.DurationMS/1000,
+			fold.Replace(it.Artist), fold.Replace(it.Title), it.DisplayPath)
 	}
 	return buf.String(), nil
 }
@@ -1562,21 +1702,52 @@ func (l *Library) ImportPlaylistM3U(ctx context.Context, uc *UserCtx, name, visi
 	if err != nil {
 		return M3uImportOutcome{}, err
 	}
-	res, err := l.lib.Playlists().ImportM3U8(ctx, name, model.PID(uc.CatalogPID), vis, strings.NewReader(content))
+	owner := model.PID(uc.CatalogPID)
+	if err := l.lib.Playlists().CheckImport(ctx, name, owner, vis); err != nil {
+		return M3uImportOutcome{}, classify(err)
+	}
+	// Resolve, filter, then create: a path naming an item the caller
+	// cannot see reads as unmatched, never as stored and then dropped. A
+	// merged line names the item of the line before it, so it shares that
+	// line's verdict.
+	matches, err := l.lib.Playlists().ResolveM3U8(ctx, strings.NewReader(content))
 	if err != nil {
 		return M3uImportOutcome{}, classify(err)
 	}
-	pl, err := l.lib.Playlists().Get(ctx, res.PlaylistPID)
+	var found []*model.ItemView
+	for _, m := range matches {
+		if m.Item != nil {
+			found = append(found, m.Item)
+		}
+	}
+	f, err := l.withTagVerdicts(ctx, memberFilter{uc: uc, subs: l.newSubscriptionFilter(uc)}, found)
+	if err != nil {
+		return M3uImportOutcome{}, err
+	}
+	out := M3uImportOutcome{}
+	var keep []model.PID
+	for _, m := range matches {
+		switch {
+		case m.Item == nil || !l.memberVisible(ctx, f, m.Item):
+			out.Unmatched++
+			out.UnmatchedPaths = append(out.UnmatchedPaths, m.Path)
+		case m.Merged:
+		default:
+			keep = append(keep, m.Item.PID)
+		}
+	}
+	pid, err := l.createStaticWith(ctx, name, owner, vis, keep)
+	if err != nil {
+		return M3uImportOutcome{}, err
+	}
+	pl, err := l.lib.Playlists().Get(ctx, pid)
 	if err != nil {
 		return M3uImportOutcome{}, classify(err)
 	}
 	l.emitPlaylistEvent(ctx, uc, pl.Visibility == model.VisibilityShared, string(pl.PID))
-	return M3uImportOutcome{
-		Playlist:       l.playlistDTO(ctx, uc, pl, true, nil),
-		Matched:        res.Matched,
-		Unmatched:      res.Unmatched,
-		UnmatchedPaths: res.UnmatchedPaths,
-	}, nil
+	out.Playlist = l.playlistDTO(ctx, uc, pl, true, nil)
+	out.Matched = len(keep)
+	return out, nil
 }
 
 // resolveItemPIDs validates item pids against the caller's visibility

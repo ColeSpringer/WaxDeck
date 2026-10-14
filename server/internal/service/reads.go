@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -386,35 +387,23 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 		}
 		return hits
 	}
-	convEntity := func(hits []read.SearchHit, prefix string, kind read.EntityKind, group read.GroupBy, field string) ([]SearchHit, error) {
-		// Entities carry no stored library column, so a restricted caller's
-		// hits are attributed through the libraries holding their member
-		// items, in one batched lookup per kind. Full-visibility callers
-		// see every entity and skip it entirely.
-		var infos map[model.PID]*read.EntityInfo
-		if !uc.AllLibraries && len(hits) > 0 {
-			pids := make([]model.PID, 0, len(hits))
-			for _, h := range hits {
-				pids = append(pids, h.PID)
-			}
-			var err error
-			if infos, err = l.lib.EntityByPIDs(ctx, kind, pids); err != nil {
-				// The batch is the gate, so a failure can neither hand the
-				// caller entities it may not see nor pass as an honest
-				// empty group: it fails the search.
-				return nil, classify(err)
-			}
+	convEntity := func(hits []read.SearchHit, prefix string) ([]SearchHit, error) {
+		// Entities carry no stored library column, so every hit is kept
+		// only when one of its members passes the caller's listing scope,
+		// in one facet per kind. The facet is the gate, so a failure can
+		// neither hand the caller entities it may not see nor pass as an
+		// honest empty group: it fails the search.
+		pids := make([]model.PID, 0, len(hits))
+		for _, h := range hits {
+			pids = append(pids, h.PID)
 		}
-		live, err := l.entitiesWithLiveMembers(ctx, hits, group, field)
+		live, err := l.visibleEntities(ctx, uc, prefix, pids)
 		if err != nil {
 			return nil, err
 		}
 		out := make([]SearchHit, 0, len(hits))
 		for _, h := range hits {
 			if !live[h.PID] {
-				continue
-			}
-			if !uc.AllLibraries && !l.entityInLibraries(infos[h.PID], uc) {
 				continue
 			}
 			out = append(out, SearchHit{
@@ -453,11 +442,11 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 		}
 		return truncate(out)
 	}
-	artists, err := convEntity(res.Artists, PrefixArtist, read.EntityArtist, read.GroupArtist, "artist_pid")
+	artists, err := convEntity(res.Artists, PrefixArtist)
 	if err != nil {
 		return SearchResults{}, err
 	}
-	albums, err := convEntity(res.Albums, PrefixAlbum, read.EntityAlbum, read.GroupAlbum, "album_pid")
+	albums, err := convEntity(res.Albums, PrefixAlbum)
 	if err != nil {
 		return SearchResults{}, err
 	}
@@ -472,36 +461,53 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 	}, nil
 }
 
-// entitiesWithLiveMembers reports which of a search's entity hits still
-// hold at least one item a listing would offer: an artist whose every
-// track is in the trash must not stay a search hit and open onto an
-// empty facet drill, while the browse index has already dropped them
-// because facetScopeQuery aggregates over items.
+// entityScope is how a catalog entity kind is tested for visibility:
+// the item field naming its members and the facet dimension grouping
+// by it, the same membership the catalog attributes libraries through.
+type entityScope struct {
+	field string
+	group read.GroupBy
+}
+
+var entityScopes = map[string]entityScope{
+	PrefixArtist:       {"artist_pid", read.GroupArtist},
+	PrefixAlbum:        {"album_pid", read.GroupAlbum},
+	PrefixReleaseGroup: {"release_group_pid", read.GroupReleaseGroup},
+}
+
+// fullReach reports whether the caller sees every track and book: every
+// library and no tag rule. Entity gates skip their member read for such
+// a caller. The explicit toggle is not part of it: it hides episodes
+// alone, and nothing gated on this holds one (albums, artists, release
+// groups, series, the music in a recap).
+func fullReach(uc *UserCtx) bool {
+	return uc.AllLibraries && !tagRestricted(uc)
+}
+
+// visibleEntities answers which of the entities hold at least one member
+// this caller's listings offer: the facet scope (state, library grants,
+// content rules) narrowed to the entities, in one facet. An artist whose
+// every track is in the trash, or an album a tag rule denies throughout,
+// is not visible, so no entity surface hands out a pid that opens onto
+// an empty drill.
 //
-// One facet over the hit pids answers the whole group: the same
-// dimension the drill pairs with, so search and browse cannot disagree
-// about what "this artist has something" means.
-//
-// This is belt now rather than the only guard. The catalog derives the
-// artist and album groups from matched *item* rows, so
-// SearchOptions.States carries into them: an entity whose every member
-// is archived contributes no matched row and is never a hit in the first
-// place. Kept because the two ask subtly different questions - States
-// asks whether a listable member *matched the query*, this asks whether
-// the entity has a listable member at all - and because it is the half
-// that keeps search agreeing with the drill it opens. If it ever shows
-// up in a search profile, measure before deleting: it costs one facet
-// per entity group per keystroke.
-func (l *Library) entitiesWithLiveMembers(ctx context.Context, hits []read.SearchHit, group read.GroupBy, field string) (map[model.PID]bool, error) {
-	if len(hits) == 0 {
-		return nil, nil
+// Never nil without an error: callers read a nil set as "nothing was
+// filtered" (a caller of full reach), so a kind missing from
+// entityScopes is an error rather than a set any of them could misread.
+func (l *Library) visibleEntities(ctx context.Context, uc *UserCtx, prefix string, pids []model.PID) (map[model.PID]bool, error) {
+	scope, ok := entityScopes[prefix]
+	if !ok {
+		return nil, &Error{Kind: KindInternal, Err: fmt.Errorf("no visibility scope for entity kind %q", prefix)}
 	}
-	pids := make([]string, 0, len(hits))
-	for _, h := range hits {
-		pids = append(pids, string(h.PID))
+	if len(pids) == 0 {
+		return map[model.PID]bool{}, nil
 	}
-	q := visibleItems().WhereValues(field, query.OpIn, query.Values(pids)...).Build()
-	res, err := l.lib.Facet(ctx, q, group, read.FacetOrderLabel, 0, model.PID(""))
+	values := make([]string, 0, len(pids))
+	for _, pid := range pids {
+		values = append(values, string(pid))
+	}
+	q := l.facetScopeBuilder(ctx, uc).WhereNode(inSet(scope.field, values)).Build()
+	res, err := l.lib.Facet(ctx, q, scope.group, read.FacetOrderLabel, 0, model.PID(""))
 	if err != nil {
 		return nil, classify(err)
 	}
@@ -512,6 +518,19 @@ func (l *Library) entitiesWithLiveMembers(ctx context.Context, hits []read.Searc
 		}
 	}
 	return out, nil
+}
+
+// entityVisible is visibleEntities for one entity, skipped for a caller
+// of full reach.
+func (l *Library) entityVisible(ctx context.Context, uc *UserCtx, prefix string, pid model.PID) (bool, error) {
+	if fullReach(uc) {
+		return true, nil
+	}
+	vis, err := l.visibleEntities(ctx, uc, prefix, []model.PID{pid})
+	if err != nil {
+		return false, err
+	}
+	return vis[pid], nil
 }
 
 // EntityNames resolves the catalog's display name for a batch of API
@@ -646,7 +665,9 @@ func (l *Library) Album(ctx context.Context, uc *UserCtx, apiAlbumPID string) (A
 	if info == nil {
 		return AlbumDetail{}, errNotFound("no album with pid " + apiAlbumPID)
 	}
-	if !uc.AllLibraries && !l.entityInLibraries(info, uc) {
+	if ok, err := l.entityVisible(ctx, uc, PrefixAlbum, pid); err != nil {
+		return AlbumDetail{}, err
+	} else if !ok {
 		return AlbumDetail{}, errNotFound("no album with pid " + apiAlbumPID)
 	}
 	out := AlbumDetail{
@@ -663,13 +684,13 @@ func (l *Library) Album(ctx context.Context, uc *UserCtx, apiAlbumPID string) (A
 		Country:         info.Country,
 	}
 	// The catalog's counts are catalog-wide: EntityByPID takes no library
-	// scope, so they describe the release rather than the caller's reach.
-	// Handing them to a restricted caller would advertise nine tracks on
-	// a screen that can open three, so they are answered only where they
-	// are true. Left absent rather than recomputed: nothing draws them
-	// today (a header counts the rows it listed), and a per-album scoped
-	// count is a read spent on a number nobody reads.
-	if uc.AllLibraries {
+	// or content scope, so they describe the release rather than the
+	// caller's reach. Handing them to a restricted caller would advertise
+	// nine tracks on a screen that can open three, so they are answered
+	// only where they are true. Left absent rather than recomputed:
+	// nothing draws them today (a header counts the rows it listed), and
+	// a per-album scoped count is a read spent on a number nobody reads.
+	if fullReach(uc) {
 		out.ItemCount, out.TotalDurationMS = info.ItemCount, info.TotalDurationMS
 	}
 	out.ArtSource = l.artSourceForRef(ctx, model.EntityRef{Type: model.ArtAlbum, PID: info.PID})

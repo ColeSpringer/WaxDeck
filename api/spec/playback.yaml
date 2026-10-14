@@ -13,11 +13,16 @@ paths:
         `stream-stale`. On a server running without the streaming
         engine, the url serves the item's original file bytes directly
         (ranged, no transcoding, in whatever format the file is in)
-        through the same endpoint downloads use, attachment
-        disposition and byte-identity pin included; expiry is
+        through the same endpoint downloads use, inline and with the
+        byte-identity pin; expiry is
         enforced per request, so an in-flight fetch completes but a
         later range request after `expiresAt` answers
-        `unauthenticated` and the client re-requests play-info. An
+        `unauthenticated` and the client re-requests play-info. The url
+        dies with the session that asked for it. A capped account's
+        transcoded stream is never wider than its ceiling, whether or
+        not the request carries `maxBitrateKbps` (an original played
+        directly is the file itself), and the stream
+        parameters are part of the url's credential. An
         item carved out of a larger file additionally carries
         `spanStartMs`/`spanEndMs` and the client plays only that
         window; a client that does not implement the window MUST
@@ -133,7 +138,7 @@ paths:
         media-token-authenticated URL serving the untranscoded file with
         range support, so interrupted downloads resume. The download
         responses carry a `Content-Disposition` derived from each entry's
-        `fileName` and an `ETag` equal to the entry's `etag`, a strong
+        `fileName` (an attachment) and an `ETag` equal to the entry's `etag`, a strong
         validator of the exact file bytes: resume ranges with
         `If-Range: <etag>`, and when it no longer matches (the file was
         retagged, replaced, or upgraded) restart that file's transfer.
@@ -146,7 +151,12 @@ paths:
         file plus a `spanStartMs`/`spanEndMs` playback window. When a
         URL expires mid-download, re-request download-info and resume by
         range against the fresh URL. A download URL whose file changed
-        on disk answers `stream-stale`; re-request download-info.
+        on disk answers `stream-stale`; re-request download-info. The
+        URLs die with the session that asked for them and stop with the
+        account's download permission. The permission governs this
+        surface (and the Subsonic `download` verb and a share's
+        `allowDownload`); a natively playable file's direct play is its
+        original bytes whatever it says.
       tags: [playback]
       parameters:
         - $ref: "#/components/parameters/Pid"

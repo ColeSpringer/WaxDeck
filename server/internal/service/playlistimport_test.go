@@ -1,8 +1,14 @@
 package service
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/colespringer/waxbin/model"
+
+	"github.com/colespringer/waxdeck/fixtures"
 )
 
 func TestParseDelimitedExportExportify(t *testing.T) {
@@ -258,5 +264,95 @@ func TestFirstArtist(t *testing.T) {
 		if got := firstArtist(c.in); got != c.want {
 			t.Errorf("firstArtist(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+// TestResolveReachableFallsThroughToTheRetry: a first-pass match the
+// caller cannot see is a miss inside that pass, so the trimmed-artist
+// retry still runs and finds the copy they can.
+func TestResolveReachableFallsThroughToTheRetry(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixtureWith(t, catalogFixtureOptions{
+		extra: func(t *testing.T, libDir string) {
+			if _, err := fixtures.Generate(filepath.Join(libDir, "guest"), fixtures.Spec{
+				Name: "guest", Codec: fixtures.CodecFLAC, Duration: 4 * time.Second,
+				Tags: map[string]string{
+					"TITLE": "Amber Waves", "ARTIST": "Test Ensemble, Guest", "ALBUM": "Guest Spots",
+				},
+			}); err != nil {
+				t.Fatal(err)
+			}
+		},
+	})
+	var guest, plain string
+	page, err := svc.Items(ctx, uc, ItemFilter{}, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range page.Items {
+		switch {
+		case it.Title == "Amber Waves" && it.Artist == "Test Ensemble, Guest":
+			guest = it.PID
+		case it.Title == "Amber Waves":
+			plain = it.PID
+		}
+	}
+	if guest == "" || plain == "" {
+		t.Fatalf("fixture copies: guest %q plain %q", guest, plain)
+	}
+	if _, err := svc.SetItemTag(ctx, uc, guest, "MOOD", []string{"calm"}, false, false); err != nil {
+		t.Fatal(err)
+	}
+	in := PlaylistImportInput{Source: "text", Payload: "Test Ensemble, Guest - Amber Waves\n"}
+
+	out, err := svc.ImportStreamingPlaylist(ctx, uc, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := memberPIDs(t, ctx, svc, uc, out.PlaylistPID); !samePIDs(got, []string{guest}) {
+		t.Fatalf("unrestricted import holds %v, want the credited copy %s", got, guest)
+	}
+
+	kid := &UserCtx{
+		ID: uc.ID, CatalogPID: uc.CatalogPID, AllLibraries: true, Explicit: true,
+		TagDeny: []TagRule{{Key: "MOOD", Value: "calm"}},
+	}
+	out, err = svc.ImportStreamingPlaylist(ctx, kid, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Resolved != 1 {
+		t.Fatalf("restricted import = %+v, want the retry's match", out)
+	}
+	if got := memberPIDs(t, ctx, svc, kid, out.PlaylistPID); !samePIDs(got, []string{plain}) {
+		t.Errorf("restricted import holds %v, want the copy they can see %s", got, plain)
+	}
+}
+
+// TestPairRefsRefusesAListThatMoved: the portable export pairs the
+// catalog's positional refs with a member read by position, so a list
+// that changed between the two reads must refuse rather than hand a
+// reader the ref of a member they cannot see.
+func TestPairRefsRefusesAListThatMoved(t *testing.T) {
+	t.Parallel()
+	l := &Library{}
+	f := memberFilter{uc: &UserCtx{Admin: true, AllLibraries: true, Explicit: true}, subs: l.newSubscriptionFilter(nil)}
+	view := func(pid, title string, state model.ItemState) *model.ItemView {
+		return &model.ItemView{PID: model.PID(pid), Kind: model.KindTrack, Title: title, DurationMS: 1000, State: state}
+	}
+	ref := func(title string) model.PortableRef {
+		return model.PortableRef{Kind: model.KindTrack, Title: title, DurationMS: 1000}
+	}
+	live, gone := view("a", "Alpha", model.StatePresent), view("b", "Bravo", model.StateArchived)
+
+	out, ok := l.pairRefs(t.Context(), f, []*model.ItemView{live, gone}, []model.PortableRef{ref("Alpha"), ref("Bravo")})
+	if !ok || len(out) != 1 || out[0].Title != "Alpha" {
+		t.Errorf("aligned lists = %+v (%v), want Alpha's ref alone", out, ok)
+	}
+	if _, ok := l.pairRefs(t.Context(), f, []*model.ItemView{live, gone}, []model.PortableRef{ref("Bravo"), ref("Alpha")}); ok {
+		t.Error("a reordered list paired")
+	}
+	if _, ok := l.pairRefs(t.Context(), f, []*model.ItemView{live}, []model.PortableRef{ref("Alpha"), ref("Bravo")}); ok {
+		t.Error("lists of different lengths paired")
 	}
 }

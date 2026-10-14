@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -784,7 +786,7 @@ func longestRun(days map[int]bool) int {
 // ServerWideYearInReview aggregates every enrolled user's year. Each
 // participant's sessions bucket in their own timezone; opted-out users
 // are absent from every figure.
-func (l *Library) ServerWideYearInReview(ctx context.Context, year int) (ServerYearInReview, error) {
+func (l *Library) ServerWideYearInReview(ctx context.Context, uc *UserCtx, year int) (ServerYearInReview, error) {
 	if year == 0 {
 		year = time.Now().Year()
 	}
@@ -849,6 +851,11 @@ func (l *Library) ServerWideYearInReview(ctx context.Context, year int) (ServerY
 		return ServerYearInReview{}, &Error{Kind: KindInternal, Err: err}
 	}
 	out.Participants = len(participants)
+	// The totals are everyone's, the names are not: an item the reader
+	// cannot see stays out of the rankings.
+	if err := l.dropUnseen(ctx, uc, musicTotals); err != nil {
+		return ServerYearInReview{}, err
+	}
 	const topN = 5
 	if out.TopArtists, err = l.groupTotals(ctx, musicTotals, "artists", topN); err != nil {
 		return ServerYearInReview{}, err
@@ -860,6 +867,36 @@ func (l *Library) ServerWideYearInReview(ctx context.Context, year int) (ServerY
 		return ServerYearInReview{}, err
 	}
 	return out, nil
+}
+
+// dropUnseen removes the totals of tracks the caller's library grants
+// or tag rules hide. A track in the trash or gone from the catalog
+// stays, as it does for a reader of full reach: the trash hides nothing
+// a grant allows, and a gone track names nothing.
+func (l *Library) dropUnseen(ctx context.Context, uc *UserCtx, totals map[string]*itemTotals) error {
+	if fullReach(uc) || len(totals) == 0 {
+		return nil
+	}
+	// The history is the whole server's, so the tracks are read and
+	// tag-checked in batches rather than one at a time.
+	pids := make([]model.PID, 0, len(totals))
+	for pid := range totals {
+		pids = append(pids, model.PID(pid))
+	}
+	views, err := l.itemViewsByPID(ctx, pids)
+	if err != nil {
+		return err
+	}
+	allowed, err := l.tagVerdicts(ctx, uc, slices.Collect(maps.Values(views)))
+	if err != nil {
+		return err
+	}
+	for pid, v := range views {
+		if !l.viewVisible(ctx, uc, v) || !l.contentAllows(ctx, uc, allowed, v) {
+			delete(totals, string(pid))
+		}
+	}
+	return nil
 }
 
 func sortedMedia(byMedia map[string]*MediaTypeListening) []MediaTypeListening {

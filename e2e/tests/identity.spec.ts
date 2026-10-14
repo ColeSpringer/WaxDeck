@@ -80,6 +80,22 @@ test('revoking a session kills the device immediately', async ({ app }) => {
   expect((await asPhone.raw.get('/library/items')).status()).toBe(401);
 });
 
+// A socket lives as long as the session that opened it: revoking a
+// device closes its socket at once with 4401, which a client reads as
+// "sign in again", not as a dropped link to retry.
+test('revoking a session closes the socket it opened', async ({ app, device }) => {
+  const phone = await device({ name: 'Playwright Socket Phone' });
+  await phone.nav.enter('home');
+  const closed = await phone.auth.openSocketProbe();
+
+  const sessions = (await app.api.get('/auth/sessions')).sessions ?? [];
+  const entry = sessions.find((s) => s.deviceName === 'Playwright Socket Phone');
+  expect(entry, 'the phone should be listed').toBeTruthy();
+  await app.api.delete('/auth/sessions/{sessionId}', { path: { sessionId: entry!.id } });
+
+  expect(await closed()).toBe(4401);
+});
+
 test.describe('through the identity provider', () => {
   // The one scenario that must meet the door: what it is about is the
   // provider putting a session there, so a planted one would answer a

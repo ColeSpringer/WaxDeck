@@ -17,7 +17,7 @@ part 'user_update.g.dart';
 /// Properties:
 /// * [displayName] - New display name; empty clears it.
 /// * [roles] - Replacement role set.
-/// * [disabled] - Disable or re-enable the account. Disabling revokes its live sessions. 
+/// * [disabled] - Disable or re-enable the account. Disabling revokes its live sessions and closes the sockets they opened. 
 /// * [libraryAccess] 
 /// * [uploadEnabled] - Grant or revoke upload rights.
 /// * [uploadQuotaBytes] - New ceiling on bytes held in upload staging at once; 0 removes it. 
@@ -32,7 +32,7 @@ abstract class UserUpdate implements Built<UserUpdate, UserUpdateBuilder> {
   @BuiltValueField(wireName: r'roles')
   BuiltList<Role>? get roles;
 
-  /// Disable or re-enable the account. Disabling revokes its live sessions. 
+  /// Disable or re-enable the account. Disabling revokes its live sessions and closes the sockets they opened. 
   @BuiltValueField(wireName: r'disabled')
   bool? get disabled;
 

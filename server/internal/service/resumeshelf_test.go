@@ -53,3 +53,35 @@ func resumePIDs(t *testing.T, f *migrateFixture, limit int) []string {
 	}
 	return out
 }
+
+// The resume shelf hydrates its items by pid, past every listing filter,
+// so it applies the content rules itself: a book a tag rule denies is
+// off it (and off Subsonic's resume surface), as every read of the book
+// answers not-found.
+func TestResumeShelfHonoursContentRules(t *testing.T) {
+	t.Parallel()
+	ctx, f := newMigrateFixture(t)
+	book := f.itemPID(t, ctx, model.KindBook, "The Fixture Book")
+	if _, err := f.svc.Checkpoint(ctx, f.uc, book, 5000, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.SetItemTag(ctx, f.uc, book, "MOOD", []string{"calm"}, false, false); err != nil {
+		t.Fatal(err)
+	}
+	kid := &UserCtx{
+		ID: f.uc.ID, CatalogPID: f.uc.CatalogPID, AllLibraries: true, Explicit: true,
+		TagDeny: []TagRule{{Key: "MOOD", Value: "calm"}},
+	}
+	items, err := f.svc.RecentlyPositionedItems(ctx, kid, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.PID == book {
+			t.Errorf("the denied book is on the restricted shelf")
+		}
+	}
+	if got := resumePIDs(t, f, 10); len(got) != 1 || got[0] != book {
+		t.Errorf("unrestricted shelf = %v, want [%s]", got, book)
+	}
+}

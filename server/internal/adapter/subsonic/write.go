@@ -78,13 +78,14 @@ func (h *Handler) getPlaylists(w http.ResponseWriter, r *http.Request, uc *servi
 		return
 	}
 	out := &playlists{}
+	scope := uc.ScopeKey()
 	for _, pl := range rows {
 		shape := playlistHeader(pl)
 		// Both fields: a count disagreeing with the duration beside it
 		// would be the same bug in a new place. Best effort, and said
 		// out loud: the fallback is the stored count, which is the wrong
 		// answer this computation exists to replace.
-		if songs, seconds, err := h.playlistTotals(r.Context(), uc, pl); err == nil {
+		if songs, seconds, err := h.playlistTotals(r.Context(), uc, scope, pl); err == nil {
 			shape.SongCount, shape.Duration = songs, seconds
 		} else {
 			h.warn("subsonic playlist totals", "playlist", pl.PID, "err", err)
@@ -101,11 +102,11 @@ func (h *Handler) getPlaylists(w http.ResponseWriter, r *http.Request, uc *servi
 // COUNT now: Subsonic wants a duration beside the count, and duration
 // still has to hydrate the members. One hydration yields both numbers,
 // so counting separately would add a query without removing the walk.
-// The price is lag the REST listing no longer has: a change that does
-// not move UpdatedAt - a member trashed, a grant revoked, a
+// The price is lag the REST listing no longer has: a change that moves
+// neither UpdatedAt nor the caller's scope - a member trashed, a
 // subscription dropped - reads stale here for up to the TTL.
-func (h *Handler) playlistTotals(ctx context.Context, uc *service.UserCtx, pl service.Playlist) (int, int, error) {
-	key := playlistTotalKey{userID: uc.ID, pid: pl.PID}
+func (h *Handler) playlistTotals(ctx context.Context, uc *service.UserCtx, scope string, pl service.Playlist) (int, int, error) {
+	key := playlistTotalKey{userID: uc.ID, scope: scope, pid: pl.PID}
 	updated := pl.UpdatedAt.UnixNano()
 	now := time.Now()
 

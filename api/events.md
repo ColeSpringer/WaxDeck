@@ -19,6 +19,12 @@ One socket per client; all topics multiplex over it. Frames are JSON text
 messages. A connection that has not sent its subscribe frame within a few
 seconds is closed.
 
+A socket is bound to the session that opened it. When that session ends
+(sign-out, a revoke from another device, signing out everywhere, a password
+reset, the account being disabled or deleted, or expiry) the server closes
+the socket with status 4401, and reconnecting answers 401: sign in again.
+Frames that race the close are not acted on.
+
 ## Model: invalidate, then pull; commands are a separate plane
 
 For mirrored data the socket carries no entity payloads. It tells a client

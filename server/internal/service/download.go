@@ -51,13 +51,19 @@ func (l *Library) DownloadInfo(ctx context.Context, uc *UserCtx, apiItemPID stri
 	if err != nil {
 		return DownloadResolution{}, err
 	}
+	// An episode whose audio was never fetched has no file here; it says
+	// so in the stream resolvers' terms, so a caller can relay the feed's.
+	if unfetchedEpisode(it) {
+		return DownloadResolution{}, notFetchedEpisode()
+	}
 	return l.downloadResolution(ctx, it)
 }
 
 // DownloadSource resolves one backing file for the download handler,
-// which authenticates by media token (visibility was enforced at mint,
-// exactly like streaming). filePID selects a part of a multi-file item;
-// empty means the single backing file.
+// which authenticates by media token: the handler has already re-run the
+// token's check (AuthorizeMedia), visibility included, before this reads
+// the item. filePID selects a part of a multi-file item; empty means the
+// single backing file.
 func (l *Library) DownloadSource(ctx context.Context, apiItemPID, filePID string) (DownloadFile, error) {
 	it, err := l.getItem(ctx, apiItemPID)
 	if err != nil {

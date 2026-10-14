@@ -72,6 +72,8 @@ func (s *Server) ExportPlaylistPortable(ctx context.Context, req ExportPlaylistP
 	case "":
 	case service.KindNotFound:
 		return ExportPlaylistPortable404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
+	case service.KindConflict:
+		return ExportPlaylistPortable409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
 	default:
 		return nil, err
 	}

@@ -173,8 +173,17 @@ Conventions:
   can fetch them. A media token binds one user to one subject, which
   is an item pid everywhere but the probe: that one binds `probe`,
   which is not a pid and which no item can be named by, so a probe
-  token opens the probe and nothing in the library. Expiry
-  gates new opens rather than cutting a stream already running.
+  token opens the probe and nothing in the library. A token also
+  binds the route it was minted for and, on `/media/stream`, the
+  stream parameters the server chose, so it opens no other route and
+  a URL with those parameters edited, added or dropped answers
+  `unauthenticated` (a seek's `t` stays free). Every fetch re-checks
+  the account (gone or disabled), the session or app password that
+  minted the URL (signed out or revoked), and the account's right to
+  the item (a narrowed library grant or a new content rule answers
+  `not-found`, a withdrawn download permission `forbidden`). Expiry
+  and these checks gate new opens, Range requests included, rather
+  than cutting a stream already running.
   `/media/enclosure` takes only that pid and token, never a target
   URL: the enclosure is read from the episode in the catalog, so a
   token for one episode reaches that episode's audio and nothing
@@ -203,7 +212,8 @@ Conventions:
   and app-less phones work; it never loads the SPA. `/s/{token}/stream`,
   `/s/{token}/art`, and `/s/{token}/download` serve the media. The token
   is a signed capability: possession grants access until the share
-  expires or is revoked, no account needed. Share pages send
+  expires or is revoked, no account needed, to what the share's owner
+  can see when it is opened. Share pages send
   `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex`, and
   anonymous listeners' transcodes and bandwidth are billed against the
   share owner's limits with per-share concurrency caps.

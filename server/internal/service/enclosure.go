@@ -42,8 +42,8 @@ type EnclosureSource struct {
 // The URL comes from the catalog, never from the request. That is what
 // keeps /media/enclosure from being an open proxy: a caller who holds a
 // media token for an episode can reach that episode's enclosure and
-// nothing else. Visibility is gated where the URL is minted, the same
-// place it is gated for /media/download.
+// nothing else. Visibility is checked where the URL is minted and again
+// on every fetch (AuthorizeMedia), as it is for /media/download.
 //
 // userID identifies the listener, for the credential rule below; it is
 // the media token's subject at the relay and the caller at every mint.

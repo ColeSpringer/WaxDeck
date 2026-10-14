@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxdeck/fixtures"
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/cast/castv2/testreceiver"
 	"github.com/colespringer/waxdeck/server/internal/cast/dlna"
 	"github.com/colespringer/waxdeck/server/internal/cast/dlna/testrenderer"
@@ -450,7 +451,7 @@ func TestProbeAudioIsTokenBound(t *testing.T) {
 		t.Fatalf("untokenized probe fetch status %d, want 401", resp.StatusCode)
 	}
 
-	token, _ := h.media.MintFor(adminUserID(t, h), probePID, time.Minute)
+	token, _ := h.media.MintFor(auth.MediaClaims{User: adminUserID(t, h), Purpose: auth.PurposeProbe, PID: probePID}, time.Minute)
 	resp, err = http.Get(h.ts.URL + mediaProbeURL(token, "0"))
 	if err != nil {
 		t.Fatal(err)
@@ -480,7 +481,7 @@ func TestProbeAudioIsTokenBound(t *testing.T) {
 	// A token minted for an item does not open it, and this one does
 	// not open an item.
 	items := h.items(t, "")
-	itemToken, _ := h.media.MintFor(adminUserID(t, h), items.Items[0].Pid, time.Minute)
+	itemToken, _ := h.media.MintFor(auth.MediaClaims{User: adminUserID(t, h), Purpose: auth.PurposeStream, PID: items.Items[0].Pid}, time.Minute)
 	resp, err = http.Get(h.ts.URL + mediaProbeURL(itemToken, "0"))
 	if err != nil {
 		t.Fatal(err)
@@ -488,5 +489,21 @@ func TestProbeAudioIsTokenBound(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("an item's token opened the probe: status %d", resp.StatusCode)
+	}
+}
+
+// A probe URL is re-checked like every media URL: minted under a
+// session, it stops opening when that session ends.
+func TestProbeAudioStopsWithItsSession(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	id, token, session := mediaListener(t, h, "prober", nil)
+	probe, _ := h.media.MintFor(auth.MediaClaims{User: id, Cred: "se:" + session, Purpose: auth.PurposeProbe, PID: probePID}, time.Minute)
+	if code := fetchStatus(t, h, mediaProbeURL(probe, "0")); code != http.StatusOK {
+		t.Fatalf("the probe before sign-out = %d", code)
+	}
+	wantStatus(t, reqAs(t, h, "POST", "/api/v1/auth/logout", token, nil), 204, "sign out")
+	if code := fetchStatus(t, h, mediaProbeURL(probe, "0")); code != http.StatusUnauthorized {
+		t.Errorf("the probe after sign-out = %d, want 401", code)
 	}
 }

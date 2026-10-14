@@ -211,7 +211,7 @@ class StatsApi {
   }
 
   /// Server-wide year in review
-  /// The whole server&#39;s listening recap for one calendar year, aggregated across every user who has not opted out of shared stats (the &#x60;sharedStatsOptOut&#x60; preference; opted-out users&#39; listening is absent from every figure, and &#x60;participants&#x60; counts only the enrolled). Visible to every signed-in user. Bucketing uses each participant&#39;s own timezone. 
+  /// The whole server&#39;s listening recap for one calendar year, aggregated across every user who has not opted out of shared stats (the &#x60;sharedStatsOptOut&#x60; preference; opted-out users&#39; listening is absent from every figure, and &#x60;participants&#x60; counts only the enrolled). Visible to every signed-in user; the top artists, tracks, and genres leave out items the caller cannot see, by library grant or content settings, while the totals stay the server&#39;s. Bucketing uses each participant&#39;s own timezone. 
   ///
   /// Parameters:
   /// * [year] - Calendar year. Defaults to the current year.

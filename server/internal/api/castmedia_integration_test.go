@@ -393,3 +393,30 @@ func TestBookPiecesResolveInOnePass(t *testing.T) {
 		t.Fatalf("a track laid out as %+v (err %v), want nothing", got, err)
 	}
 }
+
+// A cast queue's gapless rendering is minted from the session's stored
+// queue, so every entry is checked against the owner's reach as the
+// REST mint checks it: once the owner can no longer see an entry, no
+// timeline is minted and the per-item load, which refuses it, decides.
+func TestCastTimelineChecksEveryEntry(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := context.Background()
+	items := h.items(t, "?mediaType=music").Items
+	id, _, _ := mediaListener(t, h, "caster", nil)
+	entries := []connect.QueueEntry{{PID: items[0].Pid}, {PID: items[1].Pid}}
+	r := castResolver(h)
+	if tm, err := r.Timeline(ctx, id, entries, h.ts.URL); err != nil || tm == nil {
+		t.Fatalf("a visible queue's timeline = %v, %v", tm, err)
+	}
+
+	lib := decodeStatus[Library](t, h.postJSON(t, "/api/v1/libraries", map[string]any{
+		"name": "elsewhere", "path": t.TempDir(),
+	}), 201, "a second library")
+	wantStatus(t, h.patchJSON(t, "/api/v1/users/"+id, map[string]any{
+		"libraryAccess": map[string]any{"mode": "granted", "libraryPids": []string{lib.Pid}},
+	}), 200, "narrowing the grant")
+	if tm, err := r.Timeline(ctx, id, entries, h.ts.URL); tm != nil {
+		t.Errorf("a queue its owner can no longer see minted a timeline (%v)", err)
+	}
+}

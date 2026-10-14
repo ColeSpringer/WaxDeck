@@ -179,8 +179,17 @@ info:
       can fetch them. A media token binds one user to one subject, which
       is an item pid everywhere but the probe: that one binds `probe`,
       which is not a pid and which no item can be named by, so a probe
-      token opens the probe and nothing in the library. Expiry
-      gates new opens rather than cutting a stream already running.
+      token opens the probe and nothing in the library. A token also
+      binds the route it was minted for and, on `/media/stream`, the
+      stream parameters the server chose, so it opens no other route and
+      a URL with those parameters edited, added or dropped answers
+      `unauthenticated` (a seek's `t` stays free). Every fetch re-checks
+      the account (gone or disabled), the session or app password that
+      minted the URL (signed out or revoked), and the account's right to
+      the item (a narrowed library grant or a new content rule answers
+      `not-found`, a withdrawn download permission `forbidden`). Expiry
+      and these checks gate new opens, Range requests included, rather
+      than cutting a stream already running.
       `/media/enclosure` takes only that pid and token, never a target
       URL: the enclosure is read from the episode in the catalog, so a
       token for one episode reaches that episode's audio and nothing
@@ -209,7 +218,8 @@ info:
       and app-less phones work; it never loads the SPA. `/s/{token}/stream`,
       `/s/{token}/art`, and `/s/{token}/download` serve the media. The token
       is a signed capability: possession grants access until the share
-      expires or is revoked, no account needed. Share pages send
+      expires or is revoked, no account needed, to what the share's owner
+      can see when it is opened. Share pages send
       `Referrer-Policy: no-referrer` and `X-Robots-Tag: noindex`, and
       anonymous listeners' transcodes and bandwidth are billed against the
       share owner's limits with per-share concurrency caps.
@@ -594,7 +604,13 @@ paths:
     get:
       operationId: getJob
       summary: Get one job's state
-      description: State and progress of a server-run catalog job.
+      description: >
+        State and progress of a server-run catalog job, for the audience
+        the `job` sync marker reaches: administrators, and the starter of
+        a targeted job until its end has been announced to them; anyone
+        else is `forbidden`. A timeline-measurement job (the job a queue
+        timeline answers `202` with) is readable by the account whose
+        queue it measures alone, and is `not-found` to any other.
       tags: [admin]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -607,6 +623,8 @@ paths:
                 $ref: "#/components/schemas/Job"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "503":
@@ -1740,7 +1758,9 @@ paths:
         the cookie; passing `deviceName` labels the session in the device
         list. Invalid credentials and disabled accounts answer 401 without
         distinguishing the two. Repeated failures are rate limited per
-        source and account.
+        source and account. An account holds at most a server-configured
+        number of sessions (250 unless the operator changes it); signing
+        in past that ends its least recently used one.
       tags: [auth]
       security: []
       requestBody:
@@ -1773,8 +1793,9 @@ paths:
       operationId: logout
       summary: End the current session
       description: >
-        Revokes the presented session (cookie or bearer token) and clears the
-        session cookie. Succeeds even if no session is active.
+        Revokes the presented session (cookie or bearer token), closes any
+        WebSocket it opened, and clears the session cookie. Succeeds even if
+        no session is active.
       tags: [auth]
       security: []
       responses:
@@ -1994,7 +2015,8 @@ paths:
       summary: Revoke one of the caller's sessions
       description: >
         Revokes one of the calling user's sessions immediately: the device
-        holding it is signed out and its next request fails with 401.
+        holding it is signed out, any WebSocket it opened closes, and its
+        next request fails with 401.
         Revoking the session serving this request is allowed and acts as
         a logout (the response then also expires the session cookie).
         Only the caller's own sessions are visible here; an administrator
@@ -2244,8 +2266,8 @@ paths:
         one in two, and backs the series index a client browses.
 
 
-        Filtered by library visibility, so a series held only in
-        libraries this account cannot see is absent.
+        Filtered by library visibility and content settings, so a
+        series none of whose books this account can see is absent.
       tags: [books]
       parameters:
         - name: cursor
@@ -2448,13 +2470,14 @@ paths:
         where the catalog puts it.
 
 
-        Counts are answered only to an account that can see every
-        library, exactly as the listing answers them: a series with one
-        visible book and nine hidden ones must not advertise ten.
+        Counts are answered only when this account sees every book in
+        the series: a series with one visible book and nine hidden ones
+        must not advertise ten.
 
 
         404 when no series carries the pid, and when every book in it
-        lives in a library this account was not granted.
+        is hidden from this account, by library grant or content
+        settings.
 
 
         A top-level path rather than one under `/books/series`, which
@@ -3398,7 +3421,9 @@ paths:
       description: >
         Full-text search across artists, albums, tracks, books, and episodes.
         Results are grouped by kind and ranked within each group; each group
-        is capped at `limit` hits.
+        is capped at `limit` hits. An artist or album is a hit only while
+        at least one of its tracks is one the caller can see, by library
+        grant and content settings.
       tags: [library]
       parameters:
         - name: q
@@ -3508,7 +3533,9 @@ paths:
 
 
         The `pid` must be an album (`al-`); anything else is `not-found`
-        rather than a wrong-shaped answer. Absent fields are omitted:
+        rather than a wrong-shaped answer, and so is an album none of
+        whose tracks the caller can see, by library grant or content
+        settings. Absent fields are omitted:
         most releases carry none of the five, and an album with nothing
         to say answers the identity fields empty rather than blank.
       tags: [library]
@@ -5933,11 +5960,16 @@ paths:
         `stream-stale`. On a server running without the streaming
         engine, the url serves the item's original file bytes directly
         (ranged, no transcoding, in whatever format the file is in)
-        through the same endpoint downloads use, attachment
-        disposition and byte-identity pin included; expiry is
+        through the same endpoint downloads use, inline and with the
+        byte-identity pin; expiry is
         enforced per request, so an in-flight fetch completes but a
         later range request after `expiresAt` answers
-        `unauthenticated` and the client re-requests play-info. An
+        `unauthenticated` and the client re-requests play-info. The url
+        dies with the session that asked for it. A capped account's
+        transcoded stream is never wider than its ceiling, whether or
+        not the request carries `maxBitrateKbps` (an original played
+        directly is the file itself), and the stream
+        parameters are part of the url's credential. An
         item carved out of a larger file additionally carries
         `spanStartMs`/`spanEndMs` and the client plays only that
         window; a client that does not implement the window MUST
@@ -6053,7 +6085,7 @@ paths:
         media-token-authenticated URL serving the untranscoded file with
         range support, so interrupted downloads resume. The download
         responses carry a `Content-Disposition` derived from each entry's
-        `fileName` and an `ETag` equal to the entry's `etag`, a strong
+        `fileName` (an attachment) and an `ETag` equal to the entry's `etag`, a strong
         validator of the exact file bytes: resume ranges with
         `If-Range: <etag>`, and when it no longer matches (the file was
         retagged, replaced, or upgraded) restart that file's transfer.
@@ -6066,7 +6098,12 @@ paths:
         file plus a `spanStartMs`/`spanEndMs` playback window. When a
         URL expires mid-download, re-request download-info and resume by
         range against the fresh URL. A download URL whose file changed
-        on disk answers `stream-stale`; re-request download-info.
+        on disk answers `stream-stale`; re-request download-info. The
+        URLs die with the session that asked for them and stop with the
+        account's download permission. The permission governs this
+        surface (and the Subsonic `download` verb and a share's
+        `allowDownload`); a natively playable file's direct play is its
+        original bytes whatever it says.
       tags: [playback]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -7011,7 +7048,11 @@ paths:
         a queue never expires mid-listen; a member file changing on
         disk surfaces as `stream-stale`, and a timeline aged out of
         the engine's store answers `not-found` on fetch. Re-request
-        this endpoint in either case. Minting may first need to
+        this endpoint in either case. The URL dies with the session
+        that minted it, and a change to the account's library grants
+        or content rules ends it too: its fetches answer
+        `unauthenticated`, and a re-request mints one under the new
+        rules. Minting may first need to
         measure member lengths (MP3 sources are scanned); the server
         absorbs short measurements into this request, and when one
         outlasts the request budget it answers 202 with a job to poll,
@@ -7302,7 +7343,9 @@ paths:
       description: >
         Evaluates a rule without storing anything and returns the
         first matching items plus the total match count, computed
-        against the caller's own user state and library visibility.
+        against the caller's own user state and counting only what
+        the caller can see (library grants, content settings,
+        followed shows).
         Rule editors call this while the user builds the rule.
       tags: [playlists]
       requestBody:
@@ -7343,7 +7386,9 @@ paths:
         entry to a cataloged item by exact path or unique
         relative-path suffix. Unmatched paths are skipped and
         reported, never invented; an empty document yields an empty
-        playlist.
+        playlist. A path naming an item the caller cannot see is
+        reported as unmatched, exactly like a path that names
+        nothing.
       tags: [playlists]
       requestBody:
         required: true
@@ -7599,9 +7644,11 @@ paths:
         The playlist's members in order: stored order for a static
         playlist, rule order for a smart playlist (evaluated against
         the owner's user state for shared lists, the caller's for
-        their own). Entries outside the caller's visibility are
-        omitted, so a restricted viewer's `position` values can skip
-        numbers. `position` is the entry's index in the full stored
+        their own). Entries the caller cannot see (outside their
+        library grants, denied by their content settings, or episodes
+        of shows they do not follow) are omitted, and the list's
+        `itemCount` counts the same way, so a restricted viewer's
+        `position` values can skip numbers. `position` is the entry's index in the full stored
         order, kept contiguous from 0 by every change to the list;
         pass it, with the entry's item pid as `itemPid`, to the
         removal endpoint, never the row index of a filtered page.
@@ -7762,11 +7809,12 @@ paths:
       summary: Export a playlist as M3U8
       description: >
         The playlist as an M3U8 document, for interop with path-based
-        players. Entries are the cataloged display paths (absolute
-        server-side paths); exposing them is deliberate, since
-        playlists reach only this server's own users and path-based
-        interop is the point of the format. A smart playlist exports
-        its current evaluation. The import side matches by exact path
+        players. Only the members the caller can see are written, the
+        same ones the member listing shows them. Entries are the
+        cataloged display paths (absolute server-side paths); exposing
+        them is deliberate, since playlists reach only this server's
+        own users and path-based interop is the point of the format.
+        A smart playlist exports its current evaluation. The import side matches by exact path
         or unique relative-path suffix, so documents exported from a
         differently-rooted server still resolve.
       tags: [playlists]
@@ -7928,6 +7976,9 @@ paths:
         resolves, a manual playlist is created with the resolved
         tracks in order and `missing` reports the rest; when nothing
         resolves, no playlist is created and `playlistPid` is absent.
+        An entry whose only match is an item the caller cannot see
+        is reported as missing, exactly like an entry nothing
+        matched.
         Unresolved entries carrying an ISRC are upgraded to a
         recording identifier through MusicBrainz when the server has
         internet, within a bounded lookup budget; without it the
@@ -7962,8 +8013,10 @@ paths:
         identity descriptors (audio essence, external identifiers,
         acoustic fingerprint, descriptive fields) that resolve on any
         other WaxDeck through the playlist import endpoint's
-        `portable` source. Smart playlists export their current
-        evaluation.
+        `portable` source. Only the members the caller can see are
+        exported. Smart playlists export their current evaluation.
+        Answers `conflict` when the playlist changed while it was
+        being exported; retry.
       tags: [playlists]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -7978,6 +8031,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -10140,9 +10195,15 @@ paths:
         member view for the link's whole life: another user's shared
         playlist is theirs to publish, not the viewer's, and their
         later edits or a flip back to private must not leak through a
-        link they cannot revoke. The link is a capability
-        URL: anyone holding it can open the landing page and listen
-        until it expires or is revoked. Episodes accept `positionMs`
+        link they cannot revoke. An album needs at least one track the
+        caller can hear. The link is a capability URL: anyone holding
+        it can open the landing page and listen until it expires or is
+        revoked, to what its owner can see when it is opened. A list
+        serves only the members the owner can still see, and the link
+        answers not-found while the owner is disabled or once the
+        target is out of the owner's reach (a library grant withdrawn,
+        a content setting that denies it); it resumes when that
+        changes back. Episodes accept `positionMs`
         for copy-link-at-timestamp. `allowDownload` additionally
         offers the original file and requires the caller's own
         download permission. Episodes of private feeds (feeds with
@@ -10486,8 +10547,11 @@ paths:
         aggregated across every user who has not opted out of shared
         stats (the `sharedStatsOptOut` preference; opted-out users'
         listening is absent from every figure, and `participants`
-        counts only the enrolled). Visible to every signed-in user.
-        Bucketing uses each participant's own timezone.
+        counts only the enrolled). Visible to every signed-in user;
+        the top artists, tracks, and genres leave out items the caller
+        cannot see, by library grant or content settings, while the
+        totals stay the server's. Bucketing uses each participant's
+        own timezone.
       tags: [stats]
       parameters:
         - name: year
@@ -10910,7 +10974,11 @@ paths:
         final event named `done` after the task reaches a terminal
         state, after which the stream closes. Reconnecting is always
         safe: the first event replays current state. Same visibility
-        as reading the task. The WebSocket channel carries the same
+        as reading the task, and the stream keeps checking it: within
+        a few seconds of the caller's session ending, or of the caller
+        losing the right to read the task, the stream closes with no
+        `done` event, and a reconnect answers that refusal. The
+        WebSocket channel carries the same
         lifecycle as invalidations; this stream exists for consumers
         that want the payloads pushed.
       tags: [tools]
@@ -11496,7 +11564,8 @@ paths:
         answers `forbidden`, and the session making the request is the
         only one that survives. An administrator resetting another
         account's password omits `currentPassword`, and every one of
-        that account's sessions is revoked. Setting a password on an
+        that account's sessions is revoked (recorded in the audit log as
+        `user.password-reset`). Setting a password on an
         OIDC-provisioned account enables local login for it. App
         passwords are separate credentials and survive a password
         change; revoke them individually.
@@ -11527,9 +11596,12 @@ paths:
       summary: Revoke all of an account's sessions
       description: >
         Signs the account out everywhere by revoking every live session it
-        has. When callers target their own account, the session making this
-        request survives. Administrators can target any account; everyone
-        else only their own.
+        has and closing the WebSockets they opened, and ends its gpodder
+        logins (app passwords stay valid, so those clients log in again).
+        When callers target their own account, the session making this
+        request survives.
+        Administrators can target any account; everyone else only their
+        own. Recorded in the audit log as `user.sessions-revoke`.
       tags: [users]
       parameters:
         - $ref: "#/components/parameters/UserId"
@@ -11770,7 +11842,7 @@ paths:
       description: >
         The calling user's app passwords, newest first. App passwords are
         dedicated per-client credentials for the compatibility APIs
-        (Subsonic and, later, gpodder), which require the server to hold a
+        (Subsonic and gpodder), which require the server to hold a
         recoverable secret; the login password is never usable there. The
         secret itself is only ever returned by creation. App passwords
         stop authenticating the moment their account is disabled, and are
@@ -11827,7 +11899,8 @@ paths:
       summary: Revoke an app password
       description: >
         Revokes one of the calling user's app passwords. Clients holding it
-        fail their next compatibility-API request immediately.
+        fail their next compatibility-API request immediately, and so do
+        the gpodder sessions it opened and the media URLs it minted.
       tags: [users]
       parameters:
         - $ref: "#/components/parameters/AppPasswordId"
@@ -13950,7 +14023,10 @@ components:
           description: The series name, as the books' tags spell it.
         bookCount:
           type: integer
-          description: Books in the series that this account can see.
+          description: >
+            Books in the series, answered only to an account that sees
+            every book: every library open to it and no tag rule
+            narrowing what it sees.
         totalDurationMs:
           type: integer
           format: int64
@@ -13971,8 +14047,8 @@ components:
         bookCount:
           type: integer
           description: >
-            Books in the series, answered only to an account that can
-            see every library. A restricted account reads the length of
+            Books in the series, answered only when this account sees
+            every one of them. A restricted account reads the length of
             `books` instead, which is what it can open.
         totalDurationMs:
           type: integer
@@ -15884,7 +15960,8 @@ components:
             stored rule to draw a card is work a listing row skips too.
             And a catalog entity's count is catalog-wide rather than
             scoped to what the caller may see, so it is answered only to
-            a caller who can see the whole library - a card advertising
+            a caller every library is open to and no tag rule narrows
+            (the explicit setting hides only podcasts) - a card advertising
             nine tracks that opens onto three would be worse than a card
             with no count on it.
 
@@ -15968,9 +16045,10 @@ components:
           type: integer
           description: >
             Tracks on the release as the catalog holds it. Absent for a
-            caller with restricted library visibility, because the count
-            is not scoped to their grant and a number larger than what
-            they can open would be worse than none.
+            caller whose library grants or tag rules narrow what they
+            see, because the count is not scoped to them and a
+            number larger than what they can open would be worse than
+            none.
         totalDurationMs:
           type: integer
           format: int64
@@ -19385,7 +19463,9 @@ components:
             URL for the whole timeline. The token lives at least the
             timeline's duration plus margin; re-request this endpoint
             on `stream-stale`, on a `not-found` fetch (the engine aged
-            the timeline out), or after `expiresAt`.
+            the timeline out), on an `unauthenticated` one (the
+            account's grants or content rules changed), or after
+            `expiresAt`.
           example: /media/hls/master.m3u8?tl=abc&mt=xyz
         mimeType:
           type: string
@@ -23567,8 +23647,8 @@ components:
             disabled:
               type: boolean
               description: >
-                Disabled accounts cannot log in and their live sessions are
-                revoked on disable.
+                Disabled accounts cannot log in; disabling revokes their
+                live sessions and closes the sockets those opened.
             pending:
               type: boolean
               description: >
@@ -23709,7 +23789,7 @@ components:
           type: boolean
           description: >
             Disable or re-enable the account. Disabling revokes its live
-            sessions.
+            sessions and closes the sockets they opened.
         libraryAccess:
           $ref: "#/components/schemas/LibraryAccess"
         uploadEnabled:

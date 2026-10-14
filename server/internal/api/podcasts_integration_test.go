@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxdeck/fixtures"
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -1459,6 +1460,17 @@ func TestEnclosurePassthrough(t *testing.T) {
 	if denied.StatusCode != 401 {
 		t.Errorf("a token for another pid = %d, want 401", denied.StatusCode)
 	}
+
+	// Every fetch re-checks the session the URL was minted under, so one
+	// minted before a sign-out stops after it.
+	other := loginAs(t, h.ts, "admin", testPassword).Token
+	minted := decode[PlayInfo](t, get(t, h.ts, "/api/v1/items/"+ep.Pid+"/play-info", other)).Url
+	wantStatus(t, reqAs(t, h, "POST", "/api/v1/auth/logout", other, nil), 204, "signing that session out")
+	gone := get(t, h.ts, minted, "")
+	gone.Body.Close()
+	if gone.StatusCode != 401 {
+		t.Errorf("a relay URL after its session signed out = %d, want 401", gone.StatusCode)
+	}
 }
 
 // TestEnclosurePassthroughFollowsTrackerChains holds the relay to what
@@ -1806,7 +1818,7 @@ func TestEnclosurePassthroughWithheldFromNonSubscribers(t *testing.T) {
 	// check is on the endpoint rather than only on the mint: a media
 	// token names its user, and the relay resolves credentials for that
 	// user, so sam's own token buys sam nothing here.
-	token, _ := h.media.MintFor(sam.User.Id, ep.Pid, time.Hour)
+	token, _ := h.media.MintFor(auth.MediaClaims{User: sam.User.Id, Purpose: auth.PurposeEnclosure, PID: ep.Pid}, time.Hour)
 	direct := get(t, h.ts, "/media/enclosure?pid="+ep.Pid+"&mt="+token, "")
 	direct.Body.Close()
 	if direct.StatusCode != 403 {
@@ -2801,4 +2813,38 @@ func TestAReadOnlyServerKeepsThePodcastTreeAsItIs(t *testing.T) {
 	if n, _ := downloaded(); n != 1 {
 		t.Fatalf("retention left %d downloads once writable, want one", n)
 	}
+}
+
+// /rest/download of an episode whose audio was never fetched hands the
+// client the feed's original through the passthrough relay, as stream
+// does: the enclosure is that episode's original bytes.
+func TestSubsonicDownloadRelaysAnUnfetchedEpisode(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 1)
+	sub := decodeStatus[Subscription](t, h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()}), 201, "subscribe")
+	ep := decode[EpisodePage](t, get(t, h.ts, "/api/v1/podcasts/"+sub.Show.Pid+"/episodes", h.token)).Items[0]
+	if ep.Downloaded {
+		t.Fatal("the episode should not be fetched for this test")
+	}
+	secret := newSubsonicSecret(t, h)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Get(h.ts.URL + "/rest/download?apiKey=" + secret + "&id=" + ep.Pid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	loc := resp.Header.Get("Location")
+	if resp.StatusCode != http.StatusFound || !strings.HasPrefix(loc, "/media/enclosure?") {
+		t.Fatalf("download of an unfetched episode = %d to %q, want the passthrough relay", resp.StatusCode, loc)
+	}
+	relayed := get(t, h.ts, loc, "")
+	body, _ := io.ReadAll(relayed.Body)
+	relayed.Body.Close()
+	if relayed.StatusCode != http.StatusOK || len(body) == 0 {
+		t.Errorf("the relay = %d with %d bytes", relayed.StatusCode, len(body))
+	}
+	// The app's download-info has no relay to offer: there is no file
+	// here to keep offline until the episode is fetched.
+	wantStatus(t, get(t, h.ts, "/api/v1/items/"+ep.Pid+"/download-info", h.token), 404, "download-info for an unfetched episode")
 }

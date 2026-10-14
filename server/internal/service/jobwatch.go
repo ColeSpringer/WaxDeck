@@ -349,10 +349,10 @@ func (l *Library) jobAudience(ctx context.Context, j model.Job, admins []string)
 		return admins
 	}
 	var out []string
-	if o, err := l.db.JobOriginGet(ctx, string(j.PID)); err == nil {
-		out = append(out, o.UserID)
-	} else if !errors.Is(err, wdb.ErrNotFound) {
+	if starter, err := l.jobStarter(ctx, j.PID, true); err != nil {
 		l.log.Warn("reading a targeted job's origin", "job", string(j.PID), "err", err)
+	} else if starter != "" {
+		out = append(out, starter)
 	}
 	if j.State != model.JobRunning {
 		for _, id := range admins {
@@ -362,6 +362,24 @@ func (l *Library) jobAudience(ctx context.Context, j model.Job, admins []string)
 		}
 	}
 	return out
+}
+
+// jobStarter is the account a targeted job answers to besides the
+// administrators: its starter, while the origin row holds them. A whole
+// pass has none, since administrators alone hear of passes. Both the
+// audience a job's news reaches and who may read it are this rule.
+func (l *Library) jobStarter(ctx context.Context, pid model.PID, targeted bool) (string, error) {
+	if !targeted {
+		return "", nil
+	}
+	o, err := l.db.JobOriginGet(ctx, string(pid))
+	if errors.Is(err, wdb.ErrNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return o.UserID, nil
 }
 
 // jobHasOrigin reports whether someone waits to hear a job ended.

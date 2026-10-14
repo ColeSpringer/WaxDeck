@@ -330,7 +330,9 @@ paths:
       description: >
         Full-text search across artists, albums, tracks, books, and episodes.
         Results are grouped by kind and ranked within each group; each group
-        is capped at `limit` hits.
+        is capped at `limit` hits. An artist or album is a hit only while
+        at least one of its tracks is one the caller can see, by library
+        grant and content settings.
       tags: [library]
       parameters:
         - name: q
@@ -440,7 +442,9 @@ paths:
 
 
         The `pid` must be an album (`al-`); anything else is `not-found`
-        rather than a wrong-shaped answer. Absent fields are omitted:
+        rather than a wrong-shaped answer, and so is an album none of
+        whose tracks the caller can see, by library grant or content
+        settings. Absent fields are omitted:
         most releases carry none of the five, and an album with nothing
         to say answers the identity fields empty rather than blank.
       tags: [library]
@@ -1082,7 +1086,8 @@ components:
             stored rule to draw a card is work a listing row skips too.
             And a catalog entity's count is catalog-wide rather than
             scoped to what the caller may see, so it is answered only to
-            a caller who can see the whole library - a card advertising
+            a caller every library is open to and no tag rule narrows
+            (the explicit setting hides only podcasts) - a card advertising
             nine tracks that opens onto three would be worse than a card
             with no count on it.
 
@@ -1166,9 +1171,10 @@ components:
           type: integer
           description: >
             Tracks on the release as the catalog holds it. Absent for a
-            caller with restricted library visibility, because the count
-            is not scoped to their grant and a number larger than what
-            they can open would be worse than none.
+            caller whose library grants or tag rules narrow what they
+            see, because the count is not scoped to them and a
+            number larger than what they can open would be worse than
+            none.
         totalDurationMs:
           type: integer
           format: int64

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -17,6 +18,10 @@ import (
 // its ETag. The id parameter pins the exact bytes the URL was minted
 // for; a file rewritten since answers the stream-stale error and the
 // client re-requests download-info.
+//
+// A download token opens it. So does a stream token while the engine is
+// unavailable, since the originals then stream from here, and that one
+// serves inline rather than as an attachment.
 func (s *Server) ServeDownload(w http.ResponseWriter, r *http.Request) {
 	if s.media == nil {
 		writeError(w, http.StatusNotImplemented, "internal", "downloads are not configured on this server")
@@ -28,8 +33,14 @@ func (s *Server) ServeDownload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid-request", "pid is required")
 		return
 	}
-	if _, err := s.media.Verify(q.Get("mt"), pid); err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthenticated", "missing, expired, or wrong media token")
+	// A stream token opens this route only while the engine is away, when
+	// originals stream through here.
+	purposes := []string{auth.PurposeDownload}
+	if !s.bridge.Up() {
+		purposes = append(purposes, auth.PurposeStream)
+	}
+	claims, _, ok := s.verifiedMedia(w, r, q.Get("mt"), auth.MediaWant{Purposes: purposes, PID: pid})
+	if !ok {
 		return
 	}
 	f, err := s.svc.DownloadSource(r.Context(), pid, q.Get("f"))
@@ -58,7 +69,11 @@ func (s *Server) ServeDownload(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", f.MimeType)
 	w.Header().Set("ETag", `"`+f.ETag+`"`)
-	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": f.FileName}))
+	disposition := "attachment"
+	if claims.Purpose == auth.PurposeStream {
+		disposition = "inline"
+	}
+	w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": f.FileName}))
 	// The modtime drives Last-Modified and If-Range; it is the same
 	// instant the ETag pins.
 	http.ServeContent(w, r, "", time.Unix(0, f.MTimeNS), file)

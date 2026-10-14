@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/pagetext"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -215,7 +216,7 @@ func (s *Server) ServeShareStream(w http.ResponseWriter, r *http.Request) {
 	if countableShareFetch(r.Header.Get("Range")) {
 		s.svc.CountSharePlay(r.Context(), id)
 	}
-	if s.bridge != nil {
+	if s.bridge.Up() {
 		s.bridge.ServeShareStream(w, r, it.PID, pub.OwnerUserID)
 		return
 	}
@@ -308,13 +309,24 @@ func (s *Server) ServeShareArt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not-found", "no artwork")
 		return
 	}
+	// Revalidated on every use rather than cached as is: the share was
+	// just resolved above, so a link revoked, expired or gone dormant
+	// stops serving its cover with the rest of it, and an unchanged
+	// cover costs a 304.
+	w.Header().Set("Cache-Control", "public, no-cache")
+	if blob.SourceHash != "" {
+		etag := `"` + blob.SourceHash + "-" + strconv.Itoa(shareArtSize) + `"`
+		w.Header().Set("ETag", etag)
+		if httpcache.ETagMatches(r.Header.Get("If-None-Match"), etag) {
+			w.WriteHeader(http.StatusNotModified)
+			return
+		}
+	}
 	w.Header().Set("Content-Type", blob.MimeType)
-	// The one art response with no session behind it and an hour of
-	// public caching in front of it, which is where the hardening pair
-	// earns the most.
+	// The one art response with no session behind it, which is where
+	// the hardening pair earns the most.
 	w.Header().Set("X-Content-Type-Options", service.ArtNoSniff)
 	w.Header().Set("Content-Security-Policy", service.ArtCSP)
-	w.Header().Set("Cache-Control", "public, max-age=3600")
 	_, _ = w.Write(blob.Bytes)
 }
 

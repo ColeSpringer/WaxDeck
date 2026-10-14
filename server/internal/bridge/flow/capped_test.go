@@ -1,6 +1,8 @@
 package flow
 
 import (
+	"github.com/colespringer/waxdeck/server/internal/auth"
+
 	"context"
 	"io"
 	"net/http"
@@ -15,8 +17,10 @@ import (
 
 // fakeGate counts admissions and answers a fixed per-user ceiling.
 type fakeGate struct {
-	ceiling  int
-	acquired int
+	ceiling int
+	// ceilingReads counts how often the ceiling was asked for.
+	ceilingReads int
+	acquired     int
 	// held counts admissions not yet released, and kinds records what
 	// each was taken for, which is what the timeline slot's whole
 	// lifetime is asserted through.
@@ -24,6 +28,10 @@ type fakeGate struct {
 	kinds   []TranscodeKind
 	refuse  bool
 	release func()
+	// authErr is what AuthorizeMedia answers; authorized records every
+	// token it was asked about.
+	authErr    error
+	authorized []auth.MediaClaims
 }
 
 func (g *fakeGate) Acquire(_ context.Context, _ string, kind TranscodeKind) (func(), error) {
@@ -41,7 +49,15 @@ func (g *fakeGate) Acquire(_ context.Context, _ string, kind TranscodeKind) (fun
 	return release, nil
 }
 
-func (g *fakeGate) MaxBitrateKbps(context.Context, string) int { return g.ceiling }
+func (g *fakeGate) MaxBitrateKbps(context.Context, string) int {
+	g.ceilingReads++
+	return g.ceiling
+}
+
+func (g *fakeGate) AuthorizeMedia(_ context.Context, c auth.MediaClaims) error {
+	g.authorized = append(g.authorized, c)
+	return g.authErr
+}
 
 // A bitrate cap on a source that cannot satisfy it is a real encode:
 // clamped to the caller's ceiling at mint, carried on the URL, refused
@@ -97,18 +113,24 @@ func TestPlayInfoBitrateCap(t *testing.T) {
 		t.Fatalf("engine params format=%q bitrate=%q", got.Get("format"), got.Get("bitrate"))
 	}
 
-	// An edited br can only narrow: above the ceiling it is re-clamped.
-	// got is reset so a request that never reached the fake sidecar
-	// cannot pass on the first fetch's values.
+	// The token binds the cap, so an edited br is a bad token rather
+	// than a wider stream, and so is one with the cap stripped. got is
+	// reset so a request that never reached the fake sidecar cannot pass
+	// on the first fetch's values.
 	got = nil
-	wide := strings.Replace(info.URL, "br=192", "br=320", 1)
-	rec = httptest.NewRecorder()
-	b.ServeStream(rec, httptest.NewRequest("GET", wide, nil))
-	if rec.Code != 200 {
-		t.Fatalf("widened fetch status = %d", rec.Code)
+	for _, edited := range []string{
+		strings.Replace(info.URL, "br=192", "br=320", 1),
+		strings.Replace(strings.Replace(info.URL, "&br=192", "", 1), "&fmt=opus", "", 1),
+		strings.Replace(info.URL, "fmt=opus", "fmt=flac", 1),
+	} {
+		rec = httptest.NewRecorder()
+		b.ServeStream(rec, httptest.NewRequest("GET", edited, nil))
+		if rec.Code != http.StatusUnauthorized {
+			t.Errorf("edited url %s answered %d, want 401", edited, rec.Code)
+		}
 	}
-	if got.Get("bitrate") != "192" {
-		t.Fatalf("widened br reached the engine as %q, want the 192 ceiling", got.Get("bitrate"))
+	if got != nil {
+		t.Fatalf("an edited url reached the engine with %v", got)
 	}
 }
 
@@ -183,5 +205,137 @@ func TestBitrateCapOnASourceAlreadyInTheCapsFormat(t *testing.T) {
 	}
 	if gate.acquired != 1 {
 		t.Fatalf("admissions = %d, want the encode charged", gate.acquired)
+	}
+}
+
+// A capped account's engine-rendered stream is held to its ceiling even
+// when the client named no cap of its own: a carved lossless track would
+// otherwise render as full-rate FLAC. An original played directly is
+// the file itself and stays as it is.
+func TestCeilingHoldsAnEngineRenderTheClientDidNotCap(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rip.flac")
+	if err := os.WriteFile(path, []byte("flacbytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	serve := func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "audio") }
+	for name, c := range map[string]struct {
+		src     Source
+		applied int
+	}{
+		"a carved lossless track": {Source{Path: path, Size: 9, MTimeNS: 42, Codec: "flac", Container: "flac",
+			Virtual: true, FromSample: 0, ToSample: 44100}, 64},
+		"an original played directly": {Source{Path: path, Size: 9, MTimeNS: 42, Codec: "flac", Container: "flac",
+			BitrateKbps: 900}, 0},
+	} {
+		b := newTestBridge(t, serve, c.src)
+		b.SetTranscodeGate(&fakeGate{ceiling: 64})
+		info, err := b.PlayInfoFor(context.Background(), "us-1", "tr-X", PlayOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.AppliedBitrateKbps != c.applied || strings.Contains(info.URL, "br=") != (c.applied > 0) {
+			t.Errorf("%s: applied %d, url %s; want applied %d", name, info.AppliedBitrateKbps, info.URL, c.applied)
+		}
+	}
+}
+
+// A capped account's renderer gets a lossy encode of what the engine
+// renders for it even when it plays flac, and the fetch holds that
+// encode to the ceiling; an original it plays as it is stays the file.
+func TestCeilingHoldsWhatTheEngineRendersForADevice(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "rip.flac")
+	if err := os.WriteFile(path, []byte("flacbytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	carved := Source{Path: path, Size: 9, MTimeNS: 42, Codec: "flac", Container: "flac",
+		Virtual: true, FromSample: 0, ToSample: 44100}
+	whole := Source{Path: path, Size: 9, MTimeNS: 42, Codec: "flac", Container: "flac", BitrateKbps: 900}
+	for name, c := range map[string]struct {
+		src     Source
+		ceiling int
+		format  string
+	}{
+		"a carved track for a capped account":    {carved, 64, "mp3"},
+		"a carved track for an uncapped account": {carved, 0, "flac"},
+		"an original for a capped account":       {whole, 64, ""},
+	} {
+		var upstream string
+		b := newTestBridge(t, func(w http.ResponseWriter, r *http.Request) {
+			upstream = r.URL.RawQuery
+			io.WriteString(w, "audio")
+		}, c.src)
+		b.SetTranscodeGate(&fakeGate{ceiling: c.ceiling})
+		info, err := b.PlayInfoFor(context.Background(), "us-1", "tr-X", PlayOptions{
+			ForceFormat: "mp3", DeviceFormats: []string{"audio/flac", "audio/mpeg"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		u, err := url.Parse(info.URL)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := u.Query().Get("fmt"); got != c.format {
+			t.Errorf("%s: fmt = %q, want %q (%s)", name, got, c.format, info.URL)
+			continue
+		}
+		if c.format != "mp3" {
+			continue
+		}
+		rec := httptest.NewRecorder()
+		b.ServeStream(rec, httptest.NewRequest(http.MethodGet, info.URL, nil))
+		if q, _ := url.ParseQuery(upstream); rec.Code != 200 || q.Get("bitrate") != "64" {
+			t.Errorf("%s: fetch = %d, upstream %q; want the encode held to 64", name, rec.Code, upstream)
+		}
+	}
+}
+
+// A direct play reads no ceiling at fetch: the account's limit bounds
+// engine encodes, and a passthrough of the original is not one, so its
+// every Range request skips the account read.
+func TestDirectPlayFetchReadsNoCeiling(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "song.flac")
+	if err := os.WriteFile(path, []byte("flacbytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b := newTestBridge(t, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "audio") },
+		Source{Path: path, Size: 9, MTimeNS: 42, Codec: "flac", Container: "flac", BitrateKbps: 900})
+	gate := &fakeGate{ceiling: 64}
+	b.SetTranscodeGate(gate)
+	info, err := b.PlayInfoFor(context.Background(), "us-1", "tr-X", PlayOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate.ceilingReads = 0
+	rec := httptest.NewRecorder()
+	b.ServeStream(rec, httptest.NewRequest("GET", info.URL, nil))
+	if rec.Code != http.StatusOK || gate.ceilingReads != 0 {
+		t.Errorf("a direct play fetch = %d with %d ceiling reads, want 200 and none", rec.Code, gate.ceilingReads)
+	}
+}
+
+// Per-fetch authorization fails closed: a bridge nobody wired a gate
+// into cannot ask whether a token's account, credential and item still
+// hold, so it refuses the token rather than serving it unchecked.
+func TestNoGateRefusesMediaTokens(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "song.flac")
+	if err := os.WriteFile(path, []byte("flacbytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b := newTestBridge(t, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "audio") },
+		Source{Path: path, Size: 9, MTimeNS: 42, Codec: "flac", Container: "flac"})
+	b.SetTranscodeGate(nil)
+	info, err := b.PlayInfoFor(context.Background(), "us-1", "tr-X", PlayOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	b.ServeStream(rec, httptest.NewRequest("GET", info.URL, nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("a fetch with no gate wired = %d, want 500", rec.Code)
 	}
 }

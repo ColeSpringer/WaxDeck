@@ -102,6 +102,13 @@ func (l *Library) CreateShare(ctx context.Context, uc *UserCtx, targetAPIPID str
 	}
 	info := shareInfo(row)
 	info.TargetTitle = title
+	// A link serves whatever its owner can reach when it is opened, so
+	// this entry is the one record of what it published.
+	detail := map[string]any{"targetPid": targetAPIPID, "targetKind": kind, "allowDownload": allowDownload}
+	if !row.ExpiresAt.IsZero() {
+		detail["expiresAt"] = row.ExpiresAt.Format(time.RFC3339)
+	}
+	l.Audit(ctx, uc, "share.create", AuditTarget{Kind: "share", PID: info.ID, Name: title}, detail)
 	return info, nil
 }
 
@@ -115,13 +122,12 @@ func (l *Library) shareTargetTitle(ctx context.Context, uc *UserCtx, kind, targe
 		if err != nil {
 			return "", err
 		}
-		// Ownership, not mere visibility: the public page serves the
-		// owner's member view for the link's whole life, and resolve
-		// deliberately skips visibility (the capability URL is the
-		// authorization). Another user's shared playlist is theirs to
-		// publish; letting a viewer mint a link for it would keep
-		// serving it even after the owner flips it private, through a
-		// link the owner cannot revoke.
+		// Ownership, not mere visibility: the public page serves what
+		// the owner can currently see of the list for the link's whole
+		// life, with the capability URL as the authorization. Another
+		// user's shared playlist is theirs to publish; letting a viewer
+		// mint a link for it would keep serving it even after the owner
+		// flips it private, through a link the owner cannot revoke.
 		if !pl.IsOwner {
 			return "", &Error{Kind: KindForbidden,
 				Msg: "only your own playlists can be shared publicly"}
@@ -148,9 +154,11 @@ func (l *Library) shareTargetTitle(ctx context.Context, uc *UserCtx, kind, targe
 		if err != nil {
 			return "", classify(err)
 		}
-		// A restricted owner can only share an album they can see: one of
-		// the libraries holding its members must be granted to them.
-		if !uc.AllLibraries && !l.entityInLibraries(info, uc) {
+		// An owner can only share an album they can hear some of: one of
+		// its tracks has to pass their library grants and content rules.
+		if ok, err := l.entityVisible(ctx, uc, PrefixAlbum, pid); err != nil {
+			return "", err
+		} else if !ok {
 			return "", errNotFound("no album with pid " + targetAPIPID)
 		}
 		return info.Name, nil
@@ -273,14 +281,23 @@ func (l *Library) RevokeShare(ctx context.Context, uc *UserCtx, apiShareID strin
 		}
 		return &Error{Kind: KindInternal, Err: err}
 	}
+	// An owner pulling their own link is routine; an administrator
+	// pulling someone else's is oversight, and recorded.
+	if row.UserID != uc.ID {
+		l.Audit(ctx, uc, "share.revoke", AuditTarget{Kind: "share", PID: apiShareID},
+			map[string]any{"ownerId": row.UserID, "targetPid": row.TargetPID})
+	}
 	return nil
 }
 
 // ResolveShare answers a live share for anonymous serving: not-found
-// for unknown, revoked, or expired ids, and the target resolved to
-// playable members. Resolution ignores per-user visibility on purpose:
-// the owner chose to publish this target, and the capability URL is
-// the authorization.
+// for unknown, revoked, or expired ids, and the target resolved to the
+// members its owner can see now. The capability URL authorizes the
+// visitor for what the owner published, never for more than the owner
+// still reaches: a disabled owner's links, and a target the owner has
+// lost to a grant or a content rule, answer not-found, and a list serves
+// only the members left. Nothing is cached, so a revocation bites on the
+// next hit.
 func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePublic, error) {
 	row, err := l.db.ShareByID(ctx, shareID)
 	if err == wdb.ErrNotFound {
@@ -294,6 +311,13 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 	}
 	if !row.ExpiresAt.IsZero() && time.Now().After(row.ExpiresAt) {
 		return nil, errNotFound("no such share")
+	}
+	owner, err := l.userCtxByID(ctx, row.UserID)
+	if err != nil {
+		if KindOf(err) == KindNotFound {
+			return nil, errNotFound("no such share")
+		}
+		return nil, err
 	}
 	pub := &SharePublic{Share: shareInfo(*row), OwnerUserID: row.UserID}
 	_, pid, ok := parseAPIPID(row.TargetPID)
@@ -320,15 +344,9 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 		}
 	}
 	// Downloads stop when the owner's own download permission is
-	// withdrawn; an unreadable owner degrades the same way (the
-	// stream still serves, the download link does not).
-	if pub.Share.AllowDownload {
-		owner, err := l.db.UserByID(ctx, row.UserID)
-		if err != nil {
-			pub.Share.AllowDownload = false
-		} else if ouc, err := l.UserCtx(ctx, owner); err != nil || !ouc.Download {
-			pub.Share.AllowDownload = false
-		}
+	// withdrawn (the stream still serves, the download link does not).
+	if !owner.Download {
+		pub.Share.AllowDownload = false
 	}
 	switch row.TargetKind {
 	case "playlist":
@@ -338,9 +356,14 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 		}
 		pub.Title = pl.Name
 		pub.Subtitle = "Playlist"
-		items, err := l.playlistMemberViews(ctx, pl, 500)
+		items, held, err := l.playlistMemberViews(ctx, owner, pl, 500)
 		if err != nil {
 			return nil, err
+		}
+		// A list the owner can no longer hear any of is gone, rather than
+		// a page that names it over no rows.
+		if held && len(items) == 0 {
+			return nil, errNotFound("no such share")
 		}
 		for _, it := range items {
 			pub.Items = append(pub.Items, summary(it))
@@ -352,16 +375,19 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 		}
 		pub.Title = info.Name
 		pub.Subtitle = "Album"
-		items, err := l.albumMemberViews(ctx, pid, 500)
+		items, err := l.albumMemberViews(ctx, owner, pid, 500)
 		if err != nil {
 			return nil, err
+		}
+		if len(items) == 0 {
+			return nil, errNotFound("no such share")
 		}
 		for _, it := range items {
 			pub.Items = append(pub.Items, summary(it))
 		}
 	default:
 		it, err := l.lib.Get(ctx, pid)
-		if err != nil {
+		if err != nil || !l.offers(ctx, owner, it) {
 			return nil, errNotFound("no such share")
 		}
 		pub.Title = it.Title
@@ -374,13 +400,12 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 	return pub, nil
 }
 
-// albumMemberViews resolves an album's member tracks in disc then
-// track order for anonymous share serving. Album membership is catalog
-// structure, independent of any user, so the query needs no user
-// context; the album_pid facet field addresses the album by entity
-// identity rather than a display-string match.
-func (l *Library) albumMemberViews(ctx context.Context, albumPID model.PID, cap int) ([]*model.ItemView, error) {
-	q := visibleTracks().
+// albumMemberViews resolves the album tracks the owner can see, in disc
+// then track order, for anonymous share serving. The album_pid field
+// addresses the album by entity identity rather than a display-string
+// match.
+func (l *Library) albumMemberViews(ctx context.Context, owner *UserCtx, albumPID model.PID, cap int) ([]*model.ItemView, error) {
+	q := l.scopedTo(ctx, owner, visibleTracks()).
 		Where("album_pid", query.OpIs, string(albumPID)).
 		OrderBy("disc_no", false).
 		OrderBy("track_no", false).
@@ -432,8 +457,8 @@ func (l *Library) PublicArt(ctx context.Context, apiItemPID string, size int) (A
 		return ArtBlob{}, classify(err)
 	}
 	// artMime, not a table of its own: this is the one art response with
-	// no session behind it and an hour of public caching in front of it,
-	// so the type it declares has to be the same one the authenticated
+	// no session behind it, cacheable by anyone who revalidates, so the
+	// type it declares has to be the same one the authenticated
 	// endpoints derive rather than a second opinion that drifts.
 	return ArtBlob{
 		Bytes:      blob.Bytes,
@@ -444,8 +469,8 @@ func (l *Library) PublicArt(ctx context.Context, apiItemPID string, size int) (A
 		// The rung this answered at, same as the authenticated read.
 		// The share page's oversize guard reads it: without it every
 		// blob looks unsized, and an original too big to paint would be
-		// streamed to anonymous visitors under an hour of public
-		// caching instead of falling back to the placeholder.
+		// streamed to anonymous visitors, and into public caches, instead
+		// of falling back to the placeholder.
 		Box: blob.Box,
 	}, nil
 }
@@ -476,38 +501,36 @@ func (l *Library) sharedPlaylist(ctx context.Context, pid model.PID) (*model.Pla
 	return pl, nil
 }
 
-// playlistMemberViews answers a playlist's members in play order,
-// evaluated as the owner (the share publishes the owner's list),
-// capped so a pathological playlist cannot balloon a public page.
-// Trashed members are dropped before the cap, so a share that would
-// otherwise be the most visible copy of a deleted track does not carry one.
+// playlistMemberViews answers a playlist's members in play order as the
+// owner's own listing shows them to the owner (the share publishes that
+// list), capped so a pathological playlist cannot balloon a public page.
+// held reports whether the list holds anything before the filter, so an
+// empty list can be told from one the owner can no longer hear.
 //
-// The membership comes from the same helper the owner's own listing
-// uses, so a smart list's rule is evaluated with the state predicate
-// inside the query here too - the share and the listing "have to honour
-// it identically", and two independent copies of the filter is the
-// shape that drifts.
-func (l *Library) playlistMemberViews(ctx context.Context, pl *model.Playlist, cap int) ([]*model.ItemView, error) {
+// The membership and the filter are the ones the owner's listing uses,
+// so a smart list's rule is evaluated with the state predicate inside
+// the query here too, and a rule that names `state` is honoured as
+// written - the share and the listing have to agree, and two copies of
+// the filter is the shape that drifts.
+func (l *Library) playlistMemberViews(ctx context.Context, owner *UserCtx, pl *model.Playlist, cap int) (items []*model.ItemView, held bool, err error) {
 	members, err := l.playlistMembers(ctx, pl)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	// The same exemption PlaylistItems makes, because a share publishes
-	// the owner's list rather than a second interpretation of it: a rule
-	// that names `state` is honoured as written, and a share of one that
-	// asks for archived rows would otherwise resolve to nothing.
-	keepArchived := pl.Rule != nil && ruleNamesState(pl.Rule.Where)
-	items := make([]*model.ItemView, 0, min(len(members), cap))
+	f, err := l.withTagVerdicts(ctx, l.newMemberFilter(owner, pl), members)
+	if err != nil {
+		return nil, false, err
+	}
+	items = make([]*model.ItemView, 0, min(len(members), cap))
 	for _, it := range members {
-		if archived(it) && !keepArchived {
-			continue
-		}
 		if len(items) == cap {
 			break
 		}
-		items = append(items, it)
+		if l.memberVisible(ctx, f, it) {
+			items = append(items, it)
+		}
 	}
-	return items, nil
+	return items, len(members) > 0, nil
 }
 
 func encodeShareCursor(ns int64, id string) string {

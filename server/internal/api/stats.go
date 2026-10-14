@@ -232,14 +232,15 @@ func (s *Server) GetYearInReview(ctx context.Context, req GetYearInReviewRequest
 }
 
 func (s *Server) GetServerYearInReview(ctx context.Context, req GetServerYearInReviewRequestObject) (GetServerYearInReviewResponseObject, error) {
-	if _, _, err := s.requireUserCtx(ctx); err != nil {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
 		return nil, err
 	}
 	year := 0
 	if req.Params.Year != nil {
 		year = *req.Params.Year
 	}
-	res, err := s.svc.ServerWideYearInReview(ctx, year)
+	res, err := s.svc.ServerWideYearInReview(ctx, uc, year)
 	switch service.KindOf(err) {
 	case "":
 	case service.KindInvalid:

@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
@@ -89,6 +90,12 @@ type Server struct {
 	// from. Empty is today's behaviour exactly: the socket address, and
 	// no header believed.
 	trusted trustedProxies
+	// wsPingEvery is the socket keepalive, which is also when a socket
+	// re-checks that its session is alive; tests shorten it.
+	wsPingEvery time.Duration
+	// streamRecheckEvery is how often a long-lived stream re-reads its
+	// caller's session and rights; tests shorten it.
+	streamRecheckEvery time.Duration
 }
 
 // logger is the slice of slog the API layer uses (a seam tests can
@@ -165,6 +172,10 @@ func NewServer(version string, opts Options) *Server {
 		workerTokens: opts.WorkerTokens,
 		trusted:      opts.TrustedProxies,
 		procCtx:      opts.ProcCtx,
+		wsPingEvery:  wsPingInterval,
+		// A task's progress is polled each second; the account behind
+		// the stream is re-read every few polls.
+		streamRecheckEvery: 5 * time.Second,
 	}
 }
 
@@ -243,7 +254,7 @@ func (s *Server) Login(ctx context.Context, req LoginRequestObject) (LoginRespon
 
 func (s *Server) Logout(ctx context.Context, _ LogoutRequestObject) (LogoutResponseObject, error) {
 	if p, ok := principalFromContext(ctx); ok {
-		if err := s.sessions.Revoke(ctx, p.Session.ID); err != nil {
+		if err := s.endSessions(ctx, p.User.ID, p.Session.ID, ""); err != nil {
 			s.log.Warn("revoking session at logout", "session", p.Session.ID, "err", err)
 		}
 	}
@@ -898,18 +909,26 @@ func (s *Server) AnalyzeLibrary(ctx context.Context, _ AnalyzeLibraryRequestObje
 }
 
 func (s *Server) GetJob(ctx context.Context, req GetJobRequestObject) (GetJobResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
 	// Timeline-measurement jobs live in the bridge, not the catalog;
-	// they answer here so one job surface covers both.
+	// they answer here so one job surface covers both, and only to the
+	// account whose queue they measure.
 	if s.bridge != nil {
-		if state, ok := s.bridge.TimelineJob(ctx, req.Pid); ok {
+		if state, ok := s.bridge.TimelineJob(ctx, p.User.ID, req.Pid); ok {
 			return GetJob200JSONResponse(Job{Pid: req.Pid, Kind: "timeline", State: state}), nil
 		}
 	}
-	job, err := s.svc.JobStatus(ctx, req.Pid)
-	if err != nil {
-		if service.KindOf(err) == service.KindNotFound {
-			return GetJob404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no job with pid "+req.Pid))}, nil
-		}
+	job, err := s.svc.JobStatusFor(ctx, uc, req.Pid)
+	switch service.KindOf(err) {
+	case "":
+	case service.KindNotFound:
+		return GetJob404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no job with pid "+req.Pid))}, nil
+	case service.KindForbidden:
+		return GetJob403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+	default:
 		return nil, err
 	}
 	return GetJob200JSONResponse(jobJSON(job)), nil
@@ -955,13 +974,13 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	// ranged, untranscoded, through the same token-authenticated
 	// endpoint downloads use. Span items ride whole with the window in
 	// the response; DSP (voice boost) is simply unavailable.
-	if s.bridge == nil {
+	if !s.bridge.Up() {
 		if s.media == nil {
 			return nil, errStreamingUnavailable
 		}
 		res, err := s.svc.DirectPlayInfo(ctx, uc, req.Pid, part.FilePID)
 		if err != nil {
-			if out, ok := s.enclosurePlayInfo(ctx, uc.ID, req.Pid, err); ok {
+			if out, ok := s.enclosurePlayInfo(ctx, uc.ID, sessionCred(p), req.Pid, err); ok {
 				return out, nil
 			}
 			switch service.KindOf(err) {
@@ -972,7 +991,9 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 			}
 			return nil, err
 		}
-		token, exp := s.media.Mint(p.User.ID, req.Pid)
+		token, exp := s.media.MintFor(auth.MediaClaims{
+			User: p.User.ID, Cred: sessionCred(p), Purpose: auth.PurposeStream, PID: req.Pid,
+		}, 0)
 		u := "/media/download?pid=" + url.QueryEscape(req.Pid) +
 			"&mt=" + url.QueryEscape(token) + "&id=" + url.QueryEscape(res.File.ETag)
 		if part.FilePID != "" {
@@ -1009,12 +1030,13 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	}
 
 	info, err := s.bridge.PlayInfoFor(ctx, uc.ID, req.Pid, flow.PlayOptions{
+		Cred:           sessionCred(p),
 		FilePID:        part.FilePID,
 		VoiceBoost:     boost,
 		MaxBitrateKbps: maxKbps,
 	})
 	if err != nil {
-		if out, ok := s.enclosurePlayInfo(ctx, uc.ID, req.Pid, err); ok {
+		if out, ok := s.enclosurePlayInfo(ctx, uc.ID, sessionCred(p), req.Pid, err); ok {
 			return out, nil
 		}
 		switch service.KindOf(err) {

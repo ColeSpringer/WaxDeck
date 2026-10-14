@@ -251,7 +251,7 @@ class LibraryApi {
   }
 
   /// Get one album&#39;s identity
-  /// The release facts that belong to the album entity rather than to any of its tracks: barcode, label, catalog number, media, and country, beside the title and counts a header already derives.  These live on the entity because that is where the catalog keeps them - an item row carries what the file is, and an edition is what the release is - so a screen deriving an album from its tracks can reach the first set and not the second. This is the read half of the &#x60;editEntity&#x60; write surface.  The &#x60;pid&#x60; must be an album (&#x60;al-&#x60;); anything else is &#x60;not-found&#x60; rather than a wrong-shaped answer. Absent fields are omitted: most releases carry none of the five, and an album with nothing to say answers the identity fields empty rather than blank. 
+  /// The release facts that belong to the album entity rather than to any of its tracks: barcode, label, catalog number, media, and country, beside the title and counts a header already derives.  These live on the entity because that is where the catalog keeps them - an item row carries what the file is, and an edition is what the release is - so a screen deriving an album from its tracks can reach the first set and not the second. This is the read half of the &#x60;editEntity&#x60; write surface.  The &#x60;pid&#x60; must be an album (&#x60;al-&#x60;); anything else is &#x60;not-found&#x60; rather than a wrong-shaped answer, and so is an album none of whose tracks the caller can see, by library grant or content settings. Absent fields are omitted: most releases carry none of the five, and an album with nothing to say answers the identity fields empty rather than blank. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -1013,7 +1013,7 @@ class LibraryApi {
   }
 
   /// Search the library
-  /// Full-text search across artists, albums, tracks, books, and episodes. Results are grouped by kind and ranked within each group; each group is capped at &#x60;limit&#x60; hits. 
+  /// Full-text search across artists, albums, tracks, books, and episodes. Results are grouped by kind and ranked within each group; each group is capped at &#x60;limit&#x60; hits. An artist or album is a hit only while at least one of its tracks is one the caller can see, by library grant and content settings. 
   ///
   /// Parameters:
   /// * [q] - Search query. Must contain at least one non-whitespace character.

@@ -14,7 +14,7 @@ part 'timeline_info.g.dart';
 ///
 /// Properties:
 /// * [pid] - Identifies this rendering, for releasing it when playback stops. Absent from an older server, which relies on the idle sweep alone. 
-/// * [url] - Origin-relative, media-token-authenticated HLS playlist URL for the whole timeline. The token lives at least the timeline's duration plus margin; re-request this endpoint on `stream-stale`, on a `not-found` fetch (the engine aged the timeline out), or after `expiresAt`. 
+/// * [url] - Origin-relative, media-token-authenticated HLS playlist URL for the whole timeline. The token lives at least the timeline's duration plus margin; re-request this endpoint on `stream-stale`, on a `not-found` fetch (the engine aged the timeline out), on an `unauthenticated` one (the account's grants or content rules changed), or after `expiresAt`. 
 /// * [mimeType] - Always an HLS playlist type.
 /// * [durationMs] - The combined timeline's duration.
 /// * [expiresAt] - When the embedded media token stops being accepted.
@@ -28,7 +28,7 @@ abstract class TimelineInfo implements Built<TimelineInfo, TimelineInfoBuilder> 
   @BuiltValueField(wireName: r'pid')
   String? get pid;
 
-  /// Origin-relative, media-token-authenticated HLS playlist URL for the whole timeline. The token lives at least the timeline's duration plus margin; re-request this endpoint on `stream-stale`, on a `not-found` fetch (the engine aged the timeline out), or after `expiresAt`. 
+  /// Origin-relative, media-token-authenticated HLS playlist URL for the whole timeline. The token lives at least the timeline's duration plus margin; re-request this endpoint on `stream-stale`, on a `not-found` fetch (the engine aged the timeline out), on an `unauthenticated` one (the account's grants or content rules changed), or after `expiresAt`. 
   @BuiltValueField(wireName: r'url')
   String get url;
 

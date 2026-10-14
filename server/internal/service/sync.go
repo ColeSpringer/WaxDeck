@@ -676,32 +676,14 @@ func decodeServerCursor(s string) (gen string, id int64, ok bool) {
 // grantEpoch reads the user's current visibility epoch (0 until ever
 // bumped).
 func (l *Library) grantEpoch(ctx context.Context, userID string) (int64, error) {
-	v, err := l.db.SyncStateGet(ctx, syncKeyGrantEpoch+userID)
-	if err != nil {
-		return 0, &Error{Kind: KindInternal, Err: err}
-	}
-	if v == "" {
-		return 0, nil
-	}
-	n, err := strconv.ParseInt(v, 10, 64)
-	if err != nil {
-		return 0, nil
-	}
-	return n, nil
+	return l.epoch(ctx, syncKeyGrantEpoch+userID)
 }
 
 // bumpGrantEpoch retires the user's outstanding catalog cursors after a
 // visibility change; their next delta answers sync-reset and the
 // re-snapshot reflects the new grants.
 func (l *Library) bumpGrantEpoch(ctx context.Context, userID string) {
-	cur, err := l.grantEpoch(ctx, userID)
-	if err != nil {
-		l.log.Warn("reading grant epoch", "user", userID, "err", err)
-		cur = 0
-	}
-	if err := l.db.SyncStateSet(ctx, syncKeyGrantEpoch+userID, strconv.FormatInt(cur+1, 10)); err != nil {
-		l.log.Warn("bumping grant epoch", "user", userID, "err", err)
-	}
+	l.bumpEpoch(ctx, syncKeyGrantEpoch+userID)
 }
 
 // --- catalog sync ------------------------------------------------------------
@@ -720,6 +702,13 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 	if cursor == "" {
 		epoch, err := l.grantEpoch(ctx, uc.ID)
 		if err != nil {
+			return CatalogSnapshotPage{}, err
+		}
+		// The rules again, after the epoch: the caller's were read before
+		// it, and an administrator narrowing the account in between would
+		// stamp a page served under the old rules with the epoch that
+		// retires them, so no delta would ever take those items back.
+		if uc, err = l.userCtxByID(ctx, uc.ID); err != nil {
 			return CatalogSnapshotPage{}, err
 		}
 		l.feed.mu.Lock()
@@ -753,8 +742,13 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 		}
 	}
 
-	q := visibleItems().Build()
-	page, err := l.lib.QueryPage(ctx, q, inner, limit, false, model.PID(uc.CatalogPID))
+	// Content rules narrow the query itself: a tag rule per row would be
+	// one tag read for every item of a restricted caller's first sync.
+	b := visibleItems()
+	for _, n := range l.contentNarrow(ctx, uc) {
+		b.WhereNode(n)
+	}
+	page, err := l.lib.QueryPage(ctx, b.Build(), inner, limit, false, model.PID(uc.CatalogPID))
 	if err != nil {
 		return CatalogSnapshotPage{}, classify(err)
 	}
@@ -1018,14 +1012,15 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			out.Entries = append(out.Entries, l.archivedTombstone(it, restorable))
 			continue
 		}
-		if !l.viewVisible(ctx, uc, it) {
+		if !l.viewVisible(ctx, uc, it) || !l.allowedByContent(ctx, uc, it) {
 			// A change can carry an item out of the caller's sight with
-			// no grant change to bump the epoch (a file re-homed under
-			// an ungranted root keeps its item PID). Skipping would
+			// no grant or rule change to bump the epoch (a file re-homed
+			// under an ungranted root keeps its item PID; a retag or an
+			// advisory flag lands under a standing rule). Skipping would
 			// strand the stale row in the client's mirror, so the
 			// transition tombstones instead. Hidden, not removed: a
-			// regrant or a move back puts it in sight again, and the
-			// bytes would otherwise have to come down a second time.
+			// regrant, a move back or a retag puts it in sight again, and
+			// the bytes would otherwise have to come down a second time.
 			out.Entries = append(out.Entries, CatalogSyncEntry{
 				Op:     syncOpDelete,
 				PID:    apiPID(PrefixTrack, pid),

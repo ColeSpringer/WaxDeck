@@ -20,6 +20,9 @@ type wsClient struct {
 	t    *testing.T
 	conn *websocket.Conn
 	recv chan map[string]any
+	// status is the close status the socket ended with, set before recv
+	// closes.
+	status websocket.StatusCode
 }
 
 func dialWS(t *testing.T, h *harness, token string, topics ...string) *wsClient {
@@ -46,6 +49,7 @@ func dialWS(t *testing.T, h *harness, token string, topics ...string) *wsClient 
 		for {
 			_, msg, err := conn.Read(context.Background())
 			if err != nil {
+				c.status = websocket.CloseStatus(err)
 				close(c.recv)
 				return
 			}
@@ -66,6 +70,40 @@ func (c *wsClient) send(v map[string]any) {
 	defer cancel()
 	if err := c.conn.Write(ctx, websocket.MessageText, data); err != nil {
 		c.t.Fatalf("ws write: %v", err)
+	}
+}
+
+// closedWith waits for the socket to close and answers the status it
+// closed with, discarding frames on the way.
+func (c *wsClient) closedWith(within time.Duration) websocket.StatusCode {
+	c.t.Helper()
+	deadline := time.After(within)
+	for {
+		select {
+		case _, ok := <-c.recv:
+			if !ok {
+				return c.status
+			}
+		case <-deadline:
+			c.t.Fatalf("the socket is still open after %v", within)
+			return 0
+		}
+	}
+}
+
+// stillOpen reports whether the socket stays open for the whole window.
+func (c *wsClient) stillOpen(window time.Duration) bool {
+	c.t.Helper()
+	deadline := time.After(window)
+	for {
+		select {
+		case _, ok := <-c.recv:
+			if !ok {
+				return false
+			}
+		case <-deadline:
+			return true
+		}
 	}
 }
 
@@ -957,5 +995,55 @@ func TestBookPlaysOnDeviceEndpoint(t *testing.T) {
 	pGet(t, h, "/api/v1/player/sessions/"+sess.Id, h.token, &after)
 	if after.Index != 0 || after.PositionMs < 8000 || after.PositionMs > 9000 {
 		t.Fatalf("session reads entry %d at %dms, want the book entry near 8000", after.Index, after.PositionMs)
+	}
+}
+
+// A timeline's items are fixed when it is minted, so its token carries
+// the account's reach and every HLS fetch checks it: narrowing what the
+// account may see ends the timeline (the client re-requests it, and the
+// mint checks the new reach), where a fetch-time item check would cost a
+// read per member per segment.
+func TestTimelineStopsWhenTheAccountsReachChanges(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	items := h.items(t, "")
+	id, token, _ := mediaListener(t, h, "gapless", nil)
+	var tl struct{ Url string }
+	pPost(t, h, "/api/v1/player/timeline", token, map[string]any{
+		"itemPids": []string{items.Items[0].Pid, items.Items[1].Pid},
+	}, http.StatusCreated, &tl)
+	if code := fetchStatus(t, h, tl.Url); code == http.StatusUnauthorized {
+		t.Fatalf("the fresh timeline's master = %d", code)
+	}
+
+	lib := decodeStatus[Library](t, h.postJSON(t, "/api/v1/libraries", map[string]any{
+		"name": "elsewhere", "path": t.TempDir(),
+	}), 201, "a second library")
+	wantStatus(t, h.patchJSON(t, "/api/v1/users/"+id, map[string]any{
+		"libraryAccess": map[string]any{"mode": "granted", "libraryPids": []string{lib.Pid}},
+	}), 200, "narrowing the grant")
+	if code := fetchStatus(t, h, tl.Url); code != http.StatusUnauthorized {
+		t.Errorf("the timeline after the grant narrowed = %d, want 401", code)
+	}
+}
+
+// A timeline's URL outlives the 15 minutes of a stream URL (it lasts the
+// queue), so it is bound to the session that minted it as well as to the
+// account's reach: a revoked device stops opening it.
+func TestTimelineStopsWhenItsSessionEnds(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	items := h.items(t, "")
+	_, token, _ := mediaListener(t, h, "gaplessout", nil)
+	var tl struct{ Url string }
+	pPost(t, h, "/api/v1/player/timeline", token, map[string]any{
+		"itemPids": []string{items.Items[0].Pid, items.Items[1].Pid},
+	}, http.StatusCreated, &tl)
+	if code := fetchStatus(t, h, tl.Url); code == http.StatusUnauthorized {
+		t.Fatalf("the fresh timeline's master = %d", code)
+	}
+	wantStatus(t, reqAs(t, h, "POST", "/api/v1/auth/logout", token, nil), http.StatusNoContent, "signing out")
+	if code := fetchStatus(t, h, tl.Url); code != http.StatusUnauthorized {
+		t.Errorf("the timeline after its session ended = %d, want 401", code)
 	}
 }

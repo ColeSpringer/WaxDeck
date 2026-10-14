@@ -10,6 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/connect"
 	"github.com/colespringer/waxdeck/server/internal/events"
 )
@@ -28,6 +29,11 @@ const (
 	wsOutboundQueue     = 64
 	wsMaxFrameBytes     = 64 * 1024
 )
+
+// wsSessionEnded is the close status for a socket whose session ended,
+// telling a client apart from a dropped link that reconnecting will be
+// refused.
+const wsSessionEnded = websocket.StatusCode(4401)
 
 // wsSubscribeFrame is the client's first frame. Cursors are opaque and
 // unused by the transport: their validity is judged by the sync
@@ -99,17 +105,30 @@ type wsPongFrame struct {
 
 // ServeWS upgrades the event channel and command bus. It runs behind
 // AuthMiddleware (mounted on the mux with it), so a principal is
-// always in context; the upgrade itself enforces same-origin for
-// browser clients (the library's default rejects cross-origin upgrades
-// and allows absent Origin headers, which is exactly the contract).
+// always in context. A cookie-borne upgrade must be same-origin (the
+// library's check, which also allows an absent Origin); a bearer one is
+// not checked, since a browser page cannot set the header that carries
+// it. A socket lives only as long as the session that opened it.
+//
+// Called once at startup, by main and by the test harness alike, which
+// is where the session manager's revoke feed is wired to the hub.
 func (s *Server) ServeWS(hub *events.Hub) http.HandlerFunc {
+	if s.sessions != nil {
+		s.sessions.OnRevoke(func(e auth.RevokeEvent) {
+			if e.SessionID != "" {
+				hub.EndSessions(e.SessionID)
+				return
+			}
+			hub.EndUser(e.UserID, e.KeepID)
+		})
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, ok := principalFromContext(r.Context())
 		if !ok {
 			writeError(w, http.StatusUnauthorized, "unauthenticated", "no valid session or token was presented")
 			return
 		}
-		c, err := websocket.Accept(w, r, nil)
+		c, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: !p.FromCookie})
 		if err != nil {
 			// Accept already answered the request (bad handshake or
 			// forbidden origin).
@@ -131,8 +150,16 @@ func (s *Server) ServeWS(hub *events.Hub) http.HandlerFunc {
 			return
 		}
 
-		conn := hub.Register(p.User.ID, sub.Topics)
+		sessionID := sessionIDOf(p)
+		conn := hub.Register(p.User.ID, sessionID, sub.Topics)
 		defer hub.Unregister(conn)
+		// A session that ended between the upgrade and the subscribe
+		// frame was announced to nobody.
+		if s.sessionEnded(r.Context(), sessionID) {
+			hub.EndSessions(sessionID)
+			c.Close(wsSessionEnded, "session ended")
+			return
+		}
 
 		// A returning client (any cursor presented) gets one immediate
 		// invalidate per subscribed topic: pulling is cheap and a no-op
@@ -152,19 +179,38 @@ func (s *Server) ServeWS(hub *events.Hub) http.HandlerFunc {
 		// distinguishes by frame kind upstream.
 		ctx, cancelAll := context.WithCancel(r.Context())
 		defer cancelAll()
-		// The read loop (this goroutine) is the connection's only
-		// closer; the writer just stops on cancellation. Concurrent
-		// Close would be safe (the library CAS-guards it), but a single
-		// owner keeps the close status deterministic.
+		// The read loop (this goroutine) closes the connection, except
+		// when its session ends: then the writer closes it with
+		// wsSessionEnded and only afterwards cancels the read, because a
+		// cancelled read tears the transport down with no close frame and
+		// the client would see 1006 instead. The library CAS-guards a
+		// second Close, so the loser of a race is a no-op.
 		out := make(chan any, wsOutboundQueue)
 		s.group.GoOnce(ctx, "ws-writer", func(wctx context.Context) error {
-			pings := time.NewTicker(wsPingInterval)
+			pings := time.NewTicker(s.wsPingEvery)
 			defer pings.Stop()
+			endSession := func() {
+				_ = c.Close(wsSessionEnded, "session ended")
+				cancelAll()
+			}
 			for {
 				select {
 				case <-wctx.Done():
 					return nil
+				case <-conn.Ended():
+					endSession()
+					return nil
 				case <-pings.C:
+					// The backstop for an end nothing announced: an
+					// expiry, a row deleted behind the manager's back.
+					// Announcing it through the hub ends every socket of
+					// the session at once, as a revoke does, so none of
+					// them acts on another frame.
+					if s.sessionEnded(wctx, sessionID) {
+						hub.EndSessions(sessionID)
+						endSession()
+						return nil
+					}
 					if err := s.wsPing(wctx, c); err != nil {
 						cancelAll()
 						return nil
@@ -195,10 +241,6 @@ func (s *Server) ServeWS(hub *events.Hub) http.HandlerFunc {
 					return false
 				}
 			}
-			sessionID := ""
-			if p.Session != nil {
-				sessionID = p.Session.ID
-			}
 			deviceName := ""
 			if p.Session != nil && p.Session.DeviceName != "" {
 				deviceName = p.Session.DeviceName
@@ -228,6 +270,12 @@ func (s *Server) ServeWS(hub *events.Hub) http.HandlerFunc {
 // (the contract answers every request exactly once, and a peer that
 // cannot absorb 64 pending frames is not reading anyway).
 func (s *Server) dispatchWS(ctx context.Context, conn *events.Conn, link *connect.ClientLink, out chan any, cancel func(), data []byte) {
+	// A frame racing the close of an ended session is not acted on.
+	select {
+	case <-conn.Ended():
+		return
+	default:
+	}
 	enqueue := func(v any) {
 		select {
 		case out <- v:
@@ -390,6 +438,32 @@ func refusalParams(err error) map[string]string {
 		return nil
 	}
 	return inv.Params
+}
+
+// sessionIDOf names the session a principal authenticated with, "" for
+// none.
+func sessionIDOf(p *auth.Principal) string {
+	if p == nil || p.Session == nil {
+		return ""
+	}
+	return p.Session.ID
+}
+
+// sessionEnded reports whether a long-lived response's session can no
+// longer authenticate. Only a definite answer ends one: a check that
+// failed (a cancelled context, a busy store) is retried at the next
+// tick, because ending a session ends every socket it holds. A
+// principal with no session has nothing that could be revoked, so it
+// counts as ended.
+func (s *Server) sessionEnded(ctx context.Context, sessionID string) bool {
+	if sessionID == "" {
+		return true
+	}
+	if s.sessions == nil {
+		return false
+	}
+	alive, err := s.sessions.Alive(ctx, sessionID)
+	return err == nil && !alive
 }
 
 func (s *Server) wsWrite(ctx context.Context, c *websocket.Conn, v any) error {

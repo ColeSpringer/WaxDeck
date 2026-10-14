@@ -68,8 +68,9 @@ func New(src wakeSource) *Hub {
 // Conn is one subscribed connection. The transport layer owns the
 // socket; the hub only marks pending topics and wakes it.
 type Conn struct {
-	userID string
-	topics map[string]bool // nil means every topic
+	userID    string
+	sessionID string          // the session that opened it; "" for none
+	topics    map[string]bool // nil means every topic
 
 	mu sync.Mutex
 	// station is the radio station this client says it is listening to,
@@ -88,6 +89,9 @@ type Conn struct {
 		resyncCatalog bool
 	}
 	wake chan struct{}
+
+	endOnce sync.Once
+	ended   chan struct{}
 }
 
 // Register adds a connection for the given user. topics of zero length
@@ -95,8 +99,8 @@ type Conn struct {
 // contract). A list with no recognized names also subscribes to
 // everything: spurious invalidations are harmless by the model, while a
 // connection that looks live but hears nothing is silent staleness.
-func (h *Hub) Register(userID string, topics []string) *Conn {
-	c := &Conn{userID: userID, wake: make(chan struct{}, 1)}
+func (h *Hub) Register(userID, sessionID string, topics []string) *Conn {
+	c := &Conn{userID: userID, sessionID: sessionID, wake: make(chan struct{}, 1), ended: make(chan struct{})}
 	if len(topics) > 0 {
 		c.topics = make(map[string]bool, len(topics))
 		for _, t := range topics {
@@ -119,6 +123,47 @@ func (h *Hub) Unregister(c *Conn) {
 	h.mu.Lock()
 	delete(h.conns, c)
 	h.mu.Unlock()
+}
+
+// Ended closes when the session that opened the connection has ended;
+// the transport then closes the socket.
+func (c *Conn) Ended() <-chan struct{} { return c.ended }
+
+func (c *Conn) end() { c.endOnce.Do(func() { close(c.ended) }) }
+
+// EndSessions ends the connections the named sessions opened.
+func (h *Hub) EndSessions(ids ...string) {
+	gone := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id != "" {
+			gone[id] = true
+		}
+	}
+	h.endWhere(func(c *Conn) bool { return gone[c.sessionID] })
+}
+
+// EndUser ends every connection of the account except those keepSessionID
+// opened ("" keeps none).
+func (h *Hub) EndUser(userID, keepSessionID string) {
+	h.endWhere(func(c *Conn) bool {
+		return c.userID == userID && (keepSessionID == "" || c.sessionID != keepSessionID)
+	})
+}
+
+// endWhere ends the matching connections outside the registry lock, as
+// markAllAs marks them.
+func (h *Hub) endWhere(match func(*Conn) bool) {
+	h.mu.Lock()
+	var hit []*Conn
+	for c := range h.conns {
+		if match(c) {
+			hit = append(hit, c)
+		}
+	}
+	h.mu.Unlock()
+	for _, c := range hit {
+		c.end()
+	}
 }
 
 // wants reports whether the connection subscribed to the topic.

@@ -39,8 +39,8 @@ paths:
         one in two, and backs the series index a client browses.
 
 
-        Filtered by library visibility, so a series held only in
-        libraries this account cannot see is absent.
+        Filtered by library visibility and content settings, so a
+        series none of whose books this account can see is absent.
       tags: [books]
       parameters:
         - name: cursor
@@ -243,13 +243,14 @@ paths:
         where the catalog puts it.
 
 
-        Counts are answered only to an account that can see every
-        library, exactly as the listing answers them: a series with one
-        visible book and nine hidden ones must not advertise ten.
+        Counts are answered only when this account sees every book in
+        the series: a series with one visible book and nine hidden ones
+        must not advertise ten.
 
 
         404 when no series carries the pid, and when every book in it
-        lives in a library this account was not granted.
+        is hidden from this account, by library grant or content
+        settings.
 
 
         A top-level path rather than one under `/books/series`, which
@@ -302,7 +303,10 @@ components:
           description: The series name, as the books' tags spell it.
         bookCount:
           type: integer
-          description: Books in the series that this account can see.
+          description: >
+            Books in the series, answered only to an account that sees
+            every book: every library open to it and no tag rule
+            narrowing what it sees.
         totalDurationMs:
           type: integer
           format: int64
@@ -323,8 +327,8 @@ components:
         bookCount:
           type: integer
           description: >
-            Books in the series, answered only to an account that can
-            see every library. A restricted account reads the length of
+            Books in the series, answered only when this account sees
+            every one of them. A restricted account reads the length of
             `books` instead, which is what it can open.
         totalDurationMs:
           type: integer

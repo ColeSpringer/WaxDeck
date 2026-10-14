@@ -368,7 +368,7 @@ class BooksApi {
   }
 
   /// Get one audiobook series
-  /// One series and the books in it, in sequence order. The sequence is what a book&#39;s tags say rather than a number anyone assigned, so it is a string and can be absent: a book tagged with the series name and no number sorts among the ones that carry one, where the catalog puts it.  Counts are answered only to an account that can see every library, exactly as the listing answers them: a series with one visible book and nine hidden ones must not advertise ten.  404 when no series carries the pid, and when every book in it lives in a library this account was not granted.  A top-level path rather than one under &#x60;/books/series&#x60;, which lists them: a series is a shared entity with a pid of its own, read the way &#x60;/albums/{pid}&#x60; is read. 
+  /// One series and the books in it, in sequence order. The sequence is what a book&#39;s tags say rather than a number anyone assigned, so it is a string and can be absent: a book tagged with the series name and no number sorts among the ones that carry one, where the catalog puts it.  Counts are answered only when this account sees every book in the series: a series with one visible book and nine hidden ones must not advertise ten.  404 when no series carries the pid, and when every book in it is hidden from this account, by library grant or content settings.  A top-level path rather than one under &#x60;/books/series&#x60;, which lists them: a series is a shared entity with a pid of its own, read the way &#x60;/albums/{pid}&#x60; is read. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -454,7 +454,7 @@ class BooksApi {
   }
 
   /// List audiobook series
-  /// The series the visible audiobooks belong to, in collation order. A series is a name a book&#39;s tags carry rather than an entity anyone curates, so what it names is a spelling: this listing both offers the target of a series merge, when a spelling split one in two, and backs the series index a client browses.  Filtered by library visibility, so a series held only in libraries this account cannot see is absent. 
+  /// The series the visible audiobooks belong to, in collation order. A series is a name a book&#39;s tags carry rather than an entity anyone curates, so what it names is a spelling: this listing both offers the target of a series merge, when a spelling split one in two, and backs the series index a client browses.  Filtered by library visibility and content settings, so a series none of whose books this account can see is absent. 
   ///
   /// Parameters:
   /// * [cursor] - Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. 

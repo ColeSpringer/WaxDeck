@@ -8,6 +8,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -48,17 +50,90 @@ func (p *Principal) IsAdmin() bool {
 	return false
 }
 
+// DefaultSessionCap is how many live sessions one account may hold
+// unless the operator says otherwise: generous, since every browser tab
+// that signs in and every device holds one.
+const DefaultSessionCap = 250
+
 // Sessions manages opaque session tokens over the store: creation,
 // lookup with sliding expiry, rotation, and revocation. Tokens are
 // 32-byte random values stored only as SHA-256 hashes; a database leak
 // yields no usable credentials.
 type Sessions struct {
 	store *db.DB
+	cap   int
+
+	mu       sync.Mutex
+	onRevoke []func(RevokeEvent)
 }
 
 // NewSessions builds the session manager.
 func NewSessions(store *db.DB) *Sessions {
-	return &Sessions{store: store}
+	return &Sessions{store: store, cap: DefaultSessionCap}
+}
+
+// LimitPerAccount sets how many live sessions one account may hold; a
+// sign-in past it ends the account's least recently used session. Zero
+// or less keeps the default.
+func (s *Sessions) LimitPerAccount(n int) {
+	if n > 0 {
+		s.cap = n
+	}
+}
+
+// RevokeEvent names what a revoke ended: one session (SessionID), or
+// every session of an account but KeepID (UserID, KeepID "" for all).
+type RevokeEvent struct {
+	SessionID string
+	UserID    string
+	KeepID    string
+}
+
+// OnRevoke registers a listener every revoke through this manager calls,
+// synchronously, after the rows are gone. What a session opened (a
+// socket) outlives its row, and this is how it hears.
+func (s *Sessions) OnRevoke(fn func(RevokeEvent)) {
+	s.mu.Lock()
+	s.onRevoke = append(s.onRevoke, fn)
+	s.mu.Unlock()
+}
+
+func (s *Sessions) notify(e RevokeEvent) {
+	s.mu.Lock()
+	listeners := slices.Clone(s.onRevoke)
+	s.mu.Unlock()
+	for _, fn := range listeners {
+		fn(e)
+	}
+}
+
+// Alive reports whether a session can still authenticate: its row is
+// there and unexpired, and its account exists and may sign in. The
+// backstop for whatever a revoke did not reach (an expiry, a row deleted
+// behind the manager's back). An error is a read that failed, which says
+// nothing about the session either way.
+func (s *Sessions) Alive(ctx context.Context, sessionID string) (bool, error) {
+	if sessionID == "" {
+		return false, nil
+	}
+	sess, err := s.store.SessionByID(ctx, sessionID)
+	if errors.Is(err, db.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !time.Now().Before(sess.ExpiresAt) {
+		return false, nil
+	}
+	user, err := s.store.UserByID(ctx, sess.UserID)
+	if errors.Is(err, db.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return !user.Disabled && !user.Pending, nil
 }
 
 // Created is a freshly established session with its one-time-visible
@@ -97,7 +172,27 @@ func (s *Sessions) Create(ctx context.Context, userID, kind, deviceName, client 
 	if err := s.store.CreateSession(ctx, sess); err != nil {
 		return nil, fmt.Errorf("auth: creating session: %w", err)
 	}
+	s.enforceCap(ctx, userID, sess.ID)
 	return &Created{Session: sess, Token: token, CSRFToken: csrf}, nil
+}
+
+// enforceCap ends the account's least recently used sessions past the
+// cap, sparing the one just made. Best effort: a sign-in never fails
+// over the housekeeping behind it.
+func (s *Sessions) enforceCap(ctx context.Context, userID, keepID string) {
+	live, err := s.ListForUser(ctx, userID)
+	if err != nil || len(live) <= s.cap {
+		return
+	}
+	slices.SortFunc(live, func(a, b *db.Session) int { return a.LastSeenAt.Compare(b.LastSeenAt) })
+	for _, sess := range live[:len(live)-s.cap] {
+		if sess.ID == keepID {
+			continue
+		}
+		if err := s.Revoke(ctx, sess.ID); err != nil && !errors.Is(err, db.ErrNotFound) {
+			return
+		}
+	}
 }
 
 // Lookup resolves a presented token to its principal, enforcing expiry,
@@ -170,9 +265,14 @@ func (s *Sessions) Rotate(ctx context.Context, sess *db.Session) (string, error)
 	return token, nil
 }
 
-// Revoke ends one session immediately.
+// Revoke ends one session immediately. Listeners hear it even when the
+// row was already gone.
 func (s *Sessions) Revoke(ctx context.Context, sessionID string) error {
-	return s.store.DeleteSession(ctx, sessionID)
+	err := s.store.DeleteSession(ctx, sessionID)
+	if err == nil || errors.Is(err, db.ErrNotFound) {
+		s.notify(RevokeEvent{SessionID: sessionID})
+	}
+	return err
 }
 
 // Rename relabels one session in the device list. The caller validates
@@ -206,7 +306,11 @@ func (s *Sessions) Get(ctx context.Context, sessionID string) (*db.Session, erro
 // RevokeAllForUser ends every session of the account except keepID
 // (pass "" to keep none).
 func (s *Sessions) RevokeAllForUser(ctx context.Context, userID, keepID string) error {
-	return s.store.DeleteUserSessions(ctx, userID, keepID)
+	if err := s.store.DeleteUserSessions(ctx, userID, keepID); err != nil {
+		return err
+	}
+	s.notify(RevokeEvent{UserID: userID, KeepID: keepID})
+	return nil
 }
 
 // newToken mints an opaque credential and its storage hash.

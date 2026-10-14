@@ -959,6 +959,26 @@ func (l *Library) JobStatus(ctx context.Context, apiJobPID string) (Job, error) 
 	return out[0], nil
 }
 
+// JobStatusFor reads one job for a caller in its audience (the one
+// jobAudience tells of it): an administrator, or the account that
+// started a targeted job while its origin row still holds them. Anyone
+// else is refused.
+func (l *Library) JobStatusFor(ctx context.Context, uc *UserCtx, apiJobPID string) (Job, error) {
+	job, err := l.JobStatus(ctx, apiJobPID)
+	if err != nil || uc.Admin {
+		return job, err
+	}
+	_, pid, _ := parseAPIPID(apiJobPID)
+	starter, err := l.jobStarter(ctx, pid, job.Target != nil)
+	if err != nil {
+		return Job{}, &Error{Kind: KindInternal, Err: err}
+	}
+	if starter != "" && starter == uc.ID {
+		return job, nil
+	}
+	return Job{}, &Error{Kind: KindForbidden, Msg: "only administrators and the job's starter may read it"}
+}
+
 // Jobs lists recent catalog jobs, newest first, after any still running
 // that newer ones pushed out. A finished targeted job is left out (read by
 // pid): a burst of them would push the passes out. Administrators only.

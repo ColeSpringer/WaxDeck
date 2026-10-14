@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+
+	"github.com/colespringer/waxdeck/server/internal/auth"
 )
 
 // TranscodeKind names what a slot is being held for, so the activity
@@ -32,14 +34,63 @@ type TranscodeGate interface {
 	// MaxBitrateKbps reports the user's transcode bitrate ceiling in
 	// kbit/s; 0 means none.
 	MaxBitrateKbps(ctx context.Context, user string) int
+	// AuthorizeMedia re-runs a media token's mint-time check on a fetch.
+	// An error wrapping auth.ErrMediaRevoked refuses the token's account
+	// or credential, one wrapping ErrMediaRefused refuses the item, one
+	// wrapping ErrCatalogMaintenance is the catalog briefly unavailable,
+	// and any other is a check that could not be made.
+	AuthorizeMedia(ctx context.Context, c auth.MediaClaims) error
 }
 
 // ErrTranscodeLimited is the gate's refusal.
 var ErrTranscodeLimited = errors.New("transcode session limit reached")
 
-// SetTranscodeGate wires the session gate; nil (the default) admits
-// everything. Called once at startup, before the bridge serves.
+// ErrMediaRefused is the gate's refusal of the item a media token names:
+// gone, or no longer within its account's reach.
+var ErrMediaRefused = errors.New("the media token's item is not available to its account")
+
+// ErrCatalogMaintenance is a check the gate could not make because the
+// catalog is handed to a maintenance operation for the moment.
+var ErrCatalogMaintenance = errors.New("the catalog is in maintenance")
+
+// Up reports whether the streaming engine serves streams, false for a
+// server without one. Every site that picks between the engine and the
+// original bytes asks this, so a runtime notion of "up" lands in one
+// place.
+func (b *Bridge) Up() bool { return b != nil }
+
+// SetTranscodeGate wires the session gate. Without one (the default)
+// sessions are admitted and uncapped, but no media token is served: the
+// per-fetch check is the gate's, and a bridge that cannot ask it refuses
+// rather than serving revoked tokens. Called once at startup, before
+// the bridge serves.
 func (b *Bridge) SetTranscodeGate(g TranscodeGate) { b.gate = g }
+
+// authorize re-runs the token's mint-time check through the gate,
+// answering the request itself on refusal: a token whose account or
+// credential is gone is as bad as no token, and an item it may no
+// longer have is not found. A check that failed is the server's own
+// trouble, which a player retries rather than reading as a verdict.
+func (b *Bridge) authorize(ctx context.Context, w http.ResponseWriter, c auth.MediaClaims) bool {
+	if b.gate == nil {
+		writeJSONError(w, http.StatusInternalServerError, "internal", "media tokens cannot be checked on this server")
+		return false
+	}
+	err := b.gate.AuthorizeMedia(ctx, c)
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, auth.ErrMediaRevoked):
+		writeJSONError(w, http.StatusUnauthorized, "unauthenticated", "invalid or expired media token")
+	case errors.Is(err, ErrMediaRefused):
+		writeJSONError(w, http.StatusNotFound, "not-found", "no streamable item with pid "+c.PID)
+	case errors.Is(err, ErrCatalogMaintenance):
+		writeJSONError(w, http.StatusServiceUnavailable, "catalog-maintenance", "the catalog is in maintenance; retry shortly")
+	default:
+		writeJSONError(w, http.StatusInternalServerError, "internal", "checking the media token failed")
+	}
+	return false
+}
 
 // admit reserves a session slot, answering the request itself on
 // refusal. The returned release is non-nil exactly when admitted.

@@ -368,3 +368,64 @@ func TestReadResultCountsHeldMovesAsSkipped(t *testing.T) {
 		t.Fatalf("tally = %+v, want 3 moved and 3 left where they were", j.Organize)
 	}
 }
+
+// A job is read by the audience that hears of it: administrators, and
+// the account that started a targeted job while its origin row still
+// holds them.
+func TestJobStatusForFollowsTheJobsAudience(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newCatalogFixture(t)
+	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "starter", Password: "correct-horse"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := svc.UserCtx(ctx, acct.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originFor := func(pid model.PID) {
+		t.Helper()
+		if err := svc.db.InsertJobOrigin(ctx, wdb.JobOrigin{PID: string(pid), UserID: listener.ID, CreatedAtNS: time.Now().UnixNano()}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// A whole pass is the administrators' alone: the account holding its
+	// origin row (an administrator since demoted) never hears of it, and
+	// does not read it either.
+	pass, err := svc.lib.StartAnalyze(ctx, waxbin.AnalyzeOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.JobStatusFor(ctx, admin, apiPID(PrefixJob, pass)); err != nil {
+		t.Errorf("an administrator: %v", err)
+	}
+	originFor(pass)
+	if _, err := svc.JobStatusFor(ctx, listener, apiPID(PrefixJob, pass)); KindOf(err) != KindForbidden {
+		t.Errorf("a non-administrator holding a pass's origin = %v, want forbidden", err)
+	}
+
+	// A targeted job is its starter's too, while its origin row holds.
+	_, item, _ := parseAPIPID(fixtureItemPIDs(t, ctx, svc, admin)[0])
+	targeted, err := svc.lib.StartSetItemKind(ctx, []model.PID{item}, model.KindBook, waxbin.KindOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	job := apiPID(PrefixJob, targeted)
+	if _, err := svc.JobStatusFor(ctx, listener, job); KindOf(err) != KindForbidden {
+		t.Errorf("an account that did not start it = %v, want forbidden", err)
+	}
+	originFor(targeted)
+	if _, err := svc.JobStatusFor(ctx, listener, job); err != nil {
+		t.Errorf("its starter: %v", err)
+	}
+	if _, err := svc.db.DeleteJobOrigin(ctx, string(targeted)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.JobStatusFor(ctx, listener, job); KindOf(err) != KindForbidden {
+		t.Errorf("its starter once its end was told = %v, want forbidden", err)
+	}
+	if _, err := svc.JobStatusFor(ctx, listener, "jb-01JZX5N8QW3F4V9T2B7KDEXAMPL"); KindOf(err) != KindNotFound {
+		t.Errorf("an unknown job = %v, want not-found", err)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"slices"
@@ -750,6 +751,7 @@ type syncedSourceEntry struct {
 	unavailable bool
 	pending     bool
 	rejected    bool      // a person discarded its download in review
+	hidden      bool      // mapped to an item the owner cannot see: a miss
 	pid         model.PID // resolved item, "" when none
 }
 
@@ -759,7 +761,6 @@ type syncedSourceEntry struct {
 // downloads. dryRun writes nothing at all.
 func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, uc *UserCtx, pl *model.Playlist, b wdb.PlaylistSourceRow, dryRun bool) (playlistSyncOutcome, error) {
 	var out playlistSyncOutcome
-	apiPlaylistPID := apiPID(PrefixPlaylist, pl.PID)
 	if !dryRun && t == nil {
 		// Defense in depth: every non-dry caller is a task run, and the
 		// download step keys on the task - a nil-task live call would
@@ -833,6 +834,10 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 		if err != nil {
 			return out, err
 		}
+		reach, err := l.withTagVerdicts(ctx, l.syncMemberFilter(uc), slices.Collect(maps.Values(views)))
+		if err != nil {
+			return out, err
+		}
 		for _, se := range snap.Entries {
 			e := syncedSourceEntry{
 				id:          se.ID,
@@ -844,6 +849,15 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 				switch {
 				case m.ItemPID != "":
 					e.pid = model.PID(m.ItemPID)
+					// The map is shared by every binding: an item another
+					// account's download landed where this owner cannot
+					// see is a miss for this list, not a member it could
+					// never hold (the replace would refuse it).
+					if v := views[e.pid]; v != nil && !l.memberVisible(ctx, reach, v) {
+						e.pid, e.hidden = "", true
+						missingCount++
+						misses = append(misses, ImportMiss{Title: se.Title})
+					}
 				default:
 					switch l.sourceDownloadState(ctx, b.Source, se.ID, m, dryRun) {
 					case syncDownloadPending:
@@ -864,17 +878,10 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 		if err := json.Unmarshal([]byte(b.RefsJSON), &refs); err != nil {
 			return out, fmt.Errorf("%w: the stored refs do not parse: %v", errToolPermanent, err)
 		}
-		res, err := l.resolvePlaylistImportRefs(ctx, refs)
-		if err != nil {
-			return out, err
-		}
-		var matched []model.PID
-		for _, r := range res {
-			if r.Rung != model.MatchNone {
-				matched = append(matched, r.PID)
-			}
-		}
-		views, err = l.itemViewsByPID(ctx, matched)
+		// Trashed matches stay matches: the reconciler reads them as
+		// "the owner removed this" below.
+		var res []model.RefResolution
+		res, views, err = l.resolvePlaylistImportRefs(ctx, l.syncMemberFilter(uc), refs)
 		if err != nil {
 			return out, err
 		}
@@ -939,6 +946,10 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 		st := states[e.id]
 		inList := st == wdb.PlaylistEntryAttached || st == wdb.PlaylistEntryLinked
 		switch {
+		case e.hidden:
+			// Neither a member nor a download: the item exists, the
+			// owner just cannot see it.
+			continue
 		case e.pid != "" && archived(views[e.pid]):
 			// The owner trashed this one; re-adding it or downloading
 			// it again would fight them.
@@ -987,7 +998,15 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 		}
 	}
 
-	// The mode's target membership over a given current order.
+	// The mode's target membership over a given current order. Mirror
+	// follows the source, except that a stored member its owner cannot
+	// see (another library, an unsubscribed show, a content rule) keeps
+	// its place: a run never drops what its owner cannot see, any more
+	// than a hand edit does, and append keeps every live member anyway.
+	ownerReach, err := l.withTagVerdicts(ctx, l.syncMemberFilter(uc), stored)
+	if err != nil {
+		return out, err
+	}
 	computeTarget := func(current []model.PID) []model.PID {
 		if b.Mode == playlistSyncModeAppend {
 			var target []model.PID
@@ -1003,7 +1022,19 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 			}
 			return target
 		}
-		return slices.Clone(resolvedOrder)
+		target := slices.Clone(resolvedOrder)
+		resolved := make(map[model.PID]bool, len(resolvedOrder))
+		for _, pid := range resolvedOrder {
+			resolved[pid] = true
+		}
+		for i, pid := range current {
+			v := views[pid]
+			if v == nil || archived(v) || resolved[pid] || l.memberVisible(ctx, ownerReach, v) {
+				continue
+			}
+			target = slices.Insert(target, min(i, len(target)), pid)
+		}
+		return target
 	}
 	target := computeTarget(currentOrder)
 	targetSet := map[model.PID]bool{}
@@ -1131,16 +1162,7 @@ func (l *Library) reconcilePlaylistSource(ctx context.Context, t *wdb.ToolTask, 
 			target = computeTarget(currentOrder)
 		}
 		if !slices.Equal(currentOrder, target) {
-			apiPIDs := make([]string, 0, len(target))
-			for _, pid := range target {
-				it := views[pid]
-				if it == nil {
-					return out, fmt.Errorf("no view for member %s", pid)
-				}
-				apiPIDs = append(apiPIDs, itemAPIPID(it))
-			}
-			base := time.Unix(0, pl.UpdatedAt).UTC()
-			if err := l.ReplacePlaylistItems(ctx, uc, apiPlaylistPID, apiPIDs, &base); err != nil {
+			if err := l.setSyncedMembers(ctx, uc, pl, target); err != nil {
 				if KindOf(err) == KindConflict {
 					out.conflicted = true
 					if membershipChanged {
@@ -1357,29 +1379,40 @@ func (l *Library) sourceDownloadState(ctx context.Context, sourceKind, entryID s
 	return syncDownloadPending
 }
 
+// syncMemberFilter is the owner's view of a synced list's candidates:
+// their grants, subscriptions and content rules, archived items kept for
+// the reconciler to read as removals.
+func (l *Library) syncMemberFilter(uc *UserCtx) memberFilter {
+	return memberFilter{uc: uc, subs: l.newSubscriptionFilter(uc), keepArchived: true}
+}
+
+// setSyncedMembers writes a run's target order. Not through the reorder
+// primitive: that refuses while any stored member is hidden from its
+// caller, because a client builds its list from what it was shown, where
+// a run builds its target from the whole stored list and keeps every
+// member its owner cannot see in place, so a hidden member is no reason
+// to stall the run. The lost-update guard stays: an edit since the run
+// read the list wins, and the run backs off.
+func (l *Library) setSyncedMembers(ctx context.Context, uc *UserCtx, pl *model.Playlist, target []model.PID) error {
+	fresh, err := l.lib.Playlists().Get(ctx, pl.PID)
+	if err != nil {
+		return classify(err)
+	}
+	if fresh.UpdatedAt != pl.UpdatedAt {
+		return &Error{Kind: KindConflict, Msg: "the playlist changed since this run read it"}
+	}
+	if err := l.lib.Playlists().Set(ctx, pl.PID, target); err != nil {
+		return classify(err)
+	}
+	l.emitPlaylistEvent(ctx, uc, pl.Visibility == model.VisibilityShared, string(pl.PID))
+	return nil
+}
+
 // itemViewsByPID batch-reads item views by pid, archived items
 // included: the reconciler must see a trashed member as "the owner
 // removed this", never as "vanished, download it again".
 func (l *Library) itemViewsByPID(ctx context.Context, pids []model.PID) (map[model.PID]*model.ItemView, error) {
-	out := make(map[model.PID]*model.ItemView, len(pids))
-	for start := 0; start < len(pids); start += 400 {
-		chunk := pids[start:min(start+400, len(pids))]
-		vals := make([]string, len(chunk))
-		for i, pid := range chunk {
-			vals[i] = string(pid)
-		}
-		q := query.New(query.EntityItems).
-			WhereValues("pid", query.OpIn, query.Values(vals)...).
-			Limit(len(chunk)).Build()
-		items, err := l.lib.Query(ctx, q, "")
-		if err != nil {
-			return nil, classify(err)
-		}
-		for _, it := range items {
-			out[it.PID] = it
-		}
-	}
-	return out, nil
+	return l.itemsAmong(ctx, pids, func() *query.Builder { return query.New(query.EntityItems) })
 }
 
 // syncSourcePlaylistCover stores the source's own thumbnail as the

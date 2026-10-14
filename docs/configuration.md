@@ -83,6 +83,10 @@ Read by compose itself, not the server.
 - `WAXDECK_COOKIE_SECURE` (default `false`): set `true` whenever the
   deployed origin is HTTPS so session cookies never ride cleartext.
   See [Reverse proxy](reverse-proxy.md).
+- `WAXDECK_SESSION_CAP` (default `250`): how many signed-in sessions one
+  account may hold at once. Signing in past it ends that account's least
+  recently used session, and anything it had open with it. There is no
+  "no cap": a value below 1 stops the server at startup.
 - `WAXDECK_TRUSTED_PROXIES`: comma-separated CIDRs or addresses of the
   reverse proxies in front of this server. Without it the login
   limiter counts the proxy rather than the caller, so five failed

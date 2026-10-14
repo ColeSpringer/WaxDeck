@@ -322,8 +322,13 @@ func (l *Library) getBookDetail(ctx context.Context, uc *UserCtx, apiBookPID str
 		}
 		return nil, classify(err)
 	}
-	if !l.itemVisible(ctx, uc, pid) {
-		return nil, errNotFound("no book with pid " + apiBookPID)
+	// The item routes' rule, content rules included: a book a tag rule
+	// or the advisory flag hides is as absent here as it is there.
+	if _, err := l.getVisibleItem(ctx, uc, apiBookPID); err != nil {
+		if KindOf(err) == KindNotFound {
+			return nil, errNotFound("no book with pid " + apiBookPID)
+		}
+		return nil, err
 	}
 	return bd, nil
 }
@@ -382,6 +387,10 @@ func (l *Library) ListBookSeries(ctx context.Context, uc *UserCtx, cursor string
 		return BookSeriesPageDTO{}, classify(err)
 	}
 	out := BookSeriesPageDTO{Series: make([]BookSeriesDTO, 0, len(page.Entities))}
+	offered, err := l.seriesOffering(ctx, uc, page.Entities)
+	if err != nil {
+		return BookSeriesPageDTO{}, err
+	}
 	for _, ent := range page.Entities {
 		if ent == nil {
 			continue
@@ -389,12 +398,16 @@ func (l *Library) ListBookSeries(ctx context.Context, uc *UserCtx, cursor string
 		if !uc.AllLibraries && !l.entityInLibraries(ent, uc) {
 			continue
 		}
+		if offered != nil && !offered[ent.PID] {
+			continue
+		}
 		row := BookSeriesDTO{PID: apiPID(PrefixSeries, ent.PID), Name: ent.Name}
-		// The counts are catalog-wide: EntityPage takes no library
-		// scope, so a series with one visible book and nine hidden ones
-		// would advertise ten to an account that can open one. Answered
-		// only where they are true, exactly as the album read does.
-		if uc.AllLibraries {
+		// The counts are catalog-wide: EntityPage takes no library or
+		// content scope, so a series with one visible book and nine
+		// hidden ones would advertise ten to an account that can open
+		// one. Answered only where they are true, exactly as the album
+		// read does.
+		if fullReach(uc) {
 			row.BookCount, row.TotalDurationMS = ent.ItemCount, ent.TotalDurationMS
 		}
 		out.Series = append(out.Series, row)
@@ -407,10 +420,10 @@ func (l *Library) ListBookSeries(ctx context.Context, uc *UserCtx, cursor string
 
 // BookSeriesDetailFor reads one series and the books in it.
 //
-// 404 covers both "no such series" and "every book in it lives
-// somewhere this account was not granted": a restricted caller must not
-// learn a series exists from an empty answer where a stranger's library
-// holds it.
+// 404 covers "no such series" and, for a restricted reader, "no book in
+// it is offered to this account", by library grant or content rule,
+// exactly as the listing leaves such a series out: a restricted caller
+// must not learn a series exists from an empty answer.
 func (l *Library) BookSeriesDetailFor(ctx context.Context, uc *UserCtx, apiPID string) (BookSeriesDetailDTO, error) {
 	prefix, pid, ok := parseAPIPID(apiPID)
 	if !ok || prefix != PrefixSeries {
@@ -435,24 +448,22 @@ func (l *Library) BookSeriesDetailFor(ctx context.Context, uc *UserCtx, apiPID s
 		Name:  ent.Name,
 		Books: make([]BookSeriesEntryDTO, 0, len(books)),
 	}
-	held := 0
+	// BooksInSeries takes no query node, so nothing upstream has applied
+	// this caller's grants or tag rules.
+	allowed, err := l.tagVerdicts(ctx, uc, books)
+	if err != nil {
+		return BookSeriesDetailDTO{}, err
+	}
+	held, heldMS := 0, int64(0)
 	for _, it := range books {
-		if it == nil {
+		// A listing never offers a trashed book, and the series listing
+		// leaves one out of its own test, so the two agree on a series.
+		if it == nil || archived(it) {
 			continue
 		}
 		held++
-		// viewVisible, not itemVisible: these are fresh item views, so
-		// the library handle is a field already in hand, and the
-		// located-path cache invalidates on a scan poll - which would
-		// drop a book out of the series for the length of one.
-		if !l.viewVisible(ctx, uc, it) {
-			continue
-		}
-		// allowedByContent, not advisoryAllows: BooksInSeries takes no
-		// query node, so nothing upstream has applied this caller's tag
-		// rules. The advisory half alone would list every tag-denied
-		// book in the series by title, author and pid.
-		if !l.allowedByContent(ctx, uc, it) {
+		heldMS += it.DurationMS
+		if !l.offersWith(ctx, uc, allowed, it) {
 			continue
 		}
 		out.Books = append(out.Books, BookSeriesEntryDTO{
@@ -460,15 +471,62 @@ func (l *Library) BookSeriesDetailFor(ctx context.Context, uc *UserCtx, apiPID s
 			Book:     summary(it),
 		})
 	}
-	// The counts are the catalog's, so they are answered only when this
-	// caller was shown the whole series: a series with one visible book
-	// and nine hidden ones must not advertise ten. Read off what the
-	// filters above actually dropped rather than off the grant alone -
-	// a mode=all account can still be narrowed by a tag rule or the
-	// advisory flag, and a filter added later is covered without being
-	// remembered here.
-	if uc.AllLibraries && len(out.Books) == held {
-		out.BookCount, out.TotalDurationMS = ent.ItemCount, ent.TotalDurationMS
+	// Absent exactly where the listing leaves it out.
+	if len(out.Books) == 0 && !fullReach(uc) {
+		return BookSeriesDetailDTO{}, errNotFound("no series with pid " + apiPID)
+	}
+	// Answered only when this caller was shown the whole series, so a
+	// series with one visible book and nine hidden ones does not
+	// advertise ten, and counted off the books rather than taken from
+	// the catalog, whose totals include the trash.
+	if len(out.Books) == held {
+		out.BookCount, out.TotalDurationMS = held, heldMS
+	}
+	return out, nil
+}
+
+// tagRestricted reports whether tag rules narrow what the caller sees,
+// the one content rule a book answers to.
+func tagRestricted(uc *UserCtx) bool {
+	return !uc.Admin && (len(uc.TagAllow) > 0 || len(uc.TagDeny) > 0)
+}
+
+// seriesOffering answers which of a page's series offer this caller at
+// least one book: not trashed, inside its grants, passing its tag rules.
+// Nil for a caller of full reach, whom the listing does not filter by
+// book. The catalog places a series in every library holding a file of
+// it, an alternate copy's included, which can be a book the caller
+// cannot open. Series have no query field to facet on, so the books are
+// read per series, but their tag verdicts come in one pass for the page.
+func (l *Library) seriesOffering(ctx context.Context, uc *UserCtx, page []*read.EntityInfo) (map[model.PID]bool, error) {
+	if fullReach(uc) {
+		return nil, nil
+	}
+	books := map[model.PID][]*model.ItemView{}
+	var all []*model.ItemView
+	for _, ent := range page {
+		if ent == nil || (!uc.AllLibraries && !l.entityInLibraries(ent, uc)) {
+			continue
+		}
+		held, err := l.lib.BooksInSeries(ctx, ent.PID)
+		if err != nil {
+			return nil, classify(err)
+		}
+		books[ent.PID] = held
+		all = append(all, held...)
+	}
+	allowed, err := l.tagVerdicts(ctx, uc, all)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[model.PID]bool, len(books))
+	for pid, held := range books {
+		for _, it := range held {
+			if it != nil && l.offersWith(ctx, uc, allowed, it) {
+				out[pid] = true
+				break
+			}
+		}
 	}
 	return out, nil
 }

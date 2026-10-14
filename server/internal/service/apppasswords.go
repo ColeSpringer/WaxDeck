@@ -153,54 +153,55 @@ func (l *Library) RevokeAppPassword(ctx context.Context, uc *UserCtx, apiID stri
 }
 
 // VerifyAppPasswordToken authenticates the Subsonic token scheme:
-// username plus md5(secret+salt). It returns the account, or nil on any
-// failure (unknown user, disabled account, no matching password), never
-// distinguishing them.
-func (l *Library) VerifyAppPasswordToken(ctx context.Context, username, token, salt string) (*wdb.User, error) {
+// username plus md5(secret+salt). It returns the account and the id of
+// the app password that matched, or nil on any failure (unknown user,
+// disabled account, no matching password), never distinguishing them.
+func (l *Library) VerifyAppPasswordToken(ctx context.Context, username, token, salt string) (*wdb.User, string, error) {
 	u, err := l.db.UserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
-			return nil, nil
+			return nil, "", nil
 		}
-		return nil, &Error{Kind: KindInternal, Err: err}
+		return nil, "", &Error{Kind: KindInternal, Err: err}
 	}
 	if u.Disabled {
-		return nil, nil
+		return nil, "", nil
 	}
 	want := strings.ToLower(token)
 	for _, entry := range l.userAppSecrets(ctx, u.ID) {
 		sum := md5.Sum([]byte(entry.secret + salt))
 		if subtle.ConstantTimeCompare([]byte(hex.EncodeToString(sum[:])), []byte(want)) == 1 {
 			l.touchAppPassword(ctx, entry)
-			return u, nil
+			return u, entry.id, nil
 		}
 	}
-	return nil, nil
+	return nil, "", nil
 }
 
 // VerifyAppPasswordKey authenticates the OpenSubsonic apiKey scheme:
-// the app password secret presented directly.
-func (l *Library) VerifyAppPasswordKey(ctx context.Context, apiKey string) (*wdb.User, error) {
+// the app password secret presented directly. It returns the account and
+// the app password's id.
+func (l *Library) VerifyAppPasswordKey(ctx context.Context, apiKey string) (*wdb.User, string, error) {
 	hash := sha256.Sum256([]byte(apiKey))
 	ap, err := l.db.AppPasswordBySecretHash(ctx, hash[:])
 	if err != nil {
-		return nil, &Error{Kind: KindInternal, Err: err}
+		return nil, "", &Error{Kind: KindInternal, Err: err}
 	}
 	if ap == nil {
-		return nil, nil
+		return nil, "", nil
 	}
 	u, err := l.db.UserByID(ctx, ap.UserID)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
-			return nil, nil
+			return nil, "", nil
 		}
-		return nil, &Error{Kind: KindInternal, Err: err}
+		return nil, "", &Error{Kind: KindInternal, Err: err}
 	}
 	if u.Disabled {
-		return nil, nil
+		return nil, "", nil
 	}
 	l.touchAppPassword(ctx, appSecretIdentity{id: ap.ID})
-	return u, nil
+	return u, ap.ID, nil
 }
 
 // appSecretIdentity is the cache-independent identity of a verified

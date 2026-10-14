@@ -1,10 +1,16 @@
 package service
 
 import (
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
+
+	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // restricted builds a caller who can see every library and is allowed
@@ -293,5 +299,290 @@ func TestUnaddressableAllowKeyKeepsEpisodesAside(t *testing.T) {
 	}
 	if rest, ok := node.Nodes[1].(query.Or); !ok || len(rest.Nodes) != 0 {
 		t.Errorf("second arm = %#v, want an empty Or matching nothing", node.Nodes[1])
+	}
+}
+
+// genreFixtureTitles are every track of the genre fixture, one album
+// ("Folded") by one artist ("Vocabulary Test").
+var genreFixtureTitles = []string{"Lowercase", "Synonym", "Run Together", "Canonical", "Off Tree"}
+
+// calmDenied is a caller whose only narrowing is a MOOD=calm deny.
+func (f genreFixture) calmDenied() *UserCtx {
+	return f.restricted(nil, []TagRule{{Key: "MOOD", Value: "calm"}})
+}
+
+// tagAllCalm tags every track calm, so a calm-deny caller sees none of
+// the fixture's album or artist.
+func (f genreFixture) tagAllCalm(t *testing.T) {
+	t.Helper()
+	for _, title := range genreFixtureTitles {
+		f.tag(t, title, "MOOD", "calm")
+	}
+}
+
+// Search gates entity hits on content rules as well as grants: an album
+// or artist whose every track a tag rule denies is no hit.
+func TestRestrictedSearchOmitsAnEntityWhoseTracksAreAllDenied(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	kid := f.calmDenied()
+
+	f.tag(t, "Canonical", "MOOD", "calm")
+	res, err := f.svc.Search(f.ctx, kid, "Folded", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Albums) != 1 {
+		t.Fatalf("an album with one denied track of five: %d album hits, want 1", len(res.Albums))
+	}
+
+	f.tagAllCalm(t)
+	if res, err = f.svc.Search(f.ctx, kid, "Folded", 10); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Albums) != 0 {
+		t.Errorf("a fully denied album is still a hit: %+v", res.Albums)
+	}
+	if res, err = f.svc.Search(f.ctx, kid, "Vocabulary Test", 10); err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Artists) != 0 {
+		t.Errorf("a fully denied artist is still a hit: %+v", res.Artists)
+	}
+	if res, err = f.svc.Search(f.ctx, f.uc, "Folded", 10); err != nil || len(res.Albums) != 1 {
+		t.Errorf("the unrestricted caller's search = %+v (%v), want the album", res.Albums, err)
+	}
+}
+
+func TestAlbumDetailForADeniedAlbumIsNotFound(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	kid := f.calmDenied()
+	album := apiPID(PrefixAlbum, f.itemNamed(t, "Canonical").AlbumPID)
+
+	f.tag(t, "Canonical", "MOOD", "calm")
+	if _, err := f.svc.Album(f.ctx, kid, album); err != nil {
+		t.Fatalf("a partly denied album: %v, want it readable", err)
+	}
+	f.tagAllCalm(t)
+	if _, err := f.svc.Album(f.ctx, kid, album); KindOf(err) != KindNotFound {
+		t.Errorf("a fully denied album = %v, want not-found", err)
+	}
+}
+
+// TestAlbumCountIsWithheldFromAContentRestrictedCaller: the counts are
+// the catalog's, so a caller a tag rule narrows must not read them.
+func TestAlbumCountIsWithheldFromAContentRestrictedCaller(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	kid := f.calmDenied()
+	album := apiPID(PrefixAlbum, f.itemNamed(t, "Canonical").AlbumPID)
+	f.tag(t, "Canonical", "MOOD", "calm")
+
+	theirs, err := f.svc.Album(f.ctx, kid, album)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if theirs.ItemCount != 0 || theirs.TotalDurationMS != 0 {
+		t.Errorf("restricted album detail counts %d tracks, %d ms; want them withheld", theirs.ItemCount, theirs.TotalDurationMS)
+	}
+	mine, err := f.svc.Album(f.ctx, f.uc, album)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mine.ItemCount != 5 {
+		t.Errorf("unrestricted album detail counts %d tracks, want 5", mine.ItemCount)
+	}
+
+	cards, _, err := f.svc.EntityCards(f.ctx, kid, []string{album})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 1 || cards[0].ItemCount != nil {
+		t.Errorf("restricted card = %+v, want one card with no count", cards)
+	}
+}
+
+func TestEntityCardsDropAFullyDeniedAlbum(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	kid := f.calmDenied()
+	album := apiPID(PrefixAlbum, f.itemNamed(t, "Canonical").AlbumPID)
+	f.tagAllCalm(t)
+
+	cards, departed, err := f.svc.EntityCards(f.ctx, kid, []string{album})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 0 {
+		t.Errorf("restricted cards = %+v, want the fully denied album dropped", cards)
+	}
+	if len(departed) != 0 {
+		t.Errorf("departed = %v, want none: the album exists, the caller just cannot see it", departed)
+	}
+	if cards, _, err := f.svc.EntityCards(f.ctx, f.uc, []string{album}); err != nil || len(cards) != 1 {
+		t.Errorf("unrestricted cards = %+v (%v), want the album", cards, err)
+	}
+}
+
+// A kids-mode account cannot share an album none of whose tracks it may
+// hear.
+func TestAlbumShareRefusedWhenEveryTrackIsDenied(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	kid := f.calmDenied()
+	album := apiPID(PrefixAlbum, f.itemNamed(t, "Canonical").AlbumPID)
+
+	f.tag(t, "Canonical", "MOOD", "calm")
+	if _, err := f.svc.CreateShare(f.ctx, kid, album, 0, false, 0); err != nil {
+		t.Fatalf("sharing a partly denied album: %v, want it allowed", err)
+	}
+	f.tagAllCalm(t)
+	if _, err := f.svc.CreateShare(f.ctx, kid, album, 0, false, 0); KindOf(err) != KindNotFound {
+		t.Errorf("sharing a fully denied album = %v, want not-found", err)
+	}
+}
+
+// The server recap ranks only what its reader can see: its top tracks,
+// artists and genres name nothing the reader's libraries or rules hide,
+// whatever other accounts heard.
+func TestServerYearInReviewRanksOnlyWhatTheCallerCanSee(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	f.tag(t, "Canonical", "MOOD", "calm")
+	started := time.Now().Add(-time.Hour)
+	var rows []wdb.ListenSession
+	for i, title := range []string{"Canonical", "Lowercase"} {
+		rows = append(rows, wdb.ListenSession{
+			UserID: f.uc.ID, SessionID: fmt.Sprintf("recap-%d", i),
+			ItemPID: string(f.itemNamed(t, title).PID), MediaType: "music",
+			StartedAt: started, MsPlayed: int64(60000 * (2 - i)),
+		})
+	}
+	if _, err := f.svc.db.InsertListens(f.ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+	titles := func(uc *UserCtx) []string {
+		t.Helper()
+		recap, err := f.svc.ServerWideYearInReview(f.ctx, uc, started.Year())
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, e := range recap.TopTracks {
+			out = append(out, e.Name)
+		}
+		return out
+	}
+	if got := titles(f.uc); !slices.Equal(got, []string{"Canonical", "Lowercase"}) {
+		t.Fatalf("unrestricted top tracks = %v", got)
+	}
+	if got := titles(f.calmDenied()); !slices.Equal(got, []string{"Lowercase"}) {
+		t.Errorf("restricted top tracks = %v, want the denied track left out", got)
+	}
+}
+
+// A reader's recap leaves out only what their libraries or rules hide:
+// a track in the trash, or one gone from the catalog, ranks for them
+// exactly as it does for a reader who sees everything.
+func TestServerYearInReviewHidesOnlyWhatTheReaderCannotSee(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	f.tag(t, "Canonical", "MOOD", "calm")
+	started := time.Now().Add(-time.Hour)
+	trashed := f.itemNamed(t, "Lowercase")
+	var rows []wdb.ListenSession
+	for i, pid := range []string{string(trashed.PID), "01JZZZZZZZZZZZZZZZZZZZZZZZ"} {
+		rows = append(rows, wdb.ListenSession{
+			UserID: f.uc.ID, SessionID: fmt.Sprintf("kept-%d", i),
+			ItemPID: pid, MediaType: "music",
+			StartedAt: started, MsPlayed: int64(60000 * (2 - i)),
+		})
+	}
+	if _, err := f.svc.db.InsertListens(f.ctx, rows); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.DeleteItems(f.ctx, f.uc, []string{itemAPIPID(trashed)}, "trash", false); err != nil {
+		t.Fatal(err)
+	}
+	ranked := func(uc *UserCtx) []TopEntry {
+		t.Helper()
+		recap, err := f.svc.ServerWideYearInReview(f.ctx, uc, started.Year())
+		if err != nil {
+			t.Fatal(err)
+		}
+		return recap.TopTracks
+	}
+	all, restricted := ranked(f.uc), ranked(f.calmDenied())
+	if len(all) != 2 || !slices.Equal(all, restricted) {
+		t.Errorf("restricted top tracks = %+v, want the unrestricted %+v", restricted, all)
+	}
+}
+
+// The explicit toggle hides podcast episodes and nothing else, so an
+// account of every library with it off reads an album's counts like
+// one with it on.
+func TestExplicitToggleLeavesAlbumCountsAlone(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newCatalogFixture(t)
+	page, err := svc.Items(ctx, admin, ItemFilter{}, "", 10)
+	if err != nil || len(page.Items) == 0 {
+		t.Fatalf("items = %v, %v", page.Items, err)
+	}
+	album := page.Items[0].AlbumPID
+	read := func(explicit bool) AlbumDetail {
+		t.Helper()
+		uc := &UserCtx{ID: admin.ID, CatalogPID: admin.CatalogPID, AllLibraries: true, Explicit: explicit}
+		out, err := svc.Album(ctx, uc, album)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	on, off := read(true), read(false)
+	if on.ItemCount == 0 || off.ItemCount != on.ItemCount || off.TotalDurationMS != on.TotalDurationMS {
+		t.Errorf("album counts with explicit off = %d/%d ms, with it on %d/%d ms",
+			off.ItemCount, off.TotalDurationMS, on.ItemCount, on.TotalDurationMS)
+	}
+}
+
+// A caller granted more libraries than the engine takes in one
+// membership test still gets answers: the entity gates chunk the grant
+// the way the playlist narrowing does.
+func TestEntityGatesTakeMoreThanFiveHundredGrants(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newCatalogFixture(t)
+	libs, err := svc.Libraries(ctx)
+	if err != nil || len(libs) == 0 {
+		t.Fatalf("libraries = %v, %v", libs, err)
+	}
+	grants := map[string]bool{strings.TrimPrefix(libs[0].PID, PrefixLibrary+"-"): true}
+	for i := range 500 {
+		grants[fmt.Sprintf("01NOSUCHLIBRARY%011d", i)] = true
+	}
+	wide := &UserCtx{ID: admin.ID, CatalogPID: admin.CatalogPID, Libraries: grants}
+	page, err := svc.Items(ctx, admin, ItemFilter{}, "", 10)
+	if err != nil || len(page.Items) == 0 {
+		t.Fatalf("items = %v, %v", page.Items, err)
+	}
+	album := page.Items[0].AlbumPID
+	if _, err := svc.Album(ctx, wide, album); err != nil {
+		t.Errorf("album detail for a caller with 501 grants: %v", err)
+	}
+}
+
+// An entity kind the visibility table does not know is an error, never
+// an answer: a nil set reads as "nothing filtered" to the card and star
+// surfaces and as "nothing visible" to search, so a kind added to one
+// table and not the other must fail loudly rather than open one of them.
+func TestVisibleEntitiesRefusesAnUnknownKind(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	kid := f.calmDenied()
+	if vis, err := f.svc.visibleEntities(f.ctx, kid, "zz", []model.PID{"x"}); err == nil {
+		t.Errorf("an unknown entity kind = %v, nil; want an error", vis)
+	}
+	if vis, err := f.svc.visibleEntities(f.ctx, kid, PrefixAlbum, nil); err != nil || vis == nil {
+		t.Errorf("an empty batch = %v, %v; want an empty set", vis, err)
 	}
 }

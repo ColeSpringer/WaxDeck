@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -177,7 +178,7 @@ func (s *Server) RevokeSession(ctx context.Context, req RevokeSessionRequestObje
 	if target.UserID != p.User.ID {
 		return RevokeSession404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no session with id "+req.SessionId))}, nil
 	}
-	if err := s.sessions.Revoke(ctx, target.ID); err != nil {
+	if err := s.endSessions(ctx, p.User.ID, target.ID, ""); err != nil {
 		return nil, err
 	}
 	headers := RevokeSession204ResponseHeaders{}
@@ -196,20 +197,45 @@ func (s *Server) RevokeUserSessions(ctx context.Context, req RevokeUserSessionsR
 	if req.UserId != p.User.ID && !p.IsAdmin() {
 		return RevokeUserSessions403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
 	}
-	if _, err := s.svc.Account(ctx, req.UserId); err != nil {
+	acct, err := s.svc.Account(ctx, req.UserId)
+	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {
 			return RevokeUserSessions404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no user with id "+req.UserId))}, nil
 		}
 		return nil, err
 	}
+	self := req.UserId == p.User.ID
 	keep := ""
-	if req.UserId == p.User.ID {
+	if self {
 		keep = p.Session.ID
 	}
-	if err := s.sessions.RevokeAllForUser(ctx, req.UserId, keep); err != nil {
+	if err := s.endSessions(ctx, req.UserId, "", keep); err != nil {
+		return nil, err
+	}
+	// Signing an account out everywhere is a deliberate act on every
+	// device it holds, so it is on the record whoever asked - once the
+	// sessions are gone, whatever the gpodder half below answers.
+	if uc, _, err := s.requireUserCtx(ctx); err == nil {
+		s.svc.Audit(ctx, uc, "user.sessions-revoke",
+			service.AuditTarget{Kind: "user", PID: acct.User.ID, Name: acct.User.Username},
+			map[string]any{"self": self, "kept": keep != ""})
+	}
+	// Everywhere includes the podcast clients signed in over gpodder; a
+	// failure here is reported so the caller tries again.
+	if err := s.svc.EndGpodderSessions(ctx, req.UserId); err != nil {
 		return nil, err
 	}
 	return RevokeUserSessions204Response{}, nil
+}
+
+// endSessions ends sessions through the session manager, so its revoke
+// feed closes what they opened (a socket) with them: one session when
+// sessionID is set, otherwise every session of userID but keepID.
+func (s *Server) endSessions(ctx context.Context, userID, sessionID, keepID string) error {
+	if sessionID != "" {
+		return s.sessions.Revoke(ctx, sessionID)
+	}
+	return s.sessions.RevokeAllForUser(ctx, userID, keepID)
 }
 
 func deviceSessionJSON(row *wdb.Session, current bool) DeviceSession {
@@ -379,11 +405,14 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 		}
 		return nil, err
 	}
-	// Disabling revokes the account's sessions immediately.
+	// Disabling ends the account's sessions and gpodder logins at once.
+	// The account is disabled whatever this answers, but a session or
+	// login a failed revoke left would sign straight back in on a
+	// re-enable, so the failure is reported (after the audit entry, since
+	// the update happened) and a retry finishes the revoke.
+	var revokeErr error
 	if req.Body.Disabled != nil && *req.Body.Disabled {
-		if err := s.sessions.RevokeAllForUser(ctx, req.UserId, ""); err != nil {
-			return nil, err
-		}
+		revokeErr = errors.Join(s.endSessions(ctx, req.UserId, "", ""), s.svc.EndGpodderSessions(ctx, req.UserId))
 	}
 	// Self displayName edits are routine, not audit-worthy; anything an
 	// administrator can change on another account is.
@@ -408,6 +437,9 @@ func (s *Server) UpdateUser(ctx context.Context, req UpdateUserRequestObject) (U
 				map[string]any{"fields": changed})
 		}
 	}
+	if revokeErr != nil {
+		return nil, fmt.Errorf("revoking a disabled account's sessions: %w", revokeErr)
+	}
 	return UpdateUser200JSONResponse(userAccountJSON(*acct)), nil
 }
 
@@ -428,6 +460,11 @@ func (s *Server) DeleteUser(ctx context.Context, req DeleteUserRequestObject) (D
 			return DeleteUser409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
 		}
 		return nil, err
+	}
+	// The rows went with the account (a cascade nothing announces); this
+	// is what closes the sockets they opened.
+	if err := s.endSessions(ctx, req.UserId, "", ""); err != nil {
+		s.log.Warn("ending a deleted account's sessions", "user", req.UserId, "err", err)
 	}
 	if uc, _, ucErr := s.requireUserCtx(ctx); ucErr == nil && verr == nil {
 		s.svc.Audit(ctx, uc, "user.delete",
@@ -477,8 +514,17 @@ func (s *Server) SetPassword(ctx context.Context, req SetPasswordRequestObject) 
 	if self {
 		keep = p.Session.ID
 	}
-	if err := s.sessions.RevokeAllForUser(ctx, req.UserId, keep); err != nil {
+	if err := s.endSessions(ctx, req.UserId, "", keep); err != nil {
 		return nil, err
+	}
+	if !self {
+		if uc, _, err := s.requireUserCtx(ctx); err == nil {
+			target := service.AuditTarget{Kind: "user", PID: req.UserId}
+			if acct, err := s.svc.Account(ctx, req.UserId); err == nil {
+				target.Name = acct.User.Username
+			}
+			s.svc.Audit(ctx, uc, "user.password-reset", target, nil)
+		}
 	}
 	return SetPassword204Response{}, nil
 }

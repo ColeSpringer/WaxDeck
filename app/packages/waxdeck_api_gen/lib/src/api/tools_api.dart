@@ -672,7 +672,7 @@ class ToolsApi {
   }
 
   /// Stream a tool task&#39;s progress
-  /// Server-sent events for one task: an event named &#x60;task&#x60; whose data is the &#x60;ToolTask&#x60; JSON, emitted immediately on connect and again on every state or progress change (streaming-engine job progress is relayed onto the task as it runs), then a final event named &#x60;done&#x60; after the task reaches a terminal state, after which the stream closes. Reconnecting is always safe: the first event replays current state. Same visibility as reading the task. The WebSocket channel carries the same lifecycle as invalidations; this stream exists for consumers that want the payloads pushed. 
+  /// Server-sent events for one task: an event named &#x60;task&#x60; whose data is the &#x60;ToolTask&#x60; JSON, emitted immediately on connect and again on every state or progress change (streaming-engine job progress is relayed onto the task as it runs), then a final event named &#x60;done&#x60; after the task reaches a terminal state, after which the stream closes. Reconnecting is always safe: the first event replays current state. Same visibility as reading the task, and the stream keeps checking it: within a few seconds of the caller&#39;s session ending, or of the caller losing the right to read the task, the stream closes with no &#x60;done&#x60; event, and a reconnect answers that refusal. The WebSocket channel carries the same lifecycle as invalidations; this stream exists for consumers that want the payloads pushed. 
   ///
   /// Parameters:
   /// * [taskId] - Tool task PID (e.g. `tk-01JZX5N8QW3F4V9T2B7KD3M9R6`).

@@ -122,7 +122,9 @@ paths:
       description: >
         Evaluates a rule without storing anything and returns the
         first matching items plus the total match count, computed
-        against the caller's own user state and library visibility.
+        against the caller's own user state and counting only what
+        the caller can see (library grants, content settings,
+        followed shows).
         Rule editors call this while the user builds the rule.
       tags: [playlists]
       requestBody:
@@ -163,7 +165,9 @@ paths:
         entry to a cataloged item by exact path or unique
         relative-path suffix. Unmatched paths are skipped and
         reported, never invented; an empty document yields an empty
-        playlist.
+        playlist. A path naming an item the caller cannot see is
+        reported as unmatched, exactly like a path that names
+        nothing.
       tags: [playlists]
       requestBody:
         required: true
@@ -419,9 +423,11 @@ paths:
         The playlist's members in order: stored order for a static
         playlist, rule order for a smart playlist (evaluated against
         the owner's user state for shared lists, the caller's for
-        their own). Entries outside the caller's visibility are
-        omitted, so a restricted viewer's `position` values can skip
-        numbers. `position` is the entry's index in the full stored
+        their own). Entries the caller cannot see (outside their
+        library grants, denied by their content settings, or episodes
+        of shows they do not follow) are omitted, and the list's
+        `itemCount` counts the same way, so a restricted viewer's
+        `position` values can skip numbers. `position` is the entry's index in the full stored
         order, kept contiguous from 0 by every change to the list;
         pass it, with the entry's item pid as `itemPid`, to the
         removal endpoint, never the row index of a filtered page.
@@ -582,11 +588,12 @@ paths:
       summary: Export a playlist as M3U8
       description: >
         The playlist as an M3U8 document, for interop with path-based
-        players. Entries are the cataloged display paths (absolute
-        server-side paths); exposing them is deliberate, since
-        playlists reach only this server's own users and path-based
-        interop is the point of the format. A smart playlist exports
-        its current evaluation. The import side matches by exact path
+        players. Only the members the caller can see are written, the
+        same ones the member listing shows them. Entries are the
+        cataloged display paths (absolute server-side paths); exposing
+        them is deliberate, since playlists reach only this server's
+        own users and path-based interop is the point of the format.
+        A smart playlist exports its current evaluation. The import side matches by exact path
         or unique relative-path suffix, so documents exported from a
         differently-rooted server still resolve.
       tags: [playlists]
@@ -748,6 +755,9 @@ paths:
         resolves, a manual playlist is created with the resolved
         tracks in order and `missing` reports the rest; when nothing
         resolves, no playlist is created and `playlistPid` is absent.
+        An entry whose only match is an item the caller cannot see
+        is reported as missing, exactly like an entry nothing
+        matched.
         Unresolved entries carrying an ISRC are upgraded to a
         recording identifier through MusicBrainz when the server has
         internet, within a bounded lookup budget; without it the
@@ -782,8 +792,10 @@ paths:
         identity descriptors (audio essence, external identifiers,
         acoustic fingerprint, descriptive fields) that resolve on any
         other WaxDeck through the playlist import endpoint's
-        `portable` source. Smart playlists export their current
-        evaluation.
+        `portable` source. Only the members the caller can see are
+        exported. Smart playlists export their current evaluation.
+        Answers `conflict` when the playlist changed while it was
+        being exported; retry.
       tags: [playlists]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -798,6 +810,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          $ref: "#/components/responses/Conflict"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -10,6 +11,7 @@ import (
 	"github.com/colespringer/waxbin/model"
 
 	"github.com/colespringer/waxdeck/server/internal/connect"
+	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // The connect subsystem's service-layer glue: queue hydration for
@@ -49,9 +51,15 @@ func (l *Library) UserCtxByID(ctx context.Context, userID string) (*UserCtx, err
 	return l.userCtxByID(ctx, userID)
 }
 
+// userCtxByID refuses a disabled or pending account as if it did not
+// exist: every caller acts for an account that has to be able to sign in.
+// A read that failed is not an answer, so it stays an internal error.
 func (l *Library) userCtxByID(ctx context.Context, userID string) (*UserCtx, error) {
 	u, err := l.db.UserByID(ctx, userID)
-	if err != nil || u == nil {
+	if err != nil && !errors.Is(err, wdb.ErrNotFound) {
+		return nil, &Error{Kind: KindInternal, Err: err}
+	}
+	if u == nil || u.Disabled || u.Pending {
 		return nil, errNotFound("no such user")
 	}
 	return l.UserCtx(ctx, u)

@@ -52,7 +52,10 @@ async function inboxRow(app: App, event: string, targetPid: string): Promise<str
   return id;
 }
 
-test('a scan started from the dashboard runs in Tasks and ends in the bell', async ({ app }) => {
+test('a scan started from the dashboard runs in Tasks and ends in the bell', async ({
+  app,
+  otherAccount,
+}) => {
   await catalogIdle(app);
   await app.nav.enter('admin');
   const isRescan = (r: Request) =>
@@ -70,6 +73,11 @@ test('a scan started from the dashboard runs in Tasks and ends in the bell', asy
   );
   const job = (await (await started).json()) as { pid: string };
   expect(job.pid).toMatch(/^jb-/);
+  // A job is read by the audience that hears of it, which a plain
+  // account is not.
+  const bystander = await otherAccount('bystander');
+  const read = await app.api.as(bystander.token).raw.get('/jobs/{pid}', { path: { pid: job.pid } });
+  expect(read.status()).toBe(403);
 
   // The toast offers where the scan is followed.
   await app.admin.control(SemanticsIds.openTasks).click();

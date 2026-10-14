@@ -285,7 +285,7 @@ class PlaylistsApi {
   }
 
   /// Export a playlist as M3U8
-  /// The playlist as an M3U8 document, for interop with path-based players. Entries are the cataloged display paths (absolute server-side paths); exposing them is deliberate, since playlists reach only this server&#39;s own users and path-based interop is the point of the format. A smart playlist exports its current evaluation. The import side matches by exact path or unique relative-path suffix, so documents exported from a differently-rooted server still resolve. 
+  /// The playlist as an M3U8 document, for interop with path-based players. Only the members the caller can see are written, the same ones the member listing shows them. Entries are the cataloged display paths (absolute server-side paths); exposing them is deliberate, since playlists reach only this server&#39;s own users and path-based interop is the point of the format. A smart playlist exports its current evaluation. The import side matches by exact path or unique relative-path suffix, so documents exported from a differently-rooted server still resolve. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -464,7 +464,7 @@ class PlaylistsApi {
   }
 
   /// Export a playlist as portable refs
-  /// Exports a playlist as portable refs: catalog-independent identity descriptors (audio essence, external identifiers, acoustic fingerprint, descriptive fields) that resolve on any other WaxDeck through the playlist import endpoint&#39;s &#x60;portable&#x60; source. Smart playlists export their current evaluation. 
+  /// Exports a playlist as portable refs: catalog-independent identity descriptors (audio essence, external identifiers, acoustic fingerprint, descriptive fields) that resolve on any other WaxDeck through the playlist import endpoint&#39;s &#x60;portable&#x60; source. Only the members the caller can see are exported. Smart playlists export their current evaluation. Answers &#x60;conflict&#x60; when the playlist changed while it was being exported; retry. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -806,7 +806,7 @@ class PlaylistsApi {
   }
 
   /// Import a streaming-service playlist
-  /// Imports a playlist exported from a streaming service, matching each entry against the library through the portable-ref resolve ladder (exact identifiers first, then fingerprints, then descriptive artist, title, album, and duration matching). Sources: &#x60;spotify&#x60; (Exportify CSV), &#x60;applemusic&#x60; (the tab-separated export), &#x60;ytmusic&#x60; (Google Takeout CSV), &#x60;csv&#x60; (generic with artist, title, album, duration columns), &#x60;text&#x60; (one &#x60;Artist - Title&#x60; per line), and &#x60;portable&#x60; (the &#x60;refs&#x60; array from another WaxDeck&#39;s portable export). When any entry resolves, a manual playlist is created with the resolved tracks in order and &#x60;missing&#x60; reports the rest; when nothing resolves, no playlist is created and &#x60;playlistPid&#x60; is absent. Unresolved entries carrying an ISRC are upgraded to a recording identifier through MusicBrainz when the server has internet, within a bounded lookup budget; without it the import still runs on the descriptive rung. 
+  /// Imports a playlist exported from a streaming service, matching each entry against the library through the portable-ref resolve ladder (exact identifiers first, then fingerprints, then descriptive artist, title, album, and duration matching). Sources: &#x60;spotify&#x60; (Exportify CSV), &#x60;applemusic&#x60; (the tab-separated export), &#x60;ytmusic&#x60; (Google Takeout CSV), &#x60;csv&#x60; (generic with artist, title, album, duration columns), &#x60;text&#x60; (one &#x60;Artist - Title&#x60; per line), and &#x60;portable&#x60; (the &#x60;refs&#x60; array from another WaxDeck&#39;s portable export). When any entry resolves, a manual playlist is created with the resolved tracks in order and &#x60;missing&#x60; reports the rest; when nothing resolves, no playlist is created and &#x60;playlistPid&#x60; is absent. An entry whose only match is an item the caller cannot see is reported as missing, exactly like an entry nothing matched. Unresolved entries carrying an ISRC are upgraded to a recording identifier through MusicBrainz when the server has internet, within a bounded lookup budget; without it the import still runs on the descriptive rung. 
   ///
   /// Parameters:
   /// * [playlistImportRequest] 
@@ -912,7 +912,7 @@ class PlaylistsApi {
   }
 
   /// Import an M3U8 playlist
-  /// Creates a static playlist from an M3U8 document, matching each entry to a cataloged item by exact path or unique relative-path suffix. Unmatched paths are skipped and reported, never invented; an empty document yields an empty playlist. 
+  /// Creates a static playlist from an M3U8 document, matching each entry to a cataloged item by exact path or unique relative-path suffix. Unmatched paths are skipped and reported, never invented; an empty document yields an empty playlist. A path naming an item the caller cannot see is reported as unmatched, exactly like a path that names nothing. 
   ///
   /// Parameters:
   /// * [m3uImport] 
@@ -1135,7 +1135,7 @@ class PlaylistsApi {
   }
 
   /// List a playlist&#39;s items
-  /// The playlist&#39;s members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner&#39;s user state for shared lists, the caller&#39;s for their own). Entries outside the caller&#39;s visibility are omitted, so a restricted viewer&#39;s &#x60;position&#x60; values can skip numbers. &#x60;position&#x60; is the entry&#39;s index in the full stored order, kept contiguous from 0 by every change to the list; pass it, with the entry&#39;s item pid as &#x60;itemPid&#x60;, to the removal endpoint, never the row index of a filtered page. Keyset-paginated within one evaluation; a membership change between pages may shift entries. 
+  /// The playlist&#39;s members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner&#39;s user state for shared lists, the caller&#39;s for their own). Entries the caller cannot see (outside their library grants, denied by their content settings, or episodes of shows they do not follow) are omitted, and the list&#39;s &#x60;itemCount&#x60; counts the same way, so a restricted viewer&#39;s &#x60;position&#x60; values can skip numbers. &#x60;position&#x60; is the entry&#39;s index in the full stored order, kept contiguous from 0 by every change to the list; pass it, with the entry&#39;s item pid as &#x60;itemPid&#x60;, to the removal endpoint, never the row index of a filtered page. Keyset-paginated within one evaluation; a membership change between pages may shift entries. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -1436,7 +1436,7 @@ class PlaylistsApi {
   }
 
   /// Preview a smart rule
-  /// Evaluates a rule without storing anything and returns the first matching items plus the total match count, computed against the caller&#39;s own user state and library visibility. Rule editors call this while the user builds the rule. 
+  /// Evaluates a rule without storing anything and returns the first matching items plus the total match count, computed against the caller&#39;s own user state and counting only what the caller can see (library grants, content settings, followed shows). Rule editors call this while the user builds the rule. 
   ///
   /// Parameters:
   /// * [smartRule] 

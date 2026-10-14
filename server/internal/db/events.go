@@ -146,6 +146,21 @@ func (d *DB) SyncStateSet(ctx context.Context, key, value string) error {
 	return nil
 }
 
+// SyncStateIncrement adds one to a counter kept in sync_state (absent
+// counts from 0) in one statement and answers the new value, so two
+// increments racing each other both count.
+func (d *DB) SyncStateIncrement(ctx context.Context, key string) (int64, error) {
+	var n int64
+	err := d.w.QueryRowContext(ctx, `
+		INSERT INTO sync_state (key, value) VALUES (?, '1')
+		ON CONFLICT (key) DO UPDATE SET value = CAST(CAST(value AS INTEGER) + 1 AS TEXT)
+		RETURNING CAST(value AS INTEGER)`, key).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("db: incrementing sync state %s: %w", key, err)
+	}
+	return n, nil
+}
+
 // PeekSyncState reads one sync_state value from the database at path
 // without opening it as a store: no baseline check, no writes. Empty when
 // the file, the table or the key is missing.

@@ -757,10 +757,10 @@ func TestAppPasswordLifecycle(t *testing.T) {
 	// The secret round-trips through the verification paths the
 	// Subsonic adapter will use.
 	ctx := context.Background()
-	if u, err := h.svc.VerifyAppPasswordKey(ctx, created.Secret); err != nil || u == nil {
+	if u, _, err := h.svc.VerifyAppPasswordKey(ctx, created.Secret); err != nil || u == nil {
 		t.Fatalf("apiKey verify = (%v, %v), want the admin", u, err)
 	}
-	if u, _ := h.svc.VerifyAppPasswordKey(ctx, "WRONGWRONGWRONGWRONGWRONGW"); u != nil {
+	if u, _, _ := h.svc.VerifyAppPasswordKey(ctx, "WRONGWRONGWRONGWRONGWRONGW"); u != nil {
 		t.Fatal("wrong apiKey verified")
 	}
 
@@ -769,7 +769,7 @@ func TestAppPasswordLifecycle(t *testing.T) {
 		t.Fatalf("revoke status = %d", resp.StatusCode)
 	}
 	resp.Body.Close()
-	if u, _ := h.svc.VerifyAppPasswordKey(ctx, created.Secret); u != nil {
+	if u, _, _ := h.svc.VerifyAppPasswordKey(ctx, created.Secret); u != nil {
 		t.Fatal("revoked app password still verifies")
 	}
 	resp = h.deleteReq(t, "/api/v1/users/me/app-passwords/"+created.Id)
@@ -1094,5 +1094,576 @@ func TestAJobListsItsTarget(t *testing.T) {
 	}
 	if whole == nil || whole.Target != nil {
 		t.Fatalf("scan job = %+v, want no target", whole)
+	}
+}
+
+// wsAccount creates a plain account, signs it in twice, and answers its
+// id with both sessions' tokens and ids.
+func wsAccount(t *testing.T, h *harness, username string) (userID string, tokens, sessions [2]string) {
+	t.Helper()
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{"username": username, "password": testPassword})
+	userID = decode[UserAccount](t, resp).Id
+	for i := range tokens {
+		tokens[i] = loginAs(t, h.ts, username, testPassword).Token
+		for _, s := range decode[SessionList](t, get(t, h.ts, "/api/v1/auth/sessions", tokens[i])).Sessions {
+			if s.Current {
+				sessions[i] = s.Id
+			}
+		}
+	}
+	return userID, tokens, sessions
+}
+
+// A socket lives no longer than its session: every way a session ends
+// closes it with 4401, and reconnecting answers 401.
+func TestWebSocketClosesWhenItsSessionEnds(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	cases := []struct {
+		name string
+		end  func(userID string, tokens, sessions [2]string)
+	}{
+		{"sign out", func(_ string, tokens, _ [2]string) {
+			wantStatus(t, reqAs(t, h, "POST", "/api/v1/auth/logout", tokens[0], nil), 204, "logout")
+		}},
+		{"revoked from another device", func(_ string, tokens, sessions [2]string) {
+			wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/auth/sessions/"+sessions[0], tokens[1], nil), 204, "revoke")
+		}},
+		{"signed out everywhere", func(userID string, _, _ [2]string) {
+			wantStatus(t, h.deleteReq(t, "/api/v1/users/"+userID+"/sessions"), 204, "revoke all")
+		}},
+		{"password reset", func(userID string, _, _ [2]string) {
+			wantStatus(t, h.putJSON(t, "/api/v1/users/"+userID+"/password",
+				map[string]any{"newPassword": "another-long-password"}), 204, "reset")
+		}},
+		{"disabled", func(userID string, _, _ [2]string) {
+			wantStatus(t, h.patchJSON(t, "/api/v1/users/"+userID, map[string]any{"disabled": true}), 200, "disable")
+		}},
+		{"deleted", func(userID string, _, _ [2]string) {
+			wantStatus(t, h.deleteReq(t, "/api/v1/users/"+userID), 204, "delete")
+		}},
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			userID, tokens, sessions := wsAccount(t, h, fmt.Sprintf("socket%d", i))
+			ws := dialWS(t, h, tokens[0])
+			// The subscribe frame registers the socket; one round trip
+			// proves the server has read it.
+			ws.send(map[string]any{"type": "ping", "id": "p1", "t": 1})
+			ws.expect("pong")
+			tc.end(userID, tokens, sessions)
+			if got := ws.closedWith(2 * time.Second); got != 4401 {
+				t.Errorf("close status = %d, want 4401", got)
+			}
+		})
+	}
+}
+
+// Signing out everywhere else keeps the session that asked, socket and
+// all.
+func TestWebSocketRevokeAllKeepsTheCallersSocket(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	userID, tokens, _ := wsAccount(t, h, "keeper")
+	other, mine := dialWS(t, h, tokens[0]), dialWS(t, h, tokens[1])
+	for _, ws := range []*wsClient{other, mine} {
+		ws.send(map[string]any{"type": "ping", "id": "p1", "t": 1})
+		ws.expect("pong")
+	}
+	wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/users/"+userID+"/sessions", tokens[1], nil), 204, "revoke the others")
+	if got := other.closedWith(2 * time.Second); got != 4401 {
+		t.Errorf("the other session's socket closed with %d, want 4401", got)
+	}
+	if !mine.stillOpen(300 * time.Millisecond) {
+		t.Error("the caller's own socket closed")
+	}
+}
+
+// A revoked device's socket closes, and its player endpoint goes offline
+// with it.
+func TestRevokedSocketCannotDriveThePlayer(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	_, tokens, sessions := wsAccount(t, h, "driver")
+	phone := dialWS(t, h, tokens[0])
+	endpoint := phone.register("Phone D")
+	wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/auth/sessions/"+sessions[0], tokens[1], nil), 204, "revoke the phone")
+	if got := phone.closedWith(2 * time.Second); got != 4401 {
+		t.Fatalf("the revoked phone's socket closed with %d, want 4401", got)
+	}
+	// The endpoint goes with the connection, once the close handshake
+	// has run its course; a slow host takes a moment longer.
+	online := func() bool {
+		var eps struct {
+			Endpoints []struct {
+				Id     string
+				Online bool
+			}
+		}
+		pGet(t, h, "/api/v1/player/endpoints", tokens[1], &eps)
+		return slices.ContainsFunc(eps.Endpoints, func(ep struct {
+			Id     string
+			Online bool
+		}) bool {
+			return ep.Id == endpoint && ep.Online
+		})
+	}
+	for deadline := time.Now().Add(5 * time.Second); online(); time.Sleep(20 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("the revoked phone is still an online endpoint")
+		}
+	}
+}
+
+// The ping-time re-check closes a socket whose session ended in a way
+// nothing announced: here the row is deleted behind the session
+// manager's back.
+func TestWebSocketBackstopClosesWithoutANotification(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.srv.wsPingEvery = 50 * time.Millisecond
+	_, tokens, sessions := wsAccount(t, h, "backstop")
+	ws := dialWS(t, h, tokens[0])
+	ws.send(map[string]any{"type": "ping", "id": "p1", "t": 1})
+	ws.expect("pong")
+	if err := h.store.DeleteSession(context.Background(), sessions[0]); err != nil {
+		t.Fatal(err)
+	}
+	if got := ws.closedWith(2 * time.Second); got != 4401 {
+		t.Errorf("close status = %d, want 4401", got)
+	}
+}
+
+// A check that could not be made is not an ended session: a writer
+// whose own socket just closed re-checks under a cancelled context, and
+// reading that as a dead session would end every other socket of it.
+func TestAFailedSessionCheckEndsNothing(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	_, _, sessions := wsAccount(t, h, "tabs")
+	stalled, cancel := context.WithCancel(context.Background())
+	cancel()
+	if h.srv.sessionEnded(stalled, sessions[0]) {
+		t.Error("a session check under a cancelled context read as an ended session")
+	}
+	if !h.srv.sessionEnded(context.Background(), "se-gone") {
+		t.Error("an unknown session read as live")
+	}
+	if !h.srv.sessionEnded(context.Background(), "") {
+		t.Error("a principal with no session read as live")
+	}
+}
+
+// Once the ping-time re-check finds a session ended, none of its sockets
+// acts on another frame, including one whose own re-check has not come
+// round and whose client ignores control frames and keeps writing.
+func TestBackstopEndsEverySocketOfTheSession(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.srv.wsPingEvery = 50 * time.Millisecond
+	_, tokens, sessions := wsAccount(t, h, "lingerer")
+	named := func(name string) bool {
+		var eps struct{ Endpoints []struct{ Name string } }
+		pGet(t, h, "/api/v1/player/endpoints", tokens[1], &eps)
+		return slices.ContainsFunc(eps.Endpoints, func(e struct{ Name string }) bool { return e.Name == name })
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	deaf, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(h.ts.URL, "http")+"/api/v1/ws", &websocket.DialOptions{
+		HTTPHeader: http.Header{"Authorization": []string{"Bearer " + tokens[0]}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer deaf.CloseNow()
+	register := func(name string) {
+		frame, _ := json.Marshal(map[string]any{"type": "register-endpoint", "id": name, "name": name})
+		if err := deaf.Write(ctx, websocket.MessageText, frame); err != nil {
+			t.Fatalf("writing %s: %v", name, err)
+		}
+	}
+	if err := deaf.Write(ctx, websocket.MessageText, []byte(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	register("Before")
+	for deadline := time.Now().Add(5 * time.Second); !named("Before"); {
+		if time.Now().After(deadline) {
+			t.Fatal("the deaf socket's registration never landed")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	// Past its first ping, which a deaf client never answers: this
+	// socket's own re-check is ten seconds away, so only the other
+	// socket's can end it in time.
+	time.Sleep(150 * time.Millisecond)
+	ws := dialWS(t, h, tokens[0])
+	ws.send(map[string]any{"type": "ping", "id": "p1", "t": 1})
+	ws.expect("pong")
+	if err := h.store.DeleteSession(context.Background(), sessions[0]); err != nil {
+		t.Fatal(err)
+	}
+	if got := ws.closedWith(2 * time.Second); got != 4401 {
+		t.Fatalf("close status = %d, want 4401", got)
+	}
+	register("After")
+	time.Sleep(300 * time.Millisecond)
+	if named("After") {
+		t.Error("a frame sent after the session ended registered an endpoint")
+	}
+}
+
+// A bearer-authenticated upgrade carries its credential in a header a
+// browser page cannot set, so its Origin is not checked (api/events.md
+// promises as much); a cookie-authenticated one from a foreign page is
+// still refused.
+func TestBearerSocketSkipsTheOriginCheck(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	wsURL := "ws" + strings.TrimPrefix(h.ts.URL, "http") + "/api/v1/ws"
+	dial := func(header http.Header) (*websocket.Conn, *http.Response, error) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		header.Set("Origin", "https://elsewhere.example")
+		return websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: header})
+	}
+	conn, _, err := dial(http.Header{"Authorization": []string{"Bearer " + h.token}})
+	if err != nil {
+		t.Fatalf("a bearer upgrade with a foreign Origin: %v", err)
+	}
+	conn.Close(websocket.StatusNormalClosure, "")
+	_, resp, err := dial(http.Header{"Cookie": []string{sessionCookie + "=" + h.token}})
+	if err == nil {
+		t.Fatal("a cookie upgrade from a foreign page was accepted")
+	}
+	if resp == nil || resp.StatusCode != http.StatusForbidden {
+		t.Errorf("a cookie upgrade from a foreign page = %v, want 403", resp)
+	}
+}
+
+// Signing an account out everywhere and resetting another account's
+// password both end sessions on purpose, so both leave a record; a
+// listener's own routine sign-out or password change does not.
+func TestSessionEndingActionsAreAudited(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	userID, tokens, _ := wsAccount(t, h, "audited")
+	events := func(action string) []AuditEvent {
+		t.Helper()
+		return decode[AuditEventPage](t, get(t, h.ts, "/api/v1/admin/audit?action="+action, h.token)).Events
+	}
+
+	wantStatus(t, h.deleteReq(t, "/api/v1/users/"+userID+"/sessions"), 204, "an administrator signs them out")
+	wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/users/"+userID+"/sessions", tokens[1], nil), 401,
+		"the revoked session")
+	token := loginAs(t, h.ts, "audited", testPassword).Token
+	wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/users/"+userID+"/sessions", token, nil), 204, "they sign out elsewhere")
+	revokes := events("user.sessions-revoke")
+	if len(revokes) != 2 {
+		t.Fatalf("user.sessions-revoke entries = %+v, want 2", revokes)
+	}
+	// Newest first: the account's own, keeping its session, then the
+	// administrator's.
+	for i, want := range []map[string]any{{"self": true, "kept": true}, {"self": false, "kept": false}} {
+		got := map[string]any{}
+		if revokes[i].Detail != nil {
+			got = *revokes[i].Detail
+		}
+		if revokes[i].TargetPid == nil || *revokes[i].TargetPid != userID || got["self"] != want["self"] || got["kept"] != want["kept"] {
+			t.Errorf("entry %d = %+v %v, want target %s and %v", i, revokes[i].TargetPid, got, userID, want)
+		}
+	}
+
+	wantStatus(t, reqAs(t, h, "PUT", "/api/v1/users/"+userID+"/password", token,
+		map[string]any{"currentPassword": testPassword, "newPassword": "a-new-long-password"}), 204, "their own change")
+	if got := events("user.password-reset"); len(got) != 0 {
+		t.Errorf("a listener's own password change was audited: %+v", got)
+	}
+	wantStatus(t, h.putJSON(t, "/api/v1/users/"+userID+"/password",
+		map[string]any{"newPassword": "a-reset-long-password"}), 204, "the administrator's reset")
+	if got := events("user.password-reset"); len(got) != 1 || got[0].TargetPid == nil || *got[0].TargetPid != userID {
+		t.Errorf("user.password-reset entries = %+v, want the administrator's reset", got)
+	}
+}
+
+// A task's event stream re-checks its session on every poll, so it ends
+// when the session does instead of streaming for the hours a task can
+// run.
+func TestTaskStreamEndsWithItsSession(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.srv.streamRecheckEvery = 0
+	token := loginAs(t, h.ts, "admin", testPassword).Token
+	var session string
+	for _, s := range decode[SessionList](t, get(t, h.ts, "/api/v1/auth/sessions", token)).Sessions {
+		if s.Current {
+			session = s.Id
+		}
+	}
+	resp := postJSON(t, h.ts.URL+"/api/v1/admin/genre-normalize", token, `{"dryRun":true}`)
+	task := decodeStatus[ToolTask](t, resp, 202, "queue a task")
+
+	req, err := http.NewRequest("GET", h.ts.URL+"/api/v1/tools/tasks/"+task.Id+"/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	stream, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Body.Close()
+	ended := make(chan struct{})
+	go func() {
+		io.Copy(io.Discard, stream.Body)
+		close(ended)
+	}()
+
+	wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/auth/sessions/"+session, h.token, nil), 204,
+		"revoke the stream's session from another")
+	select {
+	case <-ended:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the task stream outlived its session")
+	}
+}
+
+// Signing an account out everywhere ends its gpodder logins with its
+// sessions; a password reset does not, since app passwords survive one
+// by design and the gpodder login is one of theirs.
+func TestSignOutEverywhereEndsGpodderLogins(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := context.Background()
+	userID, tokens, _ := wsAccount(t, h, "podsync")
+	resp := reqAs(t, h, "POST", "/api/v1/users/me/app-passwords", tokens[0], map[string]any{"label": "antennapod"})
+	secret := decode[AppPasswordCreated](t, resp).Secret
+	login := func() string {
+		t.Helper()
+		_, cookie, _, err := h.svc.GpodderLogin(ctx, "podsync", "podsync", secret)
+		if err != nil || cookie == "" {
+			t.Fatalf("gpodder login = %q, %v", cookie, err)
+		}
+		return cookie
+	}
+	alive := func(cookie string) bool {
+		t.Helper()
+		u, err := h.svc.GpodderSessionUser(ctx, cookie)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return u != nil
+	}
+
+	cookie := login()
+	wantStatus(t, h.putJSON(t, "/api/v1/users/"+userID+"/password",
+		map[string]any{"newPassword": "a-reset-long-password"}), 204, "a password reset")
+	if !alive(cookie) {
+		t.Error("a password reset ended the gpodder login")
+	}
+	wantStatus(t, h.deleteReq(t, "/api/v1/users/"+userID+"/sessions"), 204, "signing them out everywhere")
+	if alive(cookie) {
+		t.Error("signing out everywhere left the gpodder login")
+	}
+}
+
+// A job's detail answers the audience its list has, not anyone holding a
+// pid.
+func TestJobDetailIsAdministratorsOnly(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	resp := h.postJSON(t, "/api/v1/library/analyze", nil)
+	if resp.StatusCode != 202 {
+		t.Fatalf("analyze status = %d", resp.StatusCode)
+	}
+	job := decode[Job](t, resp)
+	wantStatus(t, get(t, h.ts, "/api/v1/jobs/"+job.Pid, h.token), 200, "the administrator's read")
+	_, tokens, _ := wsAccount(t, h, "bystander")
+	wantStatus(t, get(t, h.ts, "/api/v1/jobs/"+job.Pid, tokens[0]), 403, "another account's read")
+}
+
+// The catalog mirror carries what its caller can see, content rules
+// included: a snapshot leaves out what a rule hides, and an item flagged
+// after the snapshot leaves the mirror through a hidden tombstone rather
+// than arriving as an upsert.
+func TestCatalogSyncHonoursContentRules(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	items := h.items(t, "?mediaType=music").Items
+	flagExplicit(t, h, items[0].Pid)
+	kid := kidAccount(t, h, "mirror-kid")
+	page := func(q string) CatalogSyncPage {
+		t.Helper()
+		return decodeStatus[CatalogSyncPage](t, get(t, h.ts, "/api/v1/sync/catalog"+q, kid), 200, "sync page")
+	}
+	upserts := map[string]bool{}
+	since, cursor := "", ""
+	for {
+		q := "?limit=200"
+		if cursor != "" {
+			q += "&cursor=" + cursor
+		}
+		p := page(q)
+		for _, e := range p.Entries {
+			if e.Op == "upsert" {
+				upserts[e.Pid] = true
+			}
+		}
+		since = p.NextSince
+		if p.NextCursor == nil {
+			break
+		}
+		cursor = *p.NextCursor
+	}
+	if upserts[items[0].Pid] || !upserts[items[1].Pid] {
+		t.Fatalf("the kid's snapshot holds the flagged track %v, the unflagged one %v",
+			upserts[items[0].Pid], upserts[items[1].Pid])
+	}
+
+	flagExplicit(t, h, items[1].Pid)
+	var got *CatalogSyncEntry
+	for {
+		p := page("?since=" + since)
+		for _, e := range p.Entries {
+			if e.Pid == items[1].Pid {
+				got = &e
+			}
+		}
+		since = p.NextSince
+		if p.More == nil || !*p.More {
+			break
+		}
+	}
+	if got == nil || got.Op != "delete" || got.Reason == nil || *got.Reason != "hidden" {
+		t.Errorf("the delta after a flag = %+v, want a hidden tombstone", got)
+	}
+}
+
+// refuseDeletes makes every delete from table fail until the returned
+// func runs, which is how a revoke that cannot complete is staged.
+func refuseDeletes(t *testing.T, h *harness, table string) func() {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := h.store.Writer().ExecContext(ctx, `CREATE TRIGGER refuse_`+table+` BEFORE DELETE ON `+table+
+		` BEGIN SELECT RAISE(ABORT, 'refused'); END`); err != nil {
+		t.Fatal(err)
+	}
+	return func() {
+		if _, err := h.store.Writer().ExecContext(ctx, `DROP TRIGGER refuse_`+table); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// gpodderLoginAs signs the account in over gpodder with a fresh app
+// password and answers the session cookie.
+func gpodderLoginAs(t *testing.T, h *harness, username, token string) string {
+	t.Helper()
+	resp := reqAs(t, h, "POST", "/api/v1/users/me/app-passwords", token, map[string]any{"label": "podcasts"})
+	secret := decode[AppPasswordCreated](t, resp).Secret
+	_, cookie, _, err := h.svc.GpodderLogin(context.Background(), username, username, secret)
+	if err != nil || cookie == "" {
+		t.Fatalf("gpodder login = %q, %v", cookie, err)
+	}
+	return cookie
+}
+
+// A disable whose revoke fails, of the sessions or of the gpodder
+// logins, has still disabled the account: the other half ends and the
+// change is on the record, and the failure is reported so a retry
+// finishes it, leaving nothing for a re-enable to bring back.
+func TestDisableReportsARevokeThatFailed(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	for i, table := range []string{"sessions", "gpodder_sessions"} {
+		name := fmt.Sprintf("sticky%d", i)
+		id, token, _ := mediaListener(t, h, name, nil)
+		cookie := gpodderLoginAs(t, h, name, token)
+		disable := func(v bool) *http.Response {
+			return h.patchJSON(t, "/api/v1/users/"+id, map[string]any{"disabled": v})
+		}
+		allow := refuseDeletes(t, h, table)
+		wantStatus(t, disable(true), http.StatusInternalServerError, "a disable whose "+table+" revoke failed")
+		allow()
+		audited := false
+		for _, e := range decode[AuditEventPage](t, get(t, h.ts, "/api/v1/admin/audit?action=user.update", h.token)).Events {
+			if e.TargetName != nil && *e.TargetName == name {
+				audited = true
+			}
+		}
+		if !audited {
+			t.Errorf("the disable whose %s revoke failed left no audit entry", table)
+		}
+		// The half that did not fail ended all the same.
+		wantStatus(t, disable(false), 200, "re-enabling before the retry")
+		if table == "sessions" {
+			if u, err := h.svc.GpodderSessionUser(context.Background(), cookie); err != nil || u != nil {
+				t.Errorf("the gpodder login a failed session revoke left = %v, %v", u, err)
+			}
+		} else {
+			wantStatus(t, get(t, h.ts, "/api/v1/auth/sessions", token), 401, "the session a failed gpodder revoke left")
+		}
+		wantStatus(t, disable(true), 200, "the retry")
+		wantStatus(t, disable(false), 200, "re-enabling")
+		wantStatus(t, get(t, h.ts, "/api/v1/auth/sessions", token), 401, "the session after a "+table+" failure")
+		if u, err := h.svc.GpodderSessionUser(context.Background(), cookie); err != nil || u != nil {
+			t.Errorf("the gpodder login after a %s failure = %v, %v", table, u, err)
+		}
+	}
+}
+
+// Signing out everywhere has happened once the sessions are revoked: it
+// is on the record even when ending the gpodder logins then fails, and
+// the failure is reported so the caller tries again.
+func TestSignOutEverywhereIsAuditedWhenTheGpodderHalfFails(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	id, token, _ := mediaListener(t, h, "halfway", nil)
+	gpodderLoginAs(t, h, "halfway", token)
+	allow := refuseDeletes(t, h, "gpodder_sessions")
+	wantStatus(t, reqAs(t, h, "DELETE", "/api/v1/users/"+id+"/sessions", h.token, nil), http.StatusInternalServerError, "revoke with gpodder refused")
+	allow()
+	wantStatus(t, get(t, h.ts, "/api/v1/auth/sessions", token), 401, "the revoked session")
+	events := decode[AuditEventPage](t, get(t, h.ts, "/api/v1/admin/audit?action=user.sessions-revoke", h.token)).Events
+	if len(events) != 1 {
+		t.Errorf("sign-out-everywhere audit entries = %d, want 1", len(events))
+	}
+}
+
+// A task stream re-reads its caller's rights as it goes: an
+// administrator demoted mid-stream stops receiving another account's
+// task, as a fresh read of it would answer not-found.
+func TestTaskStreamFollowsItsCallersRights(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.srv.streamRecheckEvery = 0
+	deputy := decodeStatus[UserAccount](t, h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "deputy", "password": testPassword, "roles": []string{"admin"},
+	}), 201, "a second administrator")
+	token := loginAs(t, h.ts, "deputy", testPassword).Token
+	task := decodeStatus[ToolTask](t, h.postJSON(t, "/api/v1/admin/genre-normalize", map[string]any{"dryRun": true}), 202, "queue a task")
+
+	req, err := http.NewRequest("GET", h.ts.URL+"/api/v1/tools/tasks/"+task.Id+"/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	stream, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Body.Close()
+	ended := make(chan struct{})
+	go func() {
+		io.Copy(io.Discard, stream.Body)
+		close(ended)
+	}()
+
+	wantStatus(t, h.patchJSON(t, "/api/v1/users/"+deputy.Id, map[string]any{"roles": []string{}}), 200, "demote the deputy")
+	select {
+	case <-ended:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the task stream outlived its caller's rights")
 	}
 }

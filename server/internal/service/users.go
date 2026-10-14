@@ -306,13 +306,20 @@ func (l *Library) UpdateAccount(ctx context.Context, id string, upd AccountUpdat
 	// called, not what it may do, and every surface that shows it is a
 	// live read anyway.
 	rightsChanged := grantsWritten || !sameRights(before, rightsOf(u))
-	if visibilityChanged {
+	err = l.db.UpdateUser(ctx, u, losesAdmin)
+	if visibilityChanged && (err == nil || grantsWritten) {
 		// Outstanding catalog sync cursors are scoped to the old grant
 		// set; retiring them makes the next delta answer sync-reset and
-		// the re-snapshot reflect the new visibility.
+		// the re-snapshot reflect the new visibility. Timelines minted
+		// under the old reach end with it. After the write, and every
+		// reader takes an epoch before the rules (TimelineReach, a
+		// snapshot's first page), so nothing read under the old rules
+		// carries the new epochs; the grants are written before it, so
+		// they count even when it fails.
 		l.bumpGrantEpoch(ctx, u.ID)
+		l.bumpReachEpoch(ctx, u.ID)
 	}
-	if err := l.db.UpdateUser(ctx, u, losesAdmin); err != nil {
+	if err != nil {
 		if errors.Is(err, wdb.ErrConflict) {
 			return nil, &Error{Kind: KindConflict, Msg: "this is the last enabled administrator"}
 		}
@@ -458,6 +465,13 @@ func (l *Library) ResolveOidcAccount(ctx context.Context, ident OidcIdentity) (*
 				l.log.Warn("group claim would demote the last administrator; keeping roles",
 					"user", u.ID)
 			} else {
+				// Admin status short-circuits visibility, so moving in or
+				// out of it is a visibility change, as UpdateAccount
+				// counts it: cursors and timelines from before end.
+				if hasRole(prevRoles, "admin") != hasRole(u.Roles, "admin") {
+					l.bumpGrantEpoch(ctx, u.ID)
+					l.bumpReachEpoch(ctx, u.ID)
+				}
 				// The IdP moved this account's roles under whatever
 				// sessions it already has open; they re-read the session
 				// rather than waiting for a relaunch.

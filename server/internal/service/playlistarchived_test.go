@@ -1,13 +1,23 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
+
+	"github.com/colespringer/waxdeck/fixtures"
 )
 
 // trashItems deletes the named items to the trash, the state of a
@@ -658,5 +668,645 @@ func TestInSetChunksAtTheCap(t *testing.T) {
 	}
 	if c, ok := inSet("library", nil).(query.Cond); !ok || len(c.Values) != 0 {
 		t.Error("an empty set should stay one empty membership condition")
+	}
+}
+
+// genreTrackPIDs answers the API pids of the genre fixture's tracks with
+// these titles, in order.
+func genreTrackPIDs(t *testing.T, f genreFixture, titles ...string) []string {
+	t.Helper()
+	out := make([]string, 0, len(titles))
+	for _, title := range titles {
+		out = append(out, apiPID(PrefixTrack, f.itemNamed(t, title).PID))
+	}
+	return out
+}
+
+// A shared list's listing and count apply the reader's content rules as
+// well as their grants: a tag-denied track another account listed shows
+// neither its title nor in the count.
+func TestSharedListHidesTagDeniedMembers(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	f.tag(t, "Canonical", "MOOD", "calm")
+	pids := genreTrackPIDs(t, f, "Lowercase", "Canonical", "Off Tree")
+	pl, err := f.svc.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
+		Name: "Mixed", Kind: "static", Visibility: "shared", ItemPIDs: pids,
+	})
+	if err != nil {
+		t.Fatalf("creating the shared list: %v", err)
+	}
+
+	kid := f.restricted(nil, []TagRule{{Key: "MOOD", Value: "calm"}})
+	want := []string{pids[0], pids[2]}
+	if got := memberPIDs(t, f.ctx, f.svc, kid, pl.PID); !samePIDs(got, want) {
+		t.Errorf("restricted reader lists %v, want %v", got, want)
+	}
+	opened, err := f.svc.PlaylistByPID(f.ctx, kid, pl.PID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opened.ItemCount == nil || *opened.ItemCount != 2 {
+		t.Errorf("restricted reader's count = %v, want 2", opened.ItemCount)
+	}
+	if got := listedCount(t, f.ctx, f.svc, kid, pl.PID); got != 2 {
+		t.Errorf("restricted reader's listing count = %d, want 2", got)
+	}
+
+	if got := memberPIDs(t, f.ctx, f.svc, f.uc, pl.PID); !samePIDs(got, pids) {
+		t.Errorf("owner lists %v, want every member %v", got, pids)
+	}
+}
+
+// TestReplaceRefusesWhenAMemberIsContentHidden is the guard's fourth
+// arm: a reorder built from a listing the owner's content rules have
+// narrowed would drop the hidden members for good.
+func TestReplaceRefusesWhenAMemberIsContentHidden(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	f.tag(t, "Canonical", "MOOD", "calm")
+	pids := genreTrackPIDs(t, f, "Lowercase", "Canonical", "Off Tree")
+	plPID := playlistWith(t, f.ctx, f.svc, f.uc, "Mine", pids)
+
+	kid := f.restricted(nil, []TagRule{{Key: "MOOD", Value: "calm"}})
+	visible := memberPIDs(t, f.ctx, f.svc, kid, plPID)
+	if err := f.svc.ReplacePlaylistItems(f.ctx, kid, plPID, visible, nil); KindOf(err) != KindConflict {
+		t.Fatalf("replacing with the narrowed listing = %v, want a conflict", err)
+	}
+	if got := memberPIDs(t, f.ctx, f.svc, f.uc, plPID); !samePIDs(got, pids) {
+		t.Errorf("after the refusal, members = %v, want %v", got, pids)
+	}
+}
+
+// TestContainsItemDoesNotProbeAHiddenItem: the add-to-playlist filter
+// read stored members directly, so naming a pid the caller cannot see
+// told them which lists hold it.
+func TestContainsItemDoesNotProbeAHiddenItem(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	f.tag(t, "Canonical", "MOOD", "calm")
+	pids := genreTrackPIDs(t, f, "Lowercase", "Canonical")
+	if _, err := f.svc.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
+		Name: "Mixed", Kind: "static", Visibility: "shared", ItemPIDs: pids,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	holding := func(uc *UserCtx, item string) int {
+		t.Helper()
+		page, err := f.svc.Playlists(f.ctx, uc, item, "", 50)
+		if err != nil {
+			t.Fatalf("filtering by %s: %v", item, err)
+		}
+		return len(page.Playlists)
+	}
+	if got := holding(f.uc, pids[1]); got != 1 {
+		t.Fatalf("owner sees %d lists holding the track, want 1", got)
+	}
+	kid := f.restricted(nil, []TagRule{{Key: "MOOD", Value: "calm"}})
+	if got := holding(kid, pids[1]); got != 0 {
+		t.Errorf("a reader the track is hidden from sees %d lists holding it, want 0", got)
+	}
+	if got := holding(kid, pids[0]); got != 1 {
+		t.Errorf("the same reader sees %d lists holding a track they can see, want 1", got)
+	}
+}
+
+// blindReader is the fixture's admin re-scoped to a fresh, empty library:
+// every fixture track is outside their grant.
+func blindReader(t *testing.T, ctx context.Context, svc *Library, uc *UserCtx) *UserCtx {
+	t.Helper()
+	elsewhere, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: "other", Path: t.TempDir()})
+	if err != nil {
+		t.Fatalf("adding a second library: %v", err)
+	}
+	return &UserCtx{
+		ID: uc.ID, CatalogPID: uc.CatalogPID,
+		Libraries: map[string]bool{strings.TrimPrefix(elsewhere.PID, PrefixLibrary+"-"): true},
+	}
+}
+
+// The resolver matches across the whole catalog, so an import drops
+// every match its caller cannot read rather than store it for a share to
+// publish.
+func TestImportDropsWhatTheCallerCannotSee(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	blind := blindReader(t, ctx, svc, uc)
+
+	text := PlaylistImportInput{Source: "text", Name: "Road Tape", Payload: "Test Ensemble - Amber Waves\n"}
+	out, err := svc.ImportStreamingPlaylist(ctx, blind, text)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Resolved != 0 || len(out.Missing) != 1 || out.PlaylistPID != "" {
+		t.Errorf("restricted text import = %+v, want one miss and no playlist", out)
+	}
+	if out, err = svc.ImportStreamingPlaylist(ctx, uc, text); err != nil || out.Resolved != 1 {
+		t.Errorf("unrestricted text import = %+v (%v), want the track resolved", out, err)
+	}
+
+	// Portable refs resolve on the strong rungs, which a hidden match
+	// cannot pass either.
+	pids := fixtureItemPIDs(t, ctx, svc, uc)[:2]
+	_, refs, err := svc.ExportPlaylistPortable(ctx, uc, playlistWith(t, ctx, svc, uc, "Source", pids))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err = svc.ImportStreamingPlaylist(ctx, blind, PlaylistImportInput{Source: "portable", Refs: refs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Resolved != 0 || len(out.Missing) != 2 {
+		t.Errorf("restricted portable import = %+v, want both refs missing", out)
+	}
+}
+
+// TestImportM3UDropsUnreachablePaths: a path naming an item the caller
+// cannot see reads as unmatched, and so does a line merged into it.
+func TestImportM3UDropsUnreachablePaths(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	blind := blindReader(t, ctx, svc, uc)
+	track := fixtureItemPIDs(t, ctx, svc, uc)[0]
+	it, err := svc.getVisibleItem(ctx, uc, track)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The absolute path, then the same file by a relative suffix: one
+	// item through two spellings, which the import merges into one entry.
+	paths := []string{it.DisplayPath, filepath.Base(it.DisplayPath)}
+	doc := "#EXTM3U\n" + strings.Join(paths, "\n") + "\n"
+
+	mine, err := svc.ImportPlaylistM3U(ctx, uc, "Mine", "", doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mine.Matched != 1 || mine.Unmatched != 0 {
+		t.Fatalf("unrestricted import = matched %d unmatched %d, want 1/0", mine.Matched, mine.Unmatched)
+	}
+	if got := memberPIDs(t, ctx, svc, uc, mine.Playlist.PID); !samePIDs(got, []string{track}) {
+		t.Errorf("unrestricted members = %v, want %v", got, []string{track})
+	}
+
+	theirs, err := svc.ImportPlaylistM3U(ctx, blind, "Theirs", "", doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if theirs.Matched != 0 || theirs.Unmatched != 2 || !samePIDs(theirs.UnmatchedPaths, paths) {
+		t.Errorf("restricted import = matched %d unmatched %d %v, want 0/2 %v",
+			theirs.Matched, theirs.Unmatched, theirs.UnmatchedPaths, paths)
+	}
+	if got := memberPIDs(t, ctx, svc, uc, theirs.Playlist.PID); len(got) != 0 {
+		t.Errorf("the restricted import stored %v", got)
+	}
+}
+
+// Both exports write only what the reader is shown: a restricted reader
+// of somebody else's shared list gets no path or identity of a track the
+// listing hides from them.
+func TestSharedListExportsOnlyTheViewersMembers(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	f.tag(t, "Canonical", "MOOD", "calm")
+	hidden := f.itemNamed(t, "Canonical")
+	pids := genreTrackPIDs(t, f, "Lowercase", "Canonical", "Off Tree")
+	pl, err := f.svc.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
+		Name: "Mixed", Kind: "static", Visibility: "shared", ItemPIDs: pids,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kid := f.calmDenied()
+
+	doc, err := f.svc.ExportPlaylistM3U(f.ctx, kid, pl.PID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(doc, hidden.DisplayPath) || strings.Contains(doc, "Canonical") {
+		t.Errorf("the restricted export names the hidden member:\n%s", doc)
+	}
+	if n := strings.Count(doc, "#EXTINF:"); n != 2 {
+		t.Errorf("the restricted export holds %d entries, want 2:\n%s", n, doc)
+	}
+	_, refs, err := f.svc.ExportPlaylistPortable(f.ctx, kid, pl.PID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs) != 2 {
+		t.Errorf("the restricted portable export holds %d refs, want 2", len(refs))
+	}
+	for _, r := range refs {
+		if r.Title == "Canonical" {
+			t.Errorf("the restricted portable export carries the hidden member: %+v", r)
+		}
+	}
+
+	// The owner's export is the catalog's own document, byte for byte:
+	// the importer's label pick reads that format back.
+	mine, err := f.svc.ExportPlaylistM3U(f.ctx, f.uc, pl.PID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, bare, _ := parseAPIPID(pl.PID)
+	var want bytes.Buffer
+	if err := f.svc.lib.Playlists().ExportM3U8(f.ctx, bare, &want, model.PID(f.uc.CatalogPID)); err != nil {
+		t.Fatal(err)
+	}
+	if mine != want.String() {
+		t.Errorf("owner export =\n%s\nwant the catalog's\n%s", mine, want.String())
+	}
+	if _, refs, err := f.svc.ExportPlaylistPortable(f.ctx, f.uc, pl.PID); err != nil || len(refs) != 3 {
+		t.Errorf("owner portable export = %d refs (%v), want 3", len(refs), err)
+	}
+}
+
+// A random smart list with no pinned seed draws a new order on every
+// read, so its portable export cannot be checked against a second read;
+// it still exports, and still only what the reader can see.
+func TestShuffledSmartListExportsPortably(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	f.tag(t, "Canonical", "MOOD", "calm")
+	pl := smartPlaylist(t, f.ctx, f.svc, f.uc, "Shuffle", "shared", SmartRule{
+		Root: allMusic(), Limit: len(genreFixtureTitles), LimitMode: "random",
+	})
+	titles := func(refs []PortableRefDTO) []string {
+		out := make([]string, len(refs))
+		for i, r := range refs {
+			out[i] = r.Title
+		}
+		slices.Sort(out)
+		return out
+	}
+	everything := slices.Sorted(slices.Values(genreFixtureTitles))
+	for range 3 {
+		_, refs, err := f.svc.ExportPlaylistPortable(f.ctx, f.uc, pl)
+		if err != nil {
+			t.Fatalf("owner export: %v", err)
+		}
+		if got := titles(refs); !slices.Equal(got, everything) {
+			t.Errorf("owner export = %v, want %v", got, everything)
+		}
+	}
+	_, refs, err := f.svc.ExportPlaylistPortable(f.ctx, f.calmDenied(), pl)
+	if err != nil {
+		t.Fatalf("restricted export: %v", err)
+	}
+	want := slices.DeleteFunc(slices.Clone(everything), func(s string) bool { return s == "Canonical" })
+	if got := titles(refs); !slices.Equal(got, want) {
+		t.Errorf("restricted export = %v, want %v", got, want)
+	}
+}
+
+// shareOwner creates a plain account and returns its id and context.
+func shareOwner(t *testing.T, ctx context.Context, svc *Library, name string) (string, *UserCtx) {
+	t.Helper()
+	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: name, Password: "correct-horse"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	uc, err := svc.UserCtx(ctx, acct.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return acct.User.ID, uc
+}
+
+// resolvedShare resolves a share by its API pid, answering how many
+// items it serves, or -1 when it does not resolve.
+func resolvedShare(t *testing.T, ctx context.Context, svc *Library, apiShareID string) int {
+	t.Helper()
+	_, id, _ := parseAPIPID(apiShareID)
+	pub, err := svc.ResolveShare(ctx, string(id))
+	if KindOf(err) == KindNotFound {
+		return -1
+	}
+	if err != nil {
+		t.Fatalf("resolving %s: %v", apiShareID, err)
+	}
+	return len(pub.Items)
+}
+
+// A link serves what its owner can see each time it is opened: what a
+// list held when its owner lost access stops playing to anyone holding
+// the URL.
+func TestResolveShareServesTheOwnersCurrentReach(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newCatalogFixture(t)
+	pids := fixtureItemPIDs(t, ctx, svc, admin)[:2]
+	ownerID, owner := shareOwner(t, ctx, svc, "publisher")
+
+	pl, err := svc.CreatePlaylist(ctx, owner, PlaylistCreate{Name: "Out", Kind: "static", ItemPIDs: pids})
+	if err != nil {
+		t.Fatal(err)
+	}
+	album, err := svc.getVisibleItem(ctx, admin, pids[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var shares []string
+	for _, target := range []string{pl.PID, apiPID(PrefixAlbum, album.AlbumPID), pids[1]} {
+		info, err := svc.CreateShare(ctx, owner, target, 0, false, 0)
+		if err != nil {
+			t.Fatalf("sharing %s: %v", target, err)
+		}
+		if resolvedShare(t, ctx, svc, info.ID) <= 0 {
+			t.Fatalf("the fresh share of %s serves nothing", target)
+		}
+		shares = append(shares, info.ID)
+	}
+
+	elsewhere, err := svc.AddLibrary(ctx, admin, AddLibraryInput{Name: "other", Path: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	granted := "granted"
+	if _, err := svc.UpdateAccount(ctx, ownerID, AccountUpdate{AccessMode: &granted, LibraryPIDs: []string{elsewhere.PID}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range shares {
+		if n := resolvedShare(t, ctx, svc, id); n != -1 {
+			t.Errorf("share %s serves %d items to an owner who lost the library, want not-found", id, n)
+		}
+	}
+
+	all := "all"
+	if _, err := svc.UpdateAccount(ctx, ownerID, AccountUpdate{AccessMode: &all}); err != nil {
+		t.Fatal(err)
+	}
+	if n := resolvedShare(t, ctx, svc, shares[0]); n != 2 {
+		t.Errorf("the playlist share after the grant came back serves %d, want 2", n)
+	}
+	off, on := true, false
+	if _, err := svc.UpdateAccount(ctx, ownerID, AccountUpdate{Disabled: &off}); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range shares {
+		if n := resolvedShare(t, ctx, svc, id); n != -1 {
+			t.Errorf("share %s of a disabled owner serves %d items, want not-found", id, n)
+		}
+	}
+	if _, err := svc.UpdateAccount(ctx, ownerID, AccountUpdate{Disabled: &on}); err != nil {
+		t.Fatal(err)
+	}
+	if n := resolvedShare(t, ctx, svc, shares[2]); n != 1 {
+		t.Errorf("the track share after re-enabling serves %d, want 1", n)
+	}
+}
+
+// TestResolveShareHidesWhatTheOwnersRulesDeny: a tag rule added after a
+// link was minted narrows what it serves, and a target it hides
+// entirely stops resolving.
+func TestResolveShareHidesWhatTheOwnersRulesDeny(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	pids := genreTrackPIDs(t, f, "Lowercase", "Canonical")
+	ownerID, owner := shareOwner(t, f.ctx, f.svc, "publisher")
+	pl, err := f.svc.CreatePlaylist(f.ctx, owner, PlaylistCreate{Name: "Out", Kind: "static", ItemPIDs: pids})
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, err := f.svc.CreateShare(f.ctx, owner, pl.PID, 0, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	track, err := f.svc.CreateShare(f.ctx, owner, pids[1], 0, false, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	f.tag(t, "Canonical", "MOOD", "calm")
+	perms := DefaultPermissions()
+	perms.TagDeny = []TagRule{{Key: "MOOD", Value: "calm"}}
+	if _, err := f.svc.UpdateAccount(f.ctx, ownerID, AccountUpdate{Permissions: &perms}); err != nil {
+		t.Fatal(err)
+	}
+	if n := resolvedShare(t, f.ctx, f.svc, list.ID); n != 1 {
+		t.Errorf("the list share serves %d items, want the one the owner may still hear", n)
+	}
+	if n := resolvedShare(t, f.ctx, f.svc, track.ID); n != -1 {
+		t.Errorf("the denied track's share serves %d items, want not-found", n)
+	}
+}
+
+// TestPreviewTotalCountsOnlyWhatTheCallerCanSee: the preview counted a
+// rule over the whole catalog, so a restricted caller read how many
+// tracks matched `path contains ...` in libraries and under tag rules
+// that hid them, and the page beside it listed tag-denied titles.
+func TestPreviewTotalCountsOnlyWhatTheCallerCanSee(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	f.tag(t, "Canonical", "MOOD", "calm")
+	rule := SmartRule{Root: allMusic()}
+
+	mine, err := f.svc.PreviewRule(f.ctx, f.uc, rule, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mine.Total != 5 || len(mine.Items) != 5 {
+		t.Fatalf("unrestricted preview = %d of %d, want 5 of 5", len(mine.Items), mine.Total)
+	}
+	theirs, err := f.svc.PreviewRule(f.ctx, f.calmDenied(), rule, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if theirs.Total != 4 || len(theirs.Items) != 4 {
+		t.Errorf("restricted preview = %d of %d, want 4 of 4", len(theirs.Items), theirs.Total)
+	}
+	for _, it := range theirs.Items {
+		if it.Title == "Canonical" {
+			t.Errorf("the restricted preview lists the denied track")
+		}
+	}
+	blind, err := f.svc.PreviewRule(f.ctx, blindReader(t, f.ctx, f.svc, f.uc), rule, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if blind.Total != 0 || len(blind.Items) != 0 {
+		t.Errorf("a reader granted nothing previews %d of %d, want nothing", len(blind.Items), blind.Total)
+	}
+}
+
+// TestUploadDuplicateNamesOnlyWhatTheUploaderCanSee: the duplicate
+// warning copied the existing item's title and artist to whoever
+// uploaded matching bytes, so an uploader confined to one library learned
+// what the others hold.
+func TestUploadDuplicateNamesOnlyWhatTheUploaderCanSee(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	it, err := svc.getVisibleItem(ctx, uc, fixtureItemPIDs(t, ctx, svc, uc)[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(it.DisplayPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(raw)
+	params := UploadCreateParams{
+		FileName: "again.flac", SizeBytes: int64(len(raw)), MediaType: "music",
+		SHA256: hex.EncodeToString(sum[:]),
+	}
+
+	mine, err := svc.CreateUpload(ctx, uc, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mine.Duplicate == nil || mine.Duplicate.Title != it.Title {
+		t.Fatalf("the administrator's warning = %+v, want it to name %q", mine.Duplicate, it.Title)
+	}
+	blind := blindReader(t, ctx, svc, uc)
+	blind.UploadEnabled = true
+	theirs, err := svc.CreateUpload(ctx, blind, params)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if theirs.Duplicate == nil || theirs.Duplicate.Kind != "content" {
+		t.Fatalf("the restricted uploader's warning = %+v, want the content warning kept", theirs.Duplicate)
+	}
+	if theirs.Duplicate.Title != "" || theirs.Duplicate.Artist != "" {
+		t.Errorf("the restricted uploader's warning names the hidden item: %+v", theirs.Duplicate)
+	}
+}
+
+// A sync run's write backs off when the list changed since the run read
+// it: the edit made in between wins, and the run is retried later.
+func TestSyncedMembersBackOffAnEditMadeSinceTheRead(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	pids := fixtureItemPIDs(t, ctx, svc, uc)
+	created, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "Synced", Kind: "static", ItemPIDs: pids[:1]})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, bare, _ := parseAPIPID(created.PID)
+	read, err := svc.lib.Playlists().Get(ctx, bare)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.AddPlaylistItems(ctx, uc, created.PID, pids[1:2]); err != nil {
+		t.Fatal(err)
+	}
+	_, other, _ := parseAPIPID(pids[2])
+	if err := svc.setSyncedMembers(ctx, uc, read, []model.PID{other}); KindOf(err) != KindConflict {
+		t.Errorf("a run writing over an edit made since its read = %v, want a conflict", err)
+	}
+	if got := memberPIDs(t, ctx, svc, uc, created.PID); !slices.Equal(got, pids[:2]) {
+		t.Errorf("members = %v, want the edit's %v", got, pids[:2])
+	}
+}
+
+// The portable export pairs the catalog's ref export with a member read,
+// and the pairing must not slip when the list changes between the two:
+// with two members a reader cannot tell apart by kind, title and length,
+// one of them hidden from that reader, an edit racing the export may make
+// it refuse, and must never hand out the hidden one's ref.
+func TestPortableExportNeverPairsAcrossAnEdit(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	twin := func(name, artist string) fixtures.Spec {
+		s := genreTrack(name, "Twin", "Jazz", 3*time.Second)
+		s.Tags["ARTIST"] = artist
+		return s
+	}
+	if _, err := fixtures.Generate(f.libDir, twin("twin-seen", "Seen Twin"), twin("twin-hidden", "Hidden Twin")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.lib.Scan(f.ctx, waxbin.ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	byArtist := map[string]string{}
+	page, err := f.svc.Items(f.ctx, f.uc, ItemFilter{}, "", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range page.Items {
+		if row.Title == "Twin" {
+			byArtist[row.Artist] = row.PID
+		}
+	}
+	seen, hidden := byArtist["Seen Twin"], byArtist["Hidden Twin"]
+	if seen == "" || hidden == "" {
+		t.Fatalf("twins = %v", byArtist)
+	}
+	if _, err := f.svc.SetItemTag(f.ctx, f.uc, hidden, "MOOD", []string{"calm"}, false, false); err != nil {
+		t.Fatal(err)
+	}
+	pl, err := f.svc.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{
+		Name: "Twins", Kind: "static", Visibility: "shared", ItemPIDs: []string{hidden, seen},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kid := f.calmDenied()
+
+	stop, flipped := make(chan struct{}), make(chan struct{})
+	quiet := func() {
+		select {
+		case <-stop:
+		default:
+			close(stop)
+		}
+		<-flipped
+	}
+	defer quiet()
+	go func() {
+		defer close(flipped)
+		orders := [][]string{{seen, hidden}, {hidden, seen}}
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if err := f.svc.ReplacePlaylistItems(f.ctx, f.uc, pl.PID, orders[i%2], nil); err != nil {
+				t.Error(err)
+				return
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}()
+	export := func() ([]PortableRefDTO, error) {
+		t.Helper()
+		_, refs, err := f.svc.ExportPlaylistPortable(f.ctx, kid, pl.PID)
+		for _, r := range refs {
+			if r.Artist == "Hidden Twin" {
+				t.Fatalf("an export handed out the hidden twin's ref: %+v", r)
+			}
+		}
+		return refs, err
+	}
+	for range 60 {
+		if _, err := export(); err != nil && KindOf(err) != KindConflict {
+			t.Fatal(err)
+		}
+	}
+	// Once the list holds still, the export goes through.
+	quiet()
+	if refs, err := export(); err != nil || len(refs) != 1 || refs[0].Artist != "Seen Twin" {
+		t.Errorf("the export of a quiet list = %+v, %v; want the seen twin alone", refs, err)
+	}
+}
+
+// A static list whose members cannot be added is taken back whole: the
+// create and the add are two writes behind one call, and a failure must
+// not leave an empty list behind for a retry to duplicate.
+func TestCreatePlaylistLeavesNothingWhenItsMembersFail(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	pids := fixtureItemPIDs(t, ctx, svc, uc)
+	execCatalog(t, svc.catalogPath, `CREATE TRIGGER refuse_members BEFORE INSERT ON playlist_item
+		BEGIN SELECT RAISE(ABORT, 'refused'); END`)
+	if _, err := svc.CreatePlaylist(ctx, uc, PlaylistCreate{Name: "Doomed", Kind: "static", ItemPIDs: pids[:1]}); err == nil {
+		t.Fatal("a create whose members failed answered success")
+	}
+	page, err := svc.Playlists(ctx, uc, "", "", 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pl := range page.Playlists {
+		if pl.Name == "Doomed" {
+			t.Errorf("the failed create left %+v behind", pl)
+		}
 	}
 }

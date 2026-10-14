@@ -23,7 +23,7 @@ part 'user_account.g.dart';
 /// * [uploadEnabled] - Whether the account may upload audio. On self views (login, session) this is the *effective* value - administrators always may, whatever their stored flag says - and clients gate their upload affordances on it. On administrative account views (`UserAccount`) it is the stored per-account flag the account editor round-trips; an administrator's own stored flag may therefore read false while their effective right is true. Defined once here because the generators flatten `UserAccount`'s `allOf` over this schema; a duplicate declaration there would silently lose. 
 /// * [managePodcasts] - Whether the account may curate podcasts. Self views carry the *effective* value (administrators always may), so clients gate their podcast-curation affordances - adding shows, setting a show's cover - on it without a second read. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. 
 /// * [delete] - Whether the account may move visible library items to the recoverable trash. Self views carry the *effective* value (administrators always may), so clients gate destructive affordances - deleting items, a synced playlist's `mirror-trash` mode - on it without a second read. Permanent deletion stays admin-only regardless. Absent on administrative account views: the stored per-account flag lives in `permissions` there, and this field would only shadow it. 
-/// * [disabled] - Disabled accounts cannot log in and their live sessions are revoked on disable. 
+/// * [disabled] - Disabled accounts cannot log in; disabling revokes their live sessions and closes the sockets those opened. 
 /// * [pending] - True for a self-serve registration still awaiting an administrator's decision. Pending accounts cannot log in; approve or reject them through the signup request endpoints. 
 /// * [libraryAccess] 
 /// * [permissions] 
@@ -51,7 +51,7 @@ abstract class UserAccount implements User, Built<UserAccount, UserAccountBuilde
   @BuiltValueField(wireName: r'libraryAccess')
   LibraryAccess get libraryAccess;
 
-  /// Disabled accounts cannot log in and their live sessions are revoked on disable. 
+  /// Disabled accounts cannot log in; disabling revokes their live sessions and closes the sockets those opened. 
   @BuiltValueField(wireName: r'disabled')
   bool get disabled;
 

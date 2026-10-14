@@ -219,10 +219,16 @@ func TestStarterPlaylistFollowsApproval(t *testing.T) {
 }
 
 // starterUserCtx is one account's own context, for reading its
-// playlists as itself rather than as the admin that made it.
+// playlists as itself rather than as the admin that made it. Built from
+// the row, since UserCtxByID refuses the pending and disabled accounts
+// these tests read.
 func starterUserCtx(t *testing.T, ctx context.Context, svc *Library, userID string) *UserCtx {
 	t.Helper()
-	uc, err := svc.UserCtxByID(ctx, userID)
+	u, err := svc.db.UserByID(ctx, userID)
+	if err != nil {
+		t.Fatalf("reading account %s: %v", userID, err)
+	}
+	uc, err := svc.UserCtx(ctx, u)
 	if err != nil {
 		t.Fatalf("user context for %s: %v", userID, err)
 	}

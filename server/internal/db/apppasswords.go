@@ -40,6 +40,21 @@ func (d *DB) InsertAppPassword(ctx context.Context, ap *AppPassword, cap int) (b
 	return n > 0, nil
 }
 
+// AppPasswordHeld reports whether the account still holds the app
+// password: one key probe, for a check made on every media fetch.
+func (d *DB) AppPasswordHeld(ctx context.Context, userID, id string) (bool, error) {
+	var one int
+	err := d.r.QueryRowContext(ctx,
+		`SELECT 1 FROM app_passwords WHERE id = ? AND user_id = ?`, id, userID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("db: probing app password: %w", err)
+	}
+	return true, nil
+}
+
 // AppPasswordsByUser lists one user's app passwords, newest first.
 func (d *DB) AppPasswordsByUser(ctx context.Context, userID string) ([]AppPassword, error) {
 	rows, err := d.r.QueryContext(ctx, `

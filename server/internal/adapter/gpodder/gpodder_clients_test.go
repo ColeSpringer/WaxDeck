@@ -165,9 +165,28 @@ func TestGpodderClientAntennaPod(t *testing.T) {
 	}
 
 	// Sign out; the protocol answers 200 and the app forgets the
-	// cookie.
+	// cookie. The sign-out is the phone's alone: the tablet, signed in
+	// with the same app password, keeps syncing on its own cookie.
 	status, b := phone.request("POST", "/api/2/auth/alice/logout.json", "", false)
 	if status != http.StatusOK {
 		t.Fatalf("logout status = %d: %s", status, b)
 	}
+	tablet.mustJSON("GET", "/api/2/devices/alice.json", "", &devices)
+
+	// Revoking the app password ends the tablet's session at its next
+	// call, and the app's recovery - a fresh login with a new app
+	// password - works.
+	if err := e.svc.RevokeAppPassword(e.ctx, e.uc, e.apID); err != nil {
+		t.Fatal(err)
+	}
+	if status, b := tablet.request("GET", "/api/2/devices/alice.json", "", false); status != http.StatusUnauthorized {
+		t.Fatalf("the tablet after the revoke = %d: %s, want 401", status, b)
+	}
+	fresh, err := e.svc.CreateAppPassword(e.ctx, e.uc, "antennapod again")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.secret = fresh.Secret
+	tablet.login()
+	tablet.mustJSON("GET", "/api/2/devices/alice.json", "", &devices)
 }

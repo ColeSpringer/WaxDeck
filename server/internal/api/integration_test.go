@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -379,7 +380,10 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 				return
 			}
 			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
-			fmt.Fprint(w, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=160000\nmedia.m3u8?v=1&sig=child\n")
+			// A child's v is its descriptor, naming the timeline as the
+			// real daemon's does.
+			v := base64.RawURLEncoding.EncodeToString([]byte(`{"ver":1,"tl":"tl-fake-digest","format":"aac"}`))
+			fmt.Fprint(w, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=160000\nmedia.m3u8?v="+v+"&sig=child\n")
 		case "/jobs":
 			// One-shot analyze jobs finish instantly in the fake.
 			fmt.Fprint(w, `{"schemaVersion":2,"id":"job1","state":"done",

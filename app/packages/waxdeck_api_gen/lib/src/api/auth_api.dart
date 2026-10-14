@@ -525,7 +525,7 @@ class AuthApi {
   }
 
   /// Log in and establish a session
-  /// Verifies local-account credentials, establishes a session, and sets the &#x60;waxdeck_session&#x60; HttpOnly cookie. Native clients use the same endpoint and read the bearer token from the response body instead of the cookie; passing &#x60;deviceName&#x60; labels the session in the device list. Invalid credentials and disabled accounts answer 401 without distinguishing the two. Repeated failures are rate limited per source and account. 
+  /// Verifies local-account credentials, establishes a session, and sets the &#x60;waxdeck_session&#x60; HttpOnly cookie. Native clients use the same endpoint and read the bearer token from the response body instead of the cookie; passing &#x60;deviceName&#x60; labels the session in the device list. Invalid credentials and disabled accounts answer 401 without distinguishing the two. Repeated failures are rate limited per source and account. An account holds at most a server-configured number of sessions (250 unless the operator changes it); signing in past that ends its least recently used one. 
   ///
   /// Parameters:
   /// * [loginRequest] 
@@ -620,7 +620,7 @@ class AuthApi {
   }
 
   /// End the current session
-  /// Revokes the presented session (cookie or bearer token) and clears the session cookie. Succeeds even if no session is active. 
+  /// Revokes the presented session (cookie or bearer token), closes any WebSocket it opened, and clears the session cookie. Succeeds even if no session is active. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -943,7 +943,7 @@ class AuthApi {
   }
 
   /// Revoke one of the caller&#39;s sessions
-  /// Revokes one of the calling user&#39;s sessions immediately: the device holding it is signed out and its next request fails with 401. Revoking the session serving this request is allowed and acts as a logout (the response then also expires the session cookie). Only the caller&#39;s own sessions are visible here; an administrator signs another user out via that user&#39;s account endpoints. 
+  /// Revokes one of the calling user&#39;s sessions immediately: the device holding it is signed out, any WebSocket it opened closes, and its next request fails with 401. Revoking the session serving this request is allowed and acts as a logout (the response then also expires the session cookie). Only the caller&#39;s own sessions are visible here; an administrator signs another user out via that user&#39;s account endpoints. 
   ///
   /// Parameters:
   /// * [sessionId] - Session PID (e.g. `se-01JZX5N8QW3F4V9T2B7KD3M9R6`).

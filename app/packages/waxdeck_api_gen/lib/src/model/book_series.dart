@@ -13,7 +13,7 @@ part 'book_series.g.dart';
 /// Properties:
 /// * [pid] - Series PID.
 /// * [name] - The series name, as the books' tags spell it.
-/// * [bookCount] - Books in the series that this account can see.
+/// * [bookCount] - Books in the series, answered only to an account that sees every book: every library open to it and no tag rule narrowing what it sees. 
 /// * [totalDurationMs] - Their combined running time.
 @BuiltValue()
 abstract class BookSeries implements Built<BookSeries, BookSeriesBuilder> {
@@ -25,7 +25,7 @@ abstract class BookSeries implements Built<BookSeries, BookSeriesBuilder> {
   @BuiltValueField(wireName: r'name')
   String get name;
 
-  /// Books in the series that this account can see.
+  /// Books in the series, answered only to an account that sees every book: every library open to it and no tag rule narrowing what it sees. 
   @BuiltValueField(wireName: r'bookCount')
   int? get bookCount;
 

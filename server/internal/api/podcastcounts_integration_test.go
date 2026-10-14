@@ -403,3 +403,40 @@ func TestShowCountsZeroCases(t *testing.T) {
 		t.Errorf("undated show lastPublishedAt = %v, want absent", *row.Show.LastPublishedAt)
 	}
 }
+
+// A shared list holding a flagged episode counts it only for readers who
+// may hear it: the listing drops it for an account without explicit
+// content, and the count is a query, so the advisory flags have to ride
+// the query too or the number reads higher than the rows.
+func TestPlaylistCountHidesFlaggedEpisodesFromANonExplicitReader(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	feed := newCountsFeed(t, []countsEpisode{
+		{title: "Clean One"},
+		{title: "Explicit One", explicit: true},
+	})
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+	listener := restrictedListener(t, h, "shielded")
+	resp = reqAs(t, h, "POST", "/api/v1/podcasts", listener, map[string]any{"url": feed.feedURL()})
+	resp.Body.Close()
+
+	var episodes []string
+	for _, ep := range decode[EpisodePage](t, get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)).Items {
+		episodes = append(episodes, ep.Pid)
+	}
+	resp = h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Both", "kind": "static", "visibility": "shared", "itemPids": episodes,
+	})
+	pl := decode[Playlist](t, resp)
+
+	items := decode[PlaylistItemsPage](t, reqAs(t, h, "GET",
+		"/api/v1/playlists/"+pl.Pid+"/items", listener, nil)).Entries
+	if len(items) != 1 {
+		t.Fatalf("restricted listing holds %d episodes, want the clean one", len(items))
+	}
+	theirs := decode[Playlist](t, reqAs(t, h, "GET", "/api/v1/playlists/"+pl.Pid, listener, nil))
+	if theirs.ItemCount == nil || *theirs.ItemCount != 1 {
+		t.Errorf("restricted count = %v, want 1", theirs.ItemCount)
+	}
+}

@@ -56,11 +56,14 @@ const maxCoverArtSize = service.ArtSizeMax
 // when streaming is not configured.
 type streamer interface {
 	PlayInfoFor(ctx context.Context, user, apiItemPID string, opts flow.PlayOptions) (flow.PlayInfo, error)
+	Up() bool
 }
 
 // Handler serves /rest/*.
 type Handler struct {
-	svc     *service.Library
+	svc *service.Library
+	// bridge may hold a nil *flow.Bridge, which answers Up false: ask Up,
+	// never compare the field with nil.
 	bridge  streamer
 	media   *auth.MediaTokens
 	version string
@@ -89,6 +92,7 @@ type Handler struct {
 // per caller, so a cache keyed on the pid alone would leak.
 type playlistTotalKey struct {
 	userID string
+	scope  string // the caller's ScopeKey: a grant or rule change misses
 	pid    string
 }
 
@@ -115,11 +119,7 @@ const playlistTotalsCap = 4096
 // (media mints the tokens), refusing only span-carved tracks it
 // cannot cut.
 func New(svc *service.Library, bridge *flow.Bridge, media *auth.MediaTokens, version string, log *slog.Logger) *Handler {
-	h := &Handler{svc: svc, media: media, version: version, log: log}
-	if bridge != nil {
-		h.bridge = bridge
-	}
-	return h
+	return &Handler{svc: svc, bridge: bridge, media: media, version: version, log: log}
 }
 
 // ServeHTTP dispatches one /rest/ request: authenticate, route, render.
@@ -131,11 +131,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	view := strings.TrimPrefix(r.URL.Path, "/rest/")
 	view = strings.TrimSuffix(view, ".view")
 
-	u, code, msg := h.authenticate(r)
+	u, appPasswordID, code, msg := h.authenticate(r)
 	if u == nil {
 		h.fail(w, r, code, msg)
 		return
 	}
+	// Media URLs a verb mints die with the app password that asked.
+	r = r.WithContext(context.WithValue(r.Context(), credKey{}, "ap:"+appPasswordID))
 	uc, err := h.svc.UserCtx(r.Context(), u)
 	if err != nil {
 		h.fail(w, r, 0, "resolving user failed")
@@ -195,8 +197,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.search3(w, r, uc)
 	case "getCoverArt":
 		h.getCoverArt(w, r, uc)
-	case "stream", "download":
+	case "stream":
 		h.stream(w, r, uc)
+	case "download":
+		h.download(w, r, uc)
 	case "getPlaylists":
 		h.getPlaylists(w, r, uc)
 	case "getPlaylist":
@@ -257,28 +261,38 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // OpenSubsonic apiKey scheme or classic salted-token auth, both against
 // app passwords only. The login password never works here, and failures
 // answer identically so the surface confirms no account's existence.
-func (h *Handler) authenticate(r *http.Request) (*wdb.User, int, string) {
+// authenticate answers the account and the app password it presented.
+func (h *Handler) authenticate(r *http.Request) (*wdb.User, string, int, string) {
 	if key := r.Form.Get("apiKey"); key != "" {
-		u, err := h.svc.VerifyAppPasswordKey(r.Context(), key)
+		u, id, err := h.svc.VerifyAppPasswordKey(r.Context(), key)
 		if err != nil || u == nil {
-			return nil, 44, "invalid API key"
+			return nil, "", 44, "invalid API key"
 		}
-		return u, 0, ""
+		return u, id, 0, ""
 	}
 	username := r.Form.Get("u")
 	token := r.Form.Get("t")
 	salt := r.Form.Get("s")
 	if username == "" || token == "" || salt == "" {
 		if r.Form.Get("p") != "" {
-			return nil, 41, "password authentication is not supported; use token authentication with an app password"
+			return nil, "", 41, "password authentication is not supported; use token authentication with an app password"
 		}
-		return nil, 10, "missing authentication parameters"
+		return nil, "", 10, "missing authentication parameters"
 	}
-	u, err := h.svc.VerifyAppPasswordToken(r.Context(), username, token, salt)
+	u, id, err := h.svc.VerifyAppPasswordToken(r.Context(), username, token, salt)
 	if err != nil || u == nil {
-		return nil, 40, "wrong username or password"
+		return nil, "", 40, "wrong username or password"
 	}
-	return u, 0, ""
+	return u, id, 0, ""
+}
+
+// credKey carries the credential a request authenticated with to the
+// verbs that mint media URLs.
+type credKey struct{}
+
+func credOf(r *http.Request) string {
+	cred, _ := r.Context().Value(credKey{}).(string)
+	return cred
 }
 
 // getUser answers the caller's account and what it may do. Clients call
@@ -661,7 +675,7 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	// Without the streaming engine the original bytes serve directly.
 	// Subsonic clients cannot clip, so a track carved out of a larger
 	// file is the one thing this mode must refuse.
-	if h.bridge == nil {
+	if !h.bridge.Up() {
 		if h.media == nil {
 			h.fail(w, r, 0, "streaming is not configured on this server")
 			return
@@ -678,7 +692,9 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 			h.fail(w, r, 0, "this track is a window into a larger file; playing it needs the streaming engine")
 			return
 		}
-		token, _ := h.media.Mint(uc.ID, id)
+		token, _ := h.media.MintFor(auth.MediaClaims{
+			User: uc.ID, Cred: credOf(r), Purpose: auth.PurposeStream, PID: id,
+		}, 0)
 		http.Redirect(w, r, "/media/download?pid="+url.QueryEscape(id)+
 			"&mt="+url.QueryEscape(token)+"&id="+url.QueryEscape(res.File.ETag), http.StatusFound)
 		return
@@ -695,7 +711,7 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	// silence on a client that asked for the best quality it could
 	// play. A format on its own still changes nothing: without a cap
 	// there is no encode to aim.
-	opts := flow.PlayOptions{}
+	opts := flow.PlayOptions{Cred: credOf(r)}
 	format := strings.ToLower(strings.TrimSpace(r.Form.Get("format")))
 	if br := formInt(r, "maxBitRate", 0); br > 0 && format != "raw" {
 		// Passed on as asked: the protocol has no way to refuse a number
@@ -736,10 +752,54 @@ func (h *Handler) redirectToEnclosure(w http.ResponseWriter, r *http.Request, us
 	if _, ok := h.svc.PassthroughEpisode(r.Context(), userID, id); !ok {
 		return false
 	}
-	token, _ := h.media.Mint(userID, id)
+	token, _ := h.media.MintFor(auth.MediaClaims{
+		User: userID, Cred: credOf(r), Purpose: auth.PurposeEnclosure, PID: id,
+	}, 0)
 	http.Redirect(w, r, "/media/enclosure?pid="+url.QueryEscape(id)+
 		"&mt="+url.QueryEscape(token), http.StatusFound)
 	return true
+}
+
+// download serves the protocol's untouched original, which is what the
+// download right governs: refused without it (error 50), resolved with
+// the visibility download-info applies, and never transcoded, so
+// maxBitRate and format do not apply.
+func (h *Handler) download(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
+	id := r.Form.Get("id")
+	if id == "" {
+		h.fail(w, r, 10, "missing id")
+		return
+	}
+	if !uc.Admin && !uc.Download {
+		h.fail(w, r, 50, "this account cannot download originals")
+		return
+	}
+	if h.media == nil {
+		h.fail(w, r, 0, "downloads are not configured on this server")
+		return
+	}
+	res, err := h.svc.DownloadInfo(r.Context(), uc, id)
+	if err != nil {
+		// An episode whose audio was never fetched has its original at
+		// the feed, which the relay serves untouched, as stream does.
+		if h.redirectToEnclosure(w, r, uc.ID, id, err) {
+			return
+		}
+		h.failFromService(w, r, err, "no such song")
+		return
+	}
+	// One song is one file to a Subsonic client: a book in parts, or a
+	// track carved out of a larger file, has no such file to hand over.
+	if len(res.Files) != 1 || res.HasSpan {
+		h.fail(w, r, 0, "this item is not one whole file; download it from the WaxDeck app")
+		return
+	}
+	f := res.Files[0]
+	token, _ := h.media.MintFor(auth.MediaClaims{
+		User: uc.ID, Cred: credOf(r), Purpose: auth.PurposeDownload, PID: id,
+	}, 0)
+	http.Redirect(w, r, "/media/download?pid="+url.QueryEscape(id)+"&mt="+url.QueryEscape(token)+
+		"&f="+url.QueryEscape(f.FilePID)+"&id="+url.QueryEscape(f.ETag), http.StatusFound)
 }
 
 // --- the entity-keyed index --------------------------------------------------

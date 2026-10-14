@@ -101,7 +101,7 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 			// learn something a 404 says for free. A renderer handed a
 			// URL that 404s draws no art, which is what it would have
 			// done without the URL.
-			token, _ := r.Media.MintFor(userID, e.PID, ttl)
+			token, _ := r.Media.MintFor(auth.MediaClaims{User: userID, Purpose: auth.PurposeArt, PID: e.PID}, ttl)
 			art = base + mediaArtURL(e.PID, token, castArtSize)
 		}
 		// A multi-file audiobook lays out as one item per part,
@@ -145,7 +145,7 @@ func (r *ConnectResolver) StreamItems(ctx context.Context, userID string, entrie
 // why they take their own path.
 func (r *ConnectResolver) wholeItem(ctx context.Context, uc *service.UserCtx, userID string, e connect.QueueEntry, d delivery) (connect.MediaItem, error) {
 	item := connect.MediaItem{PID: e.PID, Title: e.Title, Artist: e.Artist, DurationMS: e.DurationMS}
-	if r.Bridge != nil {
+	if r.Bridge.Up() {
 		// The stored voice boost setting routes here exactly as it does
 		// at play-info: a device endpoint has no local DSP, so the
 		// engine applies it server side when the user asked.
@@ -196,7 +196,7 @@ func (r *ConnectResolver) partItem(ctx context.Context, userID string, e connect
 		DurationMS:  piece.Part.DurationMS,
 		PartStartMS: piece.Part.StartMS,
 	}
-	if r.Bridge != nil {
+	if r.Bridge.Up() {
 		info, err := r.Bridge.PlayInfoForSource(ctx, userID, e.PID, piece.Src, flow.PlayOptions{
 			TTL:           d.ttl,
 			ForceFormat:   d.force,
@@ -220,7 +220,7 @@ func (r *ConnectResolver) partItem(ctx context.Context, userID string, e connect
 // multi-file book, the same selector play-info hangs on a download
 // URL: the pid names the book, and this names the file inside it.
 func (r *ConnectResolver) downloadURL(userID, pid, etag, filePID string, d delivery) string {
-	token, _ := r.Media.MintFor(userID, pid, d.ttl)
+	token, _ := r.Media.MintFor(auth.MediaClaims{User: userID, Purpose: auth.PurposeStream, PID: pid}, d.ttl)
 	u := d.base + "/media/download?pid=" + url.QueryEscape(pid) +
 		"&mt=" + url.QueryEscape(token) + "&id=" + url.QueryEscape(etag)
 	if filePID != "" {
@@ -240,19 +240,34 @@ func (r *ConnectResolver) downloadURL(userID, pid, etag, filePID string, d deliv
 // the seamless render until the book leaves - a queue mixing the two is
 // rare, and its crossfade would be zeroed at the book anyway.
 func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries []connect.QueueEntry, base string) (*connect.TimelineMedia, error) {
-	if r.Bridge == nil || !r.Bridge.TimelinesSupported() {
+	if !r.Bridge.Up() || !r.Bridge.TimelinesSupported() {
 		return nil, nil
 	}
 	// The session owner's, not the caller's: a household member with
 	// permission to drive somebody else's cast session must not have
 	// their own crossfade rewrite how it sounds mid-queue.
 	prefs := r.Svc.PrefsForUser(ctx, userID)
+	// The queue is the session's stored one, hydrated against the
+	// owner's reach when it was set; a grant or rule may have narrowed
+	// since. An entry the owner can no longer see mints no timeline, and
+	// the per-item load, which refuses it, answers instead.
+	reach, uc, err := r.Svc.TimelineReach(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	opts := flow.TimelineOptions{
+		Cred:             reach,
 		CrossfadeSeconds: prefs.CrossfadeSeconds,
 		ReplayGain:       prefs.ReplayGain,
 	}
 	members := make([]flow.TimelineMember, 0, len(entries))
 	for _, e := range entries {
+		if err := r.Svc.VisibleItem(ctx, uc, e.PID); err != nil {
+			if service.KindOf(err) == service.KindNotFound {
+				return nil, nil
+			}
+			return nil, err
+		}
 		parts, err := r.Svc.BookParts(ctx, e.PID)
 		if err != nil {
 			return nil, err
@@ -638,11 +653,11 @@ func (s *Server) TransferPlaybackSession(ctx context.Context, req TransferPlayba
 }
 
 func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelineRequestObject) (CreateQueueTimelineResponseObject, error) {
-	uc, p, err := s.requireUserCtx(ctx)
-	if err != nil {
-		return nil, err
+	p, ok := principalFromContext(ctx)
+	if !ok {
+		return CreateQueueTimeline401JSONResponse{UnauthenticatedJSONResponse(errObj("unauthenticated", "no valid session or token was presented"))}, nil
 	}
-	if s.bridge == nil || !s.bridge.TimelinesSupported() {
+	if !s.bridge.Up() || !s.bridge.TimelinesSupported() {
 		return CreateQueueTimeline501JSONResponse{FeatureUnavailableJSONResponse(errObj("feature-unavailable", "queue timelines need the streaming engine"))}, nil
 	}
 	body := req.Body
@@ -667,7 +682,18 @@ func (s *Server) CreateQueueTimeline(ctx context.Context, req CreateQueueTimelin
 			formats = append(formats, string(f))
 		}
 	}
+	// The rules come with the reach rather than off the principal, whose
+	// copy of the account was read before either.
+	cred, uc, err := s.svc.TimelineReach(ctx, p.User.ID)
+	if err != nil {
+		return nil, err
+	}
+	// The queue's URL outlives a stream's, so it dies with the session too.
+	if se := sessionCred(p); se != "" {
+		cred += "," + se
+	}
 	opts := flow.TimelineOptions{
+		Cred:             cred,
 		CrossfadeSeconds: crossfade,
 		ReplayGain:       s.svc.PrefsForUser(ctx, p.User.ID).ReplayGain,
 		Formats:          formats,
@@ -894,7 +920,9 @@ func (s *Server) ProbeCastEndpoint(ctx context.Context, req ProbeCastEndpointReq
 	// device fetches it from. Each address gets its own marker on the
 	// URL, so a request arriving back here says which one the device
 	// could reach.
-	token, _ := s.media.MintFor(p.User.ID, probePID, probeTokenTTL)
+	token, _ := s.media.MintFor(auth.MediaClaims{
+		User: p.User.ID, Cred: sessionCred(p), Purpose: auth.PurposeProbe, PID: probePID,
+	}, probeTokenTTL)
 	s.probes.begin(token)
 	defer s.probes.end(token)
 	markers := map[string]string{}

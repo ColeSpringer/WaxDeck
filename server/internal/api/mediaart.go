@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -50,9 +51,11 @@ func (s *Server) ServeMediaArt(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid-request", "pid is required")
 		return
 	}
-	user, err := s.media.Verify(q.Get("mt"), pid)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthenticated", "missing, expired, or wrong media token")
+	// The token names a user, and artwork follows that user's reach
+	// exactly as it does on the session-authenticated read, re-checked on
+	// every fetch so a grant revoked mid-queue stops serving.
+	_, uc, ok := s.verifiedMedia(w, r, q.Get("mt"), auth.MediaWant{Purposes: []string{auth.PurposeArt}, PID: pid})
+	if !ok {
 		return
 	}
 	size := castArtSize
@@ -64,17 +67,7 @@ func (s *Server) ServeMediaArt(w http.ResponseWriter, r *http.Request) {
 		}
 		size = n
 	}
-	// The token names a user, and artwork follows that user's library
-	// visibility exactly as it does on the session-authenticated read.
-	// A token minted for an item the holder could see stays bound to
-	// that item, so this re-resolve is belt and braces rather than the
-	// only guard, and it is what keeps a grant revoked mid-queue from
-	// continuing to serve.
-	uc, err := s.svc.UserCtxByID(r.Context(), user)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthenticated", "the token's account no longer exists")
-		return
-	}
+
 	blob, err := s.svc.Art(r.Context(), uc, pid, "front", size)
 	if err != nil {
 		switch service.KindOf(err) {

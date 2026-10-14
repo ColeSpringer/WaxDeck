@@ -295,6 +295,12 @@ Every entry carries a gate tag saying what actually blocks it:
   `WAXDECK_ALLOW_PRIVATE_FEED_HOSTS` is on, so it wants a decision on
   whether a configured mirror is exempt.
 
+- `[roadmap]` **An upload's duplicate warning names the matched item's
+  pid to an uploader who cannot see it.** The title and artist are
+  withheld; the pid stays because `DuplicateWarning` requires it, and it
+  opens nothing to that uploader. The upload review rework, which
+  reshapes the warning, withdraws it.
+
 ## Localization
 
 - `[in-repo]` **RTL is uncertified.** It rides the first Arabic or

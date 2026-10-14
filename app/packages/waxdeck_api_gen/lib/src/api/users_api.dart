@@ -687,7 +687,7 @@ class UsersApi {
   }
 
   /// List the caller&#39;s app passwords
-  /// The calling user&#39;s app passwords, newest first. App passwords are dedicated per-client credentials for the compatibility APIs (Subsonic and, later, gpodder), which require the server to hold a recoverable secret; the login password is never usable there. The secret itself is only ever returned by creation. App passwords stop authenticating the moment their account is disabled, and are deliberately independent of the login password: changing or resetting it leaves them working (revoke them here). Unpaginated: a user&#39;s app passwords are a small, bounded set. 
+  /// The calling user&#39;s app passwords, newest first. App passwords are dedicated per-client credentials for the compatibility APIs (Subsonic and gpodder), which require the server to hold a recoverable secret; the login password is never usable there. The secret itself is only ever returned by creation. App passwords stop authenticating the moment their account is disabled, and are deliberately independent of the login password: changing or resetting it leaves them working (revoke them here). Unpaginated: a user&#39;s app passwords are a small, bounded set. 
   ///
   /// Parameters:
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
@@ -1207,7 +1207,7 @@ class UsersApi {
   }
 
   /// Revoke an app password
-  /// Revokes one of the calling user&#39;s app passwords. Clients holding it fail their next compatibility-API request immediately. 
+  /// Revokes one of the calling user&#39;s app passwords. Clients holding it fail their next compatibility-API request immediately, and so do the gpodder sessions it opened and the media URLs it minted. 
   ///
   /// Parameters:
   /// * [appPasswordId] - App password PID (e.g. `ap-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -1323,7 +1323,7 @@ class UsersApi {
   }
 
   /// Revoke all of an account&#39;s sessions
-  /// Signs the account out everywhere by revoking every live session it has. When callers target their own account, the session making this request survives. Administrators can target any account; everyone else only their own. 
+  /// Signs the account out everywhere by revoking every live session it has and closing the WebSockets they opened, and ends its gpodder logins (app passwords stay valid, so those clients log in again). When callers target their own account, the session making this request survives. Administrators can target any account; everyone else only their own. Recorded in the audit log as &#x60;user.sessions-revoke&#x60;. 
   ///
   /// Parameters:
   /// * [userId] - User PID (e.g. `us-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -1381,7 +1381,7 @@ class UsersApi {
   }
 
   /// Set an account&#39;s password
-  /// Changes the account&#39;s password and revokes the account&#39;s sessions. Changing your own password always requires &#x60;currentPassword&#x60; (administrators included); a wrong value answers &#x60;forbidden&#x60;, and the session making the request is the only one that survives. An administrator resetting another account&#39;s password omits &#x60;currentPassword&#x60;, and every one of that account&#39;s sessions is revoked. Setting a password on an OIDC-provisioned account enables local login for it. App passwords are separate credentials and survive a password change; revoke them individually. 
+  /// Changes the account&#39;s password and revokes the account&#39;s sessions. Changing your own password always requires &#x60;currentPassword&#x60; (administrators included); a wrong value answers &#x60;forbidden&#x60;, and the session making the request is the only one that survives. An administrator resetting another account&#39;s password omits &#x60;currentPassword&#x60;, and every one of that account&#39;s sessions is revoked (recorded in the audit log as &#x60;user.password-reset&#x60;). Setting a password on an OIDC-provisioned account enables local login for it. App passwords are separate credentials and survive a password change; revoke them individually. 
   ///
   /// Parameters:
   /// * [userId] - User PID (e.g. `us-01JZX5N8QW3F4V9T2B7KD3M9R6`).

@@ -118,3 +118,34 @@ func TestEntityStateRejectsNonEntityPIDs(t *testing.T) {
 		t.Errorf("out-of-range rating: kind = %v, want invalid-request", KindOf(err))
 	}
 }
+
+// A caller a tag rule shuts out of every track of an album cannot read,
+// star or rate it, and their starred list drops it.
+func TestEntityStateHidesAFullyDeniedAlbum(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	album := apiPID(PrefixAlbum, f.itemNamed(t, "Canonical").AlbumPID)
+	if _, err := f.svc.SetEntityStar(f.ctx, f.uc, album, true, nil); err != nil {
+		t.Fatal(err)
+	}
+	f.tagAllCalm(t)
+	kid := f.calmDenied()
+
+	if _, err := f.svc.EntityPlayStateFor(f.ctx, kid, album); KindOf(err) != KindNotFound {
+		t.Errorf("read = %v, want not-found", err)
+	}
+	if _, err := f.svc.SetEntityStar(f.ctx, kid, album, false, nil); KindOf(err) != KindNotFound {
+		t.Errorf("star = %v, want not-found", err)
+	}
+	rating := 60
+	if _, err := f.svc.SetEntityRating(f.ctx, kid, album, &rating, nil); KindOf(err) != KindNotFound {
+		t.Errorf("rating = %v, want not-found", err)
+	}
+	list, err := f.svc.StarredEntities(f.ctx, kid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Albums) != 0 {
+		t.Errorf("starred albums = %+v, want the denied album dropped", list.Albums)
+	}
+}

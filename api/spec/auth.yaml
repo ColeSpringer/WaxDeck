@@ -13,7 +13,9 @@ paths:
         the cookie; passing `deviceName` labels the session in the device
         list. Invalid credentials and disabled accounts answer 401 without
         distinguishing the two. Repeated failures are rate limited per
-        source and account.
+        source and account. An account holds at most a server-configured
+        number of sessions (250 unless the operator changes it); signing
+        in past that ends its least recently used one.
       tags: [auth]
       security: []
       requestBody:
@@ -46,8 +48,9 @@ paths:
       operationId: logout
       summary: End the current session
       description: >
-        Revokes the presented session (cookie or bearer token) and clears the
-        session cookie. Succeeds even if no session is active.
+        Revokes the presented session (cookie or bearer token), closes any
+        WebSocket it opened, and clears the session cookie. Succeeds even if
+        no session is active.
       tags: [auth]
       security: []
       responses:
@@ -267,7 +270,8 @@ paths:
       summary: Revoke one of the caller's sessions
       description: >
         Revokes one of the calling user's sessions immediately: the device
-        holding it is signed out and its next request fails with 401.
+        holding it is signed out, any WebSocket it opened closes, and its
+        next request fails with 401.
         Revoking the session serving this request is allowed and acts as
         a logout (the response then also expires the session cookie).
         Only the caller's own sessions are visible here; an administrator

@@ -717,11 +717,17 @@ func facetLess(a, b FacetBucket) bool {
 // answers "the albums this artist is credited on" as album buckets
 // rather than as a download of item rows.
 func (l *Library) facetScopeBuilder(ctx context.Context, uc *UserCtx) *query.Builder {
+	return l.scopedTo(ctx, uc, visibleItems())
+}
+
+// scopedTo narrows a builder to what the caller may enumerate: their tag
+// rules and their library grants.
+func (l *Library) scopedTo(ctx context.Context, uc *UserCtx, b *query.Builder) *query.Builder {
 	// The caller's tag rules, as a node rather than the per-item pass
 	// that used to be their only home: a bucket count that ignored them
 	// read higher than the list it opened, and an "Appears on" card could
 	// open onto nothing.
-	b := visibleItems().WhereNode(l.contentRuleNode(ctx, uc))
+	b = b.WhereNode(l.contentRuleNode(ctx, uc))
 	if uc.AllLibraries {
 		return b
 	}
@@ -734,8 +740,9 @@ func (l *Library) facetScopeBuilder(ctx context.Context, uc *UserCtx) *query.Bui
 	// An allow-list, so `in`: it seeks the index and an empty grant
 	// compiles to `1=0`. Deliberately not `notIn` over the complement -
 	// that is an anti-join scanning the catalog, and it keeps fileless
-	// items, which belong to no library.
-	return b.WhereValues("library", query.OpIn, query.Values(libs)...)
+	// items, which belong to no library. Chunked, since the engine takes
+	// at most 500 values in one membership test.
+	return b.WhereNode(inSet("library", libs))
 }
 
 // facetScopeQuery is facetScopeBuilder narrowed by an optional scope

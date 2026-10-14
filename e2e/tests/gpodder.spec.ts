@@ -116,8 +116,20 @@ test('a gpodder client syncs subscriptions and play positions', async ({
       ),
     );
     expect(positions, 'the gpodder play position should reach play-state').toContain(90_000);
-  } finally {
+
+    // The login's cookie authenticates on its own, and dies with the app
+    // password that opened it.
+    const cookie = (login.headers()['set-cookie'] ?? '').split(';')[0];
+    const withCookie = () =>
+      request.get(`/api/2/devices/${who}.json`, { headers: { Cookie: cookie } });
+    expect((await withCookie()).status()).toBe(200);
     await app.api.delete('/users/me/app-passwords/{appPasswordId}', {
+      path: { appPasswordId: id },
+    });
+    expect((await withCookie()).status(), 'the cookie after its app password was revoked').toBe(401);
+  } finally {
+    // Gone already on the passing path; this is for the failing one.
+    await app.api.raw.delete('/users/me/app-passwords/{appPasswordId}', {
       path: { appPasswordId: id },
     });
   }

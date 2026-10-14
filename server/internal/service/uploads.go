@@ -432,7 +432,7 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 		return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
 	l.emitUserEvent(ctx, uc.ID, eventUpload, u.ID)
-	return l.hydrateUploadDuplicate(ctx, u), nil
+	return l.hydrateUploadDuplicate(ctx, uc, u), nil
 }
 
 // checkStagingRoom refuses a session the staging volume cannot hold.
@@ -497,14 +497,19 @@ func (l *Library) findContentDuplicate(ctx context.Context, sha string) (string,
 	return pid, ok
 }
 
-// hydrateUploadDuplicate fills the duplicate's display fields.
-func (l *Library) hydrateUploadDuplicate(ctx context.Context, u wdb.Upload) UploadDTO {
+// hydrateUploadDuplicate fills the duplicate's display fields: its
+// title and artist only for a caller who can see it, since the match is
+// catalog-wide. The warning still names the item's pid, which the
+// schema requires and which opens nothing to such a caller.
+func (l *Library) hydrateUploadDuplicate(ctx context.Context, uc *UserCtx, u wdb.Upload) UploadDTO {
 	dto := uploadDTO(u)
 	if dto.Duplicate != nil {
 		if it, err := l.lib.Get(ctx, model.PID(dto.Duplicate.ItemPID)); err == nil {
-			dto.Duplicate.Title = it.Title
-			dto.Duplicate.Artist = it.Artist
 			dto.Duplicate.ItemPID = itemAPIPID(it)
+			if l.viewVisible(ctx, uc, it) && l.allowedByContent(ctx, uc, it) {
+				dto.Duplicate.Title = it.Title
+				dto.Duplicate.Artist = it.Artist
+			}
 		}
 	}
 	return dto
@@ -531,7 +536,7 @@ func (l *Library) GetUpload(ctx context.Context, uc *UserCtx, id string) (Upload
 	if err != nil {
 		return UploadDTO{}, err
 	}
-	return l.hydrateUploadDuplicate(ctx, u), nil
+	return l.hydrateUploadDuplicate(ctx, uc, u), nil
 }
 
 // ListUploadsPage pages the caller's sessions (everyone's for
@@ -558,7 +563,7 @@ func (l *Library) ListUploadsPage(ctx context.Context, uc *UserCtx, cursor strin
 	quota := UploadQuotaDTO{BytesInUse: used, QuotaBytes: uc.UploadQuotaBytes}
 	out := make([]UploadDTO, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, l.hydrateUploadDuplicate(ctx, r))
+		out = append(out, l.hydrateUploadDuplicate(ctx, uc, r))
 	}
 	next := ""
 	if len(rows) == limit {
@@ -646,7 +651,7 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 	case uploadReceiving:
 	case uploadStaged:
 		// Idempotent: a retried complete answers the same session.
-		return l.hydrateUploadDuplicate(ctx, u), nil
+		return l.hydrateUploadDuplicate(ctx, uc, u), nil
 	default:
 		return UploadDTO{}, &Error{Kind: KindConflict, Msg: "the upload is already decided"}
 	}
@@ -747,7 +752,7 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 		}
 		if staged {
 			l.emitUserEvent(ctx, uc.ID, eventUpload, u.ID)
-			return l.hydrateUploadDuplicate(ctx, u), nil
+			return l.hydrateUploadDuplicate(ctx, uc, u), nil
 		}
 	}
 	entry := wdb.ReviewEntry{
@@ -779,7 +784,7 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 		}
 	}
 	l.emitUserEvent(ctx, uc.ID, eventUpload, u.ID)
-	return l.hydrateUploadDuplicate(ctx, u), nil
+	return l.hydrateUploadDuplicate(ctx, uc, u), nil
 }
 
 // DeleteUpload abandons a session and reclaims its staged bytes.

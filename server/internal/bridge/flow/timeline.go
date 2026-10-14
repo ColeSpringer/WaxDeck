@@ -5,6 +5,8 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +21,7 @@ import (
 	"github.com/colespringer/waxflow/client"
 	"github.com/colespringer/waxflow/waxerr"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/db"
 )
 
@@ -57,6 +60,11 @@ type TimelineMember struct {
 // the load before it, which is exactly what carrying the whole set
 // together prevents.
 type TimelineOptions struct {
+	// Cred is the credential the timeline's token runs under
+	// (auth.MediaClaims.Cred), the account's reach at mint: a timeline's
+	// items are fixed when it is minted, so a change to what the account
+	// may see has to end it.
+	Cred string
 	// CrossfadeSeconds is the equal-power fade at every seam, 0 to 12.
 	CrossfadeSeconds float64
 	// ReplayGain asks for the stream to be levelled. What that costs is
@@ -169,6 +177,14 @@ type TimelineStore interface {
 	ForgetTimelineStash(ctx context.Context, key string) error
 }
 
+// timelineJob is a measurement a timeline mint outlasted: the upstream
+// job, and the account whose queue it measures, the one account that
+// may read it.
+type timelineJob struct {
+	upstream string
+	user     string
+}
+
 // timelineState is the bridge's in-memory timeline bookkeeping. The
 // stash mirrors the store; jobs are deliberately memory only, since an
 // in-flight measurement job does not outlive the process that polls it.
@@ -176,7 +192,7 @@ type timelineState struct {
 	mu    sync.Mutex
 	stash map[string]stashedTimeline // timeline key -> signed master
 	ids   map[string]string          // row id -> timeline key
-	jobs  map[string]string          // WaxDeck job pid -> upstream job id
+	jobs  map[string]timelineJob     // WaxDeck job pid -> its measurement
 	// minting counts each listener's mints that have taken a slot and
 	// not yet stashed a rendering. In that window nothing in the stash
 	// speaks for them, so a release arriving mid-mint would read as
@@ -214,7 +230,7 @@ func (b *Bridge) timelines() *timelineState {
 		b.tl = &timelineState{
 			stash:   make(map[string]stashedTimeline),
 			ids:     make(map[string]string),
-			jobs:    make(map[string]string),
+			jobs:    make(map[string]timelineJob),
 			minting: make(map[string]int),
 			slots:   make(map[string]timelineSlot),
 		}
@@ -606,7 +622,7 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 		pid := "jb-" + ulid.MustNew(ulid.Timestamp(time.Now()), rand.Reader).String()
 		ts := b.timelines()
 		ts.mu.Lock()
-		ts.jobs[pid] = jobID
+		ts.jobs[pid] = timelineJob{upstream: jobID, user: user}
 		ts.mu.Unlock()
 		return &TimelineResult{JobPID: pid}, nil
 	}
@@ -646,7 +662,9 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 
 	render := renderKey(format, gain, opts.CrossfadeSeconds)
 	key := timelineKey(tl.Tl, render)
-	token, exp := b.tokens.MintFor(user, "tl-"+key, ttl)
+	token, exp := b.tokens.MintFor(auth.MediaClaims{
+		User: user, Cred: opts.Cred, Purpose: auth.PurposeHLS, PID: "tl-" + key,
+	}, ttl)
 	now := time.Now()
 	ts.mu.Lock()
 	// Merged rather than replaced: another listener may already be on
@@ -770,17 +788,19 @@ func (b *Bridge) mintTimeline(ctx context.Context, req client.TimelineRequest) (
 	return nil, jobID, nil
 }
 
-// TimelineJob reports a pending timeline-measurement job's state:
-// queued, running, done, or failed. Unknown pids answer false.
-func (b *Bridge) TimelineJob(ctx context.Context, jobPID string) (state string, ok bool) {
+// TimelineJob reports a pending timeline-measurement job's state to the
+// account that minted it: queued, running, done, or failed. Unknown pids
+// answer false, and so does another account's, so a pid's existence is
+// not something one listener learns about another's queue.
+func (b *Bridge) TimelineJob(ctx context.Context, user, jobPID string) (state string, ok bool) {
 	ts := b.timelines()
 	ts.mu.Lock()
-	upstream, found := ts.jobs[jobPID]
+	tj, found := ts.jobs[jobPID]
 	ts.mu.Unlock()
-	if !found {
+	if !found || tj.user != user {
 		return "", false
 	}
-	job, err := b.client.Job(ctx, upstream)
+	job, err := b.client.Job(ctx, tj.upstream)
 	if err != nil {
 		return "failed", true
 	}
@@ -800,11 +820,17 @@ func (b *Bridge) TimelineJob(ctx context.Context, jobPID string) (state string, 
 func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	token := q.Get("mt")
-	user, pid, err := b.tokens.VerifyAny(token)
-	if err != nil || !strings.HasPrefix(pid, "tl-") {
+	claims, err := b.tokens.Verify(token, auth.MediaWant{Purposes: []string{auth.PurposeHLS}, AnyPID: true})
+	if err != nil || !strings.HasPrefix(claims.PID, "tl-") {
 		writeJSONError(w, http.StatusUnauthorized, "unauthenticated", "invalid or expired media token")
 		return
 	}
+	// Master and every child fetch alike, so a timeline stops with its
+	// account and with the reach it was minted under.
+	if !b.authorize(r.Context(), w, claims) {
+		return
+	}
+	user, pid := claims.User, claims.PID
 	// Every fetch of this timeline, master and fragment alike, says the
 	// listener is still listening - and takes their slot again when a
 	// quiet spell gave it back. hls.js never re-fetches the master, so
@@ -839,6 +865,15 @@ func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Child fetches (variant playlists, init, segments) carry the
 		// upstream-signed query verbatim plus our mt, which we strip.
+		// The signature binds a child to its own timeline, not to this
+		// token, so the token has to name the timeline the child does:
+		// otherwise a live token for one queue carries another queue's
+		// saved child URLs for as long as their signatures last.
+		digest, _, _ := strings.Cut(strings.TrimPrefix(pid, "tl-"), "/")
+		if childTimeline(q.Get("v")) != digest {
+			writeJSONError(w, http.StatusUnauthorized, "unauthenticated", "token does not match this timeline")
+			return
+		}
 		q.Del("mt")
 		rel := strings.TrimPrefix(r.URL.Path, "/media/hls")
 		upstreamURL = "/hls" + rel + "?" + q.Encode()
@@ -924,6 +959,23 @@ func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", fmt.Sprint(len(rewritten)))
 	w.WriteHeader(resp.StatusCode)
 	w.Write(rewritten)
+}
+
+// childTimeline answers the timeline digest a sidecar child URL names:
+// its v parameter is the variant's descriptor, base64url JSON the URL's
+// signature covers, which carries the digest. Empty when it names none.
+func childTimeline(v string) string {
+	raw, err := base64.RawURLEncoding.DecodeString(v)
+	if err != nil {
+		return ""
+	}
+	var d struct {
+		Tl string `json:"tl"`
+	}
+	if json.Unmarshal(raw, &d) != nil {
+		return ""
+	}
+	return d.Tl
 }
 
 // touchTimeline marks a rendering as being listened to and makes sure

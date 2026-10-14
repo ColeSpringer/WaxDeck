@@ -22,7 +22,7 @@ func TestRegisterTopicFiltering(t *testing.T) {
 		{"only unknown names fall back to everything", []string{"bogus", "custom"}, true, true},
 	}
 	for _, tc := range cases {
-		c := h.Register("u1", tc.topics)
+		c := h.Register("u1", "se-u1", tc.topics)
 		if got := c.wants(TopicCatalog); got != tc.catalog {
 			t.Errorf("%s: wants(catalog) = %v, want %v", tc.name, got, tc.catalog)
 		}
@@ -37,7 +37,7 @@ func TestRegisterTopicFiltering(t *testing.T) {
 // resync always queues.
 func TestMarkRespectsSubscription(t *testing.T) {
 	h := New(nil)
-	c := h.Register("u1", []string{TopicCatalog})
+	c := h.Register("u1", "se-u1", []string{TopicCatalog})
 	c.Mark(TypeInvalidate, TopicUser)
 	if frames := c.TakePending(); len(frames) != 0 {
 		t.Fatalf("unsubscribed invalidate queued: %+v", frames)
@@ -54,8 +54,8 @@ func TestMarkRespectsSubscription(t *testing.T) {
 // ahead of its invalidations: what the user stream hydrates moved too.
 func TestMarkCatalogReplacedReachesEveryConnection(t *testing.T) {
 	h := New(nil)
-	a := h.Register("u1", nil)
-	b := h.Register("u2", []string{TopicUser})
+	a := h.Register("u1", "se-u1", nil)
+	b := h.Register("u2", "se-u2", []string{TopicUser})
 	a.Mark(TypeInvalidate, TopicCatalog)
 	h.MarkCatalogReplaced()
 	frames := a.TakePending()
@@ -100,9 +100,9 @@ func waitForFrames(t *testing.T, c *Conn) []Frame {
 func TestHubFansRadioOutAndRespectsTheSubscription(t *testing.T) {
 	t.Parallel()
 	h := New(idleSource{})
-	all := h.Register("u1", nil)
-	radioOnly := h.Register("u1", []string{TopicRadio})
-	catalogOnly := h.Register("u2", []string{TopicCatalog})
+	all := h.Register("u1", "se-u1", nil)
+	radioOnly := h.Register("u1", "se-u1", []string{TopicRadio})
+	catalogOnly := h.Register("u2", "se-u2", []string{TopicCatalog})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -146,17 +146,17 @@ func TestHubFansRadioOutAndRespectsTheSubscription(t *testing.T) {
 func TestHubMarksOnlyTheTunedConnections(t *testing.T) {
 	t.Parallel()
 	h := New(idleSource{})
-	tuned := h.Register("u1", []string{TopicRadio})
+	tuned := h.Register("u1", "se-u1", []string{TopicRadio})
 	tuned.Tune("rs-jazz")
-	elsewhere := h.Register("u1", []string{TopicRadio})
+	elsewhere := h.Register("u1", "se-u1", []string{TopicRadio})
 	elsewhere.Tune("rs-talk")
 	// Tuned to nothing, deliberately: a client that walked away from the
 	// dial and said so.
-	untuned := h.Register("u2", nil)
+	untuned := h.Register("u2", "se-u2", nil)
 	untuned.Tune("")
 	// Never tuned: a client from before the frame, or one that does not
 	// send it, which the topic still owes every landing.
-	legacy := h.Register("u3", nil)
+	legacy := h.Register("u3", "se-u3", nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -198,5 +198,63 @@ func TestHubMarksOnlyTheTunedConnections(t *testing.T) {
 	waitForFrames(t, elsewhere)
 	if got := tuned.TakePending(); got != nil {
 		t.Fatalf("after tuning to nothing: frames = %v, want none", got)
+	}
+}
+
+// ended reports whether the connection has been told to end.
+func ended(c *Conn) bool {
+	select {
+	case <-c.Ended():
+		return true
+	default:
+		return false
+	}
+}
+
+// Ending sessions reaches the connections those sessions opened and no
+// others, whoever they belong to.
+func TestEndSessionsClosesOnlyThoseConnections(t *testing.T) {
+	h := New(nil)
+	a := h.Register("u1", "se-a", nil)
+	b := h.Register("u1", "se-b", nil)
+	c := h.Register("u2", "se-c", nil)
+	h.EndSessions("se-a", "se-c")
+	if !ended(a) || !ended(c) {
+		t.Errorf("the named sessions' connections are still open: a=%v c=%v", ended(a), ended(c))
+	}
+	if ended(b) {
+		t.Error("a connection of another session ended")
+	}
+}
+
+// Signing out everywhere else keeps the session that asked.
+func TestEndUserKeepsTheNamedSession(t *testing.T) {
+	h := New(nil)
+	kept := h.Register("u1", "se-keep", nil)
+	other := h.Register("u1", "se-other", nil)
+	stranger := h.Register("u2", "se-stranger", nil)
+	h.EndUser("u1", "se-keep")
+	if ended(kept) || ended(stranger) {
+		t.Errorf("kept=%v stranger=%v, want both open", ended(kept), ended(stranger))
+	}
+	if !ended(other) {
+		t.Error("the account's other session is still open")
+	}
+	h.EndUser("u1", "")
+	if !ended(kept) {
+		t.Error("ending every session of the account left one open")
+	}
+}
+
+// A connection ended twice (a revoke racing the disable that caused it)
+// is ended once, not a panic on a closed channel.
+func TestEndIsIdempotent(t *testing.T) {
+	h := New(nil)
+	c := h.Register("u1", "se-a", nil)
+	h.EndSessions("se-a")
+	h.EndSessions("se-a")
+	h.EndUser("u1", "")
+	if !ended(c) {
+		t.Fatal("the connection did not end")
 	}
 }

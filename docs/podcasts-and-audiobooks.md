@@ -159,6 +159,13 @@ subscriptions and episode positions directly:
 
 Subscription changes and play positions sync both ways; positions run
 through the same per-medium reconciliation as first-party clients.
+A login's session cookie lasts up to two weeks and ends sooner when the
+app password that opened it is revoked, the app logs out, or the
+account is disabled or signed out everywhere; a password change leaves
+it alone, as it leaves the app password. One app password holds at
+most 20 logins, and a 21st ends the oldest, so give each device its own
+app password rather than sharing one between apps that log in often.
+The app then signs in again with its app password on its own.
 The test suite replays AntennaPod's actual sync sequence (login,
 device registration, subscription diff, episode actions with its
 timestamp format) against a live server on every run, so a regression

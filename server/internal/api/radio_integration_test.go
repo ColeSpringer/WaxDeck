@@ -316,6 +316,15 @@ func TestRadioPlayInfoAndProxy(t *testing.T) {
 	if got := streamResp.Header.Get("X-Content-Type-Options"); got != "nosniff" {
 		t.Fatalf("X-Content-Type-Options = %q, want nosniff", got)
 	}
+
+	// Each open re-checks the token: a station deleted since the mint is
+	// not found, and a URL whose session signed out is refused.
+	other := loginAs(t, h.ts, "admin", testPassword).Token
+	minted := decode[RadioPlayInfo](t, get(t, h.ts, "/api/v1/radio/stations/"+st.Pid+"/play-info", other)).Url
+	wantStatus(t, reqAs(t, h, "POST", "/api/v1/auth/logout", other, nil), 204, "signing that session out")
+	wantStatus(t, get(t, h.ts, minted, ""), 401, "a station URL after its session signed out")
+	wantStatus(t, h.deleteReq(t, "/api/v1/radio/stations/"+st.Pid), 204, "deleting the station")
+	wantStatus(t, get(t, h.ts, pi.Url, ""), 404, "a station URL after the station was deleted")
 }
 
 // A station that answers markup does not get to have it relayed as

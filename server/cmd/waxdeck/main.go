@@ -80,6 +80,7 @@ func run() error {
 		scanStart  = env.Bool("scan-on-start", "WAXDECK_SCAN_ON_START", true, "launch a library scan at startup")
 		resetStale = env.Bool("reset-catalog", "WAXDECK_RESET_CATALOG", false, "when the catalog was built from a different schema baseline (which pre-1.0 is edited in place rather than migrated), move it aside and start on a fresh one instead of refusing to start. Discards play positions, ratings, stars, playlists, curation edits, podcast subscriptions and trash; media on disk is untouched and re-indexed by the startup scan. It fires only on that refusal, never on a catalog this build can open -- but it cannot tell a baseline that moved forward from one that moved back, so a rollback across a baseline edit discards rather than refuses")
 		cookieSec  = env.Bool("cookie-secure", "WAXDECK_COOKIE_SECURE", false, "mark session cookies Secure (set whenever the origin is HTTPS)")
+		sessionCap = env.Int("session-cap", "WAXDECK_SESSION_CAP", auth.DefaultSessionCap, "live sign-in sessions one account may hold; signing in past it ends the least recently used")
 		publicBase = flag.String("public-base", envOr("WAXDECK_PUBLIC_BASE", ""), "externally reachable base URL (needed for OIDC callbacks), e.g. https://wax.example.com")
 
 		podcastDir      = flag.String("podcast-dir", envOr("WAXDECK_PODCAST_DIR", ""), "episode download directory (its own library, never inside a library root; defaults to <data-dir>/podcasts, explicit empty via -podcast-dir=\"\" disables podcasts)")
@@ -176,6 +177,10 @@ func run() error {
 		return err
 	}
 	retryDays, err := enrichRetryWindow(*enrichRetry)
+	if err != nil {
+		return err
+	}
+	maxSessions, err := sessionCapFrom(*sessionCap)
 	if err != nil {
 		return err
 	}
@@ -973,6 +978,7 @@ func run() error {
 	})
 
 	sessions := auth.NewSessions(store)
+	sessions.LimitPerAccount(maxSessions)
 
 	// Expired sessions, spent OIDC state, and stale one-time codes are
 	// swept on a coarse timer; correctness never depends on the sweep
@@ -1374,8 +1380,8 @@ func run() error {
 	// first-party clients mature.
 	mux.Handle("/rest/", httpm.instrument("subsonic", subsonic.New(svc, bridge, media, version, log).ServeHTTP))
 	// The gpodder.net-compatible sync surface (AntennaPod and friends):
-	// app passwords over Basic plus its own stateless session cookie.
-	gp := gpodder.New(svc, secret, log)
+	// app passwords over Basic plus its own stored session cookie.
+	gp := gpodder.New(svc, *cookieSec, log)
 	mux.Handle("/api/2/", httpm.instrument("gpodder", gp.ServeHTTP))
 	mux.Handle("/subscriptions/", httpm.instrument("gpodder", gp.ServeHTTP))
 	if bridge != nil {
@@ -1536,6 +1542,15 @@ func enrichRetryWindow(days int) (*int, error) {
 		return nil, fmt.Errorf("WAXDECK_ENRICHMENT_RETRY_MISSES_DAYS is %d; want at most %d days, or 0 to never ask again", days, maxRetryDays)
 	}
 	return &days, nil
+}
+
+// sessionCapFrom refuses a cap below one, which would otherwise read as
+// the default: there is no "no cap", since every sign-in adds a row.
+func sessionCapFrom(n int) (int, error) {
+	if n < 1 {
+		return 0, fmt.Errorf("WAXDECK_SESSION_CAP is %d; want at least 1", n)
+	}
+	return n, nil
 }
 
 // listenPort extracts the port from a listen address, defaulting to

@@ -205,8 +205,11 @@ paths:
         aggregated across every user who has not opted out of shared
         stats (the `sharedStatsOptOut` preference; opted-out users'
         listening is absent from every figure, and `participants`
-        counts only the enrolled). Visible to every signed-in user.
-        Bucketing uses each participant's own timezone.
+        counts only the enrolled). Visible to every signed-in user;
+        the top artists, tracks, and genres leave out items the caller
+        cannot see, by library grant or content settings, while the
+        totals stay the server's. Bucketing uses each participant's
+        own timezone.
       tags: [stats]
       parameters:
         - name: year

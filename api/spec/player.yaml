@@ -280,7 +280,11 @@ paths:
         a queue never expires mid-listen; a member file changing on
         disk surfaces as `stream-stale`, and a timeline aged out of
         the engine's store answers `not-found` on fetch. Re-request
-        this endpoint in either case. Minting may first need to
+        this endpoint in either case. The URL dies with the session
+        that minted it, and a change to the account's library grants
+        or content rules ends it too: its fetches answer
+        `unauthenticated`, and a re-request mints one under the new
+        rules. Minting may first need to
         measure member lengths (MP3 sources are scanned); the server
         absorbs short measurements into this request, and when one
         outlasts the request budget it answers 202 with a job to poll,
@@ -984,7 +988,9 @@ components:
             URL for the whole timeline. The token lives at least the
             timeline's duration plus margin; re-request this endpoint
             on `stream-stale`, on a `not-found` fetch (the engine aged
-            the timeline out), or after `expiresAt`.
+            the timeline out), on an `unauthenticated` one (the
+            account's grants or content rules changed), or after
+            `expiresAt`.
           example: /media/hls/master.m3u8?tl=abc&mt=xyz
         mimeType:
           type: string

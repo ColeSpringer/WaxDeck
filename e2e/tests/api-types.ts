@@ -80,7 +80,7 @@ export interface paths {
         };
         /**
          * Get one job's state
-         * @description State and progress of a server-run catalog job.
+         * @description State and progress of a server-run catalog job, for the audience the `job` sync marker reaches: administrators, and the starter of a targeted job until its end has been announced to them; anyone else is `forbidden`. A timeline-measurement job (the job a queue timeline answers `202` with) is readable by the account whose queue it measures alone, and is `not-found` to any other.
          */
         get: operations["getJob"];
         put?: never;
@@ -726,7 +726,7 @@ export interface paths {
         put?: never;
         /**
          * Log in and establish a session
-         * @description Verifies local-account credentials, establishes a session, and sets the `waxdeck_session` HttpOnly cookie. Native clients use the same endpoint and read the bearer token from the response body instead of the cookie; passing `deviceName` labels the session in the device list. Invalid credentials and disabled accounts answer 401 without distinguishing the two. Repeated failures are rate limited per source and account.
+         * @description Verifies local-account credentials, establishes a session, and sets the `waxdeck_session` HttpOnly cookie. Native clients use the same endpoint and read the bearer token from the response body instead of the cookie; passing `deviceName` labels the session in the device list. Invalid credentials and disabled accounts answer 401 without distinguishing the two. Repeated failures are rate limited per source and account. An account holds at most a server-configured number of sessions (250 unless the operator changes it); signing in past that ends its least recently used one.
          */
         post: operations["login"];
         delete?: never;
@@ -746,7 +746,7 @@ export interface paths {
         put?: never;
         /**
          * End the current session
-         * @description Revokes the presented session (cookie or bearer token) and clears the session cookie. Succeeds even if no session is active.
+         * @description Revokes the presented session (cookie or bearer token), closes any WebSocket it opened, and clears the session cookie. Succeeds even if no session is active.
          */
         post: operations["logout"];
         delete?: never;
@@ -871,7 +871,7 @@ export interface paths {
         post?: never;
         /**
          * Revoke one of the caller's sessions
-         * @description Revokes one of the calling user's sessions immediately: the device holding it is signed out and its next request fails with 401. Revoking the session serving this request is allowed and acts as a logout (the response then also expires the session cookie). Only the caller's own sessions are visible here; an administrator signs another user out via that user's account endpoints.
+         * @description Revokes one of the calling user's sessions immediately: the device holding it is signed out, any WebSocket it opened closes, and its next request fails with 401. Revoking the session serving this request is allowed and acts as a logout (the response then also expires the session cookie). Only the caller's own sessions are visible here; an administrator signs another user out via that user's account endpoints.
          */
         delete: operations["revokeSession"];
         options?: never;
@@ -996,7 +996,7 @@ export interface paths {
          * List audiobook series
          * @description The series the visible audiobooks belong to, in collation order. A series is a name a book's tags carry rather than an entity anyone curates, so what it names is a spelling: this listing both offers the target of a series merge, when a spelling split one in two, and backs the series index a client browses.
          *
-         *     Filtered by library visibility, so a series held only in libraries this account cannot see is absent.
+         *     Filtered by library visibility and content settings, so a series none of whose books this account can see is absent.
          */
         get: operations["listBookSeries"];
         put?: never;
@@ -1106,9 +1106,9 @@ export interface paths {
          * Get one audiobook series
          * @description One series and the books in it, in sequence order. The sequence is what a book's tags say rather than a number anyone assigned, so it is a string and can be absent: a book tagged with the series name and no number sorts among the ones that carry one, where the catalog puts it.
          *
-         *     Counts are answered only to an account that can see every library, exactly as the listing answers them: a series with one visible book and nine hidden ones must not advertise ten.
+         *     Counts are answered only when this account sees every book in the series: a series with one visible book and nine hidden ones must not advertise ten.
          *
-         *     404 when no series carries the pid, and when every book in it lives in a library this account was not granted.
+         *     404 when no series carries the pid, and when every book in it is hidden from this account, by library grant or content settings.
          *
          *     A top-level path rather than one under `/books/series`, which lists them: a series is a shared entity with a pid of its own, read the way `/albums/{pid}` is read.
          */
@@ -1515,7 +1515,7 @@ export interface paths {
         };
         /**
          * Search the library
-         * @description Full-text search across artists, albums, tracks, books, and episodes. Results are grouped by kind and ranked within each group; each group is capped at `limit` hits.
+         * @description Full-text search across artists, albums, tracks, books, and episodes. Results are grouped by kind and ranked within each group; each group is capped at `limit` hits. An artist or album is a hit only while at least one of its tracks is one the caller can see, by library grant and content settings.
          */
         get: operations["search"];
         put?: never;
@@ -1567,7 +1567,7 @@ export interface paths {
          *
          *     These live on the entity because that is where the catalog keeps them - an item row carries what the file is, and an edition is what the release is - so a screen deriving an album from its tracks can reach the first set and not the second. This is the read half of the `editEntity` write surface.
          *
-         *     The `pid` must be an album (`al-`); anything else is `not-found` rather than a wrong-shaped answer. Absent fields are omitted: most releases carry none of the five, and an album with nothing to say answers the identity fields empty rather than blank.
+         *     The `pid` must be an album (`al-`); anything else is `not-found` rather than a wrong-shaped answer, and so is an album none of whose tracks the caller can see, by library grant or content settings. Absent fields are omitted: most releases carry none of the five, and an album with nothing to say answers the identity fields empty rather than blank.
          */
         get: operations["getAlbum"];
         put?: never;
@@ -2636,7 +2636,7 @@ export interface paths {
         };
         /**
          * Resolve a playable stream for an item
-         * @description Returns everything a client needs to start playback: a short-TTL, origin-relative stream URL (media-token authenticated, so it is playable by bare `<audio>` elements, cast devices, and DLNA renderers that cannot send headers), the served format, and expiry. Clients re-request play-info when a stream URL expires or the server signals `stream-stale`. On a server running without the streaming engine, the url serves the item's original file bytes directly (ranged, no transcoding, in whatever format the file is in) through the same endpoint downloads use, attachment disposition and byte-identity pin included; expiry is enforced per request, so an in-flight fetch completes but a later range request after `expiresAt` answers `unauthenticated` and the client re-requests play-info. An item carved out of a larger file additionally carries `spanStartMs`/`spanEndMs` and the client plays only that window; a client that does not implement the window MUST treat a span-bearing response as unplayable rather than play the served audio whole. A multi-file audiobook resolves one part per call: pass `positionMs` (book-timeline milliseconds) to get the part containing that position, and read `partIndex`, `partCount`, and `partStartMs` from the response; when playback crosses the end of a part, re-request play-info with the new book-timeline position. The response's `durationMs` is always the duration of what the client plays: the resolved part for multi-file books, and the item's own window, never the backing file, for span-carved direct playback; the book total lives on the item summary and the book detail. Positions reported to play-state for multi-file books are always book-timeline milliseconds (`partStartMs` plus the in-part position). A podcast episode whose audio has not been fetched to the server resolves by enclosure passthrough: the url points at `/media/enclosure`, which relays the feed's own enclosure through this origin (a proxy, not a redirect, so the listener's address never reaches the podcast host and the web build can play it). Ranges pass both ways, so scrubbing works when the host honours them. Passthrough audio is not analyzed, so the skip map stays `unavailable` and neither silence trim nor voice boost applies until the episode is fetched, and `seekable` is best effort for passthrough: whether the host honours ranges is unknown until the first upstream request. The episode still reports `downloaded: false`, and fetching it is still what makes it play from local bytes with analysis. Only an episode whose feed named no enclosure at all answers `conflict`.
+         * @description Returns everything a client needs to start playback: a short-TTL, origin-relative stream URL (media-token authenticated, so it is playable by bare `<audio>` elements, cast devices, and DLNA renderers that cannot send headers), the served format, and expiry. Clients re-request play-info when a stream URL expires or the server signals `stream-stale`. On a server running without the streaming engine, the url serves the item's original file bytes directly (ranged, no transcoding, in whatever format the file is in) through the same endpoint downloads use, inline and with the byte-identity pin; expiry is enforced per request, so an in-flight fetch completes but a later range request after `expiresAt` answers `unauthenticated` and the client re-requests play-info. The url dies with the session that asked for it. A capped account's transcoded stream is never wider than its ceiling, whether or not the request carries `maxBitrateKbps` (an original played directly is the file itself), and the stream parameters are part of the url's credential. An item carved out of a larger file additionally carries `spanStartMs`/`spanEndMs` and the client plays only that window; a client that does not implement the window MUST treat a span-bearing response as unplayable rather than play the served audio whole. A multi-file audiobook resolves one part per call: pass `positionMs` (book-timeline milliseconds) to get the part containing that position, and read `partIndex`, `partCount`, and `partStartMs` from the response; when playback crosses the end of a part, re-request play-info with the new book-timeline position. The response's `durationMs` is always the duration of what the client plays: the resolved part for multi-file books, and the item's own window, never the backing file, for span-carved direct playback; the book total lives on the item summary and the book detail. Positions reported to play-state for multi-file books are always book-timeline milliseconds (`partStartMs` plus the in-part position). A podcast episode whose audio has not been fetched to the server resolves by enclosure passthrough: the url points at `/media/enclosure`, which relays the feed's own enclosure through this origin (a proxy, not a redirect, so the listener's address never reaches the podcast host and the web build can play it). Ranges pass both ways, so scrubbing works when the host honours them. Passthrough audio is not analyzed, so the skip map stays `unavailable` and neither silence trim nor voice boost applies until the episode is fetched, and `seekable` is best effort for passthrough: whether the host honours ranges is unknown until the first upstream request. The episode still reports `downloaded: false`, and fetching it is still what makes it play from local bytes with analysis. Only an episode whose feed named no enclosure at all answers `conflict`.
          */
         get: operations["getPlayInfo"];
         put?: never;
@@ -2656,7 +2656,7 @@ export interface paths {
         };
         /**
          * Resolve an offline download for an item
-         * @description Returns everything a client needs to download the item's original bytes for offline playback: one entry per backing file (a track has one; a multi-file audiobook lists every part in reading order), each with a short-TTL, origin-relative, media-token-authenticated URL serving the untranscoded file with range support, so interrupted downloads resume. The download responses carry a `Content-Disposition` derived from each entry's `fileName` and an `ETag` equal to the entry's `etag`, a strong validator of the exact file bytes: resume ranges with `If-Range: <etag>`, and when it no longer matches (the file was retagged, replaced, or upgraded) restart that file's transfer. The separate `essenceHash` identifies the audio content independently of tags and location; clients key their download store on it, so a retag or move never forces a re-download of audio they already hold (the restarted transfer replaces the stored file under the same key). Items carved out of a larger file (CUE-backed virtual tracks) resolve to their containing file plus a `spanStartMs`/`spanEndMs` playback window. When a URL expires mid-download, re-request download-info and resume by range against the fresh URL. A download URL whose file changed on disk answers `stream-stale`; re-request download-info.
+         * @description Returns everything a client needs to download the item's original bytes for offline playback: one entry per backing file (a track has one; a multi-file audiobook lists every part in reading order), each with a short-TTL, origin-relative, media-token-authenticated URL serving the untranscoded file with range support, so interrupted downloads resume. The download responses carry a `Content-Disposition` derived from each entry's `fileName` (an attachment) and an `ETag` equal to the entry's `etag`, a strong validator of the exact file bytes: resume ranges with `If-Range: <etag>`, and when it no longer matches (the file was retagged, replaced, or upgraded) restart that file's transfer. The separate `essenceHash` identifies the audio content independently of tags and location; clients key their download store on it, so a retag or move never forces a re-download of audio they already hold (the restarted transfer replaces the stored file under the same key). Items carved out of a larger file (CUE-backed virtual tracks) resolve to their containing file plus a `spanStartMs`/`spanEndMs` playback window. When a URL expires mid-download, re-request download-info and resume by range against the fresh URL. A download URL whose file changed on disk answers `stream-stale`; re-request download-info. The URLs die with the session that asked for them and stop with the account's download permission. The permission governs this surface (and the Subsonic `download` verb and a share's `allowDownload`); a natively playable file's direct play is its original bytes whatever it says.
          */
         get: operations["getDownloadInfo"];
         put?: never;
@@ -3108,7 +3108,7 @@ export interface paths {
         put?: never;
         /**
          * Mint a gapless queue timeline
-         * @description Renders an ordered queue of visible items as one continuous stream through the streaming engine: sample-exact seams, no discontinuities, with optional equal-power crossfade. The response's single HLS URL plays the whole queue; `boundaries` map each item onto the combined timeline (offsets in samples at `envelopeRate`; under a crossfade consecutive members overlap), so a client can render per-track position and seek across members without probing. Timelines are immutable: editing the queue means minting a new timeline and switching URLs. The URL is media-token authenticated, and the token lives at least the timeline's duration plus margin (`expiresAt` reflects it), so a queue never expires mid-listen; a member file changing on disk surfaces as `stream-stale`, and a timeline aged out of the engine's store answers `not-found` on fetch. Re-request this endpoint in either case. Minting may first need to measure member lengths (MP3 sources are scanned); the server absorbs short measurements into this request, and when one outlasts the request budget it answers 202 with a job to poll, after which re-requesting answers 201 immediately. A rendering counts against the concurrent transcode limits like a stream does: one slot a listener, however many timelines they hold live at once, taken at the mint and given back once every one of them has gone unfetched for a minute - so a mint over the cap answers `transcode-limited` before anything plays, and a fetch resuming a listen whose slot was released can answer it too. A client that stops playing releases the rendering it holds (`releaseQueueTimeline`) rather than waiting the minute out; the sweep stays the backstop for the client that cannot, a closed browser tab being the case. A caller that can only decode some formats says so in `formats`; the rendering format is part of a timeline's identity, so the same queue asked for in two formats is two streams. Requires the streaming engine with timeline support (`feature-unavailable` otherwise). Items whose delivery cannot join a timeline (unfetched podcast episodes, unsupported sources) answer `conflict` naming the pid, and a `crossfadeSeconds` longer than the shortest queue member can carry answers `invalid-request` naming it.
+         * @description Renders an ordered queue of visible items as one continuous stream through the streaming engine: sample-exact seams, no discontinuities, with optional equal-power crossfade. The response's single HLS URL plays the whole queue; `boundaries` map each item onto the combined timeline (offsets in samples at `envelopeRate`; under a crossfade consecutive members overlap), so a client can render per-track position and seek across members without probing. Timelines are immutable: editing the queue means minting a new timeline and switching URLs. The URL is media-token authenticated, and the token lives at least the timeline's duration plus margin (`expiresAt` reflects it), so a queue never expires mid-listen; a member file changing on disk surfaces as `stream-stale`, and a timeline aged out of the engine's store answers `not-found` on fetch. Re-request this endpoint in either case. The URL dies with the session that minted it, and a change to the account's library grants or content rules ends it too: its fetches answer `unauthenticated`, and a re-request mints one under the new rules. Minting may first need to measure member lengths (MP3 sources are scanned); the server absorbs short measurements into this request, and when one outlasts the request budget it answers 202 with a job to poll, after which re-requesting answers 201 immediately. A rendering counts against the concurrent transcode limits like a stream does: one slot a listener, however many timelines they hold live at once, taken at the mint and given back once every one of them has gone unfetched for a minute - so a mint over the cap answers `transcode-limited` before anything plays, and a fetch resuming a listen whose slot was released can answer it too. A client that stops playing releases the rendering it holds (`releaseQueueTimeline`) rather than waiting the minute out; the sweep stays the backstop for the client that cannot, a closed browser tab being the case. A caller that can only decode some formats says so in `formats`; the rendering format is part of a timeline's identity, so the same queue asked for in two formats is two streams. Requires the streaming engine with timeline support (`feature-unavailable` otherwise). Items whose delivery cannot join a timeline (unfetched podcast episodes, unsupported sources) answer `conflict` naming the pid, and a `crossfadeSeconds` longer than the shortest queue member can carry answers `invalid-request` naming it.
          */
         post: operations["createQueueTimeline"];
         delete?: never;
@@ -3236,7 +3236,7 @@ export interface paths {
         put?: never;
         /**
          * Preview a smart rule
-         * @description Evaluates a rule without storing anything and returns the first matching items plus the total match count, computed against the caller's own user state and library visibility. Rule editors call this while the user builds the rule.
+         * @description Evaluates a rule without storing anything and returns the first matching items plus the total match count, computed against the caller's own user state and counting only what the caller can see (library grants, content settings, followed shows). Rule editors call this while the user builds the rule.
          */
         post: operations["previewSmartRule"];
         delete?: never;
@@ -3256,7 +3256,7 @@ export interface paths {
         put?: never;
         /**
          * Import an M3U8 playlist
-         * @description Creates a static playlist from an M3U8 document, matching each entry to a cataloged item by exact path or unique relative-path suffix. Unmatched paths are skipped and reported, never invented; an empty document yields an empty playlist.
+         * @description Creates a static playlist from an M3U8 document, matching each entry to a cataloged item by exact path or unique relative-path suffix. Unmatched paths are skipped and reported, never invented; an empty document yields an empty playlist. A path naming an item the caller cannot see is reported as unmatched, exactly like a path that names nothing.
          */
         post: operations["importPlaylistM3u"];
         delete?: never;
@@ -3354,7 +3354,7 @@ export interface paths {
         };
         /**
          * List a playlist's items
-         * @description The playlist's members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner's user state for shared lists, the caller's for their own). Entries outside the caller's visibility are omitted, so a restricted viewer's `position` values can skip numbers. `position` is the entry's index in the full stored order, kept contiguous from 0 by every change to the list; pass it, with the entry's item pid as `itemPid`, to the removal endpoint, never the row index of a filtered page. Keyset-paginated within one evaluation; a membership change between pages may shift entries.
+         * @description The playlist's members in order: stored order for a static playlist, rule order for a smart playlist (evaluated against the owner's user state for shared lists, the caller's for their own). Entries the caller cannot see (outside their library grants, denied by their content settings, or episodes of shows they do not follow) are omitted, and the list's `itemCount` counts the same way, so a restricted viewer's `position` values can skip numbers. `position` is the entry's index in the full stored order, kept contiguous from 0 by every change to the list; pass it, with the entry's item pid as `itemPid`, to the removal endpoint, never the row index of a filtered page. Keyset-paginated within one evaluation; a membership change between pages may shift entries.
          */
         get: operations["listPlaylistItems"];
         /**
@@ -3402,7 +3402,7 @@ export interface paths {
         };
         /**
          * Export a playlist as M3U8
-         * @description The playlist as an M3U8 document, for interop with path-based players. Entries are the cataloged display paths (absolute server-side paths); exposing them is deliberate, since playlists reach only this server's own users and path-based interop is the point of the format. A smart playlist exports its current evaluation. The import side matches by exact path or unique relative-path suffix, so documents exported from a differently-rooted server still resolve.
+         * @description The playlist as an M3U8 document, for interop with path-based players. Only the members the caller can see are written, the same ones the member listing shows them. Entries are the cataloged display paths (absolute server-side paths); exposing them is deliberate, since playlists reach only this server's own users and path-based interop is the point of the format. A smart playlist exports its current evaluation. The import side matches by exact path or unique relative-path suffix, so documents exported from a differently-rooted server still resolve.
          */
         get: operations["exportPlaylistM3u"];
         put?: never;
@@ -3480,7 +3480,7 @@ export interface paths {
         put?: never;
         /**
          * Import a streaming-service playlist
-         * @description Imports a playlist exported from a streaming service, matching each entry against the library through the portable-ref resolve ladder (exact identifiers first, then fingerprints, then descriptive artist, title, album, and duration matching). Sources: `spotify` (Exportify CSV), `applemusic` (the tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), and `portable` (the `refs` array from another WaxDeck's portable export). When any entry resolves, a manual playlist is created with the resolved tracks in order and `missing` reports the rest; when nothing resolves, no playlist is created and `playlistPid` is absent. Unresolved entries carrying an ISRC are upgraded to a recording identifier through MusicBrainz when the server has internet, within a bounded lookup budget; without it the import still runs on the descriptive rung.
+         * @description Imports a playlist exported from a streaming service, matching each entry against the library through the portable-ref resolve ladder (exact identifiers first, then fingerprints, then descriptive artist, title, album, and duration matching). Sources: `spotify` (Exportify CSV), `applemusic` (the tab-separated export), `ytmusic` (Google Takeout CSV), `csv` (generic with artist, title, album, duration columns), `text` (one `Artist - Title` per line), and `portable` (the `refs` array from another WaxDeck's portable export). When any entry resolves, a manual playlist is created with the resolved tracks in order and `missing` reports the rest; when nothing resolves, no playlist is created and `playlistPid` is absent. An entry whose only match is an item the caller cannot see is reported as missing, exactly like an entry nothing matched. Unresolved entries carrying an ISRC are upgraded to a recording identifier through MusicBrainz when the server has internet, within a bounded lookup budget; without it the import still runs on the descriptive rung.
          */
         post: operations["importPlaylist"];
         delete?: never;
@@ -3498,7 +3498,7 @@ export interface paths {
         };
         /**
          * Export a playlist as portable refs
-         * @description Exports a playlist as portable refs: catalog-independent identity descriptors (audio essence, external identifiers, acoustic fingerprint, descriptive fields) that resolve on any other WaxDeck through the playlist import endpoint's `portable` source. Smart playlists export their current evaluation.
+         * @description Exports a playlist as portable refs: catalog-independent identity descriptors (audio essence, external identifiers, acoustic fingerprint, descriptive fields) that resolve on any other WaxDeck through the playlist import endpoint's `portable` source. Only the members the caller can see are exported. Smart playlists export their current evaluation. Answers `conflict` when the playlist changed while it was being exported; retry.
          */
         get: operations["exportPlaylistPortable"];
         put?: never;
@@ -4360,7 +4360,7 @@ export interface paths {
         put?: never;
         /**
          * Create a share link
-         * @description Creates a public share link for a track, album, book, or episode the caller can see, or a playlist the caller owns. An album share opens the album's tracks in order. Playlists require ownership because the public page serves the owner's member view for the link's whole life: another user's shared playlist is theirs to publish, not the viewer's, and their later edits or a flip back to private must not leak through a link they cannot revoke. The link is a capability URL: anyone holding it can open the landing page and listen until it expires or is revoked. Episodes accept `positionMs` for copy-link-at-timestamp. `allowDownload` additionally offers the original file and requires the caller's own download permission. Episodes of private feeds (feeds with credentials) refuse with `forbidden`: a capability URL must not leak paid content. Anonymous playback through the link is billed against the caller's transcode and bandwidth limits.
+         * @description Creates a public share link for a track, album, book, or episode the caller can see, or a playlist the caller owns. An album share opens the album's tracks in order. Playlists require ownership because the public page serves the owner's member view for the link's whole life: another user's shared playlist is theirs to publish, not the viewer's, and their later edits or a flip back to private must not leak through a link they cannot revoke. An album needs at least one track the caller can hear. The link is a capability URL: anyone holding it can open the landing page and listen until it expires or is revoked, to what its owner can see when it is opened. A list serves only the members the owner can still see, and the link answers not-found while the owner is disabled or once the target is out of the owner's reach (a library grant withdrawn, a content setting that denies it); it resumes when that changes back. Episodes accept `positionMs` for copy-link-at-timestamp. `allowDownload` additionally offers the original file and requires the caller's own download permission. Episodes of private feeds (feeds with credentials) refuse with `forbidden`: a capability URL must not leak paid content. Anonymous playback through the link is billed against the caller's transcode and bandwidth limits.
          */
         post: operations["createShare"];
         delete?: never;
@@ -4560,7 +4560,7 @@ export interface paths {
         };
         /**
          * Server-wide year in review
-         * @description The whole server's listening recap for one calendar year, aggregated across every user who has not opted out of shared stats (the `sharedStatsOptOut` preference; opted-out users' listening is absent from every figure, and `participants` counts only the enrolled). Visible to every signed-in user. Bucketing uses each participant's own timezone.
+         * @description The whole server's listening recap for one calendar year, aggregated across every user who has not opted out of shared stats (the `sharedStatsOptOut` preference; opted-out users' listening is absent from every figure, and `participants` counts only the enrolled). Visible to every signed-in user; the top artists, tracks, and genres leave out items the caller cannot see, by library grant or content settings, while the totals stay the server's. Bucketing uses each participant's own timezone.
          */
         get: operations["getServerYearInReview"];
         put?: never;
@@ -4776,7 +4776,7 @@ export interface paths {
         };
         /**
          * Stream a tool task's progress
-         * @description Server-sent events for one task: an event named `task` whose data is the `ToolTask` JSON, emitted immediately on connect and again on every state or progress change (streaming-engine job progress is relayed onto the task as it runs), then a final event named `done` after the task reaches a terminal state, after which the stream closes. Reconnecting is always safe: the first event replays current state. Same visibility as reading the task. The WebSocket channel carries the same lifecycle as invalidations; this stream exists for consumers that want the payloads pushed.
+         * @description Server-sent events for one task: an event named `task` whose data is the `ToolTask` JSON, emitted immediately on connect and again on every state or progress change (streaming-engine job progress is relayed onto the task as it runs), then a final event named `done` after the task reaches a terminal state, after which the stream closes. Reconnecting is always safe: the first event replays current state. Same visibility as reading the task, and the stream keeps checking it: within a few seconds of the caller's session ending, or of the caller losing the right to read the task, the stream closes with no `done` event, and a reconnect answers that refusal. The WebSocket channel carries the same lifecycle as invalidations; this stream exists for consumers that want the payloads pushed.
          */
         get: operations["streamToolTaskEvents"];
         put?: never;
@@ -5034,7 +5034,7 @@ export interface paths {
         get?: never;
         /**
          * Set an account's password
-         * @description Changes the account's password and revokes the account's sessions. Changing your own password always requires `currentPassword` (administrators included); a wrong value answers `forbidden`, and the session making the request is the only one that survives. An administrator resetting another account's password omits `currentPassword`, and every one of that account's sessions is revoked. Setting a password on an OIDC-provisioned account enables local login for it. App passwords are separate credentials and survive a password change; revoke them individually.
+         * @description Changes the account's password and revokes the account's sessions. Changing your own password always requires `currentPassword` (administrators included); a wrong value answers `forbidden`, and the session making the request is the only one that survives. An administrator resetting another account's password omits `currentPassword`, and every one of that account's sessions is revoked (recorded in the audit log as `user.password-reset`). Setting a password on an OIDC-provisioned account enables local login for it. App passwords are separate credentials and survive a password change; revoke them individually.
          */
         put: operations["setPassword"];
         post?: never;
@@ -5056,7 +5056,7 @@ export interface paths {
         post?: never;
         /**
          * Revoke all of an account's sessions
-         * @description Signs the account out everywhere by revoking every live session it has. When callers target their own account, the session making this request survives. Administrators can target any account; everyone else only their own.
+         * @description Signs the account out everywhere by revoking every live session it has and closing the WebSockets they opened, and ends its gpodder logins (app passwords stay valid, so those clients log in again). When callers target their own account, the session making this request survives. Administrators can target any account; everyone else only their own. Recorded in the audit log as `user.sessions-revoke`.
          */
         delete: operations["revokeUserSessions"];
         options?: never;
@@ -5201,7 +5201,7 @@ export interface paths {
         };
         /**
          * List the caller's app passwords
-         * @description The calling user's app passwords, newest first. App passwords are dedicated per-client credentials for the compatibility APIs (Subsonic and, later, gpodder), which require the server to hold a recoverable secret; the login password is never usable there. The secret itself is only ever returned by creation. App passwords stop authenticating the moment their account is disabled, and are deliberately independent of the login password: changing or resetting it leaves them working (revoke them here). Unpaginated: a user's app passwords are a small, bounded set.
+         * @description The calling user's app passwords, newest first. App passwords are dedicated per-client credentials for the compatibility APIs (Subsonic and gpodder), which require the server to hold a recoverable secret; the login password is never usable there. The secret itself is only ever returned by creation. App passwords stop authenticating the moment their account is disabled, and are deliberately independent of the login password: changing or resetting it leaves them working (revoke them here). Unpaginated: a user's app passwords are a small, bounded set.
          */
         get: operations["listAppPasswords"];
         put?: never;
@@ -5228,7 +5228,7 @@ export interface paths {
         post?: never;
         /**
          * Revoke an app password
-         * @description Revokes one of the calling user's app passwords. Clients holding it fail their next compatibility-API request immediately.
+         * @description Revokes one of the calling user's app passwords. Clients holding it fail their next compatibility-API request immediately, and so do the gpodder sessions it opened and the media URLs it minted.
          */
         delete: operations["revokeAppPassword"];
         options?: never;
@@ -6246,7 +6246,7 @@ export interface components {
             pid: string;
             /** @description The series name, as the books' tags spell it. */
             name: string;
-            /** @description Books in the series that this account can see. */
+            /** @description Books in the series, answered only to an account that sees every book: every library open to it and no tag rule narrowing what it sees. */
             bookCount?: number;
             /**
              * Format: int64
@@ -6263,7 +6263,7 @@ export interface components {
             pid: string;
             /** @description The series name, as the books' tags spell it. */
             name: string;
-            /** @description Books in the series, answered only to an account that can see every library. A restricted account reads the length of `books` instead, which is what it can open. */
+            /** @description Books in the series, answered only when this account sees every one of them. A restricted account reads the length of `books` instead, which is what it can open. */
             bookCount?: number;
             /**
              * Format: int64
@@ -7281,7 +7281,7 @@ export interface components {
             /**
              * @description Member items: an album's tracks, a playlist's entries, a show's episodes, an artist's tracks.
              *
-             *     Absent in two cases, and both are deliberate. A smart playlist's count is not taken, because evaluating every stored rule to draw a card is work a listing row skips too. And a catalog entity's count is catalog-wide rather than scoped to what the caller may see, so it is answered only to a caller who can see the whole library - a card advertising nine tracks that opens onto three would be worse than a card with no count on it.
+             *     Absent in two cases, and both are deliberate. A smart playlist's count is not taken, because evaluating every stored rule to draw a card is work a listing row skips too. And a catalog entity's count is catalog-wide rather than scoped to what the caller may see, so it is answered only to a caller every library is open to and no tag rule narrows (the explicit setting hides only podcasts) - a card advertising nine tracks that opens onto three would be worse than a card with no count on it.
              */
             itemCount?: number;
         };
@@ -7327,7 +7327,7 @@ export interface components {
              * @example US
              */
             country?: string;
-            /** @description Tracks on the release as the catalog holds it. Absent for a caller with restricted library visibility, because the count is not scoped to their grant and a number larger than what they can open would be worse than none. */
+            /** @description Tracks on the release as the catalog holds it. Absent for a caller whose library grants or tag rules narrow what they see, because the count is not scoped to them and a number larger than what they can open would be worse than none. */
             itemCount?: number;
             /**
              * Format: int64
@@ -9112,7 +9112,7 @@ export interface components {
              */
             pid?: string;
             /**
-             * @description Origin-relative, media-token-authenticated HLS playlist URL for the whole timeline. The token lives at least the timeline's duration plus margin; re-request this endpoint on `stream-stale`, on a `not-found` fetch (the engine aged the timeline out), or after `expiresAt`.
+             * @description Origin-relative, media-token-authenticated HLS playlist URL for the whole timeline. The token lives at least the timeline's duration plus margin; re-request this endpoint on `stream-stale`, on a `not-found` fetch (the engine aged the timeline out), on an `unauthenticated` one (the account's grants or content rules changed), or after `expiresAt`.
              * @example /media/hls/master.m3u8?tl=abc&mt=xyz
              */
             url: string;
@@ -11336,7 +11336,7 @@ export interface components {
         };
         /** @description An account as visible to administrators (and to its owner). */
         UserAccount: components["schemas"]["User"] & {
-            /** @description Disabled accounts cannot log in and their live sessions are revoked on disable. */
+            /** @description Disabled accounts cannot log in; disabling revokes their live sessions and closes the sockets those opened. */
             disabled: boolean;
             /** @description True for a self-serve registration still awaiting an administrator's decision. Pending accounts cannot log in; approve or reject them through the signup request endpoints. */
             pending: boolean;
@@ -11414,7 +11414,7 @@ export interface components {
             displayName?: string;
             /** @description Replacement role set. */
             roles?: components["schemas"]["Role"][];
-            /** @description Disable or re-enable the account. Disabling revokes its live sessions. */
+            /** @description Disable or re-enable the account. Disabling revokes its live sessions and closes the sockets they opened. */
             disabled?: boolean;
             libraryAccess?: components["schemas"]["LibraryAccess"];
             /** @description Grant or revoke upload rights. */
@@ -12033,6 +12033,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             503: components["responses"]["CatalogMaintenance"];
         };
@@ -17416,6 +17417,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };

@@ -456,3 +456,138 @@ test('a library created at runtime reaches the streaming sidecar', async ({ app 
   });
   expect(clash.status()).toBe(409);
 });
+
+// An account the administrator has granted no library imports a fixture
+// track by name and by path, then shares what it built: both imports
+// report the track missing, and a stranger holding the link streams
+// nothing.
+test('an account cannot publish a track it cannot see', async ({
+  app,
+  otherAccount,
+  anonApi,
+}) => {
+  const items = await app.api.get('/library/items', { query: { mediaType: 'music', limit: 5 } });
+  const track = (items.items ?? []).find((i) => i.artist && i.title);
+  expect(track, 'the fixture library should hold named music').toBeTruthy();
+  const source = await app.seed.createPlaylist('Path source', [track!.pid]);
+  const m3u = await app.api.raw.get('/playlists/{pid}/m3u', { path: { pid: source } });
+  const doc = await m3u.text();
+  expect(doc).toContain('#EXTINF');
+
+  const blind = await otherAccount('blind');
+  const { user } = await app.api.as(blind.token).get('/auth/session');
+  await app.api.patch('/users/{userId}', {
+    path: { userId: user!.id },
+    data: { libraryAccess: { mode: 'granted', libraryPids: [] } },
+  });
+  const theirs = app.api.as(blind.token);
+  const byName = await theirs.post('/playlists/import', {
+    data: { source: 'text', payload: `${track!.artist} - ${track!.title}` },
+  });
+  expect(byName.resolved).toBe(0);
+  const byPath = await theirs.post('/playlists/m3u', { data: { name: 'Paths', content: doc } });
+  expect(byPath.matched).toBe(0);
+
+  const share = await theirs.post('/shares', {
+    data: { pid: byPath.playlist.pid, allowDownload: false },
+  });
+  expect((await anonApi.raw.minted(`${share.url}/stream?i=0`)).status()).toBe(404);
+});
+
+// A content rule closes what an account may publish and what its links
+// already serve: an allow rule naming a tag no track carries hides the
+// whole library from it, so its album share is refused and the link it
+// minted before the rule stops playing.
+test('a content rule stops an album share and silences the earlier link', async ({
+  app,
+  otherAccount,
+  anonApi,
+}) => {
+  const items = await app.api.get('/library/items', { query: { mediaType: 'music', limit: 5 } });
+  const album = (items.items ?? []).find((i) => i.albumPid)?.albumPid;
+  expect(album, 'the fixture library should hold an album').toBeTruthy();
+
+  const kid = await otherAccount('kid');
+  const { user } = await app.api.as(kid.token).get('/auth/session');
+  const userId = user!.id;
+  const account = await app.api.get('/users/{userId}', { path: { userId } });
+  // Levelled first: a previous run against this stack left the rule on.
+  await app.api.patch('/users/{userId}', {
+    path: { userId },
+    data: { permissions: { ...account.permissions!, tagAllow: [] } },
+  });
+  const theirs = app.api.as(kid.token);
+  const early = await theirs.post('/shares', { data: { pid: album!, allowDownload: false } });
+
+  await app.api.patch('/users/{userId}', {
+    path: { userId },
+    data: { permissions: { ...account.permissions!, tagAllow: [{ key: 'E2EKIDSAFE' }] } },
+  });
+  const refused = await theirs.raw.post('/shares', { data: { pid: album!, allowDownload: false } });
+  expect(refused.status()).toBe(404);
+  expect((await anonApi.raw.minted(`${early.url}/stream?i=0`)).status()).toBe(404);
+});
+
+// Disabling or deleting an account closes the sockets its devices hold,
+// at once and with 4401, rather than leaving them hearing invalidations
+// and driving the player until they happen to reconnect.
+test('disabling or deleting an account closes its sockets', async ({ app, otherAccount, device }) => {
+  for (const verb of ['disable', 'delete'] as const) {
+    const listener = await otherAccount(`socket-${verb}`);
+    const { user } = await app.api.as(listener.token).get('/auth/session');
+    const userId = user!.id;
+    const theirs = await device({ as: listener });
+    await theirs.nav.enter('home');
+    const closed = await theirs.auth.openSocketProbe();
+    try {
+      if (verb === 'disable') {
+        await app.api.patch('/users/{userId}', { path: { userId }, data: { disabled: true } });
+      } else {
+        await app.api.delete('/users/{userId}', { path: { userId } });
+      }
+      expect(await closed(), `the socket after the ${verb}`).toBe(4401);
+    } finally {
+      // A disabled account cannot sign in, so the next run on this stack
+      // could not mint it again.
+      if (verb === 'disable') {
+        await app.api.patch('/users/{userId}', { path: { userId }, data: { disabled: false } });
+      }
+    }
+  }
+});
+
+// The download permission governs downloading: an account without it is
+// refused download-info, and its stream URL taken to the download route
+// opens nothing (it used to hand over the original as an attachment).
+// Disabling an account stops new opens of every URL it minted.
+test('media URLs follow the account that minted them', async ({
+  app,
+  otherAccount,
+  anonApi,
+}) => {
+  const { pid } = await app.seed.item('Alpha Song');
+  const listener = await otherAccount('media');
+  const { user } = await app.api.as(listener.token).get('/auth/session');
+  const userId = user!.id;
+  const account = await app.api.get('/users/{userId}', { path: { userId } });
+  const theirs = app.api.as(listener.token);
+  try {
+    await app.api.patch('/users/{userId}', {
+      path: { userId },
+      data: { permissions: { ...account.permissions!, download: false } },
+    });
+    expect((await theirs.raw.get('/items/{pid}/download-info', { path: { pid } })).status()).toBe(403);
+    const playInfo = await theirs.get('/items/{pid}/play-info', { path: { pid } });
+    const swapped = playInfo.url.replace('/media/stream?', '/media/download?');
+    expect((await anonApi.raw.minted(swapped)).status()).toBe(401);
+
+    expect((await anonApi.raw.minted(playInfo.url)).status()).toBe(200);
+    await app.api.patch('/users/{userId}', { path: { userId }, data: { disabled: true } });
+    expect((await anonApi.raw.minted(playInfo.url)).status()).toBe(401);
+  } finally {
+    await app.api.patch('/users/{userId}', {
+      path: { userId },
+      data: { disabled: false, permissions: { ...account.permissions!, download: true } },
+    });
+  }
+});

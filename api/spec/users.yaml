@@ -161,7 +161,8 @@ paths:
         answers `forbidden`, and the session making the request is the
         only one that survives. An administrator resetting another
         account's password omits `currentPassword`, and every one of
-        that account's sessions is revoked. Setting a password on an
+        that account's sessions is revoked (recorded in the audit log as
+        `user.password-reset`). Setting a password on an
         OIDC-provisioned account enables local login for it. App
         passwords are separate credentials and survive a password
         change; revoke them individually.
@@ -192,9 +193,12 @@ paths:
       summary: Revoke all of an account's sessions
       description: >
         Signs the account out everywhere by revoking every live session it
-        has. When callers target their own account, the session making this
-        request survives. Administrators can target any account; everyone
-        else only their own.
+        has and closing the WebSockets they opened, and ends its gpodder
+        logins (app passwords stay valid, so those clients log in again).
+        When callers target their own account, the session making this
+        request survives.
+        Administrators can target any account; everyone else only their
+        own. Recorded in the audit log as `user.sessions-revoke`.
       tags: [users]
       parameters:
         - $ref: "#/components/parameters/UserId"
@@ -435,7 +439,7 @@ paths:
       description: >
         The calling user's app passwords, newest first. App passwords are
         dedicated per-client credentials for the compatibility APIs
-        (Subsonic and, later, gpodder), which require the server to hold a
+        (Subsonic and gpodder), which require the server to hold a
         recoverable secret; the login password is never usable there. The
         secret itself is only ever returned by creation. App passwords
         stop authenticating the moment their account is disabled, and are
@@ -492,7 +496,8 @@ paths:
       summary: Revoke an app password
       description: >
         Revokes one of the calling user's app passwords. Clients holding it
-        fail their next compatibility-API request immediately.
+        fail their next compatibility-API request immediately, and so do
+        the gpodder sessions it opened and the media URLs it minted.
       tags: [users]
       parameters:
         - $ref: "#/components/parameters/AppPasswordId"
@@ -606,8 +611,8 @@ components:
             disabled:
               type: boolean
               description: >
-                Disabled accounts cannot log in and their live sessions are
-                revoked on disable.
+                Disabled accounts cannot log in; disabling revokes their
+                live sessions and closes the sockets those opened.
             pending:
               type: boolean
               description: >
@@ -748,7 +753,7 @@ components:
           type: boolean
           description: >
             Disable or re-enable the account. Disabling revokes its live
-            sessions.
+            sessions and closes the sockets they opened.
         libraryAccess:
           $ref: "#/components/schemas/LibraryAccess"
         uploadEnabled:

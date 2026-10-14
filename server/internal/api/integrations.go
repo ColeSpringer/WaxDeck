@@ -14,6 +14,7 @@ import (
 
 	"github.com/oklog/ulid/v2"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/pagetext"
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -95,7 +96,9 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 	if err != nil {
 		return nil, err
 	}
-	token, _ := s.media.Mint(p.User.ID, req.Pid)
+	token, _ := s.media.MintFor(auth.MediaClaims{
+		User: p.User.ID, Cred: sessionCred(p), Purpose: auth.PurposeRadio, PID: req.Pid,
+	}, 0)
 	out := RadioPlayInfo{
 		Url: "/media/radio/" + url.PathEscape(req.Pid) + "?mt=" + url.QueryEscape(token),
 	}
@@ -436,11 +439,13 @@ func (s *Server) SearchRadioDirectory(ctx context.Context, req SearchRadioDirect
 // records the current title for play-info to report.
 func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 	pid := r.PathValue("pid")
-	user, err := s.media.Verify(r.URL.Query().Get("mt"), pid)
-	if err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthenticated", "missing or invalid media token")
+	claims, _, ok := s.verifiedMedia(w, r, r.URL.Query().Get("mt"), auth.MediaWant{
+		Purposes: []string{auth.PurposeRadio}, PID: pid,
+	})
+	if !ok {
 		return
 	}
+	user := claims.User
 	// Shared with the enclosure relay: the same account holding the same
 	// kind of resource, counted once.
 	release, ok := s.relayStreams.acquire(user)

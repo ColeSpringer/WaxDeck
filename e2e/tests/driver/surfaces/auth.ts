@@ -77,6 +77,29 @@ export class Auth extends Surface {
     return this.browserApi().get('/auth/session');
   }
 
+  /// Open an event socket from the page on the browser's own session,
+  /// beside the app's, and answer a wait for the status it closes with.
+  /// The page must already be on the app's origin.
+  async openSocketProbe(): Promise<() => Promise<number>> {
+    type Probe = { waxdeckProbeClosed: Promise<number> };
+    const page = this.ctx.page;
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          const ws = new WebSocket(location.origin.replace(/^http/, 'ws') + '/api/v1/ws');
+          (window as unknown as Probe).waxdeckProbeClosed = new Promise((done) => {
+            ws.onclose = (e) => done(e.code);
+          });
+          ws.onopen = () => {
+            ws.send('{}');
+            resolve();
+          };
+          ws.onerror = () => reject(new Error('the probe socket did not open'));
+        }),
+    );
+    return () => page.evaluate(() => (window as unknown as Probe).waxdeckProbeClosed);
+  }
+
   /// The login screen's field, for a spec asserting what it says.
   field(which: 'username' | 'password'): Locator {
     return this.ctx.page.locator(

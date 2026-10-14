@@ -209,6 +209,9 @@ type PlayInfo struct {
 
 // PlayOptions select a part of a multi-file item and request DSP.
 type PlayOptions struct {
+	// Cred is the credential the mint runs under (auth.MediaClaims.Cred):
+	// the stream URL dies with it.
+	Cred string
 	// FilePID selects the backing file (multi-file books); empty means
 	// the item's own file.
 	FilePID string
@@ -258,9 +261,9 @@ var forceFormats = map[string]string{
 }
 
 // PlayInfoFor resolves an item into a tokenized stream URL. The token
-// binds user and item; the part and boost selections ride the URL as
-// plain parameters and are validated again at fetch, like every other
-// stream parameter.
+// binds the user, the item, the credential the mint ran under and the
+// stream parameters the mint chose (part, boost, format, bitrate), so a
+// URL with any of them edited, added or dropped fails at fetch.
 func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string, opts PlayOptions) (PlayInfo, error) {
 	src, err := b.resolver.StreamSource(ctx, apiItemPID, opts.FilePID)
 	if err != nil {
@@ -294,7 +297,8 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 		// why this can clear a floor the caller set rather than only
 		// narrowing it, and it may name a spelling of the media type
 		// that differs from ours, which is what the device has to see.
-		force, advertise = DeviceFormat(src, shape, b.caps, opts.DeviceFormats, opts.ForceFormat)
+		capped := b.gate != nil && b.gate.MaxBitrateKbps(ctx, user) > 0
+		force, advertise = DeviceFormat(src, shape, b.caps, opts.DeviceFormats, opts.ForceFormat, capped)
 	}
 	mime, forced := forceFormats[force]
 	// The fetch side gates on the live caps too, so a format this daemon
@@ -325,21 +329,33 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 	}
 	// A bitrate cap resolves at mint time like voice boost: clamped to
 	// the caller's own transcode ceiling, then applied only when the
-	// source does not already satisfy it. Device endpoints never pass
-	// one, so a forced format and a cap cannot meet.
+	// source does not already satisfy it. A capped account's engine
+	// render is held to its ceiling even when the client asked for no
+	// cap, since the engine would otherwise pick its own rate (a carved
+	// lossless track renders as FLAC); an original played directly is
+	// the file itself and is left alone. Device endpoints never pass a
+	// cap: a capped account's device answer above is already lossy (WAV
+	// aside, the last resort of a renderer that plays nothing else), and
+	// the fetch holds that encode to the ceiling.
 	capKbps := 0
-	if opts.MaxBitrateKbps > 0 && !forced {
+	ceiling := 0
+	if b.gate != nil && !forced && (opts.MaxBitrateKbps > 0 || !shape.Seekable) {
+		ceiling = b.gate.MaxBitrateKbps(ctx, user)
+	}
+	want := opts.MaxBitrateKbps
+	if want == 0 {
+		want = ceiling
+	}
+	if want > 0 && !forced {
 		// Clamped here, so "a minted br is a bitrate this engine can
 		// speak" is the mint's own invariant rather than something each
 		// caller is trusted to have applied first. The REST surface
 		// still refuses an out-of-range field outright - that is its
 		// contract - and the fetch side re-validates what it is handed
 		// like every other stream parameter.
-		capKbps = min(max(opts.MaxBitrateKbps, MinStreamBitrateKbps), MaxStreamBitrateKbps)
-		if b.gate != nil {
-			if ceiling := b.gate.MaxBitrateKbps(ctx, user); ceiling > 0 {
-				capKbps = min(capKbps, ceiling)
-			}
+		capKbps = min(max(want, MinStreamBitrateKbps), MaxStreamBitrateKbps)
+		if ceiling > 0 {
+			capKbps = min(capKbps, ceiling)
 		}
 		capped, applied := CappedShape(src, b.caps, shape, capKbps)
 		if applied {
@@ -357,22 +373,30 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 			capKbps = 0
 		}
 	}
-	token, exp := b.tokens.MintFor(user, apiItemPID, opts.TTL)
-	streamURL := "/media/stream?pid=" + url.QueryEscape(apiItemPID) + "&mt=" + url.QueryEscape(token)
+	params := url.Values{}
 	if opts.FilePID != "" {
-		streamURL += "&f=" + url.QueryEscape(opts.FilePID)
+		params.Set("f", opts.FilePID)
 	}
 	if boost {
-		streamURL += "&vb=1"
+		params.Set("vb", "1")
 	}
 	if forced {
-		streamURL += "&fmt=" + url.QueryEscape(force)
+		params.Set("fmt", force)
 	}
 	if capKbps > 0 {
 		// The capped encode rides the same closed format hint the device
-		// paths use, plus the cap itself; the fetch side re-validates
-		// both and re-clamps against the ceiling.
-		streamURL += "&fmt=" + url.QueryEscape(shape.Format) + "&br=" + strconv.Itoa(capKbps)
+		// paths use, plus the cap itself; both are bound into the token,
+		// and the fetch clamps a lossy encode to the live ceiling.
+		params.Set("fmt", shape.Format)
+		params.Set("br", strconv.Itoa(capKbps))
+	}
+	shapeKey := streamShape(params)
+	token, exp := b.tokens.MintFor(auth.MediaClaims{
+		User: user, Cred: opts.Cred, Purpose: auth.PurposeStream, PID: apiItemPID, Shape: shapeKey,
+	}, opts.TTL)
+	streamURL := "/media/stream?pid=" + url.QueryEscape(apiItemPID) + "&mt=" + url.QueryEscape(token)
+	if shapeKey != "" {
+		streamURL += "&" + shapeKey
 	}
 	return PlayInfo{
 		URL:                streamURL,
@@ -383,6 +407,20 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 		VoiceBoost:         boost,
 		AppliedBitrateKbps: capKbps,
 	}, nil
+}
+
+// streamShape is the canonical form of the stream parameters a token
+// binds: the four the mint chooses, sorted and escaped, so a URL with
+// any of them edited, added or dropped no longer matches its token. A
+// seek (t) and a Range stay free.
+func streamShape(q url.Values) string {
+	v := url.Values{}
+	for _, k := range []string{"f", "vb", "fmt", "br"} {
+		if x := q.Get(k); x != "" {
+			v.Set(k, x)
+		}
+	}
+	return v.Encode()
 }
 
 // srcRef maps an absolute file path onto a WaxFlow root reference
@@ -578,11 +616,19 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// An absent token is the same failure as a bad one: no credential.
-	user, err := b.tokens.Verify(q.Get("mt"), pid)
+	// The token binds the stream parameters as well as the item, so an
+	// edited URL is a bad token rather than a different stream.
+	claims, err := b.tokens.Verify(q.Get("mt"), auth.MediaWant{
+		Purposes: []string{auth.PurposeStream}, PID: pid, Shape: streamShape(q),
+	})
 	if err != nil {
 		writeJSONError(w, http.StatusUnauthorized, "unauthenticated", "invalid or expired media token")
 		return
 	}
+	if !b.authorize(r.Context(), w, claims) {
+		return
+	}
+	user := claims.User
 	src, err := b.resolver.StreamSource(r.Context(), pid, q.Get("f"))
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "not-found", "no streamable item with pid "+pid)
@@ -652,23 +698,25 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 		params.Set("t", t)
 	}
 	// The bitrate a lossy encode is bounded to: the smaller of the URL's
-	// own cap (minted by play-info, re-validated here like every other
-	// stream parameter) and the per-user ceiling, which is server-derived
-	// - so an edited br can only narrow what the token authorizes. Only
-	// for shapes that engage the engine: a seekable shape is a
-	// passthrough of the original bytes, and honoring br there would
-	// hand out an un-admitted transcode of a stream that was never
-	// charged as one.
+	// own cap (the mint's choice, bound into the token, so an edited br
+	// never got this far) and the account's live ceiling, which may have
+	// dropped since the mint. Only for shapes that engage the engine: a
+	// seekable shape is a passthrough of the original bytes, and
+	// honoring br there would hand out an un-admitted transcode of a
+	// stream that was never charged as one - which is also why a direct
+	// play reads no ceiling at all.
 	if !shape.Seekable && lossyBitrateFormats[shape.Format] {
 		bitrate := 0
 		if br, err := strconv.Atoi(q.Get("br")); err == nil &&
 			br >= MinStreamBitrateKbps && br <= MaxStreamBitrateKbps {
 			bitrate = br
 		}
+		ceiling := 0
 		if b.gate != nil {
-			if ceiling := b.gate.MaxBitrateKbps(r.Context(), user); ceiling > 0 && (bitrate == 0 || ceiling < bitrate) {
-				bitrate = ceiling
-			}
+			ceiling = b.gate.MaxBitrateKbps(r.Context(), user)
+		}
+		if ceiling > 0 && (bitrate == 0 || ceiling < bitrate) {
+			bitrate = ceiling
 		}
 		if bitrate > 0 {
 			params.Set("bitrate", strconv.Itoa(bitrate))

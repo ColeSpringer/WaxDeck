@@ -11,54 +11,127 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/oklog/ulid/v2"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
 // VerifyAppPasswordBasic authenticates the HTTP Basic scheme: username
 // plus an app password secret presented in the clear. The login
-// password never works here. It returns the account, or nil on any
-// failure (unknown user, disabled account, no matching password),
-// never distinguishing them; the secret comparison is constant time
-// per candidate.
-func (l *Library) VerifyAppPasswordBasic(ctx context.Context, username, password string) (*wdb.User, error) {
+// password never works here. It returns the account and the id of the
+// app password that matched, or nil on any failure (unknown user,
+// disabled account, no matching password), never distinguishing them;
+// the secret comparison is constant time per candidate.
+func (l *Library) VerifyAppPasswordBasic(ctx context.Context, username, password string) (*wdb.User, string, error) {
 	u, err := l.db.UserByUsername(ctx, username)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
-			return nil, nil
+			return nil, "", nil
 		}
-		return nil, &Error{Kind: KindInternal, Err: err}
+		return nil, "", &Error{Kind: KindInternal, Err: err}
 	}
 	if u.Disabled {
-		return nil, nil
+		return nil, "", nil
 	}
 	for _, entry := range l.userAppSecrets(ctx, u.ID) {
 		if subtle.ConstantTimeCompare([]byte(entry.secret), []byte(password)) == 1 {
 			l.touchAppPassword(ctx, entry)
-			return u, nil
+			return u, entry.id, nil
 		}
 	}
-	return nil, nil
+	return nil, "", nil
 }
 
-// GpodderSessionUser resolves a validated session cookie's username to
-// its account: nil when the account is unknown or disabled (the cookie
-// may outlive the account).
-func (l *Library) GpodderSessionUser(ctx context.Context, username string) (*wdb.User, error) {
-	u, err := l.db.UserByUsername(ctx, username)
+// Gpodder sessions: the sessionid cookie is an opaque token naming one
+// login row, which goes with the app password that opened it and with
+// its account, so a revoke, a logout, or a recreated username leaves
+// the cookie naming nothing.
+const (
+	gpodderSessionTTL = 14 * 24 * time.Hour
+	// gpodderSessionsPerPassword bounds the rows one app password holds:
+	// a client that logs in on every sync replaces its oldest.
+	gpodderSessionsPerPassword = 20
+)
+
+// GpodderLogin verifies Basic credentials against the account's app
+// passwords and opens a session for them, answering the account, the
+// cookie value and when the session ends (the cookie's own expiry, so
+// the two cannot drift); nil when the credentials do not verify, or
+// verify as an account other than the one the client named (compared
+// without case), which opens nothing.
+func (l *Library) GpodderLogin(ctx context.Context, account, username, secret string) (*wdb.User, string, time.Time, error) {
+	u, apID, err := l.VerifyAppPasswordBasic(ctx, username, secret)
+	if err != nil || u == nil || !strings.EqualFold(u.Username, account) {
+		return nil, "", time.Time{}, err
+	}
+	token, hash, err := auth.NewOpaqueToken()
+	if err != nil {
+		return nil, "", time.Time{}, &Error{Kind: KindInternal, Err: err}
+	}
+	now := time.Now()
+	expires := now.Add(gpodderSessionTTL)
+	if err := l.db.InsertGpodderSession(ctx, wdb.GpodderSession{
+		ID: ulid.Make().String(), UserID: u.ID, AppPasswordID: apID, TokenHash: hash,
+		CreatedAtNS: now.UnixNano(), ExpiresAtNS: expires.UnixNano(),
+	}, gpodderSessionsPerPassword); err != nil {
+		return nil, "", time.Time{}, &Error{Kind: KindInternal, Err: err}
+	}
+	return u, token, expires, nil
+}
+
+// GpodderSessionUser resolves a session cookie to its account: nil when
+// the cookie names no live session, or its account can no longer sign
+// in.
+func (l *Library) GpodderSessionUser(ctx context.Context, token string) (*wdb.User, error) {
+	if token == "" {
+		return nil, nil
+	}
+	s, err := l.db.GpodderSessionByHash(ctx, auth.TokenHash(token))
+	if errors.Is(err, wdb.ErrNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, &Error{Kind: KindInternal, Err: err}
+	}
+	if time.Now().UnixNano() >= s.ExpiresAtNS {
+		return nil, nil
+	}
+	u, err := l.db.UserByID(ctx, s.UserID)
 	if err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
 			return nil, nil
 		}
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
-	if u.Disabled {
+	if u.Disabled || u.Pending {
 		return nil, nil
 	}
 	return u, nil
+}
+
+// GpodderLogout ends the session a cookie names.
+func (l *Library) GpodderLogout(ctx context.Context, token string) error {
+	if token == "" {
+		return nil
+	}
+	if err := l.db.DeleteGpodderSessionByHash(ctx, auth.TokenHash(token)); err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	return nil
+}
+
+// EndGpodderSessions ends every gpodder session of the account: a
+// disable, and signing the account out everywhere.
+func (l *Library) EndGpodderSessions(ctx context.Context, userID string) error {
+	if err := l.db.DeleteGpodderSessionsForUser(ctx, userID); err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	return nil
 }
 
 // GpodderFeedURLs returns the feed URL of every subscription the user

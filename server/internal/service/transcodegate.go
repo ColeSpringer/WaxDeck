@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 )
 
@@ -95,6 +97,22 @@ func (g *transcodeGate) MaxBitrateKbps(ctx context.Context, user string) int {
 		return int(u.MaxTranscodeKbps)
 	}
 	return g.l.currentToggles().limits.DefaultMaxBitrateKbps
+}
+
+// AuthorizeMedia is the bridge's per-fetch check of a media token, its
+// refusals of the item put in the bridge's terms.
+func (g *transcodeGate) AuthorizeMedia(ctx context.Context, c auth.MediaClaims) error {
+	ctx, cancel := gateCtx(ctx)
+	defer cancel()
+	err := g.l.AuthorizeMedia(ctx, c)
+	switch k := KindOf(err); {
+	case err == nil:
+	case k == KindNotFound || k == KindForbidden:
+		return fmt.Errorf("%w: %w", flow.ErrMediaRefused, err)
+	case k == KindMaintenance:
+		return fmt.Errorf("%w: %w", flow.ErrCatalogMaintenance, err)
+	}
+	return err
 }
 
 func (g *transcodeGate) userIsAdmin(ctx context.Context, user string) bool {

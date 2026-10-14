@@ -146,14 +146,15 @@ func (l *Library) EntityCards(ctx context.Context, uc *UserCtx, apiPIDs []string
 }
 
 // entityKindCards resolves the three catalog-entity kinds through
-// EntityByPIDs, which is also the visibility gate for a restricted
-// caller: an entity whose every member sits outside the grant is dropped
-// rather than handed out as a pid the tap cannot follow.
+// EntityByPIDs, gated for a restricted caller by visibleEntities: an
+// entity none of whose members the caller's grants and content rules
+// admit is dropped rather than handed out as a pid the tap cannot
+// follow.
 //
 // Departed here is a pid the batch read did not answer at all: deleted,
 // merged away, or never real, which the catalog collapses into absence
 // (EntityByPIDs omits unknown pids rather than erroring). An entity the
-// read DID answer but the grant hides is out of the cards and out of
+// read DID answer but the gate hides is out of the cards and out of
 // departed both - it exists, and a widened grant brings it back.
 func (l *Library) entityKindCards(ctx context.Context, uc *UserCtx, prefix string, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
 	kind, ok := entityKindForPrefix(prefix)
@@ -170,6 +171,12 @@ func (l *Library) entityKindCards(ctx context.Context, uc *UserCtx, prefix strin
 			departed[apiPID(prefix, pid)] = true
 		}
 	}
+	var visible map[model.PID]bool
+	if !fullReach(uc) {
+		if visible, err = l.visibleEntities(ctx, uc, prefix, pids); err != nil {
+			return nil, nil, err
+		}
+	}
 	out := make(map[string]EntityCard, len(infos))
 	// Album and release-group cards want an artist line the entity does
 	// not carry: an album links to its release group and a release group
@@ -179,7 +186,7 @@ func (l *Library) entityKindCards(ctx context.Context, uc *UserCtx, prefix strin
 		if info == nil {
 			continue
 		}
-		if !uc.AllLibraries && !l.entityInLibraries(info, uc) {
+		if visible != nil && !visible[pid] {
 			continue
 		}
 		card := EntityCard{
@@ -189,12 +196,12 @@ func (l *Library) entityKindCards(ctx context.Context, uc *UserCtx, prefix strin
 			Year:   info.Year,
 			Artist: names[pid],
 		}
-		// Catalog-wide, because EntityByPIDs takes no library scope, so
-		// the count is answered only to a caller it is true for. A card
-		// advertising nine tracks that opens onto three would be worse
-		// than a card with no count on it, and the contract says absent
-		// is legal.
-		if uc.AllLibraries {
+		// Catalog-wide, because EntityByPIDs takes no library or content
+		// scope, so the count is answered only to a caller it is true
+		// for. A card advertising nine tracks that opens onto three would
+		// be worse than a card with no count on it, and the contract says
+		// absent is legal.
+		if fullReach(uc) {
 			count := info.ItemCount
 			card.ItemCount = &count
 		}

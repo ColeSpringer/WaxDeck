@@ -337,7 +337,7 @@ func TestDeviceFormat(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, advertise := DeviceFormat(tc.src, tc.shape, tc.caps, tc.accepts, "mp3")
+			got, advertise := DeviceFormat(tc.src, tc.shape, tc.caps, tc.accepts, "mp3", false)
 			if got != tc.want {
 				t.Fatalf("DeviceFormat(%v) format = %q, want %q", tc.accepts, got, tc.want)
 			}

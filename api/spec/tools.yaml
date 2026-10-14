@@ -250,7 +250,11 @@ paths:
         final event named `done` after the task reaches a terminal
         state, after which the stream closes. Reconnecting is always
         safe: the first event replays current state. Same visibility
-        as reading the task. The WebSocket channel carries the same
+        as reading the task, and the stream keeps checking it: within
+        a few seconds of the caller's session ending, or of the caller
+        losing the right to read the task, the stream closes with no
+        `done` event, and a reconnect answers that refusal. The
+        WebSocket channel carries the same
         lifecycle as invalidations; this stream exists for consumers
         that want the payloads pushed.
       tags: [tools]

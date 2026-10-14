@@ -2,8 +2,10 @@ package api
 
 import (
 	"io"
+	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -191,6 +193,25 @@ func TestBookSeriesDetail(t *testing.T) {
 	wantStatus(t, get(t, h.ts, "/api/v1/series/"+series, stranger),
 		404, "a series held only in a library this account was not granted")
 
+	// An account granted the books library sees the whole series, so
+	// its counts are true for it and answered.
+	var booksLib string
+	for _, lib := range libs.Libraries {
+		if lib.Name == "books" {
+			booksLib = lib.Pid
+		}
+	}
+	resp = h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "seriesreader", "password": "seriesreader-pass",
+		"libraryAccess": map[string]any{"mode": "granted", "libraryPids": []string{booksLib}},
+	})
+	wantStatus(t, resp, 201, "create the books reader")
+	reader := loginAs(t, h.ts, "seriesreader", "seriesreader-pass").Token
+	whole := decode[BookSeriesDetail](t, get(t, h.ts, "/api/v1/series/"+series, reader))
+	if whole.BookCount == nil || *whole.BookCount != 3 {
+		t.Fatalf("a reader granted the whole series reads bookCount %v, want 3", whole.BookCount)
+	}
+
 	// A pid of the wrong kind is a miss rather than a leak.
 	wantStatus(t, get(t, h.ts, "/api/v1/series/al-01JZX5N8QW3F4V9T2B7KD3M9R6", h.token),
 		404, "an album pid presented as a series")
@@ -213,13 +234,160 @@ func TestBookSeriesDetail(t *testing.T) {
 	}
 	resp.Body.Close()
 	kid := loginAs(t, h.ts, "serieskid", "serieskid-pass").Token
-	hidden := decode[BookSeriesDetail](t, get(t, h.ts, "/api/v1/series/"+series, kid))
-	if len(hidden.Books) != 0 {
-		t.Fatalf("a tag rule did not hide the series' books: %+v", hidden.Books)
+	// Every book hidden is the series hidden: the 404 an ungranted
+	// library gets, and no row in the listing.
+	wantStatus(t, get(t, h.ts, "/api/v1/series/"+series, kid),
+		404, "a series whose every book a tag rule hides")
+	for _, sr := range decode[BookSeriesPage](t, get(t, h.ts, "/api/v1/books/series", kid)).Series {
+		if sr.Pid == series {
+			t.Errorf("the hidden series is listed for the restricted account: %+v", sr)
+		}
 	}
-	// And the counts go with them: this account sees every library, so
-	// the grant alone would have advertised three books over no rows.
-	if hidden.BookCount != nil || hidden.TotalDurationMs != nil {
-		t.Fatalf("counts answered over a filtered series: %+v", hidden)
+
+	// One book carrying the allowed tag opens the series onto that book,
+	// and the counts stay withheld: this account sees every library, so
+	// the grant alone would advertise three books over one row.
+	first := detail.Books[0].Book.Pid
+	wantStatus(t, h.putJSON(t, "/api/v1/items/"+first+"/tags/nosuchtag", map[string]any{
+		"values": []string{"yes"},
+	}), 200, "tagging the first book")
+	partial := decode[BookSeriesDetail](t, get(t, h.ts, "/api/v1/series/"+series, kid))
+	if len(partial.Books) != 1 || partial.Books[0].Book.Pid != first {
+		t.Fatalf("the restricted account sees %+v, want the tagged book alone", partial.Books)
 	}
+	if partial.BookCount != nil || partial.TotalDurationMs != nil {
+		t.Fatalf("counts answered over a filtered series: %+v", partial)
+	}
+	for _, sr := range decode[BookSeriesPage](t, get(t, h.ts, "/api/v1/books/series", kid)).Series {
+		if sr.Pid == series && (sr.BookCount != nil || sr.TotalDurationMs != nil) {
+			t.Errorf("the listing answers counts over a filtered series: %+v", sr)
+		}
+	}
+}
+
+// A book a content rule hides is hidden on the book routes as it is on
+// the item routes: its detail, its resume point and its bookmarks all
+// answer not-found, as if it did not exist.
+func TestBookRoutesHonourContentRules(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	books := h.items(t, "?mediaType=audiobook")
+	if len(books.Items) != 1 {
+		t.Fatalf("audiobooks = %d, want the fixture's one", len(books.Items))
+	}
+	book := books.Items[0].Pid
+	kid := kidAccount(t, h, "reader")
+	for _, path := range []string{"/api/v1/books/" + book, "/api/v1/books/" + book + "/bookmarks"} {
+		wantStatus(t, get(t, h.ts, path, kid), 200, "before the flag: "+path)
+	}
+	flagExplicit(t, h, book)
+	for _, path := range []string{
+		"/api/v1/items/" + book,
+		"/api/v1/books/" + book,
+		"/api/v1/books/" + book + "/resume",
+		"/api/v1/books/" + book + "/bookmarks",
+	} {
+		wantStatus(t, get(t, h.ts, path, kid), 404, "after the flag: "+path)
+	}
+}
+
+// The series listing and its detail agree on what a reader is offered:
+// a trashed book is in neither, so a series whose only book a
+// tag-restricted reader may see is in the trash is absent from both.
+func TestSeriesListingAndDetailAgreeOnTrashedBooks(t *testing.T) {
+	t.Parallel()
+	books := t.TempDir()
+	if _, err := fixtures.GenerateSeriesBooks(books, "Ebbtide", 2); err != nil {
+		t.Fatalf("generating the series: %v", err)
+	}
+	h := newHarness(t, service.Root{Name: "books", Path: books})
+	var series string
+	for _, sr := range decode[BookSeriesPage](t, get(t, h.ts, "/api/v1/books/series", h.token)).Series {
+		if sr.Name == "Ebbtide" {
+			series = sr.Pid
+		}
+	}
+	detail := decode[BookSeriesDetail](t, get(t, h.ts, "/api/v1/series/"+series, h.token))
+	if len(detail.Books) != 2 {
+		t.Fatalf("series books = %d, want 2", len(detail.Books))
+	}
+	flagExplicit(t, h, detail.Books[0].Book.Pid)
+	wantStatus(t, h.postJSON(t, "/api/v1/library/items/delete", map[string]any{
+		"pids": []string{detail.Books[1].Book.Pid}, "mode": "trash",
+	}), 200, "trash the permitted book")
+
+	kid := kidAccount(t, h, "tidekid")
+	for _, sr := range decode[BookSeriesPage](t, get(t, h.ts, "/api/v1/books/series", kid)).Series {
+		if sr.Pid == series {
+			t.Error("the series is listed with its only permitted book in the trash")
+		}
+	}
+	wantStatus(t, get(t, h.ts, "/api/v1/series/"+series, kid), 404, "the detail of that series")
+	got := decode[BookSeriesDetail](t, get(t, h.ts, "/api/v1/series/"+series, h.token))
+	if len(got.Books) != 1 {
+		t.Fatalf("the administrator's detail lists %d books, want the one not trashed", len(got.Books))
+	}
+	count, total := 0, int64(0)
+	if got.BookCount != nil && got.TotalDurationMs != nil {
+		count, total = *got.BookCount, *got.TotalDurationMs
+	}
+	if count != 1 || total != got.Books[0].Book.DurationMs {
+		t.Errorf("the administrator's detail counts %d books, %d ms; want the one it lists, %d ms",
+			count, total, got.Books[0].Book.DurationMs)
+	}
+}
+
+// A reader whose libraries hold a series only through an alternate
+// copy of a book they cannot open is offered neither its listing row
+// nor its detail: the two agree for a library grant as they do for a
+// tag rule.
+func TestSeriesListingAndDetailAgreeForALibraryGrant(t *testing.T) {
+	t.Parallel()
+	shelf, annex := t.TempDir(), t.TempDir()
+	paths, err := fixtures.GenerateSeriesBooks(annex, "Ebbtide", 1)
+	if err != nil {
+		t.Fatalf("generating the series: %v", err)
+	}
+	copied := filepath.Join(shelf, strings.TrimPrefix(paths[0], annex))
+	if err := os.MkdirAll(filepath.Dir(copied), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(copied, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h := newHarness(t, service.Root{Name: "annex", Path: annex}, service.Root{Name: "shelf", Path: shelf})
+	var series, shelfLib string
+	for _, sr := range decode[BookSeriesPage](t, get(t, h.ts, "/api/v1/books/series", h.token)).Series {
+		if sr.Name == "Ebbtide" {
+			series = sr.Pid
+		}
+	}
+	detail := decode[BookSeriesDetail](t, get(t, h.ts, "/api/v1/series/"+series, h.token))
+	if len(detail.Books) != 1 {
+		t.Fatalf("series books = %d, want the one book", len(detail.Books))
+	}
+	for _, lib := range decode[Libraries](t, get(t, h.ts, "/api/v1/libraries", h.token)).Libraries {
+		if lib.Name == "shelf" {
+			shelfLib = lib.Pid
+		}
+	}
+	id, reader, _ := mediaListener(t, h, "shelfreader", nil)
+	wantStatus(t, h.patchJSON(t, "/api/v1/users/"+id, map[string]any{
+		"libraryAccess": map[string]any{"mode": "granted", "libraryPids": []string{shelfLib}},
+	}), 200, "grant the shelf alone")
+	wantStatus(t, get(t, h.ts, "/api/v1/books/"+detail.Books[0].Book.Pid, reader), 404, "the book its copy belongs to")
+	for _, sr := range decode[BookSeriesPage](t, get(t, h.ts, "/api/v1/books/series", reader)).Series {
+		if sr.Pid == series {
+			t.Error("the series is listed through a copy of a book the reader cannot open")
+		}
+	}
+	wantStatus(t, get(t, h.ts, "/api/v1/series/"+series, reader), 404, "the detail of that series")
 }

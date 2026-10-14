@@ -53,6 +53,48 @@ note.
   workaround: restore staging compares the archived header with the
   live catalog's stamp, and the start validates the extracted file with
   `port.ValidateBackup` before swapping it in.
+- **Ref resolution cannot be scoped to what a caller may hold.**
+  `ResolveRefWith` settles a tie by taking the present item with the
+  lowest pid, blind to the caller, so when that pick is in a library the
+  importing account cannot see and a copy sits in one it can, the entry
+  reads as missing. Wanted: a `ResolveOptions.Accept func(*model.ItemView)
+  bool` applied to each rung's candidates before the tie is settled.
+  Shipped workaround: WaxDeck resolves catalog-wide and turns every
+  match the caller cannot see into a miss, which never leaks but can
+  miss such a copy.
+- **Exports write every member of a playlist.** `ExportM3U8` and
+  `ExportPlaylistRefs` re-read the whole list themselves, so a host that
+  may show a reader only some members cannot use them. Wanted: both
+  over a caller-supplied pid list (`ExportM3U8For`, `ItemRefs`, a thin
+  wrapper over `store.ItemIdentities`). Shipped workaround: WaxDeck
+  writes the M3U document itself in the catalog's format, and pairs
+  `ExportPlaylistRefs` with member reads taken on both sides of it
+  (three reads of the list an attempt, the export's own included),
+  checking each pair before keeping a visible member's ref; a random
+  smart list with no pinned seed draws afresh on every read, so its one
+  draw is resolved back to its items instead. Both go when the ask
+  lands. Until then a smart list's portable export follows the
+  catalog's own evaluation, which spends a limit before dropping
+  trashed members, so a limited list holding trashed matches exports
+  fewer entries than its listing and its M3U export show; and a
+  shuffled list's draw leaves out a member its ref cannot name back, an
+  episode never fetched being the usual one (no file, so no essence or
+  fingerprint).
+- **Series have no query field.** A query can facet on an item's album,
+  artist or release group but not its series, so the series listing
+  reads each series' books to learn whether a restricted reader may
+  open any of them (the catalog places a series in every library
+  holding a file of it, an alternate copy's included). Wanted: a
+  `series_pid` item field (and a series facet group) like `album_pid`.
+  Shipped workaround: WaxDeck reads the books per series and takes
+  their tag verdicts for the whole page in one query.
+- **Entity counts include the trash.** `EntityInfo.ItemCount` and
+  `TotalDurationMS` count every member, trashed ones included, while
+  every listing leaves the trash out, so an album or series holding a
+  trashed member advertises one more than it lists. Wanted: the counts
+  over members not in the trash, or a trashed count beside them.
+  Shipped workaround: a series detail counts the books it lists; the
+  album read and the series listing carry the catalog's numbers.
 
 ## WaxTap
 

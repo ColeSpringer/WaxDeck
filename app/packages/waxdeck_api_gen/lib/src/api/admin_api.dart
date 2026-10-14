@@ -1222,7 +1222,7 @@ class AdminApi {
   }
 
   /// Get one job&#39;s state
-  /// State and progress of a server-run catalog job.
+  /// State and progress of a server-run catalog job, for the audience the &#x60;job&#x60; sync marker reaches: administrators, and the starter of a targeted job until its end has been announced to them; anyone else is &#x60;forbidden&#x60;. A timeline-measurement job (the job a queue timeline answers &#x60;202&#x60; with) is readable by the account whose queue it measures alone, and is &#x60;not-found&#x60; to any other. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

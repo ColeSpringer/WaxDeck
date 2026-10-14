@@ -3,6 +3,7 @@ package flow
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 )
@@ -55,7 +57,21 @@ func newTestBridge(t *testing.T, upstream http.HandlerFunc, src Source) *Bridge 
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A gate that admits everything, since a bridge without one refuses
+	// every token; a test about the gate wires its own.
+	b.SetTranscodeGate(&fakeGate{})
 	return b
+}
+
+// shapedURL mints a stream URL carrying parameters the mint would not
+// choose itself, for tests of the fetch side's own handling of them: the
+// token binds them, so appending one to a minted URL is an edit the
+// fetch refuses.
+func shapedURL(t *testing.T, b *Bridge, pid string, params url.Values) string {
+	t.Helper()
+	shape := streamShape(params)
+	token, _ := b.tokens.MintFor(auth.MediaClaims{User: "us-1", Purpose: auth.PurposeStream, PID: pid, Shape: shape}, 0)
+	return "/media/stream?pid=" + url.QueryEscape(pid) + "&mt=" + url.QueryEscape(token) + "&" + shape
 }
 
 func tokenURL(t *testing.T, b *Bridge, pid string) string {
@@ -236,10 +252,11 @@ func TestForcedFormatMatchingSourceTakesNoSlot(t *testing.T) {
 			gate := &fakeGate{}
 			b.SetTranscodeGate(gate)
 
-			u := tokenURL(t, b, "tr-X") + "&fmt=" + tc.format
+			params := url.Values{"fmt": {tc.format}}
 			if tc.boost {
-				u += "&vb=1"
+				params.Set("vb", "1")
 			}
+			u := shapedURL(t, b, "tr-X", params)
 			rec := httptest.NewRecorder()
 			b.ServeStream(rec, httptest.NewRequest("GET", u, nil))
 			if rec.Code != 200 || rec.Body.String() != "served" {
@@ -353,5 +370,68 @@ func TestVirtualWindowBoundsReachTheSidecar(t *testing.T) {
 				t.Errorf("open window sent from=%q to=%q", open.Get("from"), open.Get("to"))
 			}
 		})
+	}
+}
+
+// The stream fetch re-runs the token's mint-time check through the gate:
+// a refused account or credential is a bad token, an item the account
+// may no longer have is not found, and either way nothing reaches the
+// engine.
+func TestServeStreamAsksTheGate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "song.flac")
+	if err := os.WriteFile(path, []byte("flacbytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reached := 0
+	b := newTestBridge(t, func(w http.ResponseWriter, r *http.Request) {
+		reached++
+		io.WriteString(w, "served")
+	}, Source{Path: path, Size: 9, MTimeNS: 1, Codec: "flac", Container: "flac"})
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	info, err := b.PlayInfoFor(context.Background(), "us-1", "tr-X", PlayOptions{Cred: "se:se-1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetch := func() int {
+		rec := httptest.NewRecorder()
+		b.ServeStream(rec, httptest.NewRequest("GET", info.URL, nil))
+		return rec.Code
+	}
+	if got := fetch(); got != http.StatusOK || reached != 1 {
+		t.Fatalf("an authorized fetch = %d (engine reached %d), want 200", got, reached)
+	}
+	want := auth.MediaClaims{User: "us-1", Cred: "se:se-1", Purpose: auth.PurposeStream, PID: "tr-X"}
+	if len(gate.authorized) != 1 {
+		t.Fatalf("the gate was asked %d times, want 1", len(gate.authorized))
+	}
+	got := gate.authorized[0]
+	got.Exp = time.Time{}
+	if got != want {
+		t.Errorf("the gate was asked about %+v, want %+v", got, want)
+	}
+
+	gate.authErr = fmt.Errorf("disabled: %w", auth.ErrMediaRevoked)
+	if got := fetch(); got != http.StatusUnauthorized {
+		t.Errorf("a revoked account's fetch = %d, want 401", got)
+	}
+	gate.authErr = fmt.Errorf("out of reach: %w", ErrMediaRefused)
+	if got := fetch(); got != http.StatusNotFound {
+		t.Errorf("an unreachable item's fetch = %d, want 404", got)
+	}
+	// A check that could not be made (a database stall) is the server's
+	// trouble, which a player retries, not a verdict on the item; a
+	// catalog handed to maintenance says so, as the other media routes do.
+	gate.authErr = errors.New("database is locked")
+	if got := fetch(); got != http.StatusInternalServerError {
+		t.Errorf("a fetch whose check failed = %d, want 500", got)
+	}
+	gate.authErr = fmt.Errorf("handed off: %w", ErrCatalogMaintenance)
+	if got := fetch(); got != http.StatusServiceUnavailable {
+		t.Errorf("a fetch during catalog maintenance = %d, want 503", got)
+	}
+	if reached != 1 {
+		t.Errorf("refused fetches reached the engine %d times", reached-1)
 	}
 }

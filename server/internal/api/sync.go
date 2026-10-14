@@ -2,8 +2,10 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/url"
 
+	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -184,7 +186,7 @@ func (s *Server) ListPlayStates(ctx context.Context, req ListPlayStatesRequestOb
 // --- download info -----------------------------------------------------------
 
 func (s *Server) GetDownloadInfo(ctx context.Context, req GetDownloadInfoRequestObject) (GetDownloadInfoResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc, p, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -193,12 +195,18 @@ func (s *Server) GetDownloadInfo(ctx context.Context, req GetDownloadInfoRequest
 	}
 	res, err := s.svc.DownloadInfo(ctx, uc, req.Pid)
 	if err != nil {
+		if errors.Is(err, service.ErrEpisodeNotFetched) {
+			return GetDownloadInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found",
+				"the episode's audio is not on this server; fetch it before downloading"))}, nil
+		}
 		if service.KindOf(err) == service.KindNotFound {
 			return GetDownloadInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
 		}
 		return nil, err
 	}
-	token, exp := s.media.Mint(uc.ID, req.Pid)
+	token, exp := s.media.MintFor(auth.MediaClaims{
+		User: uc.ID, Cred: sessionCred(p), Purpose: auth.PurposeDownload, PID: req.Pid,
+	}, 0)
 	out := DownloadInfo{Pid: req.Pid, ExpiresAt: exp, Files: make([]DownloadFile, 0, len(res.Files))}
 	for _, f := range res.Files {
 		df := DownloadFile{

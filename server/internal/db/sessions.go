@@ -156,14 +156,17 @@ func (d *DB) DeleteUserSessions(ctx context.Context, userID, keepID string) erro
 	return err
 }
 
-// SweepExpired removes expired sessions, spent OIDC state, and spent
-// one-time codes. Called periodically by the janitor.
+// SweepExpired removes expired sessions (web and gpodder), spent OIDC
+// state, and spent one-time codes. Called periodically by the janitor.
 func (d *DB) SweepExpired(ctx context.Context) error {
 	now := time.Now().UnixNano()
 	if _, err := d.w.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at_ns < ?`, now); err != nil {
 		return err
 	}
 	if _, err := d.w.ExecContext(ctx, `DELETE FROM oauth_state WHERE expires_at_ns < ?`, now); err != nil {
+		return err
+	}
+	if _, err := d.w.ExecContext(ctx, `DELETE FROM gpodder_sessions WHERE expires_at_ns < ?`, now); err != nil {
 		return err
 	}
 	_, err := d.w.ExecContext(ctx, `DELETE FROM oidc_codes WHERE expires_at_ns < ?`, now)

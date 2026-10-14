@@ -77,3 +77,17 @@ test('resume position and listen dedupe survive a replay', async ({ app }) => {
   expect(first.accepted + second.accepted).toBe(1);
   expect(second.duplicates).toBe(1);
 });
+
+// A stream URL dies with the session that asked for it: after a sign-out
+// it opens nothing, where it used to play out its fifteen minutes.
+test('signing out ends new opens of a minted stream URL', async ({ app, anonApi }) => {
+  const { pid } = await app.seed.item('Alpha Song');
+  const phone = await app.api.as('').post('/auth/login', {
+    data: { username: app.account.username, password: app.account.password, deviceName: 'Playwright Stream Phone' },
+  });
+  const asPhone = app.api.as(phone.token);
+  const playInfo = await asPhone.get('/items/{pid}/play-info', { path: { pid } });
+  expect((await anonApi.raw.minted(playInfo.url)).status()).toBe(200);
+  await asPhone.post('/auth/logout');
+  expect((await anonApi.raw.minted(playInfo.url)).status()).toBe(401);
+});

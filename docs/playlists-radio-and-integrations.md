@@ -21,7 +21,11 @@ WaxDeck has two playlist kinds:
 Both kinds are private by default. A shared playlist is visible to
 every user on the server; only its owner can edit it. A shared smart
 playlist always shows the owner's evaluation: "my top rated" means the
-owner's ratings, and viewers see the owner's list.
+owner's ratings, and viewers see the owner's list. Each reader sees
+only the members they could open themselves: a track outside their
+libraries, one their content settings deny, or an episode of a show
+they do not follow is left out of the listing, the count, and both
+exports, on the Subsonic API as on REST.
 
 ### The starter
 
@@ -64,7 +68,9 @@ Playlists round-trip M3U8 for interop with path-based players. Import
 lives on the playlists screen (paste a file's contents; the server
 matches entries against the library and reports what it could not
 place), and every playlist detail menu offers Export M3U with a copy
-button. M3U8 carries no cover: the format has no directive for one, so
+button. Every import matches only what the importing account can see:
+an entry naming a track outside its libraries or denied by its content
+settings is reported as unmatched, the same as one nothing matched. M3U8 carries no cover: the format has no directive for one, so
 an exported playlist is text and its cover stays on the server.
 
 ### Navidrome smart playlists (NSP)
@@ -238,7 +244,9 @@ leaving the playlist bare. Covers serve at
 the same artwork endpoint as everything else, under the playlist's own
 id, so third-party Subsonic clients pick them up through `coverArt`
 with no extra work; a private playlist's cover is as private as the
-playlist.
+playlist. The cover belongs to the playlist, like its name, so a
+shared list shows every reader the owner's mosaic, including covers of
+members a reader's own access leaves out of their listing.
 
 ## Internet radio
 

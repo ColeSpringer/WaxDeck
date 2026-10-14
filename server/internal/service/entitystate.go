@@ -50,9 +50,10 @@ func mergeEntityForPrefix(prefix string) (model.MergeEntity, bool) {
 
 // resolveEntity splits an API entity pid and authorizes the caller for
 // it. Restricted callers are gated exactly as entity search hits are:
-// an entity is visible when a library holding one of its member items
-// is granted. A pid naming no entity is a plain not-found, so probing
-// cannot distinguish "no such entity" from "not yours".
+// an entity is visible when one of its members passes the caller's
+// library grants and content rules. A pid naming no entity is a plain
+// not-found, so probing cannot distinguish "no such entity" from "not
+// yours".
 func (l *Library) resolveEntity(ctx context.Context, uc *UserCtx, apiEntityPID string) (model.MergeEntity, model.PID, error) {
 	prefix, pid, ok := parseAPIPID(apiEntityPID)
 	if !ok {
@@ -62,22 +63,15 @@ func (l *Library) resolveEntity(ctx context.Context, uc *UserCtx, apiEntityPID s
 	if !ok {
 		return "", "", errNotFound("no such entity " + apiEntityPID)
 	}
-	if uc.AllLibraries {
-		return kind, pid, nil
-	}
-	readKind, ok := entityKindForPrefix(prefix)
-	if !ok {
-		return "", "", errNotFound("no such entity " + apiEntityPID)
-	}
-	info, err := l.lib.EntityByPID(ctx, readKind, pid)
+	// Only the gate's own verdict is a not-found. Folding a failed read in
+	// here would answer "no such entity" while the catalog is suspended
+	// for maintenance, where the caller needs the retry-shortly the
+	// maintenance kind renders.
+	visible, err := l.entityVisible(ctx, uc, prefix, pid)
 	if err != nil {
-		// Only the lookup's own verdict is a not-found. Folding a real
-		// failure in here would answer "no such entity" while the
-		// catalog is suspended for maintenance, where the caller needs
-		// the retry-shortly the maintenance kind renders.
-		return "", "", classify(err)
+		return "", "", err
 	}
-	if !l.entityInLibraries(info, uc) {
+	if !visible {
 		return "", "", errNotFound("no such entity " + apiEntityPID)
 	}
 	return kind, pid, nil
@@ -195,13 +189,19 @@ func (l *Library) StarredEntities(ctx context.Context, uc *UserCtx) (StarredEnti
 		if err != nil {
 			return StarredEntities{}, classify(err)
 		}
+		var visible map[model.PID]bool
+		if !fullReach(uc) {
+			if visible, err = l.visibleEntities(ctx, uc, k.prefix, pids); err != nil {
+				return StarredEntities{}, err
+			}
+		}
 		for _, st := range states {
 			info := infos[st.EntityPID]
 			if info == nil {
 				// The entity went away between the two reads.
 				continue
 			}
-			if !uc.AllLibraries && !l.entityInLibraries(info, uc) {
+			if visible != nil && !visible[st.EntityPID] {
 				continue
 			}
 			*k.hits = append(*k.hits, SearchHit{

@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/colespringer/waxdeck/server/internal/auth"
 )
 
 // The probe stream: one second of 44.1 kHz 16-bit mono silence. Every
@@ -129,8 +131,7 @@ func (s *Server) ServeProbeAudio(w http.ResponseWriter, r *http.Request) {
 	}
 	q := r.URL.Query()
 	token := q.Get("mt")
-	if _, err := s.media.Verify(token, probePID); err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthenticated", "missing, expired, or wrong media token")
+	if _, _, ok := s.verifiedMedia(w, r, token, auth.MediaWant{Purposes: []string{auth.PurposeProbe}, PID: probePID}); !ok {
 		return
 	}
 	// Recorded before the bytes go out, and on a HEAD too: the device

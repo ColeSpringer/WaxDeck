@@ -898,7 +898,7 @@ func (s *Server) CreateGenreNormalization(ctx context.Context, req CreateGenreNo
 // and blocks until it changes, so no goroutine is spawned and the
 // generated response writer's copy loop drives the pacing.
 func (s *Server) StreamToolTaskEvents(ctx context.Context, req StreamToolTaskEventsRequestObject) (StreamToolTaskEventsResponseObject, error) {
-	uc, _, err := s.requireUserCtx(ctx)
+	uc, p, err := s.requireUserCtx(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -910,22 +910,26 @@ func (s *Server) StreamToolTaskEvents(ctx context.Context, req StreamToolTaskEve
 		return nil, err
 	}
 	return StreamToolTaskEvents200TexteventStreamResponse{
-		Body: &taskEventStream{ctx: ctx, s: s, uc: uc, taskID: string(req.TaskId), last: task},
+		Body: &taskEventStream{ctx: ctx, s: s, uc: uc, sessionID: sessionIDOf(p), taskID: string(req.TaskId), last: task, checked: time.Now()},
 	}, nil
 }
 
 // taskEventStream produces SSE frames on demand. The first Read emits
 // the current state; later Reads poll until the task changes, then emit
-// it; a terminal state emits a final done event and then EOF.
+// it; a terminal state emits a final done event and then EOF, and so
+// does the end of the session that opened the stream.
 type taskEventStream struct {
-	ctx     context.Context
-	s       *Server
-	uc      *service.UserCtx
-	taskID  string
-	last    service.ToolTaskDTO
-	started bool
-	done    bool
-	buf     []byte
+	ctx       context.Context
+	s         *Server
+	uc        *service.UserCtx
+	sessionID string
+	taskID    string
+	last      service.ToolTaskDTO
+	started   bool
+	done      bool
+	buf       []byte
+	// checked is when the caller's session and rights were last read.
+	checked time.Time
 }
 
 func (t *taskEventStream) Read(p []byte) (int, error) {
@@ -947,6 +951,23 @@ func (t *taskEventStream) Read(p []byte) (int, error) {
 		case <-t.ctx.Done():
 			return 0, t.ctx.Err()
 		case <-time.After(time.Second):
+		}
+		// Every few polls the stream re-reads who is asking: the session
+		// can end, and the account can lose what reading this task needed
+		// (a demotion), which a fresh read would refuse. A read that
+		// fails keeps the rights it had and tries again next time.
+		if now := time.Now(); now.Sub(t.checked) >= t.s.streamRecheckEvery {
+			t.checked = now
+			if t.s.sessionEnded(t.ctx, t.sessionID) {
+				return 0, io.EOF
+			}
+			uc, err := t.s.svc.UserCtxByID(t.ctx, t.uc.ID)
+			if service.KindOf(err) == service.KindNotFound {
+				return 0, io.EOF
+			}
+			if err == nil {
+				t.uc = uc
+			}
 		}
 		cur, err := t.s.svc.GetToolTaskFor(t.ctx, t.uc, t.taskID)
 		if err != nil {

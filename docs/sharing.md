@@ -10,11 +10,20 @@ works in any browser.
 `POST /api/v1/shares` creates a link for a track, album, book, or
 episode you can see, or a playlist you own. An album share opens the
 album's tracks in order; the album screen's overflow and the item menus
-on track rows offer it. Playlists require ownership: the
-public page serves the owner's member view for the link's whole life,
-so another user's shared playlist is theirs to publish, not yours.
-The URL is a signed capability: possession is the authorization,
-until the link expires or you revoke it. `GET /api/v1/shares` lists your links
+on track rows offer it, and it needs at least one track you can hear.
+Playlists require ownership: the public page serves the owner's member
+view for the link's whole life, so another user's shared playlist is
+theirs to publish, not yours. The URL is a signed capability:
+possession is the authorization, until the link expires or you revoke
+it.
+
+A link serves what its owner can see each time it is opened, never
+more. A playlist or album link plays only the members the owner can
+still open, and a link whose whole target has left the owner's reach
+(a library grant withdrawn, a content setting that now denies it), or
+whose owner is disabled, answers as if it did not exist until that
+changes back. Creating a link writes an audit entry naming its target,
+and an administrator revoking someone else's link writes another. `GET /api/v1/shares` lists your links
 (administrators can list everyone's with `all=true`), and
 `DELETE /api/v1/shares/{id}` revokes one immediately.
 

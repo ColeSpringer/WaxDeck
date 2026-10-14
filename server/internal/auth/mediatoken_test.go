@@ -1,55 +1,131 @@
 package auth
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 )
 
+const testMediaSecret = "test-secret-test-secret-test-sec"
+
+func streamClaims() MediaClaims {
+	return MediaClaims{
+		User: "us-1", Cred: "se:se-01JZX5N8QW3F4V9T2B7KDEXAMPL", Purpose: PurposeStream,
+		PID: "tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE", Shape: "br=64&fmt=opus",
+	}
+}
+
+func streamWant() MediaWant {
+	return MediaWant{
+		Purposes: []string{PurposeStream}, PID: "tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE", Shape: "br=64&fmt=opus",
+	}
+}
+
 func TestMediaTokenRoundTrip(t *testing.T) {
-	m := NewMediaTokens([]byte("test-secret-test-secret-test-sec"), time.Minute)
-	token, exp := m.Mint("us-1", "tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE")
+	m := NewMediaTokens([]byte(testMediaSecret), time.Minute)
+	token, exp := m.MintFor(streamClaims(), 0)
 	if time.Until(exp) <= 0 {
 		t.Fatal("token already expired at mint")
 	}
-	user, err := m.Verify(token, "tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE")
-	if err != nil || user != "us-1" {
-		t.Fatalf("Verify = (%q, %v)", user, err)
+	got, err := m.Verify(token, streamWant())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Exp.Equal(exp) {
+		t.Errorf("exp = %v, want %v", got.Exp, exp)
+	}
+	got.Exp = time.Time{}
+	if got != streamClaims() {
+		t.Fatalf("claims = %+v, want %+v", got, streamClaims())
 	}
 }
 
+// A token opens only what it was minted for: its item, its route, the
+// stream parameters the mint chose, within its lifetime and under the
+// key that signed it.
 func TestMediaTokenRejections(t *testing.T) {
-	m := NewMediaTokens([]byte("test-secret-test-secret-test-sec"), time.Minute)
-	token, _ := m.Mint("us-1", "tr-A")
+	m := NewMediaTokens([]byte(testMediaSecret), time.Minute)
+	token, _ := m.MintFor(streamClaims(), 0)
+	other := NewMediaTokens([]byte("other-secret-other-secret-other!"), time.Minute)
+	foreign, _ := other.MintFor(streamClaims(), 0)
+	expired, _ := (&MediaTokens{key: m.key, ttl: -time.Minute}).MintFor(streamClaims(), 0)
 
-	cases := map[string]struct{ token, pid string }{
-		"wrong pid":     {token, "tr-B"},
-		"empty token":   {"", "tr-A"},
-		"garbage":       {"not.a.token", "tr-A"},
-		"no separator":  {strings.ReplaceAll(token, ".", ""), "tr-A"},
-		"tampered body": {"x" + token, "tr-A"},
+	with := func(edit func(*MediaWant)) MediaWant {
+		w := streamWant()
+		edit(&w)
+		return w
+	}
+	cases := map[string]struct {
+		token string
+		want  MediaWant
+	}{
+		"wrong pid":       {token, with(func(w *MediaWant) { w.PID = "tr-B" })},
+		"wrong purpose":   {token, with(func(w *MediaWant) { w.Purposes = []string{PurposeDownload} })},
+		"edited shape":    {token, with(func(w *MediaWant) { w.Shape = "fmt=flac" })},
+		"stripped shape":  {token, with(func(w *MediaWant) { w.Shape = "" })},
+		"empty token":     {"", streamWant()},
+		"garbage":         {"not.a.token", streamWant()},
+		"no separator":    {strings.ReplaceAll(token, ".", ""), streamWant()},
+		"tampered body":   {"x" + token, streamWant()},
+		"another key":     {foreign, streamWant()},
+		"expired":         {expired, streamWant()},
+		"tampered cred":   {retokenize(t, m, token, "se:se-01JZX5N8QW3F4V9T2B7KDEXAMPL", "se:se-SOMEBODYELSE"), streamWant()},
+		"version 1 token": {v1Token(testMediaSecret, "us-1", "tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE"), streamWant()},
 	}
 	for name, c := range cases {
-		if _, err := m.Verify(c.token, c.pid); err == nil {
+		if _, err := m.Verify(c.token, c.want); err == nil {
 			t.Errorf("%s: Verify accepted", name)
 		}
 	}
+}
 
-	// A token from a different key never verifies.
-	other := NewMediaTokens([]byte("other-secret-other-secret-other!"), time.Minute)
-	foreign, _ := other.Mint("us-1", "tr-A")
-	if _, err := m.Verify(foreign, "tr-A"); err == nil {
-		t.Error("cross-key token accepted")
+// A route that serves two purposes names both, and a fetch surface whose
+// resource lives inside the token takes any pid.
+func TestMediaTokenPurposeSetsAndAnyPID(t *testing.T) {
+	m := NewMediaTokens([]byte(testMediaSecret), time.Minute)
+	stream, _ := m.MintFor(MediaClaims{User: "us-1", Purpose: PurposeStream, PID: "tr-A"}, 0)
+	both := MediaWant{Purposes: []string{PurposeDownload, PurposeStream}, PID: "tr-A"}
+	if got, err := m.Verify(stream, both); err != nil || got.Purpose != PurposeStream {
+		t.Errorf("a stream token on a stream-or-download route = %+v, %v", got, err)
+	}
+	hls, _ := m.MintFor(MediaClaims{User: "us-1", Purpose: PurposeHLS, PID: "tl-abc"}, 0)
+	got, err := m.Verify(hls, MediaWant{Purposes: []string{PurposeHLS}, AnyPID: true})
+	if err != nil || got.PID != "tl-abc" {
+		t.Errorf("an any-pid verify = %+v, %v", got, err)
+	}
+	if _, err := m.Verify(stream, MediaWant{Purposes: []string{PurposeHLS}, AnyPID: true}); err == nil {
+		t.Error("a stream token opened the hls surface")
 	}
 }
 
-func TestMediaTokenExpiry(t *testing.T) {
-	m := NewMediaTokens([]byte("test-secret-test-secret-test-sec"), -1)
-	// ttl <= 0 selects the default; build an expired token by hand
-	// through a second instance with a tiny ttl.
-	short := &MediaTokens{key: m.key, ttl: -time.Minute}
-	token, _ := short.Mint("us-1", "tr-A")
-	if _, err := m.Verify(token, "tr-A"); err == nil {
-		t.Error("expired token accepted")
+// retokenize swaps one payload field and re-encodes the token with the
+// original signature: what an attacker editing a token can produce.
+func retokenize(t *testing.T, m *MediaTokens, token, from, to string) string {
+	t.Helper()
+	body, sig, _ := strings.Cut(token, ".")
+	raw, err := base64.RawURLEncoding.DecodeString(body)
+	if err != nil {
+		t.Fatal(err)
 	}
+	edited := strings.Replace(string(raw), from, to, 1)
+	if edited == string(raw) {
+		t.Fatalf("%q is not in the payload %q", from, raw)
+	}
+	return base64.RawURLEncoding.EncodeToString([]byte(edited)) + "." + sig
+}
+
+// v1Token is a token as the previous release minted it: its own subkey
+// and payload.
+func v1Token(secret, user, pid string) string {
+	sub := hmac.New(sha256.New, []byte(secret))
+	sub.Write([]byte("waxdeck-media-token-v1"))
+	payload := fmt.Sprintf("v1|%s|%s|%d", user, pid, time.Now().Add(time.Minute).Unix())
+	mac := hmac.New(sha256.New, sub.Sum(nil))
+	mac.Write([]byte(payload))
+	enc := base64.RawURLEncoding
+	return enc.EncodeToString([]byte(payload)) + "." + enc.EncodeToString(mac.Sum(nil))
 }

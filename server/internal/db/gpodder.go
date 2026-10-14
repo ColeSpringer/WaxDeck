@@ -188,3 +188,69 @@ func (d *DB) GpodderActionsSince(ctx context.Context, userID string, sinceSec in
 	}
 	return out, rows.Err()
 }
+
+// GpodderSession is one gpodder login: the cookie a client presents,
+// stored only as its hash, tied to the app password that opened it.
+type GpodderSession struct {
+	ID            string
+	UserID        string
+	AppPasswordID string
+	TokenHash     []byte
+	CreatedAtNS   int64
+	ExpiresAtNS   int64
+}
+
+// InsertGpodderSession records a login, then ends the app password's
+// oldest sessions past perPasswordCap, so a client that logs in on every
+// sync holds a bounded number.
+func (d *DB) InsertGpodderSession(ctx context.Context, s GpodderSession, perPasswordCap int) error {
+	tx, err := d.w.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO gpodder_sessions (id, user_id, app_password_id, token_hash, created_at_ns, expires_at_ns)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		s.ID, s.UserID, s.AppPasswordID, s.TokenHash, s.CreatedAtNS, s.ExpiresAtNS); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+		DELETE FROM gpodder_sessions WHERE app_password_id = ? AND id NOT IN (
+			SELECT id FROM gpodder_sessions WHERE app_password_id = ?
+			ORDER BY created_at_ns DESC, id DESC LIMIT ?)`,
+		s.AppPasswordID, s.AppPasswordID, perPasswordCap); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// GpodderSessionByHash finds the session a cookie hashes to; ErrNotFound
+// when none does.
+func (d *DB) GpodderSessionByHash(ctx context.Context, hash []byte) (*GpodderSession, error) {
+	var s GpodderSession
+	err := d.r.QueryRowContext(ctx, `
+		SELECT id, user_id, app_password_id, token_hash, created_at_ns, expires_at_ns
+		FROM gpodder_sessions WHERE token_hash = ?`, hash).
+		Scan(&s.ID, &s.UserID, &s.AppPasswordID, &s.TokenHash, &s.CreatedAtNS, &s.ExpiresAtNS)
+	if err == sql.ErrNoRows {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// DeleteGpodderSessionByHash ends the session a cookie hashes to; ending
+// one that is already gone is not an error.
+func (d *DB) DeleteGpodderSessionByHash(ctx context.Context, hash []byte) error {
+	_, err := d.w.ExecContext(ctx, `DELETE FROM gpodder_sessions WHERE token_hash = ?`, hash)
+	return err
+}
+
+// DeleteGpodderSessionsForUser ends every gpodder session of the account.
+func (d *DB) DeleteGpodderSessionsForUser(ctx context.Context, userID string) error {
+	_, err := d.w.ExecContext(ctx, `DELETE FROM gpodder_sessions WHERE user_id = ?`, userID)
+	return err
+}

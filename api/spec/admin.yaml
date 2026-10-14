@@ -162,7 +162,13 @@ paths:
     get:
       operationId: getJob
       summary: Get one job's state
-      description: State and progress of a server-run catalog job.
+      description: >
+        State and progress of a server-run catalog job, for the audience
+        the `job` sync marker reaches: administrators, and the starter of
+        a targeted job until its end has been announced to them; anyone
+        else is `forbidden`. A timeline-measurement job (the job a queue
+        timeline answers `202` with) is readable by the account whose
+        queue it measures alone, and is `not-found` to any other.
       tags: [admin]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -175,6 +181,8 @@ paths:
                 $ref: "#/components/schemas/Job"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "503":

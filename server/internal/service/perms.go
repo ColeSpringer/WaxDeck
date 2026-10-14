@@ -462,10 +462,10 @@ func contentRulesChanged(a, b Permissions) bool {
 
 // UserSharedOutputsAllowed answers the connect service's permission
 // callback: whether the user may control shared device endpoints.
-// Unknown users fail closed.
+// Unknown, disabled and pending users fail closed.
 func (l *Library) UserSharedOutputsAllowed(userID string) bool {
 	u, err := l.db.UserByID(context.Background(), userID)
-	if err != nil {
+	if err != nil || u.Disabled || u.Pending {
 		return false
 	}
 	return hasRole(u.Roles, "admin") || u.PermSharedOutputs

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -875,11 +876,12 @@ func TestPlaylistSyncDetachesOutOfBandTrash(t *testing.T) {
 	}
 }
 
-// TestPlaylistSyncBacksOffAConcurrentGuard pins the conflict arm: a
-// replace the guard refuses (here, a member episode of a show the
-// owner has since unsubscribed) backs the run off cleanly - task done,
-// membership untouched, no failure charged to the source.
-func TestPlaylistSyncBacksOffAConcurrentGuard(t *testing.T) {
+// A stored member its owner can no longer see (here an episode of a show
+// the owner has since unsubscribed) keeps its place through a mirror run,
+// which still follows the source for everything else and is recorded
+// like any other: a run never drops what its owner cannot see, and never
+// stalls on it either.
+func TestPlaylistSyncKeepsWhatItsOwnerCannotSee(t *testing.T) {
 	t.Parallel()
 	h := newPodcastHarness(t)
 	feed := newFeedServer(t, 2)
@@ -926,21 +928,18 @@ func TestPlaylistSyncBacksOffAConcurrentGuard(t *testing.T) {
 
 	task := syncNow(t, h, pl.Pid)
 	if task.State != "done" {
-		t.Fatalf("guarded sync = %+v", task)
+		t.Fatalf("the sync = %+v", task)
 	}
 	// The owner's own listing hides the episode now; re-subscribing
-	// shows the stored membership the backoff left untouched.
+	// shows it kept in place beside the match the run added.
 	resubscribe(t, h, feed.feedURL())
-	members := playlistItems(t, h, h.token, pl.Pid)
-	if len(members) != 1 || members[0].Item.Pid != episodes.Items[0].Pid {
-		t.Fatalf("members after backoff = %v", entryPids(members))
+	got := entryPids(playlistItems(t, h, h.token, pl.Pid))
+	if want := []string{episodes.Items[0].Pid, first.Pid}; !slices.Equal(got, want) {
+		t.Fatalf("members after the run = %v, want %v", got, want)
 	}
 	after := getSource(t, h, pl.Pid)
-	if after.ConsecutiveFailures != 0 || after.Disabled {
-		t.Fatalf("backoff charged the source: %+v", after)
-	}
-	if after.LastSyncedAt != nil {
-		t.Fatalf("backoff recorded a success: %+v", after)
+	if after.ConsecutiveFailures != 0 || after.Disabled || after.LastSyncedAt == nil {
+		t.Fatalf("the run was not recorded as a success: %+v", after)
 	}
 }
 
@@ -1448,5 +1447,103 @@ func TestAPortableRefWithAnImpossibleBucketIsRefused(t *testing.T) {
 			"refs": []map[string]any{{"kind": "track", "title": "Alpha Song", "fingerprintBucket": bucket}},
 		})
 		wantStatus(t, resp, 400, fmt.Sprintf("a bucket of %d", bucket))
+	}
+}
+
+// A live binding takes its items from the shared source map, which other
+// accounts' downloads fill. An item there the owner cannot see is a miss
+// for this list, the answer an entry nothing matched gets, never a
+// member the run tries to add.
+func TestPlaylistSyncReadsAnUnreachableMatchAsAMiss(t *testing.T) {
+	t.Parallel()
+	media := t.TempDir()
+	src := &fakeSyncSource{playlistURL: "https://tube.example/playlist?list=PLsync", title: "Sync Tapes"}
+	src.setEntries(syncFixtureEntries(t, media, 2)...)
+	h := syncHarness(t, src)
+
+	downloader := createStaticPlaylist(t, h, "Downloader")
+	wantStatus(t, h.putJSON(t, "/api/v1/playlists/"+downloader.Pid+"/source", map[string]any{
+		"url": src.playlistURL, "mode": "append", "intervalHours": 6,
+	}), 200, "bind the downloader")
+	if task := syncNow(t, h, downloader.Pid); task.State != "done" {
+		t.Fatalf("the downloading sync = %+v", task)
+	}
+
+	lib := decodeStatus[Library](t, h.postJSON(t, "/api/v1/libraries", map[string]any{
+		"name": "elsewhere", "path": t.TempDir(),
+	}), 201, "add a second library")
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "bea", "password": testPassword,
+		"libraryAccess": map[string]any{"mode": "granted", "libraryPids": []string{lib.Pid}},
+	})
+	wantStatus(t, resp, 201, "create bea")
+	bea := loginAs(t, h.ts, "bea", testPassword).Token
+	theirs := decodeStatus[Playlist](t, reqAs(t, h, "POST", "/api/v1/playlists", bea,
+		map[string]any{"name": "Borrower", "kind": "static"}), 201, "bea's playlist")
+	wantStatus(t, reqAs(t, h, "PUT", "/api/v1/playlists/"+theirs.Pid+"/source", bea, map[string]any{
+		"url": src.playlistURL, "mode": "append", "intervalHours": 6,
+	}), 200, "bind bea's playlist")
+
+	preview := decodeStatus[PlaylistSyncPreview](t, reqAs(t, h, "POST",
+		"/api/v1/playlists/"+theirs.Pid+"/source/preview", bea, nil), 200, "bea's preview")
+	if preview.Missing != 2 || preview.WouldAdd != 0 || preview.WouldDownload != 0 {
+		t.Errorf("bea's preview = %+v, want both entries missing", preview)
+	}
+	task := decodeStatus[ToolTask](t, reqAs(t, h, "POST", "/api/v1/playlists/"+theirs.Pid+"/source/sync", bea, nil), 202, "bea's sync")
+	drainTools(t, h)
+	if got := decode[ToolTask](t, reqAs(t, h, "GET", "/api/v1/tools/tasks/"+task.Id, bea, nil)); got.State != "done" {
+		t.Errorf("bea's sync = %+v, want it done", got)
+	}
+	if members := playlistItems(t, h, bea, theirs.Pid); len(members) != 0 {
+		t.Errorf("bea's list holds %v", entryPids(members))
+	}
+}
+
+// A synced list whose owner can no longer see one of its stored members
+// (a content rule now hides it) still syncs: the run is recorded like
+// any other, not read as a concurrent edit and dropped without a trace.
+func TestSyncRunsPastAMemberItsOwnerCannotSee(t *testing.T) {
+	t.Parallel()
+	media := t.TempDir()
+	src := &fakeSyncSource{playlistURL: "https://tube.example/playlist?list=PLhide", title: "Hide Tapes"}
+	src.setEntries(syncFixtureEntries(t, media, 2)...)
+	h := syncHarness(t, src)
+
+	downloader := createStaticPlaylist(t, h, "Downloader")
+	wantStatus(t, h.putJSON(t, "/api/v1/playlists/"+downloader.Pid+"/source", map[string]any{
+		"url": src.playlistURL, "mode": "append", "intervalHours": 6,
+	}), 200, "bind the downloader")
+	if task := syncNow(t, h, downloader.Pid); task.State != "done" {
+		t.Fatalf("the downloading sync = %+v", task)
+	}
+
+	kid := kidAccount(t, h, "kit")
+	mine := decodeStatus[Playlist](t, reqAs(t, h, "POST", "/api/v1/playlists", kid,
+		map[string]any{"name": "Mirror", "kind": "static"}), 201, "the kid's playlist")
+	wantStatus(t, reqAs(t, h, "PUT", "/api/v1/playlists/"+mine.Pid+"/source", kid, map[string]any{
+		"url": src.playlistURL, "mode": "mirror", "intervalHours": 6,
+	}), 200, "bind the kid's playlist")
+	sync := func() PlaylistSource {
+		t.Helper()
+		task := decodeStatus[ToolTask](t, reqAs(t, h, "POST", "/api/v1/playlists/"+mine.Pid+"/source/sync", kid, nil), 202, "sync")
+		drainTools(t, h)
+		if got := decode[ToolTask](t, reqAs(t, h, "GET", "/api/v1/tools/tasks/"+task.Id, kid, nil)); got.State != "done" {
+			t.Fatalf("the kid's sync = %+v", got)
+		}
+		return decodeStatus[PlaylistSource](t, reqAs(t, h, "GET", "/api/v1/playlists/"+mine.Pid+"/source", kid, nil), 200, "binding")
+	}
+	first := sync()
+	members := entryPids(playlistItems(t, h, kid, mine.Pid))
+	if len(members) != 2 || first.LastSyncedAt == nil {
+		t.Fatalf("the first run = %v members, binding %+v", members, first)
+	}
+
+	flagExplicit(t, h, members[0])
+	second := sync()
+	if second.LastSyncedAt == nil || !second.LastSyncedAt.After(*first.LastSyncedAt) {
+		t.Errorf("the run after a member was hidden was not recorded: %+v", second)
+	}
+	if got := entryPids(playlistItems(t, h, kid, mine.Pid)); len(got) != 1 || got[0] != members[1] {
+		t.Errorf("the kid's list = %v, want only %s", got, members[1])
 	}
 }

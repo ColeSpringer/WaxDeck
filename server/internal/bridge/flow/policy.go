@@ -354,7 +354,10 @@ func canonicalize(accepts []string) map[string]string {
 //   - A lossy source is never re-encoded into a lossless target. A
 //     renderer advertising FLAC is telling us what it can play, not what
 //     it wants an MP3 inflated into.
-func DeviceFormat(src Source, shape Shape, caps *client.Caps, accepts []string, floor string) (format, advertise string) {
+//   - A capped account's encode takes the lossy ladder whatever the
+//     source, so the fetch can hold it to the account's bitrate ceiling.
+//     The original bytes stay its to play, an original being exempt.
+func DeviceFormat(src Source, shape Shape, caps *client.Caps, accepts []string, floor string, capped bool) (format, advertise string) {
 	if caps == nil || len(accepts) == 0 {
 		return floor, ""
 	}
@@ -378,7 +381,7 @@ func DeviceFormat(src Source, shape Shape, caps *client.Caps, accepts []string, 
 		}
 	}
 	targets := lossyTargets
-	if lossless(src.Codec) {
+	if lossless(src.Codec) && !capped {
 		targets = losslessTargets
 	}
 	for _, f := range targets {

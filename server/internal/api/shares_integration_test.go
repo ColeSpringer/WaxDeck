@@ -3,6 +3,7 @@ package api
 import (
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -208,4 +209,216 @@ func TestShareOversightListing(t *testing.T) {
 	if len(all.Shares) != 1 || all.Shares[0].Pid != adminShare.Pid {
 		t.Fatalf("after revoke the wide listing = %+v, want just %s", all.Shares, adminShare.Pid)
 	}
+}
+
+// restrictedAccount creates an account granted no library at all and
+// returns its token.
+func restrictedAccount(t *testing.T, h *harness, username string) string {
+	t.Helper()
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": username, "password": testPassword,
+		"libraryAccess": map[string]any{"mode": "granted", "libraryPids": []string{}},
+	})
+	if resp.StatusCode != 201 {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("create %s status = %d: %s", username, resp.StatusCode, body)
+	}
+	resp.Body.Close()
+	return loginAs(t, h.ts, username, testPassword).Token
+}
+
+// An account that can read none of the library imports nothing it cannot
+// see, by name, by portable refs or by M3U path, so a list it shares
+// publishes nothing hidden; and neither export of somebody else's shared
+// list hands it a hidden member.
+func TestRestrictedAccountCannotPublishWhatItCannotSee(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	track := h.items(t, "?mediaType=music").Items[0]
+	resp := h.postJSON(t, "/api/v1/playlists", map[string]any{
+		"name": "Source", "kind": "static", "visibility": "shared", "itemPids": []string{track.Pid},
+	})
+	src := decode[Playlist](t, resp)
+	resp = get(t, h.ts, "/api/v1/playlists/"+src.Pid+"/m3u", h.token)
+	doc, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	portable := decode[PortablePlaylist](t, get(t, h.ts, "/api/v1/playlists/"+src.Pid+"/portable", h.token))
+
+	carol := restrictedAccount(t, h, "carol")
+	for _, body := range []map[string]any{
+		{"source": "text", "payload": deref(track.Artist) + " - " + track.Title},
+		{"source": "portable", "refs": portable.Refs},
+	} {
+		resp = reqAs(t, h, "POST", "/api/v1/playlists/import", carol, body)
+		got := decode[PlaylistImportResult](t, resp)
+		if got.Resolved != 0 || got.PlaylistPid != nil {
+			t.Errorf("%s import = %+v, want nothing resolved", body["source"], got)
+		}
+	}
+	resp = reqAs(t, h, "POST", "/api/v1/playlists/m3u", carol, map[string]any{
+		"name": "Paths", "content": string(doc),
+	})
+	m3u := decode[M3uImportResult](t, resp)
+	if m3u.Matched != 0 || m3u.Unmatched != 1 {
+		t.Errorf("m3u import = matched %d unmatched %d, want 0/1", m3u.Matched, m3u.Unmatched)
+	}
+
+	resp = reqAs(t, h, "POST", "/api/v1/shares", carol, map[string]any{"pid": m3u.Playlist.Pid})
+	if resp.StatusCode != 201 {
+		resp.Body.Close()
+		t.Fatalf("sharing the imported list = %d, want 201", resp.StatusCode)
+	}
+	share := decode[Share](t, resp)
+	wantStatus(t, get(t, h.ts, share.Url+"/stream?i=0", ""), 404, "the anonymous stream of the shared import")
+
+	// The admin's shared list, exported by an account that cannot see
+	// its one member, names nothing.
+	resp = reqAs(t, h, "GET", "/api/v1/playlists/"+src.Pid+"/m3u", carol, nil)
+	theirs, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if strings.Contains(string(theirs), "#EXTINF") {
+		t.Errorf("a restricted reader's m3u export names hidden members:\n%s", theirs)
+	}
+	if refs := decode[PortablePlaylist](t, reqAs(t, h, "GET", "/api/v1/playlists/"+src.Pid+"/portable", carol, nil)).Refs; len(refs) != 0 {
+		t.Errorf("a restricted reader's portable export carries %d refs, want none", len(refs))
+	}
+}
+
+// TestShareStopsWhenItsOwnerIsDisabled: a link serves under its owner's
+// current reach, so disabling the owner stops every route of it, and
+// re-enabling them brings it back.
+func TestShareStopsWhenItsOwnerIsDisabled(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	track := h.items(t, "?mediaType=music").Items[0]
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{"username": "dana", "password": testPassword})
+	dana := decode[UserAccount](t, resp)
+	token := loginAs(t, h.ts, "dana", testPassword).Token
+	resp = reqAs(t, h, "POST", "/api/v1/shares", token, map[string]any{"pid": track.Pid, "allowDownload": true})
+	if resp.StatusCode != 201 {
+		resp.Body.Close()
+		t.Fatalf("share status = %d", resp.StatusCode)
+	}
+	share := decode[Share](t, resp)
+	routes := []string{share.Url, share.Url + "/stream?i=0", share.Url + "/download?i=0"}
+	for _, route := range routes {
+		resp := get(t, h.ts, route, "")
+		resp.Body.Close()
+		if resp.StatusCode >= 400 {
+			t.Fatalf("%s before the disable = %d", route, resp.StatusCode)
+		}
+	}
+
+	resp = h.patchJSON(t, "/api/v1/users/"+dana.Id, map[string]any{"disabled": true})
+	resp.Body.Close()
+	for _, route := range routes {
+		wantStatus(t, get(t, h.ts, route, ""), 404, route+" of a disabled owner")
+	}
+	resp = h.patchJSON(t, "/api/v1/users/"+dana.Id, map[string]any{"disabled": false})
+	resp.Body.Close()
+	resp = get(t, h.ts, share.Url+"/stream?i=0", "")
+	resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		t.Errorf("the stream after re-enabling = %d", resp.StatusCode)
+	}
+}
+
+// kidAccount creates an account whose only narrowing is a tag deny on
+// the advisory flag (the admin screen's kids preset) and returns its
+// token.
+func kidAccount(t *testing.T, h *harness, username string) string {
+	t.Helper()
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": username, "password": testPassword,
+		"permissions": map[string]any{
+			"tagDeny": []map[string]string{{"key": "ITUNESADVISORY", "value": "1"}},
+		},
+	})
+	if resp.StatusCode != 201 {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		t.Fatalf("create %s status = %d: %s", username, resp.StatusCode, body)
+	}
+	resp.Body.Close()
+	return loginAs(t, h.ts, username, testPassword).Token
+}
+
+// flagExplicit tags the items explicit as the administrator.
+func flagExplicit(t *testing.T, h *harness, pids ...string) {
+	t.Helper()
+	for _, pid := range pids {
+		wantStatus(t, putJSON(t, h.ts, "/api/v1/items/"+pid+"/tags/ITUNESADVISORY", h.token,
+			map[string]any{"values": []string{"1"}}), 200, "flagging "+pid)
+	}
+}
+
+// A kids preset account cannot share an album its deny rule hides, and a
+// link it minted before the rule stops too.
+func TestKidCannotShareAnAlbumItCannotHear(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	items := h.items(t, "?mediaType=music").Items
+	album := deref(items[0].AlbumPid)
+	var members []string
+	for _, it := range items {
+		if deref(it.AlbumPid) == album {
+			members = append(members, it.Pid)
+		}
+	}
+	title := decode[AlbumDetail](t, get(t, h.ts, "/api/v1/albums/"+album, h.token)).Title
+	kid := kidAccount(t, h, "kid")
+	resp := reqAs(t, h, "POST", "/api/v1/shares", kid, map[string]any{"pid": album})
+	if resp.StatusCode != 201 {
+		resp.Body.Close()
+		t.Fatalf("sharing the album before any rule bites = %d, want 201", resp.StatusCode)
+	}
+	early := decode[Share](t, resp)
+
+	flagExplicit(t, h, members...)
+	wantStatus(t, reqAs(t, h, "POST", "/api/v1/shares", kid, map[string]any{"pid": album}),
+		404, "sharing an album every track of which the account's rules deny")
+	wantStatus(t, get(t, h.ts, early.Url+"/stream?i=0", ""), 404, "the earlier link's anonymous stream")
+	wantStatus(t, reqAs(t, h, "GET", "/api/v1/albums/"+album, kid, nil), 404, "the denied album's detail")
+	hits := decode[SearchResults](t, reqAs(t, h, "GET", "/api/v1/library/search?q="+url.QueryEscape(title), kid, nil))
+	for _, a := range hits.Albums {
+		if a.Pid == album {
+			t.Errorf("the denied album is a search hit for the kid: %+v", a)
+		}
+	}
+}
+
+// A share's cover is revalidated on every use rather than cached as is:
+// a link revoked, expired or gone dormant stops serving it with the rest
+// of the share, while an unchanged cover costs only a 304.
+func TestShareArtIsRevalidatedEveryTime(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	track := h.items(t, "?mediaType=music").Items[0]
+	wantStatus(t, metadataPutBytes(t, h.ts, "/api/v1/items/"+track.Pid+"/artwork", h.token, tinyPNG(t)), 200, "set a cover")
+	share := decodeStatus[Share](t, h.postJSON(t, "/api/v1/shares", map[string]any{"pid": track.Pid}), 201, "share it")
+	art := func(etag string) *http.Response {
+		t.Helper()
+		req, _ := http.NewRequest(http.MethodGet, h.ts.URL+share.Url+"/art", nil)
+		if etag != "" {
+			req.Header.Set("If-None-Match", etag)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp
+	}
+	first := art("")
+	etag := first.Header.Get("ETag")
+	if first.StatusCode != 200 || etag == "" || !strings.Contains(first.Header.Get("Cache-Control"), "no-cache") {
+		t.Fatalf("share art = %d, ETag %q, Cache-Control %q; want 200, a validator, no-cache",
+			first.StatusCode, etag, first.Header.Get("Cache-Control"))
+	}
+	wantStatus(t, art(etag), http.StatusNotModified, "revalidating an unchanged cover")
+	wantStatus(t, art("W/"+etag), http.StatusNotModified, "revalidating with the weak form")
+	wantStatus(t, art(`"elsewhere", `+etag), http.StatusNotModified, "revalidating with a list")
+	wantStatus(t, h.deleteReq(t, "/api/v1/shares/"+share.Pid), 204, "revoke the share")
+	wantStatus(t, art(etag), 404, "revalidating after the revoke")
 }

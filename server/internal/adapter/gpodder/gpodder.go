@@ -6,31 +6,25 @@
 //
 // Authentication on every endpoint is HTTP Basic with the WaxDeck
 // username and an app password (the login password never works here),
-// or the stateless signed sessionid cookie the login endpoint mints.
-// Subscriptions in WaxDeck are user-global; device ids exist to
+// or the sessionid cookie the login endpoint sets: an opaque token for a
+// stored login that ends with its app password, its account, or a
+// logout. Subscriptions in WaxDeck are user-global; device ids exist to
 // annotate changes and satisfy the protocol's device registry, they
 // never scope the subscription list itself.
 package gpodder
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
-
-// sessionTTL is how long a minted sessionid cookie stays valid.
-const sessionTTL = 14 * 24 * time.Hour
 
 // sessionCookie is the cookie name gpodder clients expect.
 const sessionCookie = "sessionid"
@@ -41,21 +35,20 @@ const maxBodyBytes = 8 << 20
 // handler serves /api/2/ and /subscriptions/.
 type handler struct {
 	svc *service.Library
-	// key signs session cookies; it is derived from the adapter secret
-	// so the raw secret never doubles as a MAC key elsewhere.
-	key []byte
-	log *slog.Logger
-	mux *http.ServeMux
+	// secure marks the cookie Secure, set whenever the server's own
+	// session cookie is (WAXDECK_COOKIE_SECURE).
+	secure bool
+	log    *slog.Logger
+	mux    *http.ServeMux
 }
 
-// New builds the adapter over the service. secret keys the session
-// cookie MAC (32 bytes); the handler routes both the /api/2/ and the
-// /subscriptions/ prefixes internally.
-func New(svc *service.Library, secret []byte, logger *slog.Logger) http.Handler {
+// New builds the adapter over the service; the handler routes both the
+// /api/2/ and the /subscriptions/ prefixes internally.
+func New(svc *service.Library, cookieSecure bool, logger *slog.Logger) http.Handler {
 	if logger == nil {
 		logger = slog.New(slog.DiscardHandler)
 	}
-	h := &handler{svc: svc, key: deriveKey(secret, "waxdeck-gpodder-session-v1"), log: logger}
+	h := &handler{svc: svc, secure: cookieSecure, log: logger}
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/2/auth/{user}/{op}", h.auth2)
 	mux.HandleFunc("GET /api/2/devices/{userext}", h.devicesList)
@@ -77,74 +70,45 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // --- auth ----------------------------------------------------------------------
 
-// deriveKey derives a purpose-bound MAC key from the adapter secret.
-func deriveKey(secret []byte, label string) []byte {
-	mac := hmac.New(sha256.New, secret)
-	mac.Write([]byte(label))
-	return mac.Sum(nil)
-}
-
-// mintSession renders the stateless session value: base64(username),
-// the expiry as epoch seconds, and an HMAC-SHA256 tag over the two,
-// dot separated. Nothing is stored server side.
-func (h *handler) mintSession(username string, expiry time.Time) string {
-	payload := base64.RawURLEncoding.EncodeToString([]byte(username)) +
-		"." + strconv.FormatInt(expiry.Unix(), 10)
-	return payload + "." + h.sign(payload)
-}
-
-func (h *handler) sign(payload string) string {
-	mac := hmac.New(sha256.New, h.key)
-	mac.Write([]byte(payload))
-	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
-}
-
-// sessionUser validates the request's sessionid cookie and returns the
-// username it binds, or "" when absent, malformed, forged, or expired.
-// The tag check is constant time.
-func (h *handler) sessionUser(r *http.Request) string {
+// cookieToken is the request's sessionid cookie value, "" when absent.
+func cookieToken(r *http.Request) string {
 	c, err := r.Cookie(sessionCookie)
-	if err != nil || c.Value == "" {
-		return ""
-	}
-	parts := strings.Split(c.Value, ".")
-	if len(parts) != 3 {
-		return ""
-	}
-	payload := parts[0] + "." + parts[1]
-	tag, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil {
 		return ""
 	}
-	mac := hmac.New(sha256.New, h.key)
-	mac.Write([]byte(payload))
-	if !hmac.Equal(mac.Sum(nil), tag) {
-		return ""
-	}
-	exp, err := strconv.ParseInt(parts[1], 10, 64)
-	if err != nil || time.Now().Unix() >= exp {
-		return ""
-	}
-	raw, err := base64.RawURLEncoding.DecodeString(parts[0])
+	return c.Value
+}
+
+// sessionUser resolves the request's cookie to its account, nil when it
+// names no live login.
+func (h *handler) sessionUser(r *http.Request) *wdb.User {
+	u, err := h.svc.GpodderSessionUser(r.Context(), cookieToken(r))
 	if err != nil {
-		return ""
+		h.log.Warn("gpodder session lookup", "err", err)
+		return nil
 	}
-	return string(raw)
+	return u
 }
 
-// setSession mints and sets a fresh cookie for the user.
-func (h *handler) setSession(w http.ResponseWriter, username string) {
-	exp := time.Now().Add(sessionTTL)
+// setSession sets the cookie for a fresh login, offered for as long as
+// the login itself lasts.
+func (h *handler) setSession(w http.ResponseWriter, token string, expires time.Time) {
 	http.SetCookie(w, &http.Cookie{
-		Name: sessionCookie, Value: h.mintSession(username, exp),
-		Path: "/", Expires: exp, HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		Name: sessionCookie, Value: token, Path: "/", Expires: expires,
+		HttpOnly: true, SameSite: http.SameSiteLaxMode, Secure: h.secure,
 	})
 }
 
-func clearSession(w http.ResponseWriter) {
+func (h *handler) clearSession(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true,
+		Name: sessionCookie, Value: "", Path: "/", MaxAge: -1, HttpOnly: true, Secure: h.secure,
 	})
+}
+
+// sameUser compares an account with the path's username the way account
+// lookup does: case-insensitively.
+func sameUser(u *wdb.User, pathUser string) bool {
+	return u != nil && strings.EqualFold(u.Username, pathUser)
 }
 
 // authenticate resolves the request to an account: HTTP Basic against
@@ -153,18 +117,15 @@ func clearSession(w http.ResponseWriter) {
 // bad credentials so the surface confirms no other account exists.
 func (h *handler) authenticate(r *http.Request, pathUser string) (*wdb.User, int, string) {
 	if username, password, ok := r.BasicAuth(); ok {
-		u, err := h.svc.VerifyAppPasswordBasic(r.Context(), username, password)
-		if err != nil || u == nil || u.Username != pathUser {
+		u, _, err := h.svc.VerifyAppPasswordBasic(r.Context(), username, password)
+		if err != nil || !sameUser(u, pathUser) {
 			return nil, http.StatusUnauthorized, "wrong username or password"
 		}
 		return u, 0, ""
 	}
-	if su := h.sessionUser(r); su != "" {
-		if su != pathUser {
-			return nil, http.StatusUnauthorized, "session does not match the request path"
-		}
-		u, err := h.svc.GpodderSessionUser(r.Context(), su)
-		if err != nil || u == nil {
+	if cookieToken(r) != "" {
+		u := h.sessionUser(r)
+		if !sameUser(u, pathUser) {
 			return nil, http.StatusUnauthorized, "session no longer valid"
 		}
 		return u, 0, ""
@@ -202,45 +163,47 @@ func (h *handler) auth2(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// login authenticates Basic credentials and mints the session cookie.
-// A valid cookie for a different username is a 400 per the protocol,
-// and a valid cookie for the path username answers 200 without Basic
-// credentials (pure cookie validation).
+// login opens a session from Basic credentials and sets its cookie. A
+// live cookie for a different username is a 400 per the protocol, and a
+// live cookie for the path username answers 200 without Basic
+// credentials (pure cookie validation) and without a new cookie, so a
+// cookie never extends itself.
 func (h *handler) login(w http.ResponseWriter, r *http.Request, pathUser string) {
-	su := h.sessionUser(r)
-	if su != "" && su != pathUser {
+	cookieUser := h.sessionUser(r)
+	if cookieUser != nil && !sameUser(cookieUser, pathUser) {
 		h.fail(w, http.StatusBadRequest, "cookie does not match the request username")
 		return
 	}
 	if username, password, ok := r.BasicAuth(); ok {
-		u, err := h.svc.VerifyAppPasswordBasic(r.Context(), username, password)
-		if err != nil || u == nil || u.Username != pathUser {
+		u, token, expires, err := h.svc.GpodderLogin(r.Context(), pathUser, username, password)
+		if err != nil || u == nil {
 			h.fail(w, http.StatusUnauthorized, "wrong username or password")
 			return
 		}
-		h.setSession(w, u.Username)
+		h.setSession(w, token, expires)
 		h.writeJSON(w, struct{}{})
 		return
 	}
-	if su == pathUser && su != "" {
-		if u, err := h.svc.GpodderSessionUser(r.Context(), su); err == nil && u != nil {
-			h.setSession(w, su)
-			h.writeJSON(w, struct{}{})
-			return
-		}
+	if cookieUser != nil {
+		h.writeJSON(w, struct{}{})
+		return
 	}
 	h.fail(w, http.StatusUnauthorized, "authentication required")
 }
 
-// logout clears the cookie. It answers 200 whether or not a session
-// was present; only a valid cookie for a different username is an
-// error (400), mirroring login.
+// logout ends the session the cookie names and clears it. It answers 200
+// whether or not a session was live; only a live cookie for a different
+// username is an error (400), mirroring login.
 func (h *handler) logout(w http.ResponseWriter, r *http.Request, pathUser string) {
-	if su := h.sessionUser(r); su != "" && su != pathUser {
+	if u := h.sessionUser(r); u != nil && !sameUser(u, pathUser) {
 		h.fail(w, http.StatusBadRequest, "cookie does not match the request username")
 		return
 	}
-	clearSession(w)
+	if err := h.svc.GpodderLogout(r.Context(), cookieToken(r)); err != nil {
+		h.fail(w, http.StatusInternalServerError, "ending the session failed")
+		return
+	}
+	h.clearSession(w)
 	h.writeJSON(w, struct{}{})
 }
 

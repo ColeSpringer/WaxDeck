@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"sort"
@@ -52,6 +55,26 @@ type UserCtx struct {
 // entirely for this caller: explicit content allowed and no tag rules.
 func (uc *UserCtx) ContentUnrestricted() bool {
 	return uc.Explicit && len(uc.TagAllow) == 0 && len(uc.TagDeny) == 0
+}
+
+// ScopeKey fingerprints everything that narrows what the caller sees -
+// role, library grants, the explicit toggle, tag rules - so a cache of
+// caller-scoped answers misses the moment any of it changes.
+func (uc *UserCtx) ScopeKey() string {
+	libs := make([]string, 0, len(uc.Libraries))
+	for lib := range uc.Libraries {
+		libs = append(libs, lib)
+	}
+	sort.Strings(libs)
+	raw, _ := json.Marshal(struct {
+		Admin, All, Explicit bool
+		Libs                 []string
+		Allow, Deny          []TagRule
+	}{uc.Admin, uc.AllLibraries, uc.Explicit, libs, uc.TagAllow, uc.TagDeny})
+	// A digest, so a key stays one size however many grants and rules
+	// it stands for.
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
 }
 
 // UserByName resolves an account row by its username, for the surfaces
@@ -247,13 +270,44 @@ func (l *Library) getVisibleItem(ctx context.Context, uc *UserCtx, apiItemPID st
 	if err != nil {
 		return nil, err
 	}
-	if !l.itemVisible(ctx, uc, it.PID) {
+	// The fresh view's own library handle rather than the located-path
+	// cache: no second read whose failure could pass for "not visible".
+	if !l.viewVisible(ctx, uc, it) {
 		return nil, errNotFound("no item with pid " + apiItemPID)
 	}
 	if !l.allowedByContent(ctx, uc, it) {
 		return nil, errNotFound("no item with pid " + apiItemPID)
 	}
 	return it, nil
+}
+
+// offers reports whether a listing may offer a hydrated item view to
+// this reader: not in the trash, inside the reader's grants, and allowed
+// by their content rules. For views read by pid or from a catalog call
+// that takes no query node, where nothing upstream applied any of the
+// three. viewVisible, not itemVisible: the view carries its library, and
+// the located-path cache invalidates on a scan poll, which would drop an
+// item out for the length of one. allowedByContent, not advisoryAllows:
+// the tag rules are what nothing upstream applied.
+func (l *Library) offers(ctx context.Context, uc *UserCtx, it *model.ItemView) bool {
+	return l.offersWith(ctx, uc, nil, it)
+}
+
+// offersWith is offers taking the tag rules' verdicts from a batch read
+// beforehand (tagVerdicts); nil asks per item.
+func (l *Library) offersWith(ctx context.Context, uc *UserCtx, verdicts map[model.PID]bool, it *model.ItemView) bool {
+	return !archived(it) && l.viewVisible(ctx, uc, it) && l.contentAllows(ctx, uc, verdicts, it)
+}
+
+// contentAllows is allowedByContent answered from a batch of tag
+// verdicts where one was read. An episode stays per item, its advisory
+// flags being fields on the view, and so does a trashed item, which the
+// batch query leaves out.
+func (l *Library) contentAllows(ctx context.Context, uc *UserCtx, verdicts map[model.PID]bool, it *model.ItemView) bool {
+	if verdicts != nil && it.Kind != model.KindEpisode && !archived(it) {
+		return verdicts[it.PID]
+	}
+	return l.allowedByContent(ctx, uc, it)
 }
 
 // VisibleItem verifies the caller can see the item (play-info calls it

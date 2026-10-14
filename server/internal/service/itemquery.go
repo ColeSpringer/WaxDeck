@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
 )
@@ -64,4 +66,27 @@ func archived(it *model.ItemView) bool {
 // named once here instead of spelled at the call site.
 var listableStates = []model.ItemState{
 	model.StatePresent, model.StateRemote, model.StateMissing,
+}
+
+// itemsAmong runs the query base builds once per 400 of the pids, each
+// run narrowed to its share of them, and answers what came back by pid.
+// 400 keeps every run under the engine's 500-value membership test.
+func (l *Library) itemsAmong(ctx context.Context, pids []model.PID, base func() *query.Builder) (map[model.PID]*model.ItemView, error) {
+	out := make(map[model.PID]*model.ItemView, len(pids))
+	for start := 0; start < len(pids); start += 400 {
+		chunk := pids[start:min(start+400, len(pids))]
+		vals := make([]string, len(chunk))
+		for i, pid := range chunk {
+			vals[i] = string(pid)
+		}
+		b := base().WhereValues("pid", query.OpIn, query.Values(vals)...).Limit(len(chunk))
+		items, err := l.lib.Query(ctx, b.Build(), "")
+		if err != nil {
+			return nil, classify(err)
+		}
+		for _, it := range items {
+			out[it.PID] = it
+		}
+	}
+	return out, nil
 }
