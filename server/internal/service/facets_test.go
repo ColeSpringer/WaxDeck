@@ -415,7 +415,7 @@ func TestFacetDimensionsWithoutAnUnknownBucket(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Canonical")
-	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, false, false); err != nil {
+	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatalf("setting a custom tag: %v", err)
 	}
 
@@ -441,7 +441,7 @@ func TestTagDimensionsCanonicalize(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Canonical")
-	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, false, false); err != nil {
+	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatalf("setting a custom tag: %v", err)
 	}
 	// The tag write moves the catalog feed; let it land before asserting
@@ -511,7 +511,7 @@ func TestTagFacetDimension(t *testing.T) {
 	t.Parallel()
 	f := newGenreFixture(t)
 	it := f.itemNamed(t, "Canonical")
-	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, false, false); err != nil {
+	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatalf("setting a custom tag: %v", err)
 	}
 
@@ -873,7 +873,7 @@ func TestBrowseCursorScopeUsesTheCanonicalDimension(t *testing.T) {
 	for _, title := range []string{"Canonical", "Synonym", "Lowercase"} {
 		it := f.itemNamed(t, title)
 		if _, err := f.svc.SetItemTag(
-			f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, false, false,
+			f.ctx, f.uc, apiPID(PrefixTrack, it.PID), "MOOD", []string{"calm"}, MetadataEditParams{},
 		); err != nil {
 			t.Fatalf("setting a custom tag: %v", err)
 		}

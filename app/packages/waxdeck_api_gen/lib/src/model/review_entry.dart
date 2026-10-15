@@ -21,6 +21,7 @@ part 'review_entry.g.dart';
 /// * [title] - Display title for the unit (the album guess).
 /// * [artist] - Display artist for the unit.
 /// * [trackCount] - Files in the unit.
+/// * [duplicateCount] - Files in the unit arriving with a duplicate warning (their tracks carry it). Absent when none. 
 /// * [libraryPid] - The library the unit belongs (or will import) to.
 /// * [uploadedBy] - The uploader's user pid, present on upload-origin entries. 
 /// * [identifying] - True while the identify pipeline still runs for this entry; candidates and the best summary fill in when it finishes (the entry invalidates over the event channel). 
@@ -62,6 +63,10 @@ abstract class ReviewEntry  {
   /// Files in the unit.
   @BuiltValueField(wireName: r'trackCount')
   int get trackCount;
+
+  /// Files in the unit arriving with a duplicate warning (their tracks carry it). Absent when none. 
+  @BuiltValueField(wireName: r'duplicateCount')
+  int? get duplicateCount;
 
   /// The library the unit belongs (or will import) to.
   @BuiltValueField(wireName: r'libraryPid')
@@ -154,6 +159,13 @@ class _$ReviewEntrySerializer implements PrimitiveSerializer<ReviewEntry> {
       object.trackCount,
       specifiedType: const FullType(int),
     );
+    if (object.duplicateCount != null) {
+      yield r'duplicateCount';
+      yield serializers.serialize(
+        object.duplicateCount,
+        specifiedType: const FullType(int),
+      );
+    }
     if (object.libraryPid != null) {
       yield r'libraryPid';
       yield serializers.serialize(
@@ -327,6 +339,14 @@ class _$$ReviewEntrySerializer implements PrimitiveSerializer<$ReviewEntry> {
             specifiedType: const FullType(int),
           ) as int;
           result.trackCount = valueDes;
+          break;
+        case r'duplicateCount':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.duplicateCount = valueDes;
           break;
         case r'libraryPid':
           final valueDes = serializers.deserialize(

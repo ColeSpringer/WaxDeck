@@ -237,6 +237,16 @@
       }
     }
   },
+  "artworkReplacedTagsFailed": "{slot} replaced, but the file's tags could not be updated",
+  "@artworkReplacedTagsFailed": {
+    "description": "Message after an artwork slot was replaced in the catalog while embedding it in the item's file failed (a read-only file, say). {slot} is the slot's name (Front cover, Booklet).",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Front cover"
+      }
+    }
+  },
   "artworkSetSlot": "Set the {slot}",
   "@artworkSetSlot": {
     "description": "Accessible name of the control that fills an empty artwork slot. {slot} is the slot's inline form.",

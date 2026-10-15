@@ -54,7 +54,7 @@ func TestResolvingAnUpgradeInAReadOnlyLibraryIsRefused(t *testing.T) {
 	t.Parallel()
 	ctx, svc, uc, paths, pids := twoTrackFixture(t)
 	setLibrariesReadOnly(t, ctx, svc, uc, true)
-	if _, err := svc.ResolveUpgrade(ctx, uc, pids[0], []string{pids[1]}); KindOf(err) != KindReadOnly {
+	if _, err := svc.ResolveUpgrade(ctx, uc, UpgradeResolveDTO{KeepItemPID: pids[0], RemoveItemPIDs: []string{pids[1]}}); KindOf(err) != KindReadOnly {
 		t.Fatalf("err = %v, want read-only", err)
 	}
 	if _, err := os.Stat(paths[1]); err != nil {

@@ -22,7 +22,12 @@ more. A playlist or album link plays only the members the owner can
 still open, and a link whose whole target has left the owner's reach
 (a library grant withdrawn, a content setting that now denies it), or
 whose owner is disabled, answers as if it did not exist until that
-changes back. Creating a link writes an audit entry naming its target,
+changes back. A track link to a track that joins a book (**Treat as
+audiobook** on an album, say) is revoked rather than widened into the
+whole book; a link to a lone track that becomes a book follows it. A
+track that a scan makes a book, as moving its library onto Audiobooks
+does, answers its track links as if it were gone.
+Creating a link writes an audit entry naming its target,
 and an administrator revoking someone else's link writes another. `GET /api/v1/shares` lists your links
 (administrators can list everyone's with `all=true`), and
 `DELETE /api/v1/shares/{id}` revokes one immediately.

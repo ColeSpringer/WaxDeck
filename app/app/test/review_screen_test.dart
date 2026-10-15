@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/review/review_controller.dart';
 import 'package:waxdeck/src/review/review_entry_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -13,6 +14,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
 import 'localized_host.dart';
+import 'routed_host.dart';
 
 ProviderContainer _container(FakeRepository repo) {
   final container = ProviderContainer(
@@ -44,6 +46,23 @@ Finder _row(String id) =>
     find.bySemanticsIdentifier(SemanticsIds.reviewRow(id));
 
 void main() {
+  testWidgets('the Decided chip counts reverted and discarded entries', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1'),
+      testReviewEntry('rv-2', status: 'applied'),
+      testReviewEntry('rv-3', status: 'reverted'),
+      testReviewEntry('rv-4', status: 'discarded'),
+    ];
+    await _pump(tester, _host(_container(repo)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Pending (1)'), findsOneWidget);
+    expect(find.text('Decided (3)'), findsOneWidget);
+  });
+
   testWidgets('renders entries with best-candidate and identifying rows', (
     tester,
   ) async {
@@ -87,6 +106,57 @@ void main() {
     expect(
       find.descendant(of: identifyingRow, matching: find.text('Upload')),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('a row says how many of its files the library holds', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1', origin: 'upload', duplicateCount: 2),
+      testReviewEntry('rv-2', origin: 'upload'),
+    ];
+    await _pump(tester, _host(_container(repo)));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(of: _row('rv-1'), matching: find.text('2 duplicates')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: _row('rv-2'),
+        matching: find.textContaining('duplicate'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a decided row drops its duplicates chip', (tester) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1', origin: 'upload', duplicateCount: 1),
+      testReviewEntry(
+        'rv-2',
+        origin: 'upload',
+        status: 'as-is',
+        duplicateCount: 1,
+      ),
+    ];
+    await _pump(tester, _host(_container(repo)));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(
+        SemanticsIds.reviewFilter(ReviewFilter.decided.name),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(_row('rv-2'), findsOneWidget);
+    expect(
+      find.descendant(of: _row('rv-2'), matching: find.text('1 duplicate')),
+      findsNothing,
     );
   });
 
@@ -214,6 +284,350 @@ void main() {
       shellMessageText(container.read(shellMessengerProvider)),
       'Decided 2 entries',
     );
+  });
+
+  testWidgets('a busy library offers the same decision again', (tester) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [testReviewEntry('rv-1')];
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.pumpAndSettle();
+
+    repo.reviewError = const WaxDeckApiException(
+      code: 'catalog-busy',
+      message: 'a conflicting catalog job is already running',
+      statusCode: 409,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyA);
+    await tester.pumpAndSettle();
+    final message = container.read(shellMessengerProvider)!;
+    expect(
+      shellMessageText(message),
+      "Another job is holding the library's files. Try again shortly.",
+    );
+    expect(message.actionLabel, 'Retry');
+
+    repo.reviewError = null;
+    message.onAction!();
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls, hasLength(2));
+    expect(repo.decideReviewCalls.last.entryId, 'rv-1');
+    expect(repo.reviewEntries.single.status, isNot('pending'));
+  });
+
+  testWidgets('a bulk decision says what the server warned of and sends the '
+      'busy entries again', (tester) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1'),
+      testReviewEntry('rv-2', title: 'Second Album'),
+    ];
+    repo.bulkOutcomes.addAll({
+      'rv-1': const ReviewBulkOutcome(
+        entryId: 'rv-1',
+        ok: true,
+        warnings: ['one.flac: already in the library; nothing was added'],
+      ),
+      'rv-2': const ReviewBulkOutcome(
+        entryId: 'rv-2',
+        ok: false,
+        code: 'catalog-busy',
+        error: 'a conflicting catalog job is already running',
+      ),
+    });
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(_row('rv-1'));
+    await tester.pumpAndSettle();
+    await tester.tap(_row('rv-2'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewBulkSkip));
+    await tester.pumpAndSettle();
+
+    final message = container.read(shellMessengerProvider)!;
+    expect(
+      shellMessageText(message),
+      'Decided 1 entry, 1 failed\n'
+      "Another job is holding the library's files. Try again shortly.\n"
+      'one.flac: already in the library; nothing was added',
+    );
+    expect(message.actionLabel, 'Retry');
+    message.onAction!();
+    await tester.pumpAndSettle();
+    expect(repo.decideBulkCalls.last.entryIds, ['rv-2']);
+    expect(repo.decideBulkCalls.last.action, 'skip');
+  });
+
+  testWidgets('a decision refused for a reason keeps the server\'s words', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [testReviewEntry('rv-1', origin: 'upload')];
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.pumpAndSettle();
+
+    repo.reviewError = const WaxDeckApiException(
+      code: 'conflict',
+      message: 'a.flac: destination already exists in the library',
+      statusCode: 409,
+    );
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+    await tester.pump();
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyS);
+    await tester.pumpAndSettle();
+
+    // Which file and why: the table's "something changed first" would
+    // send the person to try the same thing again.
+    final message = container.read(shellMessengerProvider)!;
+    expect(
+      shellMessageText(message),
+      'a.flac: destination already exists in the library',
+    );
+    expect(message.actionLabel, isNull, reason: 'trying again changes nothing');
+  });
+
+  testWidgets('a bulk decision names the one refusal it met', (tester) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1'),
+      testReviewEntry('rv-2', title: 'Second Album'),
+    ];
+    repo.bulkOutcomes['rv-2'] = const ReviewBulkOutcome(
+      entryId: 'rv-2',
+      ok: false,
+      code: 'conflict',
+      error: 'b.flac: destination already exists in the library',
+    );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(_row('rv-1'));
+    await tester.pumpAndSettle();
+    await tester.tap(_row('rv-2'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewBulkSkip));
+    await tester.pumpAndSettle();
+
+    final message = container.read(shellMessengerProvider)!;
+    expect(
+      shellMessageText(message),
+      'Decided 1 entry, 1 failed\n'
+      'b.flac: destination already exists in the library',
+    );
+    expect(message.actionLabel, isNull);
+  });
+
+  testWidgets('a bulk approve passes over entries holding duplicates', (
+    tester,
+  ) async {
+    // What the a and u keys do, for the same reason: the pane holds
+    // those two back from a unit the library already has, and the row
+    // only knows that something matched.
+    final repo = FakeRepository();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1'),
+      testReviewEntry('rv-2', origin: 'upload', duplicateCount: 2),
+      testReviewEntry('rv-3', origin: 'upload', duplicateCount: 1),
+    ];
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(_row('rv-1'));
+    await tester.pumpAndSettle();
+    await tester.tap(_row('rv-2'));
+    await tester.pumpAndSettle();
+    await tester.tap(_row('rv-3'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewBulkApprove),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.decideBulkCalls.single.entryIds, ['rv-1']);
+    expect(
+      {for (final e in repo.reviewEntries) e.id: e.status},
+      {'rv-1': 'applied', 'rv-2': 'pending', 'rv-3': 'pending'},
+    );
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Decided 1 entry\n'
+      '2 entries hold duplicates; open each to decide',
+    );
+  });
+
+  testWidgets('a bulk approve of entries that all hold duplicates sends '
+      'nothing', (tester) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1', origin: 'upload', duplicateCount: 2),
+      testReviewEntry('rv-2'),
+    ];
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(_row('rv-1'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.reviewBulkApprove),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.decideBulkCalls, isEmpty);
+    expect(repo.reviewEntries.first.status, 'pending');
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      '1 entry holds duplicates; open it to decide',
+    );
+    // Out of selection, where a tap on the row opens it.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewBulkApprove),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a bulk skip still decides entries holding duplicates', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [
+      testReviewEntry('rv-1', origin: 'upload', duplicateCount: 2),
+    ];
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(_row('rv-1'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewBulkSkip));
+    await tester.pumpAndSettle();
+
+    expect(repo.decideBulkCalls.single.entryIds, ['rv-1']);
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Decided 1 entry',
+    );
+  });
+
+  testWidgets('a bulk Retry leaves a selection made since alone', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.reviewEntries = [
+      for (final id in ['rv-1', 'rv-2', 'rv-5', 'rv-6']) testReviewEntry(id),
+    ];
+    repo.bulkOutcomes['rv-2'] = const ReviewBulkOutcome(
+      entryId: 'rv-2',
+      ok: false,
+      code: 'catalog-busy',
+      error: 'a conflicting catalog job is already running',
+    );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(_row('rv-1'));
+    await tester.pumpAndSettle();
+    await tester.tap(_row('rv-2'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewBulkSkip));
+    await tester.pumpAndSettle();
+    final retry = container.read(shellMessengerProvider)!;
+    expect(retry.actionLabel, 'Retry');
+
+    // A new selection, then the old offer taken up.
+    await tester.longPress(_row('rv-5'));
+    await tester.pumpAndSettle();
+    await tester.tap(_row('rv-6'));
+    await tester.pumpAndSettle();
+    retry.onAction!();
+    await tester.pumpAndSettle();
+    expect(repo.decideBulkCalls.last.entryIds, ['rv-2']);
+
+    expect(find.text('2 selected'), findsOneWidget);
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewBulkSkip));
+    await tester.pumpAndSettle();
+    expect(repo.decideBulkCalls.last.entryIds, ['rv-5', 'rv-6']);
+  });
+
+  for (final (key, action) in [
+    (LogicalKeyboardKey.keyA, 'approve'),
+    (LogicalKeyboardKey.keyU, 'unofficial'),
+  ]) {
+    testWidgets('$action from the list opens an entry holding duplicates', (
+      tester,
+    ) async {
+      // The pane can tell which decisions a copy of the library's own
+      // audio leaves open; the row only knows that something matched.
+      final repo = FakeRepository();
+      repo.reviewEntries = [
+        testReviewEntry('rv-1', origin: 'upload', duplicateCount: 2),
+      ];
+      final container = _container(repo);
+      await _pump(
+        tester,
+        UncontrolledProviderScope(
+          container: container,
+          child: routedHost(const ReviewScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyJ);
+      await tester.pump();
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+
+      expect(repo.decideReviewCalls, isEmpty);
+      expect(find.byType(ReviewEntryScreen), findsOneWidget);
+    });
+  }
+
+  testWidgets('a and u on the entry its pane already shows say where it is '
+      'decided', (tester) async {
+    // Opening it again would land where the reviewer already is.
+    final repo = FakeRepository()
+      ..reviewEntries = [
+        testReviewEntry('rv-1', origin: 'upload', duplicateCount: 1),
+      ];
+    final container = _container(repo);
+    tester.view.physicalSize = const Size(1400, 1000);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(
+          const ReviewSurface(openEntryId: 'rv-1'),
+          at: '/review/rv-1',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsIdentifier(SemanticsIds.reviewPane), findsOneWidget);
+    final raised = <String?>[];
+    container.listen(
+      shellMessengerProvider,
+      (_, next) => raised.add(shellMessageText(next)),
+    );
+
+    for (final key in [LogicalKeyboardKey.keyA, LogicalKeyboardKey.keyU]) {
+      await tester.sendKeyEvent(key);
+      await tester.pumpAndSettle();
+    }
+
+    expect(raised, [
+      for (var i = 0; i < 2; i++)
+        'This entry holds duplicates; decide it with its own buttons.',
+    ]);
+    expect(repo.decideReviewCalls, isEmpty);
   });
 
   testWidgets('a failing queue shows the error with a retry', (tester) async {

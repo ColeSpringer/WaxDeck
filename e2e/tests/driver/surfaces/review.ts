@@ -18,6 +18,22 @@ export class Review extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.reviewAsIs));
   }
 
+  /// The warning on an entry whose files the library already holds.
+  duplicate(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.reviewDuplicate));
+  }
+
+  /// The as-is decision of an entry whose every file the library holds,
+  /// worded as what it does: add another copy.
+  addCopy(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.reviewAddCopy));
+  }
+
+  /// Decide the open entry as another copy of what the library holds.
+  async decideAsCopy(): Promise<void> {
+    await this.addCopy().click({ force: true });
+  }
+
   /// The empty state a declined entry draws in place of candidates.
   skippedIdentification(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.reviewIdentifySkipped));
@@ -47,10 +63,10 @@ export class Review extends Surface {
     await page.locator(sem(SemanticsIds.reviewIdentifySubmit)).click({ force: true });
   }
 
-  /// Open one entry and wait for its pane.
+  /// Open one entry and wait for its pane's decision bar.
   async open(entryId: string): Promise<void> {
     await this.row(entryId).click({ force: true });
-    await this.asIs().waitFor({ timeout: T.assert });
+    await this.asIs().or(this.addCopy()).waitFor({ timeout: T.assert });
   }
 
   /// A key the queue binds. Escape closes the pane, `e` reopens the

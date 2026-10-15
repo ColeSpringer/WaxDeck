@@ -1535,6 +1535,61 @@ void main() {
     });
   });
 
+  group('an item whose kind changed', () {
+    const ulid = '01JZX5N8QW3F4V9T2B7KDKIND01';
+
+    /// The mirror's row for the item as it is now, and one complete file
+    /// on disk under [heldAs].
+    Future<String> mirrored(String now, {required String heldAs}) async {
+      await db
+          .into(db.mirrorItems)
+          .insert(
+            MirrorItemsCompanion.insert(
+              pid: now,
+              ulid: ulid,
+              mediaType: now.startsWith('bk-') ? 'audiobook' : 'music',
+              title: 'Kind',
+              durationMs: 60000,
+              sortKey: 'kind',
+            ),
+          );
+      final file = File(p.join(tmp.path, 'kind.mp3'))..writeAsStringSync('x');
+      await db
+          .into(db.downloadRecords)
+          .insert(
+            DownloadRecordsCompanion.insert(
+              pid: heldAs,
+              fileIndex: 0,
+              essenceHash: 'kind',
+              etag: '1-1',
+              fileName: 'kind.mp3',
+              localPath: file.path,
+              sizeBytes: 1,
+              state: 'complete',
+            ),
+          );
+      return file.path;
+    }
+
+    test('is found under the pid it had', () async {
+      // A queue entry saved before the delta still names the book.
+      final path = await mirrored('tr-$ulid', heldAs: 'tr-$ulid');
+
+      expect((await manager.localFor('bk-$ulid'))!.parts.single.path, path);
+      expect(await manager.isComplete('bk-$ulid'), isTrue);
+    });
+
+    test('never takes what its old pid left for its new one', () async {
+      // A track folded into a book, its file not yet reclaimed: the book
+      // is more than that file.
+      final path = await mirrored('bk-$ulid', heldAs: 'tr-$ulid');
+
+      expect(await manager.localFor('bk-$ulid'), isNull);
+      expect(await manager.isComplete('bk-$ulid'), isFalse);
+      expect((await manager.localFor('tr-$ulid'))!.parts.single.path, path);
+    });
+  });
+
   group('stored', () {
     test('is per item, with its files summed', () async {
       repo.infoByPid[_book] = _info(_book, parts: 3);

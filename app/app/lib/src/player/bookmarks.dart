@@ -67,7 +67,7 @@ class BookmarksController extends AsyncNotifier<List<LocalBookmark>> {
       try {
         await _take(engine, repository, account);
       } on WaxDeckApiException catch (e) {
-        if (_refused(e)) rethrow;
+        if (e.isRefusal) rethrow;
       }
     }
     if (!built.mounted) return const [];
@@ -77,9 +77,6 @@ class BookmarksController extends AsyncNotifier<List<LocalBookmark>> {
     built.onDispose(changes.cancel);
     return engine.localBookmarks(pid, owner: account);
   }
-
-  static bool _refused(WaxDeckApiException e) =>
-      (e.statusCode ?? 0) >= 400 && (e.statusCode ?? 0) < 500;
 
   Future<void> _take(
     SyncEngine engine,

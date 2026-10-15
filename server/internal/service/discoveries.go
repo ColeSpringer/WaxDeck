@@ -259,6 +259,12 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 		if units[key] {
 			continue
 		}
+		// A kind someone set by hand, as treating a book as music pins
+		// on every track it mints, was decided rather than discovered:
+		// the engine does not retag what a person just made tracks of.
+		if l.kindPinned(ctx, it.PID) {
+			continue
+		}
 		unit, err := l.albumUnit(ctx, it)
 		if err != nil {
 			l.log.Warn("discovery: building an album unit", "item", it.PID, "err", err)
@@ -311,6 +317,22 @@ func (l *Library) SweepDiscoveries(ctx context.Context) (DiscoverySweepReport, e
 		return report, l.storeDiscoveryCursor(ctx, from, consumedTo)
 	}
 	return report, l.storeDiscoveryCursor(ctx, from, since)
+}
+
+// kindPinned reports whether someone pinned an item's kind; a read that
+// fails counts as pinned, since leaving an item unidentified is the
+// recoverable side.
+func (l *Library) kindPinned(ctx context.Context, pid model.PID) bool {
+	rows, err := l.lib.Provenance(ctx, pid)
+	if err != nil {
+		return true
+	}
+	for _, r := range rows {
+		if r.Field == model.KindLockField && r.Locked {
+			return true
+		}
+	}
+	return false
 }
 
 // discoveryUnitKey names an album unit. The only place the fold

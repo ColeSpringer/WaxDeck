@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
@@ -29,7 +30,9 @@ func (stubFlowJobs) CreateSplitJob(context.Context, string, []int64, string, str
 func (stubFlowJobs) JobStatus(context.Context, string) (string, float64, int, string, error) {
 	return "", 0, 0, "", nil
 }
-func (stubFlowJobs) DownloadJobResult(context.Context, string, int, string) error { return nil }
+func (stubFlowJobs) DownloadJobResult(context.Context, string, int, string, os.FileMode) error {
+	return nil
+}
 
 func TestSilenceMapStale(t *testing.T) {
 	t.Parallel()

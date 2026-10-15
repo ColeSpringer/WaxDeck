@@ -71,6 +71,21 @@ func (l *Library) CreateShare(ctx context.Context, uc *UserCtx, targetAPIPID str
 	if !ok {
 		return ShareInfo{}, errInvalid("only tracks, albums, playlists, books, and episodes can be shared")
 	}
+	// Either prefix reaches a track or a book; the link records what the
+	// item is now, under the pid every answer carries.
+	if kind == "track" || kind == "book" {
+		it, err := l.getVisibleItem(ctx, uc, targetAPIPID)
+		if err != nil {
+			return ShareInfo{}, err
+		}
+		switch it.Kind {
+		case model.KindTrack:
+			kind = "track"
+		case model.KindBook:
+			kind = "book"
+		}
+		targetAPIPID = itemAPIPID(it)
+	}
 	if positionMs != 0 && kind != "episode" {
 		return ShareInfo{}, errInvalid("positionMs is for episode shares")
 	}
@@ -250,7 +265,7 @@ func (l *Library) shareTitleLoose(ctx context.Context, r wdb.Share) (string, err
 		return pl.Name, nil
 	}
 	it, err := l.lib.Get(ctx, pid)
-	if err != nil {
+	if err != nil || (r.TargetKind == "track" && it.Kind != model.KindTrack) {
 		return "", nil
 	}
 	return it.Title, nil
@@ -388,6 +403,12 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 	default:
 		it, err := l.lib.Get(ctx, pid)
 		if err != nil || !l.offers(ctx, owner, it) {
+			return nil, errNotFound("no such share")
+		}
+		// A track's link never serves the book its track became: a scan
+		// that folds tracks into a book reports no fold for the link to
+		// follow, and the book holds parts the owner never shared.
+		if row.TargetKind == "track" && it.Kind != model.KindTrack {
 			return nil, errNotFound("no such share")
 		}
 		pub.Title = it.Title

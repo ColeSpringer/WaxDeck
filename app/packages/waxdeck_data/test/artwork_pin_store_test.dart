@@ -74,4 +74,31 @@ void main() {
     expect(await none.remove('tr-A'), isEmpty);
     expect(await none.clear(), isEmpty);
   });
+
+  test('a draw under a pid a kind change retired finds the pins it moved '
+      'to, and nothing else does', () async {
+    const ulid = '01JZX5N8QW3F4V9T2B7KDKIND01';
+    await db
+        .into(db.mirrorItems)
+        .insert(
+          MirrorItemsCompanion.insert(
+            pid: 'bk-$ulid',
+            ulid: ulid,
+            mediaType: 'audiobook',
+            title: 'Kind',
+            durationMs: 60000,
+            sortKey: 'kind',
+          ),
+        );
+    await store.put(_pin('bk-$ulid', 1024));
+
+    // A queue entry saved before the change still names the track.
+    expect((await store.pinsToDraw('tr-$ulid')).map((p) => p.pid), [
+      'bk-$ulid',
+    ]);
+    expect(await store.pinsFor('tr-$ulid'), isEmpty);
+    expect(await store.remove('tr-$ulid'), isEmpty);
+    expect(await store.pinsFor('bk-$ulid'), hasLength(1));
+    expect(await store.pinsToDraw('tr-01JZX5N8QW3F4V9T2B7KDOTHER1'), isEmpty);
+  });
 }

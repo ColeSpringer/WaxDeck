@@ -802,6 +802,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminInvitesEmpty => 'Todavía no hay invitaciones';
 
   @override
+  String get adminLibrariesColumnFolders => 'Nombrar por carpetas';
+
+  @override
   String get adminLibrariesColumnHolds => 'Contiene';
 
   @override
@@ -856,8 +859,17 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String adminLibraryFolderFallbackLabel(String name) {
+    return 'Nombrar archivos sin etiquetas por carpetas: $name';
+  }
+
+  @override
+  String get adminLibraryFolderFallbackRescan =>
+      'Se aplica ya a los archivos nuevos. Usa Releer los archivos sin cambios al volver a escanear para aplicarlo a los ya escaneados.';
+
+  @override
   String get adminLibraryHoldsHelp =>
-      'Qué tipo de contenido hay en la carpeta raíz';
+      'Libros convierte cada archivo de audio de la carpeta en un audiolibro. Música y Mixta se guían por las etiquetas de cada archivo.';
 
   @override
   String get adminLibraryHoldsTitle => 'Contiene';
@@ -887,6 +899,27 @@ class AppLocalizationsEs extends AppLocalizations {
   String get adminLibraryMediaBooks => 'Libros';
 
   @override
+  String get adminLibraryMediaChange =>
+      'Cambiar lo que contiene esta biblioteca';
+
+  @override
+  String adminLibraryMediaChanged(String name) {
+    return 'Escaneando $name para aplicar el cambio.';
+  }
+
+  @override
+  String adminLibraryMediaChoiceLabel(String name) {
+    return 'Lo que contiene $name';
+  }
+
+  @override
+  String get adminLibraryMediaConfirm => 'Cambiar';
+
+  @override
+  String get adminLibraryMediaDeclared =>
+      'Lo fija la configuración del servidor';
+
+  @override
   String get adminLibraryMediaMixed => 'Mixta';
 
   @override
@@ -894,6 +927,26 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get adminLibraryMediaPodcasts => 'Pódcast';
+
+  @override
+  String adminLibraryMediaRereadBody(String name) {
+    return 'Cada archivo de $name se vuelve a leer para ver qué contiene, lo que puede tardar. En Música, un libro que las etiquetas de sus partes no forman se lee como pistas; en Mixta, un libro cuyas partes ya lo forman se mantiene. Los elementos cuyo tipo se fijó a mano lo conservan.';
+  }
+
+  @override
+  String adminLibraryMediaScanWaits(String name) {
+    return 'Hay otra tarea en marcha. Cuando termine, vuelve a escanear para aplicar el cambio a $name.';
+  }
+
+  @override
+  String adminLibraryMediaScanWaitsReread(String name) {
+    return 'Hay otra tarea en marcha. Cuando termine, vuelve a escanear con Releer los archivos sin cambios activado para aplicar el cambio a $name.';
+  }
+
+  @override
+  String adminLibraryMediaToBooksBody(String name) {
+    return 'Cada archivo de audio de $name se convierte en un libro en el escaneo que esto inicia, con las partes de una misma carpeta reunidas en un libro. Los elementos cuyo tipo se fijó a mano lo conservan.';
+  }
 
   @override
   String get adminLibraryNameHint =>
@@ -2191,6 +2244,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String artworkReplacedTagsFailed(String slot) {
+    return 'Se ha reemplazado: $slot, pero no se han podido actualizar las etiquetas del archivo';
+  }
+
+  @override
   String artworkSetSlot(String slot) {
     return 'Poner $slot';
   }
@@ -2795,6 +2853,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get bookYes => 'Sí';
 
   @override
+  String get booksAddLibrary => 'Añadir una biblioteca';
+
+  @override
   String get booksAddToLibrary => 'Añadir a la biblioteca';
 
   @override
@@ -2807,7 +2868,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get booksEmptyMessage =>
-      'Los libros van apareciendo aquí según los escanea la biblioteca. Apunta una biblioteca a tu carpeta de audiolibros y llegarán con sus capítulos.';
+      'En una biblioteca que contiene Libros cada archivo de audio se convierte en un libro, con todas sus partes. En las demás, un archivo es un libro cuando sus etiquetas lo indican o cuando alguien que puede editarlo elige Tratar como audiolibro.';
 
   @override
   String get booksEmptyTitle => 'Todavía no hay audiolibros';
@@ -3507,7 +3568,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String get errorNotFound => 'Eso ya no está aquí.';
 
   @override
-  String get errorQuotaExceeded => 'Eso superaría el límite de almacenamiento.';
+  String get errorQuotaExceeded => 'Eso supera un límite de este servidor.';
 
   @override
   String get errorRateLimited =>
@@ -3557,6 +3618,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get errorUnexpected => 'Algo ha salido mal.';
+
+  @override
+  String get errorUnreadableFile =>
+      'No se ha podido leer ese archivo como audio. Puede estar dañado o no ser audio.';
 
   @override
   String get errorUnsupportedFormat =>
@@ -3638,10 +3703,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get healthDuplicatesError => 'No se han podido cargar los duplicados';
-
-  @override
-  String get healthDuplicatesErrorBody =>
-      'La pasada de agrupación no ha respondido.';
 
   @override
   String get healthDuplicatesOverline => 'Una misma cosa con dos nombres';
@@ -3774,6 +3835,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get healthLossless => 'sin pérdida';
+
+  @override
+  String healthMemberInFile(String quality, String file) {
+    return '$quality en $file';
+  }
 
   @override
   String get healthMergeAction => 'Fusionar';
@@ -3941,10 +4007,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get healthUpgradesError => 'No se han podido cargar las mejoras';
-
-  @override
-  String get healthUpgradesErrorBody =>
-      'La comparación de calidad no ha respondido.';
 
   @override
   String get healthUpgradesOverline => 'La misma grabación dos veces';
@@ -4131,6 +4193,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get libraryDeleteFilesMenu => 'Eliminar los archivos...';
 
   @override
+  String get libraryDeleteKeepsItem =>
+      'El elemento se queda en tu biblioteca con los archivos que le quedan.';
+
+  @override
   String get libraryDeleteModePermanent => 'Eliminar permanentemente';
 
   @override
@@ -4145,6 +4211,17 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get libraryDeleteMore => 'Más';
+
+  @override
+  String libraryDeleteMoreFiles(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'y $count archivos más',
+      one: 'y 1 archivo más',
+    );
+    return '$_temp0';
+  }
 
   @override
   String libraryDeletePermanentDone(int count) {
@@ -4201,6 +4278,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get libraryFactsDuration => 'Duración';
 
   @override
+  String get libraryFactsFiles => 'Archivos';
+
+  @override
   String get libraryFactsGenres => 'Géneros';
 
   @override
@@ -4231,10 +4311,127 @@ class AppLocalizationsEs extends AppLocalizations {
   String get libraryFactsYear => 'Año';
 
   @override
+  String get libraryFileDeleteCopy => 'Eliminar esta copia';
+
+  @override
+  String get libraryFileRoleCopy => 'Copia';
+
+  @override
+  String get libraryFileRoleOtherEncoding => 'Otra codificación';
+
+  @override
+  String get libraryFileRolePart => 'Parte';
+
+  @override
+  String get libraryFileRolePrimary => 'Principal';
+
+  @override
+  String libraryFilesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos',
+      one: '1 archivo',
+    );
+    return '$_temp0';
+  }
+
+  @override
   String get libraryKindAlbum => 'álbum';
 
   @override
+  String get libraryKindAlbumToBook => 'Tratar el álbum como un audiolibro';
+
+  @override
+  String libraryKindAlbumTooLarge(int max) {
+    return 'Este álbum tiene más de $max pistas, demasiadas para cambiarlas de una vez.';
+  }
+
+  @override
+  String libraryKindAlreadyBook(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Estos ya son audiolibros',
+      one: 'Esto ya es un audiolibro',
+    );
+    return '$_temp0, así que no ha cambiado nada.';
+  }
+
+  @override
+  String libraryKindAlreadyMusic(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Estos ya son música',
+      one: 'Esto ya es música',
+    );
+    return '$_temp0, así que no ha cambiado nada.';
+  }
+
+  @override
   String get libraryKindArtist => 'artista';
+
+  @override
+  String get libraryKindConfirm => 'Cambiar';
+
+  @override
+  String get libraryKindFailed => 'No se ha podido hacer el cambio.';
+
+  @override
+  String libraryKindFailedWhy(String reason) {
+    return 'No se ha podido hacer el cambio: $reason';
+  }
+
+  @override
+  String get libraryKindJoinedUnseen =>
+      'Ahora forma parte de un elemento de una biblioteca que no puedes abrir.';
+
+  @override
+  String get libraryKindQueued =>
+      'Continúa en segundo plano; se te avisará cuando termine.';
+
+  @override
+  String get libraryKindStillRunning => 'Sigue cambiando. Síguelo en Tareas.';
+
+  @override
+  String get libraryKindStoppedPlaying =>
+      'Lo que sonaba ahora forma parte del libro; reprodúcelo desde aquí.';
+
+  @override
+  String get libraryKindToBook => 'Tratar como audiolibro';
+
+  @override
+  String libraryKindToBookBody(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          'Estas $count pistas se convierten en un audiolibro en Libros, con las partes en orden.',
+      one: 'Esta pista se convierte en un audiolibro en Libros.',
+    );
+    return '$_temp0 Las reproducciones, los favoritos y las entradas de listas van con él, y los escaneos posteriores mantienen la elección.';
+  }
+
+  @override
+  String get libraryKindToBookTitle => '¿Convertir esto en un audiolibro?';
+
+  @override
+  String get libraryKindToMusic => 'Tratar como música';
+
+  @override
+  String get libraryKindToMusicBody =>
+      'Las partes de este libro se convierten en pistas en Música. Las reproducciones y los favoritos se quedan con ellas, y los escaneos posteriores mantienen la elección.';
+
+  @override
+  String get libraryKindToMusicTitle => '¿Convertir esto en música?';
+
+  @override
+  String get libraryKindWorking => 'Volviendo a leer los archivos';
+
+  @override
+  String get libraryKindWriteBackHelp =>
+      'Escribe la elección también en los archivos. Incluso un catálogo reconstruido desde cero leerá entonces un libro como libro, y una pista como música salvo que algo más en su archivo diga libro.';
 
   @override
   String get libraryMenuDetach => 'Separar de la edición';
@@ -4445,6 +4642,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataFieldDiscNo => 'Número de disco';
 
   @override
+  String get metadataFieldDiscTotal => 'Total de discos';
+
+  @override
   String get metadataFieldEdition => 'Edición';
 
   @override
@@ -4500,6 +4700,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataFieldTrackNo => 'Número de pista';
 
   @override
+  String get metadataFieldTrackTotal => 'Total de pistas';
+
+  @override
   String get metadataFieldYear => 'Año';
 
   @override
@@ -4544,6 +4747,11 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get metadataIdentificationTitle => 'Identificación';
+
+  @override
+  String metadataKindPinned(String kind) {
+    return 'Tipo: $kind, fijado';
+  }
 
   @override
   String metadataLinesAllTimed(int count) {
@@ -4813,6 +5021,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get metadataSourceFeed => 'el feed';
 
   @override
+  String get metadataSourceNormalize => 'la pasada de limpieza';
+
+  @override
   String get metadataSourceOrganize => 'el organizador';
 
   @override
@@ -4833,6 +5044,26 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String metadataTagReserved(String key) {
     return '$key se guarda en su propio campo, no como etiqueta personalizada.';
+  }
+
+  @override
+  String metadataTagReservedBookKind(String key) {
+    return '$key se guarda como un campo propio, no como etiqueta personalizada. Una etiqueta no cambia lo que es un elemento; cambia su tipo.';
+  }
+
+  @override
+  String metadataTagReservedEpisode(String key) {
+    return '$key se guarda como un campo propio, no como etiqueta personalizada. Una etiqueta no cambia lo que es un episodio.';
+  }
+
+  @override
+  String metadataTagReservedKind(String key) {
+    return '$key se guarda como un campo propio, no como etiqueta personalizada. Una etiqueta no convierte un elemento en audiolibro; cambia su tipo.';
+  }
+
+  @override
+  String metadataTagReservedNarrator(String key) {
+    return '$key se guarda como un campo propio, no como etiqueta personalizada. Edita los créditos de narrador.';
   }
 
   @override
@@ -4968,7 +5199,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get musicAlbumEditorTotalTracksHelp =>
-      'Se cuenta a partir de las pistas de este lanzamiento. Añade o quita pistas para cambiarlo; no es un campo que se guarde.';
+      'Se cuenta a partir de las pistas de este lanzamiento. Añade o quita pistas para cambiarlo; el total de pistas de cada pista se edita en la propia pista.';
 
   @override
   String musicAlbumEditorTracksMore(int count) {
@@ -8910,6 +9141,9 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get reviewActionAddCopy => 'Añadir como otra copia';
+
+  @override
   String get reviewActionApprove => 'Aprobar';
 
   @override
@@ -8926,6 +9160,28 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get reviewActionUnofficial => 'Marcar como no oficial';
+
+  @override
+  String reviewBulkHeldDuplicates(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count entradas tienen duplicados; abre cada una para decidir',
+      one: '1 entrada tiene duplicados; ábrela para decidir',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewBulkMoreWarnings(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'y $count avisos más',
+      one: 'y 1 aviso más',
+    );
+    return '$_temp0';
+  }
 
   @override
   String reviewCandidateLine(String percent, String title, String artist) {
@@ -8954,6 +9210,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get reviewCandidatesTitle => 'Candidatos';
+
+  @override
+  String get reviewDecideHeldInPane =>
+      'Esta entrada tiene duplicados; decídela con sus propios botones.';
 
   @override
   String reviewDecidedCount(int count) {
@@ -9009,6 +9269,48 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get reviewDiffUnmatched => 'Sin emparejar';
+
+  @override
+  String reviewDuplicateCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count duplicados',
+      one: '1 duplicado',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get reviewDuplicateHelp =>
+      'Añadir un archivo que la biblioteca ya tiene mantiene un solo elemento, con el archivo como otra copia. Sus datos, su portada y quién puede editarlo no cambian.';
+
+  @override
+  String reviewDuplicateMaybeTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos puede que ya estén en tu biblioteca',
+      one: '1 archivo puede que ya esté en tu biblioteca',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String reviewDuplicateRow(String file, String what) {
+    return '$file: $what';
+  }
+
+  @override
+  String reviewDuplicateTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count archivos ya están en tu biblioteca',
+      one: '1 archivo ya está en tu biblioteca',
+    );
+    return '$_temp0';
+  }
 
   @override
   String get reviewEditMetadata => 'Editar los metadatos';
@@ -9082,6 +9384,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get reviewIdentifyingLong =>
       'Identificando: la búsqueda de candidatos sigue en marcha';
+
+  @override
+  String get reviewJoinedChip =>
+      'Añadido a un elemento que la biblioteca ya tenía';
 
   @override
   String get reviewLoadError => 'No se ha podido cargar la cola de revisión';
@@ -9194,7 +9500,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get reviewSkippedPending =>
-      'Esta entrega pidió aceptarse tal cual, así que no se ha buscado nada. No se ha podido añadir por su cuenta: deja los archivos como están, u omítelos.';
+      'Esta entrega pidió aceptarse tal cual, así que no se ha buscado nada. No se ha podido añadir por su cuenta: lee el aviso de arriba si lo hay y luego añádela, omítela o descártala.';
 
   @override
   String get reviewSkippedTitle => 'Se ha omitido la identificación';
@@ -11391,6 +11697,16 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String toolsCountChanged(int count) {
+    return 'cambiados $count';
+  }
+
+  @override
+  String toolsCountCopies(int count) {
+    return 'copias $count';
+  }
+
+  @override
   String toolsCountCovers(int count) {
     return 'portadas $count';
   }
@@ -11406,8 +11722,18 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String toolsCountFallbacks(int count) {
+    return 'con alternativa $count';
+  }
+
+  @override
   String toolsCountFilledOf(int filled, int attempted) {
     return 'completados $filled de $attempted';
+  }
+
+  @override
+  String toolsCountFolded(int count) {
+    return 'fusionados $count';
   }
 
   @override
@@ -11426,6 +11752,11 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String toolsCountNotWritten(int count) {
+    return 'sin escribir $count';
+  }
+
+  @override
   String toolsCountPictures(int count) {
     return 'imágenes $count';
   }
@@ -11433,6 +11764,11 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String toolsCountSkipped(int count) {
     return 'omitidos $count';
+  }
+
+  @override
+  String toolsCountUnreadable(int count) {
+    return 'ilegibles $count';
   }
 
   @override
@@ -11487,6 +11823,9 @@ class AppLocalizationsEs extends AppLocalizations {
   String get toolsJobScan => 'Escaneo de la biblioteca';
 
   @override
+  String get toolsJobSetKind => 'Cambio de tipo';
+
+  @override
   String toolsJobTargeted(String job, String target) {
     return '$job: $target';
   }
@@ -11515,6 +11854,31 @@ class AppLocalizationsEs extends AppLocalizations {
       one: '1 lista para revisar',
     );
     return '$_temp0';
+  }
+
+  @override
+  String get toolsRootUnreachable => 'carpeta inaccesible';
+
+  @override
+  String toolsScanRun(String library, int files, int copies) {
+    String _temp0 = intl.Intl.pluralLogic(
+      files,
+      locale: localeName,
+      other: '$files archivos',
+      one: '1 archivo',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      copies,
+      locale: localeName,
+      other: '$copies copias',
+      one: '1 copia',
+    );
+    return '$library: $_temp0, $_temp1';
+  }
+
+  @override
+  String toolsScanRunUnreachable(String library) {
+    return '$library: carpeta inaccesible';
   }
 
   @override
@@ -11693,7 +12057,19 @@ class AppLocalizationsEs extends AppLocalizations {
   String get uploadsDuplicateFingerprint => 'misma grabación';
 
   @override
+  String get uploadsDuplicateId => 'mismo identificador';
+
+  @override
+  String uploadsDuplicateJoined(String what) {
+    return 'Ya está en la biblioteca: $what. Sus datos siguen como estaban.';
+  }
+
+  @override
   String get uploadsDuplicateName => 'coincidencia de nombre';
+
+  @override
+  String get uploadsDuplicateUnseen =>
+      'un elemento de una biblioteca que no puedes abrir';
 
   @override
   String get uploadsEmptyMessage =>
@@ -11707,8 +12083,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get uploadsEmptyTitle => 'Todavía no hay subidas';
 
   @override
+  String get uploadsFileEmpty => 'El archivo está vacío';
+
+  @override
   String uploadsFileFailed(String name, String reason) {
     return '$name: $reason';
+  }
+
+  @override
+  String uploadsFileOverQuota(String limit) {
+    return 'Supera por sí solo tu límite de subidas de $limit, así que vaciar Subidas anteriores no le hará sitio. Un administrador puede ampliar el límite.';
   }
 
   @override
@@ -11826,6 +12210,10 @@ class AppLocalizationsEs extends AppLocalizations {
       'Pistas que eliges a mano, agrupadas por sus etiquetas';
 
   @override
+  String get uploadsQuotaFull =>
+      'Ya tienes en espera todo lo que permite tu límite. Importa o descarta parte en Subidas anteriores y vuelve a intentarlo.';
+
+  @override
   String get uploadsQuotaHelp =>
       'Esto es lo que puede estar en espera a la vez, no lo que puedes aportar: importar una sesión libera el espacio que ocupaba.';
 
@@ -11889,6 +12277,10 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get uploadsSourceUrlHint =>
       'Un solo vídeo, o una lista de reproducción o un canal';
+
+  @override
+  String get uploadsSourceUrlInvalid =>
+      'Introduce un enlace que empiece por http:// o https://';
 
   @override
   String get uploadsTitle => 'Subidas';

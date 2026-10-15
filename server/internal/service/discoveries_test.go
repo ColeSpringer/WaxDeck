@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/colespringer/waxbin"
+	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxdeck/fixtures"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -322,5 +324,59 @@ func TestDiscoveryRespectsMatchingOff(t *testing.T) {
 	f.sweepToQuiet(t)
 	if got := len(f.pendingEntries(t)); got != 0 {
 		t.Fatalf("%d entries opened in an as-is library; want 0", got)
+	}
+}
+
+// Treating a scan-found book as music mints tracks for its other parts,
+// and those are no discovery: a person chose what they are, so the
+// matching engine does not open them for identification.
+func TestDiscoveryLeavesTheTracksAKindChangeMinted(t *testing.T) {
+	t.Parallel()
+	f := newDiscoveryFixture(t)
+	if _, err := fixtures.GenerateBook(f.libDir); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.svc.lib.Scan(f.ctx, waxbin.ScanRequest{}); err != nil {
+		t.Fatal(err)
+	}
+	f.sweepToQuiet(t)
+	if got := len(f.pendingEntries(t)); got != 0 {
+		t.Fatalf("%d entries for a scanned book, want none", got)
+	}
+	page, err := f.svc.Items(f.ctx, f.uc, ItemFilter{}, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var book string
+	for _, it := range page.Items {
+		if strings.HasPrefix(it.PID, PrefixBook+"-") {
+			book = it.PID
+		}
+	}
+	if book == "" {
+		t.Fatal("the fixture scanned to no book")
+	}
+	job, err := f.svc.SetItemsKind(f.ctx, f.uc, []string{book}, "music", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(30 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		j, err := f.svc.JobStatus(f.ctx, job.PID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if j.State != string(model.JobRunning) && j.State != "queued" {
+			if j.State != string(model.JobDone) {
+				t.Fatalf("kind change = %+v, want done", j)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the kind change did not finish")
+		}
+	}
+	f.sweepToQuiet(t)
+	if entries := f.pendingEntries(t); len(entries) != 0 {
+		t.Fatalf("entries after the split = %+v, want none for tracks a person made", entries)
 	}
 }

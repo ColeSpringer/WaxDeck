@@ -959,6 +959,10 @@
   "@adminInvitesEmpty": {
     "description": "Empty state of the invites tab."
   },
+  "adminLibrariesColumnFolders": "Name from folders",
+  "@adminLibrariesColumnFolders": {
+    "description": "Column heading on the Libraries table: whether a scan names a library's untagged files from their folders (the artist folder and the album folder)."
+  },
   "adminLibrariesColumnHolds": "Holds",
   "@adminLibrariesColumnHolds": {
     "description": "Column heading for what kind of content a library holds."
@@ -1035,9 +1039,23 @@
       }
     }
   },
-  "adminLibraryHoldsHelp": "What kind of content the root carries",
+  "adminLibraryFolderFallbackLabel": "Name untagged files from folders: {name}",
+  "@adminLibraryFolderFallbackLabel": {
+    "description": "Accessible label of the switch that lets a scan name one library's untagged files from their folders.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "music"
+      }
+    }
+  },
+  "adminLibraryFolderFallbackRescan": "Applies to new files now. Re-read unchanged files in Rescan to apply it to files already scanned.",
+  "@adminLibraryFolderFallbackRescan": {
+    "description": "Message after switching on a library's folder naming: files scanned from now on take it, and a rescan that re-reads unchanged files applies it to the rest."
+  },
+  "adminLibraryHoldsHelp": "Books makes every audio file in the folder an audiobook. Music and Mixed go by each file's tags.",
   "@adminLibraryHoldsHelp": {
-    "description": "Line under the holds row in the add-library form."
+    "description": "Help under the Holds choice when adding a library: what each content class does to the files."
   },
   "adminLibraryHoldsTitle": "Holds",
   "@adminLibraryHoldsTitle": {
@@ -1077,6 +1095,36 @@
   "@adminLibraryMediaBooks": {
     "description": "Says a library holds audiobooks."
   },
+  "adminLibraryMediaChange": "Change what this library holds",
+  "@adminLibraryMediaChange": {
+    "description": "Title of the dialog confirming a change to what a library holds."
+  },
+  "adminLibraryMediaChanged": "Scanning {name} to apply the change.",
+  "@adminLibraryMediaChanged": {
+    "description": "Message after a library's content class changed and its scan started. {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "adminLibraryMediaChoiceLabel": "What {name} holds",
+  "@adminLibraryMediaChoiceLabel": {
+    "description": "Accessible name of the per-library control that changes what the library holds (Music, Books, Mixed). {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "adminLibraryMediaConfirm": "Change",
+  "@adminLibraryMediaConfirm": {
+    "description": "Confirm button of the dialog changing what a library holds."
+  },
+  "adminLibraryMediaDeclared": "Set by the server's configuration",
+  "@adminLibraryMediaDeclared": {
+    "description": "Under what a library holds, in place of the choice, where the server's configuration (WAXDECK_AUDIOBOOK_ROOTS) declares it: it is changed there, and the server refuses a change made here."
+  },
   "adminLibraryMediaMixed": "Mixed",
   "@adminLibraryMediaMixed": {
     "description": "Says a library holds more than one kind of content. Describes the library, so it agrees with the word for a library in this language."
@@ -1088,6 +1136,42 @@
   "adminLibraryMediaPodcasts": "Podcasts",
   "@adminLibraryMediaPodcasts": {
     "description": "Says a library holds podcasts."
+  },
+  "adminLibraryMediaRereadBody": "Every file in {name} is read again to see what it holds, which can take a while. In Music, a book its parts' tags do not make is read as tracks; in Mixed, a book whose parts already make one stays. Items whose kind was set by hand keep it.",
+  "@adminLibraryMediaRereadBody": {
+    "description": "Body of the dialog confirming a library becomes Music or Mixed. {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "adminLibraryMediaScanWaits": "Another job is running. Once it ends, rescan to apply the change to {name}.",
+  "@adminLibraryMediaScanWaits": {
+    "description": "Message after a library became a Books library while another catalog job ran, so its scan did not start. {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "adminLibraryMediaScanWaitsReread": "Another job is running. Once it ends, rescan with Re-read unchanged files on to apply the change to {name}.",
+  "@adminLibraryMediaScanWaitsReread": {
+    "description": "Message after a library became Music or Mixed while another catalog job ran: applying it needs a rescan with the re-read option (adminLibraryRescanForce). {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "adminLibraryMediaToBooksBody": "Every audio file in {name} becomes a book on the scan this starts, the parts in one folder gathered into one book. Items whose kind was set by hand keep it.",
+  "@adminLibraryMediaToBooksBody": {
+    "description": "Body of the dialog confirming a library becomes a Books library. {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "adminLibraryNameHint": "Also the WaxFlow root name serving this directory",
   "@adminLibraryNameHint": {

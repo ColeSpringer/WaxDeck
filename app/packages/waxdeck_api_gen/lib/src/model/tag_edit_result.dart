@@ -3,6 +3,8 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/write_back_failure.dart';
+import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -13,6 +15,7 @@ part 'tag_edit_result.g.dart';
 /// Properties:
 /// * [key] - The canonical uppercase key actually used.
 /// * [stored] - Values stored after deduplication.
+/// * [writeBackFailures] - Files the write-back could not update; the catalog edit stands. Absent when every file took the values or no write-back was asked for. 
 @BuiltValue()
 abstract class TagEditResult implements Built<TagEditResult, TagEditResultBuilder> {
   /// The canonical uppercase key actually used.
@@ -22,6 +25,10 @@ abstract class TagEditResult implements Built<TagEditResult, TagEditResultBuilde
   /// Values stored after deduplication.
   @BuiltValueField(wireName: r'stored')
   int get stored;
+
+  /// Files the write-back could not update; the catalog edit stands. Absent when every file took the values or no write-back was asked for. 
+  @BuiltValueField(wireName: r'writeBackFailures')
+  BuiltList<WriteBackFailure>? get writeBackFailures;
 
   TagEditResult._();
 
@@ -56,6 +63,13 @@ class _$TagEditResultSerializer implements PrimitiveSerializer<TagEditResult> {
       object.stored,
       specifiedType: const FullType(int),
     );
+    if (object.writeBackFailures != null) {
+      yield r'writeBackFailures';
+      yield serializers.serialize(
+        object.writeBackFailures,
+        specifiedType: const FullType(BuiltList, [FullType(WriteBackFailure)]),
+      );
+    }
   }
 
   @override
@@ -92,6 +106,14 @@ class _$TagEditResultSerializer implements PrimitiveSerializer<TagEditResult> {
             specifiedType: const FullType(int),
           ) as int;
           result.stored = valueDes;
+          break;
+        case r'writeBackFailures':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltList, [FullType(WriteBackFailure)]),
+          ) as BuiltList<WriteBackFailure>?;
+          if (valueDes == null) continue;
+          result.writeBackFailures.replace(valueDes);
           break;
         default:
           unhandled.add(key);

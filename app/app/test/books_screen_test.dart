@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/admin/libraries_screen.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/books_controller.dart';
 import 'package:waxdeck/src/books/books_screen.dart';
@@ -158,6 +159,29 @@ void main() {
     await tester.pumpWidget(_host(FakeRepository()));
     await tester.pumpAndSettle();
     expect(find.text('No audiobooks yet'), findsOneWidget);
+    expect(
+      find.textContaining('every audio file becomes a book'),
+      findsOneWidget,
+    );
+    // Adding a library is an administrator's.
+    expect(find.text('Add a library'), findsNothing);
+  });
+
+  testWidgets('an administrator is pointed at the libraries', (tester) async {
+    await tester.pumpWidget(
+      _host(
+        FakeRepository(
+          sessionState: const SessionState(
+            authenticated: true,
+            user: WaxDeckUser(id: 'us-1', username: 'admin', roles: ['admin']),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add a library'));
+    await tester.pumpAndSettle();
+    expect(find.byType(LibrariesScreen), findsOneWidget);
   });
 
   testWidgets('a server that will not answer offers a retry', (tester) async {

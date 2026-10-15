@@ -359,12 +359,24 @@ class _UploadRow extends StatelessWidget {
   final VoidCallback onRetry;
   final VoidCallback onDiscard;
 
-  static String _duplicateKind(AppLocalizations l10n, String kind) =>
-      switch (kind) {
-        'content' => l10n.uploadsDuplicateContent,
-        'fingerprint' => l10n.uploadsDuplicateFingerprint,
-        _ => l10n.uploadsDuplicateName,
-      };
+  /// What a duplicate matched: the item by title and artist where the
+  /// uploader can see it, a sentence where they cannot. Once imported,
+  /// a file whose audio the library held says the item kept its
+  /// details, since it joined that item rather than becoming one.
+  static String _duplicateMessage(
+    AppLocalizations l10n,
+    UploadSession upload,
+    DuplicateWarning duplicate,
+  ) {
+    final what = duplicateWhat(l10n, duplicate);
+    if (upload.state == 'imported' && duplicate.kind == 'content') {
+      return l10n.uploadsDuplicateJoined(what);
+    }
+    return l10n.uploadsDuplicate(
+      duplicateKindLabel(l10n, duplicate.kind),
+      what,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -459,19 +471,7 @@ class _UploadRow extends StatelessWidget {
                 container: true,
                 child: WaxBanner(
                   tone: WaxBannerTone.caution,
-                  message: l10n.uploadsDuplicate(
-                    _duplicateKind(l10n, duplicate.kind),
-                    // The artist names the duplicate even where the
-                    // title is missing, which is when the alternative
-                    // is a bare pid.
-                    switch ((duplicate.title, duplicate.artist)) {
-                      (_, final artist?) => l10n.uploadsDuplicateBy(
-                        duplicate.title ?? duplicate.itemPid,
-                        artist,
-                      ),
-                      _ => duplicate.title ?? duplicate.itemPid,
-                    },
-                  ),
+                  message: _duplicateMessage(l10n, upload, duplicate),
                 ),
               ),
             ],
@@ -497,3 +497,23 @@ class _UploadRow extends StatelessWidget {
     );
   }
 }
+
+/// How a duplicate matched, as the uploads row and the review pane word
+/// it.
+String duplicateKindLabel(AppLocalizations l10n, String kind) => switch (kind) {
+  'content' => l10n.uploadsDuplicateContent,
+  'id' => l10n.uploadsDuplicateId,
+  'fingerprint' => l10n.uploadsDuplicateFingerprint,
+  _ => l10n.uploadsDuplicateName,
+};
+
+/// What a duplicate matched, by title and artist where the reader may
+/// see it. The artist names it even where the title is missing, which is
+/// when the alternative is a bare pid; an item the reader cannot see is
+/// not named at all.
+String duplicateWhat(AppLocalizations l10n, DuplicateWarning duplicate) =>
+    switch ((duplicate.title ?? duplicate.itemPid, duplicate.artist)) {
+      (final name?, final artist?) => l10n.uploadsDuplicateBy(name, artist),
+      (final name?, null) => name,
+      (null, _) => l10n.uploadsDuplicateUnseen,
+    };

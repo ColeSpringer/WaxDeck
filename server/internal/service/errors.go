@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 
 	"github.com/colespringer/waxbin/waxerr"
@@ -161,10 +162,49 @@ func classify(err error) error {
 		return nil
 	}
 	e := &Error{Kind: kindFromWaxErr(err), Err: err}
-	if e.Kind == KindReadOnly {
+	switch e.Kind {
+	case KindReadOnly:
 		e.Msg = errReadOnly("this library").Error()
+	case KindInvalid, KindNotFound, KindConflict, KindLocked, KindUnsupported:
+		// A refusal is the caller's to read, in its own words, a path in
+		// it by its file's name: the directories are the server's. An
+		// internal failure keeps none, since its cause is for the log.
+		e.Msg = withoutDirectories(waxDetail(err))
 	}
 	return e
+}
+
+// absolutePath is an absolute path in a message, up to the separator
+// that ends a part of it: its directories, then its last name. A name
+// follows its slash at once, so a slash between words is no path.
+var absolutePath = regexp.MustCompile(`(^|[\s"'(])/(?:[^\s/:"'\n][^:"'\n]*/([^/:"'\n]*)|([^\s/:"'\n][^/:"'\n]*))`)
+
+// withoutDirectories cuts each absolute path in s to its last name.
+func withoutDirectories(s string) string {
+	return absolutePath.ReplaceAllString(s, "$1$2$3")
+}
+
+// waxDetail is a catalog error's own words without the operation names
+// WaxBin threads through it: each layer's message, outermost first, then
+// a cause that is not a catalog error. Empty when err holds none.
+func waxDetail(err error) string {
+	var we *waxerr.Error
+	if !errors.As(err, &we) {
+		return ""
+	}
+	var parts []string
+	for e := error(we); e != nil; {
+		w, ok := e.(*waxerr.Error)
+		if !ok {
+			parts = append(parts, e.Error())
+			break
+		}
+		if w.Msg != "" {
+			parts = append(parts, w.Msg)
+		}
+		e = w.Err
+	}
+	return strings.Join(parts, ": ")
 }
 
 // errNotFound builds a caller-facing not-found error.

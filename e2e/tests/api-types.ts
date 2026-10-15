@@ -80,7 +80,7 @@ export interface paths {
         };
         /**
          * Get one job's state
-         * @description State and progress of a server-run catalog job, for the audience the `job` sync marker reaches: administrators, and the starter of a targeted job until its end has been announced to them; anyone else is `forbidden`. A timeline-measurement job (the job a queue timeline answers `202` with) is readable by the account whose queue it measures alone, and is `not-found` to any other.
+         * @description State and progress of a server-run catalog job, for the audience the `job` sync marker reaches: administrators, and the starter of a targeted job until its end has been announced to them. Once a job on an item has ended, anyone who may edit that item (its `mayCurate`) reads it too, which is how a kind change's starter reads its result after the end notice; anyone else is `forbidden`. For a reader who is not an administrator, a scan's `runs` and the write-back failures' `path`s are left out and `error` carries no server paths. A timeline-measurement job (the job a queue timeline answers `202` with) is readable by the account whose queue it measures alone, and is `not-found` to any other.
          */
         get: operations["getJob"];
         put?: never;
@@ -114,6 +114,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/libraries/{pid}/media": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Change what a library holds
+         * @description Changes the library's content class in place and starts the scan that applies it to the files already there. Onto `audiobook`, the library's audio files become books (its plain parts gathered into one book per album and author) on an ordinary scan. Onto `music` or `mixed`, the scan re-reads every file and classifies it by its tags: in `music` a book its parts' tags do not make one is read again as tracks, while in `mixed` a book whose parts already make one keeps them. Items whose kind was set by hand or by an upload keep it either way. The podcast library is `invalid-request`, and so is moving a root `WAXDECK_AUDIOBOOK_ROOTS` declares (`mediaDeclared`) off audiobook. Administrators only.
+         */
+        put: operations["setLibraryMedia"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/libraries/{pid}/read-only": {
         parameters: {
             query?: never;
@@ -137,6 +160,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/libraries/{pid}/folder-fallback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Name untagged files from their folders
+         * @description Lets a scan name a track that carries no artist, album artist or album at all from its folders: the grandparent folder as the artist and the parent as the album, less a trailing ` (YYYY)`. It needs a file two folders down, so a loose file names nothing, and never applies to a book. Files scanned from now on take it; an unchanged file already scanned takes it on a rescan that reads every file again (`force`). Only an in-place library takes it: a managed library's folders are the catalog's own rendering, and asking for one answers `invalid-request`, as the podcast library does. Administrators only.
+         */
+        put: operations["setLibraryFolderFallback"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/jobs": {
         parameters: {
             query?: never;
@@ -146,7 +192,7 @@ export interface paths {
         };
         /**
          * List recent catalog jobs
-         * @description Recent catalog jobs, newest first: `limit` of them, after any still running. A finished targeted job is left out; read it by pid. The `job` sync marker says when to read again. Administrators only.
+         * @description Recent catalog jobs, newest first: `limit` of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (`set-kind`), which lists with its result. The `job` sync marker says when to read again. Administrators only.
          */
         get: operations["listJobs"];
         put?: never;
@@ -1250,7 +1296,7 @@ export interface paths {
         };
         /**
          * Metadata health summary
-         * @description The library completeness score with its per-rule breakdown. Health is computed by a background sweep; `warmingUp` is true until the first sweep covers the library (a fresh install shows honest progress instead of a wall of red), and `sweptAt` dates the numbers. Items marked unofficial are exempt from rules that assume a canonical release. Rule names are server-defined strings; the current set is `missing-art`, `small-art`, `missing-mbid`, `missing-year`, `missing-genre`, `genre-whitelist`, `missing-lyrics`, `missing-narrator`, `missing-asin`, `path-mismatch`, `write-unsynced`, `legacy-tags`, `corrupt-audio`, and `duration-mismatch`. `duration-mismatch` flags an analyzed file whose header states a length its decoded audio does not have, off by more than two seconds and two percent; it has no bulk fix. A multi-file book fails a file's rule (`corrupt-audio`, `write-unsynced`, `legacy-tags`, `duration-mismatch`) when any of its parts does. `genre-whitelist` flags an item carrying a genre the server's genre tree does not know; it is deliberately not bulk-fixable, because the background normalizer already rewrites everything the tree does know, so what remains is answered by editing the tree (`/admin/genre-tree`), not the item.
+         * @description The library completeness score with its per-rule breakdown. Health is computed by a background sweep; `warmingUp` is true until the first sweep covers the library (a fresh install shows honest progress instead of a wall of red), and `sweptAt` dates the numbers. Items marked unofficial are exempt from rules that assume a canonical release. Rule names are server-defined strings; the current set is `missing-art`, `small-art`, `missing-mbid`, `missing-year`, `missing-genre`, `genre-whitelist`, `missing-lyrics`, `missing-narrator`, `missing-asin`, `path-mismatch`, `write-unsynced`, `legacy-tags`, `corrupt-audio`, and `duration-mismatch`. `duration-mismatch` flags an analyzed file whose header states a length its decoded audio does not have, off by more than two seconds and two percent; it has no bulk fix. A multi-file book fails a file's rule (`corrupt-audio`, `write-unsynced`, `legacy-tags`, `duration-mismatch`) when any of its parts does. `write-unsynced` lists files whose tags lag the catalog: a refused or failed write-back, a value the format could not store, and a value an edit changed in the catalog without writing it (a value a clean-up pass normalized in the catalog alone does not count). Its fix writes those values and counts an item filled only when none remains. `genre-whitelist` flags an item carrying a genre the server's genre tree does not know; it is deliberately not bulk-fixable, because the background normalizer already rewrites everything the tree does know, so what remains is answered by editing the tree (`/admin/genre-tree`), not the item.
          */
         get: operations["getLibraryHealth"];
         put?: never;
@@ -1410,7 +1456,7 @@ export interface paths {
         };
         /**
          * List quality upgrade groups
-         * @description Groups of the same recording in different encodings, found through the fingerprint index, best quality first within each group. The resolve endpoint keeps the best and trashes the rest; play history merges onto the kept item.
+         * @description Groups of the same recording in different encodings, best quality first within each group, each encoding named by its file. An item holding another encoding of its recording as one of its files (tied by their recording id) is a group of its own, listed first; then items the fingerprint index finds are the same recording, which needs the library analyzed. A copy of the same audio is not an encoding and never appears (the item's files list it). The resolve endpoint keeps one and trashes the rest.
          */
         get: operations["listUpgrades"];
         put?: never;
@@ -1432,7 +1478,7 @@ export interface paths {
         put?: never;
         /**
          * Keep the best encoding
-         * @description Keeps one item of an upgrade group and moves the named inferior encodings to the trash (recoverable within the retention window). A named encoding in a read-only library, or any while the server is read-only, refuses the whole call with `read-only`. Administrators only.
+         * @description Keeps one encoding of an upgrade group and moves the named inferior ones to the trash (recoverable within the retention window). Across items, `removeItemPids` names the items to trash, each with all of its files. Within one item - a group whose members share its pid - `keepFilePid` and `removeFilePids` name the files: the removed ones go together with any copy of their audio, and the item stays on the kept one. Exactly one of the two removal lists is given. A cue rip's file plays every track carved from it, so a removal that would take it from under tracks the call does not name is `invalid-request` with `params.reason` `cue-rip`. A named encoding in a read-only library, or any while the server is read-only, refuses the whole call with `read-only`, as does a copy in a read-only library unless the kept encoding's library is writable, when the copy stays; a move the trash could not make refuses it with `conflict` after the others went. Administrators only.
          */
         post: operations["resolveUpgrade"];
         delete?: never;
@@ -1646,6 +1692,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/items/{pid}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the files behind an item
+         * @description The files behind one item: its primary file, or a book's parts in reading order, then its copies. A copy is a file a scan found holding the same audio as one of the item's files (`same-audio`) or another encoding of its recording (`other-encoding`), and attached to the item rather than giving it an item of its own: its tags do not describe the item, and it plays only when it takes a removed file's place. A copy in a library the caller cannot see is left out. Needs the `download` permission or the admin role, and the item must be visible to the caller; `path` is administrators' only.
+         */
+        get: operations["getItemFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/{pid}/files/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete some of an item's files
+         * @description Deletes files of one item, to the catalog trash by default or permanently (`mode` `permanent`, administrators only), as deleteLibraryItems deletes whole items. A copy goes alone; the primary or a part gives its place to a copy when the item has one, which `warnings` names, and an item that loses its last file is archived. `dryRun` answers the plan without deleting. Needs the `delete` permission or the admin role; the item must be visible to the caller and every file one of its files in a library the caller can see (`not-found` otherwise). A read-only library answers `read-only`. The file of a cue rip plays every track carved from it, so deleting it here when it plays other tracks is `invalid-request` with `params.reason` `cue-rip`: delete those tracks together through deleteLibraryItems.
+         */
+        post: operations["deleteItemFiles"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/library/items/delete": {
         parameters: {
             query?: never;
@@ -1657,7 +1743,7 @@ export interface paths {
         put?: never;
         /**
          * Delete library items
-         * @description Deletes items' files, to the catalog trash by default (reversible from the trash surface) or permanently (`mode` `permanent`, administrators only). `dryRun` answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the `delete` permission or the admin role, and every pid must be visible to the caller (`not-found` otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. A read-only library answers `read-only`. Podcast episodes are not deletable here, and one anywhere in `pids` refuses the whole call (`invalid-request`): the podcast download tree owns its own files, and removing an episode's download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore. The tracks a cue sheet carves out of one file go together: naming some but not all is `invalid-request` with `params.reason` `cue-rip`.
+         * @description Deletes items' files, to the catalog trash by default (reversible from the trash surface) or permanently (`mode` `permanent`, administrators only). `dryRun` answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the `delete` permission or the admin role, and every pid must be visible to the caller (`not-found` otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. An item's copies (getItemFiles) go with it, except one in a read-only library or a library the caller cannot see, which stays and keeps the item (`itemSurvives`). A read-only library holding the item's own file answers `read-only`. Podcast episodes are not deletable here, and one anywhere in `pids` refuses the whole call (`invalid-request`): the podcast download tree owns its own files, and removing an episode's download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore. The tracks a cue sheet carves out of one file go together: naming some but not all is `invalid-request` with `params.reason` `cue-rip`.
          */
         post: operations["deleteLibraryItems"];
         delete?: never;
@@ -1686,7 +1772,7 @@ export interface paths {
         post?: never;
         /**
          * Clear lyrics
-         * @description Removes the stored lyrics (files are untouched).
+         * @description Removes the stored lyrics and their lock. With `writeBack` it also deletes the `.lrc` sidecar beside the item's file, which a set with `writeBack` writes, unless another audio file of that name, not one of the item's own, reads it too; a sidecar that stayed is not reported (a 204 carries no body) and is logged. Lyrics embedded in the audio's own tags stay, and a forced rescan reads them again.
          */
         delete: operations["clearItemLyrics"];
         options?: never;
@@ -1703,7 +1789,7 @@ export interface paths {
         };
         /**
          * Read the caller's permissions on an item
-         * @description Whether the caller may run the item-scoped metadata mutations on this item: administrators always, everyone else exactly for the items their own uploads brought in. This is the whole `mayCurate` answer from the metadata read without the cost of the full editor document, for surfaces that only need to decide whether to show an edit door. The read does not confirm the item exists: an unknown pid answers `mayCurate: false` for a non-administrator, and `true` for an administrator, whose edits on it would answer `not-found` anyway.
+         * @description Whether the caller may run the item-scoped metadata mutations on this item: administrators always, anyone else for the items their own uploads and acquisitions brought in and the parts a kind change split out of those. This is the whole `mayCurate` answer from the metadata read without the cost of the full editor document, for surfaces that only need to decide whether to show an edit door. The read does not confirm the item exists: an unknown pid answers `mayCurate: false` for a non-administrator, and `true` for an administrator, whose edits on it would answer `not-found` anyway.
          */
         get: operations["getItemPermissions"];
         put?: never;
@@ -1788,6 +1874,28 @@ export interface paths {
          *     Gated per item like the sequential parts: administrators, or the user whose upload brought the item in. It is not the bulk edit and does not carry that operation's admin-only gate.
          */
         post: operations["commitItemMetadata"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/items/kind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change what items are
+         * @description Turns tracks into an audiobook, or a book into tracks, as a background job of kind `set-kind`, answered at once. Each item's files are read again as the new kind, so an item changes kind in place and keeps its pid, with its plays, stars, playlist entries and shares. The pid's prefix follows the kind (`tr-` and `bk-`); either form reaches the item. Tracks that make one book fold into one item, the first one named or a book already holding their key, and a book becoming tracks keeps its pid on its first part and mints the rest; the finished job's result names where each item went. A folded item's shares, and the track shares of the item it folded into, are revoked rather than widened to the whole book. The choice is pinned, so later scans keep it, and anyone who may edit the items may replace a kind pinned before.
+         *
+         *     Gated per item: administrators, or the user whose upload or acquisition brought the item in, or the part a kind change split out of one (`mayCurate`); every item named must pass or nothing changes. Refused with `invalid-request`, before anything changes, for an episode, a cue track, a file another item shares, or a book file with a cue sheet beside it that would make it a cue rip.
+         */
+        post: operations["setItemKind"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2007,13 +2115,13 @@ export interface paths {
         get?: never;
         /**
          * Set a custom tag
-         * @description Replaces the ordered values of one custom tag on a track or book, locking `tag.KEY` by default. Custom tags are full browse dimensions: they filter, facet, and feed smart list rules. An empty value list clears the tag.
+         * @description Replaces the ordered values of one custom tag on a track or book, locking `tag.KEY` by default. Custom tags are full browse dimensions: they filter, facet, and feed smart list rules. An empty value list clears the tag. With `writeBack` the values are also written into the item's files (every part of a book), and a file that cannot take them is reported in `writeBackFailures` with the edit standing; a key the tag writer would store as another field on every format (`YEAR` is the recording date) refuses `writeBack` with `invalid-request`.
          */
         put: operations["setItemTag"];
         post?: never;
         /**
          * Clear a custom tag
-         * @description Removes the tag and its lock. A reserved key (one the catalog owns through another surface) answers `invalid-request`, like setting one does.
+         * @description Removes the tag and its lock. A reserved key (one the catalog owns through another surface) answers `invalid-request`, like setting one does. With `writeBack` the tag is stripped from the item's files too; a file that could not be written is not reported (a 204 carries no body), is logged, and is listed by the health rule for tags out of sync.
          */
         delete: operations["clearItemTag"];
         options?: never;
@@ -2034,7 +2142,9 @@ export interface paths {
         get?: never;
         /**
          * Lock or unlock fields
-         * @description Locks or unlocks the named fields against scans, enrichment, and organize. Field names are the scalar vocabulary plus the namespaced artifacts: `lyrics`, `chapters`, `art`, `art.ROLE`, `acquisition`, `credit.ROLE`, and `tag.KEY`.
+         * @description Locks or unlocks the named fields against scans, enrichment, and organize. Field names are the scalar vocabulary plus the namespaced artifacts: `lyrics`, `chapters`, `art`, `art.ROLE`, `acquisition`, `credit.ROLE`, and `tag.KEY`, and `kind`.
+         *
+         *     `kind` pins whether the item is a track or a book: an upload imported under a media type its file would not get on its own takes the pin, and while it holds a scan keeps the item's kind whatever its library or tags say. Unlocking it lets the next scan that reads the file classify the item again, under the same catalog id; a forced rescan reads every file.
          *
          *     The two artwork spellings differ in reach. `art` is the whole pin: it gates the front cover and also enrichment's fills in every other role. `art.ROLE` (`art.back`, `art.disc`, `art.booklet`, `art.background`) gates that one slot, so a hand-set booklet scan can be held while the rest stay open.
          */
@@ -2191,7 +2301,7 @@ export interface paths {
         put?: never;
         /**
          * Requeue an item for matching
-         * @description Rebuilds the album unit containing the item (its album siblings ride along; a unit is always matched whole) and runs the identify pipeline on it, opening a fresh pending review entry. Items marked unofficial are eligible here (an explicit rematch is the way back from that state). The entry id returns immediately; candidates fill in asynchronously and the entry updates over the event channel.
+         * @description Rebuilds the album unit containing the item (its album siblings ride along; a unit is always matched whole) and runs the identify pipeline on it, opening a fresh pending review entry. Items marked unofficial are eligible here (an explicit rematch is the way back from that state). The entry id returns immediately; candidates fill in asynchronously and the entry updates over the event channel. A caller who is not an administrator owns the entry, so it lists in their queue, and its unit holds only the tracks their own uploads brought in.
          */
         post: operations["rematchItem"];
         delete?: never;
@@ -4065,7 +4175,7 @@ export interface paths {
         };
         /**
          * List review queue entries
-         * @description Keyset-paginated review queue, newest first. Administrators see every entry; other callers see only entries produced by their own uploads. Each entry is one album-sized unit: it applies or declines as a whole, never track by track. `status` filters to one lifecycle state (`pending` is the working queue; decided entries remain listable for calibration and undo).
+         * @description Keyset-paginated review queue, newest first. Administrators see every entry; other callers see only entries produced by their own uploads, acquisitions and rematches. Each entry is one album-sized unit: it applies or declines as a whole, never track by track. `status` filters to one lifecycle state (`pending` is the working queue; decided entries remain listable for calibration and undo).
          */
         get: operations["listReviewQueue"];
         put?: never;
@@ -4113,7 +4223,9 @@ export interface paths {
         put?: never;
         /**
          * Decide a review entry
-         * @description Applies one decision to a pending entry. `approve` applies the chosen candidate's metadata to the whole unit (the ranked best when `candidateMbid` is absent), locking the applied fields so a rescan cannot undo the acceptance; for entries staging new files (uploads and imports) the files enter the library first. `as-is` accepts the unit's current metadata unchanged (staged files enter the library as they are). `unofficial` is `as-is` plus a locked `RELEASESTATUS` custom tag of `unofficial`, which excludes the items from future match retries and from health penalties (content with no canonical release is a terminal state, not an error). `skip` dismisses the entry without touching anything (staged files stay staged). `discard` deletes staged files and exists only for entries that carry them. Deciding an already-decided entry answers `conflict`. Administrators may decide anything; other callers only entries from their own uploads. A metadata write that partially fails after the catalog committed reports per-file detail in `warnings` and the entry still counts as decided.
+         * @description Applies one decision to a pending entry. `approve` applies the chosen candidate's metadata to the whole unit (the ranked best when `candidateMbid` is absent), locking the applied fields so a rescan cannot undo the acceptance, and writes them into each file's tags; for entries staging new files (uploads and imports) the files enter the library first. `as-is` accepts the unit's current metadata unchanged (staged files enter the library as they are). `unofficial` is `as-is` plus a locked `RELEASESTATUS` custom tag of `unofficial`, written into the files too, which excludes the items from future match retries and from health penalties (content with no canonical release is a terminal state, not an error). A file in a read-only library keeps its tags: `warnings` names it and the health rule for tags out of sync lists what it is owed, while the unit's other files are written; a unit none of whose files may be written is applied to the catalog alone. A matching library applying a confident match on its own writes the files the same way. `skip` dismisses the entry without touching anything (staged files stay staged). `discard` deletes staged files and exists only for entries that carry them. Deciding an already-decided entry answers `conflict`, as does any decision, revert or new search of an entry while another runs. A decision runs to its end once it starts, whether or not the client waits for the answer. Administrators may decide anything; other callers only entries from their own uploads, acquisitions and rematches. A metadata write that partially fails after the catalog committed reports per-file detail in `warnings` and the entry still counts as decided. Files that join an item the library already holds - the same audio, or a further part of a book it has - enter as that item's copies or parts: the item keeps its metadata, `approve` and `unofficial` leave it alone, and the uploader gains no right to edit it. `warnings` names such files, and the entry's tracks mark them `joined`. A file whose audio the library holds at the very place its tags would put it adds nothing; its staged copy is removed and `warnings` says so.
+         *
+         *     Staged files enter the library together or not at all where the library can say in advance: every file is planned before any moves, so a place already taken or an unreadable file answers `conflict` with the reason, and a read-only destination `read-only`, leaving the unit staged. Two files of one unit that would take the same place pass that plan; the first lands and the decide answers `conflict` for the second, and a retry resumes there. `discard` then drops what is still staged and keeps what landed, which `warnings` counts.
          */
         post: operations["decideReviewEntry"];
         delete?: never;
@@ -4142,7 +4254,7 @@ export interface paths {
          *
          *     Typed values are searched for verbatim. The cleanup that reads "Artist - Track" out of a video title, peels "(Official Video)", and drops a " - Topic" channel suffix exists to rescue titles a machine wrote, and it does not run over these: a title that genuinely contains " - " is searched for whole, and a typed artist is not replaced by one a descriptive title happens to name. A field left blank is not an instruction, so it falls back to what the files imply.
          *
-         *     Pending entries only; a decided one answers `conflict`. The permission is the deciding permission: administrators may re-identify anything, other callers only entries from their own uploads.
+         *     Pending entries only; a decided one answers `conflict`. The permission is the deciding permission: administrators may re-identify anything, other callers only entries from their own uploads, acquisitions and rematches.
          */
         post: operations["reidentifyReviewEntry"];
         delete?: never;
@@ -4165,7 +4277,7 @@ export interface paths {
         put?: never;
         /**
          * Revert an applied match
-         * @description Restores the metadata snapshot taken before an `applied` or `auto-applied` entry was applied, unlocks the fields the apply locked, and marks the entry `reverted`. Reverts of auto applied entries feed the calibration statistics. Only administrators and the deciding user may revert. Reverting anything but an applied entry answers `conflict`.
+         * @description Restores the metadata snapshot taken before an `applied` or `auto-applied` entry was applied, in the catalog and the files' tags (catalog alone for a file in a read-only library), unlocks the fields the apply locked, and marks the entry `reverted`. Reverts of auto applied entries feed the calibration statistics. Only administrators and the deciding user may revert. Reverting anything but an applied entry answers `conflict`.
          */
         post: operations["revertReviewEntry"];
         delete?: never;
@@ -4203,7 +4315,7 @@ export interface paths {
         };
         /**
          * Review and calibration statistics
-         * @description Queue depth and auto-apply calibration: how many entries auto applied and how many of those were later reverted. The revert rate is the trust signal the review surface shows next to the auto-apply behavior; it is deliberately not the accuracy metric that tunes thresholds (reverts are sparse and lagging).
+         * @description Queue depth and auto-apply calibration: how many entries auto applied and how many of those were later reverted. The revert rate is the trust signal the review surface shows next to the auto-apply behavior; it is deliberately not the accuracy metric that tunes thresholds (reverts are sparse and lagging). The counts cover the entries the caller can see, the scope of `GET /review/queue`: administrators count every entry, other callers only the entries their own uploads, acquisitions and rematches produced.
          */
         get: operations["getReviewStats"];
         put?: never;
@@ -4802,7 +4914,7 @@ export interface paths {
         put?: never;
         /**
          * Start an upload
-         * @description Creates a resumable upload session for one audio file. The caller must hold upload rights; the declared size counts against the caller's pending-upload limit up front so a full one fails fast, and the file name's extension is checked against the server's accepted formats. The required media type label routes the file to the matching library kind; `libraryPid` names which library it belongs to, which is a choice about settings rather than about placement (see the field). Passing the file's SHA-256 up front lets the server warn about an exact duplicate before any bytes move: the response's `duplicate` names the existing item and the client can abandon the session without spending bandwidth (a fingerprint-level duplicate check still runs at completion). Bytes then flow through the data endpoint in any number of chunks.
+         * @description Creates a resumable upload session for one audio file. The caller must hold upload rights; the declared size counts against the caller's pending-upload limit up front so a full one fails fast, and the file name's extension is checked against the server's accepted formats. The required media type label is what the file becomes - an `audiobook` upload is cataloged as a book and a `music` upload as a track, whatever its tags say, and later scans keep that kind - and routes it to the matching library kind; `libraryPid` names which library it belongs to, which is a choice about settings rather than about placement (see the field). Passing the file's SHA-256 up front lets the server warn about an exact duplicate before any bytes move: the response's `duplicate` names the existing item and the client can abandon the session without spending bandwidth (a fingerprint-level duplicate check still runs at completion). Bytes then flow through the data endpoint in any number of chunks.
          *     Three ceilings answer before any of that: a `sizeBytes` past the schema's maximum answers `invalid-request` and names the limit, since no allowance anybody can change moves it; a staging volume with no room for the declared size - counting what the sessions already receiving still owe it - answers `storage-full`, which is the server's disk rather than the caller's allowance; and opening a session is paced per account, which answers `rate-limited`. Sending bytes and abandoning a session are not paced: one is bounded by the ceilings above and the other is what releases them.
          */
         post: operations["createUpload"];
@@ -4876,7 +4988,7 @@ export interface paths {
         put?: never;
         /**
          * Finish an upload
-         * @description Verifies the received bytes (size, and SHA-256 when one was declared), probes the audio (an undecodable file answers `unsupported-format` and the session stays deletable), moves the file into staging with crash-safe write discipline, and opens a review entry for the identify pipeline. The response carries `reviewEntryId` and any duplicate warning (an exact content match or a fingerprint match against an existing item); the duplicate warning does not block the review flow, it informs the decision. Completing before every declared byte arrived answers `conflict`.
+         * @description Verifies the received bytes (size, and SHA-256 when one was declared), probes the audio, moves the file into staging with crash-safe write discipline, and opens a review entry for the identify pipeline. The response carries `reviewEntryId` and any duplicate warning (the same audio, the same recording or a matching name against an existing item). The warning does not block the review flow: importing a file whose audio the library holds adds it to that item as another copy, changing nothing about the item and giving the uploader no right to edit it, and the entry waits for a person even where matching applies on its own. Completing before every declared byte arrived answers `conflict`, and the session stays open for the rest. Bytes no retry can mend end the session at once, freeing what it held against the quota: a file that does not read as audio answers `unsupported-format` with `reason: unreadable`, and bytes that do not match the declared SHA-256 answer `conflict` with `reason: checksum-mismatch`; either way the file has to be sent again under a new session.
          */
         post: operations["completeUpload"];
         delete?: never;
@@ -5352,6 +5464,20 @@ export interface components {
              */
             artUrl?: string;
         };
+        /** @description The library appears to already contain this audio. A warning, not a refusal: the review decision chooses what happens. */
+        DuplicateWarning: {
+            /** @description The existing item. Absent, as `title` and `artist` are, when it sits where the caller cannot see it. */
+            itemPid?: string;
+            /**
+             * @description Evidence level: `content` (the same audio, which imports as another copy of the item), `id` (the same recording by the identifier its tags carry), `fingerprint` (acoustically the same recording) or `name` (the same title, artist and length). A string, not a closed enum.
+             * @example content
+             */
+            kind: string;
+            /** @description The existing item's title. */
+            title?: string;
+            /** @description The existing item's artist. */
+            artist?: string;
+        };
         /** @description One chapter mark on an item's timeline. */
         ChapterMark: {
             /** @description Zero-based chapter position. */
@@ -5386,6 +5512,8 @@ export interface components {
              * @example music
              */
             media?: string;
+            /** @description The server's configuration names what the library holds (`WAXDECK_AUDIOBOOK_ROOTS`), so setLibraryMedia refuses any other media until the configuration changes. Absent means false. */
+            mediaDeclared?: boolean;
             /**
              * @description Absolute filesystem path of the root, for the administrative surface that manages it. Absent where the catalog cannot render the stored path as text (roots on non-UTF8 filesystems are stored as raw bytes).
              * @example /srv/media/music
@@ -5398,6 +5526,8 @@ export interface components {
             itemCount?: number;
             /** @description The catalog keeps the library's files as they are. */
             readOnly: boolean;
+            /** @description A scan names an untagged file from its folders (setLibraryFolderFallback). In-place libraries only. */
+            folderFallback?: boolean;
             /** @description The catalog may place and move files in the library. */
             managed: boolean;
             /**
@@ -5433,7 +5563,7 @@ export interface components {
              */
             path: string;
             /**
-             * @description Content class the root holds. `mixed` (the default) admits both tracks and books.
+             * @description What the root holds, which decides what its files become. `audiobook` makes every audio file in the root a book: parts sharing an album title and author are one book, and numbered parts with no album tag join the book their folder holds. `music` and `mixed` (the default) classify each file by its tags: an `.m4b` file, an audiobook media type, a narrator credit or an Audiobook genre makes a book, and in `mixed` the other parts of a book the first three mark join it (the genre marks only its own file). The class also routes managed placement. It can be changed with `PUT /libraries/{pid}/media`.
              * @default mixed
              * @enum {string}
              */
@@ -5452,7 +5582,7 @@ export interface components {
              */
             pid: string;
             /**
-             * @description What the job does: `scan`, `analyze`, `enrich`, `organize`, `import`, `delete`, `restore`, `empty-trash`, or `purge-trash`. New kinds may appear.
+             * @description What the job does: `scan`, `analyze`, `enrich`, `organize`, `import`, `delete`, `restore`, `empty-trash`, `purge-trash`, or `set-kind`. New kinds may appear.
              * @example scan
              */
             kind: string;
@@ -5468,7 +5598,7 @@ export interface components {
             progress?: number;
             /** @description Human-readable progress note. */
             message?: string;
-            /** @description Failure detail for `failed`/`crashed` jobs. */
+            /** @description Failure detail for `failed`/`crashed` jobs. Administrators read the catalog's own text; anyone else reads it without the server's storage paths or operation names. */
             error?: string;
             /**
              * Format: date-time
@@ -5480,7 +5610,7 @@ export interface components {
              * @description When the job reached a terminal state; absent while running.
              */
             finishedAt?: string;
-            /** @description What a finished job did, once it records a summary: a `scan` reports `filesSeen`, `created`, `updated`, `relinked`, `unchanged`, `missing`, `skipped` and `errored` (files); an `analyze` pass `analyzed`, `loudnessMeasured`, `measureFailed`, `skipped` and `errored`; an `enrich` pass the same tallies as the enrichment status's `lastRun`; an `organize` run `profile`, `moved`, `skipped`, `errored` and `sidecarsMoved`. Absent while running and for kinds that record none. Shapes may grow fields. */
+            /** @description What a finished job did, once it records a summary. A `scan` counts files: `audioFiles` (every audio file it visited) is `created`, `updated`, `sidecarsUpdated` (a lyrics, cue or cover change without the audio changing), `copies` (files that joined an item as another copy of its audio or another encoding of its recording), `unchanged` and `errored` together, and `filesSeen` is `audioFiles` and `skipped` (files that are not audio). `relinked` (moved or renamed) and `reread` (read in full rather than recognized by size and time) count among the audio files; `missing` counts items whose files are gone, `promoted` copies that took a gone file's place, `dropped` the records of gone files removed, and `walkErrors` entries the scan could not read, which no file count holds. `rootUnreachable` says a library's folder could not be reached, so nothing under it was marked missing, and `subPathGone` that the folder asked for was not there. For administrators, `runs` lists each library's own counts in the same words, with its `libraryPid` and `library` name. An `analyze` pass reports `analyzed`, `loudnessMeasured`, `measureFailed`, `skipped` and `errored`, with `fingerprintFallbacks` (files fpcalc could not read, fingerprinted another way that does not group with fpcalc's) and `fingerprintPartialReads` (fpcalc reads kept although they ended in an error, their fingerprint covering the span analyzed); an `enrich` pass the same tallies as the enrichment status's `lastRun`; an `organize` run `profile`, `moved`, `skipped`, `errored` and `sidecarsMoved`. A `set-kind` run reports `converted` (the items that changed kind in place), `absorbed` (each pid folded into another item, which no longer exists, mapped to the item that took it in, or to an empty string when that item is in a library the reader is not granted), `created` (the items a book split minted for its parts) and `writeBackFailures` (`filePid`, `reason`, and for administrators `path`); every pid is in its current form, and a change cut short reports what it did before it stopped. Absent while running and for kinds that record none. Shapes may grow fields. */
             result?: {
                 [key: string]: unknown;
             };
@@ -6072,6 +6202,29 @@ export interface components {
              * @example waxbin-native
              */
             profile: string;
+        };
+        /** @description What a library holds. */
+        LibraryMedia: {
+            /**
+             * @description The content class, as `LibraryCreate.media`.
+             * @enum {string}
+             */
+            media: "music" | "audiobook" | "mixed";
+        };
+        /** @description A library whose content class changed. */
+        LibraryMediaChanged: components["schemas"]["Library"] & {
+            /** @description Whether the scan that applies the change started. False when the library already held that media, so there was nothing to apply, and when another catalog job was already running: a change onto `audiobook` is then applied by the next scan, and any other by the next rescan that re-reads every file (`force`), which an administrator starts once the running job ends. */
+            scanStarted: boolean;
+        };
+        /** @description Whether a library names untagged files from their folders. */
+        LibraryFolderFallback: {
+            /** @description Whether a scan names an untagged file from its folders. */
+            folderFallback: boolean;
+            /**
+             * @description The library (response only).
+             * @example lb-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            libraryPid?: string;
         };
         /** @description A library's read-only flag. */
         LibraryReadOnly: {
@@ -7049,7 +7202,7 @@ export interface components {
             survivor: components["schemas"]["DuplicateEntity"];
             /** @description The suggested merge losers. */
             losers: components["schemas"]["DuplicateEntity"][];
-            /** @description The audit's explanation of the finding. */
+            /** @description Why the members were paired, in the catalog's words (for example `same collation key`, or `same title and album artist` for albums a folder keeps apart). Absent when the catalog gave none. */
             detail?: string;
         };
         /** @description One entity in a duplicate group. */
@@ -7094,33 +7247,47 @@ export interface components {
         UpgradeMember: {
             /** @description The item. */
             itemPid: string;
+            /**
+             * @description The file this encoding is, as getItemFiles names it. Within one item it is what tells the members apart.
+             * @example fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            filePid: string;
+            /** @description The file's path on the server, given where another member of the group has the same codec and bitrate: there its file's name is what tells the two apart. */
+            path?: string;
             /** @description Its title. */
             title: string;
             /** @description Its artist. */
             artist?: string;
             /** @description Audio codec. */
             codec: string;
-            /** @description Bitrate in bits per second, 0 when unknown. */
+            /** @description Bitrate in kilobits per second; absent when unknown. */
             bitrate?: number;
-            /** @description Sample rate in Hz, 0 when unknown. */
+            /** @description Sample rate in Hz; absent when unknown. */
             sampleRate?: number;
-            /** @description Bit depth, 0 when unknown or lossy. */
+            /** @description Bit depth; absent when unknown or lossy. */
             bitDepth?: number;
             /** @description Whether the encoding is lossless. */
             lossless: boolean;
             /** @description The group's suggested keeper. */
             best: boolean;
         };
-        /** @description Keep one encoding, trash the rest. */
+        /** @description Keep one encoding, trash the rest: by item across items, or by file within one. */
         UpgradeResolveRequest: {
-            /** @description The item to keep. */
+            /** @description The item to keep, or the item whose files these are. */
             keepItemPid: string;
-            /** @description The inferior encodings to trash. */
-            removeItemPids: string[];
+            /** @description The inferior encodings to trash, as whole items. */
+            removeItemPids?: string[];
+            /**
+             * @description The file to keep, within `keepItemPid`; required with `removeFilePids`.
+             * @example fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            keepFilePid?: string;
+            /** @description The inferior encodings to trash, as files of `keepItemPid`. */
+            removeFilePids?: string[];
         };
         /** @description The resolution outcome. */
         UpgradeResolveResult: {
-            /** @description Items moved to the trash. */
+            /** @description Files moved to the trash. */
             trashed: number;
         };
         /** @description One persisted observation about a library file, keyed for display by its path (files are not a first-class API resource, so no file id is surfaced). */
@@ -7129,7 +7296,7 @@ export interface components {
             path: string;
             /** @description The writer that recorded it (`scan`, `organize`, `replaygain`, `edit`, `enrichment`, or `analyze`); new writers may appear. `analyze` records the decode damage the analyze pass found or worked around, replaced each time the pass reads the file. */
             origin: string;
-            /** @description What was observed (`unsupported_format`, `legacy_only_tags`, `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`, `tag_write_lost`, `tag_write_unsynced`, or `corrupt_audio`); new codes may appear, so treat an unknown value as a generic finding. */
+            /** @description What was observed (`unsupported_format`, `legacy_only_tags`, `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`, `tag_write_lost`, `tag_write_unsynced`, `tag_write_owed`, `corrupt_audio`, `sort_name_fallback`, `fingerprint_fallback`, `duplicate_copy`, or `alternate_encoding`); new codes may appear, so treat an unknown value as a generic finding. `duplicate_copy` marks a file holding the same audio as its item's primary file and `alternate_encoding` another encoding of its recording that ranked below the primary, both attached to the item as copies with the primary's path as `detail`; `tag_write_owed` a value the catalog holds but has not yet written to the file; `sort_name_fallback` display fields filled from sort tags or a number taken from the file name; and `fingerprint_fallback` a file fpcalc could not fingerprint, with fpcalc's reason as `detail`. */
             code: string;
             /** @description `info`, `warn`, or `error`. */
             severity: string;
@@ -7338,7 +7505,7 @@ export interface components {
         };
         /** @description Full detail for a single library item. */
         Item: components["schemas"]["ItemSummary"] & {
-            /** @description Display genres. */
+            /** @description The item's display genres, one each: a tag holding several (`Rock; Pop / Indie`) is split on `;`, `/` and `\`, as the genre facet splits it. */
             genres?: string[];
             /**
              * @description Release / publication year.
@@ -7369,9 +7536,14 @@ export interface components {
             bitrate?: number;
             /**
              * Format: date-time
-             * @description When the item entered the library.
+             * @description When the item entered the library: when its primary file, or a copy of it the caller can see found before that, was found.
              */
             addedAt?: string;
+            /**
+             * @description How many copies the item holds beside its own files (getItemFiles lists them), counting those in libraries the caller can see. Absent when none.
+             * @example 1
+             */
+            copies?: number;
             /**
              * @description MusicBrainz identifier for what this item is - a recording for a track, a release for a book. Absent unless the file was tagged with one or matching found one.
              * @example b9b3d3f9-1e2b-4a1e-9a4a-1a2b3c4d5e6f
@@ -7420,6 +7592,8 @@ export interface components {
             mode: string;
             /** @description Per-item breakdown. */
             entries: components["schemas"]["DeletePlanEntry"][];
+            /** @description What the deletion did beside removing files, in sentences: a copy that took a deleted file's place, and a file it could not remove, which stayed and is not counted in `entries`. A whole-item delete names each under its item's name. Absent when there is nothing to say. */
+            warnings?: string[];
         };
         /** @description One item's part of a deletion. */
         DeletePlanEntry: {
@@ -7434,6 +7608,101 @@ export interface components {
              * @description Bytes reclaimed (or to reclaim).
              */
             bytes: number;
+            /** @description The files `files` counts, by name. Absent for an entry whose file counts under another track of its rip. */
+            fileList?: components["schemas"]["DeletePlanFile"][];
+            /** @description The item keeps a file after the deletion (a copy it holds, or one left in place), so it stays in the library rather than being archived. */
+            itemSurvives?: boolean;
+        };
+        /** @description One file a deletion removes (or would remove). */
+        DeletePlanFile: {
+            /**
+             * @description The file, as getItemFiles names it.
+             * @example fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            filePid: string;
+            /**
+             * @description The file's name, without its folder.
+             * @example 01 - Hell Shell.m4a
+             */
+            name: string;
+            /**
+             * Format: int64
+             * @description The file's size in bytes, when it could be read.
+             */
+            sizeBytes?: number;
+            /**
+             * @description `primary`, `part` or `alternate`, as getItemFiles reports it; new roles may appear.
+             * @example alternate
+             */
+            role: string;
+        };
+        /** @description A deletion (or a dry-run plan) of some of one item's files. */
+        DeleteItemFilesRequest: {
+            /** @description The files to delete, as getItemFiles names them. */
+            filePids: string[];
+            /**
+             * @description `trash` is reversible from the trash surface; `permanent` bypasses it (administrators only).
+             * @default trash
+             * @enum {string}
+             */
+            mode: "trash" | "permanent";
+            /**
+             * @description Answer the plan without deleting.
+             * @default false
+             */
+            dryRun: boolean;
+        };
+        /** @description The files behind one item. */
+        ItemFiles: {
+            /** @description The primary, or a book's parts in reading order, then the copies. */
+            files: components["schemas"]["ItemFile"][];
+        };
+        /** @description One file behind an item. */
+        ItemFile: {
+            /**
+             * @description The file.
+             * @example fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
+            filePid: string;
+            /**
+             * @description `primary` (the file the item's details come from), `part` (a book's other files) or `alternate` (a copy); new roles may appear.
+             * @example primary
+             */
+            role: string;
+            /**
+             * @description The file's name, without its folder.
+             * @example 01 - Hell Shell.flac
+             */
+            name: string;
+            /** @description The file's path on the server. Administrators only. */
+            path?: string;
+            /**
+             * Format: int64
+             * @description The file's size in bytes, when it could be read.
+             */
+            sizeBytes?: number;
+            /** @example flac */
+            codec?: string;
+            /** @example flac */
+            container?: string;
+            /** @description Bitrate in kilobits per second, when known. */
+            bitrate?: number;
+            /** @description Sample rate in Hz, when known. */
+            sampleRate?: number;
+            /** @description Bits per sample of a lossless file, when known. */
+            bitDepth?: number;
+            /**
+             * Format: int64
+             * @description The file's length in milliseconds, when known.
+             */
+            durationMs?: number;
+            /** @description The library the file sits in, which for a copy can differ from the item's. */
+            libraryPid?: string;
+            /**
+             * @description Why a copy is one: `same-audio` (the same audio as one of the item's files) or `other-encoding` (another encoding of its recording). Copies only; new reasons may appear.
+             * @example same-audio
+             */
+            reason?: string;
         };
         /**
          * @description One artwork slot an entity holds at its own level, with where its image came from and whether it is pinned.
@@ -7549,7 +7818,7 @@ export interface components {
             fields: {
                 [key: string]: string;
             };
-            /** @description Currently locked fields, including namespaced artifacts (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`). */
+            /** @description Currently locked fields, including namespaced artifacts (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`) and `kind`, a pinned track-or-book classification (setItemLocks). */
             lockedFields: string[];
             /** @description Per-field provenance for curated fields. */
             provenance: components["schemas"]["FieldProvenance"][];
@@ -7574,9 +7843,9 @@ export interface components {
             artistPid?: string;
             /** @description The item's release group entity, when any. */
             releaseGroupPid?: string;
-            /** @description Files whose on-disk tags are out of step with the catalog (failed write-backs, values the format cannot store). */
+            /** @description Files whose on-disk tags are out of step with the catalog (failed write-backs, values the format cannot store), of those the caller may see: a copy in a library they are not granted is left out, as the item's file list leaves it out. */
             writeBackIssues: components["schemas"]["WriteBackIssue"][];
-            /** @description Whether the caller may run the item-scoped edits this document describes: administrators always, everyone else exactly for the items their own uploads brought in. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. */
+            /** @description Whether the caller may run the item-scoped edits this document describes: administrators always, anyone else for the items their own uploads and acquisitions brought in and the parts a kind change split out of those. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. */
             mayCurate?: boolean;
             acquisition?: components["schemas"]["ItemAcquisition"];
         };
@@ -7654,20 +7923,20 @@ export interface components {
         };
         /** @description The caller's permissions on one item. */
         ItemPermissions: {
-            /** @description Whether the caller may run the item-scoped metadata mutations: administrators always, everyone else exactly for the items their own uploads brought in. */
+            /** @description Whether the caller may run the item-scoped metadata mutations: administrators always, anyone else for the items their own uploads and acquisitions brought in and the parts a kind change split out of those. */
             mayCurate: boolean;
         };
         /**
          * @description Who set one field's current value.
          *
-         *     The list carries two kinds of row. A scalar row names a metadata field (`title`, `genre`, ...) and reports the value a curator set. An artifact row names `art` or `lyrics`, with an empty `value` because the value is bytes rather than text. A non-empty provenance list therefore does not mean the item was curated: an untouched track with a cover in its tags reports one `art` row sourced `tag`. Count the scalar rows, not the list, when summarizing what a person changed.
+         *     The list carries three kinds of row. A scalar row names a metadata field (`title`, `genre`, ...) and reports the value a curator set. An artifact row names `art` or `lyrics`, with an empty `value` because the value is bytes rather than text. A `kind` row is a pinned classification (setItemLocks), which an upload's import takes without anybody editing anything. A non-empty provenance list therefore does not mean the item was curated: an untouched track with a cover in its tags reports one `art` row sourced `tag`. Count the scalar rows, not the list, when summarizing what a person changed.
          *
          *     An artifact row does not imply the artifact. Locking `art` or `lyrics` to stop a scan filling it leaves a row with nothing behind it, and the `source` on such a row is invented by whichever writer took the lock rather than describing anything. Read `hasOwnArtwork` and `lyrics` on the enclosing `ItemMetadata` before presenting an artifact row's source as where something came from; on a lock-only row, `locked` is the only field worth reading.
          */
         FieldProvenance: {
-            /** @description The field, possibly namespaced, or `art` / `lyrics` for an artifact row. */
+            /** @description The field, possibly namespaced, `art` / `lyrics` for an artifact row, or `kind` for a pinned classification. */
             field: string;
-            /** @description The producer: `tag` (the file's own tags), `sidecar` (a companion file beside the audio - a `cover.jpg`, an `.lrc`), `user` (set through the curation surface), `enrichment` (supplied by a metadata provider, named in `provider`), `organize` (written by an organize tag write-back), or `feed` (a podcast feed). A string, not a closed enum. `sidecar` and `feed` reach only artifact rows; a scalar field is never produced from a cover image or a feed. */
+            /** @description The producer: `tag` (the file's own tags), `sidecar` (a companion file beside the audio - a `cover.jpg`, an `.lrc`), `user` (set through the curation surface), `enrichment` (supplied by a metadata provider, named in `provider`), `organize` (written by an organize tag write-back), `normalize` (rewritten by a clean-up pass, such as the genre normalizer, in the catalog alone), or `feed` (a podcast feed). A string, not a closed enum. `sidecar` and `feed` reach only artifact rows; a scalar field is never produced from a cover image or a feed. */
             source: string;
             /** @description The enrichment provider, for enriched fields. */
             provider?: string;
@@ -7739,11 +8008,14 @@ export interface components {
         };
         /** @description One file out of step with the catalog. */
         WriteBackIssue: {
-            /** @description The backing file. */
+            /**
+             * @description The backing file.
+             * @example fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
             filePid: string;
-            /** @description The diagnostic: `tag-write-unsynced` (a write-back was refused or failed; the file's tags lag the catalog) or `tag-write-lost` (the write ran but the format could not store the value). A string, not a closed enum. */
+            /** @description The diagnostic: `tag-write-unsynced` (a write-back was refused or failed; the file's tags lag the catalog), `tag-write-lost` (the write ran but the format could not store the value), or `tag-write-owed` (an edit changed the value in the catalog without writing it; `tagKey` names it). A string, not a closed enum. */
             code: string;
-            /** @description The affected tag key, when known. */
+            /** @description The affected key, when known. On a `tag-write-owed` issue it is the catalog's name for the value: an item field (`title`), a credit (`credit.composer`), a custom tag (`tag.MOOD`), the item's front cover (`art`) or origin (`acquisition`), or an entity value written to member files (`album.label`, `album.art`). */
             tagKey?: string;
             /** @description Human-readable detail, administrators only. It is the tag writer's own error, which names the file's absolute path, so it is withheld from everyone else exactly as the diagnostics listing is; `code`, `tagKey`, and `filePid` say what went wrong without saying where the library lives. Absent rather than redacted for a non-administrator. */
             detail?: string;
@@ -7770,13 +8042,16 @@ export interface components {
              */
             force: boolean;
         };
-        /** @description One file a write-back could not update. */
+        /** @description One file a write-back could not update. A caller who is not an administrator is told only of files in libraries they are granted. */
         WriteBackFailure: {
-            /** @description The file. */
+            /**
+             * @description The file; empty for a failure no one file caused.
+             * @example fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+             */
             filePid: string;
-            /** @description Its display path. */
+            /** @description Its display path, or its file name for a caller who is not an administrator. */
             path?: string;
-            /** @description Why the write failed or was refused. */
+            /** @description Why the write failed or was refused, without the server's paths for a caller who is not an administrator. */
             reason: string;
         };
         /** @description The outcome of a metadata mutation. The catalog write succeeded whenever this shape returns; write-back trouble and drop warnings ride along instead of failing the edit. */
@@ -7818,7 +8093,7 @@ export interface components {
             /** @description The release-status mark: true marks the item as having no canonical release, false clears the mark. Omitted leaves it alone. */
             unofficial?: boolean;
             /**
-             * @description Also write the new values into the backing file's tags, for the parts that have a tag form (fields, credits, lyrics).
+             * @description Also write the new values into the backing file's tags, for the parts that have a tag form (fields, credits, lyrics, custom tags, the release status), and removes a cleared lyrics sheet's `.lrc` sidecar.
              * @default false
              */
             writeBack: boolean;
@@ -7995,6 +8270,11 @@ export interface components {
              * @default false
              */
             force: boolean;
+            /**
+             * @description Also write the values into the item's files.
+             * @default false
+             */
+            writeBack: boolean;
         };
         /** @description The outcome of a tag edit. */
         TagEditResult: {
@@ -8002,6 +8282,8 @@ export interface components {
             key: string;
             /** @description Values stored after deduplication. */
             stored: number;
+            /** @description Files the write-back could not update; the catalog edit stands. Absent when every file took the values or no write-back was asked for. */
+            writeBackFailures?: components["schemas"]["WriteBackFailure"][];
         };
         /** @description A lock or unlock for named fields. */
         LocksEdit: {
@@ -8036,6 +8318,21 @@ export interface components {
              * @default false
              */
             force: boolean;
+        };
+        /** @description The items to change, and what they become. */
+        SetItemKindRequest: {
+            /** @description The items, by pid. Tracks named together whose tags name one book become that book. */
+            pids: string[];
+            /**
+             * @description What the items become.
+             * @enum {string}
+             */
+            mediaType: "music" | "audiobook";
+            /**
+             * @description Also write the kind into the files. A book gets the audiobook media type, which even a scan that re-derives everything reads back as a book; a track has it cleared, so such a scan reads it as music only where nothing else marks it a book (an `.m4b` name, a narrator, the Audiobook genre, a library that holds Books). Without it the catalog's pin alone keeps the choice. A file that cannot be written is listed in the job result's `writeBackFailures` and the change stands.
+             * @default false
+             */
+            writeBack: boolean;
         };
         /** @description A per-member detach. */
         DetachRequest: {
@@ -8125,6 +8422,11 @@ export interface components {
         ReleaseStatusEdit: {
             /** @description True marks the item as having no canonical release; false clears the mark. */
             unofficial: boolean;
+            /**
+             * @description Also write the mark into (or strip it from) the item's files' `RELEASESTATUS` tag.
+             * @default false
+             */
+            writeBack: boolean;
         };
         /** @description The review entry a rematch opened. */
         RematchResult: {
@@ -10193,6 +10495,8 @@ export interface components {
             artist?: string;
             /** @description Files in the unit. */
             trackCount: number;
+            /** @description Files in the unit arriving with a duplicate warning (their tracks carry it). Absent when none. */
+            duplicateCount?: number;
             /** @description The library the unit belongs (or will import) to. */
             libraryPid?: string;
             /** @description The uploader's user pid, present on upload-origin entries. */
@@ -10240,9 +10544,9 @@ export interface components {
         };
         /** @description One file in a review unit with its current metadata. */
         ReviewTrack: {
-            /** @description The catalog item pid, type-prefixed like every pid on this API; absent for staged files that have not entered the library yet. */
+            /** @description The catalog item pid, type-prefixed like every pid on this API; absent for staged files that have not entered the library yet, and for a joined file whose item sits where the caller cannot see it. */
             pid?: string;
-            /** @description The file's path (library-relative for cataloged items, staging-relative for uploads). */
+            /** @description The file's name. Administrators get the full path of a file a scan or rematch entry names; an uploaded or downloaded file is named alone for everyone, before it lands and after. */
             path: string;
             /** @description Current title (tag, or cleaned filename). */
             title: string;
@@ -10257,6 +10561,9 @@ export interface components {
              * @description Audio length in milliseconds.
              */
             durationMs: number;
+            duplicate?: components["schemas"]["DuplicateWarning"];
+            /** @description The file entered the library as a copy of, or a further part of, an item that already existed; that item's metadata and who may edit it were not touched. */
+            joined?: boolean;
         };
         /** @description One named contribution to a candidate's distance, so the queue explains a score instead of asserting it. */
         CandidateComponent: {
@@ -10403,13 +10710,19 @@ export interface components {
             entryId: string;
             /** @description Whether the decision applied. */
             ok: boolean;
+            /** @description The error code the single-entry decide would have answered (`not-found`, `conflict`, `catalog-busy`, `read-only`, ...), when `ok` is false. `catalog-busy` clears on its own, so those entries can be sent again. */
+            code?: string;
             /** @description Why it did not, when `ok` is false. */
             error?: string;
+            /** @description What the single-entry decide reports under `warnings`, when `ok` is true: the decision stood, with these problems. */
+            warnings?: string[];
         };
         /** @description Queue depth and auto-apply calibration. */
         ReviewStats: {
             /** @description Entries awaiting a decision. */
             pending: number;
+            /** @description Entries in every status but `pending`, discarded and reverted ones included: the size of the `status=decided` listing. */
+            decided: number;
             /** @description Entries whose identify pipeline still runs. */
             identifying?: number;
             /** @description Entries a person approved. */
@@ -10924,7 +11237,7 @@ export interface components {
             /** @description The server's most-listened music genres that year. */
             topGenres: components["schemas"]["TopEntry"][];
         };
-        /** @description One mirrored catalog change: an `upsert` carrying the item's current summary, an `upsert-show` carrying a podcast show's current summary (shows are catalog entities but not items, so they ride their own operation and clients from before this operation existed drop them harmlessly), or a `delete` tombstone carrying the PID and a `reason` (which removes the PID from whichever mirror table holds it). An `upsert` for a podcast episode carries `item` and additionally `episode`, the full episode summary; clients that only know items keep reading `item`. Snapshot pages contain only upserts, of both kinds. `op` is a string, not a closed enum, so new operations can appear; clients must drop entries whose `op` they do not recognize. */
+        /** @description One mirrored catalog change: an `upsert` carrying the item's current summary, an `upsert-show` carrying a podcast show's current summary (shows are catalog entities but not items, so they ride their own operation and clients from before this operation existed drop them harmlessly), or a `delete` tombstone carrying the PID and a `reason` (which removes the PID from whichever mirror table holds it). An `upsert` for a podcast episode carries `item` and additionally `episode`, the full episode summary; clients that only know items keep reading `item`. Snapshot pages contain only upserts, of both kinds. A pid's prefix follows its item's kind, and an item whose kind changed (`POST /items/kind`) comes back as an `upsert` under its new prefix with no `delete` for the old one: mirrors key items by the ULID after the prefix, so the upsert replaces the row the old pid held, and a `delete` likewise matches whatever prefix the mirror stored. Items folded into another arrive as `delete` tombstones. `op` is a string, not a closed enum, so new operations can appear; clients must drop entries whose `op` they do not recognize. */
         CatalogSyncEntry: {
             /**
              * @description What the mirror should do with this entry: `upsert` (store `item`, and `episode` when present), `upsert-show` (store `show`), or `delete` (remove the PID).
@@ -11144,7 +11457,7 @@ export interface components {
             /**
              * @description Whether the file is identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences), which is why there is no schema default here: a generated client that filled one in would erase the account setting on every upload.
              *
-             *     Declining means the file enters the library as delivered, with no stop: completing the session imports it and files its review entry `as-is` in one step, so nothing waits for a decision that was already made at submission. The entry is still written, decided rather than pending, so the import leaves the same record as a hand-decided `as-is` one; like any `as-is` it does not revert, so undoing it means deleting the item from the library. If the import cannot proceed - a read-only destination, a name collision, a file the server already flagged as a duplicate - the entry is left pending for a person instead, carrying `identifyDeclined`.
+             *     Declining means the file enters the library as delivered, with no stop: completing the session imports it and files its review entry `as-is` in one step, so nothing waits for a decision that was already made at submission. The entry is still written, decided rather than pending, so the import leaves the same record as a hand-decided `as-is` one; like any `as-is` it does not revert, so undoing it means deleting the item from the library. If the import cannot proceed - a read-only destination, a name collision, a file the server already flagged as a duplicate - the entry is left pending for a person instead, carrying `identifyDeclined`. A flagged duplicate also keeps an identified entry from applying its match on its own.
              *
              *     Ignored on a batch member: the batch's own value decides for every file in it.
              */
@@ -11194,20 +11507,6 @@ export interface components {
              * @description When an unfinished session and its bytes are reclaimed.
              */
             expiresAt?: string;
-        };
-        /** @description The library appears to already contain this audio. A warning, not a refusal: the review decision chooses what happens. */
-        DuplicateWarning: {
-            /** @description The existing item. */
-            itemPid: string;
-            /**
-             * @description Evidence level: `content` (byte-identical audio) or `fingerprint` (acoustically the same recording). A string, not a closed enum.
-             * @example content
-             */
-            kind: string;
-            /** @description The existing item's title. */
-            title?: string;
-            /** @description The existing item's artist. */
-            artist?: string;
         };
         /**
          * @description How a batch's staged files reach the review queue: `album` opens one multi-file entry over all of them, `tracks` one entry per file, and `auto` clusters them into album units by their tags and relative paths (disc subfolders fold into their parent).
@@ -11755,7 +12054,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description The file's format is not accepted (code `unsupported-format`): the extension is outside the server's accepted set, or the audio did not decode. A DRM-encrypted container (an Audible `aax`/`aaxc`) answers with the same status but code `drm-protected`, because that refusal is permanent - no format set can make the file playable - and must not read as a codec gap an operator could widen away. */
+        /** @description The file's format is not accepted (code `unsupported-format`): the extension is outside the server's accepted set, or the audio did not decode, which carries `reason: unreadable`. A DRM-encrypted container (an Audible `aax`/`aaxc`) answers with the same status but code `drm-protected`, because that refusal is permanent - no format set can make the file playable - and must not read as a codec gap an operator could widen away. */
         UnsupportedFormat: {
             headers: {
                 [name: string]: unknown;
@@ -11862,7 +12161,7 @@ export interface components {
         /** @description Restrict to one writer. */
         DiagnosticOriginFilter: "scan" | "organize" | "replaygain" | "edit" | "enrichment" | "analyze";
         /** @description Restrict to one diagnostic code. */
-        DiagnosticCodeFilter: "unsupported_format" | "legacy_only_tags" | "lyrics_partial" | "sidecar_skipped" | "cue_track_dropped" | "tag_write_lost" | "tag_write_unsynced" | "corrupt_audio";
+        DiagnosticCodeFilter: "unsupported_format" | "legacy_only_tags" | "lyrics_partial" | "sidecar_skipped" | "cue_track_dropped" | "tag_write_lost" | "tag_write_unsynced" | "tag_write_owed" | "corrupt_audio" | "sort_name_fallback" | "fingerprint_fallback" | "duplicate_copy" | "alternate_encoding";
         /** @description Restrict to one severity. */
         DiagnosticSeverityFilter: "info" | "warn" | "error";
         /** @description Restrict to files under one library root. */
@@ -12070,6 +12369,38 @@ export interface operations {
             503: components["responses"]["CatalogMaintenance"];
         };
     };
+    setLibraryMedia: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryMedia"];
+            };
+        };
+        responses: {
+            /** @description The library, and whether its scan started. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryMediaChanged"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
     setLibraryReadOnly: {
         parameters: {
             query?: never;
@@ -12093,6 +12424,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LibraryReadOnly"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    setLibraryFolderFallback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LibraryFolderFallback"];
+            };
+        };
+        responses: {
+            /** @description The stored flag. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LibraryFolderFallback"];
                 };
             };
             400: components["responses"]["InvalidRequest"];
@@ -14035,7 +14398,7 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The resolution was refused. `read-only`: a named encoding's library, or the whole server, is read-only. `conflict`: another catalog job holds the file-mutation scope the move to the trash needs; retry when it ends. */
+            /** @description The resolution was refused. `read-only`: a named encoding's library, or the whole server, is read-only. `catalog-busy`: another catalog job holds the file-mutation scope the move to the trash needs; retry when it ends. `conflict`: a move to the trash failed, and the message says how many. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -14396,6 +14759,74 @@ export interface operations {
             503: components["responses"]["CatalogMaintenance"];
         };
     };
+    getItemFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The item's files. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemFiles"];
+                };
+            };
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    deleteItemFiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
+                pid: components["parameters"]["Pid"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeleteItemFilesRequest"];
+            };
+        };
+        responses: {
+            /** @description The plan (dry run) or the applied result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeleteItemsResult"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The delete was refused. `read-only`: the file's library, or the whole server, is in read-only mode. `catalog-busy`: another job holds the catalog's shared file-mutation scope, which clears on its own, so an unattended retry is worth something. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
     deleteLibraryItems: {
         parameters: {
             query?: never;
@@ -14495,7 +14926,10 @@ export interface operations {
     };
     clearItemLyrics: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Delete the item's `.lrc` sidecar too. */
+                writeBack?: boolean;
+            };
             header?: never;
             path: {
                 /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
@@ -14515,6 +14949,15 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description `writeBack` was asked while the server, or the item's library, is read-only (code `read-only`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -14651,6 +15094,44 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            503: components["responses"]["CatalogMaintenance"];
+        };
+    };
+    setItemKind: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetItemKindRequest"];
+            };
+        };
+        responses: {
+            /** @description The kind change, running. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            400: components["responses"]["InvalidRequest"];
+            401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            /** @description The change was refused. `conflict`: a file of one of the items is not on disk, so it cannot be read as the new kind. `read-only`: `writeBack` was asked while the server, or an item's library, is read-only. `catalog-busy`: another job holds the catalog's shared file-mutation scope, which clears on its own. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -15060,13 +15541,24 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["FieldLocked"];
+            /** @description `field-locked`: the tag is locked and the request did not set `force`; the message names it. `read-only`: `writeBack` was asked while the server, or the item's library, is read-only. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
     clearItemTag: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Strip the tag from the item's files too. */
+                writeBack?: boolean;
+            };
             header?: never;
             path: {
                 /** @description Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`). */
@@ -15089,6 +15581,15 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description `writeBack` was asked while the server, or the item's library, is read-only (code `read-only`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -15309,6 +15810,15 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description `writeBack` was asked while the server, or the item's library, is read-only (code `read-only`). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -18533,7 +19043,7 @@ export interface operations {
     listReviewQueue: {
         parameters: {
             query?: {
-                /** @description Restrict to one status. Statuses are server-defined strings; the current set is `pending`, `applied`, `auto-applied`, `as-is`, `unofficial`, `skipped`, `discarded`, and `reverted`. Unknown values yield an empty page rather than an error. */
+                /** @description Restrict to one status. Statuses are server-defined strings; the current set is `pending`, `applied`, `auto-applied`, `as-is`, `unofficial`, `skipped`, `discarded`, and `reverted`. `decided` is not a status but selects every status except `pending`. Unknown values yield an empty page rather than an error. */
                 status?: string;
                 /** @description Opaque keyset cursor from a previous page's `nextCursor`. Omit for the first page. */
                 cursor?: string;
@@ -18615,7 +19125,15 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
+            /** @description The decision was refused. `conflict`: the entry is already decided, or part of its unit cannot enter the library (the message says why). `read-only`: the server is in read-only mode, or the library an upload or acquisition was staged for is read-only. `catalog-busy`: another job holds the catalog's shared file-mutation scope, which clears on its own, so the same decision is worth sending again. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };

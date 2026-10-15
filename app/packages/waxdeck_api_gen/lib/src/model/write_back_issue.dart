@@ -12,8 +12,8 @@ part 'write_back_issue.g.dart';
 ///
 /// Properties:
 /// * [filePid] - The backing file.
-/// * [code] - The diagnostic: `tag-write-unsynced` (a write-back was refused or failed; the file's tags lag the catalog) or `tag-write-lost` (the write ran but the format could not store the value). A string, not a closed enum. 
-/// * [tagKey] - The affected tag key, when known.
+/// * [code] - The diagnostic: `tag-write-unsynced` (a write-back was refused or failed; the file's tags lag the catalog), `tag-write-lost` (the write ran but the format could not store the value), or `tag-write-owed` (an edit changed the value in the catalog without writing it; `tagKey` names it). A string, not a closed enum. 
+/// * [tagKey] - The affected key, when known. On a `tag-write-owed` issue it is the catalog's name for the value: an item field (`title`), a credit (`credit.composer`), a custom tag (`tag.MOOD`), the item's front cover (`art`) or origin (`acquisition`), or an entity value written to member files (`album.label`, `album.art`). 
 /// * [detail] - Human-readable detail, administrators only. It is the tag writer's own error, which names the file's absolute path, so it is withheld from everyone else exactly as the diagnostics listing is; `code`, `tagKey`, and `filePid` say what went wrong without saying where the library lives. Absent rather than redacted for a non-administrator. 
 @BuiltValue()
 abstract class WriteBackIssue implements Built<WriteBackIssue, WriteBackIssueBuilder> {
@@ -21,11 +21,11 @@ abstract class WriteBackIssue implements Built<WriteBackIssue, WriteBackIssueBui
   @BuiltValueField(wireName: r'filePid')
   String get filePid;
 
-  /// The diagnostic: `tag-write-unsynced` (a write-back was refused or failed; the file's tags lag the catalog) or `tag-write-lost` (the write ran but the format could not store the value). A string, not a closed enum. 
+  /// The diagnostic: `tag-write-unsynced` (a write-back was refused or failed; the file's tags lag the catalog), `tag-write-lost` (the write ran but the format could not store the value), or `tag-write-owed` (an edit changed the value in the catalog without writing it; `tagKey` names it). A string, not a closed enum. 
   @BuiltValueField(wireName: r'code')
   String get code;
 
-  /// The affected tag key, when known.
+  /// The affected key, when known. On a `tag-write-owed` issue it is the catalog's name for the value: an item field (`title`), a credit (`credit.composer`), a custom tag (`tag.MOOD`), the item's front cover (`art`) or origin (`acquisition`), or an entity value written to member files (`album.label`, `album.art`). 
   @BuiltValueField(wireName: r'tagKey')
   String? get tagKey;
 

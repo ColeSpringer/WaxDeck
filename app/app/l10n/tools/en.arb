@@ -25,6 +25,25 @@
       }
     }
   },
+  "toolsCountChanged": "changed {count}",
+  "@toolsCountChanged": {
+    "description": "Counter in a finished kind change's result: items that changed kind or were made as its parts. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "toolsCountCopies": "copies {count}",
+  "@toolsCountCopies": {
+    "description": "Counter in a finished scan's result: files that joined an item as another copy of its audio or another encoding of its recording, rather than becoming items of their own. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
   "toolsCountCovers": "covers {count}",
   "@toolsCountCovers": {
     "description": "Counter in a finished enrichment's result: front covers it fetched. Lower case: it sits in a comma-separated run of counters.",
@@ -55,6 +74,16 @@
       }
     }
   },
+  "toolsCountFallbacks": "fell back {count}",
+  "@toolsCountFallbacks": {
+    "description": "Counter in a finished analysis's result: files fpcalc could not read, fingerprinted another way that does not group with fpcalc's. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "58"
+      }
+    }
+  },
   "toolsCountFilledOf": "filled {filled} of {attempted}",
   "@toolsCountFilledOf": {
     "description": "Counter in a finished health fix's result: how many of the items it tried it fixed. Lower case: it sits in a comma-separated run of counters.",
@@ -66,6 +95,15 @@
       "attempted": {
         "type": "int",
         "example": "5"
+      }
+    }
+  },
+  "toolsCountFolded": "folded {count}",
+  "@toolsCountFolded": {
+    "description": "Counter in a finished kind change's result: items folded into another (tracks gathered into one book). Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int"
       }
     }
   },
@@ -99,6 +137,15 @@
       }
     }
   },
+  "toolsCountNotWritten": "not written {count}",
+  "@toolsCountNotWritten": {
+    "description": "Counter in a finished kind change's result: files the change could not be written into. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "toolsCountPictures": "pictures {count}",
   "@toolsCountPictures": {
     "description": "Counter in a finished enrichment's result: other pictures it fetched, backs and booklets. Lower case: it sits in a comma-separated run of counters.",
@@ -116,6 +163,16 @@
       "count": {
         "type": "int",
         "example": "2"
+      }
+    }
+  },
+  "toolsCountUnreadable": "unreadable {count}",
+  "@toolsCountUnreadable": {
+    "description": "Counter in a finished scan's result: entries in a library folder the scan could not read (a folder without permission, say). Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1"
       }
     }
   },
@@ -191,6 +248,10 @@
   "@toolsJobScan": {
     "description": "Name of a catalog job that scans the library folders."
   },
+  "toolsJobSetKind": "Kind change",
+  "@toolsJobSetKind": {
+    "description": "Name of a catalog job that turns items into audiobooks or music tracks."
+  },
   "toolsJobTargeted": "{job}: {target}",
   "@toolsJobTargeted": {
     "description": "A catalog job that ran on one thing: {job} is the job name (Enrichment, Library scan), {target} what it ran on (a track, an album, a library).",
@@ -234,6 +295,38 @@
       "count": {
         "type": "int",
         "example": "3"
+      }
+    }
+  },
+  "toolsRootUnreachable": "folder not reachable",
+  "@toolsRootUnreachable": {
+    "description": "Marker in a finished scan's result: a library's folder could not be reached (a drive that is not mounted, say), so nothing under it was marked missing. Lower case: it sits in a comma-separated run of counters."
+  },
+  "toolsScanRun": "{library}: {files, plural, =1{1 file} other{{files} files}}, {copies, plural, =1{1 copy} other{{copies} copies}}",
+  "@toolsScanRun": {
+    "description": "One library's line under a finished scan of several libraries: the library's name, the audio files the scan visited in it, and how many of them joined an item as copies.",
+    "placeholders": {
+      "library": {
+        "type": "String",
+        "example": "Music"
+      },
+      "files": {
+        "type": "int",
+        "example": "412"
+      },
+      "copies": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "toolsScanRunUnreachable": "{library}: folder not reachable",
+  "@toolsScanRunUnreachable": {
+    "description": "One library's line under a finished scan of several libraries, when that library's folder could not be reached (a drive that is not mounted, say).",
+    "placeholders": {
+      "library": {
+        "type": "String",
+        "example": "Archive"
       }
     }
   },

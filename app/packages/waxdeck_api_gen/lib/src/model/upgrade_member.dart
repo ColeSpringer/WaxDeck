@@ -12,12 +12,14 @@ part 'upgrade_member.g.dart';
 ///
 /// Properties:
 /// * [itemPid] - The item.
+/// * [filePid] - The file this encoding is, as getItemFiles names it. Within one item it is what tells the members apart. 
+/// * [path] - The file's path on the server, given where another member of the group has the same codec and bitrate: there its file's name is what tells the two apart. 
 /// * [title] - Its title.
 /// * [artist] - Its artist.
 /// * [codec] - Audio codec.
-/// * [bitrate] - Bitrate in bits per second, 0 when unknown.
-/// * [sampleRate] - Sample rate in Hz, 0 when unknown.
-/// * [bitDepth] - Bit depth, 0 when unknown or lossy.
+/// * [bitrate] - Bitrate in kilobits per second; absent when unknown.
+/// * [sampleRate] - Sample rate in Hz; absent when unknown.
+/// * [bitDepth] - Bit depth; absent when unknown or lossy.
 /// * [lossless] - Whether the encoding is lossless.
 /// * [best] - The group's suggested keeper.
 @BuiltValue()
@@ -25,6 +27,14 @@ abstract class UpgradeMember implements Built<UpgradeMember, UpgradeMemberBuilde
   /// The item.
   @BuiltValueField(wireName: r'itemPid')
   String get itemPid;
+
+  /// The file this encoding is, as getItemFiles names it. Within one item it is what tells the members apart. 
+  @BuiltValueField(wireName: r'filePid')
+  String get filePid;
+
+  /// The file's path on the server, given where another member of the group has the same codec and bitrate: there its file's name is what tells the two apart. 
+  @BuiltValueField(wireName: r'path')
+  String? get path;
 
   /// Its title.
   @BuiltValueField(wireName: r'title')
@@ -38,15 +48,15 @@ abstract class UpgradeMember implements Built<UpgradeMember, UpgradeMemberBuilde
   @BuiltValueField(wireName: r'codec')
   String get codec;
 
-  /// Bitrate in bits per second, 0 when unknown.
+  /// Bitrate in kilobits per second; absent when unknown.
   @BuiltValueField(wireName: r'bitrate')
   int? get bitrate;
 
-  /// Sample rate in Hz, 0 when unknown.
+  /// Sample rate in Hz; absent when unknown.
   @BuiltValueField(wireName: r'sampleRate')
   int? get sampleRate;
 
-  /// Bit depth, 0 when unknown or lossy.
+  /// Bit depth; absent when unknown or lossy.
   @BuiltValueField(wireName: r'bitDepth')
   int? get bitDepth;
 
@@ -86,6 +96,18 @@ class _$UpgradeMemberSerializer implements PrimitiveSerializer<UpgradeMember> {
       object.itemPid,
       specifiedType: const FullType(String),
     );
+    yield r'filePid';
+    yield serializers.serialize(
+      object.filePid,
+      specifiedType: const FullType(String),
+    );
+    if (object.path != null) {
+      yield r'path';
+      yield serializers.serialize(
+        object.path,
+        specifiedType: const FullType(String),
+      );
+    }
     yield r'title';
     yield serializers.serialize(
       object.title,
@@ -163,6 +185,21 @@ class _$UpgradeMemberSerializer implements PrimitiveSerializer<UpgradeMember> {
             specifiedType: const FullType(String),
           ) as String;
           result.itemPid = valueDes;
+          break;
+        case r'filePid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(String),
+          ) as String;
+          result.filePid = valueDes;
+          break;
+        case r'path':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.path = valueDes;
           break;
         case r'title':
           final valueDes = serializers.deserialize(

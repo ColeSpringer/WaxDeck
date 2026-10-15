@@ -5,10 +5,13 @@ import '../l10n/l10n.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
 
-/// One audiobook's detail.
+/// One audiobook's detail. A refusal is final: a pid that is no longer
+/// a book (turned into tracks) answers 404, and retrying that would hold
+/// the screen on its skeleton for the whole backoff.
 final bookDetailProvider = FutureProvider.autoDispose
     .family<BookDetail, String>(
       (ref, pid) => ref.watch(repositoryProvider).getBook(pid),
+      retry: retryUnlessRefused,
     );
 
 /// How the hub orders the shelf of books.

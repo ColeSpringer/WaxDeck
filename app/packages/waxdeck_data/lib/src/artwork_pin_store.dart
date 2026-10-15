@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import 'database.dart';
+import 'mirror_pages.dart';
 
 /// One pinned cover: the bytes kept on disk for an item that was
 /// downloaded, so its grid cell and its player draw artwork with the
@@ -46,6 +47,12 @@ abstract class ArtworkPinStore {
   /// the first one at least as big as it needs.
   Future<List<ArtworkPinRecord>> pinsFor(String pid);
 
+  /// [pinsFor], for a draw: where [pid] holds none, those of the pid a
+  /// kind change has given its item since, as a queue or a summary from
+  /// before the change still names the old one. Never for a write, which
+  /// acts on [pid] alone.
+  Future<List<ArtworkPinRecord>> pinsToDraw(String pid);
+
   Future<void> put(ArtworkPinRecord pin);
 
   /// Drops every pin for [pid] and answers what was dropped, so the
@@ -71,6 +78,14 @@ class DriftArtworkPinStore implements ArtworkPinStore {
               ..orderBy([(t) => OrderingTerm.desc(t.sizePx)]))
             .get();
     return rows.map(_record).toList();
+  }
+
+  @override
+  Future<List<ArtworkPinRecord>> pinsToDraw(String pid) async {
+    final held = await pinsFor(pid);
+    if (held.isNotEmpty) return held;
+    final now = await mirrorRenamedPid(db, pid);
+    return now == null ? held : pinsFor(now);
   }
 
   @override
@@ -122,6 +137,9 @@ class NoArtworkPinStore implements ArtworkPinStore {
 
   @override
   Future<List<ArtworkPinRecord>> pinsFor(String pid) async => const [];
+
+  @override
+  Future<List<ArtworkPinRecord>> pinsToDraw(String pid) async => const [];
 
   @override
   Future<void> put(ArtworkPinRecord pin) async {}

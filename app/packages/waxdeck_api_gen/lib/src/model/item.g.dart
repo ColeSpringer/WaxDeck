@@ -16,6 +16,8 @@ class _$Item extends Item {
   @override
   final ArtSource? artSource;
   @override
+  final int? copies;
+  @override
   final String? mbid;
   @override
   final int? year;
@@ -60,6 +62,7 @@ class _$Item extends Item {
     this.codec,
     this.addedAt,
     this.artSource,
+    this.copies,
     this.mbid,
     this.year,
     this.genres,
@@ -94,6 +97,7 @@ class _$Item extends Item {
         codec == other.codec &&
         addedAt == other.addedAt &&
         artSource == other.artSource &&
+        copies == other.copies &&
         mbid == other.mbid &&
         year == other.year &&
         genres == other.genres &&
@@ -121,6 +125,7 @@ class _$Item extends Item {
     _$hash = $jc(_$hash, codec.hashCode);
     _$hash = $jc(_$hash, addedAt.hashCode);
     _$hash = $jc(_$hash, artSource.hashCode);
+    _$hash = $jc(_$hash, copies.hashCode);
     _$hash = $jc(_$hash, mbid.hashCode);
     _$hash = $jc(_$hash, year.hashCode);
     _$hash = $jc(_$hash, genres.hashCode);
@@ -150,6 +155,7 @@ class _$Item extends Item {
           ..add('codec', codec)
           ..add('addedAt', addedAt)
           ..add('artSource', artSource)
+          ..add('copies', copies)
           ..add('mbid', mbid)
           ..add('year', year)
           ..add('genres', genres)
@@ -191,6 +197,10 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
   ArtSourceBuilder get artSource => _$this._artSource ??= ArtSourceBuilder();
   set artSource(covariant ArtSourceBuilder? artSource) =>
       _$this._artSource = artSource;
+
+  int? _copies;
+  int? get copies => _$this._copies;
+  set copies(covariant int? copies) => _$this._copies = copies;
 
   String? _mbid;
   String? get mbid => _$this._mbid;
@@ -277,6 +287,7 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
       _codec = $v.codec;
       _addedAt = $v.addedAt;
       _artSource = $v.artSource?.toBuilder();
+      _copies = $v.copies;
       _mbid = $v.mbid;
       _year = $v.year;
       _genres = $v.genres?.toBuilder();
@@ -323,6 +334,7 @@ class ItemBuilder implements Builder<Item, ItemBuilder>, ItemSummaryBuilder {
             codec: codec,
             addedAt: addedAt,
             artSource: _artSource?.build(),
+            copies: copies,
             mbid: mbid,
             year: year,
             genres: _genres?.build(),

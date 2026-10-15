@@ -5,10 +5,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/trash"
 	"github.com/colespringer/waxbin/waxerr"
 )
 
@@ -185,19 +188,32 @@ func trashEmptyDTO(rep *waxbin.EmptyReport) TrashEmptyDTO {
 		SkippedReadOnly: rep.SkippedReadOnly}
 }
 
-// DeletePlanDTO is one item's share of a deletion.
+// DeletePlanDTO is one item's share of a deletion: the files it loses,
+// by name, and whether it keeps one.
 type DeletePlanDTO struct {
-	PID   string
-	Name  string
-	Files int
-	Bytes int64
+	PID          string
+	Name         string
+	Files        int
+	Bytes        int64
+	FileList     []DeletePlanFileDTO
+	ItemSurvives bool
 }
 
-// DeleteItemsResultDTO is the plan (dry run) or the applied outcome.
+// DeletePlanFileDTO is one file a deletion removes.
+type DeletePlanFileDTO struct {
+	FilePID   string
+	Name      string
+	SizeBytes int64
+	Role      string
+}
+
+// DeleteItemsResultDTO is the plan (dry run) or the applied outcome, with
+// what the deletion did beside removing files.
 type DeleteItemsResultDTO struct {
-	Applied bool
-	Mode    string
-	Entries []DeletePlanDTO
+	Applied  bool
+	Mode     string
+	Entries  []DeletePlanDTO
+	Warnings []string
 }
 
 // errEpisodeNotDeletable refuses a podcast episode on a delete surface.
@@ -217,22 +233,14 @@ var ErrCueRipPart = errors.New("part of a cue rip")
 // need the delete permission or the admin role; permanent mode is
 // admin-only. Every pid must be visible to the caller, every touched
 // library must be writable, and no pid may name a podcast episode.
-// The whole list is refused when one does, matching the catalog.
+// The whole list is refused when one does, matching the catalog. An
+// item's copies go with it, except one in a library the caller cannot
+// see, which stays and keeps the item, as one in a read-only library
+// does.
 func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string, mode string, dryRun bool) (DeleteItemsResultDTO, error) {
-	if !uc.Admin && !uc.Delete {
-		return DeleteItemsResultDTO{}, &Error{Kind: KindForbidden, Msg: "this account cannot delete library items"}
-	}
-	var dm model.DeleteMode
-	switch mode {
-	case "", "trash":
-		dm, mode = model.DeleteTrash, "trash"
-	case "permanent":
-		if !uc.Admin {
-			return DeleteItemsResultDTO{}, &Error{Kind: KindForbidden, Msg: "permanent deletion is administrators only"}
-		}
-		dm = model.DeletePermanent
-	default:
-		return DeleteItemsResultDTO{}, errInvalid("mode must be trash or permanent")
+	dm, mode, err := deleteModeFor(uc, mode)
+	if err != nil {
+		return DeleteItemsResultDTO{}, err
 	}
 	if len(apiPIDs) == 0 {
 		return DeleteItemsResultDTO{}, errInvalid("pids are required")
@@ -241,8 +249,7 @@ func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string
 		return DeleteItemsResultDTO{}, errInvalid("at most 500 pids per call")
 	}
 	pids := make([]model.PID, 0, len(apiPIDs))
-	names := map[string]string{}
-	apiByBare := map[string]string{}
+	d := newDeletion(uc)
 	carved := false
 	for _, p := range apiPIDs {
 		it, err := l.getVisibleItem(ctx, uc, p)
@@ -255,63 +262,396 @@ func (l *Library) DeleteItems(ctx context.Context, uc *UserCtx, apiPIDs []string
 		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
 			return DeleteItemsResultDTO{}, err
 		}
+		if err := d.add(ctx, l, it, p); err != nil {
+			return DeleteItemsResultDTO{}, err
+		}
 		pids = append(pids, it.PID)
-		names[string(it.PID)] = it.Title
-		apiByBare[string(it.PID)] = p
 		carved = carved || it.Virtual
+	}
+	if l.deletePlanHook != nil {
+		l.deletePlanHook(ctx)
 	}
 	plan, err := l.lib.PlanDeletePIDs(ctx, pids, dm)
 	if err != nil {
-		// Episodes and modes are refused above, so an invalid plan with a
-		// carved track named is the catalog's whole-rip rule.
-		if carved && waxerr.Is(err, waxerr.CodeInvalid) {
-			return DeleteItemsResultDTO{}, &Error{Kind: KindInvalid, Err: ErrCueRipPart,
-				Msg: "a cue rip's tracks share one file, so they are deleted together or not at all; name every track of the rip"}
+		// Episodes and modes are refused above.
+		return DeleteItemsResultDTO{}, planRefusal(err, carved)
+	}
+	d.keepUnseen(plan)
+	out := DeleteItemsResultDTO{Mode: mode, Entries: d.entries(plan)}
+	if dryRun {
+		return out, nil
+	}
+	rep, stayed, err := l.applyDeletion(ctx, plan)
+	if err != nil {
+		return DeleteItemsResultDTO{}, err
+	}
+	d.settle(&out, plan, stayed, true)
+	// An item a copy kept names the copy, under the item's name, since
+	// one call can keep several.
+	if len(rep.Promoted) > 0 {
+		kept := map[string]bool{}
+		for _, e := range out.Entries {
+			kept[e.PID] = e.ItemSurvives
 		}
+		for _, pid := range pids {
+			if !kept[d.apiPIDs[pid]] {
+				continue
+			}
+			for _, w := range l.promotedWarnings(ctx, uc, pid, rep.Promoted) {
+				out.Warnings = append(out.Warnings, d.names[pid]+": "+w)
+			}
+		}
+	}
+	l.Audit(ctx, uc, "items.delete", AuditTarget{Kind: "item"},
+		map[string]any{"mode": mode, "count": len(out.Entries), "pids": apiPIDs})
+	return out, nil
+}
+
+// DeleteItemFiles deletes some of one visible item's files, to the trash
+// by default, under DeleteItems' rights. A copy goes alone; the primary
+// or a part gives its place to a copy when the item has one, which a
+// warning names. Every file must be one the caller sees in ItemFiles, in
+// a writable library, and the file of a cue rip only goes with every
+// track it plays, which this surface cannot name.
+func (l *Library) DeleteItemFiles(ctx context.Context, uc *UserCtx, apiItemPID string, filePIDs []string, mode string, dryRun bool) (DeleteItemsResultDTO, error) {
+	dm, mode, err := deleteModeFor(uc, mode)
+	if err != nil {
+		return DeleteItemsResultDTO{}, err
+	}
+	if len(filePIDs) == 0 {
+		return DeleteItemsResultDTO{}, errInvalid("filePids are required")
+	}
+	if len(filePIDs) > 100 {
+		return DeleteItemsResultDTO{}, errInvalid("at most 100 files per call")
+	}
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	if err != nil {
+		return DeleteItemsResultDTO{}, err
+	}
+	if it.Kind == model.KindEpisode {
+		return DeleteItemsResultDTO{}, errEpisodeNotDeletable()
+	}
+	d := newDeletion(uc)
+	if err := d.add(ctx, l, it, apiItemPID); err != nil {
+		return DeleteItemsResultDTO{}, err
+	}
+	own := d.files[it.PID]
+	var pids []model.PID
+	for _, fp := range filePIDs {
+		ref, ok := own[model.PID(fp)]
+		if !ok || !libraryGranted(uc, ref.LibraryPID) {
+			return DeleteItemsResultDTO{}, errNotFound("item " + apiItemPID + " has no file " + FileAPIPID(fp))
+		}
+		if slices.Contains(pids, ref.FilePID) {
+			continue
+		}
+		if err := l.CheckWritable(ctx, string(ref.LibraryPID)); err != nil {
+			return DeleteItemsResultDTO{}, err
+		}
+		pids = append(pids, ref.FilePID)
+	}
+	plan, err := l.lib.PlanDeleteFiles(ctx, pids, dm)
+	if err != nil {
 		return DeleteItemsResultDTO{}, classify(err)
 	}
-	// The plan is per file; the API reports per item. A cue rip's file
-	// plays every track it lists, so each gets an entry, and the file
-	// counts once, under the item the plan names it for.
-	perItem := map[string]*DeletePlanDTO{}
-	order := []string{}
-	entry := func(bare, src string) *DeletePlanDTO {
-		dto, ok := perItem[bare]
+	for _, a := range plan.Actions {
+		if ripPlaysOthers(a, it.PID) {
+			return DeleteItemsResultDTO{}, errCueRipPart()
+		}
+	}
+	out := DeleteItemsResultDTO{Mode: mode, Entries: d.entries(plan)}
+	if dryRun {
+		return out, nil
+	}
+	rep, stayed, err := l.applyDeletion(ctx, plan)
+	if err != nil {
+		return DeleteItemsResultDTO{}, err
+	}
+	d.settle(&out, plan, stayed, false)
+	out.Warnings = append(out.Warnings, l.promotedWarnings(ctx, uc, it.PID, rep.Promoted)...)
+	l.Audit(ctx, uc, "items.delete-files", AuditTarget{Kind: "item", PID: apiItemPID},
+		map[string]any{"mode": mode, "count": len(pids) - len(stayed), "filePids": filePIDs})
+	return out, nil
+}
+
+// applyDeletion applies a delete plan and maps each planned file that
+// stayed to why, in words: the run goes on past a move it could not
+// make, and skips an action whose library was flagged read-only, or whose
+// cue rip's tracks changed, since the plan, so the plan alone would
+// report the file gone.
+func (l *Library) applyDeletion(ctx context.Context, plan *trash.Plan) (*trash.Report, map[model.PID]string, error) {
+	if l.deleteApplyHook != nil {
+		l.deleteApplyHook(ctx)
+	}
+	rep, err := l.lib.ApplyDelete(ctx, plan)
+	if err != nil {
+		return nil, nil, classifyMutation(err)
+	}
+	stayed := make(map[model.PID]string, len(rep.Failures))
+	for _, f := range rep.Failures {
+		stayed[f.FilePID] = l.failureCause(f.Err)
+	}
+	planned := 0
+	for _, a := range plan.Actions {
+		if a.Skip {
+			planned++
+		}
+	}
+	if rep.Skipped > planned {
+		l.skippedAsItRan(ctx, plan, stayed)
+	}
+	return rep, stayed, nil
+}
+
+// skippedAsItRan adds to stayed each file the catalog skipped as the
+// delete ran, which its report counts and does not name: a file its item
+// still holds after the run did not go.
+func (l *Library) skippedAsItRan(ctx context.Context, plan *trash.Plan, stayed map[model.PID]string) {
+	readOnly := map[model.PID]bool{}
+	libs, err := l.lib.Libraries(ctx)
+	if err != nil {
+		l.log.Warn("reading the libraries a delete skipped in", "err", err)
+	}
+	for _, lib := range libs {
+		readOnly[lib.PID] = lib.ReadOnly
+	}
+	held := map[model.PID]map[model.PID]model.ItemFileRef{}
+	for _, a := range plan.Actions {
+		if _, ok := stayed[a.FilePID]; a.Skip || ok {
+			continue
+		}
+		files, read := held[a.ItemPID]
+		if !read {
+			refs, err := l.lib.ItemFiles(ctx, a.ItemPID)
+			if err != nil {
+				l.log.Warn("reading the files a delete skipped", "item", string(a.ItemPID), "err", err)
+			}
+			files = make(map[model.PID]model.ItemFileRef, len(refs))
+			for _, ref := range refs {
+				files[ref.FilePID] = ref
+			}
+			held[a.ItemPID] = files
+		}
+		if ref, kept := files[a.FilePID]; kept {
+			stayed[a.FilePID] = "the cue rip's tracks changed since the plan"
+			if readOnly[ref.LibraryPID] {
+				stayed[a.FilePID] = "library is read-only"
+			}
+		}
+	}
+}
+
+// failureCause is the innermost reason of an error's text, the part
+// after its last ": ", with storage roots scrubbed.
+func (l *Library) failureCause(msg string) string {
+	if i := strings.LastIndex(msg, ": "); i >= 0 {
+		msg = msg[i+2:]
+	}
+	return l.scrubStoragePaths(msg)
+}
+
+// deleteModeFor reads a delete mode for the caller: trash for anyone
+// holding the delete right, permanent for administrators.
+func deleteModeFor(uc *UserCtx, mode string) (model.DeleteMode, string, error) {
+	if !uc.Admin && !uc.Delete {
+		return "", "", &Error{Kind: KindForbidden, Msg: "this account cannot delete library items"}
+	}
+	switch mode {
+	case "", "trash":
+		return model.DeleteTrash, "trash", nil
+	case "permanent":
+		if !uc.Admin {
+			return "", "", &Error{Kind: KindForbidden, Msg: "permanent deletion is administrators only"}
+		}
+		return model.DeletePermanent, mode, nil
+	}
+	return "", "", errInvalid("mode must be trash or permanent")
+}
+
+// errCueRipPart refuses a delete that would take a cue rip's file from
+// under tracks the caller did not name.
+func errCueRipPart() error {
+	return &Error{Kind: KindInvalid, Err: ErrCueRipPart,
+		Msg: "a cue rip's tracks share one file, so they are deleted together or not at all; name every track of the rip"}
+}
+
+// ripPlaysOthers reports whether a planned deletion takes a cue rip's
+// file from under tracks besides item.
+func ripPlaysOthers(a trash.Action, item model.PID) bool {
+	return len(a.Tracks) > 1 || (len(a.Tracks) == 1 && a.Tracks[0] != item)
+}
+
+// planRefusal is an item delete plan's refusal: an invalid plan with a
+// carved track named is the catalog's whole-rip rule.
+func planRefusal(err error, carved bool) error {
+	if carved && waxerr.Is(err, waxerr.CodeInvalid) {
+		return errCueRipPart()
+	}
+	return classify(err)
+}
+
+// deletion is what a delete knows of the items it names: their API pids
+// and names, every file behind each, seen or not, and the size of each
+// file the plan takes, measured at its first report, before the apply
+// moves it.
+type deletion struct {
+	uc      *UserCtx
+	names   map[model.PID]string
+	apiPIDs map[model.PID]string
+	files   map[model.PID]map[model.PID]model.ItemFileRef
+	sizes   map[model.PID]int64
+}
+
+func newDeletion(uc *UserCtx) *deletion {
+	return &deletion{uc: uc, names: map[model.PID]string{}, apiPIDs: map[model.PID]string{},
+		files: map[model.PID]map[model.PID]model.ItemFileRef{}, sizes: map[model.PID]int64{}}
+}
+
+// add records one item the delete names.
+func (d *deletion) add(ctx context.Context, l *Library, it *model.ItemView, apiPID string) error {
+	refs, err := l.lib.ItemFiles(ctx, it.PID)
+	if err != nil {
+		return classify(err)
+	}
+	files := make(map[model.PID]model.ItemFileRef, len(refs))
+	for _, ref := range refs {
+		files[ref.FilePID] = ref
+	}
+	d.names[it.PID], d.apiPIDs[it.PID], d.files[it.PID] = it.Title, apiPID, files
+	return nil
+}
+
+// keepUnseen leaves in place every file the plan would delete that the
+// caller was not shown: a copy in a library they cannot see is not
+// theirs to remove, nor is one that joined the item after its files were
+// read, so the item keeps it.
+func (d *deletion) keepUnseen(plan *trash.Plan) {
+	for i := range plan.Actions {
+		a := &plan.Actions[i]
+		if a.Skip {
+			continue
+		}
+		switch ref, seen := d.files[a.ItemPID][a.FilePID]; {
+		case !seen:
+			a.Skip, a.Reason = true, "joined the item after the delete read its files"
+		case !libraryGranted(d.uc, ref.LibraryPID):
+			a.Skip, a.Reason = true, "in a library outside the caller's reach"
+		}
+	}
+}
+
+// entries reports a plan per item, as the API does. A cue rip's file
+// plays every track it lists, so each gets an entry, and the file counts
+// once, under the item the plan names it for.
+func (d *deletion) entries(plan *trash.Plan) []DeletePlanDTO {
+	return d.entriesWithout(plan, nil)
+}
+
+// entriesWithout is entries less the files that stayed. An item a
+// skipped or staying file holds survives.
+func (d *deletion) entriesWithout(plan *trash.Plan, stayed map[model.PID]string) []DeletePlanDTO {
+	perItem := map[model.PID]*DeletePlanDTO{}
+	var order []model.PID
+	going := map[model.PID]bool{}
+	kept := map[model.PID]bool{}
+	entry := func(item model.PID, src string) *DeletePlanDTO {
+		dto, ok := perItem[item]
 		if !ok {
-			dto = &DeletePlanDTO{PID: apiByBare[bare], Name: names[bare]}
+			dto = &DeletePlanDTO{PID: d.apiPIDs[item], Name: d.names[item]}
 			if dto.Name == "" {
 				dto.Name = filepath.Base(src)
 			}
-			perItem[bare] = dto
-			order = append(order, bare)
+			perItem[item] = dto
+			order = append(order, item)
 		}
 		return dto
 	}
 	for _, a := range plan.Actions {
-		if a.Skip {
+		if _, ok := stayed[a.FilePID]; a.Skip || ok {
+			kept[a.ItemPID] = true
+			for _, track := range a.Tracks {
+				kept[track] = true
+			}
 			continue
 		}
-		dto := entry(string(a.ItemPID), a.Src)
+		going[a.FilePID] = true
+		dto := entry(a.ItemPID, a.Src)
+		f := DeletePlanFileDTO{FilePID: string(a.FilePID), Name: filepath.Base(a.Src), Role: d.files[a.ItemPID][a.FilePID].Role}
+		size, measured := d.sizes[a.FilePID]
+		if !measured {
+			if st, err := os.Stat(a.Src); err == nil {
+				size = st.Size()
+			}
+			d.sizes[a.FilePID] = size
+		}
+		f.SizeBytes = size
 		dto.Files++
-		if st, err := os.Stat(a.Src); err == nil {
-			dto.Bytes += st.Size()
-		}
+		dto.Bytes += f.SizeBytes
+		dto.FileList = append(dto.FileList, f)
 		for _, track := range a.Tracks {
-			entry(string(track), a.Src)
+			entry(track, a.Src)
 		}
 	}
-	out := DeleteItemsResultDTO{Mode: mode}
-	for _, bare := range order {
-		out.Entries = append(out.Entries, *perItem[bare])
+	out := make([]DeletePlanDTO, 0, len(order))
+	for _, item := range order {
+		dto := perItem[item]
+		dto.ItemSurvives = kept[item]
+		for file := range d.files[item] {
+			if !going[file] {
+				dto.ItemSurvives = true
+			}
+		}
+		out = append(out, *dto)
 	}
-	if dryRun {
-		return out, nil
-	}
-	if _, err := l.lib.ApplyDelete(ctx, plan); err != nil {
-		return DeleteItemsResultDTO{}, classifyMutation(err)
-	}
+	return out
+}
+
+// settle reports an applied plan into out: what went, less the files
+// that stayed, each named in a warning, under its item's name for a call
+// that names items.
+func (d *deletion) settle(out *DeleteItemsResultDTO, plan *trash.Plan, stayed map[model.PID]string, byItem bool) {
 	out.Applied = true
-	l.Audit(ctx, uc, "items.delete", AuditTarget{Kind: "item"},
-		map[string]any{"mode": mode, "count": len(out.Entries), "pids": apiPIDs})
-	return out, nil
+	if len(stayed) > 0 {
+		out.Entries = d.entriesWithout(plan, stayed)
+	}
+	for _, a := range plan.Actions {
+		why, ok := stayed[a.FilePID]
+		if !ok {
+			continue
+		}
+		w := filepath.Base(a.Src) + " stayed: " + why
+		if byItem {
+			w = d.names[a.ItemPID] + ": " + w
+		}
+		out.Warnings = append(out.Warnings, w)
+	}
+}
+
+// promotedWarnings names each copy a deletion moved into a removed
+// file's place, by the place it now holds; one the caller cannot see is
+// left unsaid.
+func (l *Library) promotedWarnings(ctx context.Context, uc *UserCtx, item model.PID, promoted []model.PromotedFile) []string {
+	if len(promoted) == 0 {
+		return nil
+	}
+	refs, err := l.lib.ItemFiles(ctx, item)
+	if err != nil {
+		l.log.Warn("reading the files a deletion promoted", "item", string(item), "err", err)
+		return nil
+	}
+	var out []string
+	for _, p := range promoted {
+		for _, ref := range refs {
+			if ref.FilePID != p.FilePID || !libraryGranted(uc, ref.LibraryPID) {
+				continue
+			}
+			name := filepath.Base(ref.DisplayPath)
+			if ref.Role == fileRolePrimary {
+				out = append(out, name+" is now the item's main file")
+			} else {
+				out = append(out, name+" now takes the place of the deleted part")
+			}
+		}
+	}
+	return out
 }

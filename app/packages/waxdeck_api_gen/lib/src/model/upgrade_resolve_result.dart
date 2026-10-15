@@ -11,10 +11,10 @@ part 'upgrade_resolve_result.g.dart';
 /// The resolution outcome.
 ///
 /// Properties:
-/// * [trashed] - Items moved to the trash.
+/// * [trashed] - Files moved to the trash.
 @BuiltValue()
 abstract class UpgradeResolveResult implements Built<UpgradeResolveResult, UpgradeResolveResultBuilder> {
-  /// Items moved to the trash.
+  /// Files moved to the trash.
   @BuiltValueField(wireName: r'trashed')
   int get trashed;
 

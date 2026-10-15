@@ -206,6 +206,19 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
     if (_selected < 0 || _selected >= entries.length) return;
     final entry = entries[_selected];
     if (entry.status != 'pending' || entry.identifying) return;
+    // Opened, for the decision to be made where the duplicates can be
+    // seen. Where they already are, opening it again would do nothing,
+    // so the key says what decides it instead.
+    if (_heldBack(entry, action)) {
+      if (widget.openEntryId == entry.id) {
+        ref
+            .read(shellMessengerProvider.notifier)
+            .show(context.l10n.reviewDecideHeldInPane);
+      } else {
+        _open(entry);
+      }
+      return;
+    }
     // `a` on the row the pane is showing approves what the pane has
     // selected, or the two controls decide different releases.
     await _decide(
@@ -232,25 +245,92 @@ class _ReviewScreenState extends ConsumerState<ReviewScreen> {
       // is about, which no table sentence can.
       if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
     } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
+      // A `conflict` names the file the library cannot take, which the
+      // table's "something changed first" would hide.
+      showRefusal(
+        messenger,
+        l10n,
+        explainRefusal(l10n, e),
+        refused: {entryId: e.code},
+        mounted: () => mounted,
+        retry: (_) => _decide(entryId, action, candidateMbid: candidateMbid),
+      );
     }
   }
 
-  Future<void> _decideBulk(String action) async {
-    final ids = _checked.toList();
-    if (ids.isEmpty) return;
+  /// Whether the list leaves [action] on [entry] to its pane: the pane
+  /// holds approving and marking unofficial back from a unit whose files
+  /// the library already has, and a row only knows that some matched.
+  static bool _heldBack(ReviewEntry entry, String action) =>
+      entry.status == 'pending' &&
+      entry.duplicateCount > 0 &&
+      const {'approve', 'unofficial'}.contains(action);
+
+  /// How many of the server's warnings one bulk snackbar spells out.
+  static const _bulkWarningLines = 3;
+
+  Future<void> _decideBulk(String action, [List<String>? only]) async {
+    final chosen = only ?? _checked.toList();
+    if (chosen.isEmpty) return;
     final l10n = context.l10n;
     final messenger = ref.read(shellMessengerProvider.notifier);
+    // What the a and u keys open rather than decide stays undecided
+    // here, and is counted: each is for its own pane.
+    final held = {
+      for (final entry in _entries)
+        if (_heldBack(entry, action)) entry.id,
+    };
+    final ids = [
+      for (final id in chosen)
+        if (!held.contains(id)) id,
+    ];
+    final left = chosen.length - ids.length;
     try {
-      final outcomes = await ref
-          .read(reviewQueueProvider.notifier)
-          .decideBulk(ids, action);
-      final failed = outcomes.where((o) => !o.ok).length;
-      messenger.show(
-        failed == 0
-            ? l10n.reviewDecidedCount(outcomes.length)
-            : l10n.reviewDecidedSomeFailed(outcomes.length - failed, failed),
+      final outcomes = ids.isEmpty
+          ? const <ReviewBulkOutcome>[]
+          : await ref
+                .read(reviewQueueProvider.notifier)
+                .decideBulk(ids, action);
+      final failed = [
+        for (final o in outcomes)
+          if (!o.ok) o,
+      ];
+      // Worded as the single decide words them, and said where the
+      // failures say one thing: the one entry that failed, or a busy
+      // catalog behind all of them. Several reasons leave the count.
+      final reasons = <String>{
+        for (final o in failed)
+          explainRefusal(
+            l10n,
+            WaxDeckApiException(code: o.code ?? '', message: o.error ?? ''),
+          ),
+      }..remove('');
+      final warnings = [for (final o in outcomes) ...o.warnings];
+      showRefusal(
+        messenger,
+        l10n,
+        [
+          if (outcomes.isNotEmpty)
+            failed.isEmpty
+                ? l10n.reviewDecidedCount(outcomes.length)
+                : l10n.reviewDecidedSomeFailed(
+                    outcomes.length - failed.length,
+                    failed.length,
+                  ),
+          if (reasons.length == 1) reasons.single,
+          if (left > 0) l10n.reviewBulkHeldDuplicates(left),
+          ...warnings.take(_bulkWarningLines),
+          if (warnings.length > _bulkWarningLines)
+            l10n.reviewBulkMoreWarnings(warnings.length - _bulkWarningLines),
+        ].join('\n'),
+        refused: {for (final o in failed) o.entryId: o.code},
+        mounted: () => mounted,
+        retry: (again) => _decideBulk(action, again),
       );
+      // Only for the decision somebody started: a Retry sends what an
+      // earlier selection left, and the selection standing by then is
+      // somebody's next one.
+      if (only != null || !mounted) return;
       setState(() {
         _selecting = false;
         _checked.clear();
@@ -699,13 +779,6 @@ class _MatchingModeMenu extends ConsumerWidget {
 class _FilterChips extends ConsumerWidget {
   const _FilterChips();
 
-  static int _decidedCount(ReviewStats stats) =>
-      stats.applied +
-      stats.autoApplied +
-      stats.asIs +
-      stats.unofficial +
-      stats.skipped;
-
   static String _label(
     AppLocalizations l10n,
     ReviewFilter filter,
@@ -715,7 +788,7 @@ class _FilterChips extends ConsumerWidget {
     final count = switch (filter) {
       ReviewFilter.pending => stats.pending,
       ReviewFilter.autoApplied => stats.autoApplied,
-      ReviewFilter.decided => _decidedCount(stats),
+      ReviewFilter.decided => stats.decided,
     };
     return l10n.reviewFilterCount(filter.labelOf(l10n), count);
   }
@@ -879,6 +952,15 @@ class _ReviewRow extends StatelessWidget {
                   label: _originLabel(l10n, context.waxL10n, entry),
                   compact: true,
                 ),
+                // The pane drops its warning once decided; so does the row.
+                if (entry.status == 'pending' &&
+                    entry.duplicateCount > 0) ...<Widget>[
+                  const SizedBox(width: WaxSpace.s4),
+                  CodecChip(
+                    l10n.reviewDuplicateCount(entry.duplicateCount),
+                    emphasis: true,
+                  ),
+                ],
                 if (entry.status != 'pending') ...<Widget>[
                   const SizedBox(width: WaxSpace.s4),
                   CodecChip(entry.status),

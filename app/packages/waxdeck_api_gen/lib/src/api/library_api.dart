@@ -13,6 +13,7 @@ import 'package:waxdeck_api_gen/src/api_util.dart';
 import 'package:waxdeck_api_gen/src/model/album_detail.dart';
 import 'package:waxdeck_api_gen/src/model/art_role.dart';
 import 'package:waxdeck_api_gen/src/model/art_roles.dart';
+import 'package:waxdeck_api_gen/src/model/delete_item_files_request.dart';
 import 'package:waxdeck_api_gen/src/model/delete_items_request.dart';
 import 'package:waxdeck_api_gen/src/model/delete_items_result.dart';
 import 'package:waxdeck_api_gen/src/model/discovery_list.dart';
@@ -22,6 +23,7 @@ import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/facet_page.dart';
 import 'package:waxdeck_api_gen/src/model/facet_sort.dart';
 import 'package:waxdeck_api_gen/src/model/item.dart';
+import 'package:waxdeck_api_gen/src/model/item_files.dart';
 import 'package:waxdeck_api_gen/src/model/item_page.dart';
 import 'package:waxdeck_api_gen/src/model/lyrics.dart';
 import 'package:waxdeck_api_gen/src/model/media_type.dart';
@@ -144,8 +146,116 @@ class LibraryApi {
     );
   }
 
+  /// Delete some of an item&#39;s files
+  /// Deletes files of one item, to the catalog trash by default or permanently (&#x60;mode&#x60; &#x60;permanent&#x60;, administrators only), as deleteLibraryItems deletes whole items. A copy goes alone; the primary or a part gives its place to a copy when the item has one, which &#x60;warnings&#x60; names, and an item that loses its last file is archived. &#x60;dryRun&#x60; answers the plan without deleting. Needs the &#x60;delete&#x60; permission or the admin role; the item must be visible to the caller and every file one of its files in a library the caller can see (&#x60;not-found&#x60; otherwise). A read-only library answers &#x60;read-only&#x60;. The file of a cue rip plays every track carved from it, so deleting it here when it plays other tracks is &#x60;invalid-request&#x60; with &#x60;params.reason&#x60; &#x60;cue-rip&#x60;: delete those tracks together through deleteLibraryItems. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [deleteItemFilesRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [DeleteItemsResult] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<DeleteItemsResult>> deleteItemFiles({ 
+    required String pid,
+    required DeleteItemFilesRequest deleteItemFilesRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/files/delete'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(DeleteItemFilesRequest);
+      _bodyData = _serializers.serialize(deleteItemFilesRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    DeleteItemsResult? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(DeleteItemsResult),
+      ) as DeleteItemsResult;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<DeleteItemsResult>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Delete library items
-  /// Deletes items&#39; files, to the catalog trash by default (reversible from the trash surface) or permanently (&#x60;mode&#x60; &#x60;permanent&#x60;, administrators only). &#x60;dryRun&#x60; answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the &#x60;delete&#x60; permission or the admin role, and every pid must be visible to the caller (&#x60;not-found&#x60; otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. A read-only library answers &#x60;read-only&#x60;. Podcast episodes are not deletable here, and one anywhere in &#x60;pids&#x60; refuses the whole call (&#x60;invalid-request&#x60;): the podcast download tree owns its own files, and removing an episode&#39;s download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore. The tracks a cue sheet carves out of one file go together: naming some but not all is &#x60;invalid-request&#x60; with &#x60;params.reason&#x60; &#x60;cue-rip&#x60;. 
+  /// Deletes items&#39; files, to the catalog trash by default (reversible from the trash surface) or permanently (&#x60;mode&#x60; &#x60;permanent&#x60;, administrators only). &#x60;dryRun&#x60; answers the plan (which files, how many bytes) without deleting, and the response reports the same entries when it applies. Deleting needs the &#x60;delete&#x60; permission or the admin role, and every pid must be visible to the caller (&#x60;not-found&#x60; otherwise). Items keep their catalog identity: an item that loses its last file is archived, not erased, and play history survives. An item&#39;s copies (getItemFiles) go with it, except one in a read-only library or a library the caller cannot see, which stays and keeps the item (&#x60;itemSurvives&#x60;). A read-only library holding the item&#39;s own file answers &#x60;read-only&#x60;. Podcast episodes are not deletable here, and one anywhere in &#x60;pids&#x60; refuses the whole call (&#x60;invalid-request&#x60;): the podcast download tree owns its own files, and removing an episode&#39;s download is its own endpoint, keeping the episode re-fetchable rather than journalling a restore. The tracks a cue sheet carves out of one file go together: naming some but not all is &#x60;invalid-request&#x60; with &#x60;params.reason&#x60; &#x60;cue-rip&#x60;. 
   ///
   /// Parameters:
   /// * [deleteItemsRequest] 
@@ -597,6 +707,92 @@ class LibraryApi {
     }
 
     return Response<ArtRoles>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// List the files behind an item
+  /// The files behind one item: its primary file, or a book&#39;s parts in reading order, then its copies. A copy is a file a scan found holding the same audio as one of the item&#39;s files (&#x60;same-audio&#x60;) or another encoding of its recording (&#x60;other-encoding&#x60;), and attached to the item rather than giving it an item of its own: its tags do not describe the item, and it plays only when it takes a removed file&#39;s place. A copy in a library the caller cannot see is left out. Needs the &#x60;download&#x60; permission or the admin role, and the item must be visible to the caller; &#x60;path&#x60; is administrators&#39; only. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [ItemFiles] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<ItemFiles>> getItemFiles({ 
+    required String pid,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/{pid}/files'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'GET',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      validateStatus: validateStatus,
+    );
+
+    final _response = await _dio.request<Object>(
+      _path,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    ItemFiles? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(ItemFiles),
+      ) as ItemFiles;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<ItemFiles>(
       data: _responseData,
       headers: _response.headers,
       isRedirect: _response.isRedirect,

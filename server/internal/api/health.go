@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
@@ -209,10 +210,14 @@ func (s *Server) ListUpgrades(ctx context.Context, _ ListUpgradesRequestObject) 
 		for _, m := range g.Members {
 			um := UpgradeMember{
 				ItemPid:  m.ItemPID,
+				FilePid:  service.FileAPIPID(m.FilePID),
 				Title:    m.Title,
 				Codec:    m.Codec,
 				Lossless: m.Lossless,
 				Best:     m.Best,
+			}
+			if m.Path != "" {
+				um.Path = ptr(m.Path)
 			}
 			if m.Artist != "" {
 				um.Artist = ptr(m.Artist)
@@ -241,15 +246,43 @@ func (s *Server) ResolveUpgrade(ctx context.Context, req ResolveUpgradeRequestOb
 	if req.Body == nil {
 		return ResolveUpgrade400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a resolve body is required"))}, nil
 	}
-	trashed, err := s.svc.ResolveUpgrade(ctx, uc, req.Body.KeepItemPid, req.Body.RemoveItemPids)
+	body := service.UpgradeResolveDTO{KeepItemPID: req.Body.KeepItemPid}
+	if req.Body.RemoveItemPids != nil {
+		body.RemoveItemPIDs = *req.Body.RemoveItemPids
+	}
+	if req.Body.KeepFilePid != nil {
+		keep, bad := bareFilePIDs([]string{*req.Body.KeepFilePid})
+		if bad != "" {
+			return ResolveUpgrade400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "bad file pid "+bad))}, nil
+		}
+		body.KeepFilePID = keep[0]
+	}
+	if req.Body.RemoveFilePids != nil {
+		remove, bad := bareFilePIDs(*req.Body.RemoveFilePids)
+		if bad != "" {
+			return ResolveUpgrade400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "bad file pid "+bad))}, nil
+		}
+		body.RemoveFilePIDs = remove
+	}
+	trashed, err := s.svc.ResolveUpgrade(ctx, uc, body)
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
-			return ResolveUpgrade400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+			e := errObj("invalid-request", err.Error())
+			if errors.Is(err, service.ErrCueRipPart) {
+				e.Params = &map[string]string{"reason": "cue-rip"}
+			}
+			return ResolveUpgrade400JSONResponse{InvalidRequestJSONResponse(e)}, nil
 		case service.KindForbidden:
 			return ResolveUpgrade403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindNotFound:
-			return ResolveUpgrade404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such item"))}, nil
+			return ResolveUpgrade404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
+		case service.KindReadOnly:
+			return ResolveUpgrade409JSONResponse(errObj("read-only", err.Error())), nil
+		case service.KindCatalogBusy:
+			return ResolveUpgrade409JSONResponse(errObj(string(service.KindCatalogBusy), err.Error())), nil
+		case service.KindConflict:
+			return ResolveUpgrade409JSONResponse(errObj("conflict", err.Error())), nil
 		}
 		return nil, err
 	}

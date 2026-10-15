@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -455,5 +456,47 @@ func TestGenreTreeReplaceAndReset(t *testing.T) {
 	if back.Source != "default" || len(back.Genres) != shipped {
 		t.Fatalf("clearing left source %q with %d genres, want the shipped %d",
 			back.Source, len(back.Genres), shipped)
+	}
+}
+
+// A normalized genre is attributed to the clean-up pass, not to a person:
+// the editor says where the value came from, and the rule for tags out of
+// sync leaves a catalog-only rewrite alone.
+func TestNormalizedGenresAreAttributedToTheNormalizer(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	f.sweepToQuiet(t)
+	it := f.itemNamed(t, "Lowercase")
+	prov, err := f.svc.lib.Provenance(f.ctx, it.PID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got model.ProvenanceSource
+	for _, p := range prov {
+		if p.Field == "genre" {
+			got = p.Source
+		}
+	}
+	if got != model.SourceNormalize {
+		t.Fatalf("genre provenance = %q, want the normalizer's", got)
+	}
+}
+
+// An item's genres are its display genres, one each, split on the
+// separators a tag holds them with.
+func TestItemGenresAreSplit(t *testing.T) {
+	t.Parallel()
+	f := newGenreFixture(t)
+	it := f.itemNamed(t, "Lowercase")
+	if _, err := f.svc.EditItemMetadata(f.ctx, f.uc, apiPID(PrefixTrack, it.PID),
+		map[string]string{"genre": "R&B; Soul"}, MetadataEditParams{Lock: true}); err != nil {
+		t.Fatal(err)
+	}
+	d, err := f.svc.Item(f.ctx, f.uc, apiPID(PrefixTrack, it.PID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(d.Genres, []string{"R&B", "Soul"}) {
+		t.Fatalf("genres = %q, want each one apart", d.Genres)
 	}
 }

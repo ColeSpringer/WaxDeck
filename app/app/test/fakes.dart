@@ -719,6 +719,9 @@ class FakeRepository implements WaxDeckRepository {
     return album;
   }
 
+  /// The copies [getItem] reports per item, none by default.
+  final Map<String, int> itemDetailCopies = {};
+
   @override
   Future<ItemDetail> getItem(String pid) async {
     await getItemGate?.future;
@@ -759,6 +762,7 @@ class FakeRepository implements WaxDeckRepository {
       sampleRate: itemDetailSampleRate,
       bitrate: itemDetailBitrate,
       addedAt: itemDetailAddedAt,
+      copies: itemDetailCopies[pid] ?? 0,
       mbid: itemDetailMbid[pid],
       isrc: itemDetailIsrc[pid],
     );
@@ -3003,9 +3007,12 @@ class FakeRepository implements WaxDeckRepository {
   }) async {
     final error = reviewError;
     if (error != null) throw error;
-    final filtered = status == null
-        ? reviewEntries
-        : reviewEntries.where((e) => e.status == status).toList();
+    // `decided` is the server's pseudo-status: everything not pending.
+    final filtered = switch (status) {
+      null => reviewEntries,
+      'decided' => reviewEntries.where((e) => e.status != 'pending').toList(),
+      _ => reviewEntries.where((e) => e.status == status).toList(),
+    };
     final start = cursor == null ? 0 : int.parse(cursor);
     final pageSize = limit ?? 50;
     final end = (start + pageSize).clamp(0, filtered.length);
@@ -3154,11 +3161,14 @@ class FakeRepository implements WaxDeckRepository {
     List<String> entryIds, {
     required String action,
   }) async {
+    decideBulkCalls.add((entryIds: entryIds, action: action));
     final error = reviewError;
     if (error != null) throw error;
     return [
       for (final id in entryIds)
-        if (reviewEntries.any((e) => e.id == id))
+        if (bulkOutcomes.remove(id) case final scripted?)
+          scripted
+        else if (reviewEntries.any((e) => e.id == id))
           ReviewBulkOutcome(entryId: (_decide(id, action)).id, ok: true)
         else
           ReviewBulkOutcome(entryId: id, ok: false, error: 'not-found'),
@@ -3171,6 +3181,7 @@ class FakeRepository implements WaxDeckRepository {
         reviewEntries.where((e) => e.status == status).length;
     return ReviewStats(
       pending: count('pending'),
+      decided: reviewEntries.where((e) => e.status != 'pending').length,
       identifying: reviewEntries.where((e) => e.identifying).length,
       applied: count('applied'),
       autoApplied: count('auto-applied'),
@@ -3295,6 +3306,13 @@ class FakeRepository implements WaxDeckRepository {
   /// Runs before each createUpload, ahead of the [uploadError] check;
   /// tests use it to fail a chosen file in a multi-file flow.
   void Function(String fileName)? onCreateUpload;
+
+  /// Thrown by createUpload alone, so the session list (and the
+  /// allowance it carries) still reads: one file refused, nothing else.
+  WaxDeckApiException? createUploadRefusal;
+
+  /// Holds every createUpload until completed, when set.
+  Completer<void>? createUploadGate;
 
   final List<({String uploadId, int offset, int byteCount})>
   putUploadDataCalls = [];
@@ -3425,8 +3443,9 @@ class FakeRepository implements WaxDeckRepository {
     String? batchPath,
     bool? identify,
   }) async {
+    await createUploadGate?.future;
     onCreateUpload?.call(fileName);
-    final error = uploadError;
+    final error = uploadError ?? createUploadRefusal;
     if (error != null) throw error;
     uploadIdentifyCalls.add(identify);
     final upload = UploadSession(
@@ -3454,9 +3473,25 @@ class FakeRepository implements WaxDeckRepository {
     return upload;
   }
 
+  /// Every bulk decision sent, in order.
+  final decideBulkCalls = <({List<String> entryIds, String action})>[];
+
+  /// One-shot outcomes [decideReviewBulk] answers for these entries in
+  /// place of deciding them.
+  final bulkOutcomes = <String, ReviewBulkOutcome>{};
+
+  /// A refusal [completeUpload] answers after releasing the session,
+  /// as the server does for bytes that do not read as audio.
+  WaxDeckApiException? completeRefusal;
+
+  /// How many times [getUpload] was asked.
+  int getUploadCalls = 0;
+
   @override
-  Future<UploadSession> getUpload(String uploadId) async =>
-      _uploadById(uploadId);
+  Future<UploadSession> getUpload(String uploadId) async {
+    getUploadCalls++;
+    return _uploadById(uploadId);
+  }
 
   @override
   Future<void> deleteUpload(String uploadId) async {
@@ -3490,6 +3525,9 @@ class FakeRepository implements WaxDeckRepository {
   >
   acquisitionCalls = [];
 
+  /// Holds every createAcquisition until completed, when set.
+  Completer<void>? createAcquisitionGate;
+
   @override
   Future<ToolTask> createAcquisition({
     required String url,
@@ -3498,6 +3536,7 @@ class FakeRepository implements WaxDeckRepository {
     String? format,
     bool? identify,
   }) async {
+    await createAcquisitionGate?.future;
     final error = uploadError;
     if (error != null) throw error;
     acquisitionCalls.add((
@@ -3520,6 +3559,12 @@ class FakeRepository implements WaxDeckRepository {
   Future<UploadSession> completeUpload(String uploadId) async {
     final error = uploadError;
     if (error != null) throw error;
+    final refusal = completeRefusal;
+    if (refusal != null) {
+      // The server ends a session whose bytes no retry can mend.
+      uploadsById.remove(uploadId);
+      throw refusal;
+    }
     final upload = _uploadById(uploadId);
     if (upload.receivedBytes < upload.sizeBytes) {
       throw const WaxDeckApiException(
@@ -3646,7 +3691,7 @@ class FakeRepository implements WaxDeckRepository {
     ],
     // One reserved key, because the tag editor's refusal is about the
     // set being consulted rather than about which keys are in it.
-    reservedTagKeys: ['BPM'],
+    reservedTagKeys: ['BPM', 'MEDIATYPE', 'NARRATOR'],
   );
 
   void _requireUnlocked(String pid, Iterable<String> fields, bool force) {
@@ -3870,7 +3915,7 @@ class FakeRepository implements WaxDeckRepository {
       );
     } else if (commit.clearLyrics) {
       await part(MetadataCommitPartKind.lyrics, null, () async {
-        await clearItemLyrics(pid);
+        await clearItemLyrics(pid, writeBack: commit.writeBack);
         return null;
       });
     }
@@ -3889,19 +3934,23 @@ class FakeRepository implements WaxDeckRepository {
     // Sorted, as the server applies them: a JSON object carries no order.
     for (final key in commit.tagSets.keys.toList()..sort()) {
       await part(MetadataCommitPartKind.tagSet, key, () async {
-        await setItemTag(
+        final result = await setItemTag(
           pid,
           key,
           values: commit.tagSets[key]!,
+          writeBack: commit.writeBack,
           lock: commit.lock,
           force: commit.force,
         );
-        return null;
+        return MetadataEditResult(
+          applied: true,
+          writeBackFailures: result.writeBackFailures,
+        );
       });
     }
     for (final key in commit.tagRemoves) {
       await part(MetadataCommitPartKind.tagRemove, key, () async {
-        await clearItemTag(pid, key);
+        await clearItemTag(pid, key, writeBack: commit.writeBack);
         return null;
       });
     }
@@ -3909,7 +3958,11 @@ class FakeRepository implements WaxDeckRepository {
       await part(
         MetadataCommitPartKind.releaseStatus,
         null,
-        () => setReleaseStatus(pid, unofficial: unofficial),
+        () => setReleaseStatus(
+          pid,
+          unofficial: unofficial,
+          writeBack: commit.writeBack,
+        ),
       );
     }
     return MetadataCommitResult(
@@ -4021,9 +4074,17 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<void> clearItemLyrics(String pid) async {
+  Future<void> clearItemLyrics(String pid, {bool writeBack = false}) async {
+    partWriteBacks.add((part: 'lyrics clear', writeBack: writeBack));
     lyricsByPid.remove(pid);
   }
+
+  /// The write switch each tag, lyrics-clear and release-status write
+  /// carried, in call order, so a test can see a save forward it.
+  final List<({String part, bool writeBack})> partWriteBacks = [];
+
+  /// Files [setItemTag] answers it could not write, the edit standing.
+  List<WriteBackFailure> tagWriteBackFailures = const [];
 
   @override
   Future<MetadataEditResult> setBookChapters(
@@ -4086,7 +4147,11 @@ class FakeRepository implements WaxDeckRepository {
   final Map<String, bool> entityArtworkLocks = {};
 
   /// Every slot write, so a test can see which role got which bytes.
-  final List<({String pid, String role, int bytes})> setItemArtworkCalls = [];
+  final List<({String pid, String role, int bytes, bool writeBack})>
+  setItemArtworkCalls = [];
+
+  /// The files [setItemArtwork] reports it could not write.
+  List<WriteBackFailure> setItemArtworkFailures = const [];
   final List<({String pid, String role})> clearItemArtworkCalls = [];
 
   @override
@@ -4110,12 +4175,20 @@ class FakeRepository implements WaxDeckRepository {
   }) async {
     final error = metadataError;
     if (error != null) throw error;
-    setItemArtworkCalls.add((pid: pid, role: role, bytes: bytes.length));
+    setItemArtworkCalls.add((
+      pid: pid,
+      role: role,
+      bytes: bytes.length,
+      writeBack: writeBack,
+    ));
     artworkPids.add(pid);
     if (!artRoles.any((r) => r.role == role)) {
       artRoles.add(ArtRoleInfo(role: role, format: 'png', width: 8, height: 8));
     }
-    return const MetadataEditResult(applied: true);
+    return MetadataEditResult(
+      applied: true,
+      writeBackFailures: setItemArtworkFailures,
+    );
   }
 
   @override
@@ -4232,17 +4305,28 @@ class FakeRepository implements WaxDeckRepository {
     String pid,
     String key, {
     required List<String> values,
+    bool writeBack = false,
     bool lock = true,
     bool force = false,
   }) async {
     final error = metadataError;
     if (error != null) throw error;
+    partWriteBacks.add((part: 'tag $key', writeBack: writeBack));
     (tagsByPid[pid] ??= {})[key] = List.of(values);
-    return TagEditResult(key: key, stored: values.length);
+    return TagEditResult(
+      key: key,
+      stored: values.length,
+      writeBackFailures: writeBack ? tagWriteBackFailures : const [],
+    );
   }
 
   @override
-  Future<void> clearItemTag(String pid, String key) async {
+  Future<void> clearItemTag(
+    String pid,
+    String key, {
+    bool writeBack = false,
+  }) async {
+    partWriteBacks.add((part: 'untag $key', writeBack: writeBack));
     tagsByPid[pid]?.remove(key);
   }
 
@@ -4337,6 +4421,47 @@ class FakeRepository implements WaxDeckRepository {
       );
     }
     return detail;
+  }
+
+  final setKindCalls =
+      <({List<String> pids, String mediaType, bool writeBack})>[];
+
+  /// Starts a kind change: answers it running and lists it finished, the
+  /// first item named under its new kind's prefix, unless a test put its
+  /// own job in [jobs] first.
+  @override
+  Future<Job> setItemKind(
+    List<String> pids, {
+    required String mediaType,
+    bool writeBack = false,
+  }) async {
+    final error = metadataError;
+    if (error != null) throw error;
+    setKindCalls.add((pids: pids, mediaType: mediaType, writeBack: writeBack));
+    const pid = 'jb-01JZX5N8QW3F4V9T2B7KDKIND00';
+    final first =
+        '${mediaType == 'audiobook' ? 'bk' : 'tr'}-${pids.first.substring(3)}';
+    if (!jobs.any((j) => j.pid == pid)) {
+      jobs = [
+        ...jobs,
+        Job(
+          pid: pid,
+          kind: 'set-kind',
+          state: 'done',
+          result: {
+            'converted': [first],
+            'absorbed': {
+              for (final p in pids.skip(1))
+                '${mediaType == 'audiobook' ? 'tr' : 'bk'}-${p.substring(3)}':
+                    first,
+            },
+            'created': const <String>[],
+            'writeBackFailures': const <Object>[],
+          },
+        ),
+      ];
+    }
+    return const Job(pid: pid, kind: 'set-kind', state: 'running');
   }
 
   @override
@@ -4434,8 +4559,10 @@ class FakeRepository implements WaxDeckRepository {
   Future<MetadataEditResult> setReleaseStatus(
     String pid, {
     required bool unofficial,
+    bool writeBack = false,
   }) async {
     setReleaseStatusCalls.add((pid: pid, unofficial: unofficial));
+    partWriteBacks.add((part: 'release status', writeBack: writeBack));
     unofficial ? unofficialPids.add(pid) : unofficialPids.remove(pid);
     return const MetadataEditResult(applied: true);
   }
@@ -4522,8 +4649,25 @@ class FakeRepository implements WaxDeckRepository {
   mergeDuplicatesCalls = [];
 
   List<UpgradeGroup> upgradeGroups = const [];
-  final List<({String keepItemPid, List<String> removeItemPids})>
+  final List<
+    ({
+      String keepItemPid,
+      List<String> removeItemPids,
+      String? keepFilePid,
+      List<String> removeFilePids,
+    })
+  >
   resolveUpgradeCalls = [];
+
+  /// Thrown by [listUpgrades] when set; [listUpgradesCalls] counts the
+  /// asks.
+  WaxDeckApiException? upgradesError;
+  int listUpgradesCalls = 0;
+
+  /// Thrown by [resolveUpgrade] after it trashed what it was named, as
+  /// the server refuses a move the trash could not make once the others
+  /// went.
+  WaxDeckApiException? resolveUpgradeRefusal;
   final List<FileDiagnostic> fileDiagnostics = [];
   final List<DiagnosticCount> diagnosticCounts = [];
 
@@ -4632,24 +4776,35 @@ class FakeRepository implements WaxDeckRepository {
   }
 
   @override
-  Future<List<UpgradeGroup>> listUpgrades() async => List.of(upgradeGroups);
+  Future<List<UpgradeGroup>> listUpgrades() async {
+    listUpgradesCalls++;
+    final error = upgradesError;
+    if (error != null) throw error;
+    return List.of(upgradeGroups);
+  }
 
   @override
   Future<int> resolveUpgrade({
     required String keepItemPid,
-    required List<String> removeItemPids,
+    List<String> removeItemPids = const [],
+    String? keepFilePid,
+    List<String> removeFilePids = const [],
   }) async {
     final error = healthError;
     if (error != null) throw error;
     resolveUpgradeCalls.add((
       keepItemPid: keepItemPid,
       removeItemPids: List.of(removeItemPids),
+      keepFilePid: keepFilePid,
+      removeFilePids: List.of(removeFilePids),
     ));
     upgradeGroups = [
       for (final g in upgradeGroups)
         if (!g.members.any((m) => m.itemPid == keepItemPid)) g,
     ];
-    return removeItemPids.length;
+    final refusal = resolveUpgradeRefusal;
+    if (refusal != null) throw refusal;
+    return removeItemPids.length + removeFilePids.length;
   }
 
   /// Organize profiles and canned results.
@@ -4774,9 +4929,11 @@ class FakeRepository implements WaxDeckRepository {
       pid: l.pid,
       name: l.name,
       media: l.media,
+      mediaDeclared: l.mediaDeclared,
       path: l.path,
       itemCount: l.itemCount,
       readOnly: l.readOnly,
+      folderFallback: l.folderFallback,
       managed: l.managed,
       profile: profile,
     );
@@ -5919,15 +6076,29 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<List<Job>> listJobs() async {
     jobReads++;
-    return List.of(jobs);
+    // The server's listing: a finished targeted job is left out, so a
+    // burst of one-item runs does not bury the passes, except a kind
+    // change, which someone asked for and is told the result of.
+    return [
+      for (final job in jobs)
+        if (job.target == null ||
+            job.state == 'running' ||
+            job.kind == 'set-kind')
+          job,
+    ];
   }
 
   /// How many single-job reads were made.
   int jobByPidReads = 0;
 
+  /// Thrown by [getJob] when set.
+  WaxDeckApiException? getJobError;
+
   @override
   Future<Job> getJob(String pid) async {
     jobByPidReads++;
+    final error = getJobError;
+    if (error != null) throw error;
     for (final job in jobs) {
       if (job.pid == pid) return job;
     }
@@ -5957,9 +6128,11 @@ class FakeRepository implements WaxDeckRepository {
         pid: l.pid,
         name: l.name,
         media: l.media,
+        mediaDeclared: l.mediaDeclared,
         path: l.path,
         itemCount: l.itemCount,
         readOnly: readOnly,
+        folderFallback: l.folderFallback,
         managed: l.managed,
         profile: l.profile,
       );
@@ -5967,11 +6140,74 @@ class FakeRepository implements WaxDeckRepository {
     return readOnly;
   }
 
+  final List<({String libraryPid, bool on})> setLibraryFolderFallbackCalls = [];
+
+  final List<({String libraryPid, String media})> setLibraryMediaCalls = [];
+
+  /// Whether [setLibraryMedia] reports the scan that applies it started.
+  bool libraryMediaScanStarts = true;
+
+  /// Changes what the listed library holds, as the catalog would.
+  @override
+  Future<bool> setLibraryMedia(String libraryPid, String media) async {
+    await libraryWriteGate?.future;
+    final error = adminError;
+    if (error != null) throw error;
+    setLibraryMediaCalls.add((libraryPid: libraryPid, media: media));
+    final i = libraries.indexWhere((l) => l.pid == libraryPid);
+    if (i >= 0) {
+      final l = libraries[i];
+      libraries[i] = LibraryInfo(
+        pid: l.pid,
+        name: l.name,
+        media: media,
+        mediaDeclared: l.mediaDeclared,
+        path: l.path,
+        itemCount: l.itemCount,
+        readOnly: l.readOnly,
+        folderFallback: l.folderFallback,
+        managed: l.managed,
+        profile: l.profile,
+      );
+    }
+    return libraryMediaScanStarts;
+  }
+
+  /// Flips the folder fallback on the listed library, as the catalog
+  /// would.
+  @override
+  Future<bool> setLibraryFolderFallback(String libraryPid, bool on) async {
+    await libraryWriteGate?.future;
+    final error = adminError;
+    if (error != null) throw error;
+    setLibraryFolderFallbackCalls.add((libraryPid: libraryPid, on: on));
+    final i = libraries.indexWhere((l) => l.pid == libraryPid);
+    if (i >= 0) {
+      final l = libraries[i];
+      libraries[i] = LibraryInfo(
+        pid: l.pid,
+        name: l.name,
+        media: l.media,
+        mediaDeclared: l.mediaDeclared,
+        path: l.path,
+        itemCount: l.itemCount,
+        readOnly: l.readOnly,
+        folderFallback: on,
+        managed: l.managed,
+        profile: l.profile,
+      );
+    }
+    return on;
+  }
+
   /// Preset delete plans by pid; absent pids get one file of 1 MiB.
   final Map<String, DeletePlanEntry> deletePlansByPid = {};
 
   /// Thrown by [deleteLibraryItems] when set.
   WaxDeckApiException? deleteItemsError;
+
+  /// What an applied [deleteLibraryItems] says beside removing files.
+  List<String> deleteItemsWarnings = const [];
 
   final List<({List<String> pids, String? mode, bool dryRun})>
   deleteItemsCalls = [];
@@ -5997,6 +6233,71 @@ class FakeRepository implements WaxDeckRepository {
       applied: !dryRun,
       mode: mode ?? 'trash',
       entries: entries,
+      warnings: dryRun ? const [] : deleteItemsWarnings,
+    );
+  }
+
+  /// The files [getItemFiles] answers and [deleteItemFiles] removes from,
+  /// by item pid.
+  final Map<String, List<ItemFile>> itemFilesByPid = {};
+
+  /// Thrown by [getItemFiles] when set.
+  WaxDeckApiException? itemFilesError;
+
+  @override
+  Future<List<ItemFile>> getItemFiles(String pid) async {
+    final error = itemFilesError;
+    if (error != null) throw error;
+    return itemFilesByPid[pid] ?? const [];
+  }
+
+  final List<({String pid, List<String> filePids, String? mode, bool dryRun})>
+  deleteItemFilesCalls = [];
+
+  @override
+  Future<DeleteItemsResult> deleteItemFiles({
+    required String pid,
+    required List<String> filePids,
+    String? mode,
+    bool dryRun = false,
+  }) async {
+    final error = deleteItemsError;
+    if (error != null) throw error;
+    deleteItemFilesCalls.add((
+      pid: pid,
+      filePids: filePids,
+      mode: mode,
+      dryRun: dryRun,
+    ));
+    final files = itemFilesByPid[pid] ?? const <ItemFile>[];
+    final going = [
+      for (final f in files)
+        if (filePids.contains(f.filePid))
+          DeletePlanFile(
+            filePid: f.filePid,
+            name: f.name,
+            sizeBytes: f.sizeBytes,
+            role: f.role,
+          ),
+    ];
+    if (!dryRun) {
+      itemFilesByPid[pid] = [
+        for (final f in files)
+          if (!filePids.contains(f.filePid)) f,
+      ];
+    }
+    return DeleteItemsResult(
+      applied: !dryRun,
+      mode: mode ?? 'trash',
+      entries: [
+        DeletePlanEntry(
+          pid: pid,
+          files: going.length,
+          bytes: going.fold(0, (sum, f) => sum + (f.sizeBytes ?? 0)),
+          fileList: going,
+          itemSurvives: files.any((f) => !filePids.contains(f.filePid)),
+        ),
+      ],
     );
   }
 
@@ -6758,6 +7059,7 @@ ReviewEntry testReviewEntry(
   String? uploadedBy,
   bool identifying = false,
   CandidateSummary? best,
+  int duplicateCount = 0,
 }) => ReviewEntry(
   id: id,
   kind: kind,
@@ -6771,6 +7073,7 @@ ReviewEntry testReviewEntry(
   identifying: identifying,
   best: best,
   createdAt: DateTime.utc(2026, 7, 1),
+  duplicateCount: duplicateCount,
 );
 
 /// Handy upload-session factory for tests.

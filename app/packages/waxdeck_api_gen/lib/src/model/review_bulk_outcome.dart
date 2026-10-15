@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -13,7 +14,9 @@ part 'review_bulk_outcome.g.dart';
 /// Properties:
 /// * [entryId] - The entry.
 /// * [ok] - Whether the decision applied.
+/// * [code] - The error code the single-entry decide would have answered (`not-found`, `conflict`, `catalog-busy`, `read-only`, ...), when `ok` is false. `catalog-busy` clears on its own, so those entries can be sent again. 
 /// * [error] - Why it did not, when `ok` is false.
+/// * [warnings] - What the single-entry decide reports under `warnings`, when `ok` is true: the decision stood, with these problems. 
 @BuiltValue()
 abstract class ReviewBulkOutcome implements Built<ReviewBulkOutcome, ReviewBulkOutcomeBuilder> {
   /// The entry.
@@ -24,9 +27,17 @@ abstract class ReviewBulkOutcome implements Built<ReviewBulkOutcome, ReviewBulkO
   @BuiltValueField(wireName: r'ok')
   bool get ok;
 
+  /// The error code the single-entry decide would have answered (`not-found`, `conflict`, `catalog-busy`, `read-only`, ...), when `ok` is false. `catalog-busy` clears on its own, so those entries can be sent again. 
+  @BuiltValueField(wireName: r'code')
+  String? get code;
+
   /// Why it did not, when `ok` is false.
   @BuiltValueField(wireName: r'error')
   String? get error;
+
+  /// What the single-entry decide reports under `warnings`, when `ok` is true: the decision stood, with these problems. 
+  @BuiltValueField(wireName: r'warnings')
+  BuiltList<String>? get warnings;
 
   ReviewBulkOutcome._();
 
@@ -61,11 +72,25 @@ class _$ReviewBulkOutcomeSerializer implements PrimitiveSerializer<ReviewBulkOut
       object.ok,
       specifiedType: const FullType(bool),
     );
+    if (object.code != null) {
+      yield r'code';
+      yield serializers.serialize(
+        object.code,
+        specifiedType: const FullType(String),
+      );
+    }
     if (object.error != null) {
       yield r'error';
       yield serializers.serialize(
         object.error,
         specifiedType: const FullType(String),
+      );
+    }
+    if (object.warnings != null) {
+      yield r'warnings';
+      yield serializers.serialize(
+        object.warnings,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
       );
     }
   }
@@ -105,6 +130,14 @@ class _$ReviewBulkOutcomeSerializer implements PrimitiveSerializer<ReviewBulkOut
           ) as bool;
           result.ok = valueDes;
           break;
+        case r'code':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.code = valueDes;
+          break;
         case r'error':
           final valueDes = serializers.deserialize(
             value,
@@ -112,6 +145,14 @@ class _$ReviewBulkOutcomeSerializer implements PrimitiveSerializer<ReviewBulkOut
           ) as String?;
           if (valueDes == null) continue;
           result.error = valueDes;
+          break;
+        case r'warnings':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
+          result.warnings.replace(valueDes);
           break;
         default:
           unhandled.add(key);

@@ -456,3 +456,23 @@ func TestSeedRootsLeavesOutARefusedRoot(t *testing.T) {
 		t.Errorf("seed without a sidecar file = %v, want every root", got)
 	}
 }
+
+// A configured root the sidecar's file does not hold is not seeded as
+// served: left out, it is taught, which writes it into the file and
+// reloads the sidecar. Seeded, nothing would ever tell the sidecar.
+func TestSeedRootsLeavesAConfiguredRootTheFileLacksToBeTaught(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "waxflow.json")
+	if err := os.WriteFile(path, []byte(`{"roots":[{"name":"lib","path":"/library"}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	configured := []Root{{Name: "lib", Path: "/library"}, {Name: "books", Path: "/audiobooks"}}
+	got := SeedRoots(configured, configured, path)
+	if len(got) != 1 || got[0].Name != "lib" {
+		t.Errorf("seed = %v, want only the root the file holds", got)
+	}
+	// A file that cannot be read cannot be reloaded either, so the
+	// configuration is all there is to go on.
+	if got := SeedRoots(configured, configured, filepath.Join(t.TempDir(), "absent.json")); len(got) != 2 {
+		t.Errorf("seed with no readable file = %v, want every configured root", got)
+	}
+}

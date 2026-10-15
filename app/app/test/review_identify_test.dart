@@ -48,6 +48,17 @@ FakeRepository _repo(ReviewEntryDetail detail) {
 Finder _field(String name) =>
     find.bySemanticsIdentifier(SemanticsIds.reviewIdentifyField(name));
 
+/// Presses Search again, scrolled to the middle of the view first: the
+/// decision bar under the pane is two rows tall at this width, so the
+/// button can sit below the scroll's visible end, and the top is under
+/// the pinned app bar.
+Future<void> _submit(WidgetTester tester) async {
+  final submit = find.bySemanticsIdentifier(SemanticsIds.reviewIdentifySubmit);
+  await Scrollable.ensureVisible(tester.element(submit), alignment: 0.5);
+  await tester.pumpAndSettle();
+  await tester.tap(submit);
+}
+
 void main() {
   testWidgets('the group is offered on a pending entry, collapsed', (
     tester,
@@ -103,9 +114,7 @@ void main() {
     await tester.enterText(_field('artist'), 'Nas');
     await tester.enterText(_field('title'), "How Ya Livin'");
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.reviewIdentifySubmit),
-    );
+    await _submit(tester);
     await tester.pumpAndSettle();
 
     expect(repo.reidentifyCalls, hasLength(1));
@@ -130,9 +139,7 @@ void main() {
     await tester.enterText(_field('artist'), '');
     await tester.enterText(_field('title'), '');
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.reviewIdentifySubmit),
-    );
+    await _submit(tester);
     await tester.pumpAndSettle();
 
     final call = repo.reidentifyCalls.single;
@@ -195,9 +202,7 @@ void main() {
 
     // Accepting it as-is sends the guess, so nobody retypes what the
     // parse already read.
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.reviewIdentifySubmit),
-    );
+    await _submit(tester);
     await tester.pumpAndSettle();
     final call = repo.reidentifyCalls.single;
     expect(call.artist, 'Nas');
@@ -259,9 +264,7 @@ void main() {
     // The entry refetches with a different stored value - another
     // device searched, or the server normalised what was sent.
     repo.reidentifyStoresInstead = const ReviewOverride(artist: 'Nas Escobar');
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.reviewIdentifySubmit),
-    );
+    await _submit(tester);
     await tester.pumpAndSettle();
 
     expect(find.text('Nas Escobar'), findsOne);
@@ -281,9 +284,7 @@ void main() {
     repo.reidentifyStoresInstead = const ReviewOverride(
       artist: 'Somebody Else',
     );
-    await tester.tap(
-      find.bySemanticsIdentifier(SemanticsIds.reviewIdentifySubmit),
-    );
+    await _submit(tester);
     await tester.pumpAndSettle();
 
     // What was being typed is what the server was sent, and it is still

@@ -47,6 +47,13 @@ Read by compose itself, not the server.
   default and make the library writable by uid 10001.
 - `WAXDECK_TAG` (default `latest`): image tag of the stack, for
   pinning a release (`WAXDECK_TAG=v1.0.0`).
+- `WAXDECK_AUDIOBOOKS`: host path of an audiobook folder kept apart
+  from the music library. Set, `make up` adds
+  `deploy/compose.audiobooks.yaml`, which mounts it as the root
+  `books`, adds it to `WAXDECK_LIBRARY_ROOTS` and names it in
+  `WAXDECK_AUDIOBOOK_ROOTS`; those two values then come from that file,
+  whatever `deploy/.env` sets them to. By hand it is `docker compose -f
+  deploy/compose.yaml -f deploy/compose.audiobooks.yaml`.
 - `WAXFLOW_API_KEYS`: API keys the WaxFlow sidecar accepts, comma
   separated; generate each with `openssl rand -hex 24`. `make up`
   seeds one. `WAXDECK_FLOW_API_KEY` must be one of these values.
@@ -111,9 +118,21 @@ Read by compose itself, not the server.
 
 - `WAXDECK_LIBRARY_ROOTS`: library roots as `name=path` pairs, comma
   separated. Root names must match the WaxFlow roots serving the same
-  directories; under compose this is pinned to `lib=/library`. A root
+  directories; under compose this is pinned to `lib=/library` (plus
+  `books=/audiobooks` when `WAXDECK_AUDIOBOOKS` is set). A root
   overlapping a library added in the console is left out, with a
-  warning in the log.
+  warning in the log. A root set here is registered as Mixed - each
+  file classified by its own tags - unless `WAXDECK_AUDIOBOOK_ROOTS`
+  names it; one whose type was later changed in the console keeps that
+  change.
+- `WAXDECK_AUDIOBOOK_ROOTS`: root names (comma separated) that hold
+  audiobooks. Every audio file in such a root is cataloged as a book, so
+  a folder of plain MP3 parts needs no tagging. The setting wins at every
+  start: a named root changed to another type in the console is put back
+  to Books. Under compose, set `WAXDECK_AUDIOBOOKS` in `deploy/.env` to
+  your audiobook folder instead; `make up` mounts it as the root `books`
+  and pins this to `books` (`deploy/compose.audiobooks.yaml`), over any
+  value `deploy/.env` gives it.
 - `WAXDECK_MANAGED_ROOTS`: root names (comma separated) the catalog
   may place files into - uploads import there and the organizer may
   move files there; unlisted roots stay strictly in place. The compose
@@ -126,8 +145,9 @@ Read by compose itself, not the server.
   screen, or `POST /library/rescan` with `{"force": true}`) can
   instead re-read every file: the repair pass for rows written before
   a tag-parser fix (ALAC files scanned before waxlabel 1.4.2 store a
-  wrong bit depth, and only a forced rescan heals them). Curated
-  edits survive it.
+  wrong bit depth, and only a forced rescan heals them), or after a
+  library is moved off Books, whose files are then read again as
+  tracks. Curated edits survive it.
 - `WAXDECK_LIBRARY_WATCH` (default `true`): watch the library roots
   and catalog files placed there by hand without waiting for a rescan.
   Network mounts (NFS, SMB, 9p) rarely deliver change events; disable

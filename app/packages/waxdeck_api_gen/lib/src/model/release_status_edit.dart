@@ -12,18 +12,24 @@ part 'release_status_edit.g.dart';
 ///
 /// Properties:
 /// * [unofficial] - True marks the item as having no canonical release; false clears the mark. 
+/// * [writeBack] - Also write the mark into (or strip it from) the item's files' `RELEASESTATUS` tag. 
 @BuiltValue()
 abstract class ReleaseStatusEdit implements Built<ReleaseStatusEdit, ReleaseStatusEditBuilder> {
   /// True marks the item as having no canonical release; false clears the mark. 
   @BuiltValueField(wireName: r'unofficial')
   bool get unofficial;
 
+  /// Also write the mark into (or strip it from) the item's files' `RELEASESTATUS` tag. 
+  @BuiltValueField(wireName: r'writeBack')
+  bool? get writeBack;
+
   ReleaseStatusEdit._();
 
   factory ReleaseStatusEdit([void updates(ReleaseStatusEditBuilder b)]) = _$ReleaseStatusEdit;
 
   @BuiltValueHook(initializeBuilder: true)
-  static void _defaults(ReleaseStatusEditBuilder b) => b;
+  static void _defaults(ReleaseStatusEditBuilder b) => b
+      ..writeBack = false;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<ReleaseStatusEdit> get serializer => _$ReleaseStatusEditSerializer();
@@ -46,6 +52,13 @@ class _$ReleaseStatusEditSerializer implements PrimitiveSerializer<ReleaseStatus
       object.unofficial,
       specifiedType: const FullType(bool),
     );
+    if (object.writeBack != null) {
+      yield r'writeBack';
+      yield serializers.serialize(
+        object.writeBack,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -75,6 +88,14 @@ class _$ReleaseStatusEditSerializer implements PrimitiveSerializer<ReleaseStatus
             specifiedType: const FullType(bool),
           ) as bool;
           result.unofficial = valueDes;
+          break;
+        case r'writeBack':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.writeBack = valueDes;
           break;
         default:
           unhandled.add(key);

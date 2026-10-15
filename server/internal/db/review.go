@@ -164,6 +164,26 @@ func (d *DB) ListReviewEntries(ctx context.Context, status, uploader string, bef
 	return out, rows.Err()
 }
 
+// ReviewEntriesWaitingForCatalog lists the pending entries whose declined
+// import waits for the catalog to free.
+func (d *DB) ReviewEntriesWaitingForCatalog(ctx context.Context) ([]string, error) {
+	rows, err := d.r.QueryContext(ctx, `SELECT id FROM review_entries
+		WHERE status = 'pending' AND json_extract(payload, '$.waitingForCatalog') = 1`)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing entries waiting for the catalog: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("db: scanning an entry waiting for the catalog: %w", err)
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 // ReviewStats aggregates entry counts by status plus the auto-apply
 // calibration counters.
 type ReviewStats struct {
@@ -176,12 +196,17 @@ type ReviewStats struct {
 	Skipped             int
 	Reverted            int
 	RevertedAutoApplied int
+	// Decided is every status but pending: the size of the "decided"
+	// listing.
+	Decided int
 }
 
-// ReviewStatsNow computes the current statistics.
-func (d *DB) ReviewStatsNow(ctx context.Context) (ReviewStats, error) {
+// ReviewStatsNow computes the current statistics over the entries
+// uploader's uploads produced, or over every entry when uploader is
+// empty: the scope ListReviewEntries takes.
+func (d *DB) ReviewStatsNow(ctx context.Context, uploader string) (ReviewStats, error) {
 	var s ReviewStats
-	err := d.r.QueryRowContext(ctx, `
+	q := `
 		SELECT
 			COUNT(*) FILTER (WHERE status = 'pending'),
 			COUNT(*) FILTER (WHERE status = 'pending' AND identifying = 1),
@@ -191,10 +216,17 @@ func (d *DB) ReviewStatsNow(ctx context.Context) (ReviewStats, error) {
 			COUNT(*) FILTER (WHERE status = 'unofficial'),
 			COUNT(*) FILTER (WHERE status = 'skipped'),
 			COUNT(*) FILTER (WHERE status = 'reverted'),
-			COUNT(*) FILTER (WHERE status = 'reverted' AND auto = 1)
-		FROM review_entries`).Scan(
+			COUNT(*) FILTER (WHERE status = 'reverted' AND auto = 1),
+			COUNT(*) FILTER (WHERE status != 'pending')
+		FROM review_entries`
+	var args []any
+	if uploader != "" {
+		q += ` WHERE uploaded_by = ?`
+		args = append(args, uploader)
+	}
+	err := d.r.QueryRowContext(ctx, q, args...).Scan(
 		&s.Pending, &s.Identifying, &s.Applied, &s.AutoApplied, &s.AsIs,
-		&s.Unofficial, &s.Skipped, &s.Reverted, &s.RevertedAutoApplied)
+		&s.Unofficial, &s.Skipped, &s.Reverted, &s.RevertedAutoApplied, &s.Decided)
 	if err != nil {
 		return ReviewStats{}, fmt.Errorf("db: review stats: %w", err)
 	}

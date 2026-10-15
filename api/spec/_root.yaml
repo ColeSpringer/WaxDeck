@@ -81,7 +81,13 @@ info:
       `pe-` player endpoint, `ps-` playback session, `rv-` review
       entry, `up-` upload, `tk-` tool task, `iv-` invite, `bu-` backup
       archive, `th-` trash entry, `sh-` share link, `nf-` inbox row,
-      `mx-` staged migration export, `tl-` gapless rendering).
+      `mx-` staged migration export, `tl-` gapless rendering, `fl-` file
+      behind an item). A track's
+      and a book's prefix follow the item's kind, which can change under
+      it (`POST /items/kind`, a library made to hold audiobooks, a
+      retag), so either of the two reaches the item: a queue or a
+      playlist holding the old form still resolves, and every answer
+      carries the current one. Other prefixes are strict.
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
@@ -158,7 +164,12 @@ info:
       running without the streaming engine), and other refusals under
       that code carry no params yet. Under `conflict`, a bookmark create
       replaying the id of a removed bookmark carries `reason: removed`,
-      and a client drops its copy. Under `invalid-request`, `reason` names
+      and a client drops its copy; a completed upload whose bytes miss
+      their declared SHA-256 carries `reason: checksum-mismatch`, its
+      session already ended. Under `unsupported-format`,
+      `reason: unreadable` marks a completed upload whose bytes do not
+      read as audio at all, a damaged file rather than a format the
+      server refuses. Under `invalid-request`, `reason` names
       two refusals a client words itself: `incompatible-schema` (a backup
       whose schema this server cannot open) and `cue-rip` (a delete
       naming some tracks of a cue rip but not all). Values are

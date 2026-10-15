@@ -165,8 +165,13 @@ paths:
       description: >
         State and progress of a server-run catalog job, for the audience
         the `job` sync marker reaches: administrators, and the starter of
-        a targeted job until its end has been announced to them; anyone
-        else is `forbidden`. A timeline-measurement job (the job a queue
+        a targeted job until its end has been announced to them. Once a
+        job on an item has ended, anyone who may edit that item (its
+        `mayCurate`) reads it too, which is how a kind change's starter
+        reads its result after the end notice; anyone else is
+        `forbidden`. For a reader who is not an administrator, a scan's
+        `runs` and the write-back failures' `path`s are left out and
+        `error` carries no server paths. A timeline-measurement job (the job a queue
         timeline answers `202` with) is readable by the account whose
         queue it measures alone, and is `not-found` to any other.
       tags: [admin]
@@ -223,6 +228,49 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /libraries/{pid}/media:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setLibraryMedia
+      summary: Change what a library holds
+      description: >
+        Changes the library's content class in place and starts the scan
+        that applies it to the files already there. Onto `audiobook`, the
+        library's audio files become books (its plain parts gathered into
+        one book per album and author) on an ordinary scan. Onto `music`
+        or `mixed`, the scan re-reads every file and classifies it by its
+        tags: in `music` a book its parts' tags do not make one is read
+        again as tracks, while in `mixed` a book whose parts already make
+        one keeps them. Items whose kind was set by hand or by an upload
+        keep it either way. The podcast library is `invalid-request`,
+        and so is moving a root `WAXDECK_AUDIOBOOK_ROOTS` declares
+        (`mediaDeclared`) off audiobook. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryMedia"
+      responses:
+        "200":
+          description: The library, and whether its scan started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryMediaChanged"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /libraries/{pid}/read-only:
     parameters:
       - $ref: "#/components/parameters/Pid"
@@ -258,14 +306,58 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /libraries/{pid}/folder-fallback:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setLibraryFolderFallback
+      summary: Name untagged files from their folders
+      description: >
+        Lets a scan name a track that carries no artist, album artist
+        or album at all from its folders: the grandparent folder as the
+        artist and the parent as the album, less a trailing ` (YYYY)`.
+        It needs a file two folders down, so a loose file names nothing,
+        and never applies to a book. Files scanned from now on take it;
+        an unchanged file already scanned takes it on a rescan that
+        reads every file again (`force`). Only an in-place library takes
+        it: a managed library's folders are the catalog's own rendering,
+        and asking for one answers `invalid-request`, as the podcast
+        library does. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryFolderFallback"
+      responses:
+        "200":
+          description: The stored flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryFolderFallback"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /jobs:
     get:
       operationId: listJobs
       summary: List recent catalog jobs
       description: >
         Recent catalog jobs, newest first: `limit` of them, after any still
-        running. A finished targeted job is left out; read it by pid. The
-        `job` sync marker says when to read again. Administrators only.
+        running. A finished targeted job is left out (read it by pid),
+        except a kind change (`set-kind`), which lists with its result.
+        The `job` sync marker says when to read again. Administrators
+        only.
       tags: [admin]
       parameters:
         - name: limit
@@ -1360,6 +1452,13 @@ components:
             Content class the library holds. Currently `music`,
             `audiobook`, `podcast`, or `mixed`; new values may appear.
           example: music
+        mediaDeclared:
+          type: boolean
+          description: >
+            The server's configuration names what the library holds
+            (`WAXDECK_AUDIOBOOK_ROOTS`), so setLibraryMedia refuses any
+            other media until the configuration changes. Absent means
+            false.
         path:
           type: string
           description: >
@@ -1378,6 +1477,11 @@ components:
         readOnly:
           type: boolean
           description: The catalog keeps the library's files as they are.
+        folderFallback:
+          type: boolean
+          description: >
+            A scan names an untagged file from its folders
+            (setLibraryFolderFallback). In-place libraries only.
         managed:
           type: boolean
           description: The catalog may place and move files in the library.
@@ -1447,8 +1551,17 @@ components:
           enum: [music, audiobook, mixed]
           default: mixed
           description: >
-            Content class the root holds. `mixed` (the default) admits both
-            tracks and books.
+            What the root holds, which decides what its files become.
+            `audiobook` makes every audio file in the root a book: parts
+            sharing an album title and author are one book, and numbered
+            parts with no album tag join the book their folder holds.
+            `music` and `mixed` (the default) classify each file by its
+            tags: an `.m4b` file, an audiobook media type, a narrator
+            credit or an Audiobook genre makes a book, and in `mixed` the
+            other parts of a book the first three mark join it (the genre
+            marks only its own file). The class also routes
+            managed placement. It can be changed with
+            `PUT /libraries/{pid}/media`.
         managed:
           type: boolean
           default: false
@@ -1470,8 +1583,8 @@ components:
           type: string
           description: >
             What the job does: `scan`, `analyze`, `enrich`, `organize`,
-            `import`, `delete`, `restore`, `empty-trash`, or `purge-trash`.
-            New kinds may appear.
+            `import`, `delete`, `restore`, `empty-trash`, `purge-trash`, or
+            `set-kind`. New kinds may appear.
           example: scan
         state:
           type: string
@@ -1492,7 +1605,10 @@ components:
           description: Human-readable progress note.
         error:
           type: string
-          description: Failure detail for `failed`/`crashed` jobs.
+          description: >
+            Failure detail for `failed`/`crashed` jobs. Administrators
+            read the catalog's own text; anyone else reads it without
+            the server's storage paths or operation names.
         startedAt:
           type: string
           format: date-time
@@ -1505,14 +1621,44 @@ components:
           type: object
           additionalProperties: true
           description: >
-            What a finished job did, once it records a summary: a `scan`
-            reports `filesSeen`, `created`, `updated`, `relinked`,
-            `unchanged`, `missing`, `skipped` and `errored` (files); an
-            `analyze` pass `analyzed`, `loudnessMeasured`, `measureFailed`,
-            `skipped` and `errored`; an `enrich` pass the same tallies as
-            the enrichment status's `lastRun`; an `organize` run `profile`,
-            `moved`, `skipped`, `errored` and `sidecarsMoved`. Absent while
-            running and for kinds that record none. Shapes may grow fields.
+            What a finished job did, once it records a summary. A `scan`
+            counts files: `audioFiles` (every audio file it visited) is
+            `created`, `updated`, `sidecarsUpdated` (a lyrics, cue or
+            cover change without the audio changing), `copies` (files that
+            joined an item as another copy of its audio or another
+            encoding of its recording), `unchanged` and `errored`
+            together, and `filesSeen` is `audioFiles` and `skipped`
+            (files that are not audio). `relinked` (moved or renamed) and
+            `reread` (read in full rather than recognized by size and
+            time) count among the audio files; `missing` counts items
+            whose files are gone, `promoted` copies that took a gone
+            file's place, `dropped` the records of gone files removed, and
+            `walkErrors` entries the scan could not read, which no file
+            count holds. `rootUnreachable` says a library's folder could
+            not be reached, so nothing under it was marked missing, and
+            `subPathGone` that the folder asked for was not there. For
+            administrators, `runs` lists each library's own counts in the
+            same words, with its `libraryPid` and `library` name. An
+            `analyze` pass reports `analyzed`, `loudnessMeasured`,
+            `measureFailed`, `skipped` and `errored`, with
+            `fingerprintFallbacks` (files fpcalc could not read,
+            fingerprinted another way that does not group with fpcalc's)
+            and `fingerprintPartialReads` (fpcalc reads kept although
+            they ended in an error, their fingerprint covering the span
+            analyzed); an `enrich` pass the
+            same tallies as the enrichment status's `lastRun`; an
+            `organize` run `profile`, `moved`, `skipped`, `errored` and
+            `sidecarsMoved`. A `set-kind` run reports `converted` (the
+            items that changed kind in place), `absorbed` (each pid folded
+            into another item, which no longer exists, mapped to the item
+            that took it in, or to an empty string when that item is in a
+            library the reader is not granted), `created` (the items a book
+            split minted for its parts) and `writeBackFailures` (`filePid`,
+            `reason`, and for administrators `path`); every pid is in its
+            current form, and a change cut short reports what it did before
+            it stopped.
+            Absent while running and for kinds that record none. Shapes
+            may grow fields.
         target:
           $ref: "#/components/schemas/JobTarget"
 
@@ -2497,6 +2643,49 @@ components:
           type: string
           description: A profile name from the organize profiles listing.
           example: waxbin-native
+
+    LibraryMedia:
+      type: object
+      description: What a library holds.
+      required: [media]
+      properties:
+        media:
+          type: string
+          enum: [music, audiobook, mixed]
+          description: The content class, as `LibraryCreate.media`.
+
+    LibraryMediaChanged:
+      allOf:
+        - $ref: "#/components/schemas/Library"
+        - type: object
+          description: Whether the change started the scan that applies it.
+          required: [scanStarted]
+          properties:
+            scanStarted:
+              type: boolean
+              description: >
+                Whether the scan that applies the change started. False
+                when the library already held that media, so there was
+                nothing to apply, and when another catalog job was
+                already running: a change onto `audiobook` is then
+                applied by the next scan, and any
+                other by the next rescan that re-reads every file
+                (`force`), which an administrator starts once the running
+                job ends.
+      description: A library whose content class changed.
+
+    LibraryFolderFallback:
+      type: object
+      description: Whether a library names untagged files from their folders.
+      required: [folderFallback]
+      properties:
+        folderFallback:
+          type: boolean
+          description: Whether a scan names an untagged file from its folders.
+        libraryPid:
+          type: string
+          description: The library (response only).
+          example: lb-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     LibraryReadOnly:
       type: object

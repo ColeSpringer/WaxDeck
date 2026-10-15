@@ -40,6 +40,9 @@ func reviewEntryJSON(e service.ReviewEntryDTO) ReviewEntry {
 	if e.DecidedBy != "" {
 		out.DecidedBy = ptr(e.DecidedBy)
 	}
+	if e.DuplicateCount > 0 {
+		out.DuplicateCount = ptr(e.DuplicateCount)
+	}
 	if e.Best != nil {
 		out.Best = &CandidateSummary{
 			Mbid: e.Best.MBID, Title: e.Best.Title, Artist: e.Best.Artist,
@@ -101,8 +104,9 @@ func reviewDetailJSON(d service.ReviewDetailDTO) ReviewEntryDetail {
 		CreatedAt: base.CreatedAt, Title: base.Title, Artist: base.Artist,
 		LibraryPid: base.LibraryPid, UploadedBy: base.UploadedBy, AppliedMbid: base.AppliedMbid,
 		DecidedAt: base.DecidedAt, DecidedBy: base.DecidedBy, Best: base.Best,
-		Tracks:     make([]ReviewTrack, 0, len(d.Tracks)),
-		Candidates: make([]ReviewCandidate, 0, len(d.Candidates)),
+		DuplicateCount: base.DuplicateCount,
+		Tracks:         make([]ReviewTrack, 0, len(d.Tracks)),
+		Candidates:     make([]ReviewCandidate, 0, len(d.Candidates)),
 	}
 	if d.IdentifyDeclined {
 		out.IdentifyDeclined = ptr(true)
@@ -122,6 +126,10 @@ func reviewDetailJSON(d service.ReviewDetailDTO) ReviewEntryDetail {
 		}
 		if t.DiscNo > 0 {
 			rt.DiscNo = ptr(t.DiscNo)
+		}
+		rt.Duplicate = duplicateJSON(t.Duplicate)
+		if t.Joined {
+			rt.Joined = ptr(true)
 		}
 		out.Tracks = append(out.Tracks, rt)
 	}
@@ -228,8 +236,8 @@ func (s *Server) DecideReviewEntry(ctx context.Context, req DecideReviewEntryReq
 			return DecideReviewEntry403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindNotFound:
 			return DecideReviewEntry404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such review entry"))}, nil
-		case service.KindConflict:
-			return DecideReviewEntry409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+		case service.KindConflict, service.KindCatalogBusy, service.KindReadOnly:
+			return DecideReviewEntry409JSONResponse(errObj(string(service.KindOf(err)), err.Error())), nil
 		}
 		return nil, err
 	}
@@ -308,7 +316,10 @@ func (s *Server) DecideReviewBulk(ctx context.Context, req DecideReviewBulkReque
 	for _, o := range outcomes {
 		ro := ReviewBulkOutcome{EntryId: o.EntryID, Ok: o.OK}
 		if o.Error != "" {
-			ro.Error = ptr(o.Error)
+			ro.Code, ro.Error = ptr(o.Code), ptr(o.Error)
+		}
+		if len(o.Warnings) > 0 {
+			ro.Warnings = ptr(o.Warnings)
 		}
 		result.Results = append(result.Results, ro)
 	}
@@ -320,13 +331,13 @@ func (s *Server) GetReviewStats(ctx context.Context, _ GetReviewStatsRequestObje
 	if err != nil {
 		return nil, err
 	}
-	_ = uc
-	stats, err := s.svc.ReviewStatsFor(ctx)
+	stats, err := s.svc.ReviewStatsFor(ctx, uc)
 	if err != nil {
 		return nil, err
 	}
 	out := ReviewStats{
 		Pending:             stats.Pending,
+		Decided:             stats.Decided,
 		Applied:             stats.Applied,
 		AutoApplied:         stats.AutoApplied,
 		Reverted:            stats.Reverted,

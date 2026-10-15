@@ -73,7 +73,7 @@
   "@musicAlbumEditorTotalTracks": {
     "description": "Label of the read-only track count in the album editor."
   },
-  "musicAlbumEditorTotalTracksHelp": "Counted from the tracks on this release. Add or remove tracks to change it; it is not a field anything stores.",
+  "musicAlbumEditorTotalTracksHelp": "Counted from the tracks on this release. Add or remove tracks to change it; each track's own track total is edited on the track.",
   "@musicAlbumEditorTotalTracksHelp": {
     "description": "Helper under the album editor's read-only track count, explaining why there is no input."
   },

@@ -105,10 +105,6 @@
   "@healthDuplicatesError": {
     "description": "Title of the error state when the duplicate findings could not be read."
   },
-  "healthDuplicatesErrorBody": "The clustering pass did not answer.",
-  "@healthDuplicatesErrorBody": {
-    "description": "Body of the duplicates error state. Clustering is the pass that finds duplicates."
-  },
   "healthDuplicatesOverline": "One thing under two names",
   "@healthDuplicatesOverline": {
     "description": "Line above the Duplicates heading, saying what a duplicate is."
@@ -302,6 +298,20 @@
   "healthLossless": "lossless",
   "@healthLossless": {
     "description": "Says a copy is stored without losing anything to compression. Lower case: it sits in a comma-separated run of a copy's properties."
+  },
+  "healthMemberInFile": "{quality} in {file}",
+  "@healthMemberInFile": {
+    "description": "One encoding in a quality-upgrade group, when another encoding in the group reads the same: what it is, then the name of the file that holds it, so the two can be told apart.",
+    "placeholders": {
+      "quality": {
+        "type": "String",
+        "example": "vorbis, 320 kbps"
+      },
+      "file": {
+        "type": "String",
+        "example": "Neon Meridian (1).ogg"
+      }
+    }
   },
   "healthMergeAction": "Merge",
   "@healthMergeAction": {
@@ -524,10 +534,6 @@
   "healthUpgradesError": "Could not load upgrades",
   "@healthUpgradesError": {
     "description": "Title of the error state when the quality findings could not be read."
-  },
-  "healthUpgradesErrorBody": "The quality comparison did not answer.",
-  "@healthUpgradesErrorBody": {
-    "description": "Body of the quality upgrades error state."
   },
   "healthUpgradesOverline": "The same recording twice",
   "@healthUpgradesOverline": {

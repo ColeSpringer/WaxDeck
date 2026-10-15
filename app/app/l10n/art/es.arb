@@ -48,6 +48,7 @@
   "artworkPinSlot": "Fijar {slot}",
   "artworkReplaceSlot": "Reemplazar {slot}",
   "artworkReplaced": "Se ha reemplazado: {slot}",
+  "artworkReplacedTagsFailed": "Se ha reemplazado: {slot}, pero no se han podido actualizar las etiquetas del archivo",
   "artworkSetSlot": "Poner {slot}",
   "artworkSlotPinned": "{slot} fijada",
   "artworkSlotSpoken": "{slot}: {state}",

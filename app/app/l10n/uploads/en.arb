@@ -97,9 +97,27 @@
   "@uploadsDuplicateFingerprint": {
     "description": "How a duplicate matched: a different file of the same audio. Lower case: it sits in brackets."
   },
+  "uploadsDuplicateId": "same identifier",
+  "@uploadsDuplicateId": {
+    "description": "How a duplicate matched: the file's tags carry the same MusicBrainz recording id as an item in the library. Lower case: it sits in brackets."
+  },
+  "uploadsDuplicateJoined": "Already in the library: {what}. Its details stay as they were.",
+  "@uploadsDuplicateJoined": {
+    "description": "Note on an imported upload whose audio the library already held: the file was added to that item as a copy (or nothing was added), and the item kept its details. {what} names the item.",
+    "placeholders": {
+      "what": {
+        "type": "String",
+        "example": "Hell Shell by Dom Kennedy"
+      }
+    }
+  },
   "uploadsDuplicateName": "name match",
   "@uploadsDuplicateName": {
     "description": "How a duplicate matched: only the name is the same. Lower case: it sits in brackets."
+  },
+  "uploadsDuplicateUnseen": "an item in a library you cannot open",
+  "@uploadsDuplicateUnseen": {
+    "description": "What a duplicate matched when it sits in a library the uploader cannot see, so its title is not theirs to read."
   },
   "uploadsEmptyMessage": "Pick files from the bar above, or drop them anywhere on this page.",
   "@uploadsEmptyMessage": {
@@ -113,6 +131,10 @@
   "@uploadsEmptyTitle": {
     "description": "Empty state of the uploads screen."
   },
+  "uploadsFileEmpty": "The file is empty",
+  "@uploadsFileEmpty": {
+    "description": "Why a picked file was not uploaded: it holds no bytes. Shown as {reason} in uploadsFileFailed."
+  },
   "uploadsFileFailed": "{name}: {reason}",
   "@uploadsFileFailed": {
     "description": "One file's failure inside a multi-file upload, which keeps going: the file's own name and the worded reason.",
@@ -124,6 +146,16 @@
       "reason": {
         "type": "String",
         "example": "You are out of space."
+      }
+    }
+  },
+  "uploadsFileOverQuota": "Larger than your whole upload limit of {limit}, so clearing Past uploads cannot make room. An administrator can raise the limit.",
+  "@uploadsFileOverQuota": {
+    "description": "Why a picked or shared file was not uploaded: the file alone is larger than the uploader's whole allowance (`quota-exceeded`), so importing or discarding staged sessions cannot admit it. Shown as {reason} in uploadsFileFailed. 'Past uploads' is the uploads screen's list of sessions.",
+    "placeholders": {
+      "limit": {
+        "type": "String",
+        "example": "500 MB"
       }
     }
   },
@@ -261,6 +293,10 @@
   "@uploadsPickSubtitle": {
     "description": "Second line of the upload-files row in the add sheet. Contrasts with the folder row: picked files carry no folder hierarchy, so grouping falls back to tags."
   },
+  "uploadsQuotaFull": "You already have as much waiting as your limit allows. Import or discard some in Past uploads, then try again.",
+  "@uploadsQuotaFull": {
+    "description": "Why a picked file was not uploaded: the uploader's staged sessions already fill their allowance (`quota-exceeded`). Shown as {reason} in uploadsFileFailed. 'Past uploads' is the uploads screen's list of sessions."
+  },
   "uploadsQuotaHelp": "This is what may sit staged at once, not what you may contribute: importing a session frees the space it held.",
   "@uploadsQuotaHelp": {
     "description": "Under the staging figure, saying what the cap is a cap on."
@@ -344,6 +380,10 @@
   "uploadsSourceUrlHint": "A single video, or a playlist or channel",
   "@uploadsSourceUrlHint": {
     "description": "Placeholder in the source-URL field."
+  },
+  "uploadsSourceUrlInvalid": "Enter a link starting with http:// or https://",
+  "@uploadsSourceUrlInvalid": {
+    "description": "Error under the acquisition dialog's link field when what was typed is not a web address."
   },
   "uploadsTitle": "Uploads",
   "@uploadsTitle": {

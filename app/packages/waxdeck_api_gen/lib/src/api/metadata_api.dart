@@ -28,6 +28,7 @@ import 'package:waxdeck_api_gen/src/model/error.dart';
 import 'package:waxdeck_api_gen/src/model/item_acquisition_edit.dart';
 import 'package:waxdeck_api_gen/src/model/item_metadata.dart';
 import 'package:waxdeck_api_gen/src/model/item_permissions.dart';
+import 'package:waxdeck_api_gen/src/model/job.dart';
 import 'package:waxdeck_api_gen/src/model/locks_edit.dart';
 import 'package:waxdeck_api_gen/src/model/locks_result.dart';
 import 'package:waxdeck_api_gen/src/model/lyrics_edit.dart';
@@ -38,6 +39,7 @@ import 'package:waxdeck_api_gen/src/model/metadata_edit_result.dart';
 import 'package:waxdeck_api_gen/src/model/metadata_fields.dart';
 import 'package:waxdeck_api_gen/src/model/release_status_edit.dart';
 import 'package:waxdeck_api_gen/src/model/rematch_result.dart';
+import 'package:waxdeck_api_gen/src/model/set_item_kind_request.dart';
 import 'package:waxdeck_api_gen/src/model/tag_edit.dart';
 import 'package:waxdeck_api_gen/src/model/tag_edit_result.dart';
 
@@ -359,10 +361,11 @@ class MetadataApi {
   }
 
   /// Clear lyrics
-  /// Removes the stored lyrics (files are untouched).
+  /// Removes the stored lyrics and their lock. With &#x60;writeBack&#x60; it also deletes the &#x60;.lrc&#x60; sidecar beside the item&#39;s file, which a set with &#x60;writeBack&#x60; writes, unless another audio file of that name, not one of the item&#39;s own, reads it too; a sidecar that stayed is not reported (a 204 carries no body) and is logged. Lyrics embedded in the audio&#39;s own tags stay, and a forced rescan reads them again. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [writeBack] - Delete the item's `.lrc` sidecar too.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -374,6 +377,7 @@ class MetadataApi {
   /// Throws [DioException] if API call or serialization fails
   Future<Response<void>> clearItemLyrics({ 
     required String pid,
+    bool? writeBack = false,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -405,9 +409,14 @@ class MetadataApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (writeBack != null) r'writeBack': encodeQueryParameter(_serializers, writeBack, const FullType(bool)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,
@@ -417,11 +426,12 @@ class MetadataApi {
   }
 
   /// Clear a custom tag
-  /// Removes the tag and its lock. A reserved key (one the catalog owns through another surface) answers &#x60;invalid-request&#x60;, like setting one does. 
+  /// Removes the tag and its lock. A reserved key (one the catalog owns through another surface) answers &#x60;invalid-request&#x60;, like setting one does. With &#x60;writeBack&#x60; the tag is stripped from the item&#39;s files too; a file that could not be written is not reported (a 204 carries no body), is logged, and is listed by the health rule for tags out of sync. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
   /// * [key] - The custom tag key. Keys canonicalize to uppercase ASCII; keys the catalog owns through another surface (TITLE, ARTIST, the credit roles, and the rest of the reserved set) are rejected with `invalid-request`. 
+  /// * [writeBack] - Strip the tag from the item's files too.
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -434,6 +444,7 @@ class MetadataApi {
   Future<Response<void>> clearItemTag({ 
     required String pid,
     required String key,
+    bool? writeBack = false,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -465,9 +476,14 @@ class MetadataApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (writeBack != null) r'writeBack': encodeQueryParameter(_serializers, writeBack, const FullType(bool)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,
@@ -1288,7 +1304,7 @@ class MetadataApi {
   }
 
   /// Read the caller&#39;s permissions on an item
-  /// Whether the caller may run the item-scoped metadata mutations on this item: administrators always, everyone else exactly for the items their own uploads brought in. This is the whole &#x60;mayCurate&#x60; answer from the metadata read without the cost of the full editor document, for surfaces that only need to decide whether to show an edit door. The read does not confirm the item exists: an unknown pid answers &#x60;mayCurate: false&#x60; for a non-administrator, and &#x60;true&#x60; for an administrator, whose edits on it would answer &#x60;not-found&#x60; anyway. 
+  /// Whether the caller may run the item-scoped metadata mutations on this item: administrators always, anyone else for the items their own uploads and acquisitions brought in and the parts a kind change split out of those. This is the whole &#x60;mayCurate&#x60; answer from the metadata read without the cost of the full editor document, for surfaces that only need to decide whether to show an edit door. The read does not confirm the item exists: an unknown pid answers &#x60;mayCurate: false&#x60; for a non-administrator, and &#x60;true&#x60; for an administrator, whose edits on it would answer &#x60;not-found&#x60; anyway. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -1566,7 +1582,7 @@ class MetadataApi {
   }
 
   /// Requeue an item for matching
-  /// Rebuilds the album unit containing the item (its album siblings ride along; a unit is always matched whole) and runs the identify pipeline on it, opening a fresh pending review entry. Items marked unofficial are eligible here (an explicit rematch is the way back from that state). The entry id returns immediately; candidates fill in asynchronously and the entry updates over the event channel. 
+  /// Rebuilds the album unit containing the item (its album siblings ride along; a unit is always matched whole) and runs the identify pipeline on it, opening a fresh pending review entry. Items marked unofficial are eligible here (an explicit rematch is the way back from that state). The entry id returns immediately; candidates fill in asynchronously and the entry updates over the event channel. A caller who is not an administrator owns the entry, so it lists in their queue, and its unit holds only the tracks their own uploads brought in. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -2444,8 +2460,114 @@ class MetadataApi {
     );
   }
 
+  /// Change what items are
+  /// Turns tracks into an audiobook, or a book into tracks, as a background job of kind &#x60;set-kind&#x60;, answered at once. Each item&#39;s files are read again as the new kind, so an item changes kind in place and keeps its pid, with its plays, stars, playlist entries and shares. The pid&#39;s prefix follows the kind (&#x60;tr-&#x60; and &#x60;bk-&#x60;); either form reaches the item. Tracks that make one book fold into one item, the first one named or a book already holding their key, and a book becoming tracks keeps its pid on its first part and mints the rest; the finished job&#39;s result names where each item went. A folded item&#39;s shares, and the track shares of the item it folded into, are revoked rather than widened to the whole book. The choice is pinned, so later scans keep it, and anyone who may edit the items may replace a kind pinned before.  Gated per item: administrators, or the user whose upload or acquisition brought the item in, or the part a kind change split out of one (&#x60;mayCurate&#x60;); every item named must pass or nothing changes. Refused with &#x60;invalid-request&#x60;, before anything changes, for an episode, a cue track, a file another item shares, or a book file with a cue sheet beside it that would make it a cue rip. 
+  ///
+  /// Parameters:
+  /// * [setItemKindRequest] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [Job] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<Job>> setItemKind({ 
+    required SetItemKindRequest setItemKindRequest,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/items/kind';
+    final _options = Options(
+      method: r'POST',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(SetItemKindRequest);
+      _bodyData = _serializers.serialize(setItemKindRequest, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    Job? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(Job),
+      ) as Job;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<Job>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
   /// Lock or unlock fields
-  /// Locks or unlocks the named fields against scans, enrichment, and organize. Field names are the scalar vocabulary plus the namespaced artifacts: &#x60;lyrics&#x60;, &#x60;chapters&#x60;, &#x60;art&#x60;, &#x60;art.ROLE&#x60;, &#x60;acquisition&#x60;, &#x60;credit.ROLE&#x60;, and &#x60;tag.KEY&#x60;.  The two artwork spellings differ in reach. &#x60;art&#x60; is the whole pin: it gates the front cover and also enrichment&#39;s fills in every other role. &#x60;art.ROLE&#x60; (&#x60;art.back&#x60;, &#x60;art.disc&#x60;, &#x60;art.booklet&#x60;, &#x60;art.background&#x60;) gates that one slot, so a hand-set booklet scan can be held while the rest stay open. 
+  /// Locks or unlocks the named fields against scans, enrichment, and organize. Field names are the scalar vocabulary plus the namespaced artifacts: &#x60;lyrics&#x60;, &#x60;chapters&#x60;, &#x60;art&#x60;, &#x60;art.ROLE&#x60;, &#x60;acquisition&#x60;, &#x60;credit.ROLE&#x60;, and &#x60;tag.KEY&#x60;, and &#x60;kind&#x60;.  &#x60;kind&#x60; pins whether the item is a track or a book: an upload imported under a media type its file would not get on its own takes the pin, and while it holds a scan keeps the item&#39;s kind whatever its library or tags say. Unlocking it lets the next scan that reads the file classify the item again, under the same catalog id; a forced rescan reads every file.  The two artwork spellings differ in reach. &#x60;art&#x60; is the whole pin: it gates the front cover and also enrichment&#39;s fills in every other role. &#x60;art.ROLE&#x60; (&#x60;art.back&#x60;, &#x60;art.disc&#x60;, &#x60;art.booklet&#x60;, &#x60;art.background&#x60;) gates that one slot, so a hand-set booklet scan can be held while the rest stay open. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -2661,7 +2783,7 @@ class MetadataApi {
   }
 
   /// Set a custom tag
-  /// Replaces the ordered values of one custom tag on a track or book, locking &#x60;tag.KEY&#x60; by default. Custom tags are full browse dimensions: they filter, facet, and feed smart list rules. An empty value list clears the tag. 
+  /// Replaces the ordered values of one custom tag on a track or book, locking &#x60;tag.KEY&#x60; by default. Custom tags are full browse dimensions: they filter, facet, and feed smart list rules. An empty value list clears the tag. With &#x60;writeBack&#x60; the values are also written into the item&#39;s files (every part of a book), and a file that cannot take them is reported in &#x60;writeBackFailures&#x60; with the edit standing; a key the tag writer would store as another field on every format (&#x60;YEAR&#x60; is the recording date) refuses &#x60;writeBack&#x60; with &#x60;invalid-request&#x60;. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

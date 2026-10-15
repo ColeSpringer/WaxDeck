@@ -15,12 +15,18 @@ rm -rf "$RUN_DIR"
 mkdir -p "$RUN_DIR"/{library,waxdeck-data,waxflow-data,waxflow-cache,podcasts,feed,upload-src}
 
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/library" -preset all >/dev/null)
+# A book the library catalogs as music, for the kind change to make one
+# audiobook of.
+(cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/library" -preset misfiled-book >/dev/null)
 # Source files for the manual-upload journey: outside the scanned
 # library, so they only ever enter it through the upload pipeline.
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src" -preset upload >/dev/null)
 # The release-workbench journey's own album, so its import never holds
 # the destination the manual-upload journey's import needs.
 (cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src" -preset upload-workbench >/dev/null)
+# An audiobook as plain MP3s, which only an upload's media type (or an
+# audiobook library) makes a book.
+(cd "$E2E_DIR/../fixtures" && go run ./cmd/fixturegen -out "$RUN_DIR_NATIVE/upload-src" -preset loose-book >/dev/null)
 # The folder-pick journey's own album, written under a disc subdirectory
 # so what the picker walks is a tree. The stray text file is there to be
 # left behind: a folder pick cannot filter by type in the dialog, so the

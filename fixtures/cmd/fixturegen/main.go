@@ -1,7 +1,7 @@
 // Command fixturegen writes a synthesized fixture library to a
 // directory and prints the file list, one path per line.
 //
-//	fixturegen -out <dir> [-preset default|demo|conformance|upload|upload-folder|upload-workbench|saf-probe|cover|podcast|book|all] [-base-url <url>]
+//	fixturegen -out <dir> [-preset default|demo|conformance|upload|upload-folder|upload-workbench|saf-probe|cover|podcast|book|loose-book|misfiled-book|all] [-base-url <url>]
 package main
 
 import (
@@ -15,7 +15,7 @@ import (
 func main() {
 	out := flag.String("out", "", "output directory (required)")
 	preset := flag.String("preset", "default",
-		"spec preset: default (the codec/container matrix), demo (a titled album), conformance (the engine-suite tone), upload (the manual-upload album), upload-folder (the folder-pick album), upload-workbench (the release-workbench album), saf-probe (the Android tree-picker probe folder), cover (an exotic cover image to set by hand), podcast (the default feed), book (the audiobook fixtures), all")
+		"spec preset: default (the codec/container matrix), demo (a titled album), conformance (the engine-suite tone), upload (the manual-upload album), upload-folder (the folder-pick album), upload-workbench (the release-workbench album), saf-probe (the Android tree-picker probe folder), cover (an exotic cover image to set by hand), podcast (the default feed), book (the audiobook fixtures), loose-book (an audiobook as plain MP3s), misfiled-book (another, for a library to catalog as music), all")
 	baseURL := flag.String("base-url", "http://127.0.0.1:4421",
 		"base URL podcast enclosure links point at (the podcast preset; 'all' includes the feed only when this flag is set explicitly)")
 	flag.Parse()
@@ -56,6 +56,18 @@ func run(out, preset, baseURL string, baseURLSet bool) error {
 		specs = fixtures.UploadWorkbenchSources()
 	case "saf-probe":
 		return generateSafProbe(out)
+	case "loose-book":
+		paths, err := fixtures.GenerateLooseMP3Book(out)
+		for _, p := range paths {
+			fmt.Println(p)
+		}
+		return err
+	case "misfiled-book":
+		paths, err := fixtures.GenerateMisfiledBook(out)
+		for _, p := range paths {
+			fmt.Println(p)
+		}
+		return err
 	case "all":
 		specs = append(fixtures.DefaultLibrary(), fixtures.DemoLibrary()...)
 	case "podcast":

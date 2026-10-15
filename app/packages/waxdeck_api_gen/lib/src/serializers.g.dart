@@ -66,10 +66,13 @@ Serializers _$serializers =
           ..add(CreditsEdit.serializer)
           ..add(CueSplitRequest.serializer)
           ..add(CustomTag.serializer)
+          ..add(DeleteItemFilesRequest.serializer)
+          ..add(DeleteItemFilesRequestModeEnum.serializer)
           ..add(DeleteItemsRequest.serializer)
           ..add(DeleteItemsRequestModeEnum.serializer)
           ..add(DeleteItemsResult.serializer)
           ..add(DeletePlanEntry.serializer)
+          ..add(DeletePlanFile.serializer)
           ..add(DetachRequest.serializer)
           ..add(DetachResult.serializer)
           ..add(DeviceSession.serializer)
@@ -153,6 +156,8 @@ Serializers _$serializers =
           ..add(Item.serializer)
           ..add(ItemAcquisition.serializer)
           ..add(ItemAcquisitionEdit.serializer)
+          ..add(ItemFile.serializer)
+          ..add(ItemFiles.serializer)
           ..add(ItemMetadata.serializer)
           ..add(ItemPage.serializer)
           ..add(ItemPermissions.serializer)
@@ -167,8 +172,12 @@ Serializers _$serializers =
           ..add(LibraryCreate.serializer)
           ..add(LibraryCreateMediaEnum.serializer)
           ..add(LibraryCreated.serializer)
+          ..add(LibraryFolderFallback.serializer)
           ..add(LibraryMatching.serializer)
           ..add(LibraryMatchingModeEnum.serializer)
+          ..add(LibraryMedia.serializer)
+          ..add(LibraryMediaChanged.serializer)
+          ..add(LibraryMediaMediaEnum.serializer)
           ..add(LibraryProfile.serializer)
           ..add(LibraryReadOnly.serializer)
           ..add(LinkedIdentity.serializer)
@@ -347,6 +356,8 @@ Serializers _$serializers =
           ..add(SessionInfo.serializer)
           ..add(SessionList.serializer)
           ..add(SessionRename.serializer)
+          ..add(SetItemKindRequest.serializer)
+          ..add(SetItemKindRequestMediaTypeEnum.serializer)
           ..add(Share.serializer)
           ..add(ShareCreate.serializer)
           ..add(SharePage.serializer)
@@ -508,6 +519,14 @@ Serializers _$serializers =
             () => ListBuilder<DeletePlanEntry>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(DeletePlanFile)]),
+            () => ListBuilder<DeletePlanFile>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(DeviceSession)]),
             () => ListBuilder<DeviceSession>(),
           )
@@ -650,6 +669,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(Invite)]),
             () => ListBuilder<Invite>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(ItemFile)]),
+            () => ListBuilder<ItemFile>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ItemSummary)]),
@@ -1214,6 +1237,22 @@ Serializers _$serializers =
             () => ListBuilder<String>(),
           )
           ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(String)]),
+            () => ListBuilder<String>(),
+          )
+          ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(ChapterMark)]),
             () => ListBuilder<ChapterMark>(),
           )
@@ -1361,6 +1400,10 @@ Serializers _$serializers =
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(UserAccount)]),
             () => ListBuilder<UserAccount>(),
+          )
+          ..addBuilderFactory(
+            const FullType(BuiltList, const [const FullType(WriteBackFailure)]),
+            () => ListBuilder<WriteBackFailure>(),
           )
           ..addBuilderFactory(
             const FullType(BuiltList, const [const FullType(WriteBackFailure)]),

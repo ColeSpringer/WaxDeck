@@ -15,6 +15,10 @@ class _$DeletePlanEntry extends DeletePlanEntry {
   final int files;
   @override
   final int bytes;
+  @override
+  final BuiltList<DeletePlanFile>? fileList;
+  @override
+  final bool? itemSurvives;
 
   factory _$DeletePlanEntry([void Function(DeletePlanEntryBuilder)? updates]) =>
       (DeletePlanEntryBuilder()..update(updates))._build();
@@ -24,6 +28,8 @@ class _$DeletePlanEntry extends DeletePlanEntry {
     this.name,
     required this.files,
     required this.bytes,
+    this.fileList,
+    this.itemSurvives,
   }) : super._();
   @override
   DeletePlanEntry rebuild(void Function(DeletePlanEntryBuilder) updates) =>
@@ -39,7 +45,9 @@ class _$DeletePlanEntry extends DeletePlanEntry {
         pid == other.pid &&
         name == other.name &&
         files == other.files &&
-        bytes == other.bytes;
+        bytes == other.bytes &&
+        fileList == other.fileList &&
+        itemSurvives == other.itemSurvives;
   }
 
   @override
@@ -49,6 +57,8 @@ class _$DeletePlanEntry extends DeletePlanEntry {
     _$hash = $jc(_$hash, name.hashCode);
     _$hash = $jc(_$hash, files.hashCode);
     _$hash = $jc(_$hash, bytes.hashCode);
+    _$hash = $jc(_$hash, fileList.hashCode);
+    _$hash = $jc(_$hash, itemSurvives.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -59,7 +69,9 @@ class _$DeletePlanEntry extends DeletePlanEntry {
           ..add('pid', pid)
           ..add('name', name)
           ..add('files', files)
-          ..add('bytes', bytes))
+          ..add('bytes', bytes)
+          ..add('fileList', fileList)
+          ..add('itemSurvives', itemSurvives))
         .toString();
   }
 }
@@ -84,6 +96,16 @@ class DeletePlanEntryBuilder
   int? get bytes => _$this._bytes;
   set bytes(int? bytes) => _$this._bytes = bytes;
 
+  ListBuilder<DeletePlanFile>? _fileList;
+  ListBuilder<DeletePlanFile> get fileList =>
+      _$this._fileList ??= ListBuilder<DeletePlanFile>();
+  set fileList(ListBuilder<DeletePlanFile>? fileList) =>
+      _$this._fileList = fileList;
+
+  bool? _itemSurvives;
+  bool? get itemSurvives => _$this._itemSurvives;
+  set itemSurvives(bool? itemSurvives) => _$this._itemSurvives = itemSurvives;
+
   DeletePlanEntryBuilder() {
     DeletePlanEntry._defaults(this);
   }
@@ -95,6 +117,8 @@ class DeletePlanEntryBuilder
       _name = $v.name;
       _files = $v.files;
       _bytes = $v.bytes;
+      _fileList = $v.fileList?.toBuilder();
+      _itemSurvives = $v.itemSurvives;
       _$v = null;
     }
     return this;
@@ -114,26 +138,44 @@ class DeletePlanEntryBuilder
   DeletePlanEntry build() => _build();
 
   _$DeletePlanEntry _build() {
-    final _$result =
-        _$v ??
-        _$DeletePlanEntry._(
-          pid: BuiltValueNullFieldError.checkNotNull(
-            pid,
-            r'DeletePlanEntry',
-            'pid',
-          ),
-          name: name,
-          files: BuiltValueNullFieldError.checkNotNull(
-            files,
-            r'DeletePlanEntry',
-            'files',
-          ),
-          bytes: BuiltValueNullFieldError.checkNotNull(
-            bytes,
-            r'DeletePlanEntry',
-            'bytes',
-          ),
+    _$DeletePlanEntry _$result;
+    try {
+      _$result =
+          _$v ??
+          _$DeletePlanEntry._(
+            pid: BuiltValueNullFieldError.checkNotNull(
+              pid,
+              r'DeletePlanEntry',
+              'pid',
+            ),
+            name: name,
+            files: BuiltValueNullFieldError.checkNotNull(
+              files,
+              r'DeletePlanEntry',
+              'files',
+            ),
+            bytes: BuiltValueNullFieldError.checkNotNull(
+              bytes,
+              r'DeletePlanEntry',
+              'bytes',
+            ),
+            fileList: _fileList?.build(),
+            itemSurvives: itemSurvives,
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'fileList';
+        _fileList?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'DeletePlanEntry',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

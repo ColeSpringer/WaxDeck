@@ -12,6 +12,7 @@ part 'review_stats.g.dart';
 ///
 /// Properties:
 /// * [pending] - Entries awaiting a decision.
+/// * [decided] - Entries in every status but `pending`, discarded and reverted ones included: the size of the `status=decided` listing. 
 /// * [identifying] - Entries whose identify pipeline still runs.
 /// * [applied] - Entries a person approved.
 /// * [autoApplied] - Entries the engine applied on its own.
@@ -25,6 +26,10 @@ abstract class ReviewStats implements Built<ReviewStats, ReviewStatsBuilder> {
   /// Entries awaiting a decision.
   @BuiltValueField(wireName: r'pending')
   int get pending;
+
+  /// Entries in every status but `pending`, discarded and reverted ones included: the size of the `status=decided` listing. 
+  @BuiltValueField(wireName: r'decided')
+  int get decided;
 
   /// Entries whose identify pipeline still runs.
   @BuiltValueField(wireName: r'identifying')
@@ -84,6 +89,11 @@ class _$ReviewStatsSerializer implements PrimitiveSerializer<ReviewStats> {
     yield r'pending';
     yield serializers.serialize(
       object.pending,
+      specifiedType: const FullType(int),
+    );
+    yield r'decided';
+    yield serializers.serialize(
+      object.decided,
       specifiedType: const FullType(int),
     );
     if (object.identifying != null) {
@@ -163,6 +173,13 @@ class _$ReviewStatsSerializer implements PrimitiveSerializer<ReviewStats> {
             specifiedType: const FullType(int),
           ) as int;
           result.pending = valueDes;
+          break;
+        case r'decided':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType(int),
+          ) as int;
+          result.decided = valueDes;
           break;
         case r'identifying':
           final valueDes = serializers.deserialize(

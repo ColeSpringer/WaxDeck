@@ -81,6 +81,45 @@ func TestAScanTellsTheAdministratorWhoStartedIt(t *testing.T) {
 	}
 }
 
+// A finished scan's line counts its copies, and says when the walk could
+// not read entries or reach a library's folder: those are not errored
+// files, so the errored count alone would read clean.
+func TestAScanBodySaysWhatItCouldNotRead(t *testing.T) {
+	t.Parallel()
+	clean := Job{Kind: "scan", Scan: &ScanTallyDTO{Created: 3, Updated: 1, Copies: 2, Missing: 1}}
+	if got, want := jobBody(clean), "Scan: 3 added, 1 updated, 2 copies, 1 missing, 0 errored"; got != want {
+		t.Errorf("clean body = %q, want %q", got, want)
+	}
+	one := Job{Kind: "scan", Scan: &ScanTallyDTO{WalkErrors: 1, RootUnreachable: true,
+		Runs: []ScanRunDTO{{Library: "Music", ScanTallyDTO: ScanTallyDTO{WalkErrors: 1, RootUnreachable: true}}}}}
+	if got, want := jobBody(one), "Scan: 0 added, 0 updated, 0 copies, 0 missing, 0 errored, 1 unreadable; the library folder is not reachable"; got != want {
+		t.Errorf("one-library body = %q, want %q", got, want)
+	}
+	several := Job{Kind: "scan", Scan: &ScanTallyDTO{Created: 2, WalkErrors: 1, RootUnreachable: true,
+		Runs: []ScanRunDTO{
+			{Library: "Music", ScanTallyDTO: ScanTallyDTO{Created: 2}},
+			{Library: "Archive", ScanTallyDTO: ScanTallyDTO{WalkErrors: 1, RootUnreachable: true}},
+		}}}
+	if got, want := jobBody(several), "Scan: 2 added, 0 updated, 0 copies, 0 missing, 0 errored, 1 unreadable; the folder of Archive is not reachable"; got != want {
+		t.Errorf("several-library body = %q, want %q", got, want)
+	}
+}
+
+// An analysis line says when fingerprints fell back to the pure-Go form,
+// which groups apart from fpcalc's.
+func TestAnAnalyzeNoticeCountsFallbacks(t *testing.T) {
+	t.Parallel()
+	clean := Job{Kind: "analyze", Analyze: &AnalyzeTallyDTO{Analyzed: 60, LoudnessMeasured: 60}}
+	if got, want := jobBody(clean), "Analysis: 60 analyzed, 60 measured, 0 errored"; got != want {
+		t.Errorf("clean body = %q, want %q", got, want)
+	}
+	fell := Job{Kind: "analyze", Analyze: &AnalyzeTallyDTO{Analyzed: 60, LoudnessMeasured: 60,
+		FingerprintFallbacks: 58, FingerprintPartialReads: 2}}
+	if got, want := jobBody(fell), "Analysis: 60 analyzed, 60 measured, 0 errored, 58 fingerprints without fpcalc, 2 read past an error"; got != want {
+		t.Errorf("fallback body = %q, want %q", got, want)
+	}
+}
+
 // A scan nobody started, the scheduler's or a new library's, tells
 // nobody: it leaves no one to tell.
 func TestAScanNobodyStartedTellsNobody(t *testing.T) {
@@ -277,5 +316,17 @@ func TestAFailedSweepAnswersItsRequestAndSaysSo(t *testing.T) {
 	}
 	if n := markers(t, ctx, svc, a.ID, eventHealth, ""); n != seen+1 {
 		t.Fatalf("markers = %d, want the landing told (%d)", n, seen+1)
+	}
+}
+
+// A kind change's notice names what ran and on what, and counts what
+// changed, what folded and what was not written.
+func TestAKindChangeNoticeSaysWhatChanged(t *testing.T) {
+	t.Parallel()
+	j := Job{Kind: "set-kind", Target: &JobTargetDTO{Type: "item", PID: "bk-1", Name: "The Loose Chapters"},
+		SetKind: &KindTallyDTO{Converted: []string{"bk-1"}, Absorbed: map[string]string{"tr-2": "bk-1"},
+			WriteBackFailures: []WriteBackFailureDTO{{FilePID: "f", Reason: "read-only"}}}}
+	if got, want := jobBody(j), "Kind change of The Loose Chapters: 1 changed, 1 folded into another item, 1 not written"; got != want {
+		t.Fatalf("body = %q, want %q", got, want)
 	}
 }

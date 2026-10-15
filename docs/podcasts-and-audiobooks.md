@@ -219,6 +219,41 @@ than something anyone curates, two spellings are two series: an
 administrator folds one into the other from the book screen's
 overflow, and the books move while everything else about them stays.
 
+### How a file becomes a book
+
+The library the file sits in decides first. In a library that holds
+Books, every audio file is a book, so a folder of plain MP3 parts (a
+LibriVox download, a ripped CD set) needs no tagging: parts sharing an
+album title and author are one book, and numbered parts with no album
+tag join the book their folder holds. In a Music or Mixed library each
+file is classified by its tags: it is a book when it is an `.m4b`,
+carries the audiobook media type, names a narrator, or has the genre
+Audiobook; Speech, Spoken Word and a composer on their own do not count.
+In a Mixed library the other parts of a book its file type, media type
+or narrator marks still join it; the genre marks only the file that
+carries it. A
+folder of untagged MP3s in a Music or Mixed library is music, so keep
+audiobooks in a library of their own that holds Books (see
+[adding a library](admin-and-ops.md#adding-a-library-at-runtime), or
+`WAXDECK_AUDIOBOOK_ROOTS` in [configuration](configuration.md)).
+
+A narrator added to a track does not make it a book. **Treat as
+audiobook** on a track, or on an album to make its tracks one book,
+changes what it is, and **Treat as music** on a book's overflow goes
+back; the choice is kept through every later scan, and plays, stars
+and playlist entries move with the item. Tracks folded into one book
+lose their share links, which would otherwise open the whole book.
+Tracks whose tags name a book the library already has join it, as
+uploading them as a book would have: the book keeps whoever may edit
+it, and their uploader gains nothing over it (where it sits in a
+library they cannot open, the change says only that they joined
+something there). An upload's media type does the same at import.
+
+Subsonic clients list music only: books reach them through bookmarks,
+so a library of MP3 audiobooks a Subsonic music client used to browse
+as albums leaves its listings once it holds Books. Books play in the
+WaxDeck apps.
+
 ## Silence trimming and voice boost
 
 Silence trimming skips mapped quiet spans client-side by seeking over

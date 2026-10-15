@@ -642,6 +642,49 @@ void main() {
     expect(repo.mergeDuplicatesCalls.single.loserPids, ['ar-2']);
   });
 
+  testWidgets('a file heading two groups names each by its files', (
+    tester,
+  ) async {
+    final repo = _repo();
+    UpgradeMember member(String item, String file, String codec, bool best) =>
+        UpgradeMember(
+          itemPid: item,
+          filePid: file,
+          title: 'Neon Meridian',
+          codec: codec,
+          lossless: codec == 'flac',
+          best: best,
+        );
+    repo.upgradeGroups = [
+      // The item's own lesser encoding, and another item its recording
+      // ties: the same FLAC is best in both.
+      UpgradeGroup(
+        members: [
+          member('tr-1', 'f-flac', 'flac', true),
+          member('tr-1', 'f-mp3', 'mp3', false),
+        ],
+      ),
+      UpgradeGroup(
+        members: [
+          member('tr-1', 'f-flac', 'flac', true),
+          member('tr-2', 'f-ogg', 'vorbis', false),
+        ],
+      ),
+    ];
+    await _pump(tester, _host(_container(repo)));
+
+    for (final key in ['f-flac+f-mp3', 'f-flac+f-ogg']) {
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.upgradeGroup(key)),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.upgradeResolve(key)),
+        findsOneWidget,
+      );
+    }
+  });
+
   testWidgets('resolving an upgrade keeps the best and trashes the rest', (
     tester,
   ) async {
@@ -651,6 +694,7 @@ void main() {
         members: [
           UpgradeMember(
             itemPid: 'tr-flac',
+            filePid: 'f-flac',
             title: 'Neon Meridian',
             codec: 'flac',
             lossless: true,
@@ -658,9 +702,10 @@ void main() {
           ),
           UpgradeMember(
             itemPid: 'tr-mp3',
+            filePid: 'f-mp3',
             title: 'Neon Meridian',
             codec: 'mp3',
-            bitrate: 192000,
+            bitrate: 192,
             lossless: false,
             best: false,
           ),
@@ -669,8 +714,9 @@ void main() {
     ];
     await _pump(tester, _host(_container(repo)));
 
+    expect(find.text('mp3, 192 kbps'), findsOneWidget);
     final resolve = find.bySemanticsIdentifier(
-      SemanticsIds.upgradeResolve('tr-flac'),
+      SemanticsIds.upgradeResolve('f-flac+f-mp3'),
     );
     await tester.ensureVisible(resolve);
     await tester.pumpAndSettle();
@@ -681,5 +727,195 @@ void main() {
     expect(repo.resolveUpgradeCalls, hasLength(1));
     expect(repo.resolveUpgradeCalls.single.keepItemPid, 'tr-flac');
     expect(repo.resolveUpgradeCalls.single.removeItemPids, ['tr-mp3']);
+    expect(repo.resolveUpgradeCalls.single.removeFilePids, isEmpty);
+  });
+
+  testWidgets('a resolve refused after some files went lists again', (
+    tester,
+  ) async {
+    UpgradeMember member(String item, String codec, {bool best = false}) =>
+        UpgradeMember(
+          itemPid: item,
+          filePid: 'f-$codec',
+          title: 'Neon Meridian',
+          codec: codec,
+          lossless: codec == 'flac',
+          best: best,
+        );
+    final repo = _repo()
+      ..upgradeGroups = [
+        UpgradeGroup(
+          members: [
+            member('tr-flac', 'flac', best: true),
+            member('tr-mp3', 'mp3'),
+            member('tr-ogg', 'vorbis'),
+          ],
+        ),
+      ]
+      // The mp3 went to the trash; the ogg's move did not.
+      ..resolveUpgradeRefusal = const WaxDeckApiException(
+        code: 'conflict',
+        message: '1 of 2 could not be moved to the trash: permission denied',
+        statusCode: 409,
+      );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    final resolve = find.bySemanticsIdentifier(
+      SemanticsIds.upgradeResolve('f-flac+f-mp3+f-vorbis'),
+    );
+    await tester.ensureVisible(resolve);
+    await tester.pumpAndSettle();
+    final reads = repo.listUpgradesCalls;
+    await tester.tap(resolve);
+    await tester.pumpAndSettle();
+    await _confirm(tester, 'resolve');
+
+    // The server's own count and reason, not "something changed first".
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      '1 of 2 could not be moved to the trash: permission denied',
+    );
+    expect(repo.listUpgradesCalls, greaterThan(reads));
+    expect(resolve, findsNothing, reason: 'the trashed member is gone');
+  });
+
+  testWidgets('a merge refused as stale lists again', (tester) async {
+    final repo = _repo()
+      ..duplicateGroups = const [
+        DuplicateGroup(
+          entityType: 'artist',
+          survivor: DuplicateEntity(pid: 'ar-1', name: 'The Cardinal Waves'),
+          losers: [DuplicateEntity(pid: 'ar-2', name: 'Cardinal Waves')],
+        ),
+      ];
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    final merge = find.bySemanticsIdentifier(
+      SemanticsIds.duplicateMerge('ar-1'),
+    );
+    await tester.ensureVisible(merge);
+    await tester.pumpAndSettle();
+    await tester.tap(merge);
+    await tester.pumpAndSettle();
+    // Merged from another session meanwhile: the group is gone, and the
+    // loser with it.
+    repo
+      ..duplicateGroups = const []
+      ..healthError = const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no artist ar-2',
+        statusCode: 404,
+      );
+    await _confirm(tester, 'merge');
+
+    expect(merge, findsNothing, reason: 'the list was read again');
+  });
+
+  testWidgets("resolving one item's lesser encoding names the files", (
+    tester,
+  ) async {
+    final repo = _repo();
+    repo.upgradeGroups = const [
+      UpgradeGroup(
+        members: [
+          UpgradeMember(
+            itemPid: 'tr-1',
+            filePid: 'f-flac',
+            title: 'Neon Meridian',
+            codec: 'flac',
+            sampleRate: 96000,
+            bitDepth: 24,
+            lossless: true,
+            best: true,
+          ),
+          UpgradeMember(
+            itemPid: 'tr-1',
+            filePid: 'f-ogg',
+            title: 'Neon Meridian',
+            codec: 'vorbis',
+            bitrate: 192,
+            lossless: false,
+            best: false,
+          ),
+        ],
+      ),
+    ];
+    await _pump(tester, _host(_container(repo)));
+
+    // A lossless keeper says how fine it is.
+    expect(find.text('flac, lossless, 96 kHz'), findsOneWidget);
+    expect(find.text('vorbis, 192 kbps'), findsOneWidget);
+    final resolve = find.bySemanticsIdentifier(
+      SemanticsIds.upgradeResolve('f-flac+f-ogg'),
+    );
+    await tester.ensureVisible(resolve);
+    await tester.pumpAndSettle();
+    await tester.tap(resolve);
+    await tester.pumpAndSettle();
+    await _confirm(tester, 'resolve');
+
+    final call = repo.resolveUpgradeCalls.single;
+    expect(call.keepItemPid, 'tr-1');
+    expect(call.keepFilePid, 'f-flac');
+    expect(call.removeFilePids, ['f-ogg']);
+    expect(call.removeItemPids, isEmpty);
+  });
+
+  testWidgets('two encodings that read alike are told apart by file', (
+    tester,
+  ) async {
+    final repo = _repo();
+    repo.upgradeGroups = const [
+      UpgradeGroup(
+        members: [
+          UpgradeMember(
+            itemPid: 'tr-1',
+            filePid: 'f-a',
+            path: '/music/A/one.ogg',
+            title: 'Neon Meridian',
+            codec: 'vorbis',
+            bitrate: 320,
+            lossless: false,
+            best: true,
+          ),
+          UpgradeMember(
+            itemPid: 'tr-1',
+            filePid: 'f-b',
+            path: '/music/B/one (1).ogg',
+            title: 'Neon Meridian',
+            codec: 'vorbis',
+            bitrate: 320,
+            lossless: false,
+            best: false,
+          ),
+        ],
+      ),
+    ];
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('vorbis, 320 kbps in one (1).ogg'), findsOneWidget);
+  });
+
+  testWidgets('a refused upgrades listing says so at once and retries', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..upgradesError = WaxDeckApiException(
+        statusCode: 409,
+        code: 'conflict',
+        message: 'the catalog is busy',
+      );
+    await _pump(tester, _host(_container(repo)));
+
+    final retry = find.bySemanticsIdentifier(SemanticsIds.upgradesRetry);
+    expect(retry, findsOneWidget);
+    final asked = repo.listUpgradesCalls;
+    repo.upgradesError = null;
+    await tester.ensureVisible(retry);
+    await tester.pumpAndSettle();
+    await tester.tap(retry);
+    await tester.pumpAndSettle();
+    expect(repo.listUpgradesCalls, asked + 1);
+    expect(retry, findsNothing);
   });
 }

@@ -71,9 +71,13 @@ abstract final class SemanticsIds {
   static String inviteRow(Object id) => 'invite-row-$id';
   static const String inviteToken = 'invite-token';
   static String libraryDetail(Object id) => 'library-detail-$id';
+  static String libraryFolderFallback(Object id) =>
+      'library-folder-fallback-$id';
   static const String libraryManaged = 'library-managed';
   static String libraryMatching(Object id) => 'library-matching-$id';
   static const String libraryMedia = 'library-media';
+  static String libraryMediaChoice(Object id) => 'library-media-choice-$id';
+  static const String libraryMediaConfirm = 'library-media-confirm';
   static const String libraryName = 'library-name';
   static const String libraryPath = 'library-path';
   static String libraryProfile(Object id) => 'library-profile-$id';
@@ -337,6 +341,7 @@ abstract final class SemanticsIds {
   static String duplicateDetail(Object pid) => 'duplicate-detail-$pid';
   static String duplicateGroup(Object pid) => 'duplicate-group-$pid';
   static String duplicateMerge(Object pid) => 'duplicate-merge-$pid';
+  static const String duplicatesRetry = 'duplicates-retry';
   static String health(Object rule) => 'health-rule-$rule';
   static String healthFix(Object rule) => 'health-fix-$rule';
   static String healthFixBlocked(Object rule) => 'health-fix-blocked-$rule';
@@ -344,9 +349,10 @@ abstract final class SemanticsIds {
   static const String healthScore = 'health-score';
   static const String healthSweep = 'health-sweep';
   static const String healthWarmingUp = 'health-warming-up';
-  static String upgradeDetail(Object itemPid) => 'upgrade-detail-$itemPid';
-  static String upgradeGroup(Object itemPid) => 'upgrade-group-$itemPid';
-  static String upgradeResolve(Object itemPid) => 'upgrade-resolve-$itemPid';
+  static String upgradeDetail(Object key) => 'upgrade-detail-$key';
+  static String upgradeGroup(Object key) => 'upgrade-group-$key';
+  static String upgradeResolve(Object key) => 'upgrade-resolve-$key';
+  static const String upgradesRetry = 'upgrades-retry';
 
   // home: Home and the shelf component it shares with the music hub, plus the notifications bell, its full-page screen, and the account control in the top app bar.
   static const String homeAdd = 'home-add';
@@ -384,16 +390,23 @@ abstract final class SemanticsIds {
   static const String itemFactsError = 'item-facts-error';
   static String itemFactsRow(Object key) => 'item-facts-$key';
   static String itemFactsSheet(Object pid) => 'item-facts-sheet-$pid';
+  static String itemFileDelete(Object filePid) => 'item-file-delete-$filePid';
+  static String itemFileRow(Object filePid) => 'item-file-$filePid';
   static const String itemMenuDetach = 'item-menu-detach';
   static const String itemMenuDetachConfirm = 'item-menu-detach-confirm';
   static const String itemMenuDetachWriteBack = 'item-menu-detach-writeback';
   static const String itemMenuDetails = 'item-menu-details';
   static const String itemMenuGoAlbum = 'item-menu-go-album';
   static const String itemMenuGoArtist = 'item-menu-go-artist';
+  static const String itemMenuKindAlbum = 'item-menu-kind-album';
+  static const String itemMenuKindBook = 'item-menu-kind-book';
+  static const String itemMenuKindMusic = 'item-menu-kind-music';
   static const String itemMenuMix = 'item-menu-mix';
   static const String itemMenuShare = 'item-menu-share-album';
   static const String itemMenuShareItem = 'item-menu-share';
   static String itemMenuSheet(Object pid) => 'item-menu-sheet-$pid';
+  static const String kindConfirm = 'kind-confirm';
+  static const String kindWriteBack = 'kind-write-back';
   static const String offlineBanner = 'offline-banner';
 
   // metadata: The metadata editor: fields, locks, candidates, and artwork.
@@ -826,12 +839,15 @@ abstract final class SemanticsIds {
       'matching-$libraryPid-$mode';
   static String matchingSingles(Object libraryPid) =>
       'matching-singles-$libraryPid';
+  static const String reviewAddCopy = 'review-add-copy';
   static const String reviewApprove = 'review-approve';
   static const String reviewAsIs = 'review-as-is';
   static const String reviewBulkApprove = 'review-bulk-approve';
   static const String reviewBulkAsIs = 'review-bulk-as-is';
   static const String reviewBulkSkip = 'review-bulk-skip';
   static const String reviewDiscard = 'review-discard';
+  static const String reviewDuplicate = 'review-duplicate';
+  static String reviewDuplicateRow(Object index) => 'review-duplicate-$index';
   static String reviewFilter(Object name) => 'review-filter-$name';
   static String reviewIdentifyField(Object name) => 'review-identify-$name';
   static const String reviewIdentifyGroup = 'review-identify-group';

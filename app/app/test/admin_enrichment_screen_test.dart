@@ -650,6 +650,43 @@ void main() {
     expect(find.text('A pass is running now.'), findsNothing);
   });
 
+  testWidgets('a job read that fails in passing waits, and one the server '
+      'refuses reads the status again', (tester) async {
+    final (:repo, :container) = _setUp(
+      tester,
+      status: _status(running: true, runningJob: 'jb-1'),
+    );
+    repo.jobs = [const Job(pid: 'jb-1', kind: 'enrich', state: 'running')];
+    await _host(tester, container, const EnrichmentScreen());
+    final reads = repo.enrichmentStatusReads;
+
+    for (final passing in const [
+      WaxDeckApiException(code: 'transport', message: 'connection refused'),
+      WaxDeckApiException(
+        code: 'unavailable',
+        message: 'busy',
+        statusCode: 503,
+      ),
+    ]) {
+      repo.getJobError = passing;
+      await tester.pump(enrichmentRunningPoll);
+      await tester.pump();
+    }
+    expect(repo.enrichmentStatusReads, reads);
+
+    repo
+      ..getJobError = const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such job',
+        statusCode: 404,
+      )
+      ..enrichmentStatus = _status();
+    await tester.pump(enrichmentRunningPoll);
+    await tester.pumpAndSettle();
+    expect(repo.enrichmentStatusReads, reads + 1);
+    expect(find.text('A pass is running now.'), findsNothing);
+  });
+
   testWidgets('a save the server refuses reads the sources again', (
     tester,
   ) async {

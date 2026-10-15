@@ -17,6 +17,7 @@ import (
 	"github.com/colespringer/waxbin/config"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/organize"
+	"github.com/colespringer/waxbin/podcast"
 	"github.com/colespringer/waxbin/query"
 
 	"github.com/colespringer/waxdeck/fixtures"
@@ -253,6 +254,27 @@ func TestAMediaChangeTellsEveryAccount(t *testing.T) {
 	if !slices.ContainsFunc(delta.Events, func(e ServerSyncEvent) bool { return e.Kind == eventLibraries }) {
 		t.Errorf("events = %+v, want a libraries marker", delta.Events)
 	}
+}
+
+// A library's folder fallback switched by the console or the CLI tells
+// every account to re-read the libraries, as its other flags do.
+func TestAFolderFallbackSwitchTellsEveryAccount(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixture(t)
+	svc.refreshLibraryState(ctx)
+	lib := svc.libraryRoots()[0]
+	before := markers(t, ctx, svc, uc.ID, eventLibraries, "")
+	if err := svc.LibraryFolderFallbackSet(ctx, uc, apiPID(PrefixLibrary, model.PID(lib.PID)), true); err != nil {
+		t.Fatal(err)
+	}
+	if n := markers(t, ctx, svc, uc.ID, eventLibraries, ""); n != before+1 {
+		t.Fatalf("libraries markers after the console's switch = %d, want %d", n, before+1)
+	}
+	if _, err := svc.lib.SetLibraryFolderFallback(ctx, model.PID(lib.PID), false); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { return markers(t, ctx, svc, uc.ID, eventLibraries, "") == before+2 },
+		"the CLI's switch telling every account")
 }
 
 // A root added before the bridge was wired is taught once it is.
@@ -598,6 +620,73 @@ func TestAConfiguredRootKeepsItsRuntimeMedia(t *testing.T) {
 	}
 }
 
+// A configured root declared to hold audiobooks registers as one, and a
+// catalog that holds it as something else is put back on the next start;
+// one not declared keeps whatever it holds.
+func TestAConfiguredAudiobookRootIsDeclaredBooks(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	declared := func(cfg *Config) { cfg.Roots[0].Media = string(model.MediaAudiobook) }
+	media := func(ctx context.Context, svc *Library) model.MediaType {
+		t.Helper()
+		libs, err := svc.lib.Libraries(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, lib := range libs {
+			if lib.DisplayRoot == filepath.Join(dataDir, "configured") {
+				return lib.MediaType()
+			}
+		}
+		t.Fatal("the configured root is not registered")
+		return ""
+	}
+	ctx, svc, uc, stop := openServiceAt(t, dataDir, declared)
+	if got := media(ctx, svc); got != model.MediaAudiobook {
+		t.Fatalf("declared root media = %q, want audiobook", got)
+	}
+	root, _ := rootAt(svc, filepath.Join(dataDir, "configured"))
+	if _, err := svc.SetLibraryMedia(ctx, uc, apiPID(PrefixLibrary, model.PID(root.PID)), "music"); KindOf(err) != KindInvalid ||
+		!strings.Contains(err.Error(), "WAXDECK_AUDIOBOOK_ROOTS") {
+		t.Fatalf("changing a declared root = %v, want it refused for the configuration", err)
+	}
+	// The listing says so before an administrator tries.
+	declaredAt := func(ctx context.Context, svc *Library) bool {
+		t.Helper()
+		libs, err := svc.Libraries(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, lib := range libs {
+			if lib.Path == filepath.Join(dataDir, "configured") {
+				return lib.MediaDeclared
+			}
+		}
+		t.Fatal("the configured root is not listed")
+		return false
+	}
+	if !declaredAt(ctx, svc) {
+		t.Fatal("a declared root lists as not declared")
+	}
+	if _, err := svc.lib.AddRoot(ctx, config.Root{Path: filepath.Join(dataDir, "configured"), Media: model.MediaMusic}); err != nil {
+		t.Fatal(err)
+	}
+	stop()
+
+	ctx, svc, _, stop = openServiceAt(t, dataDir, declared)
+	if got := media(ctx, svc); got != model.MediaAudiobook {
+		t.Fatalf("declared root media after a restart = %q, want it put back to audiobook", got)
+	}
+	stop()
+	ctx, svc, _, _ = openServiceAt(t, dataDir, nil)
+	if got := media(ctx, svc); got != model.MediaAudiobook {
+		t.Fatalf("undeclared root media = %q, want what the catalog holds", got)
+	}
+	if declaredAt(ctx, svc) {
+		t.Fatal("an undeclared root lists as declared")
+	}
+}
+
 // A root the CLI adds while it holds the catalog reaches the root table
 // when the catalog comes back.
 func TestARootAddedInAHandOffJoinsTheTable(t *testing.T) {
@@ -696,5 +785,42 @@ func TestALibraryNeedsAFolderThatIsThere(t *testing.T) {
 	taken := svc.libraryRoots()[0].Name
 	if _, err := svc.AddLibrary(ctx, uc, AddLibraryInput{Name: taken, Path: filepath.Join(dir, "absent")}); KindOf(err) != KindConflict {
 		t.Errorf("a taken name at a missing folder = %v, want a conflict", err)
+	}
+}
+
+// The podcast library holds what its feeds bring, so no media change
+// reaches it.
+func TestThePodcastLibrarysMediaIsNotChanged(t *testing.T) {
+	t.Parallel()
+	podcasts := t.TempDir()
+	ctx, svc, uc, stop := openServiceAt(t, t.TempDir(), func(c *Config) { c.PodcastDir = podcasts })
+	defer stop()
+	// The catalog makes the podcast library on the first episode it
+	// files, which the missing source then refuses.
+	show, err := svc.lib.Podcasts().AddManual(ctx, "Show", podcast.ManualOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ep, err := svc.lib.Podcasts().AddEpisode(ctx, show.PID, model.FeedEpisode{GUID: "one", Title: "One"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = svc.lib.Podcasts().ImportEpisodeFile(ctx, ep.EpisodePID, filepath.Join(t.TempDir(), "absent.mp3"), true)
+	libs, err := svc.lib.Libraries(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pid model.PID
+	for _, lib := range libs {
+		if lib.Mode == model.ModePodcast {
+			pid = lib.PID
+		}
+	}
+	if pid == "" {
+		t.Fatal("no podcast library")
+	}
+	_, err = svc.SetLibraryMedia(ctx, uc, apiPID(PrefixLibrary, pid), "music")
+	if KindOf(err) != KindInvalid || err.Error() != "the podcast library holds podcasts" {
+		t.Fatalf("changing the podcast library = %v, want it refused as the podcast library", err)
 	}
 }

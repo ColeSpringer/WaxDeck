@@ -9,12 +9,14 @@ part of 'release_status_edit.dart';
 class _$ReleaseStatusEdit extends ReleaseStatusEdit {
   @override
   final bool unofficial;
+  @override
+  final bool? writeBack;
 
   factory _$ReleaseStatusEdit([
     void Function(ReleaseStatusEditBuilder)? updates,
   ]) => (ReleaseStatusEditBuilder()..update(updates))._build();
 
-  _$ReleaseStatusEdit._({required this.unofficial}) : super._();
+  _$ReleaseStatusEdit._({required this.unofficial, this.writeBack}) : super._();
   @override
   ReleaseStatusEdit rebuild(void Function(ReleaseStatusEditBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -26,22 +28,26 @@ class _$ReleaseStatusEdit extends ReleaseStatusEdit {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is ReleaseStatusEdit && unofficial == other.unofficial;
+    return other is ReleaseStatusEdit &&
+        unofficial == other.unofficial &&
+        writeBack == other.writeBack;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, unofficial.hashCode);
+    _$hash = $jc(_$hash, writeBack.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
 
   @override
   String toString() {
-    return (newBuiltValueToStringHelper(
-      r'ReleaseStatusEdit',
-    )..add('unofficial', unofficial)).toString();
+    return (newBuiltValueToStringHelper(r'ReleaseStatusEdit')
+          ..add('unofficial', unofficial)
+          ..add('writeBack', writeBack))
+        .toString();
   }
 }
 
@@ -53,6 +59,10 @@ class ReleaseStatusEditBuilder
   bool? get unofficial => _$this._unofficial;
   set unofficial(bool? unofficial) => _$this._unofficial = unofficial;
 
+  bool? _writeBack;
+  bool? get writeBack => _$this._writeBack;
+  set writeBack(bool? writeBack) => _$this._writeBack = writeBack;
+
   ReleaseStatusEditBuilder() {
     ReleaseStatusEdit._defaults(this);
   }
@@ -61,6 +71,7 @@ class ReleaseStatusEditBuilder
     final $v = _$v;
     if ($v != null) {
       _unofficial = $v.unofficial;
+      _writeBack = $v.writeBack;
       _$v = null;
     }
     return this;
@@ -88,6 +99,7 @@ class ReleaseStatusEditBuilder
             r'ReleaseStatusEdit',
             'unofficial',
           ),
+          writeBack: writeBack,
         );
     replace(_$result);
     return _$result;

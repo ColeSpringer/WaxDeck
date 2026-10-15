@@ -163,6 +163,27 @@ void main() {
       expect(explainError(en, later), en.errorInvalidRequest);
       expect(explainRefusal(en, later), _serverMessage);
     });
+
+    test('unsupported-format is refined by its reason', () {
+      const unreadable = WaxDeckApiException(
+        code: 'unsupported-format',
+        message: _serverMessage,
+        params: <String, String>{'reason': 'unreadable'},
+      );
+      expect(
+        explainError(en, unreadable),
+        'That file could not be read as audio. It may be damaged, or not '
+        'audio at all.',
+      );
+      expect(explainError(es, unreadable), es.errorUnreadableFile);
+      expect(explainRefusal(en, unreadable), en.errorUnreadableFile);
+
+      const plain = WaxDeckApiException(
+        code: 'unsupported-format',
+        message: _serverMessage,
+      );
+      expect(explainError(en, plain), en.errorUnsupportedFormat);
+    });
   });
 
   group('explainRefusal', () {

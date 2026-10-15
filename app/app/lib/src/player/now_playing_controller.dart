@@ -611,6 +611,26 @@ class NowPlayingController extends Notifier<NowPlaying> {
     }
   }
 
+  /// Takes the entry playing out of the queue, for an item that stopped
+  /// existing under the listener (a kind change folded it into a book).
+  /// What lands in its place waits, paused, rather than starting: the
+  /// listener was just told playback stopped. The last entry going
+  /// empties the queue.
+  ///
+  /// Armed across the one synchronous call that can consume it, as
+  /// [restore] arms its flags: the queue notifies as it is assigned.
+  void dropCurrent() {
+    final queue = ref.read(queueControllerProvider);
+    if (queue.isEmpty) return;
+    _pendingPositionMs = null;
+    _pendingPaused = true;
+    try {
+      ref.read(queueControllerProvider.notifier).removeAt(queue.currentIndex);
+    } finally {
+      _pendingPaused = false;
+    }
+  }
+
   void _onQueueChanged(QueueState? previous, QueueState next) {
     // Summaries accumulate as entries come and go, and a session can run
     // for days; the queue's own cap is the bound worth holding them to.

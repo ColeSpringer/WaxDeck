@@ -16,7 +16,9 @@ over an optimal track assignment, and the unit is decided as a whole.
 A unit never half applies.
 
 Files reach the pipeline four ways: an upload, a URL acquisition, a
-rematch pressed on an item, and a scan. That last one is what covers
+rematch pressed on an item, and a scan. A rematch pressed by an
+uploader rather than an administrator opens an entry of their own,
+holding only the tracks their uploads brought in. A scan is what covers
 files dropped into a library root by hand: the server watches its roots
 and scans a dropped directory seconds after it goes quiet (network
 mounts without change events lean on the scan schedule instead), and a
@@ -39,21 +41,28 @@ evidence and the rest of the release is shown as context, not counted
 against it. Decisions:
 
 - **Approve** applies the chosen candidate (the ranked best by
-  default) and locks the applied fields so a rescan cannot undo the
-  acceptance.
+  default), writes it into the files' tags, and locks the applied
+  fields so a rescan cannot undo the acceptance.
 - **Keep as is** accepts the current metadata unchanged.
 - **Mark unofficial** is keep-as-is plus a locked `RELEASESTATUS`
-  custom tag: YouTube rips, remixes, live sets, and personal
-  recordings have no canonical release, and marking them says so.
+  custom tag, written into the files too: YouTube rips, remixes, live
+  sets, and personal recordings have no canonical release, and
+  marking them says so.
   Unofficial content is excluded from match retries and health
   penalties, stays browsable by the tag, and remains fully
   hand-editable. Files that arrive already tagged with a bootleg
   status are treated the same way.
 - **Skip** dismisses the entry without touching anything.
-- **Revert** (on applied entries) restores the pre-apply snapshot and
-  unlocks the fields. Reverts of auto-applied entries feed the
-  calibration statistic the queue shows, so trust in auto-apply is
-  measured, not asserted.
+- **Revert** (on applied entries) restores the pre-apply snapshot, in
+  the files as well, and unlocks the fields. Reverts of auto-applied
+  entries feed the calibration statistic the queue shows, so trust in
+  auto-apply is measured, not asserted.
+
+A match applied on its own writes the files the same way. A unit with
+a file in a read-only library changes only the catalog, and the health
+rule for tags out of sync lists the values its files are owed; a file
+that cannot be written leaves the decision standing and is named in
+its warnings.
 
 Per-library matching modes: `auto` (the default), `review` (nothing
 applies itself), and `off` for libraries the engine must never touch.
@@ -81,13 +90,26 @@ Users with upload rights (an admin grant, with an optional per-user
 pending upload limit) can push audio from any client: uploads are chunked and
 resumable, carry a required media type label (music, podcast episode,
 audiobook), and stage outside the library until a review decision
-imports them. Items a user's own uploads bring into the library stay
+imports them. The label is also what the imported file becomes: an
+audiobook upload is cataloged as a book and a music upload as a track,
+whatever its tags say, and later scans keep that kind. Items a user's own uploads bring into the library stay
 editable by that user afterward: the full-depth editor's item-scoped
 operations accept the uploader as well as administrators. The
 identify pipeline runs on every completed upload, so a well-tagged
 file usually arrives with its candidates already scored. Duplicate
-warnings (exact bytes, or the same recording in a different encoding)
-inform the decision instead of blocking it. The uploads screen shows
+warnings (the same audio, the same recording by its MusicBrainz id or
+acoustically, or a matching name) inform the decision instead of
+blocking it, and name the item only to someone who can see it. Importing
+a file whose audio the library holds adds it to that item as another
+copy: it changes nothing about the item and gives the uploader no right
+to edit it, and the same goes for a further part of a book the library
+already has. A unit that duplicates something waits for a decision
+even where matching applies on its own. A submission that declines
+identification is imported as it arrived (once another catalog job
+holding the library ends, a restart in between included), unless it
+duplicates something or its
+library takes no writes, when it waits for a decision too. The uploads
+screen shows
 what the account currently has waiting at the top of the session list.
 The limit caps what may sit in staging awaiting a decision, so
 importing an upload frees the room it held.
@@ -190,9 +212,9 @@ old identity, in every role no pin holds, so the next pass fetches the
 new one's; artwork you set or pinned stays.
 
 Each field is edited with the control its type wants rather than a
-bare text box: counts (year, track and disc numbers, seasons) take
-digits only, booleans (compilation, an episode's explicit flag) are
-switches, an episode's type is a closed choice over the three values
+bare text box: counts (year, track and disc numbers and totals,
+seasons) take digits only, booleans (compilation, an episode's
+explicit flag) are switches, an episode's type is a closed choice over the three values
 the server accepts, and genres are chips backed by a picker. An administrator's
 picker lists the canonical genre tree - the vocabulary the normalizer
 rewrites onto - and anyone may still type a genre as free text, which
@@ -208,7 +230,9 @@ bar at the bottom is the only thing that writes: fields, credits,
 tags, lyrics (emptying the lyrics field removes them on save),
 chapters, and the release status go in one press, with the bar
 counting what is unsaved. Write-back failures are reported beside
-that bar, where the next save is decided.
+that bar, where the next save is decided. Artwork is the exception: a
+cover applies when it is chosen, and with Write tags to files on it is
+embedded in the track's file too.
 
 On a single-file audiobook the chapter list is part of that draft: a
 row per chapter with its start stamp and title, each chapter running
@@ -225,7 +249,10 @@ provenance shows who set what (file tags, a user, enrichment, or the
 organizer). A write-back that fails after the catalog committed
 reports per-file detail and surfaces as an out-of-sync diagnostic
 rather than failing the edit. Lyrics write-back writes the `.lrc`
-sidecar so corrections stay portable to every other player.
+sidecar, with its audio file's permissions, so corrections stay
+portable to every other player; removing the lyrics with write-back
+deletes that sidecar, while lyrics embedded in the audio's own tags
+stay. Custom tags and the unofficial mark are written with the rest.
 
 What the editor writes, listeners read. A track's tempo, its ISRC and
 its MusicBrainz recording id come back on the item read, and the app's
@@ -330,9 +357,13 @@ ID**), and its edition columns (barcode, label, catalog number, media,
 country), each showing where its current value came from and whether
 it is locked. Only the fields that changed are sent, so a one-word
 correction does not lock the other six. Total tracks appears among
-them as a derived number, not a field: nothing stores it - it is the
-release's membership counted - so the row shows the count, marks it
-derived, and says that editing the tracks is what changes it.
+them as a derived number, not a field: the release stores none - it is
+its membership counted - so the row shows the count, marks it derived,
+and says that editing the tracks is what changes it. Each track keeps
+its own track and disc totals, the "of 12" its file carries, and the
+track editor edits them; renumbering a track past a total the edit
+does not also set clears that total, in the file too under write-back,
+so nothing reads "7 of 1".
 
 The album title and album artist live on the tracks rather than the
 release, so the album form ends with a rewrite section that applies
@@ -421,8 +452,16 @@ whole file; the check reads the analyze pass's measurements, so it
 covers analyzed files only. The
 file rules (corrupt audio, tags lagging the catalog, legacy-only tags,
 a misstated length) look at every part of a multi-file book, so one
-damaged part flags the book. Items marked unofficial are exempt from
-the rules that assume a canonical release.
+damaged part flags the book. Tags lag the catalog when a write-back
+was refused or failed, when a format could not store a value, and when
+an edit changed a value in the catalog without writing it; a value the
+genre clean-up rewrote is the catalog's alone by design and does not
+count. Fixing that rule writes each lagging value through the editor
+that owns it (fields, credits, custom tags, the item's own cover),
+keeping who set it, and counts an item only once nothing is left
+owed; an album's or an origin's value is written by its own editor.
+Items marked unofficial are exempt from the rules that assume a
+canonical release.
 An administrator can fix a rule in bulk where this install has what
 the fix needs; a rule it cannot fix says what is missing: the
 enrichment contact, a lyrics, artwork, genre or book source, or a
@@ -457,9 +496,15 @@ The audit's duplicate findings (artists, albums, release groups,
 genres) surface with suggested survivors; merging re-parents
 everything onto the survivor, play history included, and survives
 rescans because the survivor keeps its identity. Quality upgrade
-groups (the same recording in different encodings, found through the
-fingerprint index) resolve by keeping the best and trashing the rest,
-recoverable within the trash window.
+groups list the same recording in different encodings: first the
+encodings one item holds, which need no analysis, then items the
+fingerprint index ties together once the library is analyzed. A group
+resolves by keeping the best and trashing the rest, recoverable within
+the trash window: within one item, its lesser files and any copy of
+their audio, the item staying on the kept file; across items, the
+lesser items whole. A copy in a read-only library refuses a resolve
+before anything moves, unless the kept file's own library is writable
+and nobody named the copy, in which case it stays where it is.
 
 ## Organizer
 

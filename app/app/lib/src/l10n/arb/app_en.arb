@@ -1034,6 +1034,10 @@
   "@adminInvitesEmpty": {
     "description": "Empty state of the invites tab."
   },
+  "adminLibrariesColumnFolders": "Name from folders",
+  "@adminLibrariesColumnFolders": {
+    "description": "Column heading on the Libraries table: whether a scan names a library's untagged files from their folders (the artist folder and the album folder)."
+  },
   "adminLibrariesColumnHolds": "Holds",
   "@adminLibrariesColumnHolds": {
     "description": "Column heading for what kind of content a library holds."
@@ -1110,9 +1114,23 @@
       }
     }
   },
-  "adminLibraryHoldsHelp": "What kind of content the root carries",
+  "adminLibraryFolderFallbackLabel": "Name untagged files from folders: {name}",
+  "@adminLibraryFolderFallbackLabel": {
+    "description": "Accessible label of the switch that lets a scan name one library's untagged files from their folders.",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "music"
+      }
+    }
+  },
+  "adminLibraryFolderFallbackRescan": "Applies to new files now. Re-read unchanged files in Rescan to apply it to files already scanned.",
+  "@adminLibraryFolderFallbackRescan": {
+    "description": "Message after switching on a library's folder naming: files scanned from now on take it, and a rescan that re-reads unchanged files applies it to the rest."
+  },
+  "adminLibraryHoldsHelp": "Books makes every audio file in the folder an audiobook. Music and Mixed go by each file's tags.",
   "@adminLibraryHoldsHelp": {
-    "description": "Line under the holds row in the add-library form."
+    "description": "Help under the Holds choice when adding a library: what each content class does to the files."
   },
   "adminLibraryHoldsTitle": "Holds",
   "@adminLibraryHoldsTitle": {
@@ -1152,6 +1170,36 @@
   "@adminLibraryMediaBooks": {
     "description": "Says a library holds audiobooks."
   },
+  "adminLibraryMediaChange": "Change what this library holds",
+  "@adminLibraryMediaChange": {
+    "description": "Title of the dialog confirming a change to what a library holds."
+  },
+  "adminLibraryMediaChanged": "Scanning {name} to apply the change.",
+  "@adminLibraryMediaChanged": {
+    "description": "Message after a library's content class changed and its scan started. {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "adminLibraryMediaChoiceLabel": "What {name} holds",
+  "@adminLibraryMediaChoiceLabel": {
+    "description": "Accessible name of the per-library control that changes what the library holds (Music, Books, Mixed). {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "adminLibraryMediaConfirm": "Change",
+  "@adminLibraryMediaConfirm": {
+    "description": "Confirm button of the dialog changing what a library holds."
+  },
+  "adminLibraryMediaDeclared": "Set by the server's configuration",
+  "@adminLibraryMediaDeclared": {
+    "description": "Under what a library holds, in place of the choice, where the server's configuration (WAXDECK_AUDIOBOOK_ROOTS) declares it: it is changed there, and the server refuses a change made here."
+  },
   "adminLibraryMediaMixed": "Mixed",
   "@adminLibraryMediaMixed": {
     "description": "Says a library holds more than one kind of content. Describes the library, so it agrees with the word for a library in this language."
@@ -1163,6 +1211,42 @@
   "adminLibraryMediaPodcasts": "Podcasts",
   "@adminLibraryMediaPodcasts": {
     "description": "Says a library holds podcasts."
+  },
+  "adminLibraryMediaRereadBody": "Every file in {name} is read again to see what it holds, which can take a while. In Music, a book its parts' tags do not make is read as tracks; in Mixed, a book whose parts already make one stays. Items whose kind was set by hand keep it.",
+  "@adminLibraryMediaRereadBody": {
+    "description": "Body of the dialog confirming a library becomes Music or Mixed. {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "adminLibraryMediaScanWaits": "Another job is running. Once it ends, rescan to apply the change to {name}.",
+  "@adminLibraryMediaScanWaits": {
+    "description": "Message after a library became a Books library while another catalog job ran, so its scan did not start. {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "adminLibraryMediaScanWaitsReread": "Another job is running. Once it ends, rescan with Re-read unchanged files on to apply the change to {name}.",
+  "@adminLibraryMediaScanWaitsReread": {
+    "description": "Message after a library became Music or Mixed while another catalog job ran: applying it needs a rescan with the re-read option (adminLibraryRescanForce). {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "adminLibraryMediaToBooksBody": "Every audio file in {name} becomes a book on the scan this starts, the parts in one folder gathered into one book. Items whose kind was set by hand keep it.",
+  "@adminLibraryMediaToBooksBody": {
+    "description": "Body of the dialog confirming a library becomes a Books library. {name} is the library's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
   },
   "adminLibraryNameHint": "Also the WaxFlow root name serving this directory",
   "@adminLibraryNameHint": {
@@ -2921,6 +3005,16 @@
       }
     }
   },
+  "artworkReplacedTagsFailed": "{slot} replaced, but the file's tags could not be updated",
+  "@artworkReplacedTagsFailed": {
+    "description": "Message after an artwork slot was replaced in the catalog while embedding it in the item's file failed (a read-only file, say). {slot} is the slot's name (Front cover, Booklet).",
+    "placeholders": {
+      "slot": {
+        "type": "String",
+        "example": "Front cover"
+      }
+    }
+  },
   "artworkSetSlot": "Set the {slot}",
   "@artworkSetSlot": {
     "description": "Accessible name of the control that fills an empty artwork slot. {slot} is the slot's inline form.",
@@ -3761,6 +3855,10 @@
   "@bookYes": {
     "description": "The value of a yes-or-no row in a book's edition details."
   },
+  "booksAddLibrary": "Add a library",
+  "@booksAddLibrary": {
+    "description": "Action on the empty Books hub, for administrators: opens the libraries screen where a Books library is added."
+  },
   "booksAddToLibrary": "Add to library",
   "@booksAddToLibrary": {
     "description": "Accessible name of the add control on the audiobook hub, which opens the same sheet home's does with the audiobook type chosen."
@@ -3782,9 +3880,9 @@
   "@booksContinueTitle": {
     "description": "Shelf on the audiobook hub holding the books part way through."
   },
-  "booksEmptyMessage": "Books turn up here as the library scans them. Point a library at your audiobook folder and they arrive with their chapters.",
+  "booksEmptyMessage": "In a library that holds Books every audio file becomes a book, parts and all. Elsewhere a file is a book when its tags say so, or when someone who may edit it chooses Treat as audiobook.",
   "@booksEmptyMessage": {
-    "description": "Message under the empty state of the audiobook hub."
+    "description": "Message of the Books hub when there are no audiobooks: how a file becomes a book. 'Treat as audiobook' is the menu row of that name (libraryKindToBook)."
   },
   "booksEmptyTitle": "No audiobooks yet",
   "@booksEmptyTitle": {
@@ -4703,9 +4801,9 @@
   "@errorNotFound": {
     "description": "Error sentence for the spec code `not-found`."
   },
-  "errorQuotaExceeded": "That would go over the storage limit.",
+  "errorQuotaExceeded": "That is over a limit this server keeps.",
   "@errorQuotaExceeded": {
-    "description": "Error sentence for the spec code `quota-exceeded`."
+    "description": "Error sentence for the spec code `quota-exceeded`. The code is shared by an upload over the uploader's allowance, a backup import and an account export, so it names no particular limit."
   },
   "errorRateLimited": "Too many attempts. Wait a moment and try again.",
   "@errorRateLimited": {
@@ -4758,6 +4856,10 @@
   "errorUnexpected": "Something went wrong.",
   "@errorUnexpected": {
     "description": "What an error surface shows when nothing more specific is known."
+  },
+  "errorUnreadableFile": "That file could not be read as audio. It may be damaged, or not audio at all.",
+  "@errorUnreadableFile": {
+    "description": "A completed upload whose bytes do not read as audio (the server's `unsupported-format` with reason `unreadable`). Its session is already gone, so the person sends the file again."
   },
   "errorUnsupportedFormat": "This server does not accept that file's format.",
   "@errorUnsupportedFormat": {
@@ -4870,10 +4972,6 @@
   "healthDuplicatesError": "Could not load duplicates",
   "@healthDuplicatesError": {
     "description": "Title of the error state when the duplicate findings could not be read."
-  },
-  "healthDuplicatesErrorBody": "The clustering pass did not answer.",
-  "@healthDuplicatesErrorBody": {
-    "description": "Body of the duplicates error state. Clustering is the pass that finds duplicates."
   },
   "healthDuplicatesOverline": "One thing under two names",
   "@healthDuplicatesOverline": {
@@ -5068,6 +5166,20 @@
   "healthLossless": "lossless",
   "@healthLossless": {
     "description": "Says a copy is stored without losing anything to compression. Lower case: it sits in a comma-separated run of a copy's properties."
+  },
+  "healthMemberInFile": "{quality} in {file}",
+  "@healthMemberInFile": {
+    "description": "One encoding in a quality-upgrade group, when another encoding in the group reads the same: what it is, then the name of the file that holds it, so the two can be told apart.",
+    "placeholders": {
+      "quality": {
+        "type": "String",
+        "example": "vorbis, 320 kbps"
+      },
+      "file": {
+        "type": "String",
+        "example": "Neon Meridian (1).ogg"
+      }
+    }
   },
   "healthMergeAction": "Merge",
   "@healthMergeAction": {
@@ -5290,10 +5402,6 @@
   "healthUpgradesError": "Could not load upgrades",
   "@healthUpgradesError": {
     "description": "Title of the error state when the quality findings could not be read."
-  },
-  "healthUpgradesErrorBody": "The quality comparison did not answer.",
-  "@healthUpgradesErrorBody": {
-    "description": "Body of the quality upgrades error state."
   },
   "healthUpgradesOverline": "The same recording twice",
   "@healthUpgradesOverline": {
@@ -5541,6 +5649,10 @@
   "@libraryDeleteFilesMenu": {
     "description": "Row in an item's overflow menu that opens the delete dialog. The ellipsis says a dialog follows."
   },
+  "libraryDeleteKeepsItem": "The item stays in your library on its remaining files.",
+  "@libraryDeleteKeepsItem": {
+    "description": "Sentence in the delete dialog when the item keeps a file after the deletion (a copy that takes the deleted file's place, or a file left where it is), so the item is not removed from the library."
+  },
   "libraryDeleteModePermanent": "Delete permanently",
   "@libraryDeleteModePermanent": {
     "description": "Option deleting the files outright rather than trashing them."
@@ -5560,6 +5672,16 @@
   "libraryDeleteMore": "More",
   "@libraryDeleteMore": {
     "description": "Tooltip of the overflow menu on an item screen."
+  },
+  "libraryDeleteMoreFiles": "{count, plural, =1{and 1 more file} other{and {count} more files}}",
+  "@libraryDeleteMoreFiles": {
+    "description": "Last line of the delete dialog's file list when it names only the first few files: how many more the deletion removes.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "35"
+      }
+    }
   },
   "libraryDeletePermanentDone": "{count, plural, =1{Deleted 1 file for good} other{Deleted {count} files for good}}",
   "@libraryDeletePermanentDone": {
@@ -5620,6 +5742,10 @@
   "@libraryFactsDuration": {
     "description": "Facts sheet row label: how long the item runs."
   },
+  "libraryFactsFiles": "Files",
+  "@libraryFactsFiles": {
+    "description": "Label of the Details sheet row counting the files behind an item: its own file (or a book's parts) and any copies of it the library holds."
+  },
   "libraryFactsGenres": "Genres",
   "@libraryFactsGenres": {
     "description": "Facts sheet row label: the item's genres, comma separated."
@@ -5660,13 +5786,146 @@
   "@libraryFactsYear": {
     "description": "Facts sheet row label: the release or publication year."
   },
+  "libraryFileDeleteCopy": "Delete this copy",
+  "@libraryFileDeleteCopy": {
+    "description": "Accessible label of the button that deletes one copy from an item's file list, leaving the item on its own file."
+  },
+  "libraryFileRoleCopy": "Copy",
+  "@libraryFileRoleCopy": {
+    "description": "What one file in an item's file list is: another file holding the same audio, kept beside the item rather than made an item of its own."
+  },
+  "libraryFileRoleOtherEncoding": "Other encoding",
+  "@libraryFileRoleOtherEncoding": {
+    "description": "What one file in an item's file list is: another encoding of the same recording (an MP3 beside a FLAC, say), kept beside the item rather than made an item of its own."
+  },
+  "libraryFileRolePart": "Part",
+  "@libraryFileRolePart": {
+    "description": "What one file in an item's file list is: one of an audiobook's files, in reading order."
+  },
+  "libraryFileRolePrimary": "Primary",
+  "@libraryFileRolePrimary": {
+    "description": "What one file in an item's file list is: the file the item's details and playback come from."
+  },
+  "libraryFilesCount": "{count, plural, =1{1 file} other{{count} files}}",
+  "@libraryFilesCount": {
+    "description": "Value of the Details sheet's Files row: how many files are behind the item, copies included.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
   "libraryKindAlbum": "album",
   "@libraryKindAlbum": {
     "description": "The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case."
   },
+  "libraryKindAlbumToBook": "Treat album as one audiobook",
+  "@libraryKindAlbumToBook": {
+    "description": "Menu row on an album that turns all its tracks into one audiobook, the parts in order."
+  },
+  "libraryKindAlbumTooLarge": "This album has more than {max} tracks, too many to change in one go.",
+  "@libraryKindAlbumTooLarge": {
+    "description": "Body of the dialog for an album with more tracks than one kind change can name; it offers no confirm. {max} is that limit.",
+    "placeholders": {
+      "max": {
+        "type": "int",
+        "example": "500"
+      }
+    }
+  },
+  "libraryKindAlreadyBook": "{count, plural, =1{This is already an audiobook} other{These are already audiobooks}}, so nothing changed.",
+  "@libraryKindAlreadyBook": {
+    "description": "Message when a change to audiobook ended having converted nothing, because every item named already was one (a view drawn before another device changed it). {count} is how many items were named.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryKindAlreadyMusic": "{count, plural, =1{This is already music} other{These are already music}}, so nothing changed.",
+  "@libraryKindAlreadyMusic": {
+    "description": "Message when a change to music ended having converted nothing, because every item named already was music (a view drawn before another device changed it). {count} is how many items were named.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "libraryKindArtist": "artist",
   "@libraryKindArtist": {
     "description": "The word for an artist where it stands inside a sentence, such as the star row's accessible names. Lower case."
+  },
+  "libraryKindConfirm": "Change",
+  "@libraryKindConfirm": {
+    "description": "Confirm button of the dialog changing what items are."
+  },
+  "libraryKindFailed": "The change could not be made.",
+  "@libraryKindFailed": {
+    "description": "Message when a kind change job failed without a reason of its own."
+  },
+  "libraryKindFailedWhy": "The change could not be made: {reason}",
+  "@libraryKindFailedWhy": {
+    "description": "Message when a kind change job failed. {reason} is the server's own sentence for why, which a failed job carries without a code to translate.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "a file of the item is not on disk"
+      }
+    }
+  },
+  "libraryKindJoinedUnseen": "It became part of an item in a library you cannot open.",
+  "@libraryKindJoinedUnseen": {
+    "description": "Message when a kind change folded the user's item into one in a library they are not granted, so there is nothing to open."
+  },
+  "libraryKindQueued": "It carries on in the background; you will be told when it is done.",
+  "@libraryKindQueued": {
+    "description": "Message when a kind change is still running after the dialog stopped watching it (accounts without the Tasks screen)."
+  },
+  "libraryKindStillRunning": "Still changing. Follow it in Tasks.",
+  "@libraryKindStillRunning": {
+    "description": "Message, with a Tasks action, when a kind change is still running after the dialog stopped watching it (administrators)."
+  },
+  "libraryKindStoppedPlaying": "What was playing is part of the book now; play it from here.",
+  "@libraryKindStoppedPlaying": {
+    "description": "Message when a kind change folded the item playing into a book, which stopped it; the book's screen opens after it."
+  },
+  "libraryKindToBook": "Treat as audiobook",
+  "@libraryKindToBook": {
+    "description": "Menu row on a music track (item menu, player More menu, metadata actions) that turns it into an audiobook."
+  },
+  "libraryKindToBookBody": "{count, plural, =1{This track becomes an audiobook in Books.} other{These {count} tracks become one audiobook in Books, the parts in order.}} Plays, stars and playlist entries come with it, and later scans keep the choice.",
+  "@libraryKindToBookBody": {
+    "description": "Body of the dialog confirming tracks become an audiobook. {count} is how many tracks.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryKindToBookTitle": "Make this an audiobook?",
+  "@libraryKindToBookTitle": {
+    "description": "Title of the dialog confirming tracks become an audiobook."
+  },
+  "libraryKindToMusic": "Treat as music",
+  "@libraryKindToMusic": {
+    "description": "Overflow row on a book that turns its parts back into music tracks."
+  },
+  "libraryKindToMusicBody": "This book's parts become tracks in Music. Plays and stars stay with them, and later scans keep the choice.",
+  "@libraryKindToMusicBody": {
+    "description": "Body of the dialog confirming a book becomes music tracks."
+  },
+  "libraryKindToMusicTitle": "Make this music?",
+  "@libraryKindToMusicTitle": {
+    "description": "Title of the dialog confirming a book becomes music tracks."
+  },
+  "libraryKindWorking": "Reading the files again",
+  "@libraryKindWorking": {
+    "description": "Shown in the dialog while the server reads the items' files as their new kind."
+  },
+  "libraryKindWriteBackHelp": "Writes the choice into the files too. Even a catalog rebuilt from scratch then reads a book as a book, and a track as music unless something else in its file says book.",
+  "@libraryKindWriteBackHelp": {
+    "description": "Help under the write-back switch in the dialog changing what items are."
   },
   "libraryMenuDetach": "Detach from release",
   "@libraryMenuDetach": {
@@ -5929,6 +6188,10 @@
   "@metadataFieldDiscNo": {
     "description": "Name of the editable metadata field the server calls `disc_no`."
   },
+  "metadataFieldDiscTotal": "Disc total",
+  "@metadataFieldDiscTotal": {
+    "description": "Name of the editable metadata field the server calls `disc_total`: how many discs the release has."
+  },
   "metadataFieldEdition": "Edition",
   "@metadataFieldEdition": {
     "description": "Name of the editable metadata field the server calls `edition`."
@@ -6001,6 +6264,10 @@
   "@metadataFieldTrackNo": {
     "description": "Name of the editable metadata field the server calls `track_no`."
   },
+  "metadataFieldTrackTotal": "Track total",
+  "@metadataFieldTrackTotal": {
+    "description": "Name of the editable metadata field the server calls `track_total`: how many tracks the track's disc or release has."
+  },
   "metadataFieldYear": "Year",
   "@metadataFieldYear": {
     "description": "Name of the editable metadata field the server calls `year`."
@@ -6068,6 +6335,16 @@
   "metadataIdentificationTitle": "Identification",
   "@metadataIdentificationTitle": {
     "description": "Heading over the two ways of asking the providers about this item again."
+  },
+  "metadataKindPinned": "Kind: {kind}, pinned",
+  "@metadataKindPinned": {
+    "description": "Line under the editor's provenance summary when the item's kind (music or book) is pinned, as an upload imported under a media type its file would not get on its own is: scans keep it until the pin is lifted. {kind} is the media's name (Music, Book).",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "Book"
+      }
+    }
   },
   "metadataLinesAllTimed": "{count, plural, =1{1 line, timed} other{{count} lines, all timed}}",
   "@metadataLinesAllTimed": {
@@ -6436,6 +6713,10 @@
   "@metadataSourceFeed": {
     "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
   },
+  "metadataSourceNormalize": "the clean-up pass",
+  "@metadataSourceNormalize": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from the clean-up pass\"): a value a clean-up pass such as the genre normalizer rewrote in the catalog. A short noun, not a sentence."
+  },
   "metadataSourceOrganize": "the organizer",
   "@metadataSourceOrganize": {
     "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
@@ -6463,6 +6744,42 @@
   "metadataTagReserved": "{key} is stored as its own field, not as a custom tag.",
   "@metadataTagReserved": {
     "description": "Refusal under the custom-tag key input when the key is one the catalog owns through a field of its own.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "metadataTagReservedBookKind": "{key} is stored as its own field, not as a custom tag. A tag cannot change what an item is; change its kind instead.",
+  "@metadataTagReservedBookKind": {
+    "description": "Refusal under the custom-tag key input for MEDIATYPE on an audiobook. 'Change its kind' points at Treat as music.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "metadataTagReservedEpisode": "{key} is stored as its own field, not as a custom tag. A tag cannot change what an episode is.",
+  "@metadataTagReservedEpisode": {
+    "description": "Refusal under the custom-tag key input for NARRATOR or MEDIATYPE on a podcast episode, which has no kind to change to.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "metadataTagReservedKind": "{key} is stored as its own field, not as a custom tag. A tag cannot make an item an audiobook; change its kind instead.",
+  "@metadataTagReservedKind": {
+    "description": "Refusal under the custom-tag key input for NARRATOR or MEDIATYPE on a music track, keys a person types hoping to make it an audiobook. 'Change its kind' points at Treat as audiobook.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "metadataTagReservedNarrator": "{key} is stored as its own field, not as a custom tag. Edit the narrator credits instead.",
+  "@metadataTagReservedNarrator": {
+    "description": "Refusal under the custom-tag key input for NARRATOR on an audiobook, which keeps its narrators as credits.",
     "placeholders": {
       "key": {
         "type": "String"
@@ -6638,7 +6955,7 @@
   "@musicAlbumEditorTotalTracks": {
     "description": "Label of the read-only track count in the album editor."
   },
-  "musicAlbumEditorTotalTracksHelp": "Counted from the tracks on this release. Add or remove tracks to change it; it is not a field anything stores.",
+  "musicAlbumEditorTotalTracksHelp": "Counted from the tracks on this release. Add or remove tracks to change it; each track's own track total is edited on the track.",
   "@musicAlbumEditorTotalTracksHelp": {
     "description": "Helper under the album editor's read-only track count, explaining why there is no input."
   },
@@ -11782,6 +12099,10 @@
       }
     }
   },
+  "reviewActionAddCopy": "Add as another copy",
+  "@reviewActionAddCopy": {
+    "description": "Review decision button for an entry whose every file is already in the library: import the files anyway, as copies beside the items that hold their audio."
+  },
   "reviewActionApprove": "Approve",
   "@reviewActionApprove": {
     "description": "Takes the selected candidate as the match. On the entry's decision bar and on the bulk bar."
@@ -11805,6 +12126,24 @@
   "reviewActionUnofficial": "Mark unofficial",
   "@reviewActionUnofficial": {
     "description": "Files the entry as a release no catalogue lists: a bootleg, a rip, a demo."
+  },
+  "reviewBulkHeldDuplicates": "{count, plural, =1{1 entry holds duplicates; open it to decide} other{{count} entries hold duplicates; open each to decide}}",
+  "@reviewBulkHeldDuplicates": {
+    "description": "Line of a bulk Approve's snackbar for the selected entries it left undecided because they hold files the library already has: the entry's own pane says which decisions those leave open. {count} is how many were left.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewBulkMoreWarnings": "{count, plural, =1{and 1 more warning} other{and {count} more warnings}}",
+  "@reviewBulkMoreWarnings": {
+    "description": "Last line of a bulk decision's snackbar when more of the server's warnings came back than it shows. {count} is how many were left out.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "reviewCandidateLine": "{percent}% {title}, {artist}",
   "@reviewCandidateLine": {
@@ -11877,6 +12216,10 @@
   "reviewCandidatesTitle": "Candidates",
   "@reviewCandidatesTitle": {
     "description": "Heading over the ranked releases the sources offered for this entry."
+  },
+  "reviewDecideHeldInPane": "This entry holds duplicates; decide it with its own buttons.",
+  "@reviewDecideHeldInPane": {
+    "description": "Snackbar when the a or u key is pressed on a queue row whose entry is already open beside the queue and holds files the library already has: the open entry's own buttons say which decisions those files leave open."
   },
   "reviewDecidedCount": "{count, plural, =1{Decided 1 entry} other{Decided {count} entries}}",
   "@reviewDecidedCount": {
@@ -11955,6 +12298,53 @@
   "reviewDiffUnmatched": "Unmatched",
   "@reviewDiffUnmatched": {
     "description": "A local file no candidate track was paired with."
+  },
+  "reviewDuplicateCount": "{count, plural, =1{1 duplicate} other{{count} duplicates}}",
+  "@reviewDuplicateCount": {
+    "description": "Chip on a review queue row: how many of the entry's files arrived matching something the library already holds.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "reviewDuplicateHelp": "Adding a file the library already holds keeps one item, with the file as another copy. Its details, art and who may edit it do not change.",
+  "@reviewDuplicateHelp": {
+    "description": "Explanation under the duplicate warning on a review entry, shown when a file holds the same audio as an item the library has."
+  },
+  "reviewDuplicateMaybeTitle": "{count, plural, =1{1 file may already be in your library} other{{count} files may already be in your library}}",
+  "@reviewDuplicateMaybeTitle": {
+    "description": "Heading of the warning on a review entry whose files match something the library holds by name or by sound, which may be another recording.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewDuplicateRow": "{file}: {what}",
+  "@reviewDuplicateRow": {
+    "description": "One line of the duplicate warning on a review entry: the staged file's name, then what in the library it matched (a title and artist, or a sentence when the reader may not see it).",
+    "placeholders": {
+      "file": {
+        "type": "String",
+        "example": "03 - Hell Shell.m4a"
+      },
+      "what": {
+        "type": "String",
+        "example": "Hell Shell by Dom Kennedy"
+      }
+    }
+  },
+  "reviewDuplicateTitle": "{count, plural, =1{1 file is already in your library} other{{count} files are already in your library}}",
+  "@reviewDuplicateTitle": {
+    "description": "Heading of the warning on a review entry whose files arrived matching something the library already holds.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
   },
   "reviewEditMetadata": "Edit metadata",
   "@reviewEditMetadata": {
@@ -12067,6 +12457,10 @@
   "reviewIdentifyingLong": "Identifying: candidate lookup is still running",
   "@reviewIdentifyingLong": {
     "description": "Beside a spinner on the entry itself, where there is room to say what is happening."
+  },
+  "reviewJoinedChip": "Added to an item the library already had",
+  "@reviewJoinedChip": {
+    "description": "Note under a decided review track whose file joined an item that existed before (another copy of its audio, or a further part of a book), which kept its details."
   },
   "reviewLoadError": "Could not load the review queue",
   "@reviewLoadError": {
@@ -12200,7 +12594,7 @@
   "@reviewSkippedDecided": {
     "description": "Empty state for a skipped identification that has already been decided."
   },
-  "reviewSkippedPending": "This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own - keep the files as they are, or skip.",
+  "reviewSkippedPending": "This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own: read the warning above if there is one, then add it, skip it or discard it.",
   "@reviewSkippedPending": {
     "description": "Empty state for a skipped identification that is still pending, so it needs telling what to do."
   },
@@ -14979,6 +15373,25 @@
       }
     }
   },
+  "toolsCountChanged": "changed {count}",
+  "@toolsCountChanged": {
+    "description": "Counter in a finished kind change's result: items that changed kind or were made as its parts. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "toolsCountCopies": "copies {count}",
+  "@toolsCountCopies": {
+    "description": "Counter in a finished scan's result: files that joined an item as another copy of its audio or another encoding of its recording, rather than becoming items of their own. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
   "toolsCountCovers": "covers {count}",
   "@toolsCountCovers": {
     "description": "Counter in a finished enrichment's result: front covers it fetched. Lower case: it sits in a comma-separated run of counters.",
@@ -15009,6 +15422,16 @@
       }
     }
   },
+  "toolsCountFallbacks": "fell back {count}",
+  "@toolsCountFallbacks": {
+    "description": "Counter in a finished analysis's result: files fpcalc could not read, fingerprinted another way that does not group with fpcalc's. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "58"
+      }
+    }
+  },
   "toolsCountFilledOf": "filled {filled} of {attempted}",
   "@toolsCountFilledOf": {
     "description": "Counter in a finished health fix's result: how many of the items it tried it fixed. Lower case: it sits in a comma-separated run of counters.",
@@ -15020,6 +15443,15 @@
       "attempted": {
         "type": "int",
         "example": "5"
+      }
+    }
+  },
+  "toolsCountFolded": "folded {count}",
+  "@toolsCountFolded": {
+    "description": "Counter in a finished kind change's result: items folded into another (tracks gathered into one book). Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int"
       }
     }
   },
@@ -15053,6 +15485,15 @@
       }
     }
   },
+  "toolsCountNotWritten": "not written {count}",
+  "@toolsCountNotWritten": {
+    "description": "Counter in a finished kind change's result: files the change could not be written into. Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "toolsCountPictures": "pictures {count}",
   "@toolsCountPictures": {
     "description": "Counter in a finished enrichment's result: other pictures it fetched, backs and booklets. Lower case: it sits in a comma-separated run of counters.",
@@ -15070,6 +15511,16 @@
       "count": {
         "type": "int",
         "example": "2"
+      }
+    }
+  },
+  "toolsCountUnreadable": "unreadable {count}",
+  "@toolsCountUnreadable": {
+    "description": "Counter in a finished scan's result: entries in a library folder the scan could not read (a folder without permission, say). Lower case: it sits in a comma-separated run of counters.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1"
       }
     }
   },
@@ -15145,6 +15596,10 @@
   "@toolsJobScan": {
     "description": "Name of a catalog job that scans the library folders."
   },
+  "toolsJobSetKind": "Kind change",
+  "@toolsJobSetKind": {
+    "description": "Name of a catalog job that turns items into audiobooks or music tracks."
+  },
   "toolsJobTargeted": "{job}: {target}",
   "@toolsJobTargeted": {
     "description": "A catalog job that ran on one thing: {job} is the job name (Enrichment, Library scan), {target} what it ran on (a track, an album, a library).",
@@ -15188,6 +15643,38 @@
       "count": {
         "type": "int",
         "example": "3"
+      }
+    }
+  },
+  "toolsRootUnreachable": "folder not reachable",
+  "@toolsRootUnreachable": {
+    "description": "Marker in a finished scan's result: a library's folder could not be reached (a drive that is not mounted, say), so nothing under it was marked missing. Lower case: it sits in a comma-separated run of counters."
+  },
+  "toolsScanRun": "{library}: {files, plural, =1{1 file} other{{files} files}}, {copies, plural, =1{1 copy} other{{copies} copies}}",
+  "@toolsScanRun": {
+    "description": "One library's line under a finished scan of several libraries: the library's name, the audio files the scan visited in it, and how many of them joined an item as copies.",
+    "placeholders": {
+      "library": {
+        "type": "String",
+        "example": "Music"
+      },
+      "files": {
+        "type": "int",
+        "example": "412"
+      },
+      "copies": {
+        "type": "int",
+        "example": "3"
+      }
+    }
+  },
+  "toolsScanRunUnreachable": "{library}: folder not reachable",
+  "@toolsScanRunUnreachable": {
+    "description": "One library's line under a finished scan of several libraries, when that library's folder could not be reached (a drive that is not mounted, say).",
+    "placeholders": {
+      "library": {
+        "type": "String",
+        "example": "Archive"
       }
     }
   },
@@ -15465,9 +15952,27 @@
   "@uploadsDuplicateFingerprint": {
     "description": "How a duplicate matched: a different file of the same audio. Lower case: it sits in brackets."
   },
+  "uploadsDuplicateId": "same identifier",
+  "@uploadsDuplicateId": {
+    "description": "How a duplicate matched: the file's tags carry the same MusicBrainz recording id as an item in the library. Lower case: it sits in brackets."
+  },
+  "uploadsDuplicateJoined": "Already in the library: {what}. Its details stay as they were.",
+  "@uploadsDuplicateJoined": {
+    "description": "Note on an imported upload whose audio the library already held: the file was added to that item as a copy (or nothing was added), and the item kept its details. {what} names the item.",
+    "placeholders": {
+      "what": {
+        "type": "String",
+        "example": "Hell Shell by Dom Kennedy"
+      }
+    }
+  },
   "uploadsDuplicateName": "name match",
   "@uploadsDuplicateName": {
     "description": "How a duplicate matched: only the name is the same. Lower case: it sits in brackets."
+  },
+  "uploadsDuplicateUnseen": "an item in a library you cannot open",
+  "@uploadsDuplicateUnseen": {
+    "description": "What a duplicate matched when it sits in a library the uploader cannot see, so its title is not theirs to read."
   },
   "uploadsEmptyMessage": "Pick files from the bar above, or drop them anywhere on this page.",
   "@uploadsEmptyMessage": {
@@ -15481,6 +15986,10 @@
   "@uploadsEmptyTitle": {
     "description": "Empty state of the uploads screen."
   },
+  "uploadsFileEmpty": "The file is empty",
+  "@uploadsFileEmpty": {
+    "description": "Why a picked file was not uploaded: it holds no bytes. Shown as {reason} in uploadsFileFailed."
+  },
   "uploadsFileFailed": "{name}: {reason}",
   "@uploadsFileFailed": {
     "description": "One file's failure inside a multi-file upload, which keeps going: the file's own name and the worded reason.",
@@ -15492,6 +16001,16 @@
       "reason": {
         "type": "String",
         "example": "You are out of space."
+      }
+    }
+  },
+  "uploadsFileOverQuota": "Larger than your whole upload limit of {limit}, so clearing Past uploads cannot make room. An administrator can raise the limit.",
+  "@uploadsFileOverQuota": {
+    "description": "Why a picked or shared file was not uploaded: the file alone is larger than the uploader's whole allowance (`quota-exceeded`), so importing or discarding staged sessions cannot admit it. Shown as {reason} in uploadsFileFailed. 'Past uploads' is the uploads screen's list of sessions.",
+    "placeholders": {
+      "limit": {
+        "type": "String",
+        "example": "500 MB"
       }
     }
   },
@@ -15629,6 +16148,10 @@
   "@uploadsPickSubtitle": {
     "description": "Second line of the upload-files row in the add sheet. Contrasts with the folder row: picked files carry no folder hierarchy, so grouping falls back to tags."
   },
+  "uploadsQuotaFull": "You already have as much waiting as your limit allows. Import or discard some in Past uploads, then try again.",
+  "@uploadsQuotaFull": {
+    "description": "Why a picked file was not uploaded: the uploader's staged sessions already fill their allowance (`quota-exceeded`). Shown as {reason} in uploadsFileFailed. 'Past uploads' is the uploads screen's list of sessions."
+  },
   "uploadsQuotaHelp": "This is what may sit staged at once, not what you may contribute: importing a session frees the space it held.",
   "@uploadsQuotaHelp": {
     "description": "Under the staging figure, saying what the cap is a cap on."
@@ -15712,6 +16235,10 @@
   "uploadsSourceUrlHint": "A single video, or a playlist or channel",
   "@uploadsSourceUrlHint": {
     "description": "Placeholder in the source-URL field."
+  },
+  "uploadsSourceUrlInvalid": "Enter a link starting with http:// or https://",
+  "@uploadsSourceUrlInvalid": {
+    "description": "Error under the acquisition dialog's link field when what was typed is not a web address."
   },
   "uploadsTitle": "Uploads",
   "@uploadsTitle": {

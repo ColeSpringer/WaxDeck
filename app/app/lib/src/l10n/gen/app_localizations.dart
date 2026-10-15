@@ -1443,6 +1443,12 @@ abstract class AppLocalizations {
   /// **'No invites yet'**
   String get adminInvitesEmpty;
 
+  /// Column heading on the Libraries table: whether a scan names a library's untagged files from their folders (the artist folder and the album folder).
+  ///
+  /// In en, this message translates to:
+  /// **'Name from folders'**
+  String get adminLibrariesColumnFolders;
+
   /// Column heading for what kind of content a library holds.
   ///
   /// In en, this message translates to:
@@ -1539,10 +1545,22 @@ abstract class AppLocalizations {
   /// **'Library \"{name}\" created. Another catalog job is running, so the next scan will index it.'**
   String adminLibraryCreatedNoScan(String name);
 
-  /// Line under the holds row in the add-library form.
+  /// Accessible label of the switch that lets a scan name one library's untagged files from their folders.
   ///
   /// In en, this message translates to:
-  /// **'What kind of content the root carries'**
+  /// **'Name untagged files from folders: {name}'**
+  String adminLibraryFolderFallbackLabel(String name);
+
+  /// Message after switching on a library's folder naming: files scanned from now on take it, and a rescan that re-reads unchanged files applies it to the rest.
+  ///
+  /// In en, this message translates to:
+  /// **'Applies to new files now. Re-read unchanged files in Rescan to apply it to files already scanned.'**
+  String get adminLibraryFolderFallbackRescan;
+
+  /// Help under the Holds choice when adding a library: what each content class does to the files.
+  ///
+  /// In en, this message translates to:
+  /// **'Books makes every audio file in the folder an audiobook. Music and Mixed go by each file\'s tags.'**
   String get adminLibraryHoldsHelp;
 
   /// Row in the add-library form choosing what the root holds.
@@ -1593,6 +1611,36 @@ abstract class AppLocalizations {
   /// **'Books'**
   String get adminLibraryMediaBooks;
 
+  /// Title of the dialog confirming a change to what a library holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Change what this library holds'**
+  String get adminLibraryMediaChange;
+
+  /// Message after a library's content class changed and its scan started. {name} is the library's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning {name} to apply the change.'**
+  String adminLibraryMediaChanged(String name);
+
+  /// Accessible name of the per-library control that changes what the library holds (Music, Books, Mixed). {name} is the library's name.
+  ///
+  /// In en, this message translates to:
+  /// **'What {name} holds'**
+  String adminLibraryMediaChoiceLabel(String name);
+
+  /// Confirm button of the dialog changing what a library holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get adminLibraryMediaConfirm;
+
+  /// Under what a library holds, in place of the choice, where the server's configuration (WAXDECK_AUDIOBOOK_ROOTS) declares it: it is changed there, and the server refuses a change made here.
+  ///
+  /// In en, this message translates to:
+  /// **'Set by the server\'s configuration'**
+  String get adminLibraryMediaDeclared;
+
   /// Says a library holds more than one kind of content. Describes the library, so it agrees with the word for a library in this language.
   ///
   /// In en, this message translates to:
@@ -1610,6 +1658,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Podcasts'**
   String get adminLibraryMediaPodcasts;
+
+  /// Body of the dialog confirming a library becomes Music or Mixed. {name} is the library's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Every file in {name} is read again to see what it holds, which can take a while. In Music, a book its parts\' tags do not make is read as tracks; in Mixed, a book whose parts already make one stays. Items whose kind was set by hand keep it.'**
+  String adminLibraryMediaRereadBody(String name);
+
+  /// Message after a library became a Books library while another catalog job ran, so its scan did not start. {name} is the library's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Another job is running. Once it ends, rescan to apply the change to {name}.'**
+  String adminLibraryMediaScanWaits(String name);
+
+  /// Message after a library became Music or Mixed while another catalog job ran: applying it needs a rescan with the re-read option (adminLibraryRescanForce). {name} is the library's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Another job is running. Once it ends, rescan with Re-read unchanged files on to apply the change to {name}.'**
+  String adminLibraryMediaScanWaitsReread(String name);
+
+  /// Body of the dialog confirming a library becomes a Books library. {name} is the library's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Every audio file in {name} becomes a book on the scan this starts, the parts in one folder gathered into one book. Items whose kind was set by hand keep it.'**
+  String adminLibraryMediaToBooksBody(String name);
 
   /// Hint in the library name field. WaxFlow is the streaming sidecar and serves a root of the same name, so the name is not free-form decoration.
   ///
@@ -3681,6 +3753,12 @@ abstract class AppLocalizations {
   /// **'{slot} replaced'**
   String artworkReplaced(String slot);
 
+  /// Message after an artwork slot was replaced in the catalog while embedding it in the item's file failed (a read-only file, say). {slot} is the slot's name (Front cover, Booklet).
+  ///
+  /// In en, this message translates to:
+  /// **'{slot} replaced, but the file\'s tags could not be updated'**
+  String artworkReplacedTagsFailed(String slot);
+
   /// Accessible name of the control that fills an empty artwork slot. {slot} is the slot's inline form.
   ///
   /// In en, this message translates to:
@@ -4689,6 +4767,12 @@ abstract class AppLocalizations {
   /// **'Yes'**
   String get bookYes;
 
+  /// Action on the empty Books hub, for administrators: opens the libraries screen where a Books library is added.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a library'**
+  String get booksAddLibrary;
+
   /// Accessible name of the add control on the audiobook hub, which opens the same sheet home's does with the audiobook type chosen.
   ///
   /// In en, this message translates to:
@@ -4707,10 +4791,10 @@ abstract class AppLocalizations {
   /// **'Continue listening'**
   String get booksContinueTitle;
 
-  /// Message under the empty state of the audiobook hub.
+  /// Message of the Books hub when there are no audiobooks: how a file becomes a book. 'Treat as audiobook' is the menu row of that name (libraryKindToBook).
   ///
   /// In en, this message translates to:
-  /// **'Books turn up here as the library scans them. Point a library at your audiobook folder and they arrive with their chapters.'**
+  /// **'In a library that holds Books every audio file becomes a book, parts and all. Elsewhere a file is a book when its tags say so, or when someone who may edit it chooses Treat as audiobook.'**
   String get booksEmptyMessage;
 
   /// Empty state of the audiobook hub.
@@ -5721,10 +5805,10 @@ abstract class AppLocalizations {
   /// **'That is not here any more.'**
   String get errorNotFound;
 
-  /// Error sentence for the spec code `quota-exceeded`.
+  /// Error sentence for the spec code `quota-exceeded`. The code is shared by an upload over the uploader's allowance, a backup import and an account export, so it names no particular limit.
   ///
   /// In en, this message translates to:
-  /// **'That would go over the storage limit.'**
+  /// **'That is over a limit this server keeps.'**
   String get errorQuotaExceeded;
 
   /// Error sentence for the spec code `rate-limited`.
@@ -5804,6 +5888,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Something went wrong.'**
   String get errorUnexpected;
+
+  /// A completed upload whose bytes do not read as audio (the server's `unsupported-format` with reason `unreadable`). Its session is already gone, so the person sends the file again.
+  ///
+  /// In en, this message translates to:
+  /// **'That file could not be read as audio. It may be damaged, or not audio at all.'**
+  String get errorUnreadableFile;
 
   /// Error sentence for the spec code `unsupported-format`.
   ///
@@ -5948,12 +6038,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not load duplicates'**
   String get healthDuplicatesError;
-
-  /// Body of the duplicates error state. Clustering is the pass that finds duplicates.
-  ///
-  /// In en, this message translates to:
-  /// **'The clustering pass did not answer.'**
-  String get healthDuplicatesErrorBody;
 
   /// Line above the Duplicates heading, saying what a duplicate is.
   ///
@@ -6152,6 +6236,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'lossless'**
   String get healthLossless;
+
+  /// One encoding in a quality-upgrade group, when another encoding in the group reads the same: what it is, then the name of the file that holds it, so the two can be told apart.
+  ///
+  /// In en, this message translates to:
+  /// **'{quality} in {file}'**
+  String healthMemberInFile(String quality, String file);
 
   /// Confirming button of the merge dialog.
   ///
@@ -6410,12 +6500,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not load upgrades'**
   String get healthUpgradesError;
-
-  /// Body of the quality upgrades error state.
-  ///
-  /// In en, this message translates to:
-  /// **'The quality comparison did not answer.'**
-  String get healthUpgradesErrorBody;
 
   /// Line above the quality upgrades heading.
   ///
@@ -6699,6 +6783,12 @@ abstract class AppLocalizations {
   /// **'Delete files...'**
   String get libraryDeleteFilesMenu;
 
+  /// Sentence in the delete dialog when the item keeps a file after the deletion (a copy that takes the deleted file's place, or a file left where it is), so the item is not removed from the library.
+  ///
+  /// In en, this message translates to:
+  /// **'The item stays in your library on its remaining files.'**
+  String get libraryDeleteKeepsItem;
+
   /// Option deleting the files outright rather than trashing them.
   ///
   /// In en, this message translates to:
@@ -6728,6 +6818,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'More'**
   String get libraryDeleteMore;
+
+  /// Last line of the delete dialog's file list when it names only the first few files: how many more the deletion removes.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{and 1 more file} other{and {count} more files}}'**
+  String libraryDeleteMoreFiles(int count);
 
   /// Snackbar after a permanent deletion, counting the files that went.
   ///
@@ -6789,6 +6885,12 @@ abstract class AppLocalizations {
   /// **'Length'**
   String get libraryFactsDuration;
 
+  /// Label of the Details sheet row counting the files behind an item: its own file (or a book's parts) and any copies of it the library holds.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get libraryFactsFiles;
+
   /// Facts sheet row label: the item's genres, comma separated.
   ///
   /// In en, this message translates to:
@@ -6849,17 +6951,167 @@ abstract class AppLocalizations {
   /// **'Year'**
   String get libraryFactsYear;
 
+  /// Accessible label of the button that deletes one copy from an item's file list, leaving the item on its own file.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this copy'**
+  String get libraryFileDeleteCopy;
+
+  /// What one file in an item's file list is: another file holding the same audio, kept beside the item rather than made an item of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get libraryFileRoleCopy;
+
+  /// What one file in an item's file list is: another encoding of the same recording (an MP3 beside a FLAC, say), kept beside the item rather than made an item of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'Other encoding'**
+  String get libraryFileRoleOtherEncoding;
+
+  /// What one file in an item's file list is: one of an audiobook's files, in reading order.
+  ///
+  /// In en, this message translates to:
+  /// **'Part'**
+  String get libraryFileRolePart;
+
+  /// What one file in an item's file list is: the file the item's details and playback come from.
+  ///
+  /// In en, this message translates to:
+  /// **'Primary'**
+  String get libraryFileRolePrimary;
+
+  /// Value of the Details sheet's Files row: how many files are behind the item, copies included.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file} other{{count} files}}'**
+  String libraryFilesCount(int count);
+
   /// The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case.
   ///
   /// In en, this message translates to:
   /// **'album'**
   String get libraryKindAlbum;
 
+  /// Menu row on an album that turns all its tracks into one audiobook, the parts in order.
+  ///
+  /// In en, this message translates to:
+  /// **'Treat album as one audiobook'**
+  String get libraryKindAlbumToBook;
+
+  /// Body of the dialog for an album with more tracks than one kind change can name; it offers no confirm. {max} is that limit.
+  ///
+  /// In en, this message translates to:
+  /// **'This album has more than {max} tracks, too many to change in one go.'**
+  String libraryKindAlbumTooLarge(int max);
+
+  /// Message when a change to audiobook ended having converted nothing, because every item named already was one (a view drawn before another device changed it). {count} is how many items were named.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{This is already an audiobook} other{These are already audiobooks}}, so nothing changed.'**
+  String libraryKindAlreadyBook(int count);
+
+  /// Message when a change to music ended having converted nothing, because every item named already was music (a view drawn before another device changed it). {count} is how many items were named.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{This is already music} other{These are already music}}, so nothing changed.'**
+  String libraryKindAlreadyMusic(int count);
+
   /// The word for an artist where it stands inside a sentence, such as the star row's accessible names. Lower case.
   ///
   /// In en, this message translates to:
   /// **'artist'**
   String get libraryKindArtist;
+
+  /// Confirm button of the dialog changing what items are.
+  ///
+  /// In en, this message translates to:
+  /// **'Change'**
+  String get libraryKindConfirm;
+
+  /// Message when a kind change job failed without a reason of its own.
+  ///
+  /// In en, this message translates to:
+  /// **'The change could not be made.'**
+  String get libraryKindFailed;
+
+  /// Message when a kind change job failed. {reason} is the server's own sentence for why, which a failed job carries without a code to translate.
+  ///
+  /// In en, this message translates to:
+  /// **'The change could not be made: {reason}'**
+  String libraryKindFailedWhy(String reason);
+
+  /// Message when a kind change folded the user's item into one in a library they are not granted, so there is nothing to open.
+  ///
+  /// In en, this message translates to:
+  /// **'It became part of an item in a library you cannot open.'**
+  String get libraryKindJoinedUnseen;
+
+  /// Message when a kind change is still running after the dialog stopped watching it (accounts without the Tasks screen).
+  ///
+  /// In en, this message translates to:
+  /// **'It carries on in the background; you will be told when it is done.'**
+  String get libraryKindQueued;
+
+  /// Message, with a Tasks action, when a kind change is still running after the dialog stopped watching it (administrators).
+  ///
+  /// In en, this message translates to:
+  /// **'Still changing. Follow it in Tasks.'**
+  String get libraryKindStillRunning;
+
+  /// Message when a kind change folded the item playing into a book, which stopped it; the book's screen opens after it.
+  ///
+  /// In en, this message translates to:
+  /// **'What was playing is part of the book now; play it from here.'**
+  String get libraryKindStoppedPlaying;
+
+  /// Menu row on a music track (item menu, player More menu, metadata actions) that turns it into an audiobook.
+  ///
+  /// In en, this message translates to:
+  /// **'Treat as audiobook'**
+  String get libraryKindToBook;
+
+  /// Body of the dialog confirming tracks become an audiobook. {count} is how many tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{This track becomes an audiobook in Books.} other{These {count} tracks become one audiobook in Books, the parts in order.}} Plays, stars and playlist entries come with it, and later scans keep the choice.'**
+  String libraryKindToBookBody(int count);
+
+  /// Title of the dialog confirming tracks become an audiobook.
+  ///
+  /// In en, this message translates to:
+  /// **'Make this an audiobook?'**
+  String get libraryKindToBookTitle;
+
+  /// Overflow row on a book that turns its parts back into music tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Treat as music'**
+  String get libraryKindToMusic;
+
+  /// Body of the dialog confirming a book becomes music tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'This book\'s parts become tracks in Music. Plays and stars stay with them, and later scans keep the choice.'**
+  String get libraryKindToMusicBody;
+
+  /// Title of the dialog confirming a book becomes music tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Make this music?'**
+  String get libraryKindToMusicTitle;
+
+  /// Shown in the dialog while the server reads the items' files as their new kind.
+  ///
+  /// In en, this message translates to:
+  /// **'Reading the files again'**
+  String get libraryKindWorking;
+
+  /// Help under the write-back switch in the dialog changing what items are.
+  ///
+  /// In en, this message translates to:
+  /// **'Writes the choice into the files too. Even a catalog rebuilt from scratch then reads a book as a book, and a track as music unless something else in its file says book.'**
+  String get libraryKindWriteBackHelp;
 
   /// Overflow row pulling one track off the release a MusicBrainz id pinned it to.
   ///
@@ -7203,6 +7455,12 @@ abstract class AppLocalizations {
   /// **'Disc number'**
   String get metadataFieldDiscNo;
 
+  /// Name of the editable metadata field the server calls `disc_total`: how many discs the release has.
+  ///
+  /// In en, this message translates to:
+  /// **'Disc total'**
+  String get metadataFieldDiscTotal;
+
   /// Name of the editable metadata field the server calls `edition`.
   ///
   /// In en, this message translates to:
@@ -7311,6 +7569,12 @@ abstract class AppLocalizations {
   /// **'Track number'**
   String get metadataFieldTrackNo;
 
+  /// Name of the editable metadata field the server calls `track_total`: how many tracks the track's disc or release has.
+  ///
+  /// In en, this message translates to:
+  /// **'Track total'**
+  String get metadataFieldTrackTotal;
+
   /// Name of the editable metadata field the server calls `year`.
   ///
   /// In en, this message translates to:
@@ -7388,6 +7652,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Identification'**
   String get metadataIdentificationTitle;
+
+  /// Line under the editor's provenance summary when the item's kind (music or book) is pinned, as an upload imported under a media type its file would not get on its own is: scans keep it until the pin is lifted. {kind} is the media's name (Music, Book).
+  ///
+  /// In en, this message translates to:
+  /// **'Kind: {kind}, pinned'**
+  String metadataKindPinned(String kind);
 
   /// Heading of the lyrics preview when every line carries a timestamp.
   ///
@@ -7821,6 +8091,12 @@ abstract class AppLocalizations {
   /// **'the feed'**
   String get metadataSourceFeed;
 
+  /// A producer name as it reads inside the provenance tally ("3 from the clean-up pass"): a value a clean-up pass such as the genre normalizer rewrote in the catalog. A short noun, not a sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'the clean-up pass'**
+  String get metadataSourceNormalize;
+
   /// A producer name as it reads inside the provenance tally ("3 from tags"): a short noun, not a sentence.
   ///
   /// In en, this message translates to:
@@ -7862,6 +8138,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{key} is stored as its own field, not as a custom tag.'**
   String metadataTagReserved(String key);
+
+  /// Refusal under the custom-tag key input for MEDIATYPE on an audiobook. 'Change its kind' points at Treat as music.
+  ///
+  /// In en, this message translates to:
+  /// **'{key} is stored as its own field, not as a custom tag. A tag cannot change what an item is; change its kind instead.'**
+  String metadataTagReservedBookKind(String key);
+
+  /// Refusal under the custom-tag key input for NARRATOR or MEDIATYPE on a podcast episode, which has no kind to change to.
+  ///
+  /// In en, this message translates to:
+  /// **'{key} is stored as its own field, not as a custom tag. A tag cannot change what an episode is.'**
+  String metadataTagReservedEpisode(String key);
+
+  /// Refusal under the custom-tag key input for NARRATOR or MEDIATYPE on a music track, keys a person types hoping to make it an audiobook. 'Change its kind' points at Treat as audiobook.
+  ///
+  /// In en, this message translates to:
+  /// **'{key} is stored as its own field, not as a custom tag. A tag cannot make an item an audiobook; change its kind instead.'**
+  String metadataTagReservedKind(String key);
+
+  /// Refusal under the custom-tag key input for NARRATOR on an audiobook, which keeps its narrators as credits.
+  ///
+  /// In en, this message translates to:
+  /// **'{key} is stored as its own field, not as a custom tag. Edit the narrator credits instead.'**
+  String metadataTagReservedNarrator(String key);
 
   /// Marker on a custom tag whose removal is staged but not yet committed by the save bar.
   ///
@@ -8064,7 +8364,7 @@ abstract class AppLocalizations {
   /// Helper under the album editor's read-only track count, explaining why there is no input.
   ///
   /// In en, this message translates to:
-  /// **'Counted from the tracks on this release. Add or remove tracks to change it; it is not a field anything stores.'**
+  /// **'Counted from the tracks on this release. Add or remove tracks to change it; each track\'s own track total is edited on the track.'**
   String get musicAlbumEditorTotalTracksHelp;
 
   /// Line under a truncated track list.
@@ -13606,6 +13906,12 @@ abstract class AppLocalizations {
   /// **'{months, plural, =1{1mo ago} other{{months}mo ago}}'**
   String relMonthsShort(int months);
 
+  /// Review decision button for an entry whose every file is already in the library: import the files anyway, as copies beside the items that hold their audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Add as another copy'**
+  String get reviewActionAddCopy;
+
   /// Takes the selected candidate as the match. On the entry's decision bar and on the bulk bar.
   ///
   /// In en, this message translates to:
@@ -13642,6 +13948,18 @@ abstract class AppLocalizations {
   /// **'Mark unofficial'**
   String get reviewActionUnofficial;
 
+  /// Line of a bulk Approve's snackbar for the selected entries it left undecided because they hold files the library already has: the entry's own pane says which decisions those leave open. {count} is how many were left.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 entry holds duplicates; open it to decide} other{{count} entries hold duplicates; open each to decide}}'**
+  String reviewBulkHeldDuplicates(int count);
+
+  /// Last line of a bulk decision's snackbar when more of the server's warnings came back than it shows. {count} is how many were left out.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{and 1 more warning} other{and {count} more warnings}}'**
+  String reviewBulkMoreWarnings(int count);
+
   /// The best candidate on a queue row: how close it is, then what it is. Spanish puts a space before the percent sign.
   ///
   /// In en, this message translates to:
@@ -13676,6 +13994,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Candidates'**
   String get reviewCandidatesTitle;
+
+  /// Snackbar when the a or u key is pressed on a queue row whose entry is already open beside the queue and holds files the library already has: the open entry's own buttons say which decisions those files leave open.
+  ///
+  /// In en, this message translates to:
+  /// **'This entry holds duplicates; decide it with its own buttons.'**
+  String get reviewDecideHeldInPane;
 
   /// Snackbar after a bulk decision where every entry took it.
   ///
@@ -13742,6 +14066,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unmatched'**
   String get reviewDiffUnmatched;
+
+  /// Chip on a review queue row: how many of the entry's files arrived matching something the library already holds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 duplicate} other{{count} duplicates}}'**
+  String reviewDuplicateCount(int count);
+
+  /// Explanation under the duplicate warning on a review entry, shown when a file holds the same audio as an item the library has.
+  ///
+  /// In en, this message translates to:
+  /// **'Adding a file the library already holds keeps one item, with the file as another copy. Its details, art and who may edit it do not change.'**
+  String get reviewDuplicateHelp;
+
+  /// Heading of the warning on a review entry whose files match something the library holds by name or by sound, which may be another recording.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file may already be in your library} other{{count} files may already be in your library}}'**
+  String reviewDuplicateMaybeTitle(int count);
+
+  /// One line of the duplicate warning on a review entry: the staged file's name, then what in the library it matched (a title and artist, or a sentence when the reader may not see it).
+  ///
+  /// In en, this message translates to:
+  /// **'{file}: {what}'**
+  String reviewDuplicateRow(String file, String what);
+
+  /// Heading of the warning on a review entry whose files arrived matching something the library already holds.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 file is already in your library} other{{count} files are already in your library}}'**
+  String reviewDuplicateTitle(int count);
 
   /// Menu row opening the metadata editor on one track.
   ///
@@ -13844,6 +14198,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Identifying: candidate lookup is still running'**
   String get reviewIdentifyingLong;
+
+  /// Note under a decided review track whose file joined an item that existed before (another copy of its audio, or a further part of a book), which kept its details.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to an item the library already had'**
+  String get reviewJoinedChip;
 
   /// Title of the error state when the queue would not load.
   ///
@@ -13998,7 +14358,7 @@ abstract class AppLocalizations {
   /// Empty state for a skipped identification that is still pending, so it needs telling what to do.
   ///
   /// In en, this message translates to:
-  /// **'This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own - keep the files as they are, or skip.'**
+  /// **'This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own: read the warning above if there is one, then add it, skip it or discard it.'**
   String get reviewSkippedPending;
 
   /// Empty state where nothing was searched for because the submission asked to be taken as delivered.
@@ -17572,6 +17932,18 @@ abstract class AppLocalizations {
   /// **'analyzed {count}'**
   String toolsCountAnalyzed(int count);
 
+  /// Counter in a finished kind change's result: items that changed kind or were made as its parts. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'changed {count}'**
+  String toolsCountChanged(int count);
+
+  /// Counter in a finished scan's result: files that joined an item as another copy of its audio or another encoding of its recording, rather than becoming items of their own. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'copies {count}'**
+  String toolsCountCopies(int count);
+
   /// Counter in a finished enrichment's result: front covers it fetched. Lower case: it sits in a comma-separated run of counters.
   ///
   /// In en, this message translates to:
@@ -17590,11 +17962,23 @@ abstract class AppLocalizations {
   /// **'failed {count}'**
   String toolsCountFailed(int count);
 
+  /// Counter in a finished analysis's result: files fpcalc could not read, fingerprinted another way that does not group with fpcalc's. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'fell back {count}'**
+  String toolsCountFallbacks(int count);
+
   /// Counter in a finished health fix's result: how many of the items it tried it fixed. Lower case: it sits in a comma-separated run of counters.
   ///
   /// In en, this message translates to:
   /// **'filled {filled} of {attempted}'**
   String toolsCountFilledOf(int filled, int attempted);
+
+  /// Counter in a finished kind change's result: items folded into another (tracks gathered into one book). Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'folded {count}'**
+  String toolsCountFolded(int count);
 
   /// Counter in a finished enrichment's result: tracks some source answered lyrics for. Lower case: it sits in a comma-separated run of counters.
   ///
@@ -17614,6 +17998,12 @@ abstract class AppLocalizations {
   /// **'moved {count}'**
   String toolsCountMoved(int count);
 
+  /// Counter in a finished kind change's result: files the change could not be written into. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'not written {count}'**
+  String toolsCountNotWritten(int count);
+
   /// Counter in a finished enrichment's result: other pictures it fetched, backs and booklets. Lower case: it sits in a comma-separated run of counters.
   ///
   /// In en, this message translates to:
@@ -17625,6 +18015,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'skipped {count}'**
   String toolsCountSkipped(int count);
+
+  /// Counter in a finished scan's result: entries in a library folder the scan could not read (a folder without permission, say). Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'unreadable {count}'**
+  String toolsCountUnreadable(int count);
 
   /// Counter in a finished scan's result: files whose audio changed. Lower case: it sits in a comma-separated run of counters.
   ///
@@ -17716,6 +18112,12 @@ abstract class AppLocalizations {
   /// **'Library scan'**
   String get toolsJobScan;
 
+  /// Name of a catalog job that turns items into audiobooks or music tracks.
+  ///
+  /// In en, this message translates to:
+  /// **'Kind change'**
+  String get toolsJobSetKind;
+
   /// A catalog job that ran on one thing: {job} is the job name (Enrichment, Library scan), {target} what it ran on (a track, an album, a library).
   ///
   /// In en, this message translates to:
@@ -17751,6 +18153,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 ready for review} other{{count} ready for review}}'**
   String toolsReadyForReview(int count);
+
+  /// Marker in a finished scan's result: a library's folder could not be reached (a drive that is not mounted, say), so nothing under it was marked missing. Lower case: it sits in a comma-separated run of counters.
+  ///
+  /// In en, this message translates to:
+  /// **'folder not reachable'**
+  String get toolsRootUnreachable;
+
+  /// One library's line under a finished scan of several libraries: the library's name, the audio files the scan visited in it, and how many of them joined an item as copies.
+  ///
+  /// In en, this message translates to:
+  /// **'{library}: {files, plural, =1{1 file} other{{files} files}}, {copies, plural, =1{1 copy} other{{copies} copies}}'**
+  String toolsScanRun(String library, int files, int copies);
+
+  /// One library's line under a finished scan of several libraries, when that library's folder could not be reached (a drive that is not mounted, say).
+  ///
+  /// In en, this message translates to:
+  /// **'{library}: folder not reachable'**
+  String toolsScanRunUnreachable(String library);
 
   /// State of a job the server stopped before it finished, as it shut down or restarted. Agrees with the word for a task in this language.
   ///
@@ -18016,11 +18436,29 @@ abstract class AppLocalizations {
   /// **'same recording'**
   String get uploadsDuplicateFingerprint;
 
+  /// How a duplicate matched: the file's tags carry the same MusicBrainz recording id as an item in the library. Lower case: it sits in brackets.
+  ///
+  /// In en, this message translates to:
+  /// **'same identifier'**
+  String get uploadsDuplicateId;
+
+  /// Note on an imported upload whose audio the library already held: the file was added to that item as a copy (or nothing was added), and the item kept its details. {what} names the item.
+  ///
+  /// In en, this message translates to:
+  /// **'Already in the library: {what}. Its details stay as they were.'**
+  String uploadsDuplicateJoined(String what);
+
   /// How a duplicate matched: only the name is the same. Lower case: it sits in brackets.
   ///
   /// In en, this message translates to:
   /// **'name match'**
   String get uploadsDuplicateName;
+
+  /// What a duplicate matched when it sits in a library the uploader cannot see, so its title is not theirs to read.
+  ///
+  /// In en, this message translates to:
+  /// **'an item in a library you cannot open'**
+  String get uploadsDuplicateUnseen;
 
   /// Empty state of the uploads screen for an account that may upload.
   ///
@@ -18040,11 +18478,23 @@ abstract class AppLocalizations {
   /// **'No uploads yet'**
   String get uploadsEmptyTitle;
 
+  /// Why a picked file was not uploaded: it holds no bytes. Shown as {reason} in uploadsFileFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The file is empty'**
+  String get uploadsFileEmpty;
+
   /// One file's failure inside a multi-file upload, which keeps going: the file's own name and the worded reason.
   ///
   /// In en, this message translates to:
   /// **'{name}: {reason}'**
   String uploadsFileFailed(String name, String reason);
+
+  /// Why a picked or shared file was not uploaded: the file alone is larger than the uploader's whole allowance (`quota-exceeded`), so importing or discarding staged sessions cannot admit it. Shown as {reason} in uploadsFileFailed. 'Past uploads' is the uploads screen's list of sessions.
+  ///
+  /// In en, this message translates to:
+  /// **'Larger than your whole upload limit of {limit}, so clearing Past uploads cannot make room. An administrator can raise the limit.'**
+  String uploadsFileOverQuota(String limit);
 
   /// What the file picker calls the group that accepts anything, which is what keeps a file in a custom accepted-format set reachable.
   ///
@@ -18238,6 +18688,12 @@ abstract class AppLocalizations {
   /// **'Tracks you choose by hand, grouped by their tags'**
   String get uploadsPickSubtitle;
 
+  /// Why a picked file was not uploaded: the uploader's staged sessions already fill their allowance (`quota-exceeded`). Shown as {reason} in uploadsFileFailed. 'Past uploads' is the uploads screen's list of sessions.
+  ///
+  /// In en, this message translates to:
+  /// **'You already have as much waiting as your limit allows. Import or discard some in Past uploads, then try again.'**
+  String get uploadsQuotaFull;
+
   /// Under the staging figure, saying what the cap is a cap on.
   ///
   /// In en, this message translates to:
@@ -18315,6 +18771,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'A single video, or a playlist or channel'**
   String get uploadsSourceUrlHint;
+
+  /// Error under the acquisition dialog's link field when what was typed is not a web address.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a link starting with http:// or https://'**
+  String get uploadsSourceUrlInvalid;
 
   /// Title of the screen listing what has been sent to the server and not yet imported.
   ///

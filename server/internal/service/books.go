@@ -285,7 +285,7 @@ func bookmarkDTO(r wdb.Bookmark) Bookmark {
 // and so does one on a book out of their sight: the mark is still theirs.
 func (l *Library) DeleteBookmark(ctx context.Context, uc *UserCtx, apiBookPID, apiBookmarkID string) error {
 	prefix, book, ok := parseAPIPID(apiBookPID)
-	if !ok || prefix != PrefixBook {
+	if !ok || !bookOrTrackPrefix(prefix) {
 		return errNotFound("no book with pid " + apiBookPID)
 	}
 	prefix, id, ok := parseAPIPID(apiBookmarkID)
@@ -305,7 +305,7 @@ func (l *Library) DeleteBookmark(ctx context.Context, uc *UserCtx, apiBookPID, a
 // getBookDetail resolves an API book PID with the visibility check.
 func (l *Library) getBookDetail(ctx context.Context, uc *UserCtx, apiBookPID string) (*model.BookDetail, error) {
 	prefix, pid, ok := parseAPIPID(apiBookPID)
-	if !ok || prefix != PrefixBook {
+	if !ok || !bookOrTrackPrefix(prefix) {
 		return nil, errNotFound("no book with pid " + apiBookPID)
 	}
 	bd, err := l.lib.Book(ctx, pid)
@@ -317,7 +317,9 @@ func (l *Library) getBookDetail(ctx context.Context, uc *UserCtx, apiBookPID str
 		// given - which the bookmark delete does, having two things that
 		// can be missing - would otherwise put "store.ItemByPID: no such
 		// item" on the wire.
-		if KindOf(err) == KindNotFound {
+		// An item that is no longer a book (its kind changed) is no
+		// book under this pid either; the catalog calls that invalid.
+		if k := KindOf(err); k == KindNotFound || k == KindInvalid {
 			return nil, errNotFound("no book with pid " + apiBookPID)
 		}
 		return nil, classify(err)

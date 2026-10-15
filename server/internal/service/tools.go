@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/colespringer/waxbin/inbox"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
+	"github.com/colespringer/waxbin/scan"
 
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -261,7 +263,7 @@ func (l *Library) ListToolTasksFor(ctx context.Context, uc *UserCtx, cursor stri
 	}
 	out := make([]ToolTaskDTO, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, toolTaskDTO(r))
+		out = append(out, l.toolTaskFor(uc, r))
 	}
 	next := ""
 	if len(rows) == limit {
@@ -283,7 +285,7 @@ func (l *Library) GetToolTaskFor(ctx context.Context, uc *UserCtx, taskID string
 	if t.UserID != uc.ID && !uc.Admin {
 		return ToolTaskDTO{}, errNotFound("no task with id " + taskID)
 	}
-	return toolTaskDTO(t), nil
+	return l.toolTaskFor(uc, t), nil
 }
 
 // DeleteToolTaskFor removes one finished task under the same
@@ -502,7 +504,13 @@ func (l *Library) runBookMerge(ctx context.Context, t *wdb.ToolTask, p toolTaskP
 		title += " (Merged)"
 	}
 	merged := filepath.Join(ws, safeFileName(title)+".m4b")
-	if err := l.flowJobs.DownloadJobResult(ctx, jobID, 0, merged); err != nil {
+	// The merged book reads as its parts did, for whatever else reads the
+	// library.
+	mode := os.FileMode(0o644)
+	if len(p.PartPaths) > 0 {
+		mode = fileModeBeside(p.PartPaths[0])
+	}
+	if err := l.flowJobs.DownloadJobResult(ctx, jobID, 0, merged, mode); err != nil {
 		return nil, err
 	}
 	// The engine deliberately carries no source tags, so the book's
@@ -576,6 +584,9 @@ func (l *Library) runBookSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskP
 	// rescan classifies them as audiobook parts; other codecs rely on
 	// the narrator tag stamped below.
 	ext := "." + toolSplitExt(p.Format, true)
+	// The pieces read as the book did. Read before the original goes to
+	// the trash, which would leave nothing to read it from.
+	mode := fileModeBeside(p.SrcPath)
 	pieces := make([]string, 0, outs)
 	for i := 0; i < outs; i++ {
 		pieceTitle := chapterTitle("", i)
@@ -583,7 +594,7 @@ func (l *Library) runBookSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskP
 			pieceTitle = p.PieceTitles[i]
 		}
 		dst := filepath.Join(bookDir, fmt.Sprintf("%02d - %s%s", i+1, safeFileName(pieceTitle), ext))
-		if err := l.flowJobs.DownloadJobResult(ctx, jobID, i, dst); err != nil {
+		if err := l.flowJobs.DownloadJobResult(ctx, jobID, i, dst, mode); err != nil {
 			return nil, err
 		}
 		if err := l.tagToolBookFile(ctx, dst, bd, title, pieceTitle, i+1); err != nil {
@@ -608,7 +619,7 @@ func (l *Library) runBookSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskP
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
 	for _, piece := range pieces {
-		if err := copyToolFile(piece, filepath.Join(destDir, filepath.Base(piece))); err != nil {
+		if err := copyToolFile(piece, filepath.Join(destDir, filepath.Base(piece)), mode); err != nil {
 			return nil, &Error{Kind: KindInternal, Err: err}
 		}
 	}
@@ -669,6 +680,8 @@ func (l *Library) runCueSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskPa
 		return nil, &Error{Kind: KindInternal, Err: err}
 	}
 	pieces := make([]string, 0, outs)
+	// The pieces read as the rip did.
+	mode := fileModeBeside(p.SrcPath)
 	for i := 0; i < outs; i++ {
 		title := fmt.Sprintf("Track %02d", i+1)
 		trackNo := i + 1
@@ -682,7 +695,7 @@ func (l *Library) runCueSplit(ctx context.Context, t *wdb.ToolTask, p toolTaskPa
 		}
 		dst := filepath.Join(albumDir, fmt.Sprintf("%02d - %s.%s",
 			i+1, safeFileName(title), toolSplitExt(p.Format, false)))
-		if err := l.flowJobs.DownloadJobResult(ctx, jobID, i, dst); err != nil {
+		if err := l.flowJobs.DownloadJobResult(ctx, jobID, i, dst, mode); err != nil {
 			return nil, err
 		}
 		if err := l.tagToolTrackFile(ctx, dst, seed, title, artist, trackNo); err != nil {
@@ -1017,9 +1030,10 @@ func (l *Library) scanToolBookDir(ctx context.Context, dir string, oldPID model.
 }
 
 // copyToolFile copies a staged piece into the library with the repo's
-// crash-safe write discipline; staging may sit on another filesystem,
-// so a plain rename cannot carry it.
-func copyToolFile(src, dst string) error {
+// crash-safe write discipline, in mode, the mode of the file it was cut
+// from; staging may sit on another filesystem, so a plain rename cannot
+// carry it.
+func copyToolFile(src, dst string, mode os.FileMode) error {
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -1035,6 +1049,9 @@ func copyToolFile(src, dst string) error {
 		os.Remove(tmpName)
 		return err
 	}
+	// A temp file is created 0600. The mode is best effort, as the tag
+	// writer's is: a mount that refuses it still takes the piece.
+	_ = tmp.Chmod(mode)
 	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		os.Remove(tmpName)
@@ -1142,7 +1159,7 @@ func (l *Library) cueRip(ctx context.Context, seed *model.ItemView) (model.PID, 
 	}
 	var file model.PID
 	for _, f := range files {
-		if f.Virtual && f.Role == "primary" {
+		if f.Virtual && f.Role == fileRolePrimary {
 			file = f.FilePID
 		}
 	}
@@ -1252,8 +1269,9 @@ func (l *Library) taskUserCtx(ctx context.Context, userID string) *UserCtx {
 
 // failToolTask records a terminal failure.
 func (l *Library) failToolTask(ctx context.Context, t *wdb.ToolTask, cause error) {
+	l.log.Warn("a tool task failed", "task", t.ID, "type", t.Type, "err", cause)
 	t.State = taskStateFailed
-	t.Error = strings.TrimPrefix(cause.Error(), errToolPermanent.Error()+": ")
+	t.Error = taskFailureText(cause)
 	t.FinishedAtNS = time.Now().UnixNano()
 	if err := l.db.UpdateToolTask(ctx, *t); err != nil {
 		l.log.Warn("recording tool task failure", "task", t.ID, "err", err)
@@ -1262,6 +1280,85 @@ func (l *Library) failToolTask(ctx context.Context, t *wdb.ToolTask, cause error
 	l.scrubTaskSecrets(ctx, t.ID)
 	l.notifyToolTask(ctx, t.ID)
 	l.toolTaskEnded(ctx, t)
+}
+
+// taskOpName is an operation name a library threads onto its errors: a
+// dotted one ("jobs.Run", "meta.Writer.Apply") or a sibling's own.
+var taskOpName = regexp.MustCompile(`^(?:[A-Za-z]\w*(?:\.\w+)+|waxtap|waxbin|waxflow|waxlabel|waxseal)$`)
+
+// siblings are the libraries whose names begin their own operations'.
+var siblings = map[string]bool{"waxtap": true, "waxbin": true, "waxflow": true, "waxlabel": true, "waxseal": true}
+
+// namedEnds are the last parts that make a dotted name a file's or a
+// host's, which say what failed: a file's extension or a domain's.
+var namedEnds = map[string]bool{
+	"jpg": true, "jpeg": true, "png": true, "gif": true, "webp": true, "bmp": true, "tif": true,
+	"tiff": true, "avif": true, "heic": true, "svg": true, "cue": true, "lrc": true, "txt": true,
+	"nfo": true, "json": true, "xml": true, "yaml": true, "yml": true, "m3u": true, "m3u8": true,
+	"pls": true, "xspf": true, "log": true, "pdf": true, "epub": true, "sfv": true, "md5": true,
+	"ffp": true, "accurip": true, "srt": true, "vtt": true, "zip": true, "rar": true, "7z": true,
+	"tar": true, "gz": true, "part": true, "html": true, "htm": true, "csv": true,
+	"com": true, "org": true, "net": true, "io": true, "fm": true, "dev": true, "app": true,
+	"co": true, "uk": true, "de": true, "fr": true, "info": true, "tv": true, "me": true,
+	"eu": true, "ca": true, "au": true, "nl": true, "jp": true,
+}
+
+// opName reports whether a part of a failure is an operation's name: a
+// sibling's, or one shaped like it that names no file or host.
+func opName(p string) bool {
+	if !taskOpName.MatchString(p) {
+		return false
+	}
+	first, _, dotted := strings.Cut(p, ".")
+	if !dotted || siblings[first] {
+		return true
+	}
+	return !scan.IsAudio(p) && !namedEnds[strings.ToLower(p[strings.LastIndexByte(p, '.')+1:])]
+}
+
+// taskFailureText is what a failed task records: the failure's own
+// words, without the operation names a library threads onto it or the
+// permanence marker. The server's paths stay for an administrator to
+// read; toolTaskFor cuts them for anyone else.
+func taskFailureText(cause error) string {
+	s := waxDetail(cause)
+	if s == "" {
+		s = strings.TrimPrefix(cause.Error(), errToolPermanent.Error()+": ")
+	}
+	return withoutOpNames(s)
+}
+
+// withoutOpNames drops the operation names leading s or any part of it
+// after a ": ". A file's or a host's name reads like one ("part1.mp3:
+// ...", "example.com: ...") and stays: it says what failed. The last
+// part is the message itself.
+func withoutOpNames(s string) string {
+	parts := strings.Split(s, ": ")
+	out := parts[:0]
+	for i, p := range parts {
+		if i < len(parts)-1 && opName(p) {
+			continue
+		}
+		out = append(out, p)
+	}
+	return strings.Join(out, ": ")
+}
+
+// failureWords is a recorded failure's text for someone who is not an
+// administrator: without the operation names a library threads onto it
+// and without the server's storage paths.
+func (l *Library) failureWords(s string) string {
+	return l.scrubStoragePaths(withoutOpNames(s))
+}
+
+// toolTaskFor is a task as the caller may read it: its recorded failure
+// names the server's paths, which only an administrator reads.
+func (l *Library) toolTaskFor(uc *UserCtx, t wdb.ToolTask) ToolTaskDTO {
+	dto := toolTaskDTO(t)
+	if !uc.Admin {
+		dto.Error = l.failureWords(dto.Error)
+	}
+	return dto
 }
 
 // toolTaskEnded is what a task's end tells beyond its own marker, once

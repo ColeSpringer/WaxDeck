@@ -21,6 +21,7 @@ import (
 	"github.com/colespringer/waxbin"
 	"github.com/colespringer/waxbin/config"
 	"github.com/colespringer/waxbin/enrich"
+	"github.com/colespringer/waxbin/inbox"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/pidpath"
 	"github.com/colespringer/waxbin/source"
@@ -46,12 +47,15 @@ type Root struct {
 	// organizer may rename within it. The conservative default is
 	// in-place: the catalog never moves files it did not place.
 	Managed bool
-	// Media, PID, Profile and ReadOnly are the catalog's, filled when the
-	// table is rebuilt from it.
-	Media    string
-	PID      string
-	Profile  string
-	ReadOnly bool
+	// FolderFallback, Media, PID, Profile and ReadOnly are the catalog's,
+	// filled when the table is rebuilt from it. On a configured root Media
+	// is instead what the configuration declares it holds, empty for
+	// "whatever it holds".
+	FolderFallback bool
+	Media          string
+	PID            string
+	Profile        string
+	ReadOnly       bool
 }
 
 // Config configures the library service.
@@ -252,6 +256,30 @@ type Library struct {
 	// suspendHook runs inside the suspend hook for a test; nothing in the
 	// server sets it.
 	suspendHook func(context.Context)
+	// remapHook stands in for db.RemapItems in a test; nothing in the
+	// server sets it.
+	remapHook func(context.Context, wdb.KindMoves) error
+	// planHook stands in for the catalog's import planner in a test;
+	// nothing in the server sets it.
+	planHook func(context.Context, waxbin.AcquiredFile, model.Kind, waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error)
+	// kindReadHook stands in for the catalog's item read in a kind
+	// change's follow-up and tally in a test; nothing in the server sets
+	// it.
+	kindReadHook func(context.Context, model.PID) (*model.ItemView, error)
+	// deletePlanHook runs between a delete's read of its items' files
+	// and its plan, and deleteApplyHook between a plan and its apply, in
+	// a test; nothing in the server sets them.
+	deletePlanHook  func(context.Context)
+	deleteApplyHook func(context.Context)
+	// discardReadHook runs between a discard's first read of its session
+	// and its guards, in a test; nothing in the server sets it.
+	discardReadHook func()
+	// applyImportHook stands in for the catalog's import apply in a test;
+	// nothing in the server sets it.
+	applyImportHook func(context.Context, *inbox.Plan) (*inbox.Report, error)
+	// fileReadHook stands in for the catalog's read of a file's row in a
+	// test; nothing in the server sets it.
+	fileReadHook func(context.Context, model.PID) (*model.File, error)
 	// resetMu serializes a replaced catalog's reset between the reopen
 	// hook and the feed; profilesMu a saved profile's round trip.
 	resetMu    sync.Mutex
@@ -445,6 +473,21 @@ type Library struct {
 	// admitUpload serializes the allowance checks a new session runs
 	// against the insert that spends them.
 	admitUpload sync.Mutex
+	// completing holds the ids of the upload sessions a complete or a
+	// discard is working on, so a second waits its turn.
+	completing sync.Map
+	// deciding holds the ids of the review entries a decision, revert,
+	// search or discard is changing, one at a time.
+	deciding sync.Map
+	// waitingForCatalog holds the declined submissions whose import met
+	// another job holding the catalog, tried again when a job ends or the
+	// follower finds none running; heldOff those whose entry another
+	// change held, tried again when it lets go.
+	waitingForCatalog sync.Map
+	heldOff           sync.Map
+	// fpcalcTimeout bounds one fpcalc run when set, defaultFpcalcTimeout
+	// otherwise.
+	fpcalcTimeout time.Duration
 	// fpcalcPath is the fingerprint binary, empty when absent (matching
 	// then runs on tag and search evidence only).
 	fpcalcPath string
@@ -853,6 +896,19 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	return l, nil
 }
 
+// untilShutdown is ctx without the caller's cancellation or deadline,
+// ended instead by the server stopping: work a client may walk away from
+// midway, a decision moving files or writing tags, finishes rather than
+// stopping half done, and still stops with the server.
+func (l *Library) untilShutdown(ctx context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	stop := context.AfterFunc(l.procCtx, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
+}
+
 // Close releases the catalog (flushing playback state), the path cache,
 // and a socket directory Open made.
 func (l *Library) Close() error {
@@ -964,24 +1020,109 @@ func (l *Library) JobStatus(ctx context.Context, apiJobPID string) (Job, error) 
 // started a targeted job while its origin row still holds them. Anyone
 // else is refused.
 func (l *Library) JobStatusFor(ctx context.Context, uc *UserCtx, apiJobPID string) (Job, error) {
-	job, err := l.JobStatus(ctx, apiJobPID)
-	if err != nil || uc.Admin {
-		return job, err
+	if uc.Admin {
+		return l.JobStatus(ctx, apiJobPID)
 	}
+	// Who started it is read before the job: one that ends in between
+	// is told and its origin dropped, which read the other way round
+	// finds neither the starter nor an ended job.
 	_, pid, _ := parseAPIPID(apiJobPID)
-	starter, err := l.jobStarter(ctx, pid, job.Target != nil)
+	origin, err := l.jobStarter(ctx, pid)
 	if err != nil {
 		return Job{}, &Error{Kind: KindInternal, Err: err}
 	}
-	if starter != "" && starter == uc.ID {
+	job, err := l.JobStatus(ctx, apiJobPID)
+	if err != nil {
+		return job, err
+	}
+	starter := ""
+	if job.Target != nil {
+		starter = origin
+	}
+	// The starter, or, once a job on an item has ended and its origin is
+	// told, anyone who may edit that item: a kind change's starter reads
+	// the result their screen follows after the origin has gone.
+	if (starter != "" && starter == uc.ID) || l.mayReadEndedItemJob(ctx, uc, job) {
+		l.narrowJob(ctx, uc, &job)
 		return job, nil
 	}
 	return Job{}, &Error{Kind: KindForbidden, Msg: "only administrators and the job's starter may read it"}
 }
 
+// narrowJob leaves a job with what a reader who is not an administrator
+// may read of it: a scan's per-library runs and the server's paths are
+// the administrators', and a kind change's report keeps what is in the
+// reader's sight.
+func (l *Library) narrowJob(ctx context.Context, uc *UserCtx, job *Job) {
+	if job.Scan != nil {
+		job.Scan.Runs = nil
+	}
+	job.Error = l.failureWordsFor(uc, job.Error)
+	if k := job.SetKind; k != nil {
+		l.narrowKindTally(ctx, uc, k)
+	}
+}
+
+// failureWordsFor is failureWords for a reader who may not be granted
+// every library: a failure naming a file in one they are not says only
+// that.
+func (l *Library) failureWordsFor(uc *UserCtx, s string) string {
+	if !uc.AllLibraries {
+		for _, r := range l.libraryRoots() {
+			p := cleanRootPath(r.Path)
+			if p != "" && p != "." && !libraryGranted(uc, model.PID(r.PID)) && strings.Contains(s, p+string(filepath.Separator)) {
+				return "it failed on a file in a library you are not granted"
+			}
+		}
+	}
+	return l.failureWords(s)
+}
+
+// narrowKindTally leaves a kind change's report with what a reader who is
+// not an administrator may see: an administrator's change can run over
+// libraries they are not granted, so items out of their sight go, and so
+// do write-back failures of files there. An item of the reader's own
+// that folded into one out of their sight, as a book's key reaches
+// across libraries, stays with the other withheld.
+func (l *Library) narrowKindTally(ctx context.Context, uc *UserCtx, k *KindTallyDTO) {
+	seen := map[string]bool{}
+	visible := func(pid string) bool {
+		if v, ok := seen[pid]; ok {
+			return v
+		}
+		_, err := l.getVisibleItem(ctx, uc, pid)
+		seen[pid] = err == nil
+		return seen[pid]
+	}
+	k.Converted = slices.DeleteFunc(k.Converted, func(pid string) bool { return !visible(pid) })
+	k.Created = slices.DeleteFunc(k.Created, func(pid string) bool { return !visible(pid) })
+	for from, to := range k.Absorbed {
+		switch {
+		case visible(to):
+		case l.CanCurateItem(ctx, uc, from):
+			k.Absorbed[from] = ""
+		default:
+			delete(k.Absorbed, from)
+		}
+	}
+	k.WriteBackFailures = l.WriteBackFailuresFor(ctx, uc, k.WriteBackFailures)
+}
+
+// mayReadEndedItemJob reports whether a job that ran on an item has ended
+// and the caller may edit that item now.
+func (l *Library) mayReadEndedItemJob(ctx context.Context, uc *UserCtx, job Job) bool {
+	if job.Target == nil || job.Target.Type != "item" || job.State == string(model.JobRunning) {
+		return false
+	}
+	may, err := l.MayCurateItem(ctx, uc, job.Target.PID)
+	return err == nil && may
+}
+
 // Jobs lists recent catalog jobs, newest first, after any still running
 // that newer ones pushed out. A finished targeted job is left out (read by
-// pid): a burst of them would push the passes out. Administrators only.
+// pid): a burst of them would push the passes out. A kind change is the
+// exception, someone's deliberate act whose result is worth a row, not a
+// burst. Administrators only.
 func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, error) {
 	if !uc.Admin {
 		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
@@ -990,7 +1131,9 @@ func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, erro
 	if err != nil {
 		return nil, classify(err)
 	}
-	jobs = slices.DeleteFunc(jobs, func(j *model.Job) bool { return j.TargetType != "" && j.State != model.JobRunning })
+	jobs = slices.DeleteFunc(jobs, func(j *model.Job) bool {
+		return j.TargetType != "" && j.State != model.JobRunning && j.Kind != "set-kind"
+	})
 	jobs = jobs[:min(len(jobs), limit)]
 	listed := make(map[model.PID]bool, len(jobs))
 	for _, job := range jobs {
@@ -1035,8 +1178,12 @@ func summary(it *model.ItemView) ItemSummary {
 	}
 }
 
-// getItem fetches an item and enforces that the API prefix matches its
-// kind, so a track PID presented as a book 404s instead of leaking.
+// getItem fetches an item and enforces that the API prefix fits its
+// kind. Tracks and books answer to either prefix: an item's kind can
+// change under it (a kind change, a library made to hold audiobooks, a
+// retag), and a queue, a playlist or a shelf holding the old form must
+// still reach it, while every answer carries the current one. An
+// episode's prefix stays its own.
 func (l *Library) getItem(ctx context.Context, apiItemPID string) (*model.ItemView, error) {
 	prefix, pid, ok := parseAPIPID(apiItemPID)
 	if !ok || !itemPrefix(prefix) {
@@ -1046,7 +1193,7 @@ func (l *Library) getItem(ctx context.Context, apiItemPID string) (*model.ItemVi
 	if err != nil {
 		return nil, classify(err)
 	}
-	if prefixForKind(it.Kind) != prefix {
+	if !prefixFitsKind(prefix, it.Kind) {
 		return nil, errNotFound("no item with pid " + apiItemPID)
 	}
 	return it, nil

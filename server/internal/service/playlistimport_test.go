@@ -300,7 +300,7 @@ func TestResolveReachableFallsThroughToTheRetry(t *testing.T) {
 	if guest == "" || plain == "" {
 		t.Fatalf("fixture copies: guest %q plain %q", guest, plain)
 	}
-	if _, err := svc.SetItemTag(ctx, uc, guest, "MOOD", []string{"calm"}, false, false); err != nil {
+	if _, err := svc.SetItemTag(ctx, uc, guest, "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatal(err)
 	}
 	in := PlaylistImportInput{Source: "text", Payload: "Test Ensemble, Guest - Amber Waves\n"}

@@ -7,6 +7,7 @@ import '../l10n/l10n.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../uploads/uploads_screen.dart';
 import 'review_controller.dart';
 
 /// One review entry as a page of its own, below the width that can hold
@@ -85,7 +86,16 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
       // is about, which no table sentence can.
       if (warnings.isNotEmpty) messenger.show(warnings.join('\n'));
     } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
+      // A `conflict` names the file the library cannot take, which the
+      // table's "something changed first" would hide.
+      showRefusal(
+        messenger,
+        l10n,
+        explainRefusal(l10n, e),
+        refused: {widget.entryId: e.code},
+        mounted: () => mounted,
+        retry: (_) => _decide(action, candidateMbid: candidateMbid),
+      );
     }
   }
 
@@ -134,6 +144,13 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
       padding: const EdgeInsets.all(ReviewEntryView._bodyPadding),
       children: <Widget>[
         _Header(detail: detail, onClose: widget.onClose),
+        // Where the decision is made: what the library already holds
+        // changes which decision is right.
+        if (detail.status == 'pending' &&
+            detail.tracks.any((t) => t.duplicate != null)) ...<Widget>[
+          const SizedBox(height: WaxSpace.s16),
+          _DuplicateWarning(detail: detail),
+        ],
         if (detail.identifying) ...<Widget>[
           const SizedBox(height: WaxSpace.s16),
           Row(
@@ -212,6 +229,77 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
   }
 }
 
+/// The files of a unit that arrived matching what the library holds,
+/// each with what it matched, named only where the reader may see it.
+class _DuplicateWarning extends StatelessWidget {
+  const _DuplicateWarning({required this.detail});
+
+  final ReviewEntryDetail detail;
+
+  /// How many files the warning names before counting the rest.
+  static const _named = 3;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = WaxColors.of(context);
+    final l10n = context.l10n;
+    final flagged = <int>[
+      for (var i = 0; i < detail.tracks.length; i++)
+        if (detail.tracks[i].duplicate != null) i,
+    ];
+    final sameAudio = flagged.any(
+      (i) => detail.tracks[i].duplicate!.kind == 'content',
+    );
+    // Only the same audio or the same recording id is a certainty; a
+    // name or a sound alike may be another take.
+    final certain = flagged.every(
+      (i) => const {'content', 'id'}.contains(detail.tracks[i].duplicate!.kind),
+    );
+    final style = WaxType.bodySmall.copyWith(color: colors.textSecondary);
+    return Semantics(
+      identifier: SemanticsIds.reviewDuplicate,
+      container: true,
+      explicitChildNodes: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          WaxBanner(
+            tone: WaxBannerTone.caution,
+            message: certain
+                ? l10n.reviewDuplicateTitle(flagged.length)
+                : l10n.reviewDuplicateMaybeTitle(flagged.length),
+          ),
+          const SizedBox(height: WaxSpace.s8),
+          for (final i in flagged.take(_named))
+            Semantics(
+              identifier: SemanticsIds.reviewDuplicateRow(i),
+              container: true,
+              child: Text(
+                l10n.reviewDuplicateRow(
+                  detail.tracks[i].path,
+                  duplicateWhat(l10n, detail.tracks[i].duplicate!),
+                ),
+                style: style,
+              ),
+            ),
+          if (flagged.length > _named)
+            Text(
+              l10n.libraryDeleteMoreFiles(flagged.length - _named),
+              style: style,
+            ),
+          if (sameAudio) ...<Widget>[
+            const SizedBox(height: WaxSpace.s4),
+            Text(
+              l10n.reviewDuplicateHelp,
+              style: WaxType.caption.copyWith(color: colors.textTertiary),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /// The decision bar. Pinned under the scroll rather than in it: it is
 /// what somebody came here to press, and a bar that scrolls away is a
 /// bar that has to be hunted for on every entry.
@@ -235,6 +323,23 @@ class _ActionBar extends StatelessWidget {
     final decided = detail.status != 'pending';
     final revertible =
         detail.status == 'applied' || detail.status == 'auto-applied';
+    // Discard leads only where a file is certainly the library's own:
+    // the same audio or recording id, not a name or a sound alike.
+    final held = detail.tracks.any(
+      (t) => const {'content', 'id'}.contains(t.duplicate?.kind),
+    );
+    // Every file holds audio the library has, so each joins an item as
+    // its copy: metadata has nothing to land on, and as-is is the copy.
+    final allCopies =
+        detail.tracks.isNotEmpty &&
+        detail.tracks.every((t) => t.duplicate?.kind == 'content');
+    final staged = detail.origin == 'upload' || detail.origin == 'acquisition';
+    final discard = WaxButton(
+      label: l10n.reviewActionDiscard,
+      kind: WaxButtonKind.destructive,
+      semanticsId: SemanticsIds.reviewDiscard,
+      onPressed: () => onDecide('discard'),
+    );
     return Container(
       decoration: BoxDecoration(
         color: colors.surface1,
@@ -272,27 +377,38 @@ class _ActionBar extends StatelessWidget {
                 spacing: WaxSpace.s8,
                 runSpacing: WaxSpace.s8,
                 children: <Widget>[
+                  // Throwing the staged files away comes first when the
+                  // library already holds them.
+                  if (staged && held) discard,
                   WaxButton(
                     label: l10n.reviewActionApprove,
                     semanticsId: SemanticsIds.reviewApprove,
-                    onPressed: candidate == null
+                    onPressed: candidate == null || allCopies
                         ? null
                         : () => onDecide(
                             'approve',
                             candidateMbid: candidate!.mbid,
                           ),
                   ),
-                  WaxButton(
-                    label: l10n.reviewActionAsIs,
-                    kind: WaxButtonKind.tonal,
-                    semanticsId: SemanticsIds.reviewAsIs,
-                    onPressed: () => onDecide('as-is'),
-                  ),
+                  if (allCopies)
+                    WaxButton(
+                      label: l10n.reviewActionAddCopy,
+                      kind: WaxButtonKind.tonal,
+                      semanticsId: SemanticsIds.reviewAddCopy,
+                      onPressed: () => onDecide('as-is'),
+                    )
+                  else
+                    WaxButton(
+                      label: l10n.reviewActionAsIs,
+                      kind: WaxButtonKind.tonal,
+                      semanticsId: SemanticsIds.reviewAsIs,
+                      onPressed: () => onDecide('as-is'),
+                    ),
                   WaxButton(
                     label: l10n.reviewActionUnofficial,
                     kind: WaxButtonKind.tonal,
                     semanticsId: SemanticsIds.reviewUnofficial,
-                    onPressed: () => onDecide('unofficial'),
+                    onPressed: allCopies ? null : () => onDecide('unofficial'),
                   ),
                   WaxButton(
                     label: l10n.reviewActionSkip,
@@ -300,13 +416,7 @@ class _ActionBar extends StatelessWidget {
                     semanticsId: SemanticsIds.reviewSkip,
                     onPressed: () => onDecide('skip'),
                   ),
-                  if (detail.origin == 'upload')
-                    WaxButton(
-                      label: l10n.reviewActionDiscard,
-                      kind: WaxButtonKind.destructive,
-                      semanticsId: SemanticsIds.reviewDiscard,
-                      onPressed: () => onDecide('discard'),
-                    ),
+                  if (staged && !held) discard,
                 ],
               ),
       ),
@@ -778,6 +888,7 @@ class _DiffTable extends StatelessWidget {
                     pairing: pairings[i],
                     extra: extra.contains(i),
                     striped: i.isOdd,
+                    pending: detail.status == 'pending',
                   ),
                 // A band, not a caption. The two groups sat in one
                 // bordered box with nothing between them, so the rows
@@ -865,6 +976,7 @@ class _TrackDiffRow extends StatelessWidget {
     required this.pairing,
     required this.extra,
     required this.striped,
+    required this.pending,
   });
 
   final int index;
@@ -872,6 +984,7 @@ class _TrackDiffRow extends StatelessWidget {
   final CandidatePairing? pairing;
   final bool extra;
   final bool striped;
+  final bool pending;
 
   static String _numbered(
     AppLocalizations l10n,
@@ -892,7 +1005,15 @@ class _TrackDiffRow extends StatelessWidget {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
     final paired = pairing;
-    final pid = track.pid;
+    // A joined file's item was the library's before this entry, so its
+    // editor is not this entry's to offer.
+    final pid = track.joined ? null : track.pid;
+    final duplicate = track.duplicate;
+    final note = track.joined
+        ? l10n.reviewJoinedChip
+        : pending && duplicate != null
+        ? duplicateKindLabel(l10n, duplicate.kind)
+        : null;
     return Semantics(
       identifier: SemanticsIds.diffRow(index),
       container: true,
@@ -906,9 +1027,25 @@ class _TrackDiffRow extends StatelessWidget {
         child: Row(
           children: <Widget>[
             Expanded(
-              child: Text(
-                _numbered(l10n, track.trackNo, track.title, track.artist),
-                style: WaxType.bodySmall.copyWith(color: colors.textPrimary),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    _numbered(l10n, track.trackNo, track.title, track.artist),
+                    style: WaxType.bodySmall.copyWith(
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                  if (note != null)
+                    Text(
+                      note,
+                      style: WaxType.caption.copyWith(
+                        color: track.joined
+                            ? colors.textTertiary
+                            : colors.error,
+                      ),
+                    ),
+                ],
               ),
             ),
             const SizedBox(width: WaxSpace.s8),

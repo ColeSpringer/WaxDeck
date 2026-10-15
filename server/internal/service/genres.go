@@ -445,8 +445,9 @@ func (l *Library) normalizeGenres(ctx context.Context, norm *genre.Normalizer, v
 		// Lock stays off: normalization is housekeeping, not a user
 		// decision, and locking would freeze the value against the
 		// enrichment and organize paths that may still improve it. The
-		// facade records the write as a user edit regardless, which is the
-		// only provenance source its edit surface offers.
+		// write is attributed to the clean-up pass, so the editor does
+		// not credit a person with it and the rule for tags out of sync
+		// leaves it to the file.
 		//
 		// The write is catalog-only, like every other WaxDeck edit that
 		// does not opt into write-back: the file's own tag keeps whatever
@@ -455,7 +456,7 @@ func (l *Library) normalizeGenres(ctx context.Context, norm *genre.Normalizer, v
 		// re-applies it -- the same round trip an enriched genre makes, and
 		// the intended consequence of the database being the working copy.
 		batch, err := l.lib.EditManyFields(ctx, pids, map[string]string{"genre": v},
-			waxbin.EditOptions{SkipLocked: true, Lock: model.LockUnchanged})
+			waxbin.EditOptions{SkipLocked: true, Lock: model.LockUnchanged, Source: model.SourceNormalize})
 		if err != nil {
 			return res, classify(err)
 		}

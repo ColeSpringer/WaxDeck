@@ -89,9 +89,15 @@ class HealthScreen extends ConsumerWidget {
       final outcome = await ref.read(duplicatesProvider.notifier).merge(group);
       messenger.show(l10n.healthMerged(outcome.merged));
     } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
+      messenger.show(_refused(l10n, e));
     }
   }
+
+  /// A `conflict` here says what stood in the way - for a resolve, how
+  /// many moves the trash could not make and why - which the table's
+  /// "something changed first" cannot.
+  static String _refused(AppLocalizations l10n, WaxDeckApiException e) =>
+      e.code == 'conflict' ? explainRefusal(l10n, e) : explainError(l10n, e);
 
   Future<void> _resolve(
     BuildContext context,
@@ -115,7 +121,7 @@ class HealthScreen extends ConsumerWidget {
       final trashed = await ref.read(upgradesProvider.notifier).resolve(group);
       messenger.show(l10n.healthTrashedFiles(trashed));
     } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e));
+      messenger.show(_refused(l10n, e));
     }
   }
 
@@ -503,9 +509,11 @@ class _DuplicatesSection extends ConsumerWidget {
               onPressed: () => onMerge(group),
             ),
           ),
-          AsyncError() => ErrorState(
+          AsyncError(:final error) => ErrorState(
             title: l10n.healthDuplicatesError,
-            message: l10n.healthDuplicatesErrorBody,
+            message: context.explain(error),
+            onRetry: () => ref.invalidate(duplicatesProvider),
+            retrySemanticsId: SemanticsIds.duplicatesRetry,
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list),
         },
@@ -513,6 +521,12 @@ class _DuplicatesSection extends ConsumerWidget {
     );
   }
 }
+
+/// What names an upgrade group in its row's identifiers: its files, as
+/// one file can head two groups (its item's own encodings, and the items
+/// its recording ties).
+String upgradeGroupKey(UpgradeGroup group) =>
+    [for (final m in group.members) m.filePid].join('+');
 
 class _UpgradesSection extends ConsumerWidget {
   const _UpgradesSection({required this.onResolve});
@@ -522,14 +536,28 @@ class _UpgradesSection extends ConsumerWidget {
   static UpgradeMember best(UpgradeGroup group) =>
       group.members.where((m) => m.best).firstOrNull ?? group.members.first;
 
-  static String _memberLine(AppLocalizations l10n, UpgradeMember member) {
-    final parts = <String>[
-      member.codec,
-      if (member.bitrate != null) l10n.unitKbps(member.bitrate! ~/ 1000),
-      if (member.lossless) l10n.healthLossless,
-    ];
-    return parts.join(', ');
+  /// What one encoding is: codec, kilobits, and for a lossless one how
+  /// fine its samples are. Two members of a group that read alike are
+  /// told apart by their files' names.
+  static String _memberLine(
+    AppLocalizations l10n,
+    UpgradeMember member,
+    UpgradeGroup group,
+  ) {
+    final quality = _quality(l10n, member);
+    final alike = group.members.where((m) => _quality(l10n, m) == quality);
+    if (alike.length < 2) return quality;
+    final name = member.path?.split(RegExp(r'[\\/]')).last ?? member.filePid;
+    return l10n.healthMemberInFile(quality, name);
   }
+
+  static String _quality(AppLocalizations l10n, UpgradeMember member) => [
+    member.codec,
+    if (member.bitrate != null) l10n.unitKbps(member.bitrate!),
+    if (member.lossless) l10n.healthLossless,
+    if (member.lossless && member.sampleRate != null)
+      l10n.formatSampleRate(member.sampleRate!),
+  ].join(', ');
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -551,7 +579,7 @@ class _UpgradesSection extends ConsumerWidget {
           ),
           AsyncData(:final value) => WaxTable<UpgradeGroup>(
             rows: value,
-            rowId: (group) => best(group).itemPid,
+            rowId: upgradeGroupKey,
             rowSemanticsId: SemanticsIds.upgradeGroup,
             rowDetailSemanticsId: SemanticsIds.upgradeDetail,
             columns: <WaxColumn<UpgradeGroup>>[
@@ -568,9 +596,11 @@ class _UpgradesSection extends ConsumerWidget {
               WaxColumn<UpgradeGroup>(
                 label: l10n.healthColumnKeeping,
                 width: 180,
-                text: (group) => _memberLine(l10n, best(group)),
-                cell: (context, group) =>
-                    CodecChip(_memberLine(l10n, best(group)), emphasis: true),
+                text: (group) => _memberLine(l10n, best(group), group),
+                cell: (context, group) => CodecChip(
+                  _memberLine(l10n, best(group), group),
+                  emphasis: true,
+                ),
               ),
               WaxColumn<UpgradeGroup>(
                 label: l10n.healthColumnTrashing,
@@ -586,13 +616,15 @@ class _UpgradesSection extends ConsumerWidget {
             trailing: (context, group) => WaxIconButton(
               glyph: WaxIcons.check,
               label: l10n.healthKeepBest,
-              semanticsId: SemanticsIds.upgradeResolve(best(group).itemPid),
+              semanticsId: SemanticsIds.upgradeResolve(upgradeGroupKey(group)),
               onPressed: () => onResolve(group),
             ),
           ),
-          AsyncError() => ErrorState(
+          AsyncError(:final error) => ErrorState(
             title: l10n.healthUpgradesError,
-            message: l10n.healthUpgradesErrorBody,
+            message: context.explain(error),
+            onRetry: () => ref.invalidate(upgradesProvider),
+            retrySemanticsId: SemanticsIds.upgradesRetry,
           ),
           _ => const SkeletonShapes(shape: SkeletonShape.list),
         },
@@ -613,10 +645,10 @@ String _recording(AppLocalizations l10n, UpgradeMember member) {
 String _trashing(AppLocalizations l10n, UpgradeGroup group) {
   // The kept copy once, not once per member: the predicate runs for
   // every row and `best` walks the group each time it is asked.
-  final keeping = _UpgradesSection.best(group).itemPid;
+  final keeping = _UpgradesSection.best(group).filePid;
   return group.members
-      .where((m) => m.itemPid != keeping)
-      .map((m) => _UpgradesSection._memberLine(l10n, m))
+      .where((m) => m.filePid != keeping)
+      .map((m) => _UpgradesSection._memberLine(l10n, m, group))
       .join('; ');
 }
 

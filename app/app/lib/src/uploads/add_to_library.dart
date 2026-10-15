@@ -148,6 +148,9 @@ Future<void> acquireFromUrl(
   final messenger = ref.read(shellMessengerProvider.notifier);
   final router = GoRouter.of(context);
   final l10n = context.l10n;
+  // Past the first await, the container rather than `ref`: the request
+  // outlives the surface that made it, and `ref` dies with its widget.
+  final container = ProviderScope.containerOf(context, listen: false);
   // Joined, not awaited in turn: both are pre-dialog seeds and paying
   // their round trips end to end doubles the wait before the sheet.
   final (identifyDefault, targets, remembered) = await _dialogSeeds(ref);
@@ -172,9 +175,9 @@ Future<void> acquireFromUrl(
         ),
       );
   if (request == null) return;
-  _rememberUploadTarget(ref, request.libraryPid);
+  _rememberUploadTarget(container, request.libraryPid);
   try {
-    await ref
+    await container
         .read(repositoryProvider)
         .createAcquisition(
           url: request.url,
@@ -183,7 +186,7 @@ Future<void> acquireFromUrl(
           identify: request.identify,
           libraryPid: request.libraryPid.isEmpty ? null : request.libraryPid,
         );
-    ref
+    container
       ..invalidate(uploadsProvider)
       ..invalidate(toolTasksProvider);
     // It runs in the background and lands in review rather than the
@@ -208,14 +211,34 @@ Future<void> pickAndUpload(
   FilePickerPort picker, {
   MediaType? initial,
 }) async {
+  // Held across the picker, which can outlive the widget that opened it.
+  final messenger = ref.read(shellMessengerProvider.notifier);
   final l10n = context.l10n;
-  final files = await picker.pickAudioFiles(
+  final formats = await resolveUploadFormats(ref);
+  final picked = await picker.pickAudioFiles(
     audioLabel: l10n.uploadsFileTypeAudio,
     anyLabel: l10n.uploadsFileTypeAny,
-    formats: await resolveUploadFormats(ref),
+    formats: formats,
   );
-  if (files.isEmpty || !context.mounted) return;
-  await uploadPickedFiles(context, ref, files, initial: initial);
+  // The "any file" filter lets a DRM container through; it is dropped
+  // and named here, as the folder and drop walks do, rather than asked
+  // its media type and refused one by one.
+  final files = [
+    for (final f in picked)
+      if (!formats.refuses(f.name)) f,
+  ];
+  if (files.isNotEmpty && context.mounted) {
+    await uploadPickedFiles(context, ref, files, initial: initial);
+  }
+  // After the flow, for the reason pickFolderAndUpload gives: a toast
+  // raised under the media-type dialog is hidden and can expire there.
+  reportSkippedFiles(
+    messenger,
+    l10n,
+    unsupported: 0,
+    drm: picked.length - files.length,
+    nothingKept: files.isEmpty,
+  );
 }
 
 /// What a walk's extension filter dropped, said where it is news and
@@ -237,6 +260,35 @@ void reportSkippedFiles(
   } else if (nothingKept && unsupported > 0) {
     messenger.show(l10n.uploadsSkippedUnsupported(unsupported));
   }
+}
+
+/// Why a file was not uploaded, worded the same whichever way it came
+/// in.
+///
+/// `quota-exceeded` is two refusals the code does not tell apart: an
+/// allowance already full of staged sessions, which clearing Past
+/// uploads makes room in, and a file larger than the whole allowance,
+/// which nothing anybody clears admits. The allowance as the session
+/// list last read it ([quota]) tells them apart against [sizeBytes];
+/// without both, the table's sentence is the one true of either.
+/// Anything else refused the file this person chose, in the server's
+/// words where it has some.
+String explainUploadRefusal(
+  AppLocalizations l10n,
+  Object error, {
+  required int? sizeBytes,
+  required UploadQuota? quota,
+}) {
+  final limit = quota?.quotaBytes;
+  if (error is WaxDeckApiException &&
+      error.code == 'quota-exceeded' &&
+      limit != null &&
+      sizeBytes != null) {
+    return sizeBytes > limit
+        ? l10n.uploadsFileOverQuota(l10n.formatBytes(limit))
+        : l10n.uploadsQuotaFull;
+  }
+  return explainRefusal(l10n, error);
 }
 
 /// Picks a folder and hands its audio files to the shared upload
@@ -308,6 +360,19 @@ Future<void> uploadPickedFiles(
   // this loop reports is worded from a code, and there is no context to
   // read a table through once the last upload settles.
   final l10n = context.l10n;
+  // Past the first await, the container rather than `ref`: the
+  // transfers outlive the surface that started them, and a refusal, the
+  // files after it and the batch's finalize must not die with it.
+  final container = ProviderScope.containerOf(context, listen: false);
+  // An empty file is named rather than sent; when nothing else was
+  // picked there is no question to ask about it.
+  final sending = files.where((f) => f.size > 0).length;
+  if (sending == 0) {
+    for (final file in files) {
+      messenger.show(l10n.uploadsFileFailed(file.name, l10n.uploadsFileEmpty));
+    }
+    return;
+  }
   final (identifyDefault, targets, remembered) = await _dialogSeeds(ref);
   if (!context.mounted) return;
   final choice =
@@ -322,18 +387,18 @@ Future<void> uploadPickedFiles(
         context: context,
         builder: (_) => MediaTypeDialog(
           initial: initial ?? MediaType.music,
-          fileCount: files.length,
+          fileCount: sending,
           initialIdentify: identifyDefault,
           targets: targets,
           rememberedTarget: remembered,
         ),
       );
   if (choice == null) return;
-  _rememberUploadTarget(ref, choice.libraryPid);
+  _rememberUploadTarget(container, choice.libraryPid);
   final libraryPid = choice.libraryPid.isEmpty ? null : choice.libraryPid;
-  final repository = ref.read(repositoryProvider);
+  final repository = container.read(repositoryProvider);
   String? batchId;
-  if (files.length > 1) {
+  if (sending > 1) {
     try {
       final batch = await repository.createUploadBatch(
         grouping: choice.grouping,
@@ -349,8 +414,12 @@ Future<void> uploadPickedFiles(
   }
   var uploaded = 0;
   for (final file in files) {
+    if (file.size == 0) {
+      messenger.show(l10n.uploadsFileFailed(file.name, l10n.uploadsFileEmpty));
+      continue;
+    }
     try {
-      await ref
+      await container
           .read(uploadsProvider.notifier)
           .uploadPicked(
             file,
@@ -361,13 +430,16 @@ Future<void> uploadPickedFiles(
           );
       uploaded++;
     } on WaxDeckApiException catch (e) {
-      // explainRefusal, not explainError: a size or a format the server
-      // will not take is a refusal of the file this person just picked,
-      // and its sentence names which limit and by how much. The table's
-      // own words would say "over the storage limit" for a file no
-      // allowance can ever admit.
       messenger.show(
-        l10n.uploadsFileFailed(file.name, explainRefusal(l10n, e)),
+        l10n.uploadsFileFailed(
+          file.name,
+          explainUploadRefusal(
+            l10n,
+            e,
+            sizeBytes: file.size,
+            quota: container.read(uploadsProvider).value?.quota,
+          ),
+        ),
       );
     } catch (_) {
       // The source stopped answering (a file moved or shrank between
@@ -392,7 +464,7 @@ Future<void> uploadPickedFiles(
     }
     // Finalization filled the members' review entries; refresh the
     // rows.
-    ref.invalidate(uploadsProvider);
+    container.invalidate(uploadsProvider);
   }
   // With identification on, what arrived is in review rather than on
   // the shelves, and nothing on screen would otherwise say so - the
@@ -458,9 +530,9 @@ Future<String> _rememberedTarget(WidgetRef ref) async {
 /// Remembers the library that was chosen, so the next submission opens
 /// on it. An empty pid is the picker not having been a choice at all,
 /// which must not overwrite a real answer from a server with several.
-void _rememberUploadTarget(WidgetRef ref, String pid) {
+void _rememberUploadTarget(ProviderContainer container, String pid) {
   if (pid.isEmpty) return;
-  final store = ref.read(clientSettingsStoreProvider);
+  final store = container.read(clientSettingsStoreProvider);
   unawaited(
     store.write(ClientSettingKeys.uploadTarget, pid).catchError((Object _) {}),
   );
@@ -558,10 +630,19 @@ class _AcquireDialogState extends State<AcquireDialog> {
   /// this having to follow the move.
   late String _target = widget.rememberedTarget;
 
+  /// The text a submit found not to be a web address, while the field
+  /// still holds it: the next edit clears it, so the error never runs
+  /// ahead of the typing, and a caret moving is not an edit.
+  String? _refused;
+
   @override
   void initState() {
     super.initState();
-    _urlController.addListener(() => setState(() {}));
+    _urlController.addListener(
+      () => setState(() {
+        if (_urlController.text != _refused) _refused = null;
+      }),
+    );
   }
 
   @override
@@ -591,6 +672,7 @@ class _AcquireDialogState extends State<AcquireDialog> {
               controller: _urlController,
               autofocus: true,
               semanticsId: SemanticsIds.acquireUrl,
+              errorText: _refused != null ? l10n.uploadsSourceUrlInvalid : null,
             ),
             const SizedBox(height: WaxSpace.s12),
             MediaTypeSelector(
@@ -634,6 +716,8 @@ class _AcquireDialogState extends State<AcquireDialog> {
           semanticsId: SemanticsIds.acquireSubmit,
           onPressed: url.isEmpty
               ? null
+              : !isWebLink(url)
+              ? () => setState(() => _refused = _urlController.text)
               : () => Navigator.of(context).pop((
                   url: url,
                   mediaType: _mediaType,
@@ -649,6 +733,15 @@ class _AcquireDialogState extends State<AcquireDialog> {
       ],
     );
   }
+}
+
+/// Whether [text] is an http or https address with a host: the only
+/// links an acquisition takes.
+bool isWebLink(String text) {
+  final uri = Uri.tryParse(text);
+  return uri != null &&
+      (uri.scheme == 'http' || uri.scheme == 'https') &&
+      uri.host.isNotEmpty;
 }
 
 /// The media-type prompt, plus the grouping intent for several files:

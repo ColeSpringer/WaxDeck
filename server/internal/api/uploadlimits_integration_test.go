@@ -193,3 +193,85 @@ func TestUploadSurfaceIsPaced(t *testing.T) {
 		t.Fatalf("the request after the refill answered %d, want 404", code)
 	}
 }
+
+// Bytes no retry can mend end their session at once: a completed file
+// that does not read as audio, or does not match the hash it declared,
+// leaves nothing behind holding the quota.
+func TestCompleteReleasesAnUnreadableSession(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	for _, c := range []struct {
+		name         string
+		sha256       string
+		status       int
+		code, reason string
+	}{
+		{"unreadable", "", 415, "unsupported-format", "unreadable"},
+		{"mismatched", strings.Repeat("ab", 32), 409, "conflict", "checksum-mismatch"},
+	} {
+		body := map[string]any{"fileName": "noise.mp3", "mediaType": "music", "sizeBytes": 4096}
+		if c.sha256 != "" {
+			body["sha256"] = c.sha256
+		}
+		id := decodeStatus[Upload](t, h.postJSON(t, "/api/v1/uploads", body), 201, c.name+" create").Id
+		resp := putChunk(t, h, id, 0, 4096)
+		resp.Body.Close()
+		wantStatus(t, resp, 200, c.name+" chunk")
+
+		resp = h.postJSON(t, "/api/v1/uploads/"+id+"/complete", nil)
+		if resp.StatusCode != c.status {
+			resp.Body.Close()
+			t.Fatalf("%s complete = %d, want %d", c.name, resp.StatusCode, c.status)
+		}
+		e := decode[Error](t, resp)
+		if e.Code != c.code || (c.reason != "" && (e.Params == nil || (*e.Params)["reason"] != c.reason)) {
+			t.Fatalf("%s refusal = %+v, want %s with reason %q", c.name, e, c.code, c.reason)
+		}
+		wantStatus(t, get(t, h.ts, "/api/v1/uploads/"+id, h.token), 404, c.name+" session after the refusal")
+	}
+	if q := decode[UploadPage](t, get(t, h.ts, "/api/v1/uploads", h.token)).Quota; q == nil || q.BytesInUse != 0 {
+		t.Fatalf("quota after both refusals = %+v, want nothing in use", q)
+	}
+}
+
+// A request the binder refuses is named by the field it was in, never
+// by the decoder that choked on it.
+func TestBindingErrorsNameTheFieldNotTheDecoder(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	id := decodeStatus[Upload](t, h.postJSON(t, "/api/v1/uploads",
+		map[string]any{"fileName": "a.flac", "mediaType": "music", "sizeBytes": 8}), 201, "create").Id
+	send := func(method, path, body string) *http.Response {
+		t.Helper()
+		req, _ := http.NewRequest(method, h.ts.URL+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+h.token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+	for _, c := range []struct {
+		name, method, path, body, names string
+	}{
+		{"a malformed offset", "PUT", "/api/v1/uploads/" + id + "/data?offset=abc", "", "offset"},
+		{"a fractional size", "POST", "/api/v1/uploads", `{"fileName":"b.flac","mediaType":"music","sizeBytes":1.5}`, "sizeBytes"},
+		{"a cut-off body", "POST", "/api/v1/uploads", `{`, "JSON"},
+	} {
+		resp := send(c.method, c.path, c.body)
+		if resp.StatusCode != 400 {
+			resp.Body.Close()
+			t.Fatalf("%s = %d, want 400", c.name, resp.StatusCode)
+		}
+		e := decode[Error](t, resp)
+		if !strings.Contains(e.Message, c.names) {
+			t.Errorf("%s: %q does not name %s", c.name, e.Message, c.names)
+		}
+		for _, leak := range []string{"strconv", "Go struct", "json:", "can't decode", "UploadCreate"} {
+			if strings.Contains(e.Message, leak) {
+				t.Errorf("%s: %q leaks %q", c.name, e.Message, leak)
+			}
+		}
+	}
+}

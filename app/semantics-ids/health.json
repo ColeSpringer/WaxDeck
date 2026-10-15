@@ -11,6 +11,7 @@
     "duplicateDetail": "duplicate-detail-{pid}",
     "duplicateGroup": "duplicate-group-{pid}",
     "duplicateMerge": "duplicate-merge-{pid}",
+    "duplicatesRetry": "duplicates-retry",
     "health": "health-rule-{rule}",
     "healthFix": "health-fix-{rule}",
     "healthFixBlocked": "health-fix-blocked-{rule}",
@@ -18,8 +19,9 @@
     "healthScore": "health-score",
     "healthSweep": "health-sweep",
     "healthWarmingUp": "health-warming-up",
-    "upgradeDetail": "upgrade-detail-{itemPid}",
-    "upgradeGroup": "upgrade-group-{itemPid}",
-    "upgradeResolve": "upgrade-resolve-{itemPid}"
+    "upgradeDetail": "upgrade-detail-{key}",
+    "upgradeGroup": "upgrade-group-{key}",
+    "upgradeResolve": "upgrade-resolve-{key}",
+    "upgradesRetry": "upgrades-retry"
   }
 }

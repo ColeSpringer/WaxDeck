@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../shell/shell_messages.dart';
 import 'add_to_library.dart';
+import 'local_file_reader.dart';
 import 'share_intake.dart';
 import 'uploads_controller.dart';
 
@@ -92,7 +93,11 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
       }
     }
     for (final file in files) {
+      // Measured here rather than inside the upload, so a refusal can
+      // be told against the allowance as a picked file's is.
+      int? size;
       try {
+        size = await localFileLength(file.path);
         // Path-backed: the platform side already staged the share to
         // an app-private file, and the upload streams it from disk so
         // an audiobook-sized share never sits whole in memory.
@@ -104,10 +109,19 @@ class _ShareIntakeGateState extends ConsumerState<ShareIntakeGate>
               mediaType: MediaType.music.wireName,
               libraryPid: libraryPid,
               batchId: batchId,
+              sizeBytes: size,
             );
       } on WaxDeckApiException catch (e) {
         messenger.show(
-          l10n.uploadsFileFailed(file.name, explainError(l10n, e)),
+          l10n.uploadsFileFailed(
+            file.name,
+            explainUploadRefusal(
+              l10n,
+              e,
+              sizeBytes: size,
+              quota: ref.read(uploadsProvider).value?.quota,
+            ),
+          ),
           channel: ShellChannel.uploads,
         );
       }

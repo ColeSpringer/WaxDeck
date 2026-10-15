@@ -3,6 +3,8 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/delete_plan_file.dart';
+import 'package:built_collection/built_collection.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -15,6 +17,8 @@ part 'delete_plan_entry.g.dart';
 /// * [name] - Display name.
 /// * [files] - Files deleted (or to delete). A cue rip's file counts once, under one of its tracks. 
 /// * [bytes] - Bytes reclaimed (or to reclaim).
+/// * [fileList] - The files `files` counts, by name. Absent for an entry whose file counts under another track of its rip. 
+/// * [itemSurvives] - The item keeps a file after the deletion (a copy it holds, or one left in place), so it stays in the library rather than being archived. 
 @BuiltValue()
 abstract class DeletePlanEntry implements Built<DeletePlanEntry, DeletePlanEntryBuilder> {
   /// The item.
@@ -32,6 +36,14 @@ abstract class DeletePlanEntry implements Built<DeletePlanEntry, DeletePlanEntry
   /// Bytes reclaimed (or to reclaim).
   @BuiltValueField(wireName: r'bytes')
   int get bytes;
+
+  /// The files `files` counts, by name. Absent for an entry whose file counts under another track of its rip. 
+  @BuiltValueField(wireName: r'fileList')
+  BuiltList<DeletePlanFile>? get fileList;
+
+  /// The item keeps a file after the deletion (a copy it holds, or one left in place), so it stays in the library rather than being archived. 
+  @BuiltValueField(wireName: r'itemSurvives')
+  bool? get itemSurvives;
 
   DeletePlanEntry._();
 
@@ -78,6 +90,20 @@ class _$DeletePlanEntrySerializer implements PrimitiveSerializer<DeletePlanEntry
       object.bytes,
       specifiedType: const FullType(int),
     );
+    if (object.fileList != null) {
+      yield r'fileList';
+      yield serializers.serialize(
+        object.fileList,
+        specifiedType: const FullType(BuiltList, [FullType(DeletePlanFile)]),
+      );
+    }
+    if (object.itemSurvives != null) {
+      yield r'itemSurvives';
+      yield serializers.serialize(
+        object.itemSurvives,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -129,6 +155,22 @@ class _$DeletePlanEntrySerializer implements PrimitiveSerializer<DeletePlanEntry
             specifiedType: const FullType(int),
           ) as int;
           result.bytes = valueDes;
+          break;
+        case r'fileList':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltList, [FullType(DeletePlanFile)]),
+          ) as BuiltList<DeletePlanFile>?;
+          if (valueDes == null) continue;
+          result.fileList.replace(valueDes);
+          break;
+        case r'itemSurvives':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.itemSurvives = valueDes;
           break;
         default:
           unhandled.add(key);

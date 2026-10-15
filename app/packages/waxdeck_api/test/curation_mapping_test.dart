@@ -140,11 +140,35 @@ void main() {
       }
     });
 
+    test('a bulk outcome carries its code and warnings', () {
+      final refused = reviewBulkOutcomeFromGen(
+        gen.ReviewBulkOutcome(
+          (b) => b
+            ..entryId = 'rv-1'
+            ..ok = false
+            ..code = 'catalog-busy'
+            ..error = 'busy',
+        ),
+      );
+      expect(refused.code, 'catalog-busy');
+      expect(refused.warnings, isEmpty);
+      final stood = reviewBulkOutcomeFromGen(
+        gen.ReviewBulkOutcome(
+          (b) => b
+            ..entryId = 'rv-2'
+            ..ok = true
+            ..warnings.add('one.flac: tags not written'),
+        ),
+      );
+      expect(stood.warnings, ['one.flac: tags not written']);
+    });
+
     test('stats default their optional counters to zero', () {
       final stats = reviewStatsFromGen(
         gen.ReviewStats(
           (b) => b
             ..pending = 3
+            ..decided = 9
             ..applied = 2
             ..autoApplied = 5
             ..reverted = 1
@@ -152,6 +176,7 @@ void main() {
         ),
       );
       expect(stats.pending, 3);
+      expect(stats.decided, 9);
       expect(stats.identifying, 0);
       expect(stats.asIs, 0);
       expect(stats.skipped, 0);
@@ -219,6 +244,71 @@ void main() {
       expect(upload.duplicate, isNull);
       expect(upload.reviewEntryId, isNull);
       expect(upload.expiresAt, isNull);
+    });
+  });
+
+  group('library mapping', () {
+    Map<String, Object?> library({bool? declared}) => <String, Object?>{
+      'pid': 'lb-1',
+      'name': 'books',
+      'media': 'audiobook',
+      'mediaDeclared': ?declared,
+      'readOnly': false,
+      'managed': false,
+    };
+
+    test('a library the configuration declares says so', () {
+      LibraryInfo listed(Map<String, Object?> json) => libraryInfoFromGen(
+        gen.standardSerializers.deserializeWith(
+          gen.ModelLibrary.serializer,
+          json,
+        )!,
+      );
+      expect(listed(library(declared: true)).mediaDeclared, isTrue);
+      expect(listed(library(declared: false)).mediaDeclared, isFalse);
+      expect(listed(library()).mediaDeclared, isFalse);
+      final created = libraryCreatedFromGen(
+        gen.standardSerializers.deserializeWith(gen.LibraryCreated.serializer, {
+          ...library(declared: true),
+          'scanStarted': true,
+        })!,
+      );
+      expect(created.mediaDeclared, isTrue);
+    });
+  });
+
+  group('item files mapping', () {
+    test('a copy says why it is one, off the wire', () {
+      final files = gen.standardSerializers
+          .deserializeWith(gen.ItemFiles.serializer, <String, Object?>{
+            'files': <Object?>[
+              <String, Object?>{
+                'filePid': 'fi-own',
+                'role': 'primary',
+                'name': 'Harbour Lights.flac',
+              },
+              <String, Object?>{
+                'filePid': 'fi-copy',
+                'role': 'alternate',
+                'name': 'Harbour Lights (1).flac',
+                'reason': 'same-audio',
+              },
+              <String, Object?>{
+                'filePid': 'fi-mp3',
+                'role': 'alternate',
+                'name': 'Harbour Lights.mp3',
+                'reason': 'other-encoding',
+              },
+            ],
+          })!
+          .files
+          .map(itemFileFromGen)
+          .toList();
+      expect(files.map((f) => (f.filePid, f.isCopy, f.reason)), [
+        ('fi-own', false, null),
+        ('fi-copy', true, 'same-audio'),
+        ('fi-mp3', true, 'other-encoding'),
+      ]);
     });
   });
 
@@ -351,6 +441,38 @@ void main() {
       expect(result.applied, isTrue);
       expect(result.writeBackFailures, isEmpty);
       expect(result.warnings, isEmpty);
+    });
+
+    test('a tag edit carries the files its write-back missed', () {
+      final result = tagEditResultFromGen(
+        gen.TagEditResult(
+          (b) => b
+            ..key = 'MOOD'
+            ..stored = 1
+            ..writeBackFailures.add(
+              gen.WriteBackFailure(
+                (f) => f
+                  ..filePid = 'fl-1'
+                  ..path = 'a.flac'
+                  ..reason = 'read-only file',
+              ),
+            ),
+        ),
+      );
+      expect(result.key, 'MOOD');
+      expect(result.writeBackFailures.map((f) => (f.filePid, f.reason)), [
+        ('fl-1', 'read-only file'),
+      ]);
+      expect(
+        tagEditResultFromGen(
+          gen.TagEditResult(
+            (b) => b
+              ..key = 'MOOD'
+              ..stored = 1,
+          ),
+        ).writeBackFailures,
+        isEmpty,
+      );
     });
 
     test('merge entity types bridge by wire name', () {

@@ -10,7 +10,11 @@ class _$UpgradeResolveRequest extends UpgradeResolveRequest {
   @override
   final String keepItemPid;
   @override
-  final BuiltList<String> removeItemPids;
+  final BuiltList<String>? removeItemPids;
+  @override
+  final String? keepFilePid;
+  @override
+  final BuiltList<String>? removeFilePids;
 
   factory _$UpgradeResolveRequest([
     void Function(UpgradeResolveRequestBuilder)? updates,
@@ -18,7 +22,9 @@ class _$UpgradeResolveRequest extends UpgradeResolveRequest {
 
   _$UpgradeResolveRequest._({
     required this.keepItemPid,
-    required this.removeItemPids,
+    this.removeItemPids,
+    this.keepFilePid,
+    this.removeFilePids,
   }) : super._();
   @override
   UpgradeResolveRequest rebuild(
@@ -34,7 +40,9 @@ class _$UpgradeResolveRequest extends UpgradeResolveRequest {
     if (identical(other, this)) return true;
     return other is UpgradeResolveRequest &&
         keepItemPid == other.keepItemPid &&
-        removeItemPids == other.removeItemPids;
+        removeItemPids == other.removeItemPids &&
+        keepFilePid == other.keepFilePid &&
+        removeFilePids == other.removeFilePids;
   }
 
   @override
@@ -42,6 +50,8 @@ class _$UpgradeResolveRequest extends UpgradeResolveRequest {
     var _$hash = 0;
     _$hash = $jc(_$hash, keepItemPid.hashCode);
     _$hash = $jc(_$hash, removeItemPids.hashCode);
+    _$hash = $jc(_$hash, keepFilePid.hashCode);
+    _$hash = $jc(_$hash, removeFilePids.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -50,7 +60,9 @@ class _$UpgradeResolveRequest extends UpgradeResolveRequest {
   String toString() {
     return (newBuiltValueToStringHelper(r'UpgradeResolveRequest')
           ..add('keepItemPid', keepItemPid)
-          ..add('removeItemPids', removeItemPids))
+          ..add('removeItemPids', removeItemPids)
+          ..add('keepFilePid', keepFilePid)
+          ..add('removeFilePids', removeFilePids))
         .toString();
   }
 }
@@ -69,6 +81,16 @@ class UpgradeResolveRequestBuilder
   set removeItemPids(ListBuilder<String>? removeItemPids) =>
       _$this._removeItemPids = removeItemPids;
 
+  String? _keepFilePid;
+  String? get keepFilePid => _$this._keepFilePid;
+  set keepFilePid(String? keepFilePid) => _$this._keepFilePid = keepFilePid;
+
+  ListBuilder<String>? _removeFilePids;
+  ListBuilder<String> get removeFilePids =>
+      _$this._removeFilePids ??= ListBuilder<String>();
+  set removeFilePids(ListBuilder<String>? removeFilePids) =>
+      _$this._removeFilePids = removeFilePids;
+
   UpgradeResolveRequestBuilder() {
     UpgradeResolveRequest._defaults(this);
   }
@@ -77,7 +99,9 @@ class UpgradeResolveRequestBuilder
     final $v = _$v;
     if ($v != null) {
       _keepItemPid = $v.keepItemPid;
-      _removeItemPids = $v.removeItemPids.toBuilder();
+      _removeItemPids = $v.removeItemPids?.toBuilder();
+      _keepFilePid = $v.keepFilePid;
+      _removeFilePids = $v.removeFilePids?.toBuilder();
       _$v = null;
     }
     return this;
@@ -107,13 +131,18 @@ class UpgradeResolveRequestBuilder
               r'UpgradeResolveRequest',
               'keepItemPid',
             ),
-            removeItemPids: removeItemPids.build(),
+            removeItemPids: _removeItemPids?.build(),
+            keepFilePid: keepFilePid,
+            removeFilePids: _removeFilePids?.build(),
           );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'removeItemPids';
-        removeItemPids.build();
+        _removeItemPids?.build();
+
+        _$failedField = 'removeFilePids';
+        _removeFilePids?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'UpgradeResolveRequest',

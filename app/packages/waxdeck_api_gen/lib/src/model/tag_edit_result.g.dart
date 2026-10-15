@@ -11,11 +11,17 @@ class _$TagEditResult extends TagEditResult {
   final String key;
   @override
   final int stored;
+  @override
+  final BuiltList<WriteBackFailure>? writeBackFailures;
 
   factory _$TagEditResult([void Function(TagEditResultBuilder)? updates]) =>
       (TagEditResultBuilder()..update(updates))._build();
 
-  _$TagEditResult._({required this.key, required this.stored}) : super._();
+  _$TagEditResult._({
+    required this.key,
+    required this.stored,
+    this.writeBackFailures,
+  }) : super._();
   @override
   TagEditResult rebuild(void Function(TagEditResultBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -26,7 +32,10 @@ class _$TagEditResult extends TagEditResult {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is TagEditResult && key == other.key && stored == other.stored;
+    return other is TagEditResult &&
+        key == other.key &&
+        stored == other.stored &&
+        writeBackFailures == other.writeBackFailures;
   }
 
   @override
@@ -34,6 +43,7 @@ class _$TagEditResult extends TagEditResult {
     var _$hash = 0;
     _$hash = $jc(_$hash, key.hashCode);
     _$hash = $jc(_$hash, stored.hashCode);
+    _$hash = $jc(_$hash, writeBackFailures.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -42,7 +52,8 @@ class _$TagEditResult extends TagEditResult {
   String toString() {
     return (newBuiltValueToStringHelper(r'TagEditResult')
           ..add('key', key)
-          ..add('stored', stored))
+          ..add('stored', stored)
+          ..add('writeBackFailures', writeBackFailures))
         .toString();
   }
 }
@@ -59,6 +70,12 @@ class TagEditResultBuilder
   int? get stored => _$this._stored;
   set stored(int? stored) => _$this._stored = stored;
 
+  ListBuilder<WriteBackFailure>? _writeBackFailures;
+  ListBuilder<WriteBackFailure> get writeBackFailures =>
+      _$this._writeBackFailures ??= ListBuilder<WriteBackFailure>();
+  set writeBackFailures(ListBuilder<WriteBackFailure>? writeBackFailures) =>
+      _$this._writeBackFailures = writeBackFailures;
+
   TagEditResultBuilder() {
     TagEditResult._defaults(this);
   }
@@ -68,6 +85,7 @@ class TagEditResultBuilder
     if ($v != null) {
       _key = $v.key;
       _stored = $v.stored;
+      _writeBackFailures = $v.writeBackFailures?.toBuilder();
       _$v = null;
     }
     return this;
@@ -87,20 +105,37 @@ class TagEditResultBuilder
   TagEditResult build() => _build();
 
   _$TagEditResult _build() {
-    final _$result =
-        _$v ??
-        _$TagEditResult._(
-          key: BuiltValueNullFieldError.checkNotNull(
-            key,
-            r'TagEditResult',
-            'key',
-          ),
-          stored: BuiltValueNullFieldError.checkNotNull(
-            stored,
-            r'TagEditResult',
-            'stored',
-          ),
+    _$TagEditResult _$result;
+    try {
+      _$result =
+          _$v ??
+          _$TagEditResult._(
+            key: BuiltValueNullFieldError.checkNotNull(
+              key,
+              r'TagEditResult',
+              'key',
+            ),
+            stored: BuiltValueNullFieldError.checkNotNull(
+              stored,
+              r'TagEditResult',
+              'stored',
+            ),
+            writeBackFailures: _writeBackFailures?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'writeBackFailures';
+        _writeBackFailures?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'TagEditResult',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

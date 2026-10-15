@@ -1229,7 +1229,7 @@ func TestPortableExportNeverPairsAcrossAnEdit(t *testing.T) {
 	if seen == "" || hidden == "" {
 		t.Fatalf("twins = %v", byArtist)
 	}
-	if _, err := f.svc.SetItemTag(f.ctx, f.uc, hidden, "MOOD", []string{"calm"}, false, false); err != nil {
+	if _, err := f.svc.SetItemTag(f.ctx, f.uc, hidden, "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatal(err)
 	}
 	pl, err := f.svc.CreatePlaylist(f.ctx, f.uc, PlaylistCreate{

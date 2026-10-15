@@ -685,19 +685,28 @@ class BackgroundDownloadManager implements DownloadManagerPort {
 
   @override
   Future<bool> isComplete(String pid) async {
-    final rows = await (db.select(
-      db.downloadRecords,
-    )..where((t) => t.pid.equals(pid))).get();
+    final rows = await _recordsOf(pid);
     return rows.isNotEmpty && rows.every((r) => r.state == 'complete');
+  }
+
+  /// [pid]'s records in file order or, where it holds none, those of the
+  /// pid a kind change has given its item since: a queue saved or a
+  /// summary read before the change still names the old one.
+  Future<List<DownloadRecord>> _recordsOf(String pid) async {
+    Future<List<DownloadRecord>> of(String pid) =>
+        (db.select(db.downloadRecords)
+              ..where((t) => t.pid.equals(pid))
+              ..orderBy([(t) => OrderingTerm.asc(t.fileIndex)]))
+            .get();
+    final rows = await of(pid);
+    if (rows.isNotEmpty) return rows;
+    final now = await mirrorRenamedPid(db, pid);
+    return now == null ? rows : of(now);
   }
 
   @override
   Future<LocalPlayback?> localFor(String pid) async {
-    final rows =
-        await (db.select(db.downloadRecords)
-              ..where((t) => t.pid.equals(pid))
-              ..orderBy([(t) => OrderingTerm.asc(t.fileIndex)]))
-            .get();
+    final rows = await _recordsOf(pid);
     if (rows.isEmpty || rows.any((r) => r.state != 'complete')) {
       return null;
     }

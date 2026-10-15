@@ -7,10 +7,11 @@ paths:
       description: >
         Keyset-paginated review queue, newest first. Administrators see
         every entry; other callers see only entries produced by their
-        own uploads. Each entry is one album-sized unit: it applies or
-        declines as a whole, never track by track. `status` filters to
-        one lifecycle state (`pending` is the working queue; decided
-        entries remain listable for calibration and undo).
+        own uploads, acquisitions and rematches. Each entry is one
+        album-sized unit: it applies or declines as a whole, never
+        track by track. `status` filters to one lifecycle state
+        (`pending` is the working queue; decided entries remain
+        listable for calibration and undo).
       tags: [review]
       parameters:
         - name: status
@@ -19,8 +20,9 @@ paths:
             Restrict to one status. Statuses are server-defined
             strings; the current set is `pending`, `applied`,
             `auto-applied`, `as-is`, `unofficial`, `skipped`,
-            `discarded`, and `reverted`. Unknown values yield an
-            empty page rather than an error.
+            `discarded`, and `reverted`. `decided` is not a status but
+            selects every status except `pending`. Unknown values
+            yield an empty page rather than an error.
           schema:
             type: string
         - name: cursor
@@ -89,21 +91,51 @@ paths:
         Applies one decision to a pending entry. `approve` applies the
         chosen candidate's metadata to the whole unit (the ranked best
         when `candidateMbid` is absent), locking the applied fields so
-        a rescan cannot undo the acceptance; for entries staging new
-        files (uploads and imports) the files enter the library first.
-        `as-is` accepts the unit's current metadata unchanged (staged
-        files enter the library as they are). `unofficial` is `as-is`
-        plus a locked `RELEASESTATUS` custom tag of `unofficial`,
-        which excludes the items from future match retries and from
-        health penalties (content with no canonical release is a
-        terminal state, not an error). `skip` dismisses the entry
+        a rescan cannot undo the acceptance, and writes them into each
+        file's tags; for entries staging new files (uploads and
+        imports) the files enter the library first. `as-is` accepts the
+        unit's current metadata unchanged (staged files enter the
+        library as they are). `unofficial` is `as-is` plus a locked
+        `RELEASESTATUS` custom tag of `unofficial`, written into the
+        files too, which excludes the items from future match retries
+        and from health penalties (content with no canonical release is
+        a terminal state, not an error). A file in a read-only library
+        keeps its tags: `warnings` names it and the health rule for
+        tags out of sync lists what it is owed, while the unit's other
+        files are written; a unit none of whose files may be written is
+        applied to the catalog alone. A matching library applying a
+        confident match on its own writes the files the same way.
+        `skip` dismisses the entry
         without touching anything (staged files stay staged).
         `discard` deletes staged files and exists only for entries
         that carry them. Deciding an already-decided entry answers
-        `conflict`. Administrators may decide anything; other callers
-        only entries from their own uploads. A metadata write that
+        `conflict`, as does any decision, revert or new search of an
+        entry while another runs. A decision runs to its end once it
+        starts, whether or not the client waits for the answer.
+        Administrators may decide anything; other callers
+        only entries from their own uploads, acquisitions and rematches.
+        A metadata write that
         partially fails after the catalog committed reports per-file
         detail in `warnings` and the entry still counts as decided.
+        Files that join an item the library already holds - the same
+        audio, or a further part of a book it has - enter as that
+        item's copies or parts: the item keeps its metadata, `approve`
+        and `unofficial` leave it alone, and the uploader gains no
+        right to edit it. `warnings` names such files, and the
+        entry's tracks mark them `joined`. A file whose audio the
+        library holds at the very place its tags would put it adds
+        nothing; its staged copy is removed and `warnings` says so.
+
+
+        Staged files enter the library together or not at all where the
+        library can say in advance: every file is planned before any
+        moves, so a place already taken or an unreadable file answers
+        `conflict` with the reason, and a read-only destination
+        `read-only`, leaving the unit staged. Two files of one unit that would take the same
+        place pass that plan; the first lands and the decide answers
+        `conflict` for the second, and a retry resumes there. `discard`
+        then drops what is still staged and keeps what landed, which
+        `warnings` counts.
       tags: [review]
       requestBody:
         required: true
@@ -127,7 +159,18 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The decision was refused. `conflict`: the entry is already
+            decided, or part of its unit cannot enter the library (the
+            message says why). `read-only`: the server is in read-only
+            mode, or the library an upload or acquisition was staged for
+            is read-only. `catalog-busy`: another job holds the catalog's shared
+            file-mutation scope, which clears on its own, so the same
+            decision is worth sending again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -168,7 +211,7 @@ paths:
         Pending entries only; a decided one answers `conflict`. The
         permission is the deciding permission: administrators may
         re-identify anything, other callers only entries from their
-        own uploads.
+        own uploads, acquisitions and rematches.
       tags: [review]
       requestBody:
         required: false
@@ -204,8 +247,9 @@ paths:
       summary: Revert an applied match
       description: >
         Restores the metadata snapshot taken before an `applied` or
-        `auto-applied` entry was applied, unlocks the fields the apply
-        locked, and marks the entry `reverted`. Reverts of auto
+        `auto-applied` entry was applied, in the catalog and the files'
+        tags (catalog alone for a file in a read-only library), unlocks
+        the fields the apply locked, and marks the entry `reverted`. Reverts of auto
         applied entries feed the calibration statistics. Only
         administrators and the deciding user may revert. Reverting
         anything but an applied entry answers `conflict`.
@@ -270,6 +314,10 @@ paths:
         rate is the trust signal the review surface shows next to the
         auto-apply behavior; it is deliberately not the accuracy
         metric that tunes thresholds (reverts are sparse and lagging).
+        The counts cover the entries the caller can see, the scope of
+        `GET /review/queue`: administrators count every entry, other
+        callers only the entries their own uploads, acquisitions and
+        rematches produced.
       tags: [review]
       responses:
         "200":
@@ -398,6 +446,11 @@ components:
         trackCount:
           type: integer
           description: Files in the unit.
+        duplicateCount:
+          type: integer
+          description: >
+            Files in the unit arriving with a duplicate warning (their
+            tracks carry it). Absent when none.
         libraryPid:
           type: string
           description: The library the unit belongs (or will import) to.
@@ -477,12 +530,14 @@ components:
           description: >
             The catalog item pid, type-prefixed like every pid on this
             API; absent for staged files that have not entered the
-            library yet.
+            library yet, and for a joined file whose item sits where the
+            caller cannot see it.
         path:
           type: string
           description: >
-            The file's path (library-relative for cataloged items,
-            staging-relative for uploads).
+            The file's name. Administrators get the full path of a file
+            a scan or rematch entry names; an uploaded or downloaded
+            file is named alone for everyone, before it lands and after.
         title:
           type: string
           description: Current title (tag, or cleaned filename).
@@ -499,6 +554,14 @@ components:
           type: integer
           format: int64
           description: Audio length in milliseconds.
+        duplicate:
+          $ref: "#/components/schemas/DuplicateWarning"
+        joined:
+          type: boolean
+          description: >
+            The file entered the library as a copy of, or a further
+            part of, an item that already existed; that item's
+            metadata and who may edit it were not touched.
 
     CandidateComponent:
       type: object
@@ -787,18 +850,38 @@ components:
         ok:
           type: boolean
           description: Whether the decision applied.
+        code:
+          type: string
+          description: >
+            The error code the single-entry decide would have answered
+            (`not-found`, `conflict`, `catalog-busy`, `read-only`, ...),
+            when `ok` is false. `catalog-busy` clears on its own, so
+            those entries can be sent again.
         error:
           type: string
           description: Why it did not, when `ok` is false.
+        warnings:
+          type: array
+          description: >
+            What the single-entry decide reports under `warnings`, when
+            `ok` is true: the decision stood, with these problems.
+          items:
+            type: string
 
     ReviewStats:
       type: object
       description: Queue depth and auto-apply calibration.
-      required: [pending, applied, autoApplied, reverted, revertedAutoApplied]
+      required: [pending, decided, applied, autoApplied, reverted, revertedAutoApplied]
       properties:
         pending:
           type: integer
           description: Entries awaiting a decision.
+        decided:
+          type: integer
+          description: >
+            Entries in every status but `pending`, discarded and
+            reverted ones included: the size of the `status=decided`
+            listing.
         identifying:
           type: integer
           description: Entries whose identify pipeline still runs.

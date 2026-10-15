@@ -322,6 +322,9 @@ type LibraryInfo struct {
 	PID   string
 	Name  string
 	Media string
+	// MediaDeclared is the configuration naming what the root holds, which
+	// SetLibraryMedia then refuses to change.
+	MediaDeclared bool
 	// Path is the root directory, for the screen that manages it. Empty
 	// where the catalog holds a path it cannot render as text.
 	Path string
@@ -334,10 +337,12 @@ type LibraryInfo struct {
 	// ScanStarted is AddLibrary's scan starting; false when another job
 	// held the catalog, so the root waits for the next scan.
 	ScanStarted bool
-	// ReadOnly, Managed and Profile are the catalog's policy for the root.
-	ReadOnly bool
-	Managed  bool
-	Profile  string
+	// ReadOnly, FolderFallback, Managed and Profile are the catalog's
+	// policy for the root.
+	ReadOnly       bool
+	FolderFallback bool
+	Managed        bool
+	Profile        string
 }
 
 // Libraries lists the catalog's libraries with their configured root
@@ -388,13 +393,15 @@ func (l *Library) libraryInfo(lib *model.Library) LibraryInfo {
 		media = "podcast"
 	}
 	return LibraryInfo{
-		PID:      apiPID(PrefixLibrary, lib.PID),
-		Name:     name,
-		Media:    media,
-		Path:     lib.DisplayRoot,
-		ReadOnly: lib.ReadOnly,
-		Managed:  lib.Mode == model.ModeManaged,
-		Profile:  lib.Profile,
+		PID:            apiPID(PrefixLibrary, lib.PID),
+		Name:           name,
+		Media:          media,
+		MediaDeclared:  l.declaredMedia(lib) != "",
+		Path:           lib.DisplayRoot,
+		ReadOnly:       lib.ReadOnly,
+		FolderFallback: lib.FolderFallback,
+		Managed:        lib.Mode == model.ModeManaged,
+		Profile:        lib.Profile,
 	}
 }
 

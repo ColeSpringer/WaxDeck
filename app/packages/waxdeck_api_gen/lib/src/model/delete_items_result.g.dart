@@ -13,6 +13,8 @@ class _$DeleteItemsResult extends DeleteItemsResult {
   final String mode;
   @override
   final BuiltList<DeletePlanEntry> entries;
+  @override
+  final BuiltList<String>? warnings;
 
   factory _$DeleteItemsResult([
     void Function(DeleteItemsResultBuilder)? updates,
@@ -22,6 +24,7 @@ class _$DeleteItemsResult extends DeleteItemsResult {
     required this.applied,
     required this.mode,
     required this.entries,
+    this.warnings,
   }) : super._();
   @override
   DeleteItemsResult rebuild(void Function(DeleteItemsResultBuilder) updates) =>
@@ -37,7 +40,8 @@ class _$DeleteItemsResult extends DeleteItemsResult {
     return other is DeleteItemsResult &&
         applied == other.applied &&
         mode == other.mode &&
-        entries == other.entries;
+        entries == other.entries &&
+        warnings == other.warnings;
   }
 
   @override
@@ -46,6 +50,7 @@ class _$DeleteItemsResult extends DeleteItemsResult {
     _$hash = $jc(_$hash, applied.hashCode);
     _$hash = $jc(_$hash, mode.hashCode);
     _$hash = $jc(_$hash, entries.hashCode);
+    _$hash = $jc(_$hash, warnings.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -55,7 +60,8 @@ class _$DeleteItemsResult extends DeleteItemsResult {
     return (newBuiltValueToStringHelper(r'DeleteItemsResult')
           ..add('applied', applied)
           ..add('mode', mode)
-          ..add('entries', entries))
+          ..add('entries', entries)
+          ..add('warnings', warnings))
         .toString();
   }
 }
@@ -78,6 +84,11 @@ class DeleteItemsResultBuilder
   set entries(ListBuilder<DeletePlanEntry>? entries) =>
       _$this._entries = entries;
 
+  ListBuilder<String>? _warnings;
+  ListBuilder<String> get warnings =>
+      _$this._warnings ??= ListBuilder<String>();
+  set warnings(ListBuilder<String>? warnings) => _$this._warnings = warnings;
+
   DeleteItemsResultBuilder() {
     DeleteItemsResult._defaults(this);
   }
@@ -88,6 +99,7 @@ class DeleteItemsResultBuilder
       _applied = $v.applied;
       _mode = $v.mode;
       _entries = $v.entries.toBuilder();
+      _warnings = $v.warnings?.toBuilder();
       _$v = null;
     }
     return this;
@@ -123,12 +135,15 @@ class DeleteItemsResultBuilder
               'mode',
             ),
             entries: entries.build(),
+            warnings: _warnings?.build(),
           );
     } catch (_) {
       late String _$failedField;
       try {
         _$failedField = 'entries';
         entries.build();
+        _$failedField = 'warnings';
+        _warnings?.build();
       } catch (e) {
         throw BuiltValueNestedFieldError(
           r'DeleteItemsResult',

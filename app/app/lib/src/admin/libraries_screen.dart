@@ -103,12 +103,31 @@ class _LibraryTable extends ConsumerWidget {
         ),
         WaxColumn<LibraryInfo>(
           label: l10n.adminLibrariesColumnHolds,
-          width: 96,
+          width: 132,
           text: (library) => _mediaLabel(l10n, library.media),
-          cell: (context, library) => Text(
-            _mediaLabel(l10n, library.media),
-            style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
-          ),
+          cell: (context, library) {
+            final held = Text(
+              _mediaLabel(l10n, library.media),
+              style: WaxType.bodySmall.copyWith(color: colors.textSecondary),
+            );
+            if (library.media == 'podcast') return held;
+            // Changed in the server's configuration, which refuses a
+            // change made here: what it holds, and why it stays.
+            if (library.mediaDeclared) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  held,
+                  Text(
+                    l10n.adminLibraryMediaDeclared,
+                    style: WaxType.caption.copyWith(color: colors.textTertiary),
+                  ),
+                ],
+              );
+            }
+            return _MediaChoice(library: library);
+          },
         ),
         WaxColumn<LibraryInfo>(
           label: l10n.adminLibrariesColumnItems,
@@ -143,7 +162,35 @@ class _LibraryTable extends ConsumerWidget {
           // Episode fetching needs the podcast library writable.
           cell: (context, library) => library.media == 'podcast'
               ? const SizedBox.shrink()
-              : _ReadOnlySwitch(library: library),
+              : _LibraryFlagSwitch(
+                  value: library.readOnly,
+                  label: l10n.adminLibraryReadOnlyLabel(library.name),
+                  semanticsId: SemanticsIds.libraryReadOnly(library.pid),
+                  save: (repository, on) =>
+                      repository.setLibraryReadOnly(library.pid, on),
+                ),
+        ),
+        WaxColumn<LibraryInfo>(
+          label: l10n.adminLibrariesColumnFolders,
+          width: 132,
+          // A managed library's folders are the catalog's own rendering,
+          // and an episode's names come from its feed.
+          cell: (context, library) =>
+              library.managed || library.media == 'podcast'
+              ? const SizedBox.shrink()
+              // Files already scanned take it on a rescan that re-reads
+              // them, which the message says.
+              : _LibraryFlagSwitch(
+                  value: library.folderFallback,
+                  label: l10n.adminLibraryFolderFallbackLabel(library.name),
+                  semanticsId: SemanticsIds.libraryFolderFallback(library.pid),
+                  save: (repository, on) =>
+                      repository.setLibraryFolderFallback(library.pid, on),
+                  afterSave: (messenger, on) {
+                    if (!on) return;
+                    messenger.show(l10n.adminLibraryFolderFallbackRescan);
+                  },
+                ),
         ),
       ],
       trailing: (context, library) => _RescanButton(library: library),
@@ -157,6 +204,84 @@ class _LibraryTable extends ConsumerWidget {
         'podcast' => l10n.adminLibraryMediaPodcasts,
         _ => l10n.adminLibraryMediaMixed,
       };
+}
+
+/// What a library holds, changed in place after saying what the change
+/// does to the files already there.
+class _MediaChoice extends ConsumerWidget {
+  const _MediaChoice({required this.library});
+
+  final LibraryInfo library;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final current = switch (library.media) {
+      'music' || 'audiobook' => library.media!,
+      _ => 'mixed',
+    };
+    return WaxChoice<String>(
+      label: l10n.adminLibraryMediaChoiceLabel(library.name),
+      value: current,
+      semanticsId: SemanticsIds.libraryMediaChoice(library.pid),
+      options: const <String>['music', 'audiobook', 'mixed'],
+      labelFor: (media) => _LibraryTable._mediaLabel(l10n, media),
+      onChanged: (media) {
+        if (media != current) _set(context, media);
+      },
+    );
+  }
+
+  Future<void> _set(BuildContext context, String media) async {
+    final l10n = context.l10n;
+    // The row can be gone by the answer; the container outlives it.
+    final container = ProviderScope.containerOf(context, listen: false);
+    final messenger = container.read(shellMessengerProvider.notifier);
+    final books = media == 'audiobook';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(l10n.adminLibraryMediaChange),
+        content: WaxProse(
+          books
+              ? l10n.adminLibraryMediaToBooksBody(library.name)
+              : l10n.adminLibraryMediaRereadBody(library.name),
+        ),
+        actions: <Widget>[
+          WaxButton(
+            label: l10n.commonCancel,
+            kind: WaxButtonKind.text,
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+          ),
+          WaxButton(
+            label: l10n.adminLibraryMediaConfirm,
+            semanticsId: SemanticsIds.libraryMediaConfirm,
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      final scanning = await container
+          .read(repositoryProvider)
+          .setLibraryMedia(library.pid, media);
+      container
+        ..invalidate(libraryCountsProvider)
+        ..invalidate(librariesProvider);
+      // The scan it started belongs in the job list, as a rescan's does.
+      if (scanning) container.invalidate(adminJobsProvider);
+      messenger.show(
+        scanning
+            ? l10n.adminLibraryMediaChanged(library.name)
+            : books
+            ? l10n.adminLibraryMediaScanWaits(library.name)
+            : l10n.adminLibraryMediaScanWaitsReread(library.name),
+      );
+    } on WaxDeckApiException catch (error) {
+      messenger.show(explainRefusal(l10n, error));
+    }
+  }
 }
 
 /// What the matching engine does with what this root holds.
@@ -247,49 +372,67 @@ class _ProfileChoice extends ConsumerWidget {
   }
 }
 
-class _ReadOnlySwitch extends ConsumerStatefulWidget {
-  const _ReadOnlySwitch({required this.library});
+/// One flag the server stores per library: drawn at the value set here
+/// until the reloaded listing carries it, put back where the server
+/// refused it, and the listings read again once it lands.
+class _LibraryFlagSwitch extends ConsumerStatefulWidget {
+  const _LibraryFlagSwitch({
+    required this.value,
+    required this.label,
+    required this.semanticsId,
+    required this.save,
+    this.afterSave,
+  });
 
-  final LibraryInfo library;
+  /// What the listing says.
+  final bool value;
+  final String label;
+  final String semanticsId;
+
+  /// Stores the flag.
+  final Future<void> Function(WaxDeckRepository repository, bool on) save;
+
+  /// Run once [save] lands, for a word about what the change does.
+  final void Function(ShellMessenger messenger, bool on)? afterSave;
 
   @override
-  ConsumerState<_ReadOnlySwitch> createState() => _ReadOnlySwitchState();
+  ConsumerState<_LibraryFlagSwitch> createState() => _LibraryFlagSwitchState();
 }
 
-class _ReadOnlySwitchState extends ConsumerState<_ReadOnlySwitch> {
+class _LibraryFlagSwitchState extends ConsumerState<_LibraryFlagSwitch> {
   /// The value set here, shown until the reloaded listing carries it.
   bool? _set;
 
   @override
-  void didUpdateWidget(covariant _ReadOnlySwitch oldWidget) {
+  void didUpdateWidget(covariant _LibraryFlagSwitch oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.library.readOnly == _set) _set = null;
+    if (widget.value == _set) _set = null;
   }
 
   @override
   Widget build(BuildContext context) {
     return WaxSwitch(
-      label: context.l10n.adminLibraryReadOnlyLabel(widget.library.name),
-      value: _set ?? widget.library.readOnly,
-      semanticsId: SemanticsIds.libraryReadOnly(widget.library.pid),
+      label: widget.label,
+      value: _set ?? widget.value,
+      semanticsId: widget.semanticsId,
       onChanged: _flip,
     );
   }
 
-  Future<void> _flip(bool readOnly) async {
+  Future<void> _flip(bool on) async {
     final l10n = context.l10n;
     final container = ProviderScope.containerOf(context, listen: false);
     final messenger = container.read(shellMessengerProvider.notifier);
-    setState(() => _set = readOnly);
+    final afterSave = widget.afterSave;
+    setState(() => _set = on);
     try {
-      await container
-          .read(repositoryProvider)
-          .setLibraryReadOnly(widget.library.pid, readOnly);
+      await widget.save(container.read(repositoryProvider), on);
     } on WaxDeckApiException catch (error) {
       if (mounted) setState(() => _set = null);
       messenger.show(explainError(l10n, error));
       return;
     }
+    afterSave?.call(messenger, on);
     container
       ..invalidate(libraryCountsProvider)
       ..invalidate(librariesProvider);

@@ -115,6 +115,11 @@ func TestTheAnalyzePassRecordsUnderItsOwnOrigin(t *testing.T) {
 		t.Fatal("the analyze pass recorded nothing under its origin for a truncated file")
 	}
 	for _, d := range page.Diagnostics {
+		// A host with fpcalc also records the files it could not read,
+		// under the same origin.
+		if d.Code == "fingerprint_fallback" {
+			continue
+		}
 		if d.Origin != "analyze" || d.Code != "corrupt_audio" || !strings.HasSuffix(d.Path, "cut-short.flac") {
 			t.Errorf("origin=analyze listed %+v", d)
 		}

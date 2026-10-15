@@ -6,6 +6,7 @@ import '../l10n/l10n.dart';
 import '../music/entity_facts.dart';
 import '../player/play_state_controller.dart';
 import '../shell/semantics_ids.dart';
+import 'item_delete.dart';
 
 /// Everything the catalog knows about one item, as a sheet.
 ///
@@ -81,8 +82,15 @@ class ItemFactsSheet extends ConsumerWidget {
                   // still arriving and beside one that never will.
                   _Rows(rows: _playFacts(l10n, play)),
                   switch (detail) {
-                    AsyncData(:final value) => _Rows(
-                      rows: _fileFacts(l10n, value),
+                    AsyncData(:final value) => Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: <Widget>[
+                        _Rows(rows: _fileFacts(l10n, value)),
+                        // A plain item's one file is the rows above; an
+                        // item holding copies says which files it has.
+                        if (value.copies > 0) _ItemFiles(pid: pid),
+                      ],
                     ),
                     AsyncError(:final error) => Padding(
                       padding: const EdgeInsets.all(WaxSpace.s16),
@@ -221,4 +229,129 @@ class _Rows extends StatelessWidget {
         ),
     ],
   );
+}
+
+/// The files behind an item holding copies: how many, then each with
+/// what it is, and a copy's delete for a caller holding the right. A
+/// refusal draws nothing: the list takes the download right, which the
+/// session does not report, and the rows above already describe the
+/// item's own file.
+class _ItemFiles extends ConsumerWidget {
+  const _ItemFiles({required this.pid});
+
+  final String pid;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final canDelete = canDeleteItems(ref);
+    return switch (ref.watch(itemFilesProvider(pid))) {
+      AsyncData(:final value) when value.isNotEmpty => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: <Widget>[
+          MonoDetailRow(
+            label: l10n.libraryFactsFiles,
+            value: l10n.libraryFilesCount(value.length),
+            semanticsId: SemanticsIds.itemFactsRow('files'),
+          ),
+          for (final file in value)
+            _FileRow(
+              key: ValueKey(file.filePid),
+              pid: pid,
+              file: file,
+              canDelete: canDelete && file.isCopy,
+            ),
+        ],
+      ),
+      AsyncError(:final error)
+          when error is! WaxDeckApiException || !error.isRefusal =>
+        Padding(
+          padding: const EdgeInsets.all(WaxSpace.s16),
+          child: ErrorState(
+            message: context.explain(error),
+            onRetry: () => ref.invalidate(itemFilesProvider(pid)),
+          ),
+        ),
+      _ => const SizedBox.shrink(),
+    };
+  }
+}
+
+/// One file of an item: its name, what it is to the item, its size, and
+/// for a copy the caller may delete, the delete.
+class _FileRow extends StatelessWidget {
+  const _FileRow({
+    super.key,
+    required this.pid,
+    required this.file,
+    required this.canDelete,
+  });
+
+  final String pid;
+  final ItemFile file;
+  final bool canDelete;
+
+  String _role(AppLocalizations l10n) => switch (file.role) {
+    'primary' => l10n.libraryFileRolePrimary,
+    'part' => l10n.libraryFileRolePart,
+    'alternate' when file.reason == 'other-encoding' =>
+      l10n.libraryFileRoleOtherEncoding,
+    'alternate' => l10n.libraryFileRoleCopy,
+    final other => other,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final colors = WaxColors.of(context);
+    final size = file.sizeBytes;
+    return Semantics(
+      identifier: SemanticsIds.itemFileRow(file.filePid),
+      container: true,
+      explicitChildNodes: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: WaxSpace.s4),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    file.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: WaxType.monoData.copyWith(color: colors.textPrimary),
+                  ),
+                  Text(
+                    _role(l10n),
+                    style: WaxType.caption.copyWith(color: colors.textTertiary),
+                  ),
+                  if (size != null && size > 0)
+                    Text(
+                      l10n.formatBytes(size),
+                      style: WaxType.caption.copyWith(
+                        color: colors.textTertiary,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            if (canDelete)
+              WaxIconButton(
+                glyph: WaxIcons.delete,
+                label: l10n.libraryFileDeleteCopy,
+                semanticsId: SemanticsIds.itemFileDelete(file.filePid),
+                onPressed: () => confirmDeleteItem(
+                  context,
+                  pid: pid,
+                  filePids: [file.filePid],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
 }

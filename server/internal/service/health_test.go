@@ -1,6 +1,11 @@
 package service
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/colespringer/waxbin"
+	"github.com/colespringer/waxbin/model"
+)
 
 func TestHealthCursorRoundTrip(t *testing.T) {
 	t.Parallel()
@@ -35,25 +40,19 @@ func TestHealthCursorStrictParsing(t *testing.T) {
 	}
 }
 
-func TestDuplicateNamesFromMessage(t *testing.T) {
+// A duplicate group's why is the catalog's reason alone: its message
+// also repeats the names and ends with advice for the command line.
+func TestDuplicateReasonIsTheWhyAlone(t *testing.T) {
 	t.Parallel()
-	msg := "duplicate artist (same collation key): Beatles / The Beatles; merge with `waxbin merge`"
-	names := duplicateNamesFromMessage(msg, 2)
-	if len(names) != 2 || names[0] != "Beatles" || names[1] != "The Beatles" {
-		t.Fatalf("names = %v", names)
-	}
-
-	// A member-count mismatch leaves every name empty rather than
-	// misattributing one.
-	names = duplicateNamesFromMessage(msg, 3)
-	if len(names) != 3 || names[0] != "" || names[1] != "" || names[2] != "" {
-		t.Fatalf("mismatched names = %v, want empties", names)
-	}
-
-	// An unrecognized message shape parses to empties too.
-	names = duplicateNamesFromMessage("something else entirely", 2)
-	if len(names) != 2 || names[0] != "" || names[1] != "" {
-		t.Fatalf("unparsed names = %v, want empties", names)
+	for msg, want := range map[string]string{
+		"duplicate artist (same collation key): Beatles / The Beatles; merge with `waxbin merge`": "same collation key",
+		"duplicate album (same title and album artist): Blue / Blue; if they are one release, tag their files alike; " +
+			"`waxbin merge` alone joins them only until a scan or edit re-resolves them": "same title and album artist",
+		"something else entirely": "",
+	} {
+		if got := duplicateReason(msg); got != want {
+			t.Errorf("reason of %q = %q, want %q", msg, got, want)
+		}
 	}
 }
 
@@ -74,6 +73,25 @@ func TestHealthFixableRulesAreImplemented(t *testing.T) {
 	for _, r := range []string{ruleCorruptAudio, ruleLegacyTags, ruleSmallArt, ruleMissingYear, ruleDurationMismatch, ruleGenreWhitelist} {
 		if _, ok := healthFixWants[r]; ok || r == rulePathMismatch || r == ruleWriteUnsynced {
 			t.Fatalf("rule %q must not have a fix", r)
+		}
+	}
+}
+
+// A member's path is read only where another of its group shares its
+// codec and bitrate: there alone the file's name is what tells the two
+// apart.
+func TestOnlyAlikeUpgradeMembersNeedTheirPaths(t *testing.T) {
+	t.Parallel()
+	ms := []waxbin.UpgradeCandidate{
+		{FilePID: "f-flac", Codec: "flac", Bitrate: 900, Lossless: true},
+		{FilePID: "f-mp3-a", Codec: "mp3", Bitrate: 320},
+		{FilePID: "f-mp3-b", Codec: "mp3", Bitrate: 320},
+		{FilePID: "f-mp3-c", Codec: "mp3", Bitrate: 192},
+	}
+	got := alikeMembers(ms)
+	for pid, want := range map[model.PID]bool{"f-flac": false, "f-mp3-a": true, "f-mp3-b": true, "f-mp3-c": false} {
+		if got[pid] != want {
+			t.Errorf("%s alike = %v, want %v", pid, got[pid], want)
 		}
 	}
 }

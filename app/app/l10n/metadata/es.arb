@@ -49,6 +49,7 @@
   "metadataFieldComposerSort": "Compositor, para ordenar",
   "metadataFieldDescription": "Descripción",
   "metadataFieldDiscNo": "Número de disco",
+  "metadataFieldDiscTotal": "Total de discos",
   "metadataFieldEdition": "Edición",
   "metadataFieldEpisodeNo": "Número de episodio",
   "metadataFieldEpisodeType": "Tipo de episodio",
@@ -67,6 +68,7 @@
   "metadataFieldSubtitle": "Subtítulo",
   "metadataFieldTitle": "Título",
   "metadataFieldTrackNo": "Número de pista",
+  "metadataFieldTrackTotal": "Total de pistas",
   "metadataFieldYear": "Año",
   "metadataFieldsOverline": "Lo que este elemento dice ser",
   "metadataFieldsTitle": "Campos",
@@ -80,6 +82,7 @@
   "metadataGenreSearchHint": "Busca o escribe un género",
   "metadataIdentificationBlurb": "Volver a emparejar reabre la identificación y deja el resultado en la cola de revisión. Obtener metadatos aplica aquello en lo que los proveedores ya coinciden, sin preguntar.",
   "metadataIdentificationTitle": "Identificación",
+  "metadataKindPinned": "Tipo: {kind}, fijado",
   "metadataLinesAllTimed": "{count, plural, =1{1 línea, con tiempo} other{{count} líneas, todas con tiempo}}",
   "metadataLinesSomeTimed": "{count, plural, =1{1 línea, {timed} con tiempo} other{{count} líneas, {timed} con tiempo}}",
   "metadataLoadError": "No se han podido cargar los metadatos",
@@ -158,6 +161,7 @@
   "@metadataSourceFeed": {
     "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
   },
+  "metadataSourceNormalize": "la pasada de limpieza",
   "metadataSourceOrganize": "el organizador",
   "@metadataSourceOrganize": {
     "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
@@ -177,6 +181,10 @@
   },
   "metadataTagKey": "Clave",
   "metadataTagReserved": "{key} se guarda en su propio campo, no como etiqueta personalizada.",
+  "metadataTagReservedBookKind": "{key} se guarda como un campo propio, no como etiqueta personalizada. Una etiqueta no cambia lo que es un elemento; cambia su tipo.",
+  "metadataTagReservedEpisode": "{key} se guarda como un campo propio, no como etiqueta personalizada. Una etiqueta no cambia lo que es un episodio.",
+  "metadataTagReservedKind": "{key} se guarda como un campo propio, no como etiqueta personalizada. Una etiqueta no convierte un elemento en audiolibro; cambia su tipo.",
+  "metadataTagReservedNarrator": "{key} se guarda como un campo propio, no como etiqueta personalizada. Edita los créditos de narrador.",
   "metadataTagStagedRemove": "Se quitará al guardar",
   "metadataTagValues": "Valores, separados por comas",
   "metadataTagsOverline": "Todo aquello para lo que el vocabulario no tiene un campo",

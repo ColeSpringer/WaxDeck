@@ -23,7 +23,7 @@ part 'item_metadata.g.dart';
 /// * [pid] - The item.
 /// * [mediaType] 
 /// * [fields] - The item's scalar fields by name (the kind's vocabulary from the fields endpoint); empty values are omitted. 
-/// * [lockedFields] - Currently locked fields, including namespaced artifacts (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`). 
+/// * [lockedFields] - Currently locked fields, including namespaced artifacts (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`) and `kind`, a pinned track-or-book classification (setItemLocks). 
 /// * [provenance] - Per-field provenance for curated fields.
 /// * [credits] - Credits by role.
 /// * [lyrics] 
@@ -36,8 +36,8 @@ part 'item_metadata.g.dart';
 /// * [albumPid] - The item's album entity, when any.
 /// * [artistPid] - The item's artist entity, when any.
 /// * [releaseGroupPid] - The item's release group entity, when any.
-/// * [writeBackIssues] - Files whose on-disk tags are out of step with the catalog (failed write-backs, values the format cannot store). 
-/// * [mayCurate] - Whether the caller may run the item-scoped edits this document describes: administrators always, everyone else exactly for the items their own uploads brought in. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. 
+/// * [writeBackIssues] - Files whose on-disk tags are out of step with the catalog (failed write-backs, values the format cannot store), of those the caller may see: a copy in a library they are not granted is left out, as the item's file list leaves it out. 
+/// * [mayCurate] - Whether the caller may run the item-scoped edits this document describes: administrators always, anyone else for the items their own uploads and acquisitions brought in and the parts a kind change split out of those. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. 
 /// * [acquisition] 
 @BuiltValue()
 abstract class ItemMetadata implements Built<ItemMetadata, ItemMetadataBuilder> {
@@ -53,7 +53,7 @@ abstract class ItemMetadata implements Built<ItemMetadata, ItemMetadataBuilder> 
   @BuiltValueField(wireName: r'fields')
   BuiltMap<String, String> get fields;
 
-  /// Currently locked fields, including namespaced artifacts (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`). 
+  /// Currently locked fields, including namespaced artifacts (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`) and `kind`, a pinned track-or-book classification (setItemLocks). 
   @BuiltValueField(wireName: r'lockedFields')
   BuiltList<String> get lockedFields;
 
@@ -104,11 +104,11 @@ abstract class ItemMetadata implements Built<ItemMetadata, ItemMetadataBuilder> 
   @BuiltValueField(wireName: r'releaseGroupPid')
   String? get releaseGroupPid;
 
-  /// Files whose on-disk tags are out of step with the catalog (failed write-backs, values the format cannot store). 
+  /// Files whose on-disk tags are out of step with the catalog (failed write-backs, values the format cannot store), of those the caller may see: a copy in a library they are not granted is left out, as the item's file list leaves it out. 
   @BuiltValueField(wireName: r'writeBackIssues')
   BuiltList<WriteBackIssue> get writeBackIssues;
 
-  /// Whether the caller may run the item-scoped edits this document describes: administrators always, everyone else exactly for the items their own uploads brought in. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. 
+  /// Whether the caller may run the item-scoped edits this document describes: administrators always, anyone else for the items their own uploads and acquisitions brought in and the parts a kind change split out of those. The read answers anyone who can see the item, so without this a client has no way to tell an editor it can save from one every save will be refused. Optional for compatibility; absent reads as unknown, and a client that treats it as false only withholds a door the server would have refused anyway. 
   @BuiltValueField(wireName: r'mayCurate')
   bool? get mayCurate;
 

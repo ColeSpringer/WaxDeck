@@ -92,6 +92,13 @@ func (w *jobWatch) pending() bool {
 	return len(w.changed) > 0 || len(w.running) > 0 || len(w.read) > 0
 }
 
+// idle reports whether no job ran at the last read.
+func (w *jobWatch) idle() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.running) == 0
+}
+
 // takeRead hands the follower what reads found since it last asked.
 func (w *jobWatch) takeRead() []model.Job {
 	w.mu.Lock()
@@ -272,6 +279,7 @@ func jobNews(prev *jobSeen, j model.Job, now time.Time, openedAtNS int64) bool {
 // while a job runs it also reads on a ticker.
 func (l *Library) runJobFollower(ctx context.Context) error {
 	l.settleOrigins(ctx)
+	l.loadWaitingImports(ctx)
 	tick := time.NewTicker(cmp.Or(l.jobFollowEvery, jobFollowInterval))
 	defer tick.Stop()
 	seen := map[model.PID]jobSeen{}
@@ -281,7 +289,7 @@ func (l *Library) runJobFollower(ctx context.Context) error {
 			return nil
 		case <-l.jobWake:
 		case <-tick.C:
-			if !l.jobs.pending() {
+			if !l.jobs.pending() && !l.waitingImports() {
 				continue
 			}
 		}
@@ -292,7 +300,14 @@ func (l *Library) runJobFollower(ctx context.Context) error {
 			l.log.Warn("following catalog jobs", "err", err)
 			continue
 		}
-		l.announceJobs(ctx, seen, l.jobs.takeRead())
+		reads := l.jobs.takeRead()
+		l.announceJobs(ctx, seen, reads)
+		// A declined import a busy catalog held back goes again when any
+		// job ends, or when none runs: the one that held it may have
+		// ended before the import began to wait.
+		if l.jobs.idle() || slices.ContainsFunc(reads, func(j model.Job) bool { return j.State != model.JobRunning }) {
+			l.retryWaitingImports()
+		}
 		if len(seen) > jobSeenCap {
 			for pid, s := range seen {
 				if s.state != model.JobRunning {
@@ -334,8 +349,9 @@ func (l *Library) announceJobs(ctx context.Context, seen map[model.PID]jobSeen, 
 			continue
 		}
 		// Most jobs have no one to tell: an upload's imports, deletes,
-		// the scheduler's own runs. Only a pass's pictures matter then.
-		if j.Kind == "enrich" || l.jobHasOrigin(ctx, j.PID) {
+		// the scheduler's own runs. Only a pass's pictures matter then,
+		// and a kind change's pids, which WaxDeck's own rows follow.
+		if j.Kind == "enrich" || j.Kind == "set-kind" || l.jobHasOrigin(ctx, j.PID) {
 			l.settleLater(func(ctx context.Context) { l.onJobFinished(ctx, &j) })
 		}
 	}
@@ -349,7 +365,7 @@ func (l *Library) jobAudience(ctx context.Context, j model.Job, admins []string)
 		return admins
 	}
 	var out []string
-	if starter, err := l.jobStarter(ctx, j.PID, true); err != nil {
+	if starter, err := l.jobStarter(ctx, j.PID); err != nil {
 		l.log.Warn("reading a targeted job's origin", "job", string(j.PID), "err", err)
 	} else if starter != "" {
 		out = append(out, starter)
@@ -366,12 +382,10 @@ func (l *Library) jobAudience(ctx context.Context, j model.Job, admins []string)
 
 // jobStarter is the account a targeted job answers to besides the
 // administrators: its starter, while the origin row holds them. A whole
-// pass has none, since administrators alone hear of passes. Both the
-// audience a job's news reaches and who may read it are this rule.
-func (l *Library) jobStarter(ctx context.Context, pid model.PID, targeted bool) (string, error) {
-	if !targeted {
-		return "", nil
-	}
+// pass has none, since administrators alone hear of passes, which its
+// callers apply. Both the audience a job's news reaches and who may read
+// it are this rule.
+func (l *Library) jobStarter(ctx context.Context, pid model.PID) (string, error) {
 	o, err := l.db.JobOriginGet(ctx, string(pid))
 	if errors.Is(err, wdb.ErrNotFound) {
 		return "", nil
@@ -418,6 +432,20 @@ func (l *Library) emitEveryoneEvent(ctx context.Context, kind string) {
 // artwork epoch, so generated playlist covers re-composite, and whoever
 // started the job hears of it.
 func (l *Library) onJobFinished(ctx context.Context, j *model.Job) {
+	// A kind change WaxDeck started is followed up when its origin
+	// settles, which a restart repeats; one started elsewhere has no
+	// origin, so a follow-up that fails leaves one of no one's for the
+	// next start to repeat, and nothing else of the job is to settle.
+	if j.Kind == "set-kind" && !l.jobHasOrigin(ctx, j.PID) {
+		if l.followKindChange(ctx, j) != nil {
+			if err := l.db.InsertJobOrigin(context.WithoutCancel(ctx), wdb.JobOrigin{
+				PID: string(j.PID), CreatedAtNS: time.Now().UnixNano(),
+			}); err != nil {
+				l.log.Warn("keeping a kind change's follow-up for a repeat", "job", string(j.PID), "err", err)
+			}
+		}
+		return
+	}
 	if j.Kind == "enrich" && j.Result != "" {
 		var res enrich.Result
 		if json.Unmarshal([]byte(j.Result), &res) == nil && (res.ArtFetched > 0 || res.AuxArtFetched > 0) {
@@ -428,18 +456,19 @@ func (l *Library) onJobFinished(ctx context.Context, j *model.Job) {
 }
 
 // adoptJob records who started a job, so its end reaches them, and
-// follows it from here, since the feed may have dropped its rows. A job
-// that ended before the record landed is settled here: the follower found
-// no one to tell.
+// follows it from here, since the feed may have dropped its rows; one
+// whose record failed is followed all the same. A job that ended before
+// the record landed is settled here: the follower found no one to tell.
 func (l *Library) adoptJob(ctx context.Context, pid model.PID, userID, rule string) {
 	ctx = context.WithoutCancel(ctx)
-	if err := l.db.InsertJobOrigin(ctx, wdb.JobOrigin{
+	err := l.db.InsertJobOrigin(ctx, wdb.JobOrigin{
 		PID: string(pid), UserID: userID, Rule: rule, CreatedAtNS: time.Now().UnixNano(),
-	}); err != nil {
+	})
+	l.followJob(pid)
+	if err != nil {
 		l.log.Warn("recording who started a job", "job", string(pid), "err", err)
 		return
 	}
-	l.followJob(pid)
 	if j, err := l.lib.Job(ctx, pid); err == nil && j.State != model.JobRunning {
 		l.settleLater(func(ctx context.Context) { l.settleJobOrigin(ctx, j) })
 	}
@@ -457,14 +486,23 @@ func (l *Library) settleJobOrigin(ctx context.Context, j *model.Job) {
 		}
 		return
 	}
+	// Its rows follow before anyone is told: the reader opens what the
+	// change made. A follow-up that failed keeps the origin, so the next
+	// start's settle repeats it.
+	if j.Kind == "set-kind" && l.followKindChange(ctx, j) != nil {
+		return
+	}
 	if o.Rule != "" {
 		l.finishHealthFixJob(ctx, o, jobDTO(j))
 		return
 	}
 	ctx = context.WithoutCancel(ctx)
-	ended := []Job{jobDTO(j)}
-	l.nameJobTargets(ctx, ended)
-	l.notifyJobEnd(ctx, o.UserID, ended[0])
+	// An origin of no one's only kept a follow-up; there is nobody to tell.
+	if o.UserID != "" {
+		ended := []Job{jobDTO(j)}
+		l.nameJobTargets(ctx, ended)
+		l.notifyJobEnd(ctx, o.UserID, ended[0])
+	}
 	l.dropJobOrigin(ctx, o.PID)
 }
 
@@ -544,11 +582,34 @@ var jobTargetPrefixes = map[string]string{
 	"album": PrefixAlbum, "library": PrefixLibrary, "trash": PrefixTrash,
 }
 
-// nameJobTargets names the jobs' targets, and gives an item its kind's
-// prefix, best effort.
+// nameJobTargets names the jobs' targets and a scan's runs, and gives an
+// item its kind's prefix, best effort. The items every job names are read
+// at once: a list refreshes on every job's news and keeps every kind
+// change.
 func (l *Library) nameJobTargets(ctx context.Context, jobs []Job) {
+	var pids []model.PID
+	for i := range jobs {
+		if k := jobs[i].SetKind; k != nil {
+			pids = append(pids, kindTallyPIDs(k)...)
+		}
+		if t := jobs[i].Target; t != nil && t.Type == "item" {
+			if _, bare, ok := parseAPIPID(t.PID); ok {
+				pids = append(pids, bare)
+			}
+		}
+	}
+	items, err := l.readItems(ctx, pids)
+	if err != nil {
+		l.log.Warn("reading the items jobs name", "err", err)
+	}
 	var trashed map[model.PID]string
 	for i := range jobs {
+		if s := jobs[i].Scan; s != nil {
+			l.nameScanRuns(s)
+		}
+		if k := jobs[i].SetKind; k != nil {
+			shapeKindTally(k, items)
+		}
 		t := jobs[i].Target
 		if t == nil {
 			continue
@@ -559,7 +620,7 @@ func (l *Library) nameJobTargets(ctx context.Context, jobs []Job) {
 		}
 		switch t.Type {
 		case "item":
-			if it, err := l.lib.Get(ctx, bare); err == nil {
+			if it := items[bare]; it != nil {
 				t.PID, t.Name = itemAPIPID(it), it.Title
 			}
 		case "artist", "release_group", "album":
@@ -586,6 +647,25 @@ func (l *Library) nameJobTargets(ctx context.Context, jobs []Job) {
 	}
 }
 
+// nameScanRuns names each library a scan walked from the root table:
+// WaxBin names a run by its root's path, which is not every reader's to
+// see.
+func (l *Library) nameScanRuns(s *ScanTallyDTO) {
+	roots := l.libraryRoots()
+	for i := range s.Runs {
+		run := &s.Runs[i]
+		_, bare, ok := parseAPIPID(run.LibraryPID)
+		if !ok {
+			continue
+		}
+		for _, r := range roots {
+			if r.PID == string(bare) {
+				run.Library = r.Name
+			}
+		}
+	}
+}
+
 // sortJobsNewestFirst orders jobs by start, newest first.
 func sortJobsNewestFirst(jobs []Job) {
 	sort.SliceStable(jobs, func(a, b int) bool { return jobs[a].StartedAt.After(jobs[b].StartedAt) })
@@ -603,9 +683,11 @@ func organizeTally(profile string, r *organize.Report) *OrganizeTallyDTO {
 // scanTally is what a scan did, in files.
 func scanTally(r scan.Result) ScanTallyDTO {
 	return ScanTallyDTO{
-		FilesSeen: r.FilesSeen, Created: r.ItemsCreated, Updated: r.ItemsUpdated,
-		Relinked: r.Relinked, Unchanged: r.Unchanged, Missing: r.Missing,
-		Skipped: r.Skipped, Errored: r.Errored,
+		FilesSeen: r.FilesSeen, AudioFiles: r.AudioFiles, Created: r.ItemsCreated,
+		Updated: r.ItemsUpdated, SidecarsUpdated: r.SidecarsUpdated, Copies: r.Copies,
+		Unchanged: r.Unchanged, Errored: r.Errored, Relinked: r.Relinked, Reread: r.Reread,
+		Missing: r.Missing, Promoted: r.Promoted, Dropped: r.Dropped, Skipped: r.Skipped,
+		WalkErrors: r.WalkErrors, RootUnreachable: r.RootUnreachable, SubPathGone: r.SubPathGone,
 	}
 }
 
@@ -617,11 +699,19 @@ func (j *Job) readResult(raw string) {
 	}
 	switch j.Kind {
 	case "scan":
-		// The total over every library; each library's run beside it
-		// waits for the surface that names them.
-		var r scan.Result
+		// The total over every library, with each library's run beside
+		// it; nameJobTargets names the runs.
+		var r struct {
+			scan.Result
+			Runs []scan.Result
+		}
 		if json.Unmarshal([]byte(raw), &r) == nil {
-			total := scanTally(r)
+			total := scanTally(r.Result)
+			for _, run := range r.Runs {
+				total.Runs = append(total.Runs, ScanRunDTO{
+					LibraryPID: entityAPIPID(PrefixLibrary, run.LibraryPID), ScanTallyDTO: scanTally(run),
+				})
+			}
 			j.Scan = &total
 		}
 	case "analyze":
@@ -630,6 +720,7 @@ func (j *Job) readResult(raw string) {
 			j.Analyze = &AnalyzeTallyDTO{
 				Analyzed: r.Analyzed, LoudnessMeasured: r.LoudnessMeasured,
 				MeasureFailed: r.MeasureFailed, Skipped: r.Skipped, Errored: r.Errored,
+				FingerprintFallbacks: r.FingerprintFallbacks, FingerprintPartialReads: r.FingerprintPartialReads,
 			}
 		}
 	case "enrich":
@@ -642,5 +733,8 @@ func (j *Job) readResult(raw string) {
 		if json.Unmarshal([]byte(raw), &r) == nil {
 			j.Organize = organizeTally(r.Profile, &r.Report)
 		}
+	case "set-kind":
+		// Bare pids; nameJobTargets gives each its current prefix.
+		j.SetKind = kindTally(raw)
 	}
 }

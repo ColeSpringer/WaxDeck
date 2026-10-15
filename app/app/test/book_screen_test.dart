@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/books/book_screen.dart';
+import 'package:waxdeck/src/books/books_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -47,6 +48,21 @@ Finder _byId(String id) => find.byWidgetPredicate(
 );
 
 void main() {
+  test('a pid that is no longer a book settles at once', () async {
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(FakeRepository())],
+    );
+    addTearDown(container.dispose);
+    final sub = container.listen(bookDetailProvider('bk-gone'), (_, _) {});
+    addTearDown(sub.close);
+    await expectLater(
+      container
+          .read(bookDetailProvider('bk-gone').future)
+          .timeout(const Duration(seconds: 2)),
+      throwsA(isA<WaxDeckApiException>()),
+    );
+  });
+
   testWidgets('renders the header, the people, and the chapters', (
     tester,
   ) async {
@@ -442,6 +458,42 @@ void main() {
       expect(call.entityType, 'series');
       expect(call.survivorPid, survivor);
       expect(call.loserPids, [loser]);
+    });
+
+    testWidgets('someone who may edit the book turns it back into music', (
+      tester,
+    ) async {
+      final repo = _repo();
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pumpAndSettle();
+
+      await openOverflow(tester);
+      await tester.tap(find.text('Treat as music').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Make this music?'), findsOneWidget);
+      await tester.tap(_byId(SemanticsIds.kindConfirm));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pumpAndSettle();
+
+      expect(repo.setKindCalls.single.pids, [bookPid]);
+      expect(repo.setKindCalls.single.mediaType, 'music');
+      expect(
+        find.byType(BookScreen),
+        findsNothing,
+        reason: 'the book is gone; the screen leaves for its tracks',
+      );
+    });
+
+    testWidgets('a listener who may not edit it is not offered music', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _host(_repo()..mayCurateItems = false, FakeEngine()),
+      );
+      await tester.pumpAndSettle();
+      await openOverflow(tester);
+      expect(find.text('Treat as music'), findsNothing);
     });
 
     testWidgets('the file tools are hidden from a listener', (tester) async {

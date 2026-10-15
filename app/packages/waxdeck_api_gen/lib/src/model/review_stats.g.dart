@@ -10,6 +10,8 @@ class _$ReviewStats extends ReviewStats {
   @override
   final int pending;
   @override
+  final int decided;
+  @override
   final int? identifying;
   @override
   final int applied;
@@ -31,6 +33,7 @@ class _$ReviewStats extends ReviewStats {
 
   _$ReviewStats._({
     required this.pending,
+    required this.decided,
     this.identifying,
     required this.applied,
     required this.autoApplied,
@@ -52,6 +55,7 @@ class _$ReviewStats extends ReviewStats {
     if (identical(other, this)) return true;
     return other is ReviewStats &&
         pending == other.pending &&
+        decided == other.decided &&
         identifying == other.identifying &&
         applied == other.applied &&
         autoApplied == other.autoApplied &&
@@ -66,6 +70,7 @@ class _$ReviewStats extends ReviewStats {
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, pending.hashCode);
+    _$hash = $jc(_$hash, decided.hashCode);
     _$hash = $jc(_$hash, identifying.hashCode);
     _$hash = $jc(_$hash, applied.hashCode);
     _$hash = $jc(_$hash, autoApplied.hashCode);
@@ -82,6 +87,7 @@ class _$ReviewStats extends ReviewStats {
   String toString() {
     return (newBuiltValueToStringHelper(r'ReviewStats')
           ..add('pending', pending)
+          ..add('decided', decided)
           ..add('identifying', identifying)
           ..add('applied', applied)
           ..add('autoApplied', autoApplied)
@@ -100,6 +106,10 @@ class ReviewStatsBuilder implements Builder<ReviewStats, ReviewStatsBuilder> {
   int? _pending;
   int? get pending => _$this._pending;
   set pending(int? pending) => _$this._pending = pending;
+
+  int? _decided;
+  int? get decided => _$this._decided;
+  set decided(int? decided) => _$this._decided = decided;
 
   int? _identifying;
   int? get identifying => _$this._identifying;
@@ -142,6 +152,7 @@ class ReviewStatsBuilder implements Builder<ReviewStats, ReviewStatsBuilder> {
     final $v = _$v;
     if ($v != null) {
       _pending = $v.pending;
+      _decided = $v.decided;
       _identifying = $v.identifying;
       _applied = $v.applied;
       _autoApplied = $v.autoApplied;
@@ -176,6 +187,11 @@ class ReviewStatsBuilder implements Builder<ReviewStats, ReviewStatsBuilder> {
             pending,
             r'ReviewStats',
             'pending',
+          ),
+          decided: BuiltValueNullFieldError.checkNotNull(
+            decided,
+            r'ReviewStats',
+            'decided',
           ),
           identifying: identifying,
           applied: BuiltValueNullFieldError.checkNotNull(

@@ -555,6 +555,13 @@ class _TaskRow extends ConsumerWidget {
 /// A summary counter as a whole number, or null when absent.
 int? _count(Object? value) => value is num ? value.toInt() : null;
 
+/// How many entries a result's list or map holds, zero for anything else.
+int _length(Object? value) => switch (value) {
+  final List<Object?> list => list.length,
+  final Map<Object?, Object?> map => map.length,
+  _ => 0,
+};
+
 /// Everything a fix left alone, whatever the reasons, or null when none.
 int? _skippedTotal(Object? skipped) {
   if (skipped is! Map) return null;
@@ -610,6 +617,7 @@ String _jobLabel(AppLocalizations l10n, String kind) => switch (kind) {
   'import' => l10n.toolsJobImport,
   'delete' => l10n.toolsJobDelete,
   'restore' => l10n.toolsJobRestore,
+  'set-kind' => l10n.toolsJobSetKind,
   _ => kind,
 };
 
@@ -627,6 +635,7 @@ class _JobRow extends StatelessWidget {
     'organize' || 'restore' => WaxIcons.archive,
     'empty-trash' || 'purge-trash' || 'delete' => WaxIcons.delete,
     'import' => WaxIcons.upload,
+    'set-kind' => WaxIcons.audiobooks,
     _ => WaxIcons.hourglass,
   };
 
@@ -662,8 +671,14 @@ class _JobRow extends StatelessWidget {
         'scan' => <String>[
           if (n('created') case final v?) l10n.toolsCountAdded(v),
           if (n('updated') case final v?) l10n.toolsCountUpdated(v),
+          if (n('copies') case final v?) l10n.toolsCountCopies(v),
           if (n('missing') case final v?) l10n.toolsCountMissing(v),
           if (n('errored') case final v?) l10n.toolsCountErrored(v),
+          // Entries the walk could not read are no file count's, and an
+          // unreachable folder is none at all: the counts alone read clean.
+          if (n('walkErrors') case final v? when v > 0)
+            l10n.toolsCountUnreadable(v),
+          if (r['rootUnreachable'] == true) l10n.toolsRootUnreachable,
         ],
         'enrich' => <String>[
           if (n('lyricsMatched') case final v?) l10n.toolsCountLyrics(v),
@@ -673,16 +688,49 @@ class _JobRow extends StatelessWidget {
         'analyze' => <String>[
           if (n('analyzed') case final v?) l10n.toolsCountAnalyzed(v),
           if (n('errored') case final v?) l10n.toolsCountErrored(v),
+          if (n('fingerprintFallbacks') case final v? when v > 0)
+            l10n.toolsCountFallbacks(v),
         ],
         'organize' => <String>[
           if (n('moved') case final v?) l10n.toolsCountMoved(v),
           if (n('skipped') case final v?) l10n.toolsCountSkipped(v),
           if (n('errored') case final v?) l10n.toolsCountErrored(v),
         ],
+        // Lists and a map rather than counts: the pids are what a client
+        // follows to the items' new forms, and the line is their size.
+        'set-kind' => <String>[
+          l10n.toolsCountChanged(
+            _length(r['converted']) + _length(r['created']),
+          ),
+          l10n.toolsCountFolded(_length(r['absorbed'])),
+          if (_length(r['writeBackFailures']) case final v when v > 0)
+            l10n.toolsCountNotWritten(v),
+        ],
         _ => const <String>[],
       },
     ];
     return parts.isEmpty ? null : parts.join(', ');
+  }
+
+  /// A scan of several libraries says what it found in each, the
+  /// administrator's breakdown of the line above; one library's run is
+  /// that line.
+  List<String> _runLines(AppLocalizations l10n) {
+    final runs = job.result?['runs'];
+    if (job.kind != 'scan' || runs is! List || runs.length < 2) {
+      return const [];
+    }
+    return [
+      for (final run in runs.whereType<Map<Object?, Object?>>())
+        if (run['library'] ?? run['libraryPid'] case final String name)
+          run['rootUnreachable'] == true
+              ? l10n.toolsScanRunUnreachable(name)
+              : l10n.toolsScanRun(
+                  name,
+                  _count(run['audioFiles']) ?? 0,
+                  _count(run['copies']) ?? 0,
+                ),
+    ];
   }
 
   @override
@@ -692,6 +740,7 @@ class _JobRow extends StatelessWidget {
     final message = job.message;
     final error = job.error;
     final result = _resultLine(l10n);
+    final runs = _runLines(l10n);
     // Its lines stay nodes of their own, as a task row's do, rather than
     // merging into one label that changes shape as the job moves.
     return Semantics(
@@ -767,6 +816,13 @@ class _JobRow extends StatelessWidget {
                       ),
                     ),
                   ],
+                  for (final line in runs)
+                    Text(
+                      line,
+                      style: WaxType.caption.copyWith(
+                        color: colors.textTertiary,
+                      ),
+                    ),
                 ],
               ),
             ),

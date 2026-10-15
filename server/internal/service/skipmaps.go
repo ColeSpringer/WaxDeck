@@ -228,7 +228,7 @@ type FlowJobs interface {
 	CreateMergeJob(ctx context.Context, srcs []string, titles []string, format string) (string, error)
 	CreateSplitJob(ctx context.Context, src string, cuts []int64, cue string, format string) (string, error)
 	JobStatus(ctx context.Context, jobID string) (state string, progress float64, outputs int, errMsg string, err error)
-	DownloadJobResult(ctx context.Context, jobID string, index int, dst string) error
+	DownloadJobResult(ctx context.Context, jobID string, index int, dst string, mode os.FileMode) error
 }
 
 // SetFlowJobs wires the bridge's jobs surface after both sides exist

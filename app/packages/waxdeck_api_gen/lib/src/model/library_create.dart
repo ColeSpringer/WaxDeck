@@ -14,7 +14,7 @@ part 'library_create.g.dart';
 /// Properties:
 /// * [name] - Display name, and the WaxFlow root name the same directory is served under for streaming. 
 /// * [path] - Absolute filesystem path on the server. It must not overlap an existing root, the inbox folders, or the podcast download dir. 
-/// * [media] - Content class the root holds. `mixed` (the default) admits both tracks and books. 
+/// * [media] - What the root holds, which decides what its files become. `audiobook` makes every audio file in the root a book: parts sharing an album title and author are one book, and numbered parts with no album tag join the book their folder holds. `music` and `mixed` (the default) classify each file by its tags: an `.m4b` file, an audiobook media type, a narrator credit or an Audiobook genre makes a book, and in `mixed` the other parts of a book the first three mark join it (the genre marks only its own file). The class also routes managed placement. It can be changed with `PUT /libraries/{pid}/media`. 
 /// * [managed] - Whether the catalog may place and organize files under this root: uploads land here and the organizer may move files within it. The default keeps files strictly in place. 
 @BuiltValue()
 abstract class LibraryCreate implements Built<LibraryCreate, LibraryCreateBuilder> {
@@ -26,7 +26,7 @@ abstract class LibraryCreate implements Built<LibraryCreate, LibraryCreateBuilde
   @BuiltValueField(wireName: r'path')
   String get path;
 
-  /// Content class the root holds. `mixed` (the default) admits both tracks and books. 
+  /// What the root holds, which decides what its files become. `audiobook` makes every audio file in the root a book: parts sharing an album title and author are one book, and numbered parts with no album tag join the book their folder holds. `music` and `mixed` (the default) classify each file by its tags: an `.m4b` file, an audiobook media type, a narrator credit or an Audiobook genre makes a book, and in `mixed` the other parts of a book the first three mark join it (the genre marks only its own file). The class also routes managed placement. It can be changed with `PUT /libraries/{pid}/media`. 
   @BuiltValueField(wireName: r'media')
   LibraryCreateMediaEnum? get media;
   // enum mediaEnum {  music,  audiobook,  mixed,  };
@@ -167,7 +167,7 @@ class _$LibraryCreateSerializer implements PrimitiveSerializer<LibraryCreate> {
 }
 
 
-/// Content class the root holds. `mixed` (the default) admits both tracks and books. 
+/// What the root holds, which decides what its files become. `audiobook` makes every audio file in the root a book: parts sharing an album title and author are one book, and numbered parts with no album tag join the book their folder holds. `music` and `mixed` (the default) classify each file by its tags: an `.m4b` file, an audiobook media type, a narrator credit or an Audiobook genre makes a book, and in `mixed` the other parts of a book the first three mark join it (the genre marks only its own file). The class also routes managed placement. It can be changed with `PUT /libraries/{pid}/media`. 
 class LibraryCreateMediaEnum extends EnumClass {
 
   @BuiltValueEnumConst(wireName: r'music')

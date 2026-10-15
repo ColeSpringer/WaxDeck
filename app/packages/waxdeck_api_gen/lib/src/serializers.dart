@@ -66,9 +66,11 @@ import 'package:waxdeck_api_gen/src/model/credit.dart';
 import 'package:waxdeck_api_gen/src/model/credits_edit.dart';
 import 'package:waxdeck_api_gen/src/model/cue_split_request.dart';
 import 'package:waxdeck_api_gen/src/model/custom_tag.dart';
+import 'package:waxdeck_api_gen/src/model/delete_item_files_request.dart';
 import 'package:waxdeck_api_gen/src/model/delete_items_request.dart';
 import 'package:waxdeck_api_gen/src/model/delete_items_result.dart';
 import 'package:waxdeck_api_gen/src/model/delete_plan_entry.dart';
+import 'package:waxdeck_api_gen/src/model/delete_plan_file.dart';
 import 'package:waxdeck_api_gen/src/model/detach_request.dart';
 import 'package:waxdeck_api_gen/src/model/detach_result.dart';
 import 'package:waxdeck_api_gen/src/model/device_session.dart';
@@ -148,6 +150,8 @@ import 'package:waxdeck_api_gen/src/model/invite_list.dart';
 import 'package:waxdeck_api_gen/src/model/item.dart';
 import 'package:waxdeck_api_gen/src/model/item_acquisition.dart';
 import 'package:waxdeck_api_gen/src/model/item_acquisition_edit.dart';
+import 'package:waxdeck_api_gen/src/model/item_file.dart';
+import 'package:waxdeck_api_gen/src/model/item_files.dart';
 import 'package:waxdeck_api_gen/src/model/item_metadata.dart';
 import 'package:waxdeck_api_gen/src/model/item_page.dart';
 import 'package:waxdeck_api_gen/src/model/item_permissions.dart';
@@ -161,7 +165,10 @@ import 'package:waxdeck_api_gen/src/model/libraries.dart';
 import 'package:waxdeck_api_gen/src/model/library_access.dart';
 import 'package:waxdeck_api_gen/src/model/library_create.dart';
 import 'package:waxdeck_api_gen/src/model/library_created.dart';
+import 'package:waxdeck_api_gen/src/model/library_folder_fallback.dart';
 import 'package:waxdeck_api_gen/src/model/library_matching.dart';
+import 'package:waxdeck_api_gen/src/model/library_media.dart';
+import 'package:waxdeck_api_gen/src/model/library_media_changed.dart';
 import 'package:waxdeck_api_gen/src/model/library_profile.dart';
 import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/linked_identity.dart';
@@ -325,6 +332,7 @@ import 'package:waxdeck_api_gen/src/model/server_year_in_review.dart';
 import 'package:waxdeck_api_gen/src/model/session_info.dart';
 import 'package:waxdeck_api_gen/src/model/session_list.dart';
 import 'package:waxdeck_api_gen/src/model/session_rename.dart';
+import 'package:waxdeck_api_gen/src/model/set_item_kind_request.dart';
 import 'package:waxdeck_api_gen/src/model/share.dart';
 import 'package:waxdeck_api_gen/src/model/share_create.dart';
 import 'package:waxdeck_api_gen/src/model/share_page.dart';
@@ -465,9 +473,11 @@ part 'serializers.g.dart';
   CreditsEdit,
   CueSplitRequest,
   CustomTag,
+  DeleteItemFilesRequest,
   DeleteItemsRequest,
   DeleteItemsResult,
   DeletePlanEntry,
+  DeletePlanFile,
   DetachRequest,
   DetachResult,
   DeviceSession,
@@ -547,6 +557,8 @@ part 'serializers.g.dart';
   Item,
   ItemAcquisition,
   ItemAcquisitionEdit,
+  ItemFile,
+  ItemFiles,
   ItemMetadata,
   ItemPage,
   ItemPermissions,
@@ -560,7 +572,10 @@ part 'serializers.g.dart';
   LibraryAccess,
   LibraryCreate,
   LibraryCreated,
+  LibraryFolderFallback,
   LibraryMatching,
+  LibraryMedia,
+  LibraryMediaChanged,
   LibraryProfile,
   LibraryReadOnly,
   LinkedIdentity,
@@ -724,6 +739,7 @@ part 'serializers.g.dart';
   SessionInfo,
   SessionList,
   SessionRename,
+  SetItemKindRequest,
   Share,
   ShareCreate,
   SharePage,
@@ -1003,6 +1019,10 @@ Serializers serializers = (_$serializers.toBuilder()
         () => ListBuilder<Share>(),
       )
       ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(ItemFile)]),
+        () => ListBuilder<ItemFile>(),
+      )
+      ..addBuilderFactory(
         const FullType(BuiltList, [FullType(PlayState)]),
         () => ListBuilder<PlayState>(),
       )
@@ -1013,6 +1033,10 @@ Serializers serializers = (_$serializers.toBuilder()
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(PlaylistEntry)]),
         () => ListBuilder<PlaylistEntry>(),
+      )
+      ..addBuilderFactory(
+        const FullType(BuiltList, [FullType(DeletePlanFile)]),
+        () => ListBuilder<DeletePlanFile>(),
       )
       ..addBuilderFactory(
         const FullType(BuiltList, [FullType(ArtRoleInfo)]),

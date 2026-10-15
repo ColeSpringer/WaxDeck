@@ -42,7 +42,26 @@ const (
 	// waiting for the import that reads it. Never in the library: it is
 	// a file this server parses and then deletes.
 	PrefixMigrationExport = "mx"
+	// PrefixFile names a file behind an item: its primary, a part or a
+	// copy.
+	PrefixFile = "fl"
 )
+
+// FileAPIPID renders a bare file pid with the file prefix; an absent
+// one stays empty.
+func FileAPIPID(pid string) string {
+	return entityAPIPID(PrefixFile, model.PID(pid))
+}
+
+// ParseFilePID reads a file pid the API was given back to the catalog's
+// bare form; ok is false for anything that is not one.
+func ParseFilePID(s string) (string, bool) {
+	prefix, pid, ok := parseAPIPID(s)
+	if !ok || prefix != PrefixFile {
+		return "", false
+	}
+	return string(pid), true
+}
 
 // prefixForKind maps an item kind to its API prefix.
 func prefixForKind(k model.Kind) string {
@@ -141,4 +160,18 @@ func entityKindForPrefix(prefix string) (read.EntityKind, bool) {
 // itemPrefix reports whether prefix names a playable item type.
 func itemPrefix(prefix string) bool {
 	return prefix == PrefixTrack || prefix == PrefixEpisode || prefix == PrefixBook
+}
+
+// prefixFitsKind reports whether an item pid's prefix reaches an item of
+// kind: its own prefix always, and a track's or a book's the other's,
+// since a kind change keeps the pid and only the prefix follows it.
+func prefixFitsKind(prefix string, kind model.Kind) bool {
+	own := prefixForKind(kind)
+	return prefix == own || (bookOrTrackPrefix(prefix) && bookOrTrackPrefix(own))
+}
+
+// bookOrTrackPrefix reports a prefix a book route takes: a book's own,
+// or a track's, which the item may have carried before it became one.
+func bookOrTrackPrefix(prefix string) bool {
+	return prefix == PrefixBook || prefix == PrefixTrack
 }

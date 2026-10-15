@@ -45,8 +45,11 @@ paths:
         caller must hold upload rights; the declared size counts
         against the caller's pending-upload limit up front so a full
         one fails fast, and the file name's extension is checked against the
-        server's accepted formats. The required media type label
-        routes the file to the matching library kind; `libraryPid`
+        server's accepted formats. The required media type label is
+        what the file becomes - an `audiobook` upload is cataloged as a
+        book and a `music` upload as a track, whatever its tags say, and
+        later scans keep that kind - and routes it to the matching
+        library kind; `libraryPid`
         names which library it belongs to, which is a choice about
         settings rather than about placement (see the field). Passing
         the file's
@@ -199,15 +202,24 @@ paths:
       summary: Finish an upload
       description: >
         Verifies the received bytes (size, and SHA-256 when one was
-        declared), probes the audio (an undecodable file answers
-        `unsupported-format` and the session stays deletable), moves
+        declared), probes the audio, moves
         the file into staging with crash-safe write discipline, and
         opens a review entry for the identify pipeline. The response
-        carries `reviewEntryId` and any duplicate warning (an exact
-        content match or a fingerprint match against an existing
-        item); the duplicate warning does not block the review flow,
-        it informs the decision. Completing before every declared
-        byte arrived answers `conflict`.
+        carries `reviewEntryId` and any duplicate warning (the same
+        audio, the same recording or a matching name against an
+        existing item). The warning does not block the review flow:
+        importing a file whose audio the library holds adds it to that
+        item as another copy, changing nothing about the item and
+        giving the uploader no right to edit it, and the entry waits
+        for a person even where matching applies on its own.
+        Completing before every declared byte arrived answers
+        `conflict`, and the session stays open for the rest. Bytes no
+        retry can mend end the session at once, freeing what it held
+        against the quota: a file that does not read as audio answers
+        `unsupported-format` with `reason: unreadable`, and bytes that
+        do not match the declared SHA-256 answer `conflict` with
+        `reason: checksum-mismatch`; either way the file has to be sent
+        again under a new session.
       tags: [uploads]
       responses:
         "200":
@@ -525,7 +537,9 @@ components:
             cannot proceed - a read-only destination, a name
             collision, a file the server already flagged as a
             duplicate - the entry is left pending for a person
-            instead, carrying `identifyDeclined`.
+            instead, carrying `identifyDeclined`. A flagged duplicate
+            also keeps an identified entry from applying its match on
+            its own.
 
 
             Ignored on a batch member: the batch's own value decides
@@ -590,30 +604,6 @@ components:
           format: date-time
           description: >
             When an unfinished session and its bytes are reclaimed.
-
-    DuplicateWarning:
-      type: object
-      description: >
-        The library appears to already contain this audio. A warning,
-        not a refusal: the review decision chooses what happens.
-      required: [itemPid, kind]
-      properties:
-        itemPid:
-          type: string
-          description: The existing item.
-        kind:
-          type: string
-          description: >
-            Evidence level: `content` (byte-identical audio) or
-            `fingerprint` (acoustically the same recording). A
-            string, not a closed enum.
-          example: content
-        title:
-          type: string
-          description: The existing item's title.
-        artist:
-          type: string
-          description: The existing item's artist.
 
     UploadGrouping:
       type: string

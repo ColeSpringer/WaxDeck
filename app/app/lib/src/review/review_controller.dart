@@ -105,6 +105,9 @@ class ReviewQueueController extends AsyncNotifier<ReviewQueueState> {
   @override
   Future<ReviewQueueState> build() async {
     _generation++;
+    // Keyed on the account: the repository moves only with the server,
+    // and the next account starts from its own first page.
+    ref.watch(signedInAccountProvider);
     final filter = ref.watch(reviewFilterProvider);
     final page = await ref
         .watch(repositoryProvider)
@@ -199,44 +202,29 @@ final reviewQueueProvider =
       ReviewQueueController.new,
     );
 
-/// Queue counters for the filter chips.
-final reviewStatsProvider = FutureProvider<ReviewStats>(
-  (ref) => ref.watch(repositoryProvider).getReviewStats(),
-  retry: retryUnlessRefused,
-);
+/// Queue counters for the filter chips. Keyed on the account, as the
+/// queue is.
+final reviewStatsProvider = FutureProvider<ReviewStats>((ref) {
+  ref.watch(signedInAccountProvider);
+  return ref.watch(repositoryProvider).getReviewStats();
+}, retry: retryUnlessRefused);
 
 /// How many pending entries the caller can see.
 ///
 /// Feeds home's review notice, which says "your additions are waiting
-/// here", not the census - the endpoint scopes non-administrators to
-/// their own uploads' entries, and an administrator owns the whole
-/// queue anyway. An administrator reads the exact figure from the
-/// stats (their scope is the server's, and a bulk import would pin a
-/// page-length count at 50 while the real number was 900); everybody
-/// else counts their own page, capped at its size, which their own
-/// uploads rarely reach. Its own read rather than
-/// [reviewQueueProvider]: the queue watches the review screen's
-/// filter, and home's count must not change meaning when somebody
-/// flips that filter to Decided. Rides the user stream (the binder
+/// here", not the census: the stats count the caller's own scope, every
+/// entry for an administrator and their own uploads' entries for
+/// everybody else. Its own read rather than [reviewStatsProvider],
+/// which retries: this is a decoration that renders as nothing on
+/// failure, and the retry ladder would hammer the endpoint from every
+/// home mount that cannot read it. Rides the user stream (the binder
 /// invalidates it) and the decision paths' [_refresh]es, so an upload
-/// finishing or a decision landing anywhere moves it. Never retried:
-/// it is a decoration that renders as nothing on failure, and the
-/// retry ladder would hammer the endpoint from every home mount that
-/// cannot read it.
+/// finishing or a decision landing anywhere moves it. Keyed on the
+/// account as well: the repository moves only with the server, so a
+/// same-server sign-in would otherwise show the last account's count.
 final pendingReviewCountProvider = FutureProvider<int>((ref) async {
-  final admin =
-      ref.watch(authControllerProvider).value?.user?.roles.contains('admin') ??
-      false;
-  if (admin) {
-    return (await ref.watch(reviewStatsProvider.future)).pending;
-  }
-  final page = await ref
-      .watch(repositoryProvider)
-      .listReviewQueue(
-        status: 'pending',
-        limit: ReviewQueueController.pageSize,
-      );
-  return page.entries.length;
+  ref.watch(signedInAccountProvider);
+  return (await ref.watch(repositoryProvider).getReviewStats()).pending;
 }, retry: (_, _) => null);
 
 /// Which candidate an entry is decided against. Shared state because

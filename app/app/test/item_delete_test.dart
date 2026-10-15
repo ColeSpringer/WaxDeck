@@ -69,6 +69,71 @@ void main() {
     expect(shellMessageText(raisedMessage(tester)), 'Deleted 3 files for good');
   });
 
+  testWidgets('the preview names the files and says when the item stays', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+      items: [testItem('tr-1')],
+    );
+    repo.deletePlansByPid['tr-1'] = const DeletePlanEntry(
+      pid: 'tr-1',
+      name: 'Prancing Pony Blues',
+      files: 1,
+      bytes: 4613734,
+      fileList: [
+        DeletePlanFile(
+          filePid: 'f-1',
+          name: '01 - Prancing Pony Blues.m4a',
+          sizeBytes: 4613734,
+          role: 'primary',
+        ),
+      ],
+      itemSurvives: true,
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.itemDelete));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete files...'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('This removes 1 file, 4.4 MB.'), findsOneWidget);
+    expect(find.text('01 - Prancing Pony Blues.m4a'), findsOneWidget);
+    expect(
+      find.text('The item stays in your library on its remaining files.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a copy that keeps the item is named after the delete', (
+    tester,
+  ) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(authenticated: true, user: _admin),
+      items: [testItem('tr-1')],
+    );
+    repo.deleteItemsWarnings = const [
+      "Prancing Pony Blues: pony.flac is now the item's main file",
+    ];
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.itemDelete));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete files...'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('item-delete-confirm')));
+    await tester.pumpAndSettle();
+
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      "Moved 1 file to the trash\n"
+      "Prancing Pony Blues: pony.flac is now the item's main file",
+    );
+  });
+
   testWidgets('cancelling the dialog deletes nothing', (tester) async {
     final repo = FakeRepository(
       sessionState: const SessionState(authenticated: true, user: _admin),

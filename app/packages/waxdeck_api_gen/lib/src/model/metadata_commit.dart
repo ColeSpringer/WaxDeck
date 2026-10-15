@@ -23,7 +23,7 @@ part 'metadata_commit.g.dart';
 /// * [tagSets] - Custom tag key to its replacement values; empty values clear that tag. Applied in sorted key order, because a JSON object carries none of its own and the parts list has to be reproducible. 
 /// * [tagRemoves] - Custom tag keys to remove, applied in the order given.
 /// * [unofficial] - The release-status mark: true marks the item as having no canonical release, false clears the mark. Omitted leaves it alone. 
-/// * [writeBack] - Also write the new values into the backing file's tags, for the parts that have a tag form (fields, credits, lyrics). 
+/// * [writeBack] - Also write the new values into the backing file's tags, for the parts that have a tag form (fields, credits, lyrics, custom tags, the release status), and removes a cleared lyrics sheet's `.lrc` sidecar. 
 /// * [lock] - Lock what each part wrote, against scans and enrichment. 
 /// * [force] - Override existing locks.
 @BuiltValue()
@@ -59,7 +59,7 @@ abstract class MetadataCommit implements Built<MetadataCommit, MetadataCommitBui
   @BuiltValueField(wireName: r'unofficial')
   bool? get unofficial;
 
-  /// Also write the new values into the backing file's tags, for the parts that have a tag form (fields, credits, lyrics). 
+  /// Also write the new values into the backing file's tags, for the parts that have a tag form (fields, credits, lyrics, custom tags, the release status), and removes a cleared lyrics sheet's `.lrc` sidecar. 
   @BuiltValueField(wireName: r'writeBack')
   bool? get writeBack;
 

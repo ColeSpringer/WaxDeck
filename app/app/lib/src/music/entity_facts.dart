@@ -22,6 +22,16 @@ final itemDetailProvider = FutureProvider.autoDispose
       retry: retryUnlessRefused,
     );
 
+/// The files behind one item, its own then its copies, which the Details
+/// sheet lists for an item holding copies. A refusal is final, on
+/// [retryUnlessRefused]'s reasoning: an account without the download
+/// right is refused every time.
+final itemFilesProvider = FutureProvider.autoDispose
+    .family<List<ItemFile>, String>(
+      (ref, pid) => ref.watch(repositoryProvider).getItemFiles(pid),
+      retry: retryUnlessRefused,
+    );
+
 /// An album's items in the order it was pressed.
 ///
 /// A listing arrives in the catalog's own stable order, which is not

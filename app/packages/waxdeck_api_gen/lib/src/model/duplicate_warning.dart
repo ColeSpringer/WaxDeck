@@ -11,17 +11,17 @@ part 'duplicate_warning.g.dart';
 /// The library appears to already contain this audio. A warning, not a refusal: the review decision chooses what happens. 
 ///
 /// Properties:
-/// * [itemPid] - The existing item.
-/// * [kind] - Evidence level: `content` (byte-identical audio) or `fingerprint` (acoustically the same recording). A string, not a closed enum. 
+/// * [itemPid] - The existing item. Absent, as `title` and `artist` are, when it sits where the caller cannot see it. 
+/// * [kind] - Evidence level: `content` (the same audio, which imports as another copy of the item), `id` (the same recording by the identifier its tags carry), `fingerprint` (acoustically the same recording) or `name` (the same title, artist and length). A string, not a closed enum. 
 /// * [title] - The existing item's title.
 /// * [artist] - The existing item's artist.
 @BuiltValue()
 abstract class DuplicateWarning implements Built<DuplicateWarning, DuplicateWarningBuilder> {
-  /// The existing item.
+  /// The existing item. Absent, as `title` and `artist` are, when it sits where the caller cannot see it. 
   @BuiltValueField(wireName: r'itemPid')
-  String get itemPid;
+  String? get itemPid;
 
-  /// Evidence level: `content` (byte-identical audio) or `fingerprint` (acoustically the same recording). A string, not a closed enum. 
+  /// Evidence level: `content` (the same audio, which imports as another copy of the item), `id` (the same recording by the identifier its tags carry), `fingerprint` (acoustically the same recording) or `name` (the same title, artist and length). A string, not a closed enum. 
   @BuiltValueField(wireName: r'kind')
   String get kind;
 
@@ -56,11 +56,13 @@ class _$DuplicateWarningSerializer implements PrimitiveSerializer<DuplicateWarni
     DuplicateWarning object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
-    yield r'itemPid';
-    yield serializers.serialize(
-      object.itemPid,
-      specifiedType: const FullType(String),
-    );
+    if (object.itemPid != null) {
+      yield r'itemPid';
+      yield serializers.serialize(
+        object.itemPid,
+        specifiedType: const FullType(String),
+      );
+    }
     yield r'kind';
     yield serializers.serialize(
       object.kind,
@@ -106,8 +108,9 @@ class _$DuplicateWarningSerializer implements PrimitiveSerializer<DuplicateWarni
         case r'itemPid':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(String),
-          ) as String;
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
           result.itemPid = valueDes;
           break;
         case r'kind':

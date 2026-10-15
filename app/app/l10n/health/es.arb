@@ -24,7 +24,6 @@
   "healthDuplicatesEmptyMessage": "Los artistas, los álbumes y los programas aparecen una sola vez.",
   "healthDuplicatesEmptyTitle": "No se han detectado duplicados",
   "healthDuplicatesError": "No se han podido cargar los duplicados",
-  "healthDuplicatesErrorBody": "La pasada de agrupación no ha respondido.",
   "healthDuplicatesOverline": "Una misma cosa con dos nombres",
   "healthDuplicatesTitle": "Duplicados",
   "healthDurationDetail": "Cabecera {header}, audio {audio}",
@@ -58,6 +57,7 @@
   "healthLoadMore": "Cargar más",
   "healthLoadMoreFailed": "No se ha podido cargar más; desplázate para reintentarlo",
   "healthLossless": "sin pérdida",
+  "healthMemberInFile": "{quality} en {file}",
   "healthMergeAction": "Fusionar",
   "healthMergeBody": "{losers} se fusionarán en \"{survivor}\". Sus elementos pasan a estar bajo el superviviente, y la fusión no se puede deshacer.",
   "healthMergeInto": "Fusionar en {name}",
@@ -101,7 +101,6 @@
   "healthUpgradesEmptyMessage": "Cada grabación se conserva una sola vez.",
   "healthUpgradesEmptyTitle": "No se han detectado calidades duplicadas",
   "healthUpgradesError": "No se han podido cargar las mejoras",
-  "healthUpgradesErrorBody": "La comparación de calidad no ha respondido.",
   "healthUpgradesOverline": "La misma grabación dos veces",
   "healthUpgradesTitle": "Mejoras de calidad",
   "healthWriteUnsynced": "Etiquetas del archivo desincronizadas del catálogo"

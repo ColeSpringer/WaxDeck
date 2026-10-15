@@ -180,10 +180,12 @@ WAXDECK_MANAGED_ROOTS=music \
 ```
 
 Then, in the web UI, the **+** button on the library adds audio: **Add
-from URL** acquires from a video, playlist, or channel, and **Upload a
-file** sends one from your device. The button uses the media type of
+from URL** acquires from a video, playlist, or channel, and **Upload
+files** sends them from your device. The button uses the media type of
 the section you are in (Music, Audiobooks), and podcasts are added by
-subscribing to a feed instead. **Past uploads**, in the same **+**
+subscribing to a feed instead. The type you pick is what the files
+become: an Audiobook upload is cataloged as a book and a Music upload as
+a track, whatever their tags say, and later scans keep it. **Past uploads**, in the same **+**
 sheet, lists in-progress and past sessions with the quota they are
 spending; a notification about an upload opens the same list, as does
 the origin line on a review entry. Either way the

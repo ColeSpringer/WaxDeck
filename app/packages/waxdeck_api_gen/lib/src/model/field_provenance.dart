@@ -8,22 +8,22 @@ import 'package:built_value/serializer.dart';
 
 part 'field_provenance.g.dart';
 
-/// Who set one field's current value.  The list carries two kinds of row. A scalar row names a metadata field (`title`, `genre`, ...) and reports the value a curator set. An artifact row names `art` or `lyrics`, with an empty `value` because the value is bytes rather than text. A non-empty provenance list therefore does not mean the item was curated: an untouched track with a cover in its tags reports one `art` row sourced `tag`. Count the scalar rows, not the list, when summarizing what a person changed.  An artifact row does not imply the artifact. Locking `art` or `lyrics` to stop a scan filling it leaves a row with nothing behind it, and the `source` on such a row is invented by whichever writer took the lock rather than describing anything. Read `hasOwnArtwork` and `lyrics` on the enclosing `ItemMetadata` before presenting an artifact row's source as where something came from; on a lock-only row, `locked` is the only field worth reading. 
+/// Who set one field's current value.  The list carries three kinds of row. A scalar row names a metadata field (`title`, `genre`, ...) and reports the value a curator set. An artifact row names `art` or `lyrics`, with an empty `value` because the value is bytes rather than text. A `kind` row is a pinned classification (setItemLocks), which an upload's import takes without anybody editing anything. A non-empty provenance list therefore does not mean the item was curated: an untouched track with a cover in its tags reports one `art` row sourced `tag`. Count the scalar rows, not the list, when summarizing what a person changed.  An artifact row does not imply the artifact. Locking `art` or `lyrics` to stop a scan filling it leaves a row with nothing behind it, and the `source` on such a row is invented by whichever writer took the lock rather than describing anything. Read `hasOwnArtwork` and `lyrics` on the enclosing `ItemMetadata` before presenting an artifact row's source as where something came from; on a lock-only row, `locked` is the only field worth reading. 
 ///
 /// Properties:
-/// * [field] - The field, possibly namespaced, or `art` / `lyrics` for an artifact row. 
-/// * [source_] - The producer: `tag` (the file's own tags), `sidecar` (a companion file beside the audio - a `cover.jpg`, an `.lrc`), `user` (set through the curation surface), `enrichment` (supplied by a metadata provider, named in `provider`), `organize` (written by an organize tag write-back), or `feed` (a podcast feed). A string, not a closed enum. `sidecar` and `feed` reach only artifact rows; a scalar field is never produced from a cover image or a feed. 
+/// * [field] - The field, possibly namespaced, `art` / `lyrics` for an artifact row, or `kind` for a pinned classification. 
+/// * [source_] - The producer: `tag` (the file's own tags), `sidecar` (a companion file beside the audio - a `cover.jpg`, an `.lrc`), `user` (set through the curation surface), `enrichment` (supplied by a metadata provider, named in `provider`), `organize` (written by an organize tag write-back), `normalize` (rewritten by a clean-up pass, such as the genre normalizer, in the catalog alone), or `feed` (a podcast feed). A string, not a closed enum. `sidecar` and `feed` reach only artifact rows; a scalar field is never produced from a cover image or a feed. 
 /// * [provider] - The enrichment provider, for enriched fields.
 /// * [sourceUrl] - Where a fetched value's bytes came from, on the rows that have one (an enrichment or feed cover). Empty otherwise.  Redacted exactly as `ItemAcquisition.sourceUrl` is, and for the same reason: `http`/`https` only, reduced to scheme, host and path, because a feed cover's row holds the show's own enclosure URL and this read answers every account that can see the item. 
 /// * [locked] - Whether the field is locked.
 /// * [updatedAt] - When the value last changed.
 @BuiltValue()
 abstract class FieldProvenance implements Built<FieldProvenance, FieldProvenanceBuilder> {
-  /// The field, possibly namespaced, or `art` / `lyrics` for an artifact row. 
+  /// The field, possibly namespaced, `art` / `lyrics` for an artifact row, or `kind` for a pinned classification. 
   @BuiltValueField(wireName: r'field')
   String get field;
 
-  /// The producer: `tag` (the file's own tags), `sidecar` (a companion file beside the audio - a `cover.jpg`, an `.lrc`), `user` (set through the curation surface), `enrichment` (supplied by a metadata provider, named in `provider`), `organize` (written by an organize tag write-back), or `feed` (a podcast feed). A string, not a closed enum. `sidecar` and `feed` reach only artifact rows; a scalar field is never produced from a cover image or a feed. 
+  /// The producer: `tag` (the file's own tags), `sidecar` (a companion file beside the audio - a `cover.jpg`, an `.lrc`), `user` (set through the curation surface), `enrichment` (supplied by a metadata provider, named in `provider`), `organize` (written by an organize tag write-back), `normalize` (rewritten by a clean-up pass, such as the genre normalizer, in the catalog alone), or `feed` (a podcast feed). A string, not a closed enum. `sidecar` and `feed` reach only artifact rows; a scalar field is never produced from a cover image or a feed. 
   @BuiltValueField(wireName: r'source')
   String get source_;
 

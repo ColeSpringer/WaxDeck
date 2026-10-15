@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../providers.dart';
 
 /// Accumulated pages of tool tasks, newest first.
@@ -33,6 +34,9 @@ class ToolTasksController extends AsyncNotifier<ToolTasksState> {
   @override
   Future<ToolTasksState> build() async {
     _generation++;
+    // Keyed on the account: the repository moves only with the server,
+    // and the next account starts from its own first page.
+    ref.watch(signedInAccountProvider);
     final page = await ref
         .watch(repositoryProvider)
         .listToolTasks(limit: pageSize);

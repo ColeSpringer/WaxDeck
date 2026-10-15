@@ -23,7 +23,7 @@
   "errorLocalUnregistered": "Este dispositivo todavía no está listo como reproductor. Inténtalo de nuevo en un momento.",
   "errorNetwork": "No se ha podido conectar con el servidor. Comprueba la conexión e inténtalo de nuevo.",
   "errorNotFound": "Eso ya no está aquí.",
-  "errorQuotaExceeded": "Eso superaría el límite de almacenamiento.",
+  "errorQuotaExceeded": "Eso supera un límite de este servidor.",
   "errorRateLimited": "Demasiados intentos. Espera un momento e inténtalo de nuevo.",
   "errorReadOnly": "La biblioteca está en modo de solo lectura, así que no se puede cambiar nada.",
   "errorServiceUnreachable": "Un servicio externo necesario no ha respondido. Inténtalo más tarde.",
@@ -37,6 +37,7 @@
   "errorTransportTimeout": "El servidor no ha respondido a tiempo.",
   "errorUnauthenticated": "Vuelve a iniciar sesión para continuar.",
   "errorUnexpected": "Algo ha salido mal.",
+  "errorUnreadableFile": "No se ha podido leer ese archivo como audio. Puede estar dañado o no ser audio.",
   "errorUnsupportedFormat": "Este servidor no acepta el formato de ese archivo.",
   "errorWindowedTrack": "Esta pista es parte de un archivo más grande, que otro dispositivo todavía no puede reproducir. Reprodúcela en este."
 }

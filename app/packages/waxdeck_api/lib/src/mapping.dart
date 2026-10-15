@@ -263,11 +263,28 @@ ItemDetail itemDetailFromGen(gen.Item item, {String baseUrl = ''}) {
     sampleRate: item.sampleRate,
     bitrate: item.bitrate,
     addedAt: item.addedAt,
+    copies: item.copies ?? 0,
     mbid: item.mbid,
     isrc: item.isrc,
     artSource: artSourceFromGen(item.artSource),
   );
 }
+
+ItemFile itemFileFromGen(gen.ItemFile f) => ItemFile(
+  filePid: f.filePid,
+  role: f.role,
+  name: f.name,
+  path: f.path,
+  sizeBytes: f.sizeBytes,
+  codec: f.codec,
+  container: f.container,
+  bitrate: f.bitrate,
+  sampleRate: f.sampleRate,
+  bitDepth: f.bitDepth,
+  durationMs: f.durationMs,
+  libraryPid: f.libraryPid,
+  reason: f.reason,
+);
 
 /// Null for a kind this build does not know: a card whose kind names no
 /// screen has nowhere to tap, and dropping it is better than drawing it,
@@ -1283,10 +1300,12 @@ ReviewEntry reviewEntryFromGen(gen.ReviewEntry entry) {
     createdAt: entry.createdAt.toUtc(),
     decidedAt: entry.decidedAt?.toUtc(),
     decidedBy: entry.decidedBy,
+    duplicateCount: entry.duplicateCount ?? 0,
   );
 }
 
 ReviewTrack reviewTrackFromGen(gen.ReviewTrack track) {
+  final duplicate = track.duplicate;
   return ReviewTrack(
     pid: track.pid,
     path: track.path,
@@ -1295,6 +1314,8 @@ ReviewTrack reviewTrackFromGen(gen.ReviewTrack track) {
     trackNo: track.trackNo,
     discNo: track.discNo,
     durationMs: track.durationMs,
+    duplicate: duplicate == null ? null : duplicateWarningFromGen(duplicate),
+    joined: track.joined ?? false,
   );
 }
 
@@ -1361,6 +1382,7 @@ ReviewEntryDetail reviewEntryDetailFromGen(gen.ReviewEntryDetail detail) {
     createdAt: detail.createdAt.toUtc(),
     decidedAt: detail.decidedAt?.toUtc(),
     decidedBy: detail.decidedBy,
+    duplicateCount: detail.duplicateCount ?? 0,
     candidates: detail.candidates.map(reviewCandidateFromGen).toList(),
     tracks: detail.tracks.map(reviewTrackFromGen).toList(),
     identifyDeclined: detail.identifyDeclined ?? false,
@@ -1384,6 +1406,7 @@ ReviewEntryPage reviewEntryPageFromGen(gen.ReviewEntryPage page) {
 ReviewStats reviewStatsFromGen(gen.ReviewStats stats) {
   return ReviewStats(
     pending: stats.pending,
+    decided: stats.decided,
     identifying: stats.identifying ?? 0,
     applied: stats.applied,
     autoApplied: stats.autoApplied,
@@ -1396,7 +1419,13 @@ ReviewStats reviewStatsFromGen(gen.ReviewStats stats) {
 }
 
 ReviewBulkOutcome reviewBulkOutcomeFromGen(gen.ReviewBulkOutcome o) {
-  return ReviewBulkOutcome(entryId: o.entryId, ok: o.ok, error: o.error);
+  return ReviewBulkOutcome(
+    entryId: o.entryId,
+    ok: o.ok,
+    code: o.code,
+    error: o.error,
+    warnings: o.warnings?.toList() ?? const [],
+  );
 }
 
 /// Bridges a wire action string (`approve`, `as-is`, `unofficial`,
@@ -1414,9 +1443,11 @@ LibraryInfo libraryInfoFromGen(gen.ModelLibrary l) => LibraryInfo(
   pid: l.pid,
   name: l.name,
   media: l.media,
+  mediaDeclared: l.mediaDeclared ?? false,
   path: l.path,
   itemCount: l.itemCount,
   readOnly: l.readOnly,
+  folderFallback: l.folderFallback ?? false,
   managed: l.managed,
   profile: l.profile,
 );
@@ -1427,11 +1458,13 @@ LibraryInfo libraryCreatedFromGen(gen.LibraryCreated l) => LibraryInfo(
   pid: l.pid,
   name: l.name,
   media: l.media,
+  mediaDeclared: l.mediaDeclared ?? false,
   path: l.path,
   itemCount: l.itemCount,
   streamingWarning: l.streamingWarning,
   scanStarted: l.scanStarted,
   readOnly: l.readOnly,
+  folderFallback: l.folderFallback ?? false,
   managed: l.managed,
   profile: l.profile,
 );
@@ -1704,8 +1737,13 @@ BulkEditResult bulkEditResultFromGen(gen.BulkEditResult result) {
   );
 }
 
-TagEditResult tagEditResultFromGen(gen.TagEditResult result) =>
-    TagEditResult(key: result.key, stored: result.stored);
+TagEditResult tagEditResultFromGen(gen.TagEditResult result) => TagEditResult(
+  key: result.key,
+  stored: result.stored,
+  writeBackFailures:
+      result.writeBackFailures?.map(writeBackFailureFromGen).toList() ??
+      const [],
+);
 
 EntityCuratedField entityCuratedFieldFromGen(gen.EntityCuratedField f) {
   return EntityCuratedField(
@@ -2017,6 +2055,8 @@ gen.MergeRequestEntityTypeEnum mergeEntityTypeToGen(String entityType) =>
 UpgradeMember upgradeMemberFromGen(gen.UpgradeMember m) {
   return UpgradeMember(
     itemPid: m.itemPid,
+    filePid: m.filePid,
+    path: m.path,
     title: m.title,
     artist: m.artist,
     codec: m.codec,
@@ -2612,9 +2652,20 @@ DeleteItemsResult deleteItemsResultFromGen(gen.DeleteItemsResult result) {
             name: e.name,
             files: e.files,
             bytes: e.bytes,
+            fileList: [
+              for (final f in e.fileList ?? const <gen.DeletePlanFile>[])
+                DeletePlanFile(
+                  filePid: f.filePid,
+                  name: f.name,
+                  sizeBytes: f.sizeBytes,
+                  role: f.role,
+                ),
+            ],
+            itemSurvives: e.itemSurvives ?? false,
           ),
         )
         .toList(),
+    warnings: result.warnings?.toList() ?? const [],
   );
 }
 

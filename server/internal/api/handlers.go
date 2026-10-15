@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/rand/v2"
 	"net"
 	"net/http"
@@ -1275,6 +1276,9 @@ func itemJSON(d service.ItemDetail) Item {
 	if !d.AddedAt.IsZero() {
 		it.AddedAt = &d.AddedAt
 	}
+	if d.Copies > 0 {
+		it.Copies = ptr(d.Copies)
+	}
 	if d.MBID != "" {
 		it.Mbid = ptr(d.MBID)
 	}
@@ -1319,17 +1323,26 @@ func jobJSON(j service.Job) Job {
 func jobResultJSON(j service.Job) map[string]any {
 	switch {
 	case j.Scan != nil:
-		r := j.Scan
-		return map[string]any{
-			"filesSeen": r.FilesSeen, "created": r.Created, "updated": r.Updated,
-			"relinked": r.Relinked, "unchanged": r.Unchanged, "missing": r.Missing,
-			"skipped": r.Skipped, "errored": r.Errored,
+		out := scanTallyJSON(*j.Scan)
+		if len(j.Scan.Runs) > 0 {
+			runs := make([]map[string]any, 0, len(j.Scan.Runs))
+			for _, r := range j.Scan.Runs {
+				run := scanTallyJSON(r.ScanTallyDTO)
+				run["libraryPid"] = r.LibraryPID
+				if r.Library != "" {
+					run["library"] = r.Library
+				}
+				runs = append(runs, run)
+			}
+			out["runs"] = runs
 		}
+		return out
 	case j.Analyze != nil:
 		r := j.Analyze
 		return map[string]any{
 			"analyzed": r.Analyzed, "loudnessMeasured": r.LoudnessMeasured,
 			"measureFailed": r.MeasureFailed, "skipped": r.Skipped, "errored": r.Errored,
+			"fingerprintFallbacks": r.FingerprintFallbacks, "fingerprintPartialReads": r.FingerprintPartialReads,
 		}
 	case j.Organize != nil:
 		r := j.Organize
@@ -1347,8 +1360,43 @@ func jobResultJSON(j service.Job) map[string]any {
 			return nil
 		}
 		return out
+	case j.SetKind != nil:
+		r := j.SetKind
+		return map[string]any{
+			"converted": nonNil(r.Converted), "absorbed": nonNilMap(r.Absorbed),
+			"created": nonNil(r.Created), "writeBackFailures": narrowedWriteBackFailuresJSON(r.WriteBackFailures),
+		}
 	}
 	return nil
+}
+
+// nonNil is a list that encodes as [] rather than null.
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+// nonNilMap is a map that encodes as {} rather than null.
+func nonNilMap(m map[string]string) map[string]string {
+	if m == nil {
+		return map[string]string{}
+	}
+	return m
+}
+
+// scanTallyJSON is a scan's counts in the spec's words, a whole scan's
+// or one library's run.
+func scanTallyJSON(r service.ScanTallyDTO) map[string]any {
+	return map[string]any{
+		"filesSeen": r.FilesSeen, "audioFiles": r.AudioFiles, "created": r.Created,
+		"updated": r.Updated, "sidecarsUpdated": r.SidecarsUpdated, "copies": r.Copies,
+		"unchanged": r.Unchanged, "errored": r.Errored, "relinked": r.Relinked,
+		"reread": r.Reread, "missing": r.Missing, "promoted": r.Promoted, "dropped": r.Dropped,
+		"skipped": r.Skipped, "walkErrors": r.WalkErrors,
+		"rootUnreachable": r.RootUnreachable, "subPathGone": r.SubPathGone,
+	}
 }
 
 // --- small helpers ----------------------------------------------------------------
@@ -1616,7 +1664,44 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 // RequestErrorHandler adapts strict-server binding failures (bad params, bad
 // bodies) to the structured Error schema.
 func RequestErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
-	writeError(w, http.StatusBadRequest, "invalid-request", err.Error())
+	writeError(w, http.StatusBadRequest, "invalid-request", requestFailure(err))
+}
+
+// requestFailure says what was wrong with a request the binder refused,
+// by the field it was in: the binder's own text names Go types and the
+// decoder, which nobody sending the request can act on.
+func requestFailure(err error) string {
+	var (
+		format   *InvalidParamFormatError
+		unmarsh  *UnmarshalingParamError
+		required *RequiredParamError
+		header   *RequiredHeaderError
+		many     *TooManyValuesForParamError
+		typ      *json.UnmarshalTypeError
+		syntax   *json.SyntaxError
+		tooBig   *http.MaxBytesError
+	)
+	switch {
+	case errors.As(err, &format):
+		return format.ParamName + " is not a valid value"
+	case errors.As(err, &unmarsh):
+		return unmarsh.ParamName + " is not a valid value"
+	case errors.As(err, &required):
+		return required.ParamName + " is required"
+	case errors.As(err, &header):
+		return "the " + header.ParamName + " header is required"
+	case errors.As(err, &many):
+		return many.ParamName + " may be given only once"
+	case errors.As(err, &typ) && typ.Field != "":
+		return typ.Field + " has the wrong type"
+	case errors.As(err, &typ):
+		return "the request body has the wrong shape"
+	case errors.As(err, &tooBig):
+		return "the request body is too large"
+	case errors.As(err, &syntax), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, io.EOF):
+		return "the request body is not valid JSON"
+	}
+	return "the request could not be read"
 }
 
 // ResponseErrorHandler reports handler-returned errors by kind. While the
@@ -1691,7 +1776,8 @@ func responseError(w http.ResponseWriter, err error) {
 
 // kindMessage returns the service error's own message when it carries
 // one, else fallback. Only the service's Msg is surfaced, never a
-// wrapped error's text, which may name internals.
+// wrapped error's raw text, which may name internals: a catalog refusal's
+// Msg is its own words with operation names and directories cut.
 func kindMessage(err error, fallback string) string {
 	var se *service.Error
 	if errors.As(err, &se) && se.Msg != "" {

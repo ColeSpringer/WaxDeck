@@ -216,6 +216,255 @@ void main() {
     expect(repo.rescanForces, [false]);
   });
 
+  testWidgets('an in-place library names untagged files from folders', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.libraries.addAll(const [
+      LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
+      LibraryInfo(
+        pid: 'lb-2',
+        name: 'placed',
+        path: '/srv/placed',
+        managed: true,
+      ),
+    ]);
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryFolderFallback('lb-2')),
+      findsNothing,
+      reason: "a managed library's folders are the catalog's own",
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryFolderFallback('lb-1')),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.setLibraryFolderFallbackCalls, [
+      (libraryPid: 'lb-1', on: true),
+    ]);
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Applies to new files now. Re-read unchanged files in Rescan to apply '
+      'it to files already scanned.',
+    );
+  });
+
+  testWidgets('the folder switch reads what the server stored on return', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.libraries.add(
+      const LibraryInfo(pid: 'lb-1', name: 'music', path: '/srv/music'),
+    );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryFolderFallback('lb-1')),
+    );
+    await tester.pumpAndSettle();
+
+    // Away and back: a fresh switch holds no value of its own, so what
+    // it draws is the table's listing.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const SizedBox()),
+    );
+    await tester.pumpWidget(_host(container));
+    await tester.pumpAndSettle();
+    final folders = tester.widget<WaxSwitch>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(
+          SemanticsIds.libraryFolderFallback('lb-1'),
+        ),
+        matching: find.byType(WaxSwitch),
+      ),
+    );
+    expect(folders.value, isTrue, reason: 'the server holds it on');
+  });
+
+  testWidgets('changing what a library holds asks first, then scans', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.libraries.addAll(const [
+      LibraryInfo(
+        pid: 'lb-1',
+        name: 'spoken',
+        path: '/srv/spoken',
+        media: 'mixed',
+      ),
+      LibraryInfo(pid: 'lb-p', name: 'podcasts', media: 'podcast'),
+    ]);
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-p')),
+      findsNothing,
+      reason: 'the podcast library holds podcasts',
+    );
+
+    Future<void> choose(String label) async {
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-1')),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(label).last);
+      await tester.pumpAndSettle();
+    }
+
+    await choose('Books');
+    expect(
+      find.text(
+        'Every audio file in spoken becomes a book on the scan this '
+        'starts, the parts in one folder gathered into one book. Items '
+        'whose kind was set by hand keep it.',
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(repo.setLibraryMediaCalls, isEmpty);
+
+    await choose('Books');
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.setLibraryMediaCalls, [
+      (libraryPid: 'lb-1', media: 'audiobook'),
+    ]);
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Scanning spoken to apply the change.',
+    );
+
+    repo.libraryMediaScanStarts = false;
+    await choose('Music');
+    expect(find.textContaining('read again'), findsOneWidget);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.setLibraryMediaCalls.last.media, 'music');
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Another job is running. Once it ends, rescan with Re-read unchanged '
+      'files on to apply the change to spoken.',
+    );
+  });
+
+  testWidgets('a library the configuration declares says what it holds, and '
+      'why it stays', (tester) async {
+    final repo = FakeRepository();
+    repo.libraries.addAll(const [
+      LibraryInfo(
+        pid: 'lb-b',
+        name: 'books',
+        path: '/srv/books',
+        media: 'audiobook',
+        mediaDeclared: true,
+      ),
+      LibraryInfo(pid: 'lb-m', name: 'music', path: '/srv/music'),
+    ]);
+    await _pump(tester, _host(_container(repo)));
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-b')),
+      findsNothing,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-m')),
+      findsOneWidget,
+    );
+    final row = find.bySemanticsIdentifier(SemanticsIds.libraryRow('lb-b'));
+    expect(
+      find.descendant(of: row, matching: find.text('Books')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: row,
+        matching: find.text("Set by the server's configuration"),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a kind change that starts a scan reads the jobs again', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.libraries.add(
+      const LibraryInfo(
+        pid: 'lb-1',
+        name: 'spoken',
+        path: '/srv/spoken',
+        media: 'mixed',
+      ),
+    );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-1')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Books').last);
+    await tester.pumpAndSettle();
+    final reads = repo.jobReads;
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    // As the rescan and a new library do: the scan it started is in
+    // the list the Rescan buttons and the dashboard read.
+    expect(repo.jobReads, reads + 1);
+  });
+
+  testWidgets('a kind change confirmed after its row was rebuilt still lands', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.libraries.add(
+      const LibraryInfo(
+        pid: 'lb-1',
+        name: 'spoken',
+        path: '/srv/spoken',
+        media: 'mixed',
+      ),
+    );
+    final container = _container(repo);
+    await _pump(tester, _host(container));
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMediaChoice('lb-1')),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Books').last);
+    await tester.pumpAndSettle();
+
+    // The window narrows under the dialog: the table becomes cards, and
+    // the row that asked is gone by the answer.
+    tester.view.physicalSize = const Size(600, 1600);
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repo.setLibraryMediaCalls, [
+      (libraryPid: 'lb-1', media: 'audiobook'),
+    ]);
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'Scanning spoken to apply the change.',
+    );
+  });
+
   testWidgets('the podcast library offers no read-only switch', (tester) async {
     final repo = FakeRepository();
     repo.libraries.add(

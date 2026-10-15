@@ -276,7 +276,7 @@ class CachedArtworkStore extends ArtworkStore {
   Future<Uint8List?> _pinnedBytes(String artUrl, int px) async {
     final pid = artworkPidOf(artUrl);
     if (pid == null) return null;
-    final held = await pins.pinsFor(pid);
+    final held = await pins.pinsToDraw(pid);
     if (held.isEmpty) return null;
     var chosen = held.first;
     for (final pin in held) {

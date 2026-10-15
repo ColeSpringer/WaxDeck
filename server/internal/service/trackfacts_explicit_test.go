@@ -118,7 +118,7 @@ func TestTrackFactsExplicitFromAdvisoryTag(t *testing.T) {
 		}
 	}
 
-	if _, err := svc.SetItemTag(ctx, uc, unsaidPID, "ITUNESADVISORY", []string{"1"}, true, false); err != nil {
+	if _, err := svc.SetItemTag(ctx, uc, unsaidPID, "ITUNESADVISORY", []string{"1"}, MetadataEditParams{Lock: true, Force: false}); err != nil {
 		t.Fatalf("tagging through the editor: %v", err)
 	}
 	deadline := time.Now().Add(10 * time.Second)

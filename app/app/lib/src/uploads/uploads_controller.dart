@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../auth/auth_controller.dart';
 import '../providers.dart';
 import 'file_picker_port.dart';
 import 'local_file_reader.dart';
@@ -136,6 +137,22 @@ class UploadsState {
   final Set<String> failed;
 
   bool get hasMore => nextCursor != null;
+
+  /// [nextCursor] is a getter because null is a cursor's own value: the
+  /// end of the list.
+  UploadsState copyWith({
+    List<UploadSession>? uploads,
+    String? Function()? nextCursor,
+    UploadQuota? quota,
+    bool? loadingMore,
+    Set<String>? failed,
+  }) => UploadsState(
+    uploads: uploads ?? this.uploads,
+    nextCursor: nextCursor == null ? this.nextCursor : nextCursor(),
+    quota: quota ?? this.quota,
+    loadingMore: loadingMore ?? this.loadingMore,
+    failed: failed ?? this.failed,
+  );
 }
 
 /// Lists upload sessions and drives the create, chunk, complete flow.
@@ -152,6 +169,9 @@ class UploadsController extends AsyncNotifier<UploadsState> {
   @override
   Future<UploadsState> build() async {
     _generation++;
+    // Keyed on the account: the repository moves only with the server,
+    // and the next account starts from its own first page.
+    ref.watch(signedInAccountProvider);
     final page = await ref
         .watch(repositoryProvider)
         .listUploads(limit: pageSize);
@@ -173,25 +193,36 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     final current = state.value;
     if (current == null || !current.hasMore || current.loadingMore) return;
     final generation = _generation;
-    state = AsyncData(_copy(current, loadingMore: true));
+    state = AsyncData(current.copyWith(loadingMore: true));
+    // What the await answers lands on the list as it stands then: a
+    // transfer moves, drops or marks its row meanwhile, and the page
+    // must not undo that.
+    UploadsState now() => state.value ?? current;
     try {
       final page = await ref
           .read(repositoryProvider)
           .listUploads(cursor: current.nextCursor, limit: pageSize);
       if (generation != _generation) return;
+      final live = now();
+      // A row already held keeps its copy here, which is the newer.
+      final held = {for (final u in live.uploads) u.id};
       state = AsyncData(
-        UploadsState(
-          uploads: [...current.uploads, ...page.uploads],
-          nextCursor: page.nextCursor,
-          quota: page.quota ?? current.quota,
-          failed: current.failed,
+        live.copyWith(
+          uploads: [
+            ...live.uploads,
+            for (final u in page.uploads)
+              if (!held.contains(u.id)) u,
+          ],
+          nextCursor: () => page.nextCursor,
+          quota: page.quota ?? live.quota,
+          loadingMore: false,
         ),
       );
     } on WaxDeckApiException {
       // An expected transport or server error. Keep what we have;
       // scrolling near the end again retries.
       if (generation != _generation) return;
-      state = AsyncData(_copy(current, loadingMore: false));
+      state = AsyncData(now().copyWith(loadingMore: false));
     } catch (_) {
       // Anything else is a defect, not a hiccup: a decode failure,
       // a bad cast. Release the paging guard first - loadingMore is
@@ -199,7 +230,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
       // wedge paging permanently and silently - then let the error
       // reach the app's error handler instead of vanishing here.
       if (generation == _generation) {
-        state = AsyncData(_copy(current, loadingMore: false));
+        state = AsyncData(now().copyWith(loadingMore: false));
       }
       rethrow;
     }
@@ -393,6 +424,7 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     required void Function() onSealed,
   }) async {
     final repository = ref.read(repositoryProvider);
+    var sealing = false;
     try {
       var offset = from;
       while (offset < size) {
@@ -409,13 +441,25 @@ class UploadsController extends AsyncNotifier<UploadsState> {
         offset += window.length;
         _upsert(session);
       }
+      sealing = true;
       final sealed = await repository.completeUpload(uploadId);
       onSealed();
       _upsert(sealed);
       _markFailed(uploadId, failed: false);
-    } catch (_) {
-      // Marked failed whatever threw - a server refusal, but also a
-      // source that stopped answering (a SAF document moved
+    } catch (e) {
+      // A seal the server refused for bytes no retry can mend (they do
+      // not read as audio, or miss their hash) ended the session there,
+      // so the row goes rather than offering a Retry that cannot work.
+      // The refusal's reason says so; without one the session is asked.
+      if (sealing &&
+          e is WaxDeckApiException &&
+          (_endsSession(e) || await _ended(uploadId))) {
+        onSealed();
+        _drop(uploadId);
+        rethrow;
+      }
+      // Marked failed whatever else threw - a server refusal, but also
+      // a source that stopped answering (a SAF document moved
       // mid-transfer arrives as a PlatformException, a deleted local
       // file as a FileSystemException, a shrunk one as the StateError
       // above). Without the mark the row sits in "uploading" forever
@@ -423,6 +467,38 @@ class UploadsController extends AsyncNotifier<UploadsState> {
       _markFailed(uploadId, failed: true);
       rethrow;
     }
+  }
+
+  /// Whether a refused seal's reason is one that ends the session.
+  static bool _endsSession(WaxDeckApiException e) =>
+      switch (e.params?['reason']) {
+        'unreadable' || 'checksum-mismatch' => true,
+        _ => false,
+      };
+
+  /// Whether the server no longer holds the session.
+  Future<bool> _ended(String uploadId) async {
+    try {
+      await ref.read(repositoryProvider).getUpload(uploadId);
+      return false;
+    } on WaxDeckApiException catch (e) {
+      return e.code == 'not-found';
+    }
+  }
+
+  void _drop(String uploadId) {
+    if (!ref.mounted) return;
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData(
+      current.copyWith(
+        uploads: [
+          for (final u in current.uploads)
+            if (u.id != uploadId) u,
+        ],
+        failed: {...current.failed}..remove(uploadId),
+      ),
+    );
   }
 
   /// Collects one `[start, end)` window from a lazy read accessor.
@@ -444,17 +520,13 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     if (current == null) return;
     final present = current.uploads.any((u) => u.id == session.id);
     state = AsyncData(
-      UploadsState(
+      current.copyWith(
         uploads: present
             ? [
                 for (final u in current.uploads)
                   if (u.id == session.id) session else u,
               ]
             : [session, ...current.uploads],
-        nextCursor: current.nextCursor,
-        quota: current.quota,
-        loadingMore: current.loadingMore,
-        failed: current.failed,
       ),
     );
   }
@@ -465,25 +537,8 @@ class UploadsController extends AsyncNotifier<UploadsState> {
     if (current == null) return;
     final set = {...current.failed};
     failed ? set.add(uploadId) : set.remove(uploadId);
-    state = AsyncData(
-      UploadsState(
-        uploads: current.uploads,
-        nextCursor: current.nextCursor,
-        quota: current.quota,
-        loadingMore: current.loadingMore,
-        failed: set,
-      ),
-    );
+    state = AsyncData(current.copyWith(failed: set));
   }
-
-  static UploadsState _copy(UploadsState s, {required bool loadingMore}) =>
-      UploadsState(
-        uploads: s.uploads,
-        nextCursor: s.nextCursor,
-        quota: s.quota,
-        loadingMore: loadingMore,
-        failed: s.failed,
-      );
 }
 
 final uploadsProvider = AsyncNotifierProvider<UploadsController, UploadsState>(

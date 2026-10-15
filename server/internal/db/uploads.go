@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // Upload is one resumable upload session.
@@ -166,6 +167,18 @@ func (d *DB) ListUploads(ctx context.Context, userID string, beforeNS int64, bef
 	return out, rows.Err()
 }
 
+// The reads by entry repeat the entry index's own condition, without
+// which SQLite cannot use a partial index and walks every upload.
+const uploadsOfEntry = `SELECT ` + uploadCols + ` FROM uploads
+	WHERE review_entry_id = ? AND review_entry_id != '' ORDER BY created_at_ns, id`
+
+// duplicateCountsQuery counts the flagged sessions of n entries.
+func duplicateCountsQuery(n int) string {
+	return `SELECT review_entry_id, COUNT(*) FROM uploads
+		WHERE review_entry_id IN (` + strings.Repeat("?,", n-1) + `?) AND review_entry_id != ''
+		AND duplicate_pid != '' GROUP BY review_entry_id`
+}
+
 // ListUploadsByReviewEntry returns every session linked to one review
 // entry, oldest first. The settle and discard paths walk an entry's own
 // sessions through this rather than a capped newest-first page of the
@@ -174,8 +187,7 @@ func (d *DB) ListUploadsByReviewEntry(ctx context.Context, entryID string) ([]Up
 	if entryID == "" {
 		return nil, nil // '' is the column default, not a real entry
 	}
-	rows, err := d.r.QueryContext(ctx, `SELECT `+uploadCols+` FROM uploads
-		WHERE review_entry_id = ? ORDER BY created_at_ns, id`, entryID)
+	rows, err := d.r.QueryContext(ctx, uploadsOfEntry, entryID)
 	if err != nil {
 		return nil, fmt.Errorf("db: listing entry uploads: %w", err)
 	}
@@ -191,13 +203,49 @@ func (d *DB) ListUploadsByReviewEntry(ctx context.Context, entryID string) ([]Up
 	return out, rows.Err()
 }
 
+// DuplicateCountsByEntry counts, per review entry, the sessions that
+// arrived carrying a duplicate warning; an entry with none is absent.
+func (d *DB) DuplicateCountsByEntry(ctx context.Context, entryIDs []string) (map[string]int, error) {
+	out := map[string]int{}
+	const chunkSize = 500
+	for start := 0; start < len(entryIDs); start += chunkSize {
+		chunk := entryIDs[start:min(start+chunkSize, len(entryIDs))]
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			args[i] = id
+		}
+		rows, err := d.r.QueryContext(ctx, duplicateCountsQuery(len(chunk)), args...)
+		if err != nil {
+			return nil, fmt.Errorf("db: counting entry duplicates: %w", err)
+		}
+		for rows.Next() {
+			var id string
+			var n int
+			if err := rows.Scan(&id, &n); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("db: counting entry duplicates: %w", err)
+			}
+			out[id] = n
+		}
+		if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+			return nil, fmt.Errorf("db: counting entry duplicates: %w", err)
+		}
+	}
+	return out, nil
+}
+
 // UploadOwnsItem reports whether one of the user's sessions produced
-// the catalog item, which grants item-scoped editing rights.
+// the catalog item, or a grant carried that right to it (a part a kind
+// change split out of their book), which grants item-scoped editing
+// rights.
 func (d *DB) UploadOwnsItem(ctx context.Context, userID, itemPID string) (bool, error) {
 	var one int
 	err := d.r.QueryRowContext(ctx, `
-		SELECT 1 FROM uploads WHERE item_pid = ? AND user_id = ? LIMIT 1`,
-		itemPID, userID).Scan(&one)
+		SELECT 1 FROM uploads WHERE item_pid = ? AND user_id = ?
+		UNION ALL
+		SELECT 1 FROM item_grants WHERE item_pid = ? AND user_id = ?
+		LIMIT 1`,
+		itemPID, userID, itemPID, userID).Scan(&one)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -227,7 +275,9 @@ func (d *DB) UploadedItemPIDs(ctx context.Context, itemPIDs []string) (map[strin
 		args = append(args, pid)
 	}
 	rows, err := d.r.QueryContext(ctx,
-		`SELECT DISTINCT item_pid FROM uploads WHERE item_pid IN (`+string(placeholders)+`)`, args...)
+		`SELECT item_pid FROM uploads WHERE item_pid IN (`+string(placeholders)+`)
+		UNION
+		SELECT item_pid FROM item_grants WHERE item_pid IN (`+string(placeholders)+`)`, append(args, args...)...)
 	if err != nil {
 		return nil, fmt.Errorf("db: listing uploaded items: %w", err)
 	}

@@ -65,6 +65,7 @@ func (l *Library) refreshLibraryState(ctx context.Context) {
 		roots = append(roots, Root{
 			Name: names[lib.PID], Path: lib.DisplayRoot, Managed: lib.Mode == model.ModeManaged,
 			Media: string(lib.MediaType()), PID: string(lib.PID), Profile: lib.Profile, ReadOnly: lib.ReadOnly,
+			FolderFallback: lib.FolderFallback,
 		})
 	}
 	l.rootsMu.Lock()
@@ -197,7 +198,8 @@ func (l *Library) settleRoots(ctx context.Context) error {
 }
 
 // registerConfiguredRoots registers a configured root the catalog lacks or
-// holds in another mode, leaving the rest alone so no settle races an edit.
+// holds in another mode, or holding other media than the configuration
+// declares, leaving the rest alone so no settle races an edit.
 // One the catalog refuses (an overlap) is left out: the app removes nothing.
 func (l *Library) registerConfiguredRoots(ctx context.Context) error {
 	if len(l.configRoots) == 0 {
@@ -216,12 +218,18 @@ func (l *Library) registerConfiguredRoots(ctx context.Context) error {
 		if r.Managed {
 			spec.Mode = model.ModeManaged
 		}
+		// A declared media is the configuration's to keep; an undeclared
+		// one is whatever the root holds now.
+		declared := model.MediaType(r.Media)
 		row := rows[rootKey(r.Path)]
-		if row != nil && row.Mode == spec.Mode {
+		if row != nil && row.Mode == spec.Mode && (declared == "" || row.MediaType() == declared) {
 			continue
 		}
 		if row != nil {
 			spec.Media, spec.Profile = row.Media, row.Profile
+		}
+		if declared != "" {
+			spec.Media = declared
 		}
 		// A folder not there yet (a drive mounted later, or the first boot
 		// of a catalog a reset just recreated) registers and scans as
@@ -283,6 +291,78 @@ func (l *Library) defaultUndefinedProfiles(ctx context.Context) {
 		l.Audit(ctx, nil, "library.profile", AuditTarget{Kind: "library", PID: apiPID(PrefixLibrary, lib.PID)},
 			map[string]any{"profile": organize.DefaultProfileName, "undefined": lib.Profile})
 	}
+}
+
+// declaredMedia is what the configuration says a root holds, or empty
+// where it says nothing.
+func (l *Library) declaredMedia(lib *model.Library) model.MediaType {
+	for _, r := range l.configRoots {
+		if r.Media != "" && samePath(rootKey(r.Path), rootKey(lib.DisplayRoot)) {
+			return model.MediaType(r.Media)
+		}
+	}
+	return ""
+}
+
+// SetLibraryMedia changes what a library holds in place and starts the
+// scan that applies it to the files already there: an ordinary one onto
+// audiobook (the scan re-reads an unlocked track an audiobook root owes
+// a book), a forced one otherwise (music and mixed classify by tags,
+// which only a read checks, so unchanged files are read again only when
+// forced). The podcast library, and a root the configuration declares,
+// refuse.
+func (l *Library) SetLibraryMedia(ctx context.Context, uc *UserCtx, apiLibraryPID, media string) (LibraryInfo, error) {
+	if !uc.Admin {
+		return LibraryInfo{}, &Error{Kind: KindForbidden, Msg: "administrators only"}
+	}
+	prefix, pid, ok := parseAPIPID(apiLibraryPID)
+	if !ok || prefix != PrefixLibrary {
+		return LibraryInfo{}, errNotFound("no library with pid " + apiLibraryPID)
+	}
+	lib, err := l.libraryByPID(ctx, pid)
+	if KindOf(err) == KindNotFound {
+		return LibraryInfo{}, errNotFound("no library with pid " + apiLibraryPID)
+	} else if err != nil {
+		return LibraryInfo{}, err
+	}
+	if lib.Mode == model.ModePodcast {
+		return LibraryInfo{}, errInvalid("the podcast library holds podcasts")
+	}
+	to := model.MediaType(media)
+	switch to {
+	case model.MediaMusic, model.MediaAudiobook, model.MediaMixed:
+	default:
+		return LibraryInfo{}, errInvalid("a library holds music, audiobook or mixed")
+	}
+	if declared := l.declaredMedia(lib); declared != "" && declared != to {
+		return LibraryInfo{}, errInvalid("WAXDECK_AUDIOBOOK_ROOTS declares what this library holds; change the configuration instead")
+	}
+	from := lib.MediaType()
+	if from == to {
+		// Nothing to apply, so no scan.
+		return l.libraryInfo(lib), nil
+	}
+	// An existing library's folder may be unmounted; what it holds is
+	// policy. Mode and profile ride along, or the re-add resets them.
+	updated, err := l.lib.AddRoot(ctx, config.Root{Path: lib.DisplayRoot, Mode: lib.Mode, Media: to, Profile: lib.Profile},
+		waxbin.AllowAbsent())
+	if err != nil {
+		return LibraryInfo{}, classify(err)
+	}
+	l.refreshLibraryState(ctx)
+	force := to != model.MediaAudiobook
+	jobPID, scanErr := l.lib.StartScan(l.procCtx, waxbin.ScanRequest{LibraryPID: pid, Force: force})
+	if scanErr == nil {
+		l.followStarted(ctx, jobPID, uc.ID)
+	} else {
+		l.log.Warn("a library's media changed while a catalog job is running; rescan it once the job ends",
+			"library", apiLibraryPID, "force", force, "err", scanErr)
+	}
+	l.Audit(ctx, uc, "library.media", AuditTarget{Kind: "library", PID: apiLibraryPID},
+		map[string]any{"media": string(to), "from": string(from), "scanStarted": scanErr == nil})
+	info := l.libraryInfo(updated)
+	info.ScanStarted = scanErr == nil
+	return info, nil
 }
 
 // AddLibraryInput describes a runtime library-root creation.

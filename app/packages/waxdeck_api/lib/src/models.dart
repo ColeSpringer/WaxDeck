@@ -72,6 +72,12 @@ class WaxDeckApiException implements Exception {
   /// change the server refused must not wait to be refused again.
   bool get unreachable => statusCode == null || statusCode == 503;
 
+  /// Whether the server said no: a 4xx, which no retry changes.
+  bool get isRefusal {
+    final status = statusCode;
+    return status != null && status >= 400 && status < 500;
+  }
+
   @override
   String toString() => 'WaxDeckApiException($code, $statusCode): $message';
 }
@@ -535,6 +541,7 @@ class ItemDetail extends ItemSummary {
     this.sampleRate,
     this.bitrate,
     this.addedAt,
+    this.copies = 0,
     this.mbid,
     this.isrc,
     this.artSource,
@@ -553,6 +560,10 @@ class ItemDetail extends ItemSummary {
   final int? bitrate;
   final DateTime? addedAt;
 
+  /// Copies the item holds beside its own files, in libraries the caller
+  /// can see ([WaxDeckRepository.getItemFiles] lists them).
+  final int copies;
+
   /// The recording's own identifiers, as tagged or matched. Null for
   /// the items carrying neither, which is most of an untagged library.
   final String? mbid;
@@ -561,6 +572,49 @@ class ItemDetail extends ItemSummary {
   /// Where the cover this item resolves came from, so a surface drawing
   /// it large can say so. Null when nothing is attributed.
   final ArtSource? artSource;
+}
+
+/// One file behind an item: its primary, a book's part, or a copy.
+class ItemFile {
+  const ItemFile({
+    required this.filePid,
+    required this.role,
+    required this.name,
+    this.path,
+    this.sizeBytes,
+    this.codec,
+    this.container,
+    this.bitrate,
+    this.sampleRate,
+    this.bitDepth,
+    this.durationMs,
+    this.libraryPid,
+    this.reason,
+  });
+
+  final String filePid;
+
+  /// `primary`, `part` or `alternate` (a copy); new roles may appear.
+  final String role;
+
+  /// The file's name, without its folder.
+  final String name;
+
+  /// The file's path on the server; administrators only.
+  final String? path;
+  final int? sizeBytes;
+  final String? codec;
+  final String? container;
+  final int? bitrate;
+  final int? sampleRate;
+  final int? bitDepth;
+  final int? durationMs;
+  final String? libraryPid;
+
+  /// Why a copy is one: `same-audio` or `other-encoding`.
+  final String? reason;
+
+  bool get isCopy => role == 'alternate';
 }
 
 /// What an [EntityCard] is about, which is what a tap opens.
@@ -2850,6 +2904,7 @@ class ReviewEntry {
     required this.createdAt,
     this.decidedAt,
     this.decidedBy,
+    this.duplicateCount = 0,
   });
 
   final String id;
@@ -2883,6 +2938,9 @@ class ReviewEntry {
   final DateTime createdAt;
   final DateTime? decidedAt;
   final String? decidedBy;
+
+  /// Files in the unit that arrived with a duplicate warning.
+  final int duplicateCount;
 }
 
 /// Full review entry detail: the local tracks plus every candidate.
@@ -2904,6 +2962,7 @@ class ReviewEntryDetail extends ReviewEntry {
     required super.createdAt,
     super.decidedAt,
     super.decidedBy,
+    super.duplicateCount,
     this.candidates = const [],
     this.tracks = const [],
     this.identifyDeclined = false,
@@ -2964,6 +3023,8 @@ class ReviewTrack {
     this.trackNo,
     this.discNo,
     required this.durationMs,
+    this.duplicate,
+    this.joined = false,
   });
 
   /// Item pid, present once the track is cataloged.
@@ -2974,6 +3035,13 @@ class ReviewTrack {
   final int? trackNo;
   final int? discNo;
   final int durationMs;
+
+  /// The library already holds this audio (or something like it).
+  final DuplicateWarning? duplicate;
+
+  /// The file entered the library as a copy, or a further part, of an
+  /// item that already existed, which kept its details.
+  final bool joined;
 }
 
 /// One release candidate for a review entry.
@@ -3074,6 +3142,7 @@ class CandidatePairing {
 class ReviewStats {
   const ReviewStats({
     required this.pending,
+    required this.decided,
     this.identifying = 0,
     required this.applied,
     required this.autoApplied,
@@ -3085,6 +3154,10 @@ class ReviewStats {
   });
 
   final int pending;
+
+  /// Every status but pending, reverted and discarded included: the
+  /// size of the `decided` listing.
+  final int decided;
   final int identifying;
   final int applied;
   final int autoApplied;
@@ -3130,27 +3203,39 @@ class ReviewBulkOutcome {
   const ReviewBulkOutcome({
     required this.entryId,
     required this.ok,
+    this.code,
     this.error,
+    this.warnings = const [],
   });
 
   final String entryId;
   final bool ok;
+
+  /// The error code the single decide would have answered, when [ok] is
+  /// false: `catalog-busy` is worth sending again.
+  final String? code;
   final String? error;
+
+  /// What the decision stood with, when [ok] is true.
+  final List<String> warnings;
 }
 
 /// An existing item the uploaded file appears to duplicate.
 class DuplicateWarning {
   const DuplicateWarning({
-    required this.itemPid,
+    this.itemPid,
     required this.kind,
     this.title,
     this.artist,
   });
 
-  final String itemPid;
+  /// The existing item; null, as [title] and [artist] are, when it sits
+  /// where the caller cannot see it.
+  final String? itemPid;
 
-  /// Evidence level: `content` (byte-identical audio) or `fingerprint`
-  /// (acoustically the same recording). Open vocabulary.
+  /// Evidence level: `content` (the same audio), `id` (the same
+  /// recording or release by an identifier), `fingerprint` (acoustically
+  /// the same recording) or `name`. Open vocabulary.
   final String kind;
   final String? title;
   final String? artist;
@@ -3346,6 +3431,11 @@ class FieldProvenance {
   /// one - so a non-empty provenance list does not mean the item was
   /// curated.
   bool get isArtifact => field == 'art' || field == 'lyrics';
+
+  /// Whether this row pins the item's kind (music or book): an upload
+  /// imported under a media type its file would not get on its own takes
+  /// it, so like an artifact row it says nothing about who edited what.
+  bool get isKind => field == 'kind';
 }
 
 /// One credited role with its names, ordered as stored.
@@ -3921,12 +4011,19 @@ class BulkEditResult {
 
 /// Outcome of a custom tag edit.
 class TagEditResult {
-  const TagEditResult({required this.key, required this.stored});
+  const TagEditResult({
+    required this.key,
+    required this.stored,
+    this.writeBackFailures = const [],
+  });
 
   final String key;
 
   /// Number of values stored.
   final int stored;
+
+  /// Files the write-back could not update; the edit stands.
+  final List<WriteBackFailure> writeBackFailures;
 }
 
 /// One curated field override on a browse entity.
@@ -4235,11 +4332,13 @@ class LibraryInfo {
     required this.pid,
     required this.name,
     this.media,
+    this.mediaDeclared = false,
     this.path,
     this.itemCount,
     this.streamingWarning,
     this.scanStarted,
     this.readOnly = false,
+    this.folderFallback = false,
     this.managed = false,
     this.profile,
   });
@@ -4250,6 +4349,10 @@ class LibraryInfo {
   /// The catalog keeps the library's files as they are.
   final bool readOnly;
 
+  /// A scan names an untagged file from its folders (in-place libraries
+  /// only).
+  final bool folderFallback;
+
   /// The catalog may place and move files in the library.
   final bool managed;
 
@@ -4259,6 +4362,10 @@ class LibraryInfo {
   /// The content class the library holds (`music`, `audiobook`,
   /// `mixed`), when declared.
   final String? media;
+
+  /// The server's configuration names what the library holds, so it is
+  /// changed there and a change here is refused.
+  final bool mediaDeclared;
 
   /// The root directory on the server, for the screen that manages it.
   /// Absent where the catalog holds a path it cannot render as text.
@@ -4360,6 +4467,8 @@ class MergeOutcome {
 class UpgradeMember {
   const UpgradeMember({
     required this.itemPid,
+    required this.filePid,
+    this.path,
     required this.title,
     this.artist,
     required this.codec,
@@ -4371,6 +4480,13 @@ class UpgradeMember {
   });
 
   final String itemPid;
+
+  /// The file this encoding is, which tells apart the encodings one item
+  /// holds.
+  final String filePid;
+
+  /// The file's path on the server.
+  final String? path;
   final String title;
   final String? artist;
   final String codec;
@@ -5236,6 +5352,13 @@ class Job {
   /// `missing`, `errored`, ...); null while running and for kinds that
   /// record none.
   final Map<String, Object?>? result;
+
+  /// Whether the job has ended, one way or another. A state this build
+  /// does not know reads as unfinished, as the contract has it.
+  bool get ended => switch (state) {
+    'done' || 'failed' || 'crashed' || 'canceled' => true,
+    _ => false,
+  };
 }
 
 /// What a targeted job ran on: its type (`item`, `artist`, `library`,
@@ -5481,12 +5604,41 @@ class DeletePlanEntry {
     this.name,
     required this.files,
     required this.bytes,
+    this.fileList = const [],
+    this.itemSurvives = false,
   });
 
   final String pid;
   final String? name;
   final int files;
   final int bytes;
+
+  /// The files [files] counts, by name; empty for a rip's track whose
+  /// file counts under another.
+  final List<DeletePlanFile> fileList;
+
+  /// The item keeps a file after the deletion (a copy, or one left in
+  /// place), so it stays in the library.
+  final bool itemSurvives;
+}
+
+/// One file a deletion removes (or would remove).
+class DeletePlanFile {
+  const DeletePlanFile({
+    required this.filePid,
+    required this.name,
+    this.sizeBytes,
+    required this.role,
+  });
+
+  final String filePid;
+
+  /// The file's name, without its folder.
+  final String name;
+  final int? sizeBytes;
+
+  /// `primary`, `part` or `alternate`, as [ItemFile.role].
+  final String role;
 }
 
 /// Outcome (or dry-run plan) of a library item deletion.
@@ -5495,6 +5647,7 @@ class DeleteItemsResult {
     required this.applied,
     required this.mode,
     this.entries = const [],
+    this.warnings = const [],
   });
 
   /// False for a dry run: [entries] is the plan, nothing was touched.
@@ -5503,6 +5656,10 @@ class DeleteItemsResult {
   /// `trash` or `permanent`.
   final String mode;
   final List<DeletePlanEntry> entries;
+
+  /// What the deletion did beside removing files, in the server's
+  /// sentences: a copy that took a deleted file's place.
+  final List<String> warnings;
 
   int get totalFiles => entries.fold(0, (sum, e) => sum + e.files);
   int get totalBytes => entries.fold(0, (sum, e) => sum + e.bytes);

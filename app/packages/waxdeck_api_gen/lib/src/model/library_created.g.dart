@@ -18,11 +18,15 @@ class _$LibraryCreated extends LibraryCreated {
   @override
   final String? media;
   @override
+  final bool? mediaDeclared;
+  @override
   final String? path;
   @override
   final int? itemCount;
   @override
   final bool readOnly;
+  @override
+  final bool? folderFallback;
   @override
   final bool managed;
   @override
@@ -37,9 +41,11 @@ class _$LibraryCreated extends LibraryCreated {
     required this.pid,
     required this.name,
     this.media,
+    this.mediaDeclared,
     this.path,
     this.itemCount,
     required this.readOnly,
+    this.folderFallback,
     required this.managed,
     this.profile,
   }) : super._();
@@ -59,9 +65,11 @@ class _$LibraryCreated extends LibraryCreated {
         pid == other.pid &&
         name == other.name &&
         media == other.media &&
+        mediaDeclared == other.mediaDeclared &&
         path == other.path &&
         itemCount == other.itemCount &&
         readOnly == other.readOnly &&
+        folderFallback == other.folderFallback &&
         managed == other.managed &&
         profile == other.profile;
   }
@@ -74,9 +82,11 @@ class _$LibraryCreated extends LibraryCreated {
     _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, name.hashCode);
     _$hash = $jc(_$hash, media.hashCode);
+    _$hash = $jc(_$hash, mediaDeclared.hashCode);
     _$hash = $jc(_$hash, path.hashCode);
     _$hash = $jc(_$hash, itemCount.hashCode);
     _$hash = $jc(_$hash, readOnly.hashCode);
+    _$hash = $jc(_$hash, folderFallback.hashCode);
     _$hash = $jc(_$hash, managed.hashCode);
     _$hash = $jc(_$hash, profile.hashCode);
     _$hash = $jf(_$hash);
@@ -91,9 +101,11 @@ class _$LibraryCreated extends LibraryCreated {
           ..add('pid', pid)
           ..add('name', name)
           ..add('media', media)
+          ..add('mediaDeclared', mediaDeclared)
           ..add('path', path)
           ..add('itemCount', itemCount)
           ..add('readOnly', readOnly)
+          ..add('folderFallback', folderFallback)
           ..add('managed', managed)
           ..add('profile', profile))
         .toString();
@@ -128,6 +140,11 @@ class LibraryCreatedBuilder
   String? get media => _$this._media;
   set media(covariant String? media) => _$this._media = media;
 
+  bool? _mediaDeclared;
+  bool? get mediaDeclared => _$this._mediaDeclared;
+  set mediaDeclared(covariant bool? mediaDeclared) =>
+      _$this._mediaDeclared = mediaDeclared;
+
   String? _path;
   String? get path => _$this._path;
   set path(covariant String? path) => _$this._path = path;
@@ -139,6 +156,11 @@ class LibraryCreatedBuilder
   bool? _readOnly;
   bool? get readOnly => _$this._readOnly;
   set readOnly(covariant bool? readOnly) => _$this._readOnly = readOnly;
+
+  bool? _folderFallback;
+  bool? get folderFallback => _$this._folderFallback;
+  set folderFallback(covariant bool? folderFallback) =>
+      _$this._folderFallback = folderFallback;
 
   bool? _managed;
   bool? get managed => _$this._managed;
@@ -160,9 +182,11 @@ class LibraryCreatedBuilder
       _pid = $v.pid;
       _name = $v.name;
       _media = $v.media;
+      _mediaDeclared = $v.mediaDeclared;
       _path = $v.path;
       _itemCount = $v.itemCount;
       _readOnly = $v.readOnly;
+      _folderFallback = $v.folderFallback;
       _managed = $v.managed;
       _profile = $v.profile;
       _$v = null;
@@ -200,6 +224,7 @@ class LibraryCreatedBuilder
             'name',
           ),
           media: media,
+          mediaDeclared: mediaDeclared,
           path: path,
           itemCount: itemCount,
           readOnly: BuiltValueNullFieldError.checkNotNull(
@@ -207,6 +232,7 @@ class LibraryCreatedBuilder
             r'LibraryCreated',
             'readOnly',
           ),
+          folderFallback: folderFallback,
           managed: BuiltValueNullFieldError.checkNotNull(
             managed,
             r'LibraryCreated',

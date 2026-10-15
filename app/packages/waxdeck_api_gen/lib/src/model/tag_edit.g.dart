@@ -13,11 +13,14 @@ class _$TagEdit extends TagEdit {
   final bool? lock;
   @override
   final bool? force;
+  @override
+  final bool? writeBack;
 
   factory _$TagEdit([void Function(TagEditBuilder)? updates]) =>
       (TagEditBuilder()..update(updates))._build();
 
-  _$TagEdit._({required this.values, this.lock, this.force}) : super._();
+  _$TagEdit._({required this.values, this.lock, this.force, this.writeBack})
+    : super._();
   @override
   TagEdit rebuild(void Function(TagEditBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -31,7 +34,8 @@ class _$TagEdit extends TagEdit {
     return other is TagEdit &&
         values == other.values &&
         lock == other.lock &&
-        force == other.force;
+        force == other.force &&
+        writeBack == other.writeBack;
   }
 
   @override
@@ -40,6 +44,7 @@ class _$TagEdit extends TagEdit {
     _$hash = $jc(_$hash, values.hashCode);
     _$hash = $jc(_$hash, lock.hashCode);
     _$hash = $jc(_$hash, force.hashCode);
+    _$hash = $jc(_$hash, writeBack.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -49,7 +54,8 @@ class _$TagEdit extends TagEdit {
     return (newBuiltValueToStringHelper(r'TagEdit')
           ..add('values', values)
           ..add('lock', lock)
-          ..add('force', force))
+          ..add('force', force)
+          ..add('writeBack', writeBack))
         .toString();
   }
 }
@@ -69,6 +75,10 @@ class TagEditBuilder implements Builder<TagEdit, TagEditBuilder> {
   bool? get force => _$this._force;
   set force(bool? force) => _$this._force = force;
 
+  bool? _writeBack;
+  bool? get writeBack => _$this._writeBack;
+  set writeBack(bool? writeBack) => _$this._writeBack = writeBack;
+
   TagEditBuilder() {
     TagEdit._defaults(this);
   }
@@ -79,6 +89,7 @@ class TagEditBuilder implements Builder<TagEdit, TagEditBuilder> {
       _values = $v.values.toBuilder();
       _lock = $v.lock;
       _force = $v.force;
+      _writeBack = $v.writeBack;
       _$v = null;
     }
     return this;
@@ -101,7 +112,13 @@ class TagEditBuilder implements Builder<TagEdit, TagEditBuilder> {
     _$TagEdit _$result;
     try {
       _$result =
-          _$v ?? _$TagEdit._(values: values.build(), lock: lock, force: force);
+          _$v ??
+          _$TagEdit._(
+            values: values.build(),
+            lock: lock,
+            force: force,
+            writeBack: writeBack,
+          );
     } catch (_) {
       late String _$failedField;
       try {

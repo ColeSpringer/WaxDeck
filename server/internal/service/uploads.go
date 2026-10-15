@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -8,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"maps"
 	"os"
 	"path/filepath"
@@ -71,8 +73,8 @@ const stagingReserve = 512 << 20
 const stagingReservationWindow = time.Hour
 
 // drmFormats are containers that are encrypted by construction, refused
-// with their own sentence rather than the generic format refusal: "files
-// of type aax are not accepted" reads as a codec gap somebody might ask
+// with their own sentence rather than the generic format refusal: ".aax
+// files are not accepted" reads as a codec gap somebody might ask
 // to have widened, when no format set can ever make the file playable.
 // Checked before - and winning over - the operator's format set, which
 // replaces the default rather than extending it and so could otherwise
@@ -192,9 +194,6 @@ func uploadDTO(u wdb.Upload) UploadDTO {
 	}
 	if u.ExpiresAtNS > 0 {
 		dto.ExpiresAt = time.Unix(0, u.ExpiresAtNS).UTC()
-	}
-	if u.DuplicatePID != "" {
-		dto.Duplicate = &DuplicateDTO{ItemPID: u.DuplicatePID, Kind: u.DuplicateKind}
 	}
 	return dto
 }
@@ -344,7 +343,7 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 		return UploadDTO{}, errInvalid("fileName must be a bare file name")
 	}
 	if p.SizeBytes <= 0 {
-		return UploadDTO{}, errInvalid("sizeBytes must be positive")
+		return UploadDTO{}, errInvalid("an empty file cannot be uploaded")
 	}
 	if p.SizeBytes > MaxUploadSize {
 		// Invalid rather than over-quota: nothing the caller or the
@@ -361,7 +360,11 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 		return UploadDTO{}, &Error{Kind: KindDRM, Msg: "Audible DRM files can't be played"}
 	}
 	if !l.uploadFormats[ext] {
-		return UploadDTO{}, &Error{Kind: KindFormat, Msg: fmt.Sprintf("files of type %q are not accepted", ext)}
+		msg := "." + ext + " files are not accepted"
+		if ext == "" {
+			msg = "files without an extension are not accepted"
+		}
+		return UploadDTO{}, &Error{Kind: KindFormat, Msg: msg}
 	}
 	if _, ok := kindForMediaType(p.MediaType); !ok {
 		return UploadDTO{}, errInvalid("unknown media type")
@@ -487,32 +490,57 @@ func (l *Library) findContentDuplicate(ctx context.Context, sha string) (string,
 		return string(items[0].PID), true
 	}
 	// A byte-identical upload still in flight (received, not yet
-	// cataloged) is caught by this server's own upload history. The
-	// completion-time essence check remains the real net: it survives a
-	// retag the content hash does not.
+	// cataloged) is caught by this server's own upload history, for as
+	// long as the item it joined still has a file. The completion-time
+	// essence check remains the real net: it survives a retag the content
+	// hash does not.
 	pid, ok, err := l.db.ContentDuplicateByHash(ctx, sha, uploadImported)
-	if err != nil {
+	if err != nil || !ok {
 		return "", false
 	}
-	return pid, ok
+	if !l.holdsFiles(ctx, model.PID(pid)) {
+		return "", false
+	}
+	return pid, true
 }
 
-// hydrateUploadDuplicate fills the duplicate's display fields: its
-// title and artist only for a caller who can see it, since the match is
-// catalog-wide. The warning still names the item's pid, which the
-// schema requires and which opens nothing to such a caller.
+// holdsFiles reports whether an item still has a file: a delete takes
+// the files and can leave the item behind, which no upload duplicates.
+func (l *Library) holdsFiles(ctx context.Context, pid model.PID) bool {
+	refs, err := l.lib.ItemFiles(ctx, pid)
+	return err == nil && len(refs) > 0
+}
+
+// hydrateUploadDuplicate names the duplicate: its prefixed pid, title
+// and artist for a caller who can see it, and nothing but the kind of
+// match for one who cannot, since the match is catalog-wide.
 func (l *Library) hydrateUploadDuplicate(ctx context.Context, uc *UserCtx, u wdb.Upload) UploadDTO {
 	dto := uploadDTO(u)
-	if dto.Duplicate != nil {
-		if it, err := l.lib.Get(ctx, model.PID(dto.Duplicate.ItemPID)); err == nil {
-			dto.Duplicate.ItemPID = itemAPIPID(it)
-			if l.viewVisible(ctx, uc, it) && l.allowedByContent(ctx, uc, it) {
-				dto.Duplicate.Title = it.Title
-				dto.Duplicate.Artist = it.Artist
-			}
-		}
-	}
+	dto.Duplicate = l.duplicateFor(ctx, uc, u.DuplicatePID, u.DuplicateKind)
 	return dto
+}
+
+// duplicateFor is the warning an upload's match carries for the caller:
+// the item named only when the caller can see it.
+func (l *Library) duplicateFor(ctx context.Context, uc *UserCtx, pid, kind string) *DuplicateDTO {
+	if pid == "" {
+		return nil
+	}
+	d := &DuplicateDTO{Kind: kind}
+	if it, ok := l.itemInReach(ctx, uc, model.PID(pid)); ok {
+		d.ItemPID, d.Title, d.Artist = itemAPIPID(it), it.Title, it.Artist
+	}
+	return d
+}
+
+// itemInReach reads the item a bare pid names when the caller may see
+// it.
+func (l *Library) itemInReach(ctx context.Context, uc *UserCtx, pid model.PID) (*model.ItemView, bool) {
+	it, err := l.lib.Get(ctx, pid)
+	if err != nil || !l.viewVisible(ctx, uc, it) || !l.allowedByContent(ctx, uc, it) {
+		return nil, false
+	}
+	return it, true
 }
 
 // uploadForCaller loads a session the caller may touch.
@@ -587,8 +615,26 @@ func (l *Library) AppendUploadData(ctx context.Context, uc *UserCtx, id string, 
 		return UploadDTO{}, &Error{Kind: KindConflict, Msg: fmt.Sprintf(
 			"offset %d does not match the %d bytes received; resume there", offset, u.ReceivedBytes)}
 	}
+	if u.ReceivedBytes == u.SizeBytes {
+		// Every byte is here, and a complete that went away may already
+		// have promoted them: nothing on disk is this write's to touch, or
+		// a stray part would be taken for the upload.
+		if n, _ := io.Copy(io.Discard, io.LimitReader(body, 1)); n > 0 {
+			return UploadDTO{}, errInvalid("more bytes than the declared size")
+		}
+		return l.hydrateUploadDuplicate(ctx, uc, u), nil
+	}
 	part := l.uploadPartPath(u)
-	f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY, 0o644)
+	// Only the first write makes the part; a later one finding it gone
+	// has nothing to append to.
+	flags := os.O_WRONLY
+	if offset == 0 {
+		flags |= os.O_CREATE
+	}
+	f, err := os.OpenFile(part, flags, 0o644)
+	if errors.Is(err, fs.ErrNotExist) {
+		return UploadDTO{}, &Error{Kind: KindConflict, Msg: "the bytes received so far are gone; start the upload again"}
+	}
 	if err != nil {
 		return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
@@ -628,7 +674,7 @@ func (l *Library) AppendUploadData(ctx context.Context, uc *UserCtx, id string, 
 	if err := l.db.UpdateUpload(ctx, u); err != nil {
 		return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
 	}
-	return uploadDTO(u), nil
+	return l.hydrateUploadDuplicate(ctx, uc, u), nil
 }
 
 func (l *Library) uploadPartPath(u wdb.Upload) string {
@@ -639,10 +685,53 @@ func (l *Library) uploadFinalPath(u wdb.Upload) string {
 	return filepath.Join(l.stagingDir, u.ID, u.FileName)
 }
 
+// ErrUnreadableUpload marks a completed upload whose bytes do not read
+// as audio: a damaged file, not a format the server refuses.
+var ErrUnreadableUpload = errors.New("upload does not read as audio")
+
+// ErrChecksumMismatch marks a completed upload whose bytes do not match
+// the SHA-256 it declared, a refusal that ended its session.
+var ErrChecksumMismatch = errors.New("upload checksum mismatch")
+
+// unreadableUpload reports whether a parse refusal is about the bytes,
+// which no retry mends, rather than a request that went away or a disk
+// that did not answer.
+func unreadableUpload(ctx context.Context, err error) bool {
+	var pathErr *fs.PathError
+	return ctx.Err() == nil && !errors.Is(err, context.Canceled) &&
+		!errors.Is(err, context.DeadlineExceeded) && !errors.As(err, &pathErr)
+}
+
+// releaseDeadSession ends a session whose bytes no retry can mend, so
+// it stops holding quota: its staging goes, then its row. Staging that
+// will not go keeps the row, expired, for the janitor to try again: the
+// row is all that would ever find those bytes. A failure is logged; the
+// refusal the caller gets stands either way.
+func (l *Library) releaseDeadSession(ctx context.Context, uc *UserCtx, u wdb.Upload) {
+	ctx = context.WithoutCancel(ctx)
+	if err := os.RemoveAll(filepath.Join(l.stagingDir, u.ID)); err != nil {
+		l.log.Warn("releasing an unreadable upload's staging", "upload", u.ID, "err", err)
+		u.ExpiresAtNS = time.Now().UnixNano()
+		if err := l.db.UpdateUpload(ctx, u); err != nil {
+			l.log.Warn("leaving an unreadable upload to the janitor", "upload", u.ID, "err", err)
+		}
+	} else if err := l.db.DeleteUpload(ctx, u.ID); err != nil && !errors.Is(err, wdb.ErrNotFound) {
+		l.log.Warn("releasing an unreadable upload", "upload", u.ID, "err", err)
+	}
+	l.emitUserEvent(ctx, uc.ID, eventUpload, u.ID)
+}
+
 // CompleteUpload verifies the staged bytes, promotes them to their
 // final staging name (crash-safe), runs the duplicate checks, and
 // opens the review entry the identify pipeline fills.
 func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (UploadDTO, error) {
+	// One at a time per session, and the row read inside the turn: a
+	// second complete arriving mid-import would find the bytes already
+	// promoted.
+	if _, busy := l.completing.LoadOrStore(id, struct{}{}); busy {
+		return UploadDTO{}, &Error{Kind: KindConflict, Msg: "the upload is still being completed; ask again shortly"}
+	}
+	defer l.completing.Delete(id)
 	u, err := l.uploadForCaller(ctx, uc, id)
 	if err != nil {
 		return UploadDTO{}, err
@@ -659,34 +748,61 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 		return UploadDTO{}, &Error{Kind: KindConflict, Msg: fmt.Sprintf(
 			"%d of %d bytes received; the upload is incomplete", u.ReceivedBytes, u.SizeBytes)}
 	}
-	part := l.uploadPartPath(u)
-	if u.SHA256 != "" {
+	part, final := l.uploadPartPath(u), l.uploadFinalPath(u)
+	// A complete that went away after promoting the file (a crash, or a
+	// request its client gave up on mid-import) left only the final
+	// copy, its bytes already checked: this one carries on from it.
+	promoted := false
+	if _, err := os.Stat(part); errors.Is(err, fs.ErrNotExist) {
+		_, err := os.Stat(final)
+		promoted = err == nil
+	}
+	if u.SHA256 != "" && !promoted {
 		sum, err := fileSHA256(part)
 		if err != nil {
 			return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
 		}
 		if sum != u.SHA256 {
-			return UploadDTO{}, &Error{Kind: KindConflict, Msg: "the received bytes do not match the declared SHA-256"}
+			l.releaseDeadSession(ctx, uc, u)
+			return UploadDTO{}, &Error{Kind: KindConflict, Err: ErrChecksumMismatch,
+				Msg: "the received bytes do not match the declared SHA-256; send the file again"}
 		}
 	}
 	// The audio must at least parse; garbage fails here, not at import.
-	doc, err := waxlabel.ParseFile(ctx, part)
+	src := part
+	if promoted {
+		src = final
+	}
+	doc, err := waxlabel.ParseFile(ctx, src)
 	if err != nil {
-		return UploadDTO{}, &Error{Kind: KindFormat, Msg: "the file does not parse as audio"}
+		if !unreadableUpload(ctx, err) {
+			return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
+		}
+		l.releaseDeadSession(ctx, uc, u)
+		return UploadDTO{}, &Error{Kind: KindFormat, Msg: "the file does not read as audio", Err: ErrUnreadableUpload}
 	}
-	final := l.uploadFinalPath(u)
-	if err := os.Rename(part, final); err != nil {
-		return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
+	if !promoted {
+		if err := os.Rename(part, final); err != nil {
+			return UploadDTO{}, &Error{Kind: KindInternal, Err: err}
+		}
+		if dir, err := os.Open(filepath.Dir(final)); err == nil {
+			_ = dir.Sync()
+			dir.Close()
+		}
 	}
-	if dir, err := os.Open(filepath.Dir(final)); err == nil {
-		_ = dir.Sync()
-		dir.Close()
-	}
+	// From here the session settles even if its caller hangs up: a
+	// promoted file with no staged row is what the carry-on above has
+	// to mend. A server stopping still stops it.
+	ctx, cancel := l.untilShutdown(ctx)
+	defer cancel()
 	u.State = uploadStaged
 	u.StagingPath = final
 
 	// Duplicate checks: exact essence through the import planner, then
-	// an acoustic fingerprint resolve when the tooling is present.
+	// an acoustic fingerprint resolve when the tooling is present. An
+	// essence check that ran answers for the bytes that arrived, over the
+	// warning the session opened with, whose item may have gone since;
+	// one that could not run leaves that warning standing.
 	tags := flatTags(doc)
 	kind, _ := kindForMediaType(u.MediaType)
 	if kind != model.KindEpisode {
@@ -694,36 +810,61 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 		// upload knows the bytes arrived, not where they came from,
 		// and a standing origin is left alone rather than claimed as
 		// manual.
-		if res, err := l.lib.ImportAcquired(ctx, waxbin.AcquiredFile{Path: final}, kind, waxbin.AcquiredMeta{
+		res, err := l.planImport(ctx, waxbin.AcquiredFile{Path: final}, kind, waxbin.AcquiredMeta{
 			Copy: true, DupPolicy: model.DupAllow,
-		}); err == nil && res.AlreadyPresent && res.AlreadyPresentPID != "" {
-			u.DuplicatePID = string(res.AlreadyPresentPID)
-			u.DuplicateKind = "content"
+		})
+		if err == nil {
+			u.DuplicatePID, u.DuplicateKind = "", ""
+			if res.AlreadyPresent && res.AlreadyPresentPID != "" {
+				u.DuplicatePID = string(res.AlreadyPresentPID)
+				u.DuplicateKind = "content"
+			}
 		}
 	}
-	var fp string
-	var fpDur int
-	if l.fpcalcPath != "" {
-		if v, d, err := fingerprint.ChromaprintCompressed(ctx, l.fpcalcPath, final, 0); err == nil {
-			fp, fpDur = v, d
-		}
+	// The file's own length, which fpcalc's whole seconds only stand in
+	// for when the parse could not say.
+	length := doc.Properties().Duration()
+	// The raw form the catalog compares recordings by is read beside
+	// the compressed one, not after it: each is fpcalc decoding up to
+	// two minutes of audio inside this request. A content duplicate
+	// needs neither.
+	raw := make(chan []uint32, 1)
+	if u.DuplicatePID != "" || !l.workers.GoOnce(ctx, "upload-fingerprint", func(ctx context.Context) error {
+		var sub []uint32
+		defer func() { raw <- sub }()
+		sub = l.rawFingerprint(ctx, final, length)
+		return nil
+	}) {
+		raw <- nil
 	}
+	fp, fpSecs := l.fingerprintFile(ctx, final, length)
+	durMS := cmp.Or(length.Milliseconds(), int64(fpSecs)*1000)
+	rawFP := <-raw
 	if u.DuplicatePID == "" {
 		ref := model.PortableRef{
 			Kind:       kind,
 			Artist:     firstNonEmpty(tags["ARTIST"], tags["ALBUMARTIST"]),
 			Title:      tags["TITLE"],
 			Album:      tags["ALBUM"],
-			DurationMS: int64(fpDur) * 1000,
+			DurationMS: durMS,
 		}
-		if it, rung, err := l.lib.ResolveRef(ctx, ref); err == nil && it != nil {
+		// A recording id names one track. A book's release id is every
+		// part's, so it cannot tell a part the book holds from one that
+		// would join it; a book's file goes by the other rungs.
+		if kind != model.KindBook {
+			ref.MBID = doc.Fields().MusicBrainz.RecordingID
+		}
+		if len(rawFP) > 0 {
+			ref.Fingerprint, ref.FingerprintAlgo = fingerprint.Pack(rawFP), fingerprint.ChromaprintAlgoVersion
+		}
+		if it, rung, err := l.lib.ResolveRef(ctx, ref); err == nil && it != nil && l.holdsFiles(ctx, it.PID) {
 			switch rung {
+			case model.MatchStrongID:
+				u.DuplicatePID, u.DuplicateKind = string(it.PID), "id"
 			case model.MatchFingerprint:
-				u.DuplicatePID = string(it.PID)
-				u.DuplicateKind = "fingerprint"
+				u.DuplicatePID, u.DuplicateKind = string(it.PID), "fingerprint"
 			case model.MatchDescriptive:
-				u.DuplicatePID = string(it.PID)
-				u.DuplicateKind = "name"
+				u.DuplicatePID, u.DuplicateKind = string(it.PID), "name"
 			}
 		}
 	}
@@ -734,7 +875,7 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 		Artist:      tags["ARTIST"],
 		TrackNo:     parseIntTag(tags["TRACKNUMBER"]),
 		DiscNo:      parseIntTag(tags["DISCNUMBER"]),
-		DurationMS:  int64(fpDur) * 1000,
+		DurationMS:  durMS,
 		Tags:        tags,
 		Fingerprint: fp,
 	}
@@ -787,12 +928,33 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 	return l.hydrateUploadDuplicate(ctx, uc, u), nil
 }
 
-// DeleteUpload abandons a session and reclaims its staged bytes.
+// DeleteUpload abandons a session and reclaims its staged bytes. It
+// waits for neither a complete of the session, nor a decision of its
+// entry, nor a finalize of its batch: each, finishing after, would open
+// or record what is gone.
 func (l *Library) DeleteUpload(ctx context.Context, uc *UserCtx, id string) error {
 	u, err := l.uploadForCaller(ctx, uc, id)
 	if err != nil {
 		return err
 	}
+	if l.discardReadHook != nil {
+		l.discardReadHook()
+	}
+	if _, busy := l.completing.LoadOrStore(id, struct{}{}); busy {
+		return &Error{Kind: KindConflict, Msg: "the upload is still being completed; ask again shortly"}
+	}
+	defer l.completing.Delete(id)
+	if u.BatchID != "" {
+		l.batchFinalizeMu.Lock()
+		defer l.batchFinalizeMu.Unlock()
+	}
+	u, release, err := l.holdSession(ctx, func(ctx context.Context) (wdb.Upload, error) {
+		return l.uploadForCaller(ctx, uc, id)
+	})
+	if err != nil {
+		return err
+	}
+	defer release()
 	if u.State == uploadImported {
 		return &Error{Kind: KindConflict, Msg: "the upload already entered the library; delete the item there"}
 	}
@@ -809,6 +971,46 @@ func (l *Library) DeleteUpload(ctx context.Context, uc *UserCtx, id string) erro
 	}
 	l.emitUserEvent(ctx, uc.ID, eventUpload, id)
 	return nil
+}
+
+// holdSession reads a session whose complete the caller holds off and
+// claims the entry it names, reading it again under the claim: what a
+// complete, a decision or a link made before stands. An entry a change
+// still holds, or one linked between the two reads, is busy.
+func (l *Library) holdSession(ctx context.Context, read func(context.Context) (wdb.Upload, error)) (wdb.Upload, func(), error) {
+	u, err := read(ctx)
+	if err != nil || u.ReviewEntryID == "" {
+		return u, func() {}, err
+	}
+	release, ok := l.claimEntry(u.ReviewEntryID)
+	if !ok {
+		return u, nil, errEntryBusy()
+	}
+	again, err := read(ctx)
+	if err == nil && again.ReviewEntryID != u.ReviewEntryID {
+		err = errEntryBusy()
+	}
+	if err != nil {
+		release()
+		return again, nil, err
+	}
+	return again, release, nil
+}
+
+// applyImport applies one staged file's planned import.
+func (l *Library) applyImport(ctx context.Context, plan *inbox.Plan) (*inbox.Report, error) {
+	if l.applyImportHook != nil {
+		return l.applyImportHook(ctx, plan)
+	}
+	return l.lib.ApplyImport(ctx, plan)
+}
+
+// planImport plans one staged file's import, hashing its audio.
+func (l *Library) planImport(ctx context.Context, f waxbin.AcquiredFile, kind model.Kind, meta waxbin.AcquiredMeta) (*waxbin.AcquiredResult, error) {
+	if l.planHook != nil {
+		return l.planHook(ctx, f, kind, meta)
+	}
+	return l.lib.ImportAcquired(ctx, f, kind, meta)
 }
 
 // importEntryFiles moves an import entry's staged files into the
@@ -854,69 +1056,182 @@ func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, 
 		l.settleImportedUploads(ctx, entry, imported)
 		return warnings, err
 	}
+	// What an earlier attempt created is this entry's own: a retried
+	// decide lands the rest of a book onto it.
+	owned := map[string]bool{}
+	for _, doc := range payload.Tracks {
+		if doc.PID != "" && !doc.heldBefore() {
+			owned[doc.PID] = true
+		}
+	}
+	kind, _ := kindForMediaType(entry.MediaType)
+	failures, planned, err := l.preflightImport(ctx, payload, kind)
+	if err != nil {
+		return fail(err)
+	} else if len(failures) > 0 {
+		return fail(&Error{Kind: KindConflict, Msg: failuresMessage(failures)})
+	}
+	feed := l.followCreated(ctx)
 	for i := range payload.Tracks {
 		doc := &payload.Tracks[i]
-		if doc.PID != "" || doc.Imported {
-			imported[doc.Path] = importedFile{pid: doc.PID} // already in the library
+		name := filepath.Base(doc.Path)
+		if doc.PID != "" || doc.Imported || doc.Held {
+			// Already in the library.
+			imported[doc.Path] = importedFile{pid: doc.PID, joined: doc.heldBefore()}
 			continue
 		}
-		kind, _ := kindForMediaType(entry.MediaType)
-		res, err := l.lib.ImportAcquired(ctx, waxbin.AcquiredFile{Path: doc.Path}, kind, waxbin.AcquiredMeta{
+		var res *waxbin.AcquiredResult
+		if planned != nil && planned.path == doc.Path {
+			res, planned = planned.res, nil
+		} else if res, err = l.planImport(ctx, waxbin.AcquiredFile{Path: doc.Path}, kind, waxbin.AcquiredMeta{
 			Copy: false, DupPolicy: model.DupAllow,
-		})
-		if err != nil {
-			return fail(classify(err))
+		}); err != nil {
+			return fail(classifyMutation(err))
 		}
 		switch {
 		case res.EpisodePID != "":
 			doc.PID = string(res.EpisodePID)
 			imported[doc.Path] = importedFile{pid: doc.PID}
+		case l.heldWhereItGoes(ctx, res, doc):
+			// The audio is already where these tags would put it, so the
+			// staged copy adds nothing: settling removes it, granting
+			// nothing.
+			doc.Held = true
+			imported[doc.Path] = importedFile{pid: string(res.AlreadyPresentPID),
+				essence: res.Plan.Actions[0].Essence, joined: true}
+			warnings = append(warnings, name+": already in the library; nothing was added")
 		case res.Plan != nil:
-			report, err := l.lib.ApplyImport(ctx, res.Plan)
+			feed.restart(ctx)
+			report, err := l.applyImport(ctx, res.Plan)
 			if err != nil {
-				return fail(classify(err))
+				// Another job holding the file-mutation scope clears on
+				// its own: catalog-busy, not a conflict to fix.
+				return fail(classifyMutation(err))
 			}
 			if report.Imported == 0 {
-				failures = append(failures, fmt.Sprintf("%s: %s", filepath.Base(doc.Path),
-					l.scrubStoragePaths(importFailureReason(res.Plan, report))))
+				// The catalog stops a file whose library was flagged
+				// read-only since the plan, and only counts it; the flag
+				// says why, as the plan would have.
+				if report.Quarantined > 0 && len(res.Plan.Actions) > 0 && res.Plan.Actions[0].Library != nil {
+					if err := l.CheckWritable(ctx, string(res.Plan.Actions[0].Library.PID)); err != nil {
+						return fail(err)
+					}
+				}
+				failures = append(failures, fmt.Sprintf("%s: %s", name,
+					l.failureWords(importFailureReason(res.Plan, report))))
 				continue
 			}
 			doc.Imported = true
-			imported[doc.Path] = importedFile{}
-			pid, essence, err := l.resolveImportedItem(ctx, res.Plan, doc)
+			// Until the item resolves the file grants nothing.
+			imported[doc.Path] = importedFile{joined: true}
+			landed, err := l.landedItem(ctx, res, report, doc, feed, owned)
 			if err != nil {
-				warnings = append(warnings, fmt.Sprintf("%s: imported but not yet resolvable: %v", filepath.Base(doc.Path), err))
+				warnings = append(warnings, fmt.Sprintf("%s: imported but not yet resolvable: %v", name, err))
 				continue
 			}
-			doc.PID = pid
-			imported[doc.Path] = importedFile{pid: pid, essence: essence}
+			doc.PID, doc.Joined = landed.pid, landed.joined
+			imported[doc.Path] = landed
+			if landed.joined {
+				warnings = append(warnings, name+": already in the library; added to the item that holds it, which keeps its details")
+			} else {
+				owned[landed.pid] = true
+			}
 		default:
-			failures = append(failures, fmt.Sprintf("%s: the import produced nothing", filepath.Base(doc.Path)))
+			failures = append(failures, fmt.Sprintf("%s: the import produced nothing", name))
 		}
 	}
+	if feed.broken {
+		l.log.Warn("the change feed could not be followed through an import; its files grant no edit rights",
+			"entry", entry.ID)
+	}
 	if len(failures) > 0 {
-		msg := failures[0]
-		if len(failures) > 1 {
-			msg = fmt.Sprintf("%s (and %d more)", msg, len(failures)-1)
-		}
-		return fail(&Error{Kind: KindConflict, Msg: msg})
+		return fail(&Error{Kind: KindConflict, Msg: failuresMessage(failures)})
 	}
 	l.settleImportedUploads(ctx, entry, imported)
 	return warnings, nil
 }
 
+// plannedFile is a staged file's import plan, made ahead of its move.
+type plannedFile struct {
+	path string
+	res  *waxbin.AcquiredResult
+}
+
+// preflightImport plans every file of a unit still to land before any of
+// them moves, answering why each that would not import would not, so a
+// file the library cannot take (a place already taken, a read-only
+// hold, an unreadable file) stops the unit whole. It cannot see two
+// staged files colliding with each other, since each is planned against
+// a library holding neither, and every file after the first is planned
+// again right before it moves. The first's plan is answered for the
+// import to use: nothing lands between the two, and planning hashes the
+// whole file's audio. Episodes are not planned here: their import is the
+// ingest.
+func (l *Library) preflightImport(ctx context.Context, payload *reviewPayload, kind model.Kind) ([]string, *plannedFile, error) {
+	if kind != model.KindTrack && kind != model.KindBook {
+		return nil, nil, nil
+	}
+	var failures []string
+	var first *plannedFile
+	for _, doc := range payload.Tracks {
+		if doc.PID != "" || doc.Imported || doc.Held {
+			continue
+		}
+		name := filepath.Base(doc.Path)
+		res, err := l.planImport(ctx, waxbin.AcquiredFile{Path: doc.Path}, kind, waxbin.AcquiredMeta{
+			Copy: false, DupPolicy: model.DupAllow,
+		})
+		if first == nil && err == nil {
+			first = &plannedFile{path: doc.Path, res: res}
+		}
+		switch {
+		case err != nil:
+			// A file the planner refuses is this unit's failure; anything
+			// else (no library to place it, a read that failed) is the
+			// planner's own, answered as what it is.
+			if out := classify(err); KindOf(out) != KindConflict {
+				return nil, nil, out
+			}
+			failures = append(failures, name+": "+l.failureWords(cmp.Or(waxDetail(err), err.Error())))
+		case l.heldWhereItGoes(ctx, res, &doc):
+			// Nothing to move; the import says so.
+		case res.Plan == nil || res.Plan.Importable() != 1:
+			reason := "the import planner produced nothing"
+			if res.Plan != nil {
+				reason = importFailureReason(res.Plan, &inbox.Report{})
+			}
+			failures = append(failures, name+": "+l.failureWords(reason))
+		}
+	}
+	return failures, first, nil
+}
+
+// failuresMessage is the first file's failure, and how many more.
+func failuresMessage(failures []string) string {
+	msg := failures[0]
+	if len(failures) > 1 {
+		msg = fmt.Sprintf("%s (and %d more)", msg, len(failures)-1)
+	}
+	return msg
+}
+
 // importedFile is what settling needs to know about one landed file:
-// the item it resolved to and the audio essence the resolution rode.
+// the item it resolved to, the audio essence the resolution rode, and
+// whether the file joined an item the import did not create, which
+// grants nothing.
 type importedFile struct {
 	pid     string
 	essence string
+	joined  bool
 }
 
 // settleImportedUploads marks the upload sessions whose staged files
 // entered the library and reclaims their staging space; every other
 // session stays staged so its bytes survive for a retry. The recorded
 // item pid is what grants the uploader item-scoped editing rights
-// afterward.
+// afterward, so a file that joined an item the import did not create
+// records none: another account's item, or one the library held before,
+// stays theirs.
 func (l *Library) settleImportedUploads(ctx context.Context, entry *wdb.ReviewEntry, imported map[string]importedFile) {
 	if entry.Origin != reviewOriginUpload && entry.Origin != reviewOriginAcquire {
 		return
@@ -936,6 +1251,9 @@ func (l *Library) settleImportedUploads(ctx context.Context, entry *wdb.ReviewEn
 		}
 		r.State = uploadImported
 		r.ItemPID = f.pid
+		if f.joined {
+			r.ItemPID = ""
+		}
 		if err := l.db.UpdateUpload(ctx, r); err != nil {
 			l.log.Warn("marking upload imported", "upload", r.ID, "err", err)
 		}
@@ -971,15 +1289,49 @@ func (l *Library) scrubStoragePaths(s string) string {
 	if l.stagingDir != "" {
 		s = strings.ReplaceAll(s, l.stagingDir+string(filepath.Separator), "")
 	}
+	var roots []string
 	for _, r := range l.libraryRoots() {
-		p := cleanRootPath(r.Path)
-		if p == "" || p == "." {
-			continue
+		if p := cleanRootPath(r.Path); p != "" && p != "." {
+			roots = append(roots, p)
 		}
+	}
+	// Longest first, so a root whose path begins another's cannot cut
+	// that one's name in half.
+	slices.SortFunc(roots, func(a, b string) int { return cmp.Compare(len(b), len(a)) })
+	for _, p := range roots {
 		s = strings.ReplaceAll(s, p+string(filepath.Separator), "")
-		s = strings.ReplaceAll(s, p, "the library")
+		s = nameBareRoot(s, p)
 	}
 	return s
+}
+
+// nameBareRoot calls a root's path the library where the path ends, not
+// where it only begins a longer name.
+func nameBareRoot(s, root string) string {
+	var b strings.Builder
+	for {
+		i := strings.Index(s, root)
+		if i < 0 {
+			break
+		}
+		end := i + len(root)
+		b.WriteString(s[:i])
+		if end < len(s) && nameByte(s[end]) {
+			b.WriteString(root)
+		} else {
+			b.WriteString("the library")
+		}
+		s = s[end:]
+	}
+	b.WriteString(s)
+	return b.String()
+}
+
+// nameByte reports whether c can go on in a name: a word character, one
+// of . ~ + -, or a byte of a letter outside ASCII.
+func nameByte(c byte) bool {
+	return c == '_' || c == '.' || c == '~' || c == '+' || c == '-' || c >= 0x80 ||
+		'0' <= c && c <= '9' || 'a' <= c && c <= 'z' || 'A' <= c && c <= 'Z'
 }
 
 // pendingEntryHasLanded reports whether an upload's linked review entry
@@ -1007,6 +1359,10 @@ func (l *Library) pendingEntryHasLanded(ctx context.Context, reviewEntryID strin
 func (l *Library) landedTracks(ctx context.Context, payload *reviewPayload) int {
 	n := 0
 	for _, doc := range payload.Tracks {
+		if doc.Held {
+			// Nothing of it entered the library.
+			continue
+		}
 		if doc.PID == "" {
 			if doc.Imported {
 				n++
@@ -1036,9 +1392,9 @@ func importFailureReason(plan *inbox.Plan, report *inbox.Report) string {
 }
 
 // CanCurateItem reports whether the caller may run item-scoped
-// metadata mutations on the item: administrators always, everyone
-// else exactly for the items their own uploads and acquisitions
-// brought into the library.
+// metadata mutations on the item: administrators always, anyone else
+// for the items their own uploads and acquisitions brought into the
+// library and the parts a kind change split out of those.
 //
 // A lookup that fails reads as no, which is the only safe answer for a
 // gate. Callers that are describing the permission rather than
@@ -1131,33 +1487,61 @@ func (l *Library) DrainExpiredUploads(ctx context.Context) bool {
 	}
 	progress := false
 	for _, u := range rows {
-		if l.pendingEntryHasLanded(ctx, u.ReviewEntryID) {
-			// Keep the bytes: the pending entry needs them for a
-			// retried decision, and discarding it would orphan its
-			// landed items. Push the expiry forward so the row leaves
-			// the expired set instead of clogging every drain round.
-			u.ExpiresAtNS = time.Now().Add(l.uploadRetention).UnixNano()
-			if err := l.db.UpdateUpload(ctx, u); err != nil {
-				l.log.Warn("deferring partially imported upload", "upload", u.ID, "err", err)
-			}
-			continue
-		}
-		if err := os.RemoveAll(filepath.Join(l.stagingDir, u.ID)); err != nil {
-			l.log.Warn("reclaiming expired upload", "upload", u.ID, "err", err)
-			continue
-		}
-		u.State = uploadDiscarded
-		if err := l.db.UpdateUpload(ctx, u); err != nil {
-			l.log.Warn("marking upload expired", "upload", u.ID, "err", err)
+		if !l.drainExpiredUpload(ctx, u) {
 			continue
 		}
 		progress = true
-		// A completed-but-undecided upload has a pending entry pointing at the
-		// file just removed; close it so it cannot later import a missing path.
-		l.discardPendingEntry(ctx, u.ReviewEntryID, "")
-		l.emitUserEvent(ctx, u.UserID, eventUpload, u.ID)
 	}
 	return progress
+}
+
+// drainExpiredUpload reclaims one expired session, true once it is. One
+// a complete, a decision or a finalize is still working on waits for a
+// later round.
+func (l *Library) drainExpiredUpload(ctx context.Context, listed wdb.Upload) bool {
+	if _, busy := l.completing.LoadOrStore(listed.ID, struct{}{}); busy {
+		return false
+	}
+	defer l.completing.Delete(listed.ID)
+	if listed.BatchID != "" {
+		l.batchFinalizeMu.Lock()
+		defer l.batchFinalizeMu.Unlock()
+	}
+	u, release, err := l.holdSession(ctx, func(ctx context.Context) (wdb.Upload, error) {
+		return l.db.UploadByID(ctx, listed.ID)
+	})
+	if err != nil {
+		return false
+	}
+	defer release()
+	if u.State != uploadReceiving && u.State != uploadStaged {
+		return false
+	}
+	if l.pendingEntryHasLanded(ctx, u.ReviewEntryID) {
+		// Keep the bytes: the pending entry needs them for a
+		// retried decision, and discarding it would orphan its
+		// landed items. Push the expiry forward so the row leaves
+		// the expired set instead of clogging every drain round.
+		u.ExpiresAtNS = time.Now().Add(l.uploadRetention).UnixNano()
+		if err := l.db.UpdateUpload(ctx, u); err != nil {
+			l.log.Warn("deferring partially imported upload", "upload", u.ID, "err", err)
+		}
+		return false
+	}
+	if err := os.RemoveAll(filepath.Join(l.stagingDir, u.ID)); err != nil {
+		l.log.Warn("reclaiming expired upload", "upload", u.ID, "err", err)
+		return false
+	}
+	u.State = uploadDiscarded
+	if err := l.db.UpdateUpload(ctx, u); err != nil {
+		l.log.Warn("marking upload expired", "upload", u.ID, "err", err)
+		return false
+	}
+	// A completed-but-undecided upload has a pending entry pointing at the
+	// file just removed; close it so it cannot later import a missing path.
+	l.discardPendingEntry(ctx, u.ReviewEntryID, "")
+	l.emitUserEvent(ctx, u.UserID, eventUpload, u.ID)
+	return true
 }
 
 // flatTags flattens a parsed document's typed tag projection into the

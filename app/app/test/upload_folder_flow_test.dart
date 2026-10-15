@@ -1,13 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/l10n/formats.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/add_to_library.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
+import 'package:waxdeck/src/uploads/uploads_controller.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -58,6 +62,21 @@ class _FolderPicker implements FilePickerPort {
     required String label,
     String anyLabel = '',
   }) async => null;
+}
+
+/// Answers a file pick with [files] once [picked] completes, as the
+/// native sheet answers whenever somebody is done with it.
+class _FilesPicker extends _FolderPicker {
+  _FilesPicker(this.picked) : super(const FolderPick());
+
+  final Future<List<PickedAudioFile>> picked;
+
+  @override
+  Future<List<PickedAudioFile>> pickAudioFiles({
+    String audioLabel = '',
+    String anyLabel = '',
+    UploadFormatSets formats = const UploadFormatSets(),
+  }) => picked;
 }
 
 class _ThrowingFolderPicker extends _FolderPicker {
@@ -239,6 +258,234 @@ void main() {
     expect(raised, hasLength(2));
     expect(raised.first, contains('Uploaded 1 file'));
     expect(raised.last, contains('Skipped 2 Audible files'));
+  });
+
+  testWidgets('an Audible file picked beside audio is named after the flow', (
+    tester,
+  ) async {
+    final (host, containerOf) = _host(
+      _repo(),
+      _FilesPicker(Future.value([_file('book.aax'), _file('song.mp3')])),
+      pickAndUpload,
+    );
+    await tester.pumpWidget(host);
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    // Held until the dialog is gone, as the folder flow holds it.
+    expect(find.bySemanticsIdentifier(SemanticsIds.uploadMediaType), findsOne);
+    expect(containerOf().read(shellMessengerProvider), isNull);
+
+    final raised = <String>[];
+    containerOf().listen(shellMessengerProvider, (_, next) {
+      if (next != null) raised.add(next.resolve(_l10n));
+    });
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+    expect(raised, hasLength(2));
+    expect(raised.first, contains('Uploaded 1 file'));
+    expect(raised.last, contains('Skipped 1 Audible file'));
+  });
+
+  testWidgets('a pick answered after its host left still names what it '
+      'dropped', (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(_repo()),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final picked = Completer<List<PickedAudioFile>>();
+    final picker = _FilesPicker(picked.future);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(
+          Consumer(
+            builder: (context, ref, _) => Scaffold(
+              body: Center(
+                child: WaxButton(
+                  label: 'Open',
+                  onPressed: () => pickAndUpload(context, ref, picker),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pump();
+    // Signed out, or the route replaced, while the native sheet was up.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const SizedBox()),
+    );
+
+    picked.complete([_file('book.aax'), _file('song.mp3')]);
+    await tester.pumpAndSettle();
+    expect(
+      container.read(shellMessengerProvider)?.resolve(_l10n),
+      contains('Skipped 1 Audible file'),
+    );
+  });
+
+  /// A host over [container] whose button runs [open]; pumping anything
+  /// else in its place takes the button's widget, and its `ref`, away.
+  Widget hostOver(
+    ProviderContainer container,
+    Future<void> Function(BuildContext, WidgetRef) open,
+  ) => UncontrolledProviderScope(
+    container: container,
+    child: routedHost(
+      Consumer(
+        builder: (context, ref, _) => Scaffold(
+          body: Center(
+            child: WaxButton(
+              label: 'Open',
+              onPressed: () => open(context, ref),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  testWidgets('a refusal after its host left is still said, and the rest '
+      'of the batch still goes', (tester) async {
+    final gate = Completer<void>();
+    final repo = _repo()
+      ..uploadPageQuota = const UploadQuota(bytesInUse: 0, quotaBytes: 4)
+      ..createUploadGate = gate
+      ..onCreateUpload = (name) {
+        if (name == 'a.flac') {
+          throw const WaxDeckApiException(
+            code: 'quota-exceeded',
+            message: 'over quota',
+            statusCode: 413,
+          );
+        }
+      };
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+    );
+    addTearDown(container.dispose);
+    // Loaded, as on the Uploads screen, so the allowance is known.
+    await container.read(uploadsProvider.future);
+    await tester.pumpWidget(
+      hostOver(
+        container,
+        (context, ref) =>
+            uploadPickedFiles(context, ref, [_file('a.flac'), _file('b.flac')]),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+    // Navigated away while the first file was on its way.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const SizedBox()),
+    );
+    final raised = <String>[];
+    container.listen(shellMessengerProvider, (_, next) {
+      if (next != null) raised.add(next.resolve(_l10n));
+    });
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(
+      raised.first,
+      _l10n.uploadsFileFailed(
+        'a.flac',
+        _l10n.uploadsFileOverQuota(_l10n.formatBytes(4)),
+      ),
+    );
+    expect(repo.uploadsById.values.map((u) => u.fileName), ['b.flac']);
+    expect(repo.completedBatchIds, hasLength(1));
+    expect(raised.last, contains('Uploaded 1 file'));
+  });
+
+  testWidgets('a link queued after its host left still says so', (
+    tester,
+  ) async {
+    final gate = Completer<void>();
+    final repo = _repo()..createAcquisitionGate = gate;
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      hostOver(container, (context, ref) => acquireFromUrl(context, ref)),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.acquireUrl),
+      'https://tube.example/watch?v=one',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      UncontrolledProviderScope(container: container, child: const SizedBox()),
+    );
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(repo.acquisitionCalls, hasLength(1));
+    expect(
+      container.read(shellMessengerProvider)?.resolve(_l10n),
+      _l10n.uploadsAcquireQueued,
+    );
+  });
+
+  testWidgets('a refused link keeps its error until the text changes', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(_repo()),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      hostOver(container, (context, ref) => acquireFromUrl(context, ref)),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    final field = find.bySemanticsIdentifier(SemanticsIds.acquireUrl);
+    await tester.enterText(field, 'tube.example/watch?v=x');
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
+    await tester.pumpAndSettle();
+    expect(find.text(_l10n.uploadsSourceUrlInvalid), findsOne);
+
+    // Back into the field: the caret moves, the text stays as refused.
+    tester
+        .widget<EditableText>(find.byType(EditableText))
+        .controller
+        .selection = const TextSelection.collapsed(
+      offset: 4,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(_l10n.uploadsSourceUrlInvalid), findsOne);
+
+    await tester.enterText(field, 'https://tube.example/watch?v=x');
+    await tester.pumpAndSettle();
+    expect(find.text(_l10n.uploadsSourceUrlInvalid), findsNothing);
   });
 
   testWidgets('an identify-on upload says the files are in review', (

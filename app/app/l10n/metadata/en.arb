@@ -222,6 +222,10 @@
   "@metadataFieldDiscNo": {
     "description": "Name of the editable metadata field the server calls `disc_no`."
   },
+  "metadataFieldDiscTotal": "Disc total",
+  "@metadataFieldDiscTotal": {
+    "description": "Name of the editable metadata field the server calls `disc_total`: how many discs the release has."
+  },
   "metadataFieldEdition": "Edition",
   "@metadataFieldEdition": {
     "description": "Name of the editable metadata field the server calls `edition`."
@@ -294,6 +298,10 @@
   "@metadataFieldTrackNo": {
     "description": "Name of the editable metadata field the server calls `track_no`."
   },
+  "metadataFieldTrackTotal": "Track total",
+  "@metadataFieldTrackTotal": {
+    "description": "Name of the editable metadata field the server calls `track_total`: how many tracks the track's disc or release has."
+  },
   "metadataFieldYear": "Year",
   "@metadataFieldYear": {
     "description": "Name of the editable metadata field the server calls `year`."
@@ -361,6 +369,16 @@
   "metadataIdentificationTitle": "Identification",
   "@metadataIdentificationTitle": {
     "description": "Heading over the two ways of asking the providers about this item again."
+  },
+  "metadataKindPinned": "Kind: {kind}, pinned",
+  "@metadataKindPinned": {
+    "description": "Line under the editor's provenance summary when the item's kind (music or book) is pinned, as an upload imported under a media type its file would not get on its own is: scans keep it until the pin is lifted. {kind} is the media's name (Music, Book).",
+    "placeholders": {
+      "kind": {
+        "type": "String",
+        "example": "Book"
+      }
+    }
   },
   "metadataLinesAllTimed": "{count, plural, =1{1 line, timed} other{{count} lines, all timed}}",
   "@metadataLinesAllTimed": {
@@ -729,6 +747,10 @@
   "@metadataSourceFeed": {
     "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
   },
+  "metadataSourceNormalize": "the clean-up pass",
+  "@metadataSourceNormalize": {
+    "description": "A producer name as it reads inside the provenance tally (\"3 from the clean-up pass\"): a value a clean-up pass such as the genre normalizer rewrote in the catalog. A short noun, not a sentence."
+  },
   "metadataSourceOrganize": "the organizer",
   "@metadataSourceOrganize": {
     "description": "A producer name as it reads inside the provenance tally (\"3 from tags\"): a short noun, not a sentence."
@@ -756,6 +778,42 @@
   "metadataTagReserved": "{key} is stored as its own field, not as a custom tag.",
   "@metadataTagReserved": {
     "description": "Refusal under the custom-tag key input when the key is one the catalog owns through a field of its own.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "metadataTagReservedBookKind": "{key} is stored as its own field, not as a custom tag. A tag cannot change what an item is; change its kind instead.",
+  "@metadataTagReservedBookKind": {
+    "description": "Refusal under the custom-tag key input for MEDIATYPE on an audiobook. 'Change its kind' points at Treat as music.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "metadataTagReservedEpisode": "{key} is stored as its own field, not as a custom tag. A tag cannot change what an episode is.",
+  "@metadataTagReservedEpisode": {
+    "description": "Refusal under the custom-tag key input for NARRATOR or MEDIATYPE on a podcast episode, which has no kind to change to.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "metadataTagReservedKind": "{key} is stored as its own field, not as a custom tag. A tag cannot make an item an audiobook; change its kind instead.",
+  "@metadataTagReservedKind": {
+    "description": "Refusal under the custom-tag key input for NARRATOR or MEDIATYPE on a music track, keys a person types hoping to make it an audiobook. 'Change its kind' points at Treat as audiobook.",
+    "placeholders": {
+      "key": {
+        "type": "String"
+      }
+    }
+  },
+  "metadataTagReservedNarrator": "{key} is stored as its own field, not as a custom tag. Edit the narrator credits instead.",
+  "@metadataTagReservedNarrator": {
+    "description": "Refusal under the custom-tag key input for NARRATOR on an audiobook, which keeps its narrators as credits.",
     "placeholders": {
       "key": {
         "type": "String"

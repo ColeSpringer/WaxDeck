@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/library/item_kind.dart';
 import 'package:waxdeck/src/metadata/artwork_manager.dart';
 import 'package:waxdeck/src/metadata/metadata_controller.dart';
 import 'package:waxdeck/src/metadata/metadata_form.dart';
@@ -142,6 +144,17 @@ Future<void> _saveNow(WidgetTester tester) async {
 }
 
 void main() {
+  test('a track or disc total is a named count', () {
+    final l10n = AppLocalizationsEn();
+    for (final (field, label) in [
+      ('track_total', 'Track total'),
+      ('disc_total', 'Disc total'),
+    ]) {
+      expect(metadataFieldType(field), MetadataFieldType.count);
+      expect(metadataFieldLabel(l10n, field), label);
+    }
+  });
+
   testWidgets('the slot grid names every role and what fills it', (
     tester,
   ) async {
@@ -303,6 +316,36 @@ void main() {
     // A cover's sidecar is a folder image; lyrics arrive as an .lrc, and
     // one wording cannot honestly describe both files.
     expect(find.text('Lyrics · From an .lrc file'), findsOneWidget);
+  });
+
+  testWidgets('a value the clean-up pass rewrote is credited to it', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..itemProvenance['tr-1'] = const <FieldProvenance>[
+        FieldProvenance(field: 'genre', source: 'normalize', locked: false),
+      ];
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('1 from the clean-up pass'), findsOneWidget);
+  });
+
+  testWidgets('a pinned kind is a line of its own, not an edit', (
+    tester,
+  ) async {
+    // An upload imported under a media type its file would not get on
+    // its own pins the kind; nobody edited anything.
+    final repo = _repo()
+      ..itemProvenance['tr-1'] = const <FieldProvenance>[
+        FieldProvenance(field: 'kind', source: 'user', locked: true),
+        FieldProvenance(field: 'title', source: 'tag', locked: false),
+        FieldProvenance(field: 'album', source: 'tag', locked: false),
+      ];
+    await _pump(tester, _host(_container(repo)));
+
+    expect(find.text('2 from tags'), findsOneWidget);
+    expect(find.textContaining('from you'), findsNothing);
+    expect(find.text('Kind: Music, pinned'), findsOneWidget);
   });
 
   testWidgets('a field chip names its producer rather than the wire word', (
@@ -605,6 +648,55 @@ void main() {
     expect(
       shellMessageText(container.read(shellMessengerProvider)),
       'Booklet replaced',
+    );
+  });
+
+  testWidgets('a cover picked with Write tags to files on is embedded', (
+    tester,
+  ) async {
+    final repo = _repo();
+    final container = _container(repo, picker: _ImagePicker(_png()));
+    await _pump(tester, _host(container));
+
+    final writeBack = find.bySemanticsIdentifier(
+      SemanticsIds.metadataWriteback,
+    );
+    await tester.ensureVisible(writeBack);
+    await tester.pumpAndSettle();
+    await tester.tap(writeBack);
+    await tester.pumpAndSettle();
+    for (final role in ['front', 'booklet']) {
+      final set = find.bySemanticsIdentifier(SemanticsIds.artSlotSet(role));
+      await tester.ensureVisible(set);
+      await tester.pumpAndSettle();
+      await tester.tap(set);
+      await tester.pumpAndSettle();
+    }
+
+    // The front cover is what a file embeds; the other slots are the
+    // catalog's alone.
+    expect(repo.setItemArtworkCalls.map((c) => (c.role, c.writeBack)), [
+      ('front', true),
+      ('booklet', false),
+    ]);
+  });
+
+  testWidgets('a cover the file would not take says so', (tester) async {
+    final repo = _repo()
+      ..setItemArtworkFailures = const [
+        WriteBackFailure(filePid: 'f-1', reason: 'read-only file'),
+      ];
+    final container = _container(repo, picker: _ImagePicker(_png()));
+    await _pump(tester, _host(container));
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.artSlotSet('booklet')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      "Booklet replaced, but the file's tags could not be updated",
     );
   });
 
@@ -950,6 +1042,37 @@ void main() {
     expect(message?.actionLabel, 'Open review');
   });
 
+  testWidgets("a track's editor turns it into an audiobook", (tester) async {
+    final repo = _repo();
+    await _pump(tester, _routed(_container(repo)));
+
+    final kind = find.bySemanticsIdentifier(SemanticsIds.itemMenuKindBook);
+    await tester.ensureVisible(kind);
+    await tester.pumpAndSettle();
+    await tester.tap(kind);
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.kindConfirm));
+    await tester.pump();
+    await tester.pump(kindChangePoll);
+    await tester.pumpAndSettle();
+
+    expect(repo.setKindCalls.single.pids, ['tr-1']);
+    expect(repo.setKindCalls.single.mediaType, 'audiobook');
+  });
+
+  testWidgets('the kind change waits for a draft to be saved', (tester) async {
+    final repo = _repo();
+    await _pump(tester, _routed(_container(repo)));
+
+    await tester.enterText(_field('title'), 'Retitled');
+    await tester.pumpAndSettle();
+    final kind = find.ancestor(
+      of: find.bySemanticsIdentifier(SemanticsIds.itemMenuKindBook),
+      matching: find.byType(WaxButton),
+    );
+    expect(tester.widget<WaxButton>(kind).onPressed, isNull);
+  });
+
   testWidgets('a caller who may not curate gets the refusal, not the form', (
     tester,
   ) async {
@@ -1273,6 +1396,88 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets('a narrator tag is refused with the way to a book', (
+    tester,
+  ) async {
+    await _pump(tester, _host(_container(_repo())));
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagKey),
+      'narrator',
+    );
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.tagValues),
+      'Ann Reader',
+    );
+    final add = find.bySemanticsIdentifier(SemanticsIds.tagAdd);
+    await tester.ensureVisible(add);
+    await tester.pumpAndSettle();
+    await tester.tap(add);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(
+        'NARRATOR is stored as its own field, not as a custom tag. A tag '
+        'cannot make an item an audiobook; change its kind instead.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  // What the item already is decides where the refusal points: a book
+  // has a narrator of its own to edit, and an episode is no kind change
+  // away from anything.
+  for (final (pid, mediaType, typed, sentence)
+      in <(String, MediaType, String, String)>[
+        (
+          'bk-1',
+          MediaType.audiobook,
+          'narrator',
+          'NARRATOR is stored as its own field, not as a custom tag. Edit the '
+              'narrator credits instead.',
+        ),
+        (
+          'bk-1',
+          MediaType.audiobook,
+          'mediatype',
+          'MEDIATYPE is stored as its own field, not as a custom tag. A tag '
+              'cannot change what an item is; change its kind instead.',
+        ),
+        (
+          'ep-1',
+          MediaType.podcast,
+          'narrator',
+          'NARRATOR is stored as its own field, not as a custom tag. A tag '
+              'cannot change what an episode is.',
+        ),
+      ]) {
+    testWidgets('$typed on a ${mediaType.wireName} is refused with its own '
+        'way', (tester) async {
+      final repo = FakeRepository(items: [testItem(pid, mediaType: mediaType)]);
+      await _pump(
+        tester,
+        UncontrolledProviderScope(
+          container: _container(repo),
+          child: localizedHost(MetadataScreen(pid: pid)),
+        ),
+      );
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.tagKey),
+        typed,
+      );
+      await tester.enterText(
+        find.bySemanticsIdentifier(SemanticsIds.tagValues),
+        'Ann Reader',
+      );
+      final add = find.bySemanticsIdentifier(SemanticsIds.tagAdd);
+      await tester.ensureVisible(add);
+      await tester.pumpAndSettle();
+      await tester.tap(add);
+      await tester.pumpAndSettle();
+
+      expect(find.text(sentence), findsOneWidget);
+    });
+  }
 
   testWidgets('a staged tag removal can be taken back', (tester) async {
     final repo = _repo();
@@ -1702,6 +1907,63 @@ void main() {
   ) async {
     await saveOverALockedTitle(tester, compound: false);
   });
+
+  // The same draft with Write tags to files on, through either path:
+  // the fallback only stands in if it writes the files the compound
+  // save writes and reports the file that would not take it.
+  for (final compound in [true, false]) {
+    test('write-back reaches tags, lyrics and the release status '
+        '(${compound ? 'compound' : 'sequential'})', () async {
+      final repo = _repo()
+        ..tagsByPid['tr-1'] = {
+          'OLD': ['x'],
+        }
+        ..lyricsByPid['tr-1'] = const LyricsState(
+          synced: false,
+          source: 'user',
+          lrc: 'la la',
+        )
+        ..tagWriteBackFailures = const [
+          WriteBackFailure(filePid: 'fl-1', path: 'a.flac', reason: 'denied'),
+        ];
+      if (!compound) {
+        repo.commitError = const WaxDeckApiException(
+          code: 'transport',
+          message: '404 page not found',
+          statusCode: 404,
+        );
+      }
+      final container = _container(repo);
+      await container.read(metadataControllerProvider('tr-1').future);
+
+      final outcome = await container
+          .read(metadataControllerProvider('tr-1').notifier)
+          .saveAll(
+            const MetadataChanges(
+              clearLyrics: true,
+              tagSets: {
+                'MOOD': ['calm'],
+              },
+              tagRemoves: ['OLD'],
+              unofficial: true,
+            ),
+            writeBack: true,
+            lock: true,
+            force: false,
+          );
+
+      expect(repo.partWriteBacks, [
+        (part: 'lyrics clear', writeBack: true),
+        (part: 'tag MOOD', writeBack: true),
+        (part: 'untag OLD', writeBack: true),
+        (part: 'release status', writeBack: true),
+      ]);
+      expect(outcome.refusal, isNull);
+      expect(outcome.writeBackFailures.map((f) => (f.path, f.reason)), [
+        ('a.flac', 'denied'),
+      ]);
+    });
+  }
 
   testWidgets('plain lyrics go to the server as plain text', (tester) async {
     // The LRC parser drops unstamped lines and refuses the empty

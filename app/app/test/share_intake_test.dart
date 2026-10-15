@@ -5,8 +5,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/share_intake.dart';
 import 'package:waxdeck/src/uploads/share_intake_gate.dart';
+import 'package:waxdeck/src/uploads/uploads_controller.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
@@ -112,5 +115,59 @@ void main() {
       expect(upload.state, 'staged');
       expect(upload.receivedBytes, upload.sizeBytes);
     }
+  });
+
+  testWidgets('a shared file over the whole allowance is worded as a '
+      'picked one is', (tester) async {
+    // Staged on disk for the reason the test above gives; the share
+    // and the picker are two ways in, and one refusal reads one way.
+    final dir = Directory.systemTemp.createTempSync('share-intake-test');
+    addTearDown(() => dir.deleteSync(recursive: true));
+    final book = File('${dir.path}/share-1-book.flac')
+      ..writeAsBytesSync(List<int>.filled(2048, 1));
+    final repo = FakeRepository()
+      ..uploadPageQuota = const UploadQuota(bytesInUse: 0, quotaBytes: 1024)
+      ..createUploadRefusal = const WaxDeckApiException(
+        code: 'quota-exceeded',
+        message:
+            'uploads waiting for review may total 1024 bytes, 0 in use; '
+            'this one needs 2048 more',
+        statusCode: 413,
+      );
+    final port = FakeShareIntake(
+      intake: SharedFilesIntake([
+        SharedFile(path: book.path, name: 'book.flac'),
+      ]),
+    );
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        shareIntakeProvider.overrideWithValue(port),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+    );
+    addTearDown(container.dispose);
+    // The allowance as the session list last read it.
+    await tester.runAsync(() => container.read(uploadsProvider.future));
+    await tester.runAsync(() async {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: routedHost(
+            const ShareIntakeGate(child: Scaffold(body: Text('library'))),
+          ),
+        ),
+      );
+      for (var waited = 0; waited < 5000; waited += 10) {
+        if (container.read(shellMessengerProvider) != null) break;
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+
+    expect(
+      shellMessageText(container.read(shellMessengerProvider)),
+      'book.flac: Larger than your whole upload limit of 1 KB, so clearing '
+      'Past uploads cannot make room. An administrator can raise the limit.',
+    );
   });
 }

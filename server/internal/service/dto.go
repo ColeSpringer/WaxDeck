@@ -54,6 +54,9 @@ type ItemDetail struct {
 	SampleRate int
 	Bitrate    int
 	AddedAt    time.Time
+	// Copies counts the copies the item holds beside its own files, in
+	// libraries the caller may see.
+	Copies int
 	// MBID and ISRC are the recording's own identifiers, empty for the
 	// items carrying neither, which is most of an untagged library.
 	MBID      string
@@ -108,7 +111,8 @@ type SearchResults struct {
 }
 
 // Job mirrors a catalog job for the API. A finished one carries what it
-// did, by kind: at most one of Scan, Analyze, Enrich and Organize is set.
+// did, by kind: at most one of Scan, Analyze, Enrich, Organize and
+// SetKind is set.
 type Job struct {
 	PID        string
 	Kind       string
@@ -122,6 +126,7 @@ type Job struct {
 	Analyze    *AnalyzeTallyDTO
 	Enrich     *EnrichmentLastRunDTO
 	Organize   *OrganizeTallyDTO
+	SetKind    *KindTallyDTO
 	// Target is what a targeted job ran on; nil for a whole pass.
 	Target *JobTargetDTO
 }
@@ -134,14 +139,36 @@ type JobTargetDTO struct {
 	Name string
 }
 
-// ScanTallyDTO is what a scan did, in files.
+// ScanTallyDTO is what a scan did, in files: AudioFiles is Created,
+// Updated, SidecarsUpdated, Copies, Unchanged and Errored together, and
+// FilesSeen is AudioFiles and Skipped. Relinked and Reread count among
+// those, Missing counts items, Promoted and Dropped gone files' rows, and
+// WalkErrors the entries the walk could not read, which no file count
+// holds.
 type ScanTallyDTO struct {
-	FilesSeen, Created, Updated, Relinked, Unchanged, Missing, Skipped, Errored int
+	FilesSeen, AudioFiles, Created, Updated, SidecarsUpdated, Copies, Unchanged, Errored int
+	Relinked, Reread, Missing, Promoted, Dropped, Skipped, WalkErrors                    int
+	RootUnreachable, SubPathGone                                                         bool
+	// Runs is each library's own part of the scan, named from the root
+	// table; administrators only.
+	Runs []ScanRunDTO
 }
 
-// AnalyzeTallyDTO is what an analyze pass did, in files.
+// ScanRunDTO is one library's part of a scan: its prefixed pid, and its
+// name in the root table (empty for a library since removed).
+type ScanRunDTO struct {
+	LibraryPID, Library string
+	ScanTallyDTO
+}
+
+// AnalyzeTallyDTO is what an analyze pass did, in files. Fingerprint
+// fallbacks are files fpcalc could not read, fingerprinted the pure-Go
+// way instead (which groups apart from fpcalc's); partial reads are
+// fpcalc reads kept although they ended in an error, their fingerprint
+// covering the span analyzed.
 type AnalyzeTallyDTO struct {
 	Analyzed, LoudnessMeasured, MeasureFailed, Skipped, Errored int
+	FingerprintFallbacks, FingerprintPartialReads               int
 }
 
 // OrganizeTallyDTO is what an organize run did under Profile.

@@ -1232,9 +1232,10 @@ abstract interface class WaxDeckRepository {
     bool force = false,
   });
 
-  /// `DELETE /items/{pid}/lyrics`: removes the stored lyrics; files
-  /// are untouched.
-  Future<void> clearItemLyrics(String pid);
+  /// `DELETE /items/{pid}/lyrics`: removes the stored lyrics. With
+  /// [writeBack] the `.lrc` sidecar beside the item's file goes too;
+  /// lyrics embedded in the audio's own tags stay.
+  Future<void> clearItemLyrics(String pid, {bool writeBack = false});
 
   /// `PUT /books/{pid}/chapters`: replaces an audiobook's chapter
   /// marks.
@@ -1344,17 +1345,20 @@ abstract interface class WaxDeckRepository {
     bool force = false,
   });
 
-  /// `PUT /items/{pid}/tags/{key}`: replaces one custom tag's values.
+  /// `PUT /items/{pid}/tags/{key}`: replaces one custom tag's values,
+  /// written into the item's files too with [writeBack].
   Future<TagEditResult> setItemTag(
     String pid,
     String key, {
     required List<String> values,
+    bool writeBack = false,
     bool lock = true,
     bool force = false,
   });
 
-  /// `DELETE /items/{pid}/tags/{key}`: removes one custom tag.
-  Future<void> clearItemTag(String pid, String key);
+  /// `DELETE /items/{pid}/tags/{key}`: removes one custom tag, stripped
+  /// from the item's files too with [writeBack].
+  Future<void> clearItemTag(String pid, String key, {bool writeBack = false});
 
   /// `PUT /items/{pid}/locks`: locks or unlocks [fields], returning
   /// the item's full locked-field list.
@@ -1379,6 +1383,15 @@ abstract interface class WaxDeckRepository {
   /// MusicBrainz id pins it to.
   Future<DetachResult> detachItem(String pid, {bool writeBack = false});
 
+  /// `POST /items/kind`: starts the job turning [pids] into `music`
+  /// tracks or one `audiobook`, answering it at once; the finished job's
+  /// result names the items' pids in their new form.
+  Future<Job> setItemKind(
+    List<String> pids, {
+    required String mediaType,
+    bool writeBack = false,
+  });
+
   /// `POST /entities/{entityType}/{entityPid}/rename`: moves a whole
   /// album, release group, or artist onto new keying values, keeping
   /// the row.
@@ -1399,10 +1412,12 @@ abstract interface class WaxDeckRepository {
   );
 
   /// `PUT /items/{pid}/release-status`: marks an item's release
-  /// official or unofficial.
+  /// official or unofficial, written into its files too with
+  /// [writeBack].
   Future<MetadataEditResult> setReleaseStatus(
     String pid, {
     required bool unofficial,
+    bool writeBack = false,
   });
 
   /// `POST /items/{pid}/rematch`: reopens identification for the
@@ -1488,10 +1503,14 @@ abstract interface class WaxDeckRepository {
   Future<List<UpgradeGroup>> listUpgrades();
 
   /// `POST /library/upgrades/resolve`: keeps one member and trashes
-  /// the rest, returning the trashed count.
+  /// the rest, returning the trashed file count: whole items across
+  /// items ([removeItemPids]), or files of [keepItemPid] within one
+  /// ([keepFilePid] and [removeFilePids]).
   Future<int> resolveUpgrade({
     required String keepItemPid,
-    required List<String> removeItemPids,
+    List<String> removeItemPids = const [],
+    String? keepFilePid,
+    List<String> removeFilePids = const [],
   });
 
   /// `GET /organize/profiles`: the file organization profiles, and how
@@ -1897,11 +1916,35 @@ abstract interface class WaxDeckRepository {
   /// flag, returning the stored value (administrators).
   Future<bool> setLibraryReadOnly(String libraryPid, bool readOnly);
 
+  /// `PUT /libraries/{pid}/folder-fallback`: lets a scan name an in-place
+  /// library's untagged files from their folders, returning the stored
+  /// flag (administrators).
+  Future<bool> setLibraryFolderFallback(String libraryPid, bool on);
+
+  /// `PUT /libraries/{pid}/media`: changes what one library holds
+  /// (`music`, `audiobook` or `mixed`), answering whether the scan that
+  /// applies it started (administrators).
+  Future<bool> setLibraryMedia(String libraryPid, String media);
+
   /// `POST /library/items/delete`: deletes library items' files to
   /// the trash (or permanently). With [dryRun] nothing is touched and
   /// the result is the plan.
   Future<DeleteItemsResult> deleteLibraryItems({
     required List<String> pids,
+    String? mode,
+    bool dryRun = false,
+  });
+
+  /// `GET /items/{pid}/files`: the files behind one item, its own then
+  /// its copies (the download permission or the admin role).
+  Future<List<ItemFile>> getItemFiles(String pid);
+
+  /// `POST /items/{pid}/files/delete`: deletes some of one item's files
+  /// to the trash (or permanently). With [dryRun] nothing is touched and
+  /// the result is the plan.
+  Future<DeleteItemsResult> deleteItemFiles({
+    required String pid,
+    required List<String> filePids,
     String? mode,
     bool dryRun = false,
   });
@@ -3859,6 +3902,8 @@ class WaxDeckClient implements WaxDeckRepository {
     String? candidateMbid,
   }) => _guard(() async {
     final response = await _gen.getReviewApi().decideReviewEntry(
+      // The server rewrites every file's tags before it answers.
+      extra: const {_longOperation: true},
       entryId: entryId,
       reviewDecision: gen.ReviewDecision(
         (b) => b
@@ -3876,6 +3921,8 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<ReviewEntry> revertReviewEntry(String entryId) => _guard(() async {
     final response = await _gen.getReviewApi().revertReviewEntry(
+      // Restoring the snapshot retags every file before it answers.
+      extra: const {_longOperation: true},
       entryId: entryId,
     );
     return reviewEntryFromGen(_require(response.data));
@@ -3906,6 +3953,8 @@ class WaxDeckClient implements WaxDeckRepository {
     required String action,
   }) => _guard(() async {
     final response = await _gen.getReviewApi().decideReviewBulk(
+      // Every entry's files are retagged before the server answers.
+      extra: const {_longOperation: true},
       reviewBulkDecision: gen.ReviewBulkDecision(
         (b) => b
           ..entryIds = ListBuilder<String>(entryIds)
@@ -4083,6 +4132,8 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<UploadBatch> completeUploadBatch(String batchId) => _guard(() async {
     final response = await _gen.getUploadsApi().completeUploadBatch(
+      // The finalize imports every declined entry before it answers.
+      extra: const {_longOperation: true},
       batchId: batchId,
     );
     return uploadBatchFromGen(_require(response.data));
@@ -4116,6 +4167,8 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<UploadSession> completeUpload(String uploadId) => _guard(() async {
     final response = await _gen.getUploadsApi().completeUpload(
+      // The seal fingerprints, and may import, before it answers.
+      extra: const {_longOperation: true},
       uploadId: uploadId,
     );
     return uploadSessionFromGen(_require(response.data));
@@ -4265,9 +4318,13 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<void> clearItemLyrics(String pid) => _guard(() async {
-    await _gen.getMetadataApi().clearItemLyrics(pid: pid);
-  });
+  Future<void> clearItemLyrics(String pid, {bool writeBack = false}) =>
+      _guard(() async {
+        await _gen.getMetadataApi().clearItemLyrics(
+          pid: pid,
+          writeBack: writeBack,
+        );
+      });
 
   @override
   Future<MetadataEditResult> setBookChapters(
@@ -4433,6 +4490,7 @@ class WaxDeckClient implements WaxDeckRepository {
     String pid,
     String key, {
     required List<String> values,
+    bool writeBack = false,
     bool lock = true,
     bool force = false,
   }) => _guard(() async {
@@ -4442,6 +4500,7 @@ class WaxDeckClient implements WaxDeckRepository {
       tagEdit: gen.TagEdit(
         (b) => b
           ..values = ListBuilder<String>(values)
+          ..writeBack = writeBack
           ..lock = lock
           ..force = force,
       ),
@@ -4450,9 +4509,14 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<void> clearItemTag(String pid, String key) => _guard(() async {
-    await _gen.getMetadataApi().clearItemTag(pid: pid, key: key);
-  });
+  Future<void> clearItemTag(String pid, String key, {bool writeBack = false}) =>
+      _guard(() async {
+        await _gen.getMetadataApi().clearItemTag(
+          pid: pid,
+          key: key,
+          writeBack: writeBack,
+        );
+      });
 
   @override
   Future<List<String>> setItemLocks(
@@ -4492,6 +4556,23 @@ class WaxDeckClient implements WaxDeckRepository {
       ),
     );
     return metadataEditResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<Job> setItemKind(
+    List<String> pids, {
+    required String mediaType,
+    bool writeBack = false,
+  }) => _guard(() async {
+    final response = await _gen.getMetadataApi().setItemKind(
+      setItemKindRequest: gen.SetItemKindRequest(
+        (b) => b
+          ..pids.replace(pids)
+          ..mediaType = gen.SetItemKindRequestMediaTypeEnum.valueOf(mediaType)
+          ..writeBack = writeBack,
+      ),
+    );
+    return jobFromGen(_require(response.data));
   });
 
   @override
@@ -4545,11 +4626,14 @@ class WaxDeckClient implements WaxDeckRepository {
   Future<MetadataEditResult> setReleaseStatus(
     String pid, {
     required bool unofficial,
+    bool writeBack = false,
   }) => _guard(() async {
     final response = await _gen.getMetadataApi().setReleaseStatus(
       pid: pid,
       releaseStatusEdit: gen.ReleaseStatusEdit(
-        (b) => b..unofficial = unofficial,
+        (b) => b
+          ..unofficial = unofficial
+          ..writeBack = writeBack,
       ),
     );
     return metadataEditResultFromGen(_require(response.data));
@@ -4714,14 +4798,21 @@ class WaxDeckClient implements WaxDeckRepository {
   @override
   Future<int> resolveUpgrade({
     required String keepItemPid,
-    required List<String> removeItemPids,
+    List<String> removeItemPids = const [],
+    String? keepFilePid,
+    List<String> removeFilePids = const [],
   }) => _guard(() async {
     final response = await _gen.getHealthApi().resolveUpgrade(
-      upgradeResolveRequest: gen.UpgradeResolveRequest(
-        (b) => b
-          ..keepItemPid = keepItemPid
-          ..removeItemPids = ListBuilder<String>(removeItemPids),
-      ),
+      upgradeResolveRequest: gen.UpgradeResolveRequest((b) {
+        b.keepItemPid = keepItemPid;
+        if (removeItemPids.isNotEmpty) {
+          b.removeItemPids = ListBuilder<String>(removeItemPids);
+        }
+        if (keepFilePid != null) b.keepFilePid = keepFilePid;
+        if (removeFilePids.isNotEmpty) {
+          b.removeFilePids = ListBuilder<String>(removeFilePids);
+        }
+      }),
     );
     return _require(response.data).trashed;
   });
@@ -5536,6 +5627,30 @@ class WaxDeckClient implements WaxDeckRepository {
       });
 
   @override
+  Future<bool> setLibraryMedia(String libraryPid, String media) =>
+      _guard(() async {
+        final response = await _gen.getAdminApi().setLibraryMedia(
+          pid: libraryPid,
+          libraryMedia: gen.LibraryMedia(
+            (b) => b..media = gen.LibraryMediaMediaEnum.valueOf(media),
+          ),
+        );
+        return _require(response.data).scanStarted;
+      });
+
+  @override
+  Future<bool> setLibraryFolderFallback(String libraryPid, bool on) =>
+      _guard(() async {
+        final response = await _gen.getAdminApi().setLibraryFolderFallback(
+          pid: libraryPid,
+          libraryFolderFallback: gen.LibraryFolderFallback(
+            (b) => b..folderFallback = on,
+          ),
+        );
+        return _require(response.data).folderFallback;
+      });
+
+  @override
   Future<DeleteItemsResult> deleteLibraryItems({
     required List<String> pids,
     String? mode,
@@ -5548,6 +5663,33 @@ class WaxDeckClient implements WaxDeckRepository {
           ..mode = mode == null
               ? null
               : gen.DeleteItemsRequestModeEnum.valueOf(mode)
+          ..dryRun = dryRun,
+      ),
+    );
+    return deleteItemsResultFromGen(_require(response.data));
+  });
+
+  @override
+  Future<List<ItemFile>> getItemFiles(String pid) => _guard(() async {
+    final response = await _gen.getLibraryApi().getItemFiles(pid: pid);
+    return _require(response.data).files.map(itemFileFromGen).toList();
+  });
+
+  @override
+  Future<DeleteItemsResult> deleteItemFiles({
+    required String pid,
+    required List<String> filePids,
+    String? mode,
+    bool dryRun = false,
+  }) => _guard(() async {
+    final response = await _gen.getLibraryApi().deleteItemFiles(
+      pid: pid,
+      deleteItemFilesRequest: gen.DeleteItemFilesRequest(
+        (b) => b
+          ..filePids = ListBuilder<String>(filePids)
+          ..mode = mode == null
+              ? null
+              : gen.DeleteItemFilesRequestModeEnum.valueOf(mode)
           ..dryRun = dryRun,
       ),
     );

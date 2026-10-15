@@ -67,10 +67,23 @@ paths:
     delete:
       operationId: clearItemLyrics
       summary: Clear lyrics
-      description: Removes the stored lyrics (files are untouched).
+      description: >
+        Removes the stored lyrics and their lock. With `writeBack` it
+        also deletes the `.lrc` sidecar beside the item's file, which a
+        set with `writeBack` writes, unless another audio file of that
+        name, not one of the item's own, reads it too; a sidecar that
+        stayed is not reported (a 204 carries no body) and is logged.
+        Lyrics embedded in the audio's own tags stay, and a forced
+        rescan reads them again.
       tags: [metadata]
       parameters:
         - $ref: "#/components/parameters/Pid"
+        - name: writeBack
+          in: query
+          description: Delete the item's `.lrc` sidecar too.
+          schema:
+            type: boolean
+            default: false
       responses:
         "204":
           description: Cleared.
@@ -80,6 +93,14 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `writeBack` was asked while the server, or the item's library,
+            is read-only (code `read-only`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -89,8 +110,9 @@ paths:
       summary: Read the caller's permissions on an item
       description: >
         Whether the caller may run the item-scoped metadata mutations
-        on this item: administrators always, everyone else exactly for
-        the items their own uploads brought in. This is the whole
+        on this item: administrators always, anyone else for the items
+        their own uploads and acquisitions brought in and the parts a
+        kind change split out of those. This is the whole
         `mayCurate` answer from the metadata read without the cost of
         the full editor document, for surfaces that only need to
         decide whether to show an edit door. The read does not confirm
@@ -290,6 +312,70 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/kind:
+    post:
+      operationId: setItemKind
+      summary: Change what items are
+      description: >
+        Turns tracks into an audiobook, or a book into tracks, as a
+        background job of kind `set-kind`, answered at once. Each item's
+        files are read again as the new kind, so an item changes kind in
+        place and keeps its pid, with its plays, stars, playlist entries
+        and shares. The pid's prefix follows the kind (`tr-` and `bk-`);
+        either form reaches the item. Tracks that make one book fold into
+        one item, the first one named or a book already holding their
+        key, and a book becoming tracks keeps its pid on its first part
+        and mints the rest; the finished job's result names where each
+        item went. A folded item's shares, and the track shares of the
+        item it folded into, are revoked rather than widened to the
+        whole book. The choice is pinned, so later scans keep it, and
+        anyone who may edit the items may replace a kind pinned before.
+
+
+        Gated per item: administrators, or the user whose upload or
+        acquisition brought the item in, or the part a kind change split
+        out of one (`mayCurate`); every item named
+        must pass or nothing changes. Refused with `invalid-request`,
+        before anything changes, for an episode, a cue track, a file
+        another item shares, or a book file with a cue sheet beside it
+        that would make it a cue rip.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetItemKindRequest"
+      responses:
+        "202":
+          description: The kind change, running.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The change was refused. `conflict`: a file of one of the items
+            is not on disk, so it cannot be read as the new kind.
+            `read-only`: `writeBack` was asked while the server, or an
+            item's library, is read-only. `catalog-busy`:
+            another job holds the catalog's shared file-mutation scope,
+            which clears on its own.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -877,7 +963,13 @@ paths:
         Replaces the ordered values of one custom tag on a track or
         book, locking `tag.KEY` by default. Custom tags are full
         browse dimensions: they filter, facet, and feed smart list
-        rules. An empty value list clears the tag.
+        rules. An empty value list clears the tag. With `writeBack`
+        the values are also written into the item's files (every part
+        of a book), and a file that cannot take them is reported in
+        `writeBackFailures` with the edit standing; a key the tag
+        writer would store as another field on every format (`YEAR`
+        is the recording date) refuses `writeBack` with
+        `invalid-request`.
       tags: [metadata]
       requestBody:
         required: true
@@ -901,7 +993,14 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/FieldLocked"
+          description: >
+            `field-locked`: the tag is locked and the request did not set
+            `force`; the message names it. `read-only`: `writeBack` was
+            asked while the server, or the item's library, is read-only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
     delete:
@@ -910,8 +1009,18 @@ paths:
       description: >
         Removes the tag and its lock. A reserved key (one the catalog
         owns through another surface) answers `invalid-request`, like
-        setting one does.
+        setting one does. With `writeBack` the tag is stripped from the
+        item's files too; a file that could not be written is not
+        reported (a 204 carries no body), is logged, and is listed by
+        the health rule for tags out of sync.
       tags: [metadata]
+      parameters:
+        - name: writeBack
+          in: query
+          description: Strip the tag from the item's files too.
+          schema:
+            type: boolean
+            default: false
       responses:
         "204":
           description: Cleared.
@@ -923,6 +1032,14 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `writeBack` was asked while the server, or the item's library,
+            is read-only (code `read-only`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -936,7 +1053,16 @@ paths:
         Locks or unlocks the named fields against scans, enrichment,
         and organize. Field names are the scalar vocabulary plus the
         namespaced artifacts: `lyrics`, `chapters`, `art`,
-        `art.ROLE`, `acquisition`, `credit.ROLE`, and `tag.KEY`.
+        `art.ROLE`, `acquisition`, `credit.ROLE`, and `tag.KEY`, and
+        `kind`.
+
+
+        `kind` pins whether the item is a track or a book: an upload
+        imported under a media type its file would not get on its own
+        takes the pin, and while it holds a scan keeps the item's kind
+        whatever its library or tags say. Unlocking it lets the next
+        scan that reads the file classify the item again, under the
+        same catalog id; a forced rescan reads every file.
 
 
         The two artwork spellings differ in reach. `art` is the whole
@@ -1201,6 +1327,14 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `writeBack` was asked while the server, or the item's library,
+            is read-only (code `read-only`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -1217,7 +1351,10 @@ paths:
         entry. Items marked unofficial are eligible here (an explicit
         rematch is the way back from that state). The entry id
         returns immediately; candidates fill in asynchronously and
-        the entry updates over the event channel.
+        the entry updates over the event channel. A caller who is not
+        an administrator owns the entry, so it lists in their queue,
+        and its unit holds only the tracks their own uploads brought
+        in.
       tags: [metadata]
       responses:
         "202":
@@ -1512,7 +1649,8 @@ components:
           type: array
           description: >
             Currently locked fields, including namespaced artifacts
-            (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`).
+            (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`) and `kind`, a
+            pinned track-or-book classification (setItemLocks).
           items:
             type: string
         provenance:
@@ -1570,15 +1708,18 @@ components:
           type: array
           description: >
             Files whose on-disk tags are out of step with the catalog
-            (failed write-backs, values the format cannot store).
+            (failed write-backs, values the format cannot store), of
+            those the caller may see: a copy in a library they are not
+            granted is left out, as the item's file list leaves it out.
           items:
             $ref: "#/components/schemas/WriteBackIssue"
         mayCurate:
           type: boolean
           description: >
             Whether the caller may run the item-scoped edits this
-            document describes: administrators always, everyone else
-            exactly for the items their own uploads brought in. The
+            document describes: administrators always, anyone else for
+            the items their own uploads and acquisitions brought in and
+            the parts a kind change split out of those. The
             read answers anyone who can see the item, so without this
             a client has no way to tell an editor it can save from one
             every save will be refused. Optional for compatibility;
@@ -1747,8 +1888,9 @@ components:
           type: boolean
           description: >
             Whether the caller may run the item-scoped metadata
-            mutations: administrators always, everyone else exactly
-            for the items their own uploads brought in.
+            mutations: administrators always, anyone else for the items
+            their own uploads and acquisitions brought in and the parts a
+            kind change split out of those.
 
     FieldProvenance:
       type: object
@@ -1756,14 +1898,16 @@ components:
         Who set one field's current value.
 
 
-        The list carries two kinds of row. A scalar row names a metadata
-        field (`title`, `genre`, ...) and reports the value a curator
-        set. An artifact row names `art` or `lyrics`, with an empty
-        `value` because the value is bytes rather than text. A non-empty
-        provenance list therefore does not mean the item was curated: an
-        untouched track with a cover in its tags reports one `art` row
-        sourced `tag`. Count the scalar rows, not the list, when
-        summarizing what a person changed.
+        The list carries three kinds of row. A scalar row names a
+        metadata field (`title`, `genre`, ...) and reports the value a
+        curator set. An artifact row names `art` or `lyrics`, with an
+        empty `value` because the value is bytes rather than text. A
+        `kind` row is a pinned classification (setItemLocks), which an
+        upload's import takes without anybody editing anything. A
+        non-empty provenance list therefore does not mean the item was
+        curated: an untouched track with a cover in its tags reports
+        one `art` row sourced `tag`. Count the scalar rows, not the
+        list, when summarizing what a person changed.
 
 
         An artifact row does not imply the artifact. Locking `art` or
@@ -1779,8 +1923,8 @@ components:
         field:
           type: string
           description: >
-            The field, possibly namespaced, or `art` / `lyrics` for an
-            artifact row.
+            The field, possibly namespaced, `art` / `lyrics` for an
+            artifact row, or `kind` for a pinned classification.
         source:
           type: string
           description: >
@@ -1788,8 +1932,10 @@ components:
             companion file beside the audio - a `cover.jpg`, an `.lrc`),
             `user` (set through the curation surface), `enrichment`
             (supplied by a metadata provider, named in `provider`),
-            `organize` (written by an organize tag write-back), or `feed`
-            (a podcast feed). A string, not a closed enum. `sidecar` and
+            `organize` (written by an organize tag write-back),
+            `normalize` (rewritten by a clean-up pass, such as the genre
+            normalizer, in the catalog alone), or `feed` (a podcast
+            feed). A string, not a closed enum. `sidecar` and
             `feed` reach only artifact rows; a scalar field is never
             produced from a cover image or a feed.
         provider:
@@ -1927,16 +2073,25 @@ components:
         filePid:
           type: string
           description: The backing file.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
         code:
           type: string
           description: >
             The diagnostic: `tag-write-unsynced` (a write-back was
-            refused or failed; the file's tags lag the catalog) or
+            refused or failed; the file's tags lag the catalog),
             `tag-write-lost` (the write ran but the format could not
-            store the value). A string, not a closed enum.
+            store the value), or `tag-write-owed` (an edit changed the
+            value in the catalog without writing it; `tagKey` names
+            it). A string, not a closed enum.
         tagKey:
           type: string
-          description: The affected tag key, when known.
+          description: >
+            The affected key, when known. On a `tag-write-owed` issue it
+            is the catalog's name for the value: an item field
+            (`title`), a credit (`credit.composer`), a custom tag
+            (`tag.MOOD`), the item's front cover (`art`) or origin
+            (`acquisition`), or an entity value written to member files
+            (`album.label`, `album.art`).
         detail:
           type: string
           description: >
@@ -1975,18 +2130,26 @@ components:
 
     WriteBackFailure:
       type: object
-      description: One file a write-back could not update.
+      description: >
+        One file a write-back could not update. A caller who is not an
+        administrator is told only of files in libraries they are
+        granted.
       required: [filePid, reason]
       properties:
         filePid:
           type: string
-          description: The file.
+          description: The file; empty for a failure no one file caused.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
         path:
           type: string
-          description: Its display path.
+          description: >
+            Its display path, or its file name for a caller who is not an
+            administrator.
         reason:
           type: string
-          description: Why the write failed or was refused.
+          description: >
+            Why the write failed or was refused, without the server's
+            paths for a caller who is not an administrator.
 
     MetadataEditResult:
       type: object
@@ -2112,7 +2275,8 @@ components:
           description: >
             Also write the new values into the backing file's tags,
             for the parts that have a tag form (fields, credits,
-            lyrics).
+            lyrics, custom tags, the release status), and removes a
+            cleared lyrics sheet's `.lrc` sidecar.
         lock:
           type: boolean
           default: true
@@ -2403,6 +2567,10 @@ components:
           type: boolean
           default: false
           description: Override an existing lock.
+        writeBack:
+          type: boolean
+          default: false
+          description: Also write the values into the item's files.
 
     TagEditResult:
       type: object
@@ -2415,6 +2583,14 @@ components:
         stored:
           type: integer
           description: Values stored after deduplication.
+        writeBackFailures:
+          type: array
+          description: >
+            Files the write-back could not update; the catalog edit
+            stands. Absent when every file took the values or no
+            write-back was asked for.
+          items:
+            $ref: "#/components/schemas/WriteBackFailure"
 
     LocksEdit:
       type: object
@@ -2471,6 +2647,37 @@ components:
           type: boolean
           default: false
           description: Override existing locks.
+
+    SetItemKindRequest:
+      type: object
+      description: The items to change, and what they become.
+      required: [pids, mediaType]
+      properties:
+        pids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          description: >
+            The items, by pid. Tracks named together whose tags name one
+            book become that book.
+          items:
+            type: string
+        mediaType:
+          type: string
+          enum: [music, audiobook]
+          description: What the items become.
+        writeBack:
+          type: boolean
+          default: false
+          description: >
+            Also write the kind into the files. A book gets the audiobook
+            media type, which even a scan that re-derives everything reads
+            back as a book; a track has it cleared, so such a scan reads it
+            as music only where nothing else marks it a book (an `.m4b`
+            name, a narrator, the Audiobook genre, a library that holds
+            Books). Without it the catalog's pin alone keeps the choice. A
+            file that cannot be written is listed in the job result's
+            `writeBackFailures` and the change stands.
 
     DetachRequest:
       type: object
@@ -2634,6 +2841,12 @@ components:
           description: >
             True marks the item as having no canonical release;
             false clears the mark.
+        writeBack:
+          type: boolean
+          default: false
+          description: >
+            Also write the mark into (or strip it from) the item's
+            files' `RELEASESTATUS` tag.
 
     RematchResult:
       type: object

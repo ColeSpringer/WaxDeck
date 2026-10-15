@@ -26,14 +26,15 @@ part 'item.g.dart';
 /// * [discNumber] - Disc number within a multi-disc release (music). Absent for a single-disc release and for anything that is not a track. 
 /// * [durationMs] - Duration in milliseconds. For a multi-file audiobook this is the total across all parts; for a not-yet-fetched podcast episode it is the feed-declared duration, or 0 when the feed declares none. 
 /// * [artUrl] - Origin-relative URL of the item's artwork endpoint. Always populated; the endpoint itself returns 404 for items with no artwork, so clients keep a placeholder ready. 
-/// * [genres] - Display genres.
+/// * [genres] - The item's display genres, one each: a tag holding several (`Rock; Pop / Indie`) is split on `;`, `/` and `\\`, as the genre facet splits it. 
 /// * [year] - Release / publication year.
 /// * [bpm] - Stated tempo, whole. Absent or `0` for an item carrying none, which is most of them; nothing measures it, so this is the tag's number and not an analysis result. 
 /// * [codec] - Source audio codec.
 /// * [container] - Source file container.
 /// * [sampleRate] - Source sample rate in Hz.
 /// * [bitrate] - Source bitrate in kilobits per second, when known.
-/// * [addedAt] - When the item entered the library.
+/// * [addedAt] - When the item entered the library: when its primary file, or a copy of it the caller can see found before that, was found. 
+/// * [copies] - How many copies the item holds beside its own files (getItemFiles lists them), counting those in libraries the caller can see. Absent when none. 
 /// * [mbid] - MusicBrainz identifier for what this item is - a recording for a track, a release for a book. Absent unless the file was tagged with one or matching found one. 
 /// * [isrc] - The recording's ISRC, as tagged or matched. Absent for anything carrying none, which is most of a library. 
 /// * [artSource] 
@@ -47,12 +48,16 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   @BuiltValueField(wireName: r'codec')
   String? get codec;
 
-  /// When the item entered the library.
+  /// When the item entered the library: when its primary file, or a copy of it the caller can see found before that, was found. 
   @BuiltValueField(wireName: r'addedAt')
   DateTime? get addedAt;
 
   @BuiltValueField(wireName: r'artSource')
   ArtSource? get artSource;
+
+  /// How many copies the item holds beside its own files (getItemFiles lists them), counting those in libraries the caller can see. Absent when none. 
+  @BuiltValueField(wireName: r'copies')
+  int? get copies;
 
   /// MusicBrainz identifier for what this item is - a recording for a track, a release for a book. Absent unless the file was tagged with one or matching found one. 
   @BuiltValueField(wireName: r'mbid')
@@ -62,7 +67,7 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   @BuiltValueField(wireName: r'year')
   int? get year;
 
-  /// Display genres.
+  /// The item's display genres, one each: a tag holding several (`Rock; Pop / Indie`) is split on `;`, `/` and `\\`, as the genre facet splits it. 
   @BuiltValueField(wireName: r'genres')
   BuiltList<String>? get genres;
 
@@ -222,6 +227,13 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
       yield r'discNumber';
       yield serializers.serialize(
         object.discNumber,
+        specifiedType: const FullType(int),
+      );
+    }
+    if (object.copies != null) {
+      yield r'copies';
+      yield serializers.serialize(
+        object.copies,
         specifiedType: const FullType(int),
       );
     }
@@ -414,6 +426,14 @@ class _$ItemSerializer implements PrimitiveSerializer<Item> {
           ) as int?;
           if (valueDes == null) continue;
           result.discNumber = valueDes;
+          break;
+        case r'copies':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(int),
+          ) as int?;
+          if (valueDes == null) continue;
+          result.copies = valueDes;
           break;
         case r'genres':
           final valueDes = serializers.deserialize(

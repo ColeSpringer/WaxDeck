@@ -20,7 +20,8 @@ pressing controls that all refuse.
 
 The **review queue** is not in the console. It has its own row and its
 own location at `/review`: it is the surface an administrator opens
-daily, and an uploader sees their own entries there.
+daily, and an uploader sees their own entries there, the counts on its
+filter chips included.
 
 ## Accounts, roles, and permissions
 
@@ -45,8 +46,10 @@ permission toggles:
   somebody adds to the library over time.
 - **Download** - fetch original files for offline use: the app's
   downloads, the Subsonic `download` verb, and a share link's download
-  offer. Streaming a file a client plays natively still sends its
-  original bytes; that is what direct play is.
+  offer. In the Details sheet of an item that holds copies it also
+  lists the item's files by name.
+  Streaming a file a client plays natively still sends its original
+  bytes; that is what direct play is.
 - **Delete** - delete visible library items to the trash. Permanent
   deletion is always admin-only.
 - **Explicit content** - see and play content flagged explicit.
@@ -225,7 +228,11 @@ the part startup will not put back. The reset says so three times:
 a WARN in the server log and a `catalog.reset` entry in the audit log,
 both naming the roots to add again, and a `catalog-reset`
 notification to every administrator that counts them (it can reach a
-chat service, so it leaves the folders to the audit log).
+chat service, so it leaves the folders to the audit log). A root named
+in `WAXDECK_LIBRARY_ROOTS` comes back as Mixed unless
+`WAXDECK_AUDIOBOOK_ROOTS` names it, so an audiobook folder that was a
+Books library is added again as one, in the console or by naming it
+there.
 
 Things worth knowing before you take the upgrade this note is
 attached to:
@@ -252,9 +259,11 @@ attached to:
   library declared as audiobooks catalogs every file in it as part of
   a book, and albums are keyed without the track year: an album's year
   follows the years of its tracks, so a year edit no longer splits a
-  release. Kind locks set by hand are among what the reset drops, so
-  a file you had re-filed as a book or as music goes back to automatic
-  classification.
+  release. Kind locks are among what the reset drops, so a file
+  re-filed by hand with **Treat as audiobook** or **Treat as music**,
+  or uploaded as a book its tags do not make one, goes back to
+  automatic classification unless the change wrote the kind into the
+  file.
 - **Media URLs and gpodder logins from before the upgrade stop
   working.** Both changed form: a player asks for a fresh stream URL
   as it would when one expires, and a podcast client signs in again
@@ -320,9 +329,20 @@ lists every trashed file with where it lived and the library it came
 from, restores files back into the catalog (re-scanned and
 un-archived), and empties the trash permanently, reporting the space
 reclaimed and how many entries read-only libraries kept. Deleting items
-from the item page previews what will be deleted (files, bytes) before
-anything moves. The tracks a cue sheet cuts from one file share it, so
-they are deleted together or not at all: one alone is refused.
+from the item page previews what will be deleted (the files by name,
+and the bytes) before anything moves. The tracks a cue sheet cuts from
+one file share it, so they are deleted together or not at all: one
+alone is refused.
+
+A file holding the same audio as one already cataloged, or another
+encoding of its recording, does not become an item of its own: the
+scan attaches it to that item as a copy, and the item's Details sheet
+lists its files with each copy marked. A copy can be deleted there on
+its own, leaving the item on its file; deleting the item's own file
+when it has a copy gives the copy its place. Deleting a whole item
+takes its copies too, except one in a read-only library or in a
+library the deleting account cannot see, which stays and keeps the
+item.
 
 ## Upload oversight
 
@@ -335,7 +355,10 @@ unfinished or undecided session can be deleted there, freeing
 its staged bytes and closing its pending review entry; a file that
 already entered the library is deleted in the library instead, like
 any other item, and it stopped counting against the pending upload
-limit the moment it was imported. Staging never needs manual sweeping: stalled
+limit the moment it was imported. A file that arrives whole but does
+not read as audio, or does not match the checksum its client declared,
+ends its session on the spot, so it never holds a place in the limit.
+Staging never needs manual sweeping: stalled
 transfers and staged files nobody decides on are reclaimed a week
 after the session opened, their pending review entries closed with
 them. Granting upload rights and setting quotas is covered above;
@@ -387,6 +410,20 @@ not reached. The podcast download tree needs a writable root: while the
 server is read-only, episode fetches and download removal are refused,
 and the fetch queue and download retention wait for the flag to clear.
 
+## Naming untagged files from folders
+
+An in-place library can name a track that carries no artist, album
+artist or album at all from its folders: the grandparent folder as the
+artist and the parent as the album, less a trailing ` (YYYY)`. It is a
+per-library switch in the Libraries table ("Name from folders"), off
+by default since a folder layout is a guess a tag is not; it needs a
+file two folders down and never applies to a book. A managed library
+has no such switch: its folders are the catalog's own rendering. Files
+scanned from then on take it; files already scanned take it on a
+rescan with "Re-read unchanged files". Files carrying only sort tags
+(`sonm`, `soar`, `soal`) are named from those on their own, with a
+`sort_name_fallback` diagnostic saying so.
+
 ## Adding a library at runtime
 
 The console's Libraries section lists every root with its path, what it
@@ -406,10 +443,30 @@ added here. The library name doubles as the streaming engine's
 root name, so it also has to be free there - including the podcast root
 name, which the engine mounts but the library list never shows.
 
+What a library holds can be changed later from its row's **Holds**
+choice, which asks first and then scans the library to apply it. Onto
+**Books** an ordinary scan turns its audio files into books. Onto
+**Music** or **Mixed** the scan re-reads every file, which takes longer:
+in Music a book its parts' tags do not make is read as tracks again,
+while in Mixed a book whose parts already make one keeps them. Items
+whose kind was set by hand, or by an upload, keep it. When another
+catalog job is running the change waits for a rescan, which the message
+says (with **Re-read unchanged files** on, unless the move was onto
+Books). A root named in `WAXDECK_AUDIOBOOK_ROOTS` is always Books and
+cannot be changed here.
+
+The compose stack mounts one library, `lib`, registered as Mixed. An
+audiobook folder kept apart from it is mounted as a second library by
+setting `WAXDECK_AUDIOBOOKS` in `deploy/.env`: `make up` then adds it as
+the root `books`, declared Books. A folder added in the console instead
+has to be inside a volume both containers mount.
+
 Streaming needs the engine to mount the same root, which it can learn at
 runtime. Point both sides at one JSON config file - `WAXDECK_FLOW_CONFIG`
 for the server, `WAXFLOW_CONFIG` for the engine - and creating a library
-rewrites the file's `roots` array and asks the engine to reconcile.
+rewrites the file's `roots` array and asks the engine to reconcile. A
+configured root the file does not list yet (`books` the first time it is
+mounted) is added the same way when the server starts.
 `make up` wires this and seeds the file; the compose service mounts the
 directory read-write into WaxDeck and read-only into the engine, and
 both containers run as the same UID (as they already must for the shared
@@ -453,10 +510,14 @@ fine - the watcher's scans are the ordinary incremental kind that
 fast-path unchanged files.
 
 Dropped files are cataloged as-is immediately; browsing and playback
-never wait on identification. A scan classifies music against audiobooks
-from the files' own tags, and a library's declared media type (chosen
-when it is added in the console) is what routes managed placement to
-type-specific roots. Whether identification then runs is the per-library
+never wait on identification. What a file becomes follows its library's
+declared type, chosen when the library is added in the console and
+changeable later from the Libraries table. In a Books library a scan
+makes every audio file a book. In a Music or Mixed library it classifies
+each file by its own tags (see
+[Audiobooks](podcasts-and-audiobooks.md#how-a-file-becomes-a-book)).
+The declared type also routes managed placement to type-specific roots.
+Whether identification then runs is the per-library
 matching mode on the Libraries screen - the intake flag for manual
 files: **automatic** opens album-unit review entries and applies
 confident matches itself, **ask me** holds every unit for review, and
@@ -578,8 +639,20 @@ WebSocket channel; `GET /api/v1/tools/tasks/{id}/events` serves a
 task's lifecycle as server-sent events for anything that prefers a
 plain HTTP stream.
 
-Whoever started a scan, an analysis, an enrichment pass or a health fix
-gets a notification when it ends, saying what it did or why it failed
+A finished scan counts files (added, updated, copies, which joined an
+item as a copy, and errored) and the items it marked missing, and says
+when it could not read an entry or reach a library's folder (a drive
+that is not mounted, say), since neither shows in those counts. A scan of several
+libraries lists each one's files and copies under it.
+
+A kind change (**Treat as audiobook** or **Treat as music**) runs as a
+job on its first item and says how many items changed and how many
+folded into another, plus the files it could not write when write-back
+was on. Its dialog follows it and opens the result; anyone who may edit
+that item can read the finished job, so an uploader follows their own.
+
+Whoever started a scan, an analysis, an enrichment pass, a health fix
+or a kind change gets a notification when it ends, saying what it did or why it failed
 (a job cut off by the server stopping says so), even when the server
 restarted in between. An organize run and emptying the trash run inside
 the request that started them: their starter hears of success, and a

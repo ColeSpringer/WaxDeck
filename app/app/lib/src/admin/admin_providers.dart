@@ -365,12 +365,9 @@ class EnrichmentStatusController extends AsyncNotifier<EnrichmentStatus> {
   ) async {
     if (job != null) {
       try {
-        final state = (await repository.getJob(job)).state;
-        if (!const {'done', 'failed', 'crashed', 'canceled'}.contains(state)) {
-          return;
-        }
+        if (!(await repository.getJob(job)).ended) return;
       } on WaxDeckApiException catch (e) {
-        if (e.statusCode == null || e.statusCode! >= 500) return;
+        if (!e.isRefusal) return;
       }
     }
     if (built.mounted) built.invalidateSelf();

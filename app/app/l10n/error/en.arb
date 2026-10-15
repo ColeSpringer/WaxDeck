@@ -85,9 +85,9 @@
   "@errorNotFound": {
     "description": "Error sentence for the spec code `not-found`."
   },
-  "errorQuotaExceeded": "That would go over the storage limit.",
+  "errorQuotaExceeded": "That is over a limit this server keeps.",
   "@errorQuotaExceeded": {
-    "description": "Error sentence for the spec code `quota-exceeded`."
+    "description": "Error sentence for the spec code `quota-exceeded`. The code is shared by an upload over the uploader's allowance, a backup import and an account export, so it names no particular limit."
   },
   "errorRateLimited": "Too many attempts. Wait a moment and try again.",
   "@errorRateLimited": {
@@ -140,6 +140,10 @@
   "errorUnexpected": "Something went wrong.",
   "@errorUnexpected": {
     "description": "What an error surface shows when nothing more specific is known."
+  },
+  "errorUnreadableFile": "That file could not be read as audio. It may be damaged, or not audio at all.",
+  "@errorUnreadableFile": {
+    "description": "A completed upload whose bytes do not read as audio (the server's `unsupported-format` with reason `unreadable`). Its session is already gone, so the person sends the file again."
   },
   "errorUnsupportedFormat": "This server does not accept that file's format.",
   "@errorUnsupportedFormat": {

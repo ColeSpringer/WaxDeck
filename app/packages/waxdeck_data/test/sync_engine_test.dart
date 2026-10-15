@@ -289,6 +289,46 @@ class _QuietChannel extends EventsChannel {
   Future<void> close() async {}
 }
 
+/// Counts what reaches the database, for what a sync costs rather than
+/// what it leaves.
+class _Counter extends QueryInterceptor {
+  final selects = <String>[];
+  final deletes = <String>[];
+  var transactions = 0;
+
+  void reset() {
+    selects.clear();
+    deletes.clear();
+    transactions = 0;
+  }
+
+  @override
+  TransactionExecutor beginTransaction(QueryExecutor parent) {
+    transactions++;
+    return super.beginTransaction(parent);
+  }
+
+  @override
+  Future<List<Map<String, Object?>>> runSelect(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    selects.add(statement);
+    return super.runSelect(executor, statement, args);
+  }
+
+  @override
+  Future<int> runDelete(
+    QueryExecutor executor,
+    String statement,
+    List<Object?> args,
+  ) {
+    deletes.add(statement);
+    return super.runDelete(executor, statement, args);
+  }
+}
+
 void main() {
   late MirrorDatabase db;
   late ScriptedRepository repo;
@@ -387,6 +427,688 @@ void main() {
       expect(rows.map((r) => r.pid), ['tr-AAA']);
     },
   );
+
+  test('an item whose kind changed replaces its old row', () async {
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-CCC',
+            item: repo.item('tr-CCC', 'Chapter One'),
+          ),
+        ],
+        nextSince: 'cur-1',
+      ),
+    );
+    await engine.pullCatalog();
+
+    // Treat as audiobook: the same ULID comes back under the book's
+    // prefix, with no tombstone for the old one.
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'bk-CCC',
+            item: repo.item(
+              'bk-CCC',
+              'The Loose Chapters',
+              mediaType: MediaType.audiobook,
+            ),
+          ),
+        ],
+        nextSince: 'cur-2',
+      ),
+    );
+    await engine.pullCatalog();
+
+    final rows = await mirror();
+    expect(rows.map((r) => (r.pid, r.title)), [
+      ('bk-CCC', 'The Loose Chapters'),
+    ]);
+    expect(
+      (await db.select(db.syncCursors).getSingle()).catalogSince,
+      'cur-2',
+      reason: 'the page applied and the cursor moved past it',
+    );
+  });
+
+  test('a kind change moves what the device keeps for the item', () async {
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'bk-CCC',
+            item: repo.item(
+              'bk-CCC',
+              'Chapter One',
+              mediaType: MediaType.audiobook,
+            ),
+          ),
+        ],
+        nextSince: 'cur-1',
+      ),
+    );
+    await engine.pullCatalog();
+    final at = DateTime.utc(2026, 10, 1);
+    await db
+        .into(db.downloadRecords)
+        .insert(
+          DownloadRecordsCompanion.insert(
+            pid: 'bk-CCC',
+            fileIndex: 0,
+            essenceHash: 'e1',
+            etag: 'x',
+            fileName: 'chapter-one.mp3',
+            localPath: '/downloads/chapter-one.mp3',
+            sizeBytes: 1024,
+            state: 'complete',
+          ),
+        );
+    await db
+        .into(db.mirrorPlayStates)
+        .insert(
+          const MirrorPlayStatesCompanion(
+            pid: Value('bk-CCC'),
+            positionMs: Value(61000),
+          ),
+        );
+    await db
+        .into(db.queueEntries)
+        .insert(
+          QueueEntriesCompanion.insert(
+            queueId: 'q1',
+            pid: 'bk-CCC',
+            position: 0,
+            sourceRank: 0,
+          ),
+        );
+    await db
+        .into(db.artworkPins)
+        .insert(
+          ArtworkPinsCompanion.insert(
+            pid: 'bk-CCC',
+            sizePx: 300,
+            artUrl: '/media/art?pid=bk-CCC',
+            etag: 'a',
+            localPath: '/art/ccc.jpg',
+            sizeBytes: 2048,
+            pinnedAt: at,
+          ),
+        );
+
+    // Treat as music: the same ULID, under the track's prefix. A track
+    // is one file, so the one the device holds is all of it.
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-CCC',
+            item: repo.item('tr-CCC', 'Chapter One'),
+          ),
+        ],
+        nextSince: 'cur-2',
+      ),
+    );
+    await engine.pullCatalog();
+
+    expect((await db.select(db.downloadRecords).get()).map((r) => r.pid), [
+      'tr-CCC',
+    ], reason: 'the download plays offline under the new pid');
+    final state = await db.select(db.mirrorPlayStates).getSingle();
+    expect((state.pid, state.positionMs), ('tr-CCC', 61000));
+    expect((await db.select(db.queueEntries).get()).map((r) => r.pid), [
+      'tr-CCC',
+    ]);
+    expect((await db.select(db.artworkPins).get()).map((r) => r.pid), [
+      'tr-CCC',
+    ]);
+  });
+
+  /// What a device keeps for one item: a download of [files] files in
+  /// [state] with its pinned cover, a play state, and a queue entry.
+  Future<void> keepFor(
+    String pid, {
+    int files = 1,
+    String state = 'complete',
+  }) async {
+    for (var i = 0; i < files; i++) {
+      await db
+          .into(db.downloadRecords)
+          .insert(
+            DownloadRecordsCompanion.insert(
+              pid: pid,
+              fileIndex: i,
+              essenceHash: '$pid-e$i',
+              etag: 'x',
+              fileName: '$pid-$i.mp3',
+              localPath: state == 'complete' ? '/downloads/$pid-$i.mp3' : '',
+              sizeBytes: 1024,
+              state: state,
+            ),
+          );
+    }
+    await db
+        .into(db.mirrorPlayStates)
+        .insert(
+          MirrorPlayStatesCompanion(
+            pid: Value(pid),
+            positionMs: const Value(61000),
+          ),
+        );
+    await db
+        .into(db.queueEntries)
+        .insert(
+          QueueEntriesCompanion.insert(
+            queueId: 'q-$pid',
+            pid: pid,
+            position: 0,
+            sourceRank: 0,
+          ),
+        );
+    await db
+        .into(db.artworkPins)
+        .insert(
+          ArtworkPinsCompanion.insert(
+            pid: pid,
+            sizePx: 300,
+            artUrl: '/media/art?pid=$pid',
+            etag: 'a',
+            localPath: '/art/$pid.jpg',
+            sizeBytes: 2048,
+            pinnedAt: DateTime.utc(2026, 10, 1),
+          ),
+        );
+  }
+
+  Future<List<String>> pidsIn(TableInfo<Table, dynamic> table) async => [
+    for (final row
+        in await db
+            .customSelect(
+              'SELECT pid FROM ${table.actualTableName} ORDER BY pid',
+              readsFrom: {table},
+            )
+            .get())
+      row.read<String>('pid'),
+  ];
+
+  test('a re-mirror moves what the device keeps for an item whose kind '
+      'changed', () async {
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-CCC',
+            item: repo.item('tr-CCC', 'Chapter One'),
+          ),
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'bk-DDD',
+            item: repo.item('bk-DDD', 'Delta', mediaType: MediaType.audiobook),
+          ),
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'bk-EEE',
+            item: repo.item('bk-EEE', 'Echo', mediaType: MediaType.audiobook),
+          ),
+        ],
+        nextSince: 'cur-1',
+      ),
+    );
+    await engine.pullCatalog();
+    await keepFor('tr-CCC');
+    await keepFor('bk-DDD', files: 3);
+    await keepFor('bk-EEE');
+    final reclaimed = <String>[];
+    final sub = engine.itemsRemoved.listen(reclaimed.add);
+
+    // Away while a track became a book and both books became tracks,
+    // long enough that the server answers the cursor with a reset: the
+    // mirror comes back whole, with no delta naming any change.
+    repo.resetCatalogOnce = true;
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'bk-CCC',
+            item: repo.item(
+              'bk-CCC',
+              'The Loose Chapters',
+              mediaType: MediaType.audiobook,
+            ),
+          ),
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-DDD',
+            item: repo.item('tr-DDD', 'Delta, Part One'),
+          ),
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-EEE',
+            item: repo.item('tr-EEE', 'Echo'),
+          ),
+        ],
+        nextSince: 'cur-9',
+      ),
+    );
+    await engine.pullCatalog();
+    await pumpEventQueue();
+    await sub.cancel();
+
+    expect(
+      (await mirror()).map((r) => r.pid),
+      unorderedEquals(['bk-CCC', 'tr-DDD', 'tr-EEE']),
+    );
+    // The one-file book's download plays offline as the track; the
+    // track's one file may be any part of its book, and the book's three
+    // files any part of its track, so both stay put to be reclaimed.
+    expect(await pidsIn(db.downloadRecords), [
+      'bk-DDD',
+      'bk-DDD',
+      'bk-DDD',
+      'tr-CCC',
+      'tr-EEE',
+    ]);
+    expect(reclaimed, ['tr-CCC', 'bk-DDD']);
+    expect(await pidsIn(db.artworkPins), ['bk-DDD', 'tr-CCC', 'tr-EEE']);
+    expect(await pidsIn(db.mirrorPlayStates), ['bk-CCC', 'tr-DDD', 'tr-EEE']);
+    expect(await pidsIn(db.queueEntries), ['bk-CCC', 'tr-DDD', 'tr-EEE']);
+  });
+
+  test(
+    'a book download of several files is not moved onto one track',
+    () async {
+      repo.catalogPages.add(
+        CatalogSyncPage(
+          entries: [
+            CatalogSyncEntry(
+              op: 'upsert',
+              pid: 'bk-DDD',
+              item: repo.item(
+                'bk-DDD',
+                'Delta',
+                mediaType: MediaType.audiobook,
+              ),
+            ),
+          ],
+          nextSince: 'cur-1',
+        ),
+      );
+      await engine.pullCatalog();
+      await keepFor('bk-DDD', files: 3);
+      final reclaimed = <String>[];
+      final sub = engine.itemsRemoved.listen(reclaimed.add);
+
+      // Treat as music: the book's primary part keeps the ULID as a track,
+      // and nothing on this device says which of the three files that is.
+      repo.catalogPages.add(
+        CatalogSyncPage(
+          entries: [
+            CatalogSyncEntry(
+              op: 'upsert',
+              pid: 'tr-DDD',
+              item: repo.item('tr-DDD', 'Delta, Part Two'),
+            ),
+          ],
+          nextSince: 'cur-2',
+        ),
+      );
+      await engine.pullCatalog();
+      await pumpEventQueue();
+      await sub.cancel();
+
+      expect((await mirror()).map((r) => r.pid), ['tr-DDD']);
+      expect(await pidsIn(db.downloadRecords), ['bk-DDD', 'bk-DDD', 'bk-DDD']);
+      // Published for the downloads store, which frees the files and the
+      // cover pinned with them.
+      expect(reclaimed, ['bk-DDD']);
+      expect(await pidsIn(db.artworkPins), ['bk-DDD']);
+      expect(await pidsIn(db.mirrorPlayStates), ['tr-DDD']);
+      expect(await pidsIn(db.queueEntries), ['tr-DDD']);
+    },
+  );
+
+  test('a one-file download is not moved onto a book, which may hold '
+      'more', () async {
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          for (final (pid, title) in [
+            ('tr-AAA', 'Chapter One'),
+            ('tr-BBB', 'Chapter Two'),
+            ('tr-CCC', 'Chapter Three'),
+          ])
+            CatalogSyncEntry(
+              op: 'upsert',
+              pid: pid,
+              item: repo.item(pid, title),
+            ),
+        ],
+        nextSince: 'cur-1',
+      ),
+    );
+    await engine.pullCatalog();
+    await keepFor('tr-AAA');
+    final reclaimed = <String>[];
+    final sub = engine.itemsRemoved.listen(reclaimed.add);
+
+    // Treat album as one audiobook: the first track's ULID comes back as
+    // the book, and the other two are folded into it.
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'bk-AAA',
+            item: repo.item(
+              'bk-AAA',
+              'The Album',
+              mediaType: MediaType.audiobook,
+            ),
+          ),
+          const CatalogSyncEntry(
+            op: 'delete',
+            pid: 'tr-BBB',
+            reason: 'removed',
+          ),
+          const CatalogSyncEntry(
+            op: 'delete',
+            pid: 'tr-CCC',
+            reason: 'removed',
+          ),
+        ],
+        nextSince: 'cur-2',
+      ),
+    );
+    await engine.pullCatalog();
+    await pumpEventQueue();
+    await sub.cancel();
+
+    expect((await mirror()).map((r) => r.pid), ['bk-AAA']);
+    // The book's first part is not the book: left to be reclaimed, so it
+    // shows as not downloaded rather than downloaded and one part long.
+    expect(await pidsIn(db.downloadRecords), ['tr-AAA']);
+    expect(reclaimed, ['tr-AAA', 'tr-BBB', 'tr-CCC']);
+    expect(await pidsIn(db.artworkPins), ['tr-AAA']);
+    expect(await pidsIn(db.mirrorPlayStates), ['bk-AAA']);
+    expect(await pidsIn(db.queueEntries), ['bk-AAA']);
+  });
+
+  for (final state in ['pending', 'paused']) {
+    test('a $state download stays with the pid its transfer runs under, '
+        'to be reclaimed', () async {
+      repo.catalogPages.add(
+        CatalogSyncPage(
+          entries: [
+            CatalogSyncEntry(
+              op: 'upsert',
+              pid: 'bk-DDD',
+              item: repo.item(
+                'bk-DDD',
+                'Delta',
+                mediaType: MediaType.audiobook,
+              ),
+            ),
+          ],
+          nextSince: 'cur-1',
+        ),
+      );
+      await engine.pullCatalog();
+      await keepFor('bk-DDD', state: state);
+      final reclaimed = <String>[];
+      final sub = engine.itemsRemoved.listen(reclaimed.add);
+
+      repo.catalogPages.add(
+        CatalogSyncPage(
+          entries: [
+            CatalogSyncEntry(
+              op: 'upsert',
+              pid: 'tr-DDD',
+              item: repo.item('tr-DDD', 'Delta'),
+            ),
+          ],
+          nextSince: 'cur-2',
+        ),
+      );
+      await engine.pullCatalog();
+      await pumpEventQueue();
+      await sub.cancel();
+
+      // The download manager holds the transfer under the old pid, so
+      // that is where it is stopped and its rows dropped.
+      expect(await pidsIn(db.downloadRecords), ['bk-DDD']);
+      expect(reclaimed, ['bk-DDD']);
+      expect(await pidsIn(db.artworkPins), ['bk-DDD']);
+      expect(await pidsIn(db.mirrorPlayStates), ['tr-DDD']);
+    });
+  }
+
+  test('a download moves only onto a pid that holds none', () async {
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'bk-DDD',
+            item: repo.item('bk-DDD', 'Delta', mediaType: MediaType.audiobook),
+          ),
+        ],
+        nextSince: 'cur-1',
+      ),
+    );
+    await engine.pullCatalog();
+    await keepFor('bk-DDD');
+    // Fetched again under its new pid before the delta said it moved.
+    await db
+        .into(db.downloadRecords)
+        .insert(
+          DownloadRecordsCompanion.insert(
+            pid: 'tr-DDD',
+            fileIndex: 0,
+            essenceHash: 'bk-DDD-e0',
+            etag: 'x',
+            fileName: 'tr-DDD-0.mp3',
+            localPath: '/downloads/tr-DDD-0.mp3',
+            sizeBytes: 1024,
+            state: 'complete',
+          ),
+        );
+    final reclaimed = <String>[];
+    final sub = engine.itemsRemoved.listen(reclaimed.add);
+
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-DDD',
+            item: repo.item('tr-DDD', 'Delta'),
+          ),
+        ],
+        nextSince: 'cur-2',
+      ),
+    );
+    await engine.pullCatalog();
+    await pumpEventQueue();
+    await sub.cancel();
+
+    expect(await pidsIn(db.downloadRecords), ['bk-DDD', 'tr-DDD']);
+    expect(reclaimed, ['bk-DDD'], reason: 'nothing else frees the old one');
+  });
+
+  test(
+    "a snapshot that meets one item under two pids keeps the later page's",
+    () async {
+      // The item changed kind between the two page reads, and its new
+      // title sorts it past the cursor, so it is read twice.
+      repo.catalogPages.addAll([
+        CatalogSyncPage(
+          entries: [
+            CatalogSyncEntry(
+              op: 'upsert',
+              pid: 'tr-AAA',
+              item: repo.item('tr-AAA', 'Alpha'),
+            ),
+            CatalogSyncEntry(
+              op: 'upsert',
+              pid: 'tr-XXX',
+              item: repo.item('tr-XXX', 'Chapter One'),
+            ),
+          ],
+          nextCursor: 'page2',
+          nextSince: 'cur-1',
+        ),
+        CatalogSyncPage(
+          entries: [
+            CatalogSyncEntry(
+              op: 'upsert',
+              pid: 'bk-XXX',
+              item: repo.item(
+                'bk-XXX',
+                'The Loose Chapters',
+                mediaType: MediaType.audiobook,
+              ),
+            ),
+          ],
+          nextSince: 'cur-1',
+        ),
+      ]);
+      await engine.pullCatalog();
+
+      expect((await mirror()).map((r) => (r.pid, r.title)), [
+        ('tr-AAA', 'Alpha'),
+        ('bk-XXX', 'The Loose Chapters'),
+      ]);
+      expect(
+        (await db.select(db.syncCursors).getSingle()).catalogSince,
+        'cur-1',
+      );
+    },
+  );
+
+  test(
+    'a play state moved by a kind change still answers to the old pid',
+    () async {
+      repo.catalogPages.add(
+        CatalogSyncPage(
+          entries: [
+            CatalogSyncEntry(
+              op: 'upsert',
+              pid: 'bk-CCC',
+              item: repo.item(
+                'bk-CCC',
+                'Chapter',
+                mediaType: MediaType.audiobook,
+              ),
+            ),
+          ],
+          nextSince: 'cur-1',
+        ),
+      );
+      await engine.pullCatalog();
+      await keepFor('bk-CCC');
+      repo.catalogPages.add(
+        CatalogSyncPage(
+          entries: [
+            CatalogSyncEntry(
+              op: 'upsert',
+              pid: 'tr-CCC',
+              item: repo.item('tr-CCC', 'Chapter'),
+            ),
+          ],
+          nextSince: 'cur-2',
+        ),
+      );
+      await engine.pullCatalog();
+
+      // A queue entry saved before the delta still names the book.
+      expect((await engine.localPlayState('bk-CCC'))?.positionMs, 61000);
+      expect((await engine.localPlayState('tr-CCC'))?.positionMs, 61000);
+      expect(await engine.localPlayState('tr-ZZZ'), isNull);
+    },
+  );
+
+  test('ordinary upserts read the mirror once a page, and land', () async {
+    final counter = _Counter();
+    final counted = MirrorDatabase(
+      DatabaseConnection(NativeDatabase.memory().interceptWith(counter)),
+    );
+    final quiet = SyncEngine(
+      db: counted,
+      repository: repo,
+      channelFactory: neverConnects(),
+    );
+    addTearDown(() async {
+      quiet.dispose();
+      await counted.close();
+    });
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-AAA',
+            item: repo.item('tr-AAA', 'Alpha'),
+          ),
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-BBB',
+            item: repo.item('tr-BBB', 'Bravo'),
+          ),
+        ],
+        nextSince: 'cur-1',
+      ),
+    );
+    await quiet.pullCatalog();
+    counter.reset();
+
+    repo.catalogPages.add(
+      CatalogSyncPage(
+        entries: [
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-AAA',
+            item: repo.item('tr-AAA', 'Alpha (Remastered)'),
+          ),
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-CCC',
+            item: repo.item('tr-CCC', 'Charlie'),
+          ),
+          CatalogSyncEntry(
+            op: 'upsert',
+            pid: 'tr-DDD',
+            item: repo.item('tr-DDD', 'Delta'),
+          ),
+        ],
+        nextSince: 'cur-2',
+      ),
+    );
+    await quiet.pullCatalog();
+
+    // The rare kind change is looked for once for the page, not paid
+    // for per item in a transaction of its own.
+    expect(
+      counter.selects.where((s) => s.contains('"mirror_items"')),
+      hasLength(1),
+    );
+    expect(counter.transactions, 0);
+    expect(counter.deletes, isEmpty);
+    final rows = await (counted.select(
+      counted.mirrorItems,
+    )..orderBy([(t) => OrderingTerm.asc(t.sortKey)])).get();
+    expect(rows.map((r) => (r.pid, r.title)), [
+      ('tr-AAA', 'Alpha (Remastered)'),
+      ('tr-BBB', 'Bravo'),
+      ('tr-CCC', 'Charlie'),
+      ('tr-DDD', 'Delta'),
+    ]);
+  });
 
   test('only an unrecoverable delete publishes a pid to reclaim', () async {
     repo.catalogPages.add(

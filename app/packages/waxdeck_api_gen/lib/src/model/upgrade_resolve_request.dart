@@ -9,20 +9,30 @@ import 'package:built_value/serializer.dart';
 
 part 'upgrade_resolve_request.g.dart';
 
-/// Keep one encoding, trash the rest.
+/// Keep one encoding, trash the rest: by item across items, or by file within one. 
 ///
 /// Properties:
-/// * [keepItemPid] - The item to keep.
-/// * [removeItemPids] - The inferior encodings to trash.
+/// * [keepItemPid] - The item to keep, or the item whose files these are.
+/// * [removeItemPids] - The inferior encodings to trash, as whole items.
+/// * [keepFilePid] - The file to keep, within `keepItemPid`; required with `removeFilePids`. 
+/// * [removeFilePids] - The inferior encodings to trash, as files of `keepItemPid`.
 @BuiltValue()
 abstract class UpgradeResolveRequest implements Built<UpgradeResolveRequest, UpgradeResolveRequestBuilder> {
-  /// The item to keep.
+  /// The item to keep, or the item whose files these are.
   @BuiltValueField(wireName: r'keepItemPid')
   String get keepItemPid;
 
-  /// The inferior encodings to trash.
+  /// The inferior encodings to trash, as whole items.
   @BuiltValueField(wireName: r'removeItemPids')
-  BuiltList<String> get removeItemPids;
+  BuiltList<String>? get removeItemPids;
+
+  /// The file to keep, within `keepItemPid`; required with `removeFilePids`. 
+  @BuiltValueField(wireName: r'keepFilePid')
+  String? get keepFilePid;
+
+  /// The inferior encodings to trash, as files of `keepItemPid`.
+  @BuiltValueField(wireName: r'removeFilePids')
+  BuiltList<String>? get removeFilePids;
 
   UpgradeResolveRequest._();
 
@@ -52,11 +62,27 @@ class _$UpgradeResolveRequestSerializer implements PrimitiveSerializer<UpgradeRe
       object.keepItemPid,
       specifiedType: const FullType(String),
     );
-    yield r'removeItemPids';
-    yield serializers.serialize(
-      object.removeItemPids,
-      specifiedType: const FullType(BuiltList, [FullType(String)]),
-    );
+    if (object.removeItemPids != null) {
+      yield r'removeItemPids';
+      yield serializers.serialize(
+        object.removeItemPids,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
+    if (object.keepFilePid != null) {
+      yield r'keepFilePid';
+      yield serializers.serialize(
+        object.keepFilePid,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.removeFilePids != null) {
+      yield r'removeFilePids';
+      yield serializers.serialize(
+        object.removeFilePids,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
   }
 
   @override
@@ -90,9 +116,26 @@ class _$UpgradeResolveRequestSerializer implements PrimitiveSerializer<UpgradeRe
         case r'removeItemPids':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(BuiltList, [FullType(String)]),
-          ) as BuiltList<String>;
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
           result.removeItemPids.replace(valueDes);
+          break;
+        case r'keepFilePid':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.keepFilePid = valueDes;
+          break;
+        case r'removeFilePids':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
+          result.removeFilePids.replace(valueDes);
           break;
         default:
           unhandled.add(key);

@@ -6,6 +6,7 @@ import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
 import '../providers.dart';
 import '../home/home_shelves.dart';
+import '../music/entity_facts.dart';
 import '../music/music_controllers.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -35,9 +36,13 @@ bool canDeleteItems(WidgetRef ref) {
 /// for it, so it goes through the container rather than through a
 /// caller's provider dependencies - which is the whole point of the
 /// capture below.
+///
+/// With [filePids] it deletes those files of the item rather than the
+/// whole item (a copy, from the Details sheet), and the item stays.
 Future<void> confirmDeleteItem(
   BuildContext context, {
   required String pid,
+  List<String>? filePids,
   VoidCallback? onDeleted,
 }) async {
   // Read here: it is wanted after an await, and a context is not read
@@ -61,8 +66,25 @@ Future<void> confirmDeleteItem(
           ?.roles
           .contains('admin') ??
       false;
+  Future<DeleteItemsResult> delete({String? mode, bool dryRun = false}) =>
+      filePids == null
+      ? repo.deleteLibraryItems(pids: [pid], mode: mode, dryRun: dryRun)
+      : repo.deleteItemFiles(
+          pid: pid,
+          filePids: filePids,
+          mode: mode,
+          dryRun: dryRun,
+        );
+  // What a files delete changes is the item's file list and its copies.
+  void rereadFiles() {
+    if (filePids == null) return;
+    container
+      ..invalidate(itemFilesProvider(pid))
+      ..invalidate(itemDetailProvider(pid));
+  }
+
   try {
-    final plan = await repo.deleteLibraryItems(pids: [pid], dryRun: true);
+    final plan = await delete(dryRun: true);
     if (!context.mounted) return;
     final mode = await showDialog<String>(
       context: context,
@@ -70,7 +92,8 @@ Future<void> confirmDeleteItem(
           _DeleteItemsDialog(plan: plan, allowPermanent: allowPermanent),
     );
     if (mode == null) return;
-    final result = await repo.deleteLibraryItems(pids: [pid], mode: mode);
+    final result = await delete(mode: mode);
+    rereadFiles();
     // The listings that could be showing what just went: the music
     // listing this was opened from, and the home shelves, which draw
     // the same items from the other side. The catalog invalidation is
@@ -80,13 +103,22 @@ Future<void> confirmDeleteItem(
     for (final provider in homeShelfProviders) {
       container.invalidate(provider);
     }
+    // The server's sentences follow: a copy that took a deleted file's
+    // place, which keeps the item where the listing still shows it.
     messenger.show(
-      result.mode == 'permanent'
-          ? l10n.libraryDeletePermanentDone(result.totalFiles)
-          : l10n.libraryDeleteTrashDone(result.totalFiles),
+      [
+        result.mode == 'permanent'
+            ? l10n.libraryDeletePermanentDone(result.totalFiles)
+            : l10n.libraryDeleteTrashDone(result.totalFiles),
+        ...result.warnings,
+      ].join('\n'),
     );
     onDeleted?.call();
   } on WaxDeckApiException catch (e) {
+    // A refusal is the server's answer about the item as it stands, and
+    // the list the file was picked from may be older: a copy deleted
+    // elsewhere leaves it rather than refusing every tap.
+    if (e.isRefusal) rereadFiles();
     messenger.show(explainError(l10n, e), channel: ShellChannel.itemDelete);
   }
 }
@@ -146,10 +178,17 @@ class _DeleteItemsDialog extends StatefulWidget {
 class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
   var _mode = 'trash';
 
+  /// How many file names the preview lists before counting the rest.
+  static const _namedFiles = 5;
+
   @override
   Widget build(BuildContext context) {
     final plan = widget.plan;
     final l10n = context.l10n;
+    final names = [
+      for (final entry in plan.entries)
+        for (final file in entry.fileList) file.name,
+    ];
     return AlertDialog(
       key: const Key('item-delete-dialog'),
       title: Text(l10n.libraryDeleteTitle),
@@ -164,6 +203,21 @@ class _DeleteItemsDialogState extends State<_DeleteItemsDialog> {
             ),
             key: const Key('item-delete-preview'),
           ),
+          // Which files go, by name: the first few, then how many more.
+          for (final name in names.take(_namedFiles))
+            Text(
+              name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: WaxType.monoData,
+            ),
+          if (names.length > _namedFiles)
+            Text(l10n.libraryDeleteMoreFiles(names.length - _namedFiles)),
+          if (plan.entries.isNotEmpty &&
+              plan.entries.every((e) => e.itemSurvives)) ...<Widget>[
+            const SizedBox(height: WaxSpace.s8),
+            WaxProse(l10n.libraryDeleteKeepsItem),
+          ],
           const SizedBox(height: WaxSpace.s8),
           WaxRadioGroup<String>(
             value: _mode,

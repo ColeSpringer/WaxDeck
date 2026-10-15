@@ -111,3 +111,42 @@ func TestBookFixturesScanAsBooks(t *testing.T) {
 		}
 	})
 }
+
+// The loose MP3 book is a book only where its library says so: a plain
+// root catalogs its parts as two tracks, and an audiobook root as one
+// book of two parts.
+func TestLooseMP3BookIsABookOnlyInAnAudiobookRoot(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		media model.MediaType
+		kind  string
+		want  int
+	}{
+		{media: "", kind: "track", want: 2},
+		{media: model.MediaAudiobook, kind: "book", want: 1},
+	} {
+		root := t.TempDir()
+		paths, err := fixtures.GenerateLooseMP3Book(root)
+		if err != nil || len(paths) != 2 {
+			t.Fatalf("parts = %v (%v), want two", paths, err)
+		}
+		lib, err := waxbin.Open(ctx, waxbin.Options{
+			DBPath: filepath.Join(t.TempDir(), "catalog.db"),
+			Roots:  []config.Root{{Path: root, Mode: model.ModeInPlace, Media: tc.media}},
+		})
+		if err != nil {
+			t.Fatalf("open catalog: %v", err)
+		}
+		t.Cleanup(func() { _ = lib.Close() })
+		if _, err := lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		items, err := lib.Query(ctx, query.New(query.EntityItems).Where("kind", query.OpIs, tc.kind).Build(), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(items) != tc.want {
+			t.Errorf("media %q: %d %s items, want %d", tc.media, len(items), tc.kind, tc.want)
+		}
+	}
+}

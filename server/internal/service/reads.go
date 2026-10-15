@@ -14,6 +14,8 @@ import (
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
+
+	"github.com/colespringer/waxdeck/server/internal/genre"
 )
 
 // ItemFilter narrows a library listing. Facet and FacetKey together
@@ -626,13 +628,35 @@ func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (Ite
 		MBID:        it.MBID,
 		ISRC:        it.ISRC,
 	}
-	if it.Genre != "" {
-		d.Genres = []string{it.Genre}
-	}
-	// Bitrate lives on the file row; a miss is fine (remote/missing items).
-	if f, err := l.lib.File(ctx, it.FilePID); err == nil {
-		d.Bitrate = f.Bitrate
-		d.AddedAt = time.Unix(0, f.FirstSeen).UTC()
+	d.Genres = genre.Split(it.Genre)
+	// Bitrate lives on the primary's row, and the item entered the
+	// library with its primary, or with a copy found before it; a book's
+	// other parts are read for neither. A miss is fine (remote/missing
+	// items).
+	if refs, err := l.lib.ItemFiles(ctx, it.PID); err == nil {
+		var first int64
+		for _, ref := range refs {
+			alt := ref.Role == fileRoleAlternate
+			if !libraryGranted(uc, ref.LibraryPID) || (!alt && ref.FilePID != it.FilePID) {
+				continue
+			}
+			if alt {
+				d.Copies++
+			}
+			f, err := l.readFile(ctx, ref.FilePID)
+			if err != nil {
+				continue
+			}
+			if !alt {
+				d.Bitrate = f.Bitrate
+			}
+			if seen := f.FirstSeen; seen > 0 && (first == 0 || seen < first) {
+				first = seen
+			}
+		}
+		if first > 0 {
+			d.AddedAt = time.Unix(0, first).UTC()
+		}
 	}
 	entity := model.ArtTrack
 	if it.Kind == model.KindEpisode {

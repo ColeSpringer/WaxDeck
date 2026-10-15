@@ -278,9 +278,23 @@ up: deploy/.env deploy/waxflow-config/waxflow.json
 	   exit 1; \
 	 fi; \
 	 rm -f "$$lib/.write-probe"
-	@case "$$(uname -s)" in \
-	   MINGW*|MSYS*|CYGWIN*) $(COMPOSE) up --build -d --wait ;; \
-	   *) WAXDECK_UID=$$(id -u) WAXDECK_GID=$$(id -g) $(COMPOSE) up --build -d --wait ;; \
+	@books="$${WAXDECK_AUDIOBOOKS-}"; \
+	 if [ -z "$$books" ]; then \
+	   books=$$(sed -n 's/^WAXDECK_AUDIOBOOKS=//p' deploy/.env | tail -n 1 | tr -d '\r' \
+	     | sed -e 's/^"\(.*\)"$$/\1/' -e "s/^'\(.*\)'$$/\1/"); \
+	 fi; \
+	 overlay=; \
+	 if [ -n "$$books" ]; then \
+	   case "$$books" in "~") dir="$$HOME" ;; "~/"*) dir="$$HOME/$${books#\~/}" ;; /*|[A-Za-z]:*) dir="$$books" ;; *) dir="deploy/$${books#./}" ;; esac; \
+	   if [ ! -d "$$dir" ]; then \
+	     echo "make up: WAXDECK_AUDIOBOOKS=$$dir does not exist; docker would create it empty and root-owned. Point deploy/.env at your audiobook folder." >&2; \
+	     exit 1; \
+	   fi; \
+	   overlay="-f deploy/compose.audiobooks.yaml"; \
+	 fi; \
+	 case "$$(uname -s)" in \
+	   MINGW*|MSYS*|CYGWIN*) $(COMPOSE) $$overlay up --build -d --wait ;; \
+	   *) WAXDECK_UID=$$(id -u) WAXDECK_GID=$$(id -g) $(COMPOSE) $$overlay up --build -d --wait ;; \
 	 esac
 	@echo "WaxDeck is up on http://localhost:4420  (make logs / make down)"
 

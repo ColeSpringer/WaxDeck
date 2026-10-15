@@ -87,7 +87,8 @@ components:
       description: >
         The file's format is not accepted (code `unsupported-format`):
         the extension is outside the server's accepted set, or the
-        audio did not decode. A DRM-encrypted container (an Audible
+        audio did not decode, which carries `reason: unreadable`. A
+        DRM-encrypted container (an Audible
         `aax`/`aaxc`) answers with the same status but code
         `drm-protected`, because that refusal is permanent - no format
         set can make the file playable - and must not read as a codec
@@ -336,6 +337,34 @@ components:
             populated; the endpoint itself returns 404 for items with no
             artwork, so clients keep a placeholder ready.
           example: /api/v1/items/tr-01JZX5N8QW3F4V9T2B7KD3M9R6/art
+
+    DuplicateWarning:
+      type: object
+      description: >
+        The library appears to already contain this audio. A warning,
+        not a refusal: the review decision chooses what happens.
+      required: [kind]
+      properties:
+        itemPid:
+          type: string
+          description: >
+            The existing item. Absent, as `title` and `artist` are, when
+            it sits where the caller cannot see it.
+        kind:
+          type: string
+          description: >
+            Evidence level: `content` (the same audio, which imports
+            as another copy of the item), `id` (the same recording by
+            the identifier its tags carry), `fingerprint`
+            (acoustically the same recording) or `name` (the same
+            title, artist and length). A string, not a closed enum.
+          example: content
+        title:
+          type: string
+          description: The existing item's title.
+        artist:
+          type: string
+          description: The existing item's artist.
 
     ChapterMark:
       type: object

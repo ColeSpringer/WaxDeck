@@ -12,14 +12,23 @@ class _$ReviewBulkOutcome extends ReviewBulkOutcome {
   @override
   final bool ok;
   @override
+  final String? code;
+  @override
   final String? error;
+  @override
+  final BuiltList<String>? warnings;
 
   factory _$ReviewBulkOutcome([
     void Function(ReviewBulkOutcomeBuilder)? updates,
   ]) => (ReviewBulkOutcomeBuilder()..update(updates))._build();
 
-  _$ReviewBulkOutcome._({required this.entryId, required this.ok, this.error})
-    : super._();
+  _$ReviewBulkOutcome._({
+    required this.entryId,
+    required this.ok,
+    this.code,
+    this.error,
+    this.warnings,
+  }) : super._();
   @override
   ReviewBulkOutcome rebuild(void Function(ReviewBulkOutcomeBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -34,7 +43,9 @@ class _$ReviewBulkOutcome extends ReviewBulkOutcome {
     return other is ReviewBulkOutcome &&
         entryId == other.entryId &&
         ok == other.ok &&
-        error == other.error;
+        code == other.code &&
+        error == other.error &&
+        warnings == other.warnings;
   }
 
   @override
@@ -42,7 +53,9 @@ class _$ReviewBulkOutcome extends ReviewBulkOutcome {
     var _$hash = 0;
     _$hash = $jc(_$hash, entryId.hashCode);
     _$hash = $jc(_$hash, ok.hashCode);
+    _$hash = $jc(_$hash, code.hashCode);
     _$hash = $jc(_$hash, error.hashCode);
+    _$hash = $jc(_$hash, warnings.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -52,7 +65,9 @@ class _$ReviewBulkOutcome extends ReviewBulkOutcome {
     return (newBuiltValueToStringHelper(r'ReviewBulkOutcome')
           ..add('entryId', entryId)
           ..add('ok', ok)
-          ..add('error', error))
+          ..add('code', code)
+          ..add('error', error)
+          ..add('warnings', warnings))
         .toString();
   }
 }
@@ -69,9 +84,18 @@ class ReviewBulkOutcomeBuilder
   bool? get ok => _$this._ok;
   set ok(bool? ok) => _$this._ok = ok;
 
+  String? _code;
+  String? get code => _$this._code;
+  set code(String? code) => _$this._code = code;
+
   String? _error;
   String? get error => _$this._error;
   set error(String? error) => _$this._error = error;
+
+  ListBuilder<String>? _warnings;
+  ListBuilder<String> get warnings =>
+      _$this._warnings ??= ListBuilder<String>();
+  set warnings(ListBuilder<String>? warnings) => _$this._warnings = warnings;
 
   ReviewBulkOutcomeBuilder() {
     ReviewBulkOutcome._defaults(this);
@@ -82,7 +106,9 @@ class ReviewBulkOutcomeBuilder
     if ($v != null) {
       _entryId = $v.entryId;
       _ok = $v.ok;
+      _code = $v.code;
       _error = $v.error;
+      _warnings = $v.warnings?.toBuilder();
       _$v = null;
     }
     return this;
@@ -102,21 +128,39 @@ class ReviewBulkOutcomeBuilder
   ReviewBulkOutcome build() => _build();
 
   _$ReviewBulkOutcome _build() {
-    final _$result =
-        _$v ??
-        _$ReviewBulkOutcome._(
-          entryId: BuiltValueNullFieldError.checkNotNull(
-            entryId,
-            r'ReviewBulkOutcome',
-            'entryId',
-          ),
-          ok: BuiltValueNullFieldError.checkNotNull(
-            ok,
-            r'ReviewBulkOutcome',
-            'ok',
-          ),
-          error: error,
+    _$ReviewBulkOutcome _$result;
+    try {
+      _$result =
+          _$v ??
+          _$ReviewBulkOutcome._(
+            entryId: BuiltValueNullFieldError.checkNotNull(
+              entryId,
+              r'ReviewBulkOutcome',
+              'entryId',
+            ),
+            ok: BuiltValueNullFieldError.checkNotNull(
+              ok,
+              r'ReviewBulkOutcome',
+              'ok',
+            ),
+            code: code,
+            error: error,
+            warnings: _warnings?.build(),
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'warnings';
+        _warnings?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'ReviewBulkOutcome',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

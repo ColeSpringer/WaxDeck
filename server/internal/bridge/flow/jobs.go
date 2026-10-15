@@ -245,9 +245,11 @@ func (b *Bridge) JobStatus(ctx context.Context, jobID string) (state string, pro
 // DownloadJobResult streams one job output to dst with the repo's
 // crash-safe write discipline: temp name in the target directory, size
 // check against Content-Length when the sidecar declares one, fsync,
-// atomic rename, directory fsync. The typed client verifies the status
-// and attaches the API key; this owns the durable placement.
-func (b *Bridge) DownloadJobResult(ctx context.Context, jobID string, index int, dst string) error {
+// atomic rename, directory fsync. The file takes the caller's mode rather
+// than the 0600 a temp file starts with, which tagging and the catalog's
+// move would both keep. The typed client verifies the status and
+// attaches the API key; this owns the durable placement.
+func (b *Bridge) DownloadJobResult(ctx context.Context, jobID string, index int, dst string, mode os.FileMode) error {
 	resp, err := b.client.JobResult(ctx, jobID, index)
 	if err != nil {
 		return fmt.Errorf("flow: fetching job %s result %d: %w", jobID, index, err)
@@ -272,6 +274,9 @@ func (b *Bridge) DownloadJobResult(ctx context.Context, jobID string, index int,
 		cleanup()
 		return fmt.Errorf("flow: job %s result %d: got %d of %d bytes", jobID, index, n, resp.ContentLength)
 	}
+	// Best effort, as the tag writer's is: a mount that refuses a mode
+	// still takes the file.
+	_ = tmp.Chmod(mode)
 	if err := tmp.Sync(); err != nil {
 		cleanup()
 		return fmt.Errorf("flow: syncing job result: %w", err)

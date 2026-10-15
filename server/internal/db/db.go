@@ -753,6 +753,16 @@ const baselineSchema = `
 	);
 	CREATE INDEX uploads_user ON uploads (user_id, created_at_ns DESC, id);
 	CREATE INDEX uploads_item ON uploads (item_pid, user_id);
+	-- Edit rights on items no upload session names: the parts a kind
+	-- change split out of a book its uploader brought in. Read beside
+	-- uploads.item_pid wherever that grants the right to curate.
+	CREATE TABLE item_grants (
+		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		item_pid      TEXT    NOT NULL,
+		created_at_ns INTEGER NOT NULL,
+		PRIMARY KEY (user_id, item_pid)
+	) WITHOUT ROWID;
+	CREATE INDEX item_grants_item ON item_grants (item_pid);
 	CREATE INDEX uploads_batch ON uploads (batch_id) WHERE batch_id != '';
 	CREATE INDEX uploads_entry ON uploads (review_entry_id) WHERE review_entry_id != '';
 	-- The pending-upload sum, over exactly the rows it charges. Partial

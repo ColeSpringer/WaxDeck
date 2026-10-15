@@ -65,7 +65,7 @@ func TestResumeShelfHonoursContentRules(t *testing.T) {
 	if _, err := f.svc.Checkpoint(ctx, f.uc, book, 5000, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.svc.SetItemTag(ctx, f.uc, book, "MOOD", []string{"calm"}, false, false); err != nil {
+	if _, err := f.svc.SetItemTag(ctx, f.uc, book, "MOOD", []string{"calm"}, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatal(err)
 	}
 	kid := &UserCtx{

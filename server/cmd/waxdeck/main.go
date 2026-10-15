@@ -117,6 +117,7 @@ func run() error {
 		jukeboxName   = flag.String("jukebox-name", envOr("WAXDECK_JUKEBOX_NAME", "Server audio"), "display name of the jukebox endpoint")
 
 		managedRoots = flag.String("managed-roots", envOr("WAXDECK_MANAGED_ROOTS", ""), "library root names (comma separated) the catalog may place files into: uploads import there and the organizer may move files there; unlisted roots stay strictly in place")
+		bookRoots    = flag.String("audiobook-roots", envOr("WAXDECK_AUDIOBOOK_ROOTS", ""), "library root names (comma separated) that hold audiobooks: every audio file in them is cataloged as a book; unlisted roots hold whatever they were set to, mixed when new")
 		watchRoots   = env.Bool("library-watch", "WAXDECK_LIBRARY_WATCH", true, "watch the library roots and catalog files placed there by hand without waiting for a rescan. On by default; set WAXDECK_LIBRARY_WATCH=false to disable. Network mounts (NFS, SMB, 9p) rarely deliver change events; enable the scan schedule there instead")
 
 		uploadFormats = flag.String("upload-formats", envOr("WAXDECK_UPLOAD_FORMATS", ""), "file extensions uploads accept, comma separated. Replaces the default set rather than extending it; empty keeps the default (every format the catalog scans and the decode stack reads). DRM containers (aax, aaxc) are refused regardless")
@@ -256,15 +257,26 @@ func run() error {
 			managed[name] = true
 		}
 	}
+	books := map[string]bool{}
+	for _, name := range splitNonEmpty(*bookRoots, ",") {
+		books[name] = true
+	}
 	svcRoots := make([]service.Root, len(roots))
 	for i, r := range roots {
 		svcRoots[i] = service.Root{Name: r.Name, Path: r.Path, Managed: managed[r.Name]}
+		if books[r.Name] {
+			svcRoots[i].Media = "audiobook"
+		}
 		delete(managed, r.Name)
+		delete(books, r.Name)
 	}
 	if len(managed) > 0 {
 		for name := range managed {
 			return fmt.Errorf("WAXDECK_MANAGED_ROOTS names %q, which is not a configured library root", name)
 		}
+	}
+	for name := range books {
+		return fmt.Errorf("WAXDECK_AUDIOBOOK_ROOTS names %q, which is not a configured library root", name)
 	}
 	// Podcasts work out of the box: an unset dir lands beside the
 	// databases. Only an explicit -podcast-dir="" disables the surface

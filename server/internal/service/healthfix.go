@@ -382,17 +382,7 @@ func (l *Library) fixHealthItem(ctx context.Context, rule string, pid model.PID,
 			}
 			return
 		}
-		// Re-editing the title to its current value, with WriteBack and
-		// Force, rewrites the file's tags and clears the unsynced
-		// diagnostic; Force only gets the no-op edit past a locked title.
-		// It is not mark-free: an edit naming no source records a user
-		// one, so the title then reads as hand-curated.
-		if err := l.lib.EditFields(ctx, pid, map[string]string{"title": it.Title},
-			waxbin.EditOptions{WriteBack: true, Force: true, Lock: model.LockUnchanged}); err != nil {
-			sum.Failed++
-			return
-		}
-		sum.Filled++
+		l.fixWriteDrift(ctx, it, sum)
 		return
 	}
 	want := healthFixWants[rule]
@@ -679,7 +669,7 @@ func (l *Library) stillFails(ctx context.Context, rule string, it *model.ItemVie
 		return in.moves[it.PID]
 	case ruleWriteUnsynced:
 		rules, _ := l.itemFileRules(ctx, it, in.findings)
-		return slices.Contains(rules, ruleWriteUnsynced)
+		return in.findings == nil || slices.Contains(rules, ruleWriteUnsynced)
 	}
 	return true
 }

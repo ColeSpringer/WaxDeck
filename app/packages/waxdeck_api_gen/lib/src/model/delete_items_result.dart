@@ -16,6 +16,7 @@ part 'delete_items_result.g.dart';
 /// * [applied] - False for a dry run.
 /// * [mode] - The mode that was (or would be) used.
 /// * [entries] - Per-item breakdown.
+/// * [warnings] - What the deletion did beside removing files, in sentences: a copy that took a deleted file's place, and a file it could not remove, which stayed and is not counted in `entries`. A whole-item delete names each under its item's name. Absent when there is nothing to say. 
 @BuiltValue()
 abstract class DeleteItemsResult implements Built<DeleteItemsResult, DeleteItemsResultBuilder> {
   /// False for a dry run.
@@ -29,6 +30,10 @@ abstract class DeleteItemsResult implements Built<DeleteItemsResult, DeleteItems
   /// Per-item breakdown.
   @BuiltValueField(wireName: r'entries')
   BuiltList<DeletePlanEntry> get entries;
+
+  /// What the deletion did beside removing files, in sentences: a copy that took a deleted file's place, and a file it could not remove, which stayed and is not counted in `entries`. A whole-item delete names each under its item's name. Absent when there is nothing to say. 
+  @BuiltValueField(wireName: r'warnings')
+  BuiltList<String>? get warnings;
 
   DeleteItemsResult._();
 
@@ -68,6 +73,13 @@ class _$DeleteItemsResultSerializer implements PrimitiveSerializer<DeleteItemsRe
       object.entries,
       specifiedType: const FullType(BuiltList, [FullType(DeletePlanEntry)]),
     );
+    if (object.warnings != null) {
+      yield r'warnings';
+      yield serializers.serialize(
+        object.warnings,
+        specifiedType: const FullType(BuiltList, [FullType(String)]),
+      );
+    }
   }
 
   @override
@@ -111,6 +123,14 @@ class _$DeleteItemsResultSerializer implements PrimitiveSerializer<DeleteItemsRe
             specifiedType: const FullType(BuiltList, [FullType(DeletePlanEntry)]),
           ) as BuiltList<DeletePlanEntry>;
           result.entries.replace(valueDes);
+          break;
+        case r'warnings':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(BuiltList, [FullType(String)]),
+          ) as BuiltList<String>?;
+          if (valueDes == null) continue;
+          result.warnings.replace(valueDes);
           break;
         default:
           unhandled.add(key);

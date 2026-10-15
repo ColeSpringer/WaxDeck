@@ -106,8 +106,10 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
   /// N round trips, which on a phone reaching a home server through a
   /// reverse proxy is the felt cost of a single Save, and N
   /// partial-failure windows on a flaky link. Both paths run the same
-  /// parts in the same order and report the same outcome, which is what
-  /// lets either stand in for the other.
+  /// parts in the same order with the same switches, which is what lets
+  /// either stand in for the other. The one gap: sequentially, a tag
+  /// removal and a lyrics clear answer 204, so a file that kept the tag
+  /// or a sidecar that stayed goes unreported there.
   ///
   /// Never throws for a refused write. The refusal rides the outcome
   /// beside whatever the calls before it reported, because the
@@ -207,8 +209,8 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
   }
 
   /// One call per staged part, kept for servers without the compound
-  /// endpoint. It is also the reference the compound path is measured
-  /// against: same parts, same order, same outcome.
+  /// endpoint: the same parts in the same order, each carrying the
+  /// write switches it takes.
   Future<MetadataSaveOutcome> _saveSequentially(
     MetadataChanges changes, {
     required bool writeBack,
@@ -220,14 +222,18 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
     final seen = <String>{};
     final warnings = <String>[];
     WaxDeckApiException? refusal;
-    void collect(MetadataEditResult result) {
+    void failed(List<WriteBackFailure> missed) {
       // Deduplicated: several write paths can report the same file for
       // the same reason, and each line is for a person to read once.
-      for (final failure in result.writeBackFailures) {
+      for (final failure in missed) {
         if (seen.add('${failure.filePid} ${failure.path} ${failure.reason}')) {
           failures.add(failure);
         }
       }
+    }
+
+    void collect(MetadataEditResult result) {
+      failed(result.writeBackFailures);
       warnings.addAll(result.warnings);
     }
 
@@ -270,7 +276,7 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
           ),
         );
       } else if (changes.clearLyrics) {
-        await repository.clearItemLyrics(pid);
+        await repository.clearItemLyrics(pid, writeBack: writeBack);
       }
       if (changes.chapters case final chapters?) {
         collect(
@@ -288,19 +294,27 @@ class MetadataController extends AsyncNotifier<MetadataEditorState> {
       // a refusal partway leaves the same parts committed. Dart's map
       // order is insertion order, which is a different answer.
       for (final key in changes.tagSets.keys.toList()..sort()) {
-        await repository.setItemTag(
+        final result = await repository.setItemTag(
           pid,
           key,
           values: changes.tagSets[key]!,
+          writeBack: writeBack,
           lock: lock,
           force: force,
         );
+        failed(result.writeBackFailures);
       }
       for (final key in changes.tagRemoves) {
-        await repository.clearItemTag(pid, key);
+        await repository.clearItemTag(pid, key, writeBack: writeBack);
       }
       if (changes.unofficial case final unofficial?) {
-        await repository.setReleaseStatus(pid, unofficial: unofficial);
+        collect(
+          await repository.setReleaseStatus(
+            pid,
+            unofficial: unofficial,
+            writeBack: writeBack,
+          ),
+        );
       }
     } on WaxDeckApiException catch (e) {
       refusal = e;

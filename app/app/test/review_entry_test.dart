@@ -302,6 +302,50 @@ void main() {
     expect(repo.decideReviewCalls.single.candidateMbid, 'mb-2');
   });
 
+  testWidgets('a decision refused for a reason keeps the server\'s words', (
+    tester,
+  ) async {
+    final repo = _repoWith(_detail());
+    await _pump(tester, _host(repo, 'rv-1'));
+    repo.reviewError = const WaxDeckApiException(
+      code: 'conflict',
+      message: 'a.flac: destination already exists in the library',
+      statusCode: 409,
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+    await tester.pumpAndSettle();
+
+    final message = raisedMessage(tester)!;
+    expect(
+      shellMessageText(message),
+      'a.flac: destination already exists in the library',
+    );
+    expect(message.actionLabel, isNull);
+  });
+
+  testWidgets('a busy library offers the same decision again', (tester) async {
+    final repo = _repoWith(_detail());
+    await _pump(tester, _host(repo, 'rv-1'));
+    repo.reviewError = const WaxDeckApiException(
+      code: 'catalog-busy',
+      message: 'a conflicting catalog job is already running',
+      statusCode: 409,
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs));
+    await tester.pumpAndSettle();
+    final message = raisedMessage(tester)!;
+    expect(
+      shellMessageText(message),
+      "Another job is holding the library's files. Try again shortly.",
+    );
+    expect(message.actionLabel, 'Retry');
+
+    repo.reviewError = null;
+    await pressRaisedAction(tester);
+    expect(repo.decideReviewCalls, hasLength(2));
+    expect(repo.decideReviewCalls.last.action, 'as-is');
+  });
+
   testWidgets('the other decisions and the upload discard work', (
     tester,
   ) async {
@@ -318,6 +362,186 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.decideReviewCalls.single.action, 'discard');
+  });
+
+  testWidgets('a unit the library already holds says so and offers a copy', (
+    tester,
+  ) async {
+    const holder = DuplicateWarning(
+      itemPid: 'tr-9',
+      kind: 'content',
+      title: 'Opening Tide',
+      artist: 'The Cardinal Waves',
+    );
+    final repo = _repoWith(
+      ReviewEntryDetail(
+        id: 'rv-1',
+        kind: 'import',
+        status: 'pending',
+        mediaType: MediaType.music,
+        origin: 'acquisition',
+        title: 'Neon Meridian',
+        trackCount: 2,
+        createdAt: DateTime.utc(2026, 7, 1),
+        duplicateCount: 2,
+        candidates: _detail().candidates,
+        tracks: const [
+          ReviewTrack(
+            path: 'a.flac',
+            title: 'opening tide',
+            durationMs: 200000,
+            duplicate: holder,
+          ),
+          ReviewTrack(
+            path: 'b.flac',
+            title: 'closing tide',
+            durationMs: 100000,
+            duplicate: DuplicateWarning(kind: 'content'),
+          ),
+        ],
+      ),
+    );
+    await _pump(tester, _host(repo, 'rv-1'));
+
+    final banner = find.bySemanticsIdentifier(SemanticsIds.reviewDuplicate);
+    expect(banner, findsOneWidget);
+    expect(
+      find.descendant(
+        of: banner,
+        matching: find.text('2 files are already in your library'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.reviewDuplicateRow(0)),
+        matching: find.text('a.flac: Opening Tide by The Cardinal Waves'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.reviewDuplicateRow(1)),
+        matching: find.text('b.flac: an item in a library you cannot open'),
+      ),
+      findsOneWidget,
+      reason: 'a holder the reader cannot see is not named',
+    );
+    // Every file joins what the library has: approving or marking
+    // metadata has nothing to land on, and as-is is a copy.
+    final approve = tester.widget<WaxButton>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+        matching: find.byType(WaxButton),
+      ),
+    );
+    expect(approve.onPressed, isNull);
+    expect(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs), findsNothing);
+    expect(find.text('Add as another copy'), findsOneWidget);
+    // An acquisition's staged files can be thrown away too.
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewDiscard));
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls.single.action, 'discard');
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.reviewAddCopy));
+    await tester.pumpAndSettle();
+    expect(repo.decideReviewCalls.last.action, 'as-is');
+  });
+
+  testWidgets('a unit with new files beside a duplicate keeps its decisions', (
+    tester,
+  ) async {
+    final base = _detail();
+    final repo = _repoWith(
+      ReviewEntryDetail(
+        id: 'rv-1',
+        kind: 'import',
+        status: 'pending',
+        mediaType: MediaType.music,
+        origin: 'upload',
+        trackCount: 2,
+        createdAt: DateTime.utc(2026, 7, 1),
+        duplicateCount: 1,
+        candidates: base.candidates,
+        tracks: const [
+          ReviewTrack(
+            path: 'a.flac',
+            title: 'opening tide',
+            durationMs: 200000,
+            duplicate: DuplicateWarning(kind: 'name', itemPid: 'tr-9'),
+          ),
+          ReviewTrack(path: 'b.flac', title: 'bonus jam', durationMs: 100000),
+        ],
+      ),
+    );
+    await _pump(tester, _host(repo, 'rv-1'));
+
+    // A name match is a guess: the banner says the file may be there.
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.reviewDuplicate),
+        matching: find.text('1 file may already be in your library'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.bySemanticsIdentifier(SemanticsIds.reviewAsIs), findsOneWidget);
+    final approve = tester.widget<WaxButton>(
+      find.ancestor(
+        of: find.bySemanticsIdentifier(SemanticsIds.reviewApprove),
+        matching: find.byType(WaxButton),
+      ),
+    );
+    expect(approve.onPressed, isNotNull);
+    // Nor does Discard lead the decisions on a guess.
+    final order = [
+      for (final b in tester.widgetList<WaxButton>(find.byType(WaxButton)))
+        b.semanticsId,
+    ];
+    expect(
+      order.indexOf(SemanticsIds.reviewDiscard),
+      greaterThan(order.indexOf(SemanticsIds.reviewApprove)),
+    );
+  });
+
+  testWidgets('a decided file that joined an item says so', (tester) async {
+    final repo = _repoWith(
+      ReviewEntryDetail(
+        id: 'rv-1',
+        kind: 'import',
+        status: 'as-is',
+        mediaType: MediaType.music,
+        origin: 'upload',
+        trackCount: 1,
+        createdAt: DateTime.utc(2026, 7, 1),
+        tracks: const [
+          ReviewTrack(
+            pid: 'tr-9',
+            path: 'a.flac',
+            title: 'opening tide',
+            durationMs: 200000,
+            joined: true,
+          ),
+        ],
+      ),
+    );
+    await _pump(tester, _host(repo, 'rv-1'));
+
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.diffRow(0)),
+        matching: find.text('Added to an item the library already had'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.trackMenu('tr-9')),
+      findsNothing,
+      reason: 'the item is not this entry\'s to edit',
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.reviewDuplicate),
+      findsNothing,
+    );
   });
 
   testWidgets('a wide surface draws the entry beside the queue', (

@@ -208,6 +208,13 @@ table invites
   column used_count|INTEGER|notnull=1|default=0|pk=0
   autoindex pk|unique=1|(id)
   autoindex u|unique=1|(token_hash)
+table item_grants
+  column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column item_pid|TEXT|notnull=1|default=<none>|pk=2
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,item_pid)
+  index item_grants_item|unique=0|partial=0|(item_pid)
 table job_origins
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
   column pid|TEXT|notnull=0|default=<none>|pk=1

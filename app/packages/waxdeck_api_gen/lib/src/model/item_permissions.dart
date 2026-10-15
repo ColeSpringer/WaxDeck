@@ -11,10 +11,10 @@ part 'item_permissions.g.dart';
 /// The caller's permissions on one item.
 ///
 /// Properties:
-/// * [mayCurate] - Whether the caller may run the item-scoped metadata mutations: administrators always, everyone else exactly for the items their own uploads brought in. 
+/// * [mayCurate] - Whether the caller may run the item-scoped metadata mutations: administrators always, anyone else for the items their own uploads and acquisitions brought in and the parts a kind change split out of those. 
 @BuiltValue()
 abstract class ItemPermissions implements Built<ItemPermissions, ItemPermissionsBuilder> {
-  /// Whether the caller may run the item-scoped metadata mutations: administrators always, everyone else exactly for the items their own uploads brought in. 
+  /// Whether the caller may run the item-scoped metadata mutations: administrators always, anyone else for the items their own uploads and acquisitions brought in and the parts a kind change split out of those. 
   @BuiltValueField(wireName: r'mayCurate')
   bool get mayCurate;
 

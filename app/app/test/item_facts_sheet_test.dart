@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/library/item_facts_sheet.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
@@ -36,8 +37,17 @@ Future<void> _pump(
 }) async {
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [repositoryProvider.overrideWithValue(repository)],
-      child: routedHost(ItemFactsSheet(pid: pid, mediaType: mediaType)),
+      overrides: [
+        repositoryProvider.overrideWithValue(repository),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+      // A scaffold for the ink a copy's delete draws, as the modal sheet
+      // provides it.
+      child: routedHost(
+        Scaffold(
+          body: ItemFactsSheet(pid: pid, mediaType: mediaType),
+        ),
+      ),
     ),
   );
   await tester.pumpAndSettle();
@@ -185,6 +195,222 @@ void main() {
     expect(_row('plays'), findsOneWidget);
     expect(_row('codec'), findsOneWidget);
   });
+
+  testWidgets('an item with a copy lists its files and deletes the copy', (
+    tester,
+  ) async {
+    final repository =
+        FakeRepository(
+            sessionState: const SessionState(
+              authenticated: true,
+              user: WaxDeckUser(
+                id: 'us-1',
+                username: 'curator',
+                canDelete: true,
+              ),
+            ),
+            items: [_item('tr-1', MediaType.music)],
+          )
+          ..itemDetailCopies['tr-1'] = 1
+          ..itemFilesByPid['tr-1'] = const [
+            ItemFile(
+              filePid: 'f-own',
+              role: 'primary',
+              name: '01 - Harbour Lights.flac',
+              sizeBytes: 31457280,
+            ),
+            ItemFile(
+              filePid: 'f-copy',
+              role: 'alternate',
+              name: '01 - Harbour Lights (1).flac',
+              sizeBytes: 31457280,
+              reason: 'same-audio',
+            ),
+          ];
+
+    await _pump(tester, repository);
+
+    expect(_value(tester, 'files'), '2 files');
+    final copy = find.bySemanticsIdentifier(SemanticsIds.itemFileRow('f-copy'));
+    expect(
+      find.descendant(
+        of: copy,
+        matching: find.text('01 - Harbour Lights (1).flac'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: copy, matching: find.text('Copy')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemFileDelete('f-own')),
+      findsNothing,
+      reason: 'the item\'s own file goes through the item\'s delete',
+    );
+
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemFileDelete('f-copy')),
+    );
+    await tester.pumpAndSettle();
+    expect(repository.deleteItemFilesCalls.single.dryRun, isTrue);
+    expect(find.text('01 - Harbour Lights (1).flac'), findsWidgets);
+    expect(
+      find.text('The item stays in your library on its remaining files.'),
+      findsOneWidget,
+    );
+    await tester.tap(find.byKey(const Key('item-delete-confirm')));
+    await tester.pumpAndSettle();
+
+    final applied = repository.deleteItemFilesCalls.last;
+    expect(applied.dryRun, isFalse);
+    expect(applied.filePids, ['f-copy']);
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemFileRow('f-copy')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a copy says whether it is the same audio or another '
+      'encoding', (tester) async {
+    final repository = FakeRepository(items: [_item('tr-1', MediaType.music)])
+      ..itemDetailCopies['tr-1'] = 2
+      ..itemFilesByPid['tr-1'] = const [
+        ItemFile(
+          filePid: 'f-own',
+          role: 'primary',
+          name: '01 - Harbour Lights.flac',
+        ),
+        ItemFile(
+          filePid: 'f-copy',
+          role: 'alternate',
+          name: '01 - Harbour Lights (1).flac',
+          reason: 'same-audio',
+        ),
+        ItemFile(
+          filePid: 'f-mp3',
+          role: 'alternate',
+          name: '01 - Harbour Lights.mp3',
+          reason: 'other-encoding',
+        ),
+      ];
+
+    await _pump(tester, repository);
+
+    String? labelOf(String filePid) {
+      final row = find.bySemanticsIdentifier(SemanticsIds.itemFileRow(filePid));
+      for (final label in ['Primary', 'Copy', 'Other encoding']) {
+        if (find
+            .descendant(of: row, matching: find.text(label))
+            .evaluate()
+            .isNotEmpty) {
+          return label;
+        }
+      }
+      return null;
+    }
+
+    expect(labelOf('f-own'), 'Primary');
+    expect(labelOf('f-copy'), 'Copy');
+    expect(labelOf('f-mp3'), 'Other encoding');
+  });
+
+  testWidgets('a copy deleted elsewhere leaves the list once its delete is '
+      'refused', (tester) async {
+    const own = ItemFile(
+      filePid: 'f-own',
+      role: 'primary',
+      name: '01 - Harbour Lights.flac',
+      sizeBytes: 31457280,
+    );
+    final repository =
+        FakeRepository(
+            sessionState: const SessionState(
+              authenticated: true,
+              user: WaxDeckUser(
+                id: 'us-1',
+                username: 'curator',
+                canDelete: true,
+              ),
+            ),
+            items: [_item('tr-1', MediaType.music)],
+          )
+          ..itemDetailCopies['tr-1'] = 1
+          ..itemFilesByPid['tr-1'] = const [
+            own,
+            ItemFile(
+              filePid: 'f-copy',
+              role: 'alternate',
+              name: '01 - Harbour Lights (1).flac',
+              sizeBytes: 31457280,
+              reason: 'same-audio',
+            ),
+          ];
+    await _pump(tester, repository);
+
+    // Another session deleted the copy after this list was read.
+    repository
+      ..itemDetailCopies['tr-1'] = 0
+      ..itemFilesByPid['tr-1'] = const [own]
+      ..deleteItemsError = const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such file',
+        statusCode: 404,
+      );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.itemFileDelete('f-copy')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'That is not here any more.',
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.itemFileRow('f-copy')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('an item without copies asks for no file list', (tester) async {
+    final repository = FakeRepository(items: [_item('tr-1', MediaType.music)])
+      ..itemFilesError = WaxDeckApiException(
+        statusCode: 500,
+        code: 'internal',
+        message: 'not asked',
+      );
+
+    await _pump(tester, repository);
+
+    expect(_row('files'), findsNothing);
+    expect(find.byType(ErrorState), findsNothing);
+  });
+
+  for (final (status, code, drawn) in [
+    (403, 'forbidden', false),
+    (500, 'internal', true),
+  ]) {
+    testWidgets('a file list answered $status draws '
+        '${drawn ? 'its error' : 'nothing'}', (tester) async {
+      final repository = FakeRepository(items: [_item('tr-1', MediaType.music)])
+        ..itemDetailCopies['tr-1'] = 1
+        ..itemFilesError = WaxDeckApiException(
+          statusCode: status,
+          code: code,
+          message: 'no',
+        );
+
+      await _pump(tester, repository);
+      // Through the retry ladder a failure that is not a refusal climbs,
+      // about forty seconds of it.
+      for (var i = 0; i < 30; i++) {
+        await tester.pump(const Duration(seconds: 2));
+      }
+
+      expect(find.byType(ErrorState), drawn ? findsOneWidget : findsNothing);
+      expect(_row('files'), findsNothing);
+    });
+  }
 
   testWidgets('the sheet is named for the item it was raised for', (
     tester,

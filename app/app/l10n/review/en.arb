@@ -1,6 +1,10 @@
 {
   "@@locale": "en",
   "@@x-template": "en.arb",
+  "reviewActionAddCopy": "Add as another copy",
+  "@reviewActionAddCopy": {
+    "description": "Review decision button for an entry whose every file is already in the library: import the files anyway, as copies beside the items that hold their audio."
+  },
   "reviewActionApprove": "Approve",
   "@reviewActionApprove": {
     "description": "Takes the selected candidate as the match. On the entry's decision bar and on the bulk bar."
@@ -24,6 +28,24 @@
   "reviewActionUnofficial": "Mark unofficial",
   "@reviewActionUnofficial": {
     "description": "Files the entry as a release no catalogue lists: a bootleg, a rip, a demo."
+  },
+  "reviewBulkHeldDuplicates": "{count, plural, =1{1 entry holds duplicates; open it to decide} other{{count} entries hold duplicates; open each to decide}}",
+  "@reviewBulkHeldDuplicates": {
+    "description": "Line of a bulk Approve's snackbar for the selected entries it left undecided because they hold files the library already has: the entry's own pane says which decisions those leave open. {count} is how many were left.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewBulkMoreWarnings": "{count, plural, =1{and 1 more warning} other{and {count} more warnings}}",
+  "@reviewBulkMoreWarnings": {
+    "description": "Last line of a bulk decision's snackbar when more of the server's warnings came back than it shows. {count} is how many were left out.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "reviewCandidateLine": "{percent}% {title}, {artist}",
   "@reviewCandidateLine": {
@@ -96,6 +118,10 @@
   "reviewCandidatesTitle": "Candidates",
   "@reviewCandidatesTitle": {
     "description": "Heading over the ranked releases the sources offered for this entry."
+  },
+  "reviewDecideHeldInPane": "This entry holds duplicates; decide it with its own buttons.",
+  "@reviewDecideHeldInPane": {
+    "description": "Snackbar when the a or u key is pressed on a queue row whose entry is already open beside the queue and holds files the library already has: the open entry's own buttons say which decisions those files leave open."
   },
   "reviewDecidedCount": "{count, plural, =1{Decided 1 entry} other{Decided {count} entries}}",
   "@reviewDecidedCount": {
@@ -174,6 +200,53 @@
   "reviewDiffUnmatched": "Unmatched",
   "@reviewDiffUnmatched": {
     "description": "A local file no candidate track was paired with."
+  },
+  "reviewDuplicateCount": "{count, plural, =1{1 duplicate} other{{count} duplicates}}",
+  "@reviewDuplicateCount": {
+    "description": "Chip on a review queue row: how many of the entry's files arrived matching something the library already holds.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "1"
+      }
+    }
+  },
+  "reviewDuplicateHelp": "Adding a file the library already holds keeps one item, with the file as another copy. Its details, art and who may edit it do not change.",
+  "@reviewDuplicateHelp": {
+    "description": "Explanation under the duplicate warning on a review entry, shown when a file holds the same audio as an item the library has."
+  },
+  "reviewDuplicateMaybeTitle": "{count, plural, =1{1 file may already be in your library} other{{count} files may already be in your library}}",
+  "@reviewDuplicateMaybeTitle": {
+    "description": "Heading of the warning on a review entry whose files match something the library holds by name or by sound, which may be another recording.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "reviewDuplicateRow": "{file}: {what}",
+  "@reviewDuplicateRow": {
+    "description": "One line of the duplicate warning on a review entry: the staged file's name, then what in the library it matched (a title and artist, or a sentence when the reader may not see it).",
+    "placeholders": {
+      "file": {
+        "type": "String",
+        "example": "03 - Hell Shell.m4a"
+      },
+      "what": {
+        "type": "String",
+        "example": "Hell Shell by Dom Kennedy"
+      }
+    }
+  },
+  "reviewDuplicateTitle": "{count, plural, =1{1 file is already in your library} other{{count} files are already in your library}}",
+  "@reviewDuplicateTitle": {
+    "description": "Heading of the warning on a review entry whose files arrived matching something the library already holds.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
   },
   "reviewEditMetadata": "Edit metadata",
   "@reviewEditMetadata": {
@@ -286,6 +359,10 @@
   "reviewIdentifyingLong": "Identifying: candidate lookup is still running",
   "@reviewIdentifyingLong": {
     "description": "Beside a spinner on the entry itself, where there is room to say what is happening."
+  },
+  "reviewJoinedChip": "Added to an item the library already had",
+  "@reviewJoinedChip": {
+    "description": "Note under a decided review track whose file joined an item that existed before (another copy of its audio, or a further part of a book), which kept its details."
   },
   "reviewLoadError": "Could not load the review queue",
   "@reviewLoadError": {
@@ -419,7 +496,7 @@
   "@reviewSkippedDecided": {
     "description": "Empty state for a skipped identification that has already been decided."
   },
-  "reviewSkippedPending": "This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own - keep the files as they are, or skip.",
+  "reviewSkippedPending": "This submission asked to be taken as delivered, so nothing was searched. It could not be added on its own: read the warning above if there is one, then add it, skip it or discard it.",
   "@reviewSkippedPending": {
     "description": "Empty state for a skipped identification that is still pending, so it needs telling what to do."
   },

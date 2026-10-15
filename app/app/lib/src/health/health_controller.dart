@@ -203,22 +203,27 @@ class DuplicatesController extends AsyncNotifier<List<DuplicateGroup>> {
   Future<List<DuplicateGroup>> build() =>
       ref.watch(repositoryProvider).listDuplicates();
 
+  /// Lists again whatever the answer: a refusal can mean the group is
+  /// stale, which only a fresh read shows.
   Future<MergeOutcome> merge(DuplicateGroup group) async {
-    final outcome = await ref
-        .read(repositoryProvider)
-        .mergeDuplicates(
-          entityType: group.entityType,
-          survivorPid: group.survivor.pid,
-          loserPids: [for (final loser in group.losers) loser.pid],
-        );
-    if (ref.mounted) ref.invalidateSelf();
-    return outcome;
+    try {
+      return await ref
+          .read(repositoryProvider)
+          .mergeDuplicates(
+            entityType: group.entityType,
+            survivorPid: group.survivor.pid,
+            loserPids: [for (final loser in group.losers) loser.pid],
+          );
+    } finally {
+      if (ref.mounted) ref.invalidateSelf();
+    }
   }
 }
 
 final duplicatesProvider =
     AsyncNotifierProvider<DuplicatesController, List<DuplicateGroup>>(
       DuplicatesController.new,
+      retry: retryUnlessRefused,
     );
 
 /// Recordings held in more than one quality, with the resolve action
@@ -228,25 +233,41 @@ class UpgradesController extends AsyncNotifier<List<UpgradeGroup>> {
   Future<List<UpgradeGroup>> build() =>
       ref.watch(repositoryProvider).listUpgrades();
 
-  /// Returns the trashed count.
+  /// Returns the trashed count. A group whose members are one item's
+  /// files names them by file; one across items, by item.
+  ///
+  /// Lists again whatever the answer: a move the trash could not make
+  /// is refused after the others went, and those are gone.
   Future<int> resolve(UpgradeGroup group) async {
     final keep =
         group.members.where((m) => m.best).firstOrNull ?? group.members.first;
-    final removed = await ref
-        .read(repositoryProvider)
-        .resolveUpgrade(
-          keepItemPid: keep.itemPid,
-          removeItemPids: [
-            for (final member in group.members)
-              if (member.itemPid != keep.itemPid) member.itemPid,
-          ],
-        );
-    if (ref.mounted) ref.invalidateSelf();
-    return removed;
+    final repo = ref.read(repositoryProvider);
+    final oneItem = group.members.every((m) => m.itemPid == keep.itemPid);
+    try {
+      return oneItem
+          ? await repo.resolveUpgrade(
+              keepItemPid: keep.itemPid,
+              keepFilePid: keep.filePid,
+              removeFilePids: [
+                for (final member in group.members)
+                  if (member.filePid != keep.filePid) member.filePid,
+              ],
+            )
+          : await repo.resolveUpgrade(
+              keepItemPid: keep.itemPid,
+              removeItemPids: [
+                for (final member in group.members)
+                  if (member.itemPid != keep.itemPid) member.itemPid,
+              ],
+            );
+    } finally {
+      if (ref.mounted) ref.invalidateSelf();
+    }
   }
 }
 
 final upgradesProvider =
     AsyncNotifierProvider<UpgradesController, List<UpgradeGroup>>(
       UpgradesController.new,
+      retry: retryUnlessRefused,
     );

@@ -9,11 +9,14 @@ import (
 )
 
 // Audiobook fixtures. WaxBin classifies a file as a book when its
-// extension is .m4b, its iTunes media kind is audiobook (stik=2), or it
-// carries a narrator credit; the extension is the one signal a
-// synthesized fixture can rely on, so every part below is generated as
-// MP4/AAC and renamed to .m4b. Parts group into one book by their
-// identity key (album + album-artist), and order by track number.
+// library is declared an audiobook library, its extension is .m4b, its
+// iTunes media kind is audiobook (stik=2), or it carries a narrator
+// credit, and keeps whatever kind an import or a person pinned. The
+// extension is the one signal a synthesized file carries on its own, so
+// the books below are MP4/AAC renamed to .m4b, apart from the loose MP3
+// book, which is a book only where its library or an upload says so.
+// Parts group into one book by their identity key (album +
+// album-artist), and order by track number.
 
 // bookAuthor and bookTitle name the multi-file fixture book.
 const (
@@ -40,6 +43,60 @@ func GenerateM4B(dir string, spec Spec) (string, error) {
 		return "", fmt.Errorf("fixtures: renaming to m4b: %w", err)
 	}
 	return m4b, nil
+}
+
+// GenerateLooseMP3Book writes a two-part audiobook as a library of
+// plain MP3s holds one - the shape of a LibriVox download - under dir:
+// "Mira Loom/The Loose Chapters" holding "01 - Chapter One.mp3" and
+// "02 - Chapter Two.mp3", tagged with title, artist, album and track,
+// genre "Speech", and nothing a scan reads as a book. It returns the
+// parts' paths in reading order.
+func GenerateLooseMP3Book(dir string) ([]string, error) {
+	bookDir := filepath.Join(dir, "Mira Loom", "The Loose Chapters")
+	var out []string
+	for i, title := range []string{"Chapter One", "Chapter Two"} {
+		paths, err := Generate(bookDir, Spec{
+			Name:     fmt.Sprintf("%02d - %s", i+1, title),
+			Codec:    CodecMP3,
+			Duration: time.Duration(3+i) * time.Second,
+			Tags: map[string]string{
+				"TITLE": title, "ARTIST": "Mira Loom", "ALBUM": "The Loose Chapters",
+				"ALBUMARTIST": "Mira Loom", "TRACKNUMBER": fmt.Sprint(i + 1), "GENRE": "Speech",
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("fixtures: loose book part %d: %w", i+1, err)
+		}
+		out = append(out, paths...)
+	}
+	return out, nil
+}
+
+// GenerateMisfiledBook writes a two-part MP3 audiobook a library holding
+// music catalogs as an album - "Ora Vance/The Misfiled Lectures" with
+// "01 - First Lecture.mp3" and "02 - Second Lecture.mp3", tagged with
+// title, artist, album and track only - for the kind change to make a
+// book of. Its audio is its own, so it never joins GenerateLooseMP3Book's
+// as a copy. It returns the parts' paths in reading order.
+func GenerateMisfiledBook(dir string) ([]string, error) {
+	bookDir := filepath.Join(dir, "Ora Vance", "The Misfiled Lectures")
+	var out []string
+	for i, title := range []string{"First Lecture", "Second Lecture"} {
+		paths, err := Generate(bookDir, Spec{
+			Name:     fmt.Sprintf("%02d - %s", i+1, title),
+			Codec:    CodecMP3,
+			Duration: time.Duration(5+i) * time.Second,
+			Tags: map[string]string{
+				"TITLE": title, "ARTIST": "Ora Vance", "ALBUM": "The Misfiled Lectures",
+				"ALBUMARTIST": "Ora Vance", "TRACKNUMBER": fmt.Sprint(i + 1),
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("fixtures: misfiled book part %d: %w", i+1, err)
+		}
+		out = append(out, paths...)
+	}
+	return out, nil
 }
 
 // GenerateBook writes a three-part audiobook under dir using the

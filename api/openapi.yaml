@@ -80,7 +80,13 @@ info:
       `pe-` player endpoint, `ps-` playback session, `rv-` review
       entry, `up-` upload, `tk-` tool task, `iv-` invite, `bu-` backup
       archive, `th-` trash entry, `sh-` share link, `nf-` inbox row,
-      `mx-` staged migration export, `tl-` gapless rendering).
+      `mx-` staged migration export, `tl-` gapless rendering, `fl-` file
+      behind an item). A track's
+      and a book's prefix follow the item's kind, which can change under
+      it (`POST /items/kind`, a library made to hold audiobooks, a
+      retag), so either of the two reaches the item: a queue or a
+      playlist holding the old form still resolves, and every answer
+      carries the current one. Other prefixes are strict.
     - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
       never offsets.
     - Errors are always the `Error` schema. `code` is a stable machine-readable
@@ -157,7 +163,12 @@ info:
       running without the streaming engine), and other refusals under
       that code carry no params yet. Under `conflict`, a bookmark create
       replaying the id of a removed bookmark carries `reason: removed`,
-      and a client drops its copy. Under `invalid-request`, `reason` names
+      and a client drops its copy; a completed upload whose bytes miss
+      their declared SHA-256 carries `reason: checksum-mismatch`, its
+      session already ended. Under `unsupported-format`,
+      `reason: unreadable` marks a completed upload whose bytes do not
+      read as audio at all, a damaged file rather than a format the
+      server refuses. Under `invalid-request`, `reason` names
       two refusals a client words itself: `incompatible-schema` (a backup
       whose schema this server cannot open) and `cue-rip` (a delete
       naming some tracks of a cue rip but not all). Values are
@@ -607,8 +618,13 @@ paths:
       description: >
         State and progress of a server-run catalog job, for the audience
         the `job` sync marker reaches: administrators, and the starter of
-        a targeted job until its end has been announced to them; anyone
-        else is `forbidden`. A timeline-measurement job (the job a queue
+        a targeted job until its end has been announced to them. Once a
+        job on an item has ended, anyone who may edit that item (its
+        `mayCurate`) reads it too, which is how a kind change's starter
+        reads its result after the end notice; anyone else is
+        `forbidden`. For a reader who is not an administrator, a scan's
+        `runs` and the write-back failures' `path`s are left out and
+        `error` carries no server paths. A timeline-measurement job (the job a queue
         timeline answers `202` with) is readable by the account whose
         queue it measures alone, and is `not-found` to any other.
       tags: [admin]
@@ -665,6 +681,49 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /libraries/{pid}/media:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setLibraryMedia
+      summary: Change what a library holds
+      description: >
+        Changes the library's content class in place and starts the scan
+        that applies it to the files already there. Onto `audiobook`, the
+        library's audio files become books (its plain parts gathered into
+        one book per album and author) on an ordinary scan. Onto `music`
+        or `mixed`, the scan re-reads every file and classifies it by its
+        tags: in `music` a book its parts' tags do not make one is read
+        again as tracks, while in `mixed` a book whose parts already make
+        one keeps them. Items whose kind was set by hand or by an upload
+        keep it either way. The podcast library is `invalid-request`,
+        and so is moving a root `WAXDECK_AUDIOBOOK_ROOTS` declares
+        (`mediaDeclared`) off audiobook. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryMedia"
+      responses:
+        "200":
+          description: The library, and whether its scan started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryMediaChanged"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /libraries/{pid}/read-only:
     parameters:
       - $ref: "#/components/parameters/Pid"
@@ -700,14 +759,58 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /libraries/{pid}/folder-fallback:
+    parameters:
+      - $ref: "#/components/parameters/Pid"
+    put:
+      operationId: setLibraryFolderFallback
+      summary: Name untagged files from their folders
+      description: >
+        Lets a scan name a track that carries no artist, album artist
+        or album at all from its folders: the grandparent folder as the
+        artist and the parent as the album, less a trailing ` (YYYY)`.
+        It needs a file two folders down, so a loose file names nothing,
+        and never applies to a book. Files scanned from now on take it;
+        an unchanged file already scanned takes it on a rescan that
+        reads every file again (`force`). Only an in-place library takes
+        it: a managed library's folders are the catalog's own rendering,
+        and asking for one answers `invalid-request`, as the podcast
+        library does. Administrators only.
+      tags: [admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LibraryFolderFallback"
+      responses:
+        "200":
+          description: The stored flag.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LibraryFolderFallback"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /jobs:
     get:
       operationId: listJobs
       summary: List recent catalog jobs
       description: >
         Recent catalog jobs, newest first: `limit` of them, after any still
-        running. A finished targeted job is left out; read it by pid. The
-        `job` sync marker says when to read again. Administrators only.
+        running. A finished targeted job is left out (read it by pid),
+        except a kind change (`set-kind`), which lists with its result.
+        The `job` sync marker says when to read again. Administrators
+        only.
       tags: [admin]
       parameters:
         - name: limit
@@ -2746,6 +2849,12 @@ paths:
         seconds and two percent; it has no bulk fix. A multi-file book
         fails a file's rule (`corrupt-audio`, `write-unsynced`,
         `legacy-tags`, `duration-mismatch`) when any of its parts does.
+        `write-unsynced` lists files whose tags lag the catalog: a
+        refused or failed write-back, a value the format could not
+        store, and a value an edit changed in the catalog without
+        writing it (a value a clean-up pass normalized in the catalog
+        alone does not count). Its fix writes those values and counts
+        an item filled only when none remains.
         `genre-whitelist` flags an
         item carrying a genre the server's genre tree does not know; it
         is deliberately not bulk-fixable, because the background
@@ -3027,10 +3136,15 @@ paths:
       operationId: listUpgrades
       summary: List quality upgrade groups
       description: >
-        Groups of the same recording in different encodings, found
-        through the fingerprint index, best quality first within each
-        group. The resolve endpoint keeps the best and trashes the
-        rest; play history merges onto the kept item.
+        Groups of the same recording in different encodings, best
+        quality first within each group, each encoding named by its
+        file. An item holding another encoding of its recording as one
+        of its files (tied by their recording id) is a group of its
+        own, listed first; then items the fingerprint index finds are
+        the same recording, which needs the library analyzed. A copy
+        of the same audio is not an encoding and never appears (the
+        item's files list it). The resolve endpoint keeps one and
+        trashes the rest.
       tags: [health]
       responses:
         "200":
@@ -3051,11 +3165,23 @@ paths:
       operationId: resolveUpgrade
       summary: Keep the best encoding
       description: >
-        Keeps one item of an upgrade group and moves the named
-        inferior encodings to the trash (recoverable within the
-        retention window). A named encoding in a read-only library,
-        or any while the server is read-only, refuses the whole call
-        with `read-only`. Administrators only.
+        Keeps one encoding of an upgrade group and moves the named
+        inferior ones to the trash (recoverable within the retention
+        window). Across items, `removeItemPids` names the items to
+        trash, each with all of its files. Within one item - a group
+        whose members share its pid - `keepFilePid` and
+        `removeFilePids` name the files: the removed ones go together
+        with any copy of their audio, and the item stays on the kept
+        one. Exactly one of the two removal lists is given. A cue rip's
+        file plays every track carved from it, so a removal that would
+        take it from under tracks the call does not name is
+        `invalid-request` with `params.reason` `cue-rip`. A named
+        encoding in a read-only library, or any while the server is
+        read-only, refuses the whole call with `read-only`, as does a
+        copy in a read-only library unless the kept encoding's library
+        is writable, when the copy stays; a move the trash could not
+        make refuses it with `conflict` after the others went.
+        Administrators only.
       tags: [health]
       requestBody:
         required: true
@@ -3081,9 +3207,10 @@ paths:
         "409":
           description: >
             The resolution was refused. `read-only`: a named encoding's
-            library, or the whole server, is read-only. `conflict`:
+            library, or the whole server, is read-only. `catalog-busy`:
             another catalog job holds the file-mutation scope the move
-            to the trash needs; retry when it ends.
+            to the trash needs; retry when it ends. `conflict`: a move
+            to the trash failed, and the message says how many.
           content:
             application/json:
               schema:
@@ -3867,6 +3994,96 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /items/{pid}/files:
+    get:
+      operationId: getItemFiles
+      summary: List the files behind an item
+      description: >
+        The files behind one item: its primary file, or a book's parts in
+        reading order, then its copies. A copy is a file a scan found
+        holding the same audio as one of the item's files (`same-audio`)
+        or another encoding of its recording (`other-encoding`), and
+        attached to the item rather than giving it an item of its own:
+        its tags do not describe the item, and it plays only when it takes
+        a removed file's place. A copy in a library the caller cannot see
+        is left out. Needs the `download` permission or the admin role,
+        and the item must be visible to the caller; `path` is
+        administrators' only.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The item's files.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemFiles"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/files/delete:
+    post:
+      operationId: deleteItemFiles
+      summary: Delete some of an item's files
+      description: >
+        Deletes files of one item, to the catalog trash by default or
+        permanently (`mode` `permanent`, administrators only), as
+        deleteLibraryItems deletes whole items. A copy goes alone; the
+        primary or a part gives its place to a copy when the item has
+        one, which `warnings` names, and an item that loses its last file
+        is archived. `dryRun` answers the plan without deleting. Needs the
+        `delete` permission or the admin role; the item must be visible
+        to the caller and every file one of its files in a library the
+        caller can see (`not-found` otherwise). A read-only library answers
+        `read-only`. The file of a cue rip plays every track carved from
+        it, so deleting it here when it plays other tracks is
+        `invalid-request` with `params.reason` `cue-rip`: delete those
+        tracks together through deleteLibraryItems.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteItemFilesRequest"
+      responses:
+        "200":
+          description: The plan (dry run) or the applied result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteItemsResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The delete was refused. `read-only`: the file's library, or
+            the whole server, is in read-only mode. `catalog-busy`:
+            another job holds the catalog's shared file-mutation scope,
+            which clears on its own, so an unattended retry is worth
+            something.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /library/items/delete:
     post:
       operationId: deleteLibraryItems
@@ -3881,7 +4098,10 @@ paths:
         pid must be visible to the caller (`not-found` otherwise).
         Items keep their catalog identity: an item that loses its
         last file is archived, not erased, and play history
-        survives. A read-only library answers `read-only`.
+        survives. An item's copies (getItemFiles) go with it, except
+        one in a read-only library or a library the caller cannot see,
+        which stays and keeps the item (`itemSurvives`). A read-only
+        library holding the item's own file answers `read-only`.
         Podcast episodes are not deletable here, and one anywhere in
         `pids` refuses the whole call (`invalid-request`): the podcast
         download tree owns its own files, and removing an episode's
@@ -3992,10 +4212,23 @@ paths:
     delete:
       operationId: clearItemLyrics
       summary: Clear lyrics
-      description: Removes the stored lyrics (files are untouched).
+      description: >
+        Removes the stored lyrics and their lock. With `writeBack` it
+        also deletes the `.lrc` sidecar beside the item's file, which a
+        set with `writeBack` writes, unless another audio file of that
+        name, not one of the item's own, reads it too; a sidecar that
+        stayed is not reported (a 204 carries no body) and is logged.
+        Lyrics embedded in the audio's own tags stay, and a forced
+        rescan reads them again.
       tags: [metadata]
       parameters:
         - $ref: "#/components/parameters/Pid"
+        - name: writeBack
+          in: query
+          description: Delete the item's `.lrc` sidecar too.
+          schema:
+            type: boolean
+            default: false
       responses:
         "204":
           description: Cleared.
@@ -4005,6 +4238,14 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `writeBack` was asked while the server, or the item's library,
+            is read-only (code `read-only`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -4014,8 +4255,9 @@ paths:
       summary: Read the caller's permissions on an item
       description: >
         Whether the caller may run the item-scoped metadata mutations
-        on this item: administrators always, everyone else exactly for
-        the items their own uploads brought in. This is the whole
+        on this item: administrators always, anyone else for the items
+        their own uploads and acquisitions brought in and the parts a
+        kind change split out of those. This is the whole
         `mayCurate` answer from the metadata read without the cost of
         the full editor document, for surfaces that only need to
         decide whether to show an edit door. The read does not confirm
@@ -4215,6 +4457,70 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/kind:
+    post:
+      operationId: setItemKind
+      summary: Change what items are
+      description: >
+        Turns tracks into an audiobook, or a book into tracks, as a
+        background job of kind `set-kind`, answered at once. Each item's
+        files are read again as the new kind, so an item changes kind in
+        place and keeps its pid, with its plays, stars, playlist entries
+        and shares. The pid's prefix follows the kind (`tr-` and `bk-`);
+        either form reaches the item. Tracks that make one book fold into
+        one item, the first one named or a book already holding their
+        key, and a book becoming tracks keeps its pid on its first part
+        and mints the rest; the finished job's result names where each
+        item went. A folded item's shares, and the track shares of the
+        item it folded into, are revoked rather than widened to the
+        whole book. The choice is pinned, so later scans keep it, and
+        anyone who may edit the items may replace a kind pinned before.
+
+
+        Gated per item: administrators, or the user whose upload or
+        acquisition brought the item in, or the part a kind change split
+        out of one (`mayCurate`); every item named
+        must pass or nothing changes. Refused with `invalid-request`,
+        before anything changes, for an episode, a cue track, a file
+        another item shares, or a book file with a cue sheet beside it
+        that would make it a cue rip.
+      tags: [metadata]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetItemKindRequest"
+      responses:
+        "202":
+          description: The kind change, running.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The change was refused. `conflict`: a file of one of the items
+            is not on disk, so it cannot be read as the new kind.
+            `read-only`: `writeBack` was asked while the server, or an
+            item's library, is read-only. `catalog-busy`:
+            another job holds the catalog's shared file-mutation scope,
+            which clears on its own.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -4802,7 +5108,13 @@ paths:
         Replaces the ordered values of one custom tag on a track or
         book, locking `tag.KEY` by default. Custom tags are full
         browse dimensions: they filter, facet, and feed smart list
-        rules. An empty value list clears the tag.
+        rules. An empty value list clears the tag. With `writeBack`
+        the values are also written into the item's files (every part
+        of a book), and a file that cannot take them is reported in
+        `writeBackFailures` with the edit standing; a key the tag
+        writer would store as another field on every format (`YEAR`
+        is the recording date) refuses `writeBack` with
+        `invalid-request`.
       tags: [metadata]
       requestBody:
         required: true
@@ -4826,7 +5138,14 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/FieldLocked"
+          description: >
+            `field-locked`: the tag is locked and the request did not set
+            `force`; the message names it. `read-only`: `writeBack` was
+            asked while the server, or the item's library, is read-only.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
     delete:
@@ -4835,8 +5154,18 @@ paths:
       description: >
         Removes the tag and its lock. A reserved key (one the catalog
         owns through another surface) answers `invalid-request`, like
-        setting one does.
+        setting one does. With `writeBack` the tag is stripped from the
+        item's files too; a file that could not be written is not
+        reported (a 204 carries no body), is logged, and is listed by
+        the health rule for tags out of sync.
       tags: [metadata]
+      parameters:
+        - name: writeBack
+          in: query
+          description: Strip the tag from the item's files too.
+          schema:
+            type: boolean
+            default: false
       responses:
         "204":
           description: Cleared.
@@ -4848,6 +5177,14 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `writeBack` was asked while the server, or the item's library,
+            is read-only (code `read-only`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -4861,7 +5198,16 @@ paths:
         Locks or unlocks the named fields against scans, enrichment,
         and organize. Field names are the scalar vocabulary plus the
         namespaced artifacts: `lyrics`, `chapters`, `art`,
-        `art.ROLE`, `acquisition`, `credit.ROLE`, and `tag.KEY`.
+        `art.ROLE`, `acquisition`, `credit.ROLE`, and `tag.KEY`, and
+        `kind`.
+
+
+        `kind` pins whether the item is a track or a book: an upload
+        imported under a media type its file would not get on its own
+        takes the pin, and while it holds a scan keeps the item's kind
+        whatever its library or tags say. Unlocking it lets the next
+        scan that reads the file classify the item again, under the
+        same catalog id; a forced rescan reads every file.
 
 
         The two artwork spellings differ in reach. `art` is the whole
@@ -5126,6 +5472,14 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            `writeBack` was asked while the server, or the item's library,
+            is read-only (code `read-only`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -5142,7 +5496,10 @@ paths:
         entry. Items marked unofficial are eligible here (an explicit
         rematch is the way back from that state). The entry id
         returns immediately; candidates fill in asynchronously and
-        the entry updates over the event channel.
+        the entry updates over the event channel. A caller who is not
+        an administrator owns the entry, so it lists in their queue,
+        and its unit holds only the tracks their own uploads brought
+        in.
       tags: [metadata]
       responses:
         "202":
@@ -9640,10 +9997,11 @@ paths:
       description: >
         Keyset-paginated review queue, newest first. Administrators see
         every entry; other callers see only entries produced by their
-        own uploads. Each entry is one album-sized unit: it applies or
-        declines as a whole, never track by track. `status` filters to
-        one lifecycle state (`pending` is the working queue; decided
-        entries remain listable for calibration and undo).
+        own uploads, acquisitions and rematches. Each entry is one
+        album-sized unit: it applies or declines as a whole, never
+        track by track. `status` filters to one lifecycle state
+        (`pending` is the working queue; decided entries remain
+        listable for calibration and undo).
       tags: [review]
       parameters:
         - name: status
@@ -9652,8 +10010,9 @@ paths:
             Restrict to one status. Statuses are server-defined
             strings; the current set is `pending`, `applied`,
             `auto-applied`, `as-is`, `unofficial`, `skipped`,
-            `discarded`, and `reverted`. Unknown values yield an
-            empty page rather than an error.
+            `discarded`, and `reverted`. `decided` is not a status but
+            selects every status except `pending`. Unknown values
+            yield an empty page rather than an error.
           schema:
             type: string
         - name: cursor
@@ -9722,21 +10081,51 @@ paths:
         Applies one decision to a pending entry. `approve` applies the
         chosen candidate's metadata to the whole unit (the ranked best
         when `candidateMbid` is absent), locking the applied fields so
-        a rescan cannot undo the acceptance; for entries staging new
-        files (uploads and imports) the files enter the library first.
-        `as-is` accepts the unit's current metadata unchanged (staged
-        files enter the library as they are). `unofficial` is `as-is`
-        plus a locked `RELEASESTATUS` custom tag of `unofficial`,
-        which excludes the items from future match retries and from
-        health penalties (content with no canonical release is a
-        terminal state, not an error). `skip` dismisses the entry
+        a rescan cannot undo the acceptance, and writes them into each
+        file's tags; for entries staging new files (uploads and
+        imports) the files enter the library first. `as-is` accepts the
+        unit's current metadata unchanged (staged files enter the
+        library as they are). `unofficial` is `as-is` plus a locked
+        `RELEASESTATUS` custom tag of `unofficial`, written into the
+        files too, which excludes the items from future match retries
+        and from health penalties (content with no canonical release is
+        a terminal state, not an error). A file in a read-only library
+        keeps its tags: `warnings` names it and the health rule for
+        tags out of sync lists what it is owed, while the unit's other
+        files are written; a unit none of whose files may be written is
+        applied to the catalog alone. A matching library applying a
+        confident match on its own writes the files the same way.
+        `skip` dismisses the entry
         without touching anything (staged files stay staged).
         `discard` deletes staged files and exists only for entries
         that carry them. Deciding an already-decided entry answers
-        `conflict`. Administrators may decide anything; other callers
-        only entries from their own uploads. A metadata write that
+        `conflict`, as does any decision, revert or new search of an
+        entry while another runs. A decision runs to its end once it
+        starts, whether or not the client waits for the answer.
+        Administrators may decide anything; other callers
+        only entries from their own uploads, acquisitions and rematches.
+        A metadata write that
         partially fails after the catalog committed reports per-file
         detail in `warnings` and the entry still counts as decided.
+        Files that join an item the library already holds - the same
+        audio, or a further part of a book it has - enter as that
+        item's copies or parts: the item keeps its metadata, `approve`
+        and `unofficial` leave it alone, and the uploader gains no
+        right to edit it. `warnings` names such files, and the
+        entry's tracks mark them `joined`. A file whose audio the
+        library holds at the very place its tags would put it adds
+        nothing; its staged copy is removed and `warnings` says so.
+
+
+        Staged files enter the library together or not at all where the
+        library can say in advance: every file is planned before any
+        moves, so a place already taken or an unreadable file answers
+        `conflict` with the reason, and a read-only destination
+        `read-only`, leaving the unit staged. Two files of one unit that would take the same
+        place pass that plan; the first lands and the decide answers
+        `conflict` for the second, and a retry resumes there. `discard`
+        then drops what is still staged and keeps what landed, which
+        `warnings` counts.
       tags: [review]
       requestBody:
         required: true
@@ -9760,7 +10149,18 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          $ref: "#/components/responses/Conflict"
+          description: >
+            The decision was refused. `conflict`: the entry is already
+            decided, or part of its unit cannot enter the library (the
+            message says why). `read-only`: the server is in read-only
+            mode, or the library an upload or acquisition was staged for
+            is read-only. `catalog-busy`: another job holds the catalog's shared
+            file-mutation scope, which clears on its own, so the same
+            decision is worth sending again.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -9801,7 +10201,7 @@ paths:
         Pending entries only; a decided one answers `conflict`. The
         permission is the deciding permission: administrators may
         re-identify anything, other callers only entries from their
-        own uploads.
+        own uploads, acquisitions and rematches.
       tags: [review]
       requestBody:
         required: false
@@ -9837,8 +10237,9 @@ paths:
       summary: Revert an applied match
       description: >
         Restores the metadata snapshot taken before an `applied` or
-        `auto-applied` entry was applied, unlocks the fields the apply
-        locked, and marks the entry `reverted`. Reverts of auto
+        `auto-applied` entry was applied, in the catalog and the files'
+        tags (catalog alone for a file in a read-only library), unlocks
+        the fields the apply locked, and marks the entry `reverted`. Reverts of auto
         applied entries feed the calibration statistics. Only
         administrators and the deciding user may revert. Reverting
         anything but an applied entry answers `conflict`.
@@ -9903,6 +10304,10 @@ paths:
         rate is the trust signal the review surface shows next to the
         auto-apply behavior; it is deliberately not the accuracy
         metric that tunes thresholds (reverts are sparse and lagging).
+        The counts cover the entries the caller can see, the scope of
+        `GET /review/queue`: administrators count every entry, other
+        callers only the entries their own uploads, acquisitions and
+        rematches produced.
       tags: [review]
       responses:
         "200":
@@ -11042,8 +11447,11 @@ paths:
         caller must hold upload rights; the declared size counts
         against the caller's pending-upload limit up front so a full
         one fails fast, and the file name's extension is checked against the
-        server's accepted formats. The required media type label
-        routes the file to the matching library kind; `libraryPid`
+        server's accepted formats. The required media type label is
+        what the file becomes - an `audiobook` upload is cataloged as a
+        book and a `music` upload as a track, whatever its tags say, and
+        later scans keep that kind - and routes it to the matching
+        library kind; `libraryPid`
         names which library it belongs to, which is a choice about
         settings rather than about placement (see the field). Passing
         the file's
@@ -11196,15 +11604,24 @@ paths:
       summary: Finish an upload
       description: >
         Verifies the received bytes (size, and SHA-256 when one was
-        declared), probes the audio (an undecodable file answers
-        `unsupported-format` and the session stays deletable), moves
+        declared), probes the audio, moves
         the file into staging with crash-safe write discipline, and
         opens a review entry for the identify pipeline. The response
-        carries `reviewEntryId` and any duplicate warning (an exact
-        content match or a fingerprint match against an existing
-        item); the duplicate warning does not block the review flow,
-        it informs the decision. Completing before every declared
-        byte arrived answers `conflict`.
+        carries `reviewEntryId` and any duplicate warning (the same
+        audio, the same recording or a matching name against an
+        existing item). The warning does not block the review flow:
+        importing a file whose audio the library holds adds it to that
+        item as another copy, changing nothing about the item and
+        giving the uploader no right to edit it, and the entry waits
+        for a person even where matching applies on its own.
+        Completing before every declared byte arrived answers
+        `conflict`, and the session stays open for the rest. Bytes no
+        retry can mend end the session at once, freeing what it held
+        against the quota: a file that does not read as audio answers
+        `unsupported-format` with `reason: unreadable`, and bytes that
+        do not match the declared SHA-256 answer `conflict` with
+        `reason: checksum-mismatch`; either way the file has to be sent
+        again under a new session.
       tags: [uploads]
       responses:
         "200":
@@ -12007,7 +12424,12 @@ components:
           - cue_track_dropped
           - tag_write_lost
           - tag_write_unsynced
+          - tag_write_owed
           - corrupt_audio
+          - sort_name_fallback
+          - fingerprint_fallback
+          - duplicate_copy
+          - alternate_encoding
     DiagnosticSeverityFilter:
       name: severity
       in: query
@@ -12236,7 +12658,8 @@ components:
       description: >
         The file's format is not accepted (code `unsupported-format`):
         the extension is outside the server's accepted set, or the
-        audio did not decode. A DRM-encrypted container (an Audible
+        audio did not decode, which carries `reason: unreadable`. A
+        DRM-encrypted container (an Audible
         `aax`/`aaxc`) answers with the same status but code
         `drm-protected`, because that refusal is permanent - no format
         set can make the file playable - and must not read as a codec
@@ -12557,6 +12980,34 @@ components:
             artwork, so clients keep a placeholder ready.
           example: /api/v1/items/tr-01JZX5N8QW3F4V9T2B7KD3M9R6/art
 
+    DuplicateWarning:
+      type: object
+      description: >
+        The library appears to already contain this audio. A warning,
+        not a refusal: the review decision chooses what happens.
+      required: [kind]
+      properties:
+        itemPid:
+          type: string
+          description: >
+            The existing item. Absent, as `title` and `artist` are, when
+            it sits where the caller cannot see it.
+        kind:
+          type: string
+          description: >
+            Evidence level: `content` (the same audio, which imports
+            as another copy of the item), `id` (the same recording by
+            the identifier its tags carry), `fingerprint`
+            (acoustically the same recording) or `name` (the same
+            title, artist and length). A string, not a closed enum.
+          example: content
+        title:
+          type: string
+          description: The existing item's title.
+        artist:
+          type: string
+          description: The existing item's artist.
+
     ChapterMark:
       type: object
       description: One chapter mark on an item's timeline.
@@ -12600,6 +13051,13 @@ components:
             Content class the library holds. Currently `music`,
             `audiobook`, `podcast`, or `mixed`; new values may appear.
           example: music
+        mediaDeclared:
+          type: boolean
+          description: >
+            The server's configuration names what the library holds
+            (`WAXDECK_AUDIOBOOK_ROOTS`), so setLibraryMedia refuses any
+            other media until the configuration changes. Absent means
+            false.
         path:
           type: string
           description: >
@@ -12618,6 +13076,11 @@ components:
         readOnly:
           type: boolean
           description: The catalog keeps the library's files as they are.
+        folderFallback:
+          type: boolean
+          description: >
+            A scan names an untagged file from its folders
+            (setLibraryFolderFallback). In-place libraries only.
         managed:
           type: boolean
           description: The catalog may place and move files in the library.
@@ -12687,8 +13150,17 @@ components:
           enum: [music, audiobook, mixed]
           default: mixed
           description: >
-            Content class the root holds. `mixed` (the default) admits both
-            tracks and books.
+            What the root holds, which decides what its files become.
+            `audiobook` makes every audio file in the root a book: parts
+            sharing an album title and author are one book, and numbered
+            parts with no album tag join the book their folder holds.
+            `music` and `mixed` (the default) classify each file by its
+            tags: an `.m4b` file, an audiobook media type, a narrator
+            credit or an Audiobook genre makes a book, and in `mixed` the
+            other parts of a book the first three mark join it (the genre
+            marks only its own file). The class also routes
+            managed placement. It can be changed with
+            `PUT /libraries/{pid}/media`.
         managed:
           type: boolean
           default: false
@@ -12710,8 +13182,8 @@ components:
           type: string
           description: >
             What the job does: `scan`, `analyze`, `enrich`, `organize`,
-            `import`, `delete`, `restore`, `empty-trash`, or `purge-trash`.
-            New kinds may appear.
+            `import`, `delete`, `restore`, `empty-trash`, `purge-trash`, or
+            `set-kind`. New kinds may appear.
           example: scan
         state:
           type: string
@@ -12732,7 +13204,10 @@ components:
           description: Human-readable progress note.
         error:
           type: string
-          description: Failure detail for `failed`/`crashed` jobs.
+          description: >
+            Failure detail for `failed`/`crashed` jobs. Administrators
+            read the catalog's own text; anyone else reads it without
+            the server's storage paths or operation names.
         startedAt:
           type: string
           format: date-time
@@ -12745,14 +13220,44 @@ components:
           type: object
           additionalProperties: true
           description: >
-            What a finished job did, once it records a summary: a `scan`
-            reports `filesSeen`, `created`, `updated`, `relinked`,
-            `unchanged`, `missing`, `skipped` and `errored` (files); an
-            `analyze` pass `analyzed`, `loudnessMeasured`, `measureFailed`,
-            `skipped` and `errored`; an `enrich` pass the same tallies as
-            the enrichment status's `lastRun`; an `organize` run `profile`,
-            `moved`, `skipped`, `errored` and `sidecarsMoved`. Absent while
-            running and for kinds that record none. Shapes may grow fields.
+            What a finished job did, once it records a summary. A `scan`
+            counts files: `audioFiles` (every audio file it visited) is
+            `created`, `updated`, `sidecarsUpdated` (a lyrics, cue or
+            cover change without the audio changing), `copies` (files that
+            joined an item as another copy of its audio or another
+            encoding of its recording), `unchanged` and `errored`
+            together, and `filesSeen` is `audioFiles` and `skipped`
+            (files that are not audio). `relinked` (moved or renamed) and
+            `reread` (read in full rather than recognized by size and
+            time) count among the audio files; `missing` counts items
+            whose files are gone, `promoted` copies that took a gone
+            file's place, `dropped` the records of gone files removed, and
+            `walkErrors` entries the scan could not read, which no file
+            count holds. `rootUnreachable` says a library's folder could
+            not be reached, so nothing under it was marked missing, and
+            `subPathGone` that the folder asked for was not there. For
+            administrators, `runs` lists each library's own counts in the
+            same words, with its `libraryPid` and `library` name. An
+            `analyze` pass reports `analyzed`, `loudnessMeasured`,
+            `measureFailed`, `skipped` and `errored`, with
+            `fingerprintFallbacks` (files fpcalc could not read,
+            fingerprinted another way that does not group with fpcalc's)
+            and `fingerprintPartialReads` (fpcalc reads kept although
+            they ended in an error, their fingerprint covering the span
+            analyzed); an `enrich` pass the
+            same tallies as the enrichment status's `lastRun`; an
+            `organize` run `profile`, `moved`, `skipped`, `errored` and
+            `sidecarsMoved`. A `set-kind` run reports `converted` (the
+            items that changed kind in place), `absorbed` (each pid folded
+            into another item, which no longer exists, mapped to the item
+            that took it in, or to an empty string when that item is in a
+            library the reader is not granted), `created` (the items a book
+            split minted for its parts) and `writeBackFailures` (`filePid`,
+            `reason`, and for administrators `path`); every pid is in its
+            current form, and a change cut short reports what it did before
+            it stopped.
+            Absent while running and for kinds that record none. Shapes
+            may grow fields.
         target:
           $ref: "#/components/schemas/JobTarget"
 
@@ -13737,6 +14242,49 @@ components:
           type: string
           description: A profile name from the organize profiles listing.
           example: waxbin-native
+
+    LibraryMedia:
+      type: object
+      description: What a library holds.
+      required: [media]
+      properties:
+        media:
+          type: string
+          enum: [music, audiobook, mixed]
+          description: The content class, as `LibraryCreate.media`.
+
+    LibraryMediaChanged:
+      allOf:
+        - $ref: "#/components/schemas/Library"
+        - type: object
+          description: Whether the change started the scan that applies it.
+          required: [scanStarted]
+          properties:
+            scanStarted:
+              type: boolean
+              description: >
+                Whether the scan that applies the change started. False
+                when the library already held that media, so there was
+                nothing to apply, and when another catalog job was
+                already running: a change onto `audiobook` is then
+                applied by the next scan, and any
+                other by the next rescan that re-reads every file
+                (`force`), which an administrator starts once the running
+                job ends.
+      description: A library whose content class changed.
+
+    LibraryFolderFallback:
+      type: object
+      description: Whether a library names untagged files from their folders.
+      required: [folderFallback]
+      properties:
+        folderFallback:
+          type: boolean
+          description: Whether a scan names an untagged file from its folders.
+        libraryPid:
+          type: string
+          description: The library (response only).
+          example: lb-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     LibraryReadOnly:
       type: object
@@ -15495,7 +16043,11 @@ components:
             $ref: "#/components/schemas/DuplicateEntity"
         detail:
           type: string
-          description: The audit's explanation of the finding.
+          description: >
+            Why the members were paired, in the catalog's words (for
+            example `same collation key`, or `same title and album
+            artist` for albums a folder keeps apart). Absent when the
+            catalog gave none.
 
     DuplicateEntity:
       type: object
@@ -15574,11 +16126,23 @@ components:
     UpgradeMember:
       type: object
       description: One encoding of a recording.
-      required: [itemPid, title, codec, best, lossless]
+      required: [itemPid, filePid, title, codec, best, lossless]
       properties:
         itemPid:
           type: string
           description: The item.
+        filePid:
+          type: string
+          description: >
+            The file this encoding is, as getItemFiles names it. Within
+            one item it is what tells the members apart.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        path:
+          type: string
+          description: >
+            The file's path on the server, given where another member
+            of the group has the same codec and bitrate: there its
+            file's name is what tells the two apart.
         title:
           type: string
           description: Its title.
@@ -15590,13 +16154,13 @@ components:
           description: Audio codec.
         bitrate:
           type: integer
-          description: Bitrate in bits per second, 0 when unknown.
+          description: Bitrate in kilobits per second; absent when unknown.
         sampleRate:
           type: integer
-          description: Sample rate in Hz, 0 when unknown.
+          description: Sample rate in Hz; absent when unknown.
         bitDepth:
           type: integer
-          description: Bit depth, 0 when unknown or lossy.
+          description: Bit depth; absent when unknown or lossy.
         lossless:
           type: boolean
           description: Whether the encoding is lossless.
@@ -15606,19 +16170,35 @@ components:
 
     UpgradeResolveRequest:
       type: object
-      description: Keep one encoding, trash the rest.
-      required: [keepItemPid, removeItemPids]
+      description: >
+        Keep one encoding, trash the rest: by item across items, or by
+        file within one.
+      required: [keepItemPid]
       properties:
         keepItemPid:
           type: string
-          description: The item to keep.
+          description: The item to keep, or the item whose files these are.
         removeItemPids:
           type: array
           minItems: 1
           maxItems: 100
-          description: The inferior encodings to trash.
+          description: The inferior encodings to trash, as whole items.
           items:
             type: string
+        keepFilePid:
+          type: string
+          description: >
+            The file to keep, within `keepItemPid`; required with
+            `removeFilePids`.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        removeFilePids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The inferior encodings to trash, as files of `keepItemPid`.
+          items:
+            type: string
+            example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     UpgradeResolveResult:
       type: object
@@ -15627,7 +16207,7 @@ components:
       properties:
         trashed:
           type: integer
-          description: Items moved to the trash.
+          description: Files moved to the trash.
 
     FileDiagnostic:
       type: object
@@ -15652,8 +16232,19 @@ components:
           description: >
             What was observed (`unsupported_format`, `legacy_only_tags`,
             `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`,
-            `tag_write_lost`, `tag_write_unsynced`, or `corrupt_audio`); new
-            codes may appear, so treat an unknown value as a generic finding.
+            `tag_write_lost`, `tag_write_unsynced`, `tag_write_owed`,
+            `corrupt_audio`, `sort_name_fallback`, `fingerprint_fallback`,
+            `duplicate_copy`, or `alternate_encoding`); new codes may
+            appear, so treat an unknown value as a generic finding.
+            `duplicate_copy` marks a file holding the same audio as its
+            item's primary file and `alternate_encoding` another encoding
+            of its recording that ranked below the primary, both attached
+            to the item as copies with the primary's path as `detail`;
+            `tag_write_owed` a value the catalog holds but has not yet
+            written to the file; `sort_name_fallback` display fields
+            filled from sort tags or a number taken from the file name;
+            and `fingerprint_fallback` a file fpcalc could not
+            fingerprint, with fpcalc's reason as `detail`.
         severity:
           type: string
           description: "`info`, `warn`, or `error`."
@@ -16066,7 +16657,10 @@ components:
           properties:
             genres:
               type: array
-              description: Display genres.
+              description: >
+                The item's display genres, one each: a tag holding
+                several (`Rock; Pop / Indie`) is split on `;`, `/` and
+                `\`, as the genre facet splits it.
               items:
                 type: string
                 example: blues
@@ -16099,7 +16693,17 @@ components:
             addedAt:
               type: string
               format: date-time
-              description: When the item entered the library.
+              description: >
+                When the item entered the library: when its primary file,
+                or a copy of it the caller can see found before that, was
+                found.
+            copies:
+              type: integer
+              description: >
+                How many copies the item holds beside its own files
+                (getItemFiles lists them), counting those in libraries
+                the caller can see. Absent when none.
+              example: 1
             mbid:
               type: string
               description: >
@@ -16180,6 +16784,16 @@ components:
           description: Per-item breakdown.
           items:
             $ref: "#/components/schemas/DeletePlanEntry"
+        warnings:
+          type: array
+          description: >
+            What the deletion did beside removing files, in sentences: a
+            copy that took a deleted file's place, and a file it could
+            not remove, which stayed and is not counted in `entries`. A
+            whole-item delete names each under its item's name. Absent
+            when there is nothing to say.
+          items:
+            type: string
 
     DeletePlanEntry:
       type: object
@@ -16201,6 +16815,140 @@ components:
           type: integer
           format: int64
           description: Bytes reclaimed (or to reclaim).
+        fileList:
+          type: array
+          description: >
+            The files `files` counts, by name. Absent for an entry whose
+            file counts under another track of its rip.
+          items:
+            $ref: "#/components/schemas/DeletePlanFile"
+        itemSurvives:
+          type: boolean
+          description: >
+            The item keeps a file after the deletion (a copy it holds, or
+            one left in place), so it stays in the library rather than
+            being archived.
+
+    DeletePlanFile:
+      type: object
+      description: One file a deletion removes (or would remove).
+      required: [filePid, name, role]
+      properties:
+        filePid:
+          type: string
+          description: The file, as getItemFiles names it.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: The file's name, without its folder.
+          example: 01 - Hell Shell.m4a
+        sizeBytes:
+          type: integer
+          format: int64
+          description: The file's size in bytes, when it could be read.
+        role:
+          type: string
+          description: >
+            `primary`, `part` or `alternate`, as getItemFiles reports
+            it; new roles may appear.
+          example: alternate
+
+    DeleteItemFilesRequest:
+      type: object
+      description: A deletion (or a dry-run plan) of some of one item's files.
+      required: [filePids]
+      properties:
+        filePids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The files to delete, as getItemFiles names them.
+          items:
+            type: string
+            example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        mode:
+          type: string
+          enum: [trash, permanent]
+          default: trash
+          description: >
+            `trash` is reversible from the trash surface;
+            `permanent` bypasses it (administrators only).
+        dryRun:
+          type: boolean
+          default: false
+          description: Answer the plan without deleting.
+
+    ItemFiles:
+      type: object
+      description: The files behind one item.
+      required: [files]
+      properties:
+        files:
+          type: array
+          description: >
+            The primary, or a book's parts in reading order, then the
+            copies.
+          items:
+            $ref: "#/components/schemas/ItemFile"
+
+    ItemFile:
+      type: object
+      description: One file behind an item.
+      required: [filePid, role, name]
+      properties:
+        filePid:
+          type: string
+          description: The file.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        role:
+          type: string
+          description: >
+            `primary` (the file the item's details come from), `part` (a
+            book's other files) or `alternate` (a copy); new roles may
+            appear.
+          example: primary
+        name:
+          type: string
+          description: The file's name, without its folder.
+          example: 01 - Hell Shell.flac
+        path:
+          type: string
+          description: The file's path on the server. Administrators only.
+        sizeBytes:
+          type: integer
+          format: int64
+          description: The file's size in bytes, when it could be read.
+        codec:
+          type: string
+          example: flac
+        container:
+          type: string
+          example: flac
+        bitrate:
+          type: integer
+          description: Bitrate in kilobits per second, when known.
+        sampleRate:
+          type: integer
+          description: Sample rate in Hz, when known.
+        bitDepth:
+          type: integer
+          description: Bits per sample of a lossless file, when known.
+        durationMs:
+          type: integer
+          format: int64
+          description: The file's length in milliseconds, when known.
+        libraryPid:
+          type: string
+          description: >
+            The library the file sits in, which for a copy can differ
+            from the item's.
+        reason:
+          type: string
+          description: >
+            Why a copy is one: `same-audio` (the same audio as one of the
+            item's files) or `other-encoding` (another encoding of its
+            recording). Copies only; new reasons may appear.
+          example: same-audio
 
     ArtRoleInfo:
       type: object
@@ -16456,7 +17204,8 @@ components:
           type: array
           description: >
             Currently locked fields, including namespaced artifacts
-            (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`).
+            (`lyrics`, `art`, `credit.ROLE`, `tag.KEY`) and `kind`, a
+            pinned track-or-book classification (setItemLocks).
           items:
             type: string
         provenance:
@@ -16514,15 +17263,18 @@ components:
           type: array
           description: >
             Files whose on-disk tags are out of step with the catalog
-            (failed write-backs, values the format cannot store).
+            (failed write-backs, values the format cannot store), of
+            those the caller may see: a copy in a library they are not
+            granted is left out, as the item's file list leaves it out.
           items:
             $ref: "#/components/schemas/WriteBackIssue"
         mayCurate:
           type: boolean
           description: >
             Whether the caller may run the item-scoped edits this
-            document describes: administrators always, everyone else
-            exactly for the items their own uploads brought in. The
+            document describes: administrators always, anyone else for
+            the items their own uploads and acquisitions brought in and
+            the parts a kind change split out of those. The
             read answers anyone who can see the item, so without this
             a client has no way to tell an editor it can save from one
             every save will be refused. Optional for compatibility;
@@ -16691,8 +17443,9 @@ components:
           type: boolean
           description: >
             Whether the caller may run the item-scoped metadata
-            mutations: administrators always, everyone else exactly
-            for the items their own uploads brought in.
+            mutations: administrators always, anyone else for the items
+            their own uploads and acquisitions brought in and the parts a
+            kind change split out of those.
 
     FieldProvenance:
       type: object
@@ -16700,14 +17453,16 @@ components:
         Who set one field's current value.
 
 
-        The list carries two kinds of row. A scalar row names a metadata
-        field (`title`, `genre`, ...) and reports the value a curator
-        set. An artifact row names `art` or `lyrics`, with an empty
-        `value` because the value is bytes rather than text. A non-empty
-        provenance list therefore does not mean the item was curated: an
-        untouched track with a cover in its tags reports one `art` row
-        sourced `tag`. Count the scalar rows, not the list, when
-        summarizing what a person changed.
+        The list carries three kinds of row. A scalar row names a
+        metadata field (`title`, `genre`, ...) and reports the value a
+        curator set. An artifact row names `art` or `lyrics`, with an
+        empty `value` because the value is bytes rather than text. A
+        `kind` row is a pinned classification (setItemLocks), which an
+        upload's import takes without anybody editing anything. A
+        non-empty provenance list therefore does not mean the item was
+        curated: an untouched track with a cover in its tags reports
+        one `art` row sourced `tag`. Count the scalar rows, not the
+        list, when summarizing what a person changed.
 
 
         An artifact row does not imply the artifact. Locking `art` or
@@ -16723,8 +17478,8 @@ components:
         field:
           type: string
           description: >
-            The field, possibly namespaced, or `art` / `lyrics` for an
-            artifact row.
+            The field, possibly namespaced, `art` / `lyrics` for an
+            artifact row, or `kind` for a pinned classification.
         source:
           type: string
           description: >
@@ -16732,8 +17487,10 @@ components:
             companion file beside the audio - a `cover.jpg`, an `.lrc`),
             `user` (set through the curation surface), `enrichment`
             (supplied by a metadata provider, named in `provider`),
-            `organize` (written by an organize tag write-back), or `feed`
-            (a podcast feed). A string, not a closed enum. `sidecar` and
+            `organize` (written by an organize tag write-back),
+            `normalize` (rewritten by a clean-up pass, such as the genre
+            normalizer, in the catalog alone), or `feed` (a podcast
+            feed). A string, not a closed enum. `sidecar` and
             `feed` reach only artifact rows; a scalar field is never
             produced from a cover image or a feed.
         provider:
@@ -16871,16 +17628,25 @@ components:
         filePid:
           type: string
           description: The backing file.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
         code:
           type: string
           description: >
             The diagnostic: `tag-write-unsynced` (a write-back was
-            refused or failed; the file's tags lag the catalog) or
+            refused or failed; the file's tags lag the catalog),
             `tag-write-lost` (the write ran but the format could not
-            store the value). A string, not a closed enum.
+            store the value), or `tag-write-owed` (an edit changed the
+            value in the catalog without writing it; `tagKey` names
+            it). A string, not a closed enum.
         tagKey:
           type: string
-          description: The affected tag key, when known.
+          description: >
+            The affected key, when known. On a `tag-write-owed` issue it
+            is the catalog's name for the value: an item field
+            (`title`), a credit (`credit.composer`), a custom tag
+            (`tag.MOOD`), the item's front cover (`art`) or origin
+            (`acquisition`), or an entity value written to member files
+            (`album.label`, `album.art`).
         detail:
           type: string
           description: >
@@ -16919,18 +17685,26 @@ components:
 
     WriteBackFailure:
       type: object
-      description: One file a write-back could not update.
+      description: >
+        One file a write-back could not update. A caller who is not an
+        administrator is told only of files in libraries they are
+        granted.
       required: [filePid, reason]
       properties:
         filePid:
           type: string
-          description: The file.
+          description: The file; empty for a failure no one file caused.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
         path:
           type: string
-          description: Its display path.
+          description: >
+            Its display path, or its file name for a caller who is not an
+            administrator.
         reason:
           type: string
-          description: Why the write failed or was refused.
+          description: >
+            Why the write failed or was refused, without the server's
+            paths for a caller who is not an administrator.
 
     MetadataEditResult:
       type: object
@@ -17056,7 +17830,8 @@ components:
           description: >
             Also write the new values into the backing file's tags,
             for the parts that have a tag form (fields, credits,
-            lyrics).
+            lyrics, custom tags, the release status), and removes a
+            cleared lyrics sheet's `.lrc` sidecar.
         lock:
           type: boolean
           default: true
@@ -17347,6 +18122,10 @@ components:
           type: boolean
           default: false
           description: Override an existing lock.
+        writeBack:
+          type: boolean
+          default: false
+          description: Also write the values into the item's files.
 
     TagEditResult:
       type: object
@@ -17359,6 +18138,14 @@ components:
         stored:
           type: integer
           description: Values stored after deduplication.
+        writeBackFailures:
+          type: array
+          description: >
+            Files the write-back could not update; the catalog edit
+            stands. Absent when every file took the values or no
+            write-back was asked for.
+          items:
+            $ref: "#/components/schemas/WriteBackFailure"
 
     LocksEdit:
       type: object
@@ -17415,6 +18202,37 @@ components:
           type: boolean
           default: false
           description: Override existing locks.
+
+    SetItemKindRequest:
+      type: object
+      description: The items to change, and what they become.
+      required: [pids, mediaType]
+      properties:
+        pids:
+          type: array
+          minItems: 1
+          maxItems: 500
+          description: >
+            The items, by pid. Tracks named together whose tags name one
+            book become that book.
+          items:
+            type: string
+        mediaType:
+          type: string
+          enum: [music, audiobook]
+          description: What the items become.
+        writeBack:
+          type: boolean
+          default: false
+          description: >
+            Also write the kind into the files. A book gets the audiobook
+            media type, which even a scan that re-derives everything reads
+            back as a book; a track has it cleared, so such a scan reads it
+            as music only where nothing else marks it a book (an `.m4b`
+            name, a narrator, the Audiobook genre, a library that holds
+            Books). Without it the catalog's pin alone keeps the choice. A
+            file that cannot be written is listed in the job result's
+            `writeBackFailures` and the change stands.
 
     DetachRequest:
       type: object
@@ -17578,6 +18396,12 @@ components:
           description: >
             True marks the item as having no canonical release;
             false clears the mark.
+        writeBack:
+          type: boolean
+          default: false
+          description: >
+            Also write the mark into (or strip it from) the item's
+            files' `RELEASESTATUS` tag.
 
     RematchResult:
       type: object
@@ -21585,6 +22409,11 @@ components:
         trackCount:
           type: integer
           description: Files in the unit.
+        duplicateCount:
+          type: integer
+          description: >
+            Files in the unit arriving with a duplicate warning (their
+            tracks carry it). Absent when none.
         libraryPid:
           type: string
           description: The library the unit belongs (or will import) to.
@@ -21664,12 +22493,14 @@ components:
           description: >
             The catalog item pid, type-prefixed like every pid on this
             API; absent for staged files that have not entered the
-            library yet.
+            library yet, and for a joined file whose item sits where the
+            caller cannot see it.
         path:
           type: string
           description: >
-            The file's path (library-relative for cataloged items,
-            staging-relative for uploads).
+            The file's name. Administrators get the full path of a file
+            a scan or rematch entry names; an uploaded or downloaded
+            file is named alone for everyone, before it lands and after.
         title:
           type: string
           description: Current title (tag, or cleaned filename).
@@ -21686,6 +22517,14 @@ components:
           type: integer
           format: int64
           description: Audio length in milliseconds.
+        duplicate:
+          $ref: "#/components/schemas/DuplicateWarning"
+        joined:
+          type: boolean
+          description: >
+            The file entered the library as a copy of, or a further
+            part of, an item that already existed; that item's
+            metadata and who may edit it were not touched.
 
     CandidateComponent:
       type: object
@@ -21974,18 +22813,38 @@ components:
         ok:
           type: boolean
           description: Whether the decision applied.
+        code:
+          type: string
+          description: >
+            The error code the single-entry decide would have answered
+            (`not-found`, `conflict`, `catalog-busy`, `read-only`, ...),
+            when `ok` is false. `catalog-busy` clears on its own, so
+            those entries can be sent again.
         error:
           type: string
           description: Why it did not, when `ok` is false.
+        warnings:
+          type: array
+          description: >
+            What the single-entry decide reports under `warnings`, when
+            `ok` is true: the decision stood, with these problems.
+          items:
+            type: string
 
     ReviewStats:
       type: object
       description: Queue depth and auto-apply calibration.
-      required: [pending, applied, autoApplied, reverted, revertedAutoApplied]
+      required: [pending, decided, applied, autoApplied, reverted, revertedAutoApplied]
       properties:
         pending:
           type: integer
           description: Entries awaiting a decision.
+        decided:
+          type: integer
+          description: >
+            Entries in every status but `pending`, discarded and
+            reverted ones included: the size of the `status=decided`
+            listing.
         identifying:
           type: integer
           description: Entries whose identify pipeline still runs.
@@ -22814,9 +23673,15 @@ components:
         episode carries `item` and additionally `episode`, the full
         episode summary; clients that only know items keep reading
         `item`. Snapshot pages contain only upserts, of both kinds.
-        `op` is a string, not a closed enum, so new operations can
-        appear; clients must drop entries whose `op` they do not
-        recognize.
+        A pid's prefix follows its item's kind, and an item whose kind
+        changed (`POST /items/kind`) comes back as an `upsert` under its
+        new prefix with no `delete` for the old one: mirrors key items
+        by the ULID after the prefix, so the upsert replaces the row the
+        old pid held, and a `delete` likewise matches whatever prefix
+        the mirror stored. Items folded into another arrive as `delete`
+        tombstones. `op` is a string, not a closed enum, so new
+        operations can appear; clients must drop entries whose `op`
+        they do not recognize.
       required: [op, pid]
       properties:
         op:
@@ -23273,7 +24138,9 @@ components:
             cannot proceed - a read-only destination, a name
             collision, a file the server already flagged as a
             duplicate - the entry is left pending for a person
-            instead, carrying `identifyDeclined`.
+            instead, carrying `identifyDeclined`. A flagged duplicate
+            also keeps an identified entry from applying its match on
+            its own.
 
 
             Ignored on a batch member: the batch's own value decides
@@ -23338,30 +24205,6 @@ components:
           format: date-time
           description: >
             When an unfinished session and its bytes are reclaimed.
-
-    DuplicateWarning:
-      type: object
-      description: >
-        The library appears to already contain this audio. A warning,
-        not a refusal: the review decision chooses what happens.
-      required: [itemPid, kind]
-      properties:
-        itemPid:
-          type: string
-          description: The existing item.
-        kind:
-          type: string
-          description: >
-            Evidence level: `content` (byte-identical audio) or
-            `fingerprint` (acoustically the same recording). A
-            string, not a closed enum.
-          example: content
-        title:
-          type: string
-          description: The existing item's title.
-        artist:
-          type: string
-          description: The existing item's artist.
 
     UploadGrouping:
       type: string

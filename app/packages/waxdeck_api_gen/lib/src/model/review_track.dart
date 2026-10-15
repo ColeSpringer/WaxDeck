@@ -3,6 +3,7 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:waxdeck_api_gen/src/model/duplicate_warning.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -11,20 +12,22 @@ part 'review_track.g.dart';
 /// One file in a review unit with its current metadata.
 ///
 /// Properties:
-/// * [pid] - The catalog item pid, type-prefixed like every pid on this API; absent for staged files that have not entered the library yet. 
-/// * [path] - The file's path (library-relative for cataloged items, staging-relative for uploads). 
+/// * [pid] - The catalog item pid, type-prefixed like every pid on this API; absent for staged files that have not entered the library yet, and for a joined file whose item sits where the caller cannot see it. 
+/// * [path] - The file's name. Administrators get the full path of a file a scan or rematch entry names; an uploaded or downloaded file is named alone for everyone, before it lands and after. 
 /// * [title] - Current title (tag, or cleaned filename).
 /// * [artist] - Current artist.
 /// * [trackNo] - Current track number, 0 when untagged.
 /// * [discNo] - Current disc number, 0 when untagged.
 /// * [durationMs] - Audio length in milliseconds.
+/// * [duplicate] 
+/// * [joined] - The file entered the library as a copy of, or a further part of, an item that already existed; that item's metadata and who may edit it were not touched. 
 @BuiltValue()
 abstract class ReviewTrack implements Built<ReviewTrack, ReviewTrackBuilder> {
-  /// The catalog item pid, type-prefixed like every pid on this API; absent for staged files that have not entered the library yet. 
+  /// The catalog item pid, type-prefixed like every pid on this API; absent for staged files that have not entered the library yet, and for a joined file whose item sits where the caller cannot see it. 
   @BuiltValueField(wireName: r'pid')
   String? get pid;
 
-  /// The file's path (library-relative for cataloged items, staging-relative for uploads). 
+  /// The file's name. Administrators get the full path of a file a scan or rematch entry names; an uploaded or downloaded file is named alone for everyone, before it lands and after. 
   @BuiltValueField(wireName: r'path')
   String get path;
 
@@ -47,6 +50,13 @@ abstract class ReviewTrack implements Built<ReviewTrack, ReviewTrackBuilder> {
   /// Audio length in milliseconds.
   @BuiltValueField(wireName: r'durationMs')
   int get durationMs;
+
+  @BuiltValueField(wireName: r'duplicate')
+  DuplicateWarning? get duplicate;
+
+  /// The file entered the library as a copy of, or a further part of, an item that already existed; that item's metadata and who may edit it were not touched. 
+  @BuiltValueField(wireName: r'joined')
+  bool? get joined;
 
   ReviewTrack._();
 
@@ -114,6 +124,20 @@ class _$ReviewTrackSerializer implements PrimitiveSerializer<ReviewTrack> {
       object.durationMs,
       specifiedType: const FullType(int),
     );
+    if (object.duplicate != null) {
+      yield r'duplicate';
+      yield serializers.serialize(
+        object.duplicate,
+        specifiedType: const FullType(DuplicateWarning),
+      );
+    }
+    if (object.joined != null) {
+      yield r'joined';
+      yield serializers.serialize(
+        object.joined,
+        specifiedType: const FullType(bool),
+      );
+    }
   }
 
   @override
@@ -189,6 +213,22 @@ class _$ReviewTrackSerializer implements PrimitiveSerializer<ReviewTrack> {
             specifiedType: const FullType(int),
           ) as int;
           result.durationMs = valueDes;
+          break;
+        case r'duplicate':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(DuplicateWarning),
+          ) as DuplicateWarning?;
+          if (valueDes == null) continue;
+          result.duplicate.replace(valueDes);
+          break;
+        case r'joined':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.joined = valueDes;
           break;
         default:
           unhandled.add(key);

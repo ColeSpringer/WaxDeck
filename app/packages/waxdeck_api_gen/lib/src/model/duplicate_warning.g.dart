@@ -8,7 +8,7 @@ part of 'duplicate_warning.dart';
 
 class _$DuplicateWarning extends DuplicateWarning {
   @override
-  final String itemPid;
+  final String? itemPid;
   @override
   final String kind;
   @override
@@ -21,7 +21,7 @@ class _$DuplicateWarning extends DuplicateWarning {
   ]) => (DuplicateWarningBuilder()..update(updates))._build();
 
   _$DuplicateWarning._({
-    required this.itemPid,
+    this.itemPid,
     required this.kind,
     this.title,
     this.artist,
@@ -119,11 +119,7 @@ class DuplicateWarningBuilder
     final _$result =
         _$v ??
         _$DuplicateWarning._(
-          itemPid: BuiltValueNullFieldError.checkNotNull(
-            itemPid,
-            r'DuplicateWarning',
-            'itemPid',
-          ),
+          itemPid: itemPid,
           kind: BuiltValueNullFieldError.checkNotNull(
             kind,
             r'DuplicateWarning',

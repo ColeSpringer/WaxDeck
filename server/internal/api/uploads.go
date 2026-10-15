@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -34,14 +35,25 @@ func uploadJSON(u service.UploadDTO) Upload {
 	if !u.ExpiresAt.IsZero() {
 		out.ExpiresAt = ptr(u.ExpiresAt)
 	}
-	if u.Duplicate != nil {
-		out.Duplicate = &DuplicateWarning{ItemPid: u.Duplicate.ItemPID, Kind: u.Duplicate.Kind}
-		if u.Duplicate.Title != "" {
-			out.Duplicate.Title = ptr(u.Duplicate.Title)
-		}
-		if u.Duplicate.Artist != "" {
-			out.Duplicate.Artist = ptr(u.Duplicate.Artist)
-		}
+	out.Duplicate = duplicateJSON(u.Duplicate)
+	return out
+}
+
+// duplicateJSON is a duplicate warning in the spec's words; the item is
+// named only where the service named it.
+func duplicateJSON(d *service.DuplicateDTO) *DuplicateWarning {
+	if d == nil {
+		return nil
+	}
+	out := &DuplicateWarning{Kind: d.Kind}
+	if d.ItemPID != "" {
+		out.ItemPid = ptr(d.ItemPID)
+	}
+	if d.Title != "" {
+		out.Title = ptr(d.Title)
+	}
+	if d.Artist != "" {
+		out.Artist = ptr(d.Artist)
 	}
 	return out
 }
@@ -239,9 +251,17 @@ func (s *Server) CompleteUpload(ctx context.Context, req CompleteUploadRequestOb
 		case service.KindNotFound:
 			return CompleteUpload404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no such upload"))}, nil
 		case service.KindConflict:
-			return CompleteUpload409JSONResponse{ConflictJSONResponse(errObj("conflict", err.Error()))}, nil
+			e := errObj("conflict", err.Error())
+			if errors.Is(err, service.ErrChecksumMismatch) {
+				e.Params = &map[string]string{"reason": "checksum-mismatch"}
+			}
+			return CompleteUpload409JSONResponse{ConflictJSONResponse(e)}, nil
 		case service.KindFormat:
-			return CompleteUpload415JSONResponse{UnsupportedFormatJSONResponse(errObj("unsupported-format", err.Error()))}, nil
+			e := errObj("unsupported-format", err.Error())
+			if errors.Is(err, service.ErrUnreadableUpload) {
+				e.Params = &map[string]string{"reason": "unreadable"}
+			}
+			return CompleteUpload415JSONResponse{UnsupportedFormatJSONResponse(e)}, nil
 		}
 		return nil, err
 	}

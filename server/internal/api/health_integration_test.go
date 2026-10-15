@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/url"
 	"os"
@@ -149,23 +150,39 @@ func TestHealthSweepAndIssues(t *testing.T) {
 	resp = h.postJSON(t, "/api/v1/library/health/fix", map[string]any{"rule": "missing-genre"})
 	wantStatus(t, resp, 400, "a blocked rule's fix")
 
-	// A write-back retry runs as a task that reports what it did.
-	resp = h.postJSON(t, "/api/v1/library/health/fix", map[string]any{
-		"rule": "write-unsynced", "itemPids": []string{page.Items[0].Pid},
-	})
-	if resp.StatusCode != 202 {
-		t.Fatalf("write-unsynced fix status = %d, want 202", resp.StatusCode)
+	// A write-back retry runs as a task that reports what it did: an
+	// item whose file already carries its values is no fill, and one a
+	// catalog-only edit left behind is written and counted.
+	fixOne := func(pid string) map[string]any {
+		t.Helper()
+		resp := h.postJSON(t, "/api/v1/library/health/fix", map[string]any{
+			"rule": "write-unsynced", "itemPids": []string{pid},
+		})
+		if resp.StatusCode != 202 {
+			t.Fatalf("write-unsynced fix status = %d, want 202", resp.StatusCode)
+		}
+		fix := decode[HealthFixResult](t, resp)
+		if fix.Queued != 1 || fix.TaskId == nil || fix.JobPid != nil {
+			t.Fatalf("fix = %+v, want one item on a task", fix)
+		}
+		for h.svc.DrainHealthFixes(ctx) {
+		}
+		task := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+*fix.TaskId, h.token))
+		if task.State != "done" || task.Summary == nil || (*task.Summary)["attempted"] != float64(1) ||
+			(*task.Summary)["rule"] != "write-unsynced" {
+			t.Fatalf("task = %+v (summary %v), want the one item attempted", task, task.Summary)
+		}
+		return *task.Summary
 	}
-	fix := decode[HealthFixResult](t, resp)
-	if fix.Queued != 1 || fix.TaskId == nil || fix.JobPid != nil {
-		t.Fatalf("fix = %+v, want one item on a task", fix)
+	pid := page.Items[0].Pid
+	if sum := fixOne(pid); sum["filled"] != float64(0) || sum["skipped"].(map[string]any)["already in sync"] != float64(1) {
+		t.Fatalf("summary %v, want the in-sync item skipped", sum)
 	}
-	for h.svc.DrainHealthFixes(ctx) {
-	}
-	task := decode[ToolTask](t, get(t, h.ts, "/api/v1/tools/tasks/"+*fix.TaskId, h.token))
-	if task.State != "done" || task.Summary == nil || (*task.Summary)["attempted"] != float64(1) ||
-		(*task.Summary)["filled"] != float64(1) || (*task.Summary)["rule"] != "write-unsynced" {
-		t.Fatalf("task = %+v (summary %v), want one item written back", task, task.Summary)
+	wantStatus(t, h.patchJSON(t, "/api/v1/items/"+pid+"/metadata", map[string]any{
+		"fields": map[string]string{"comment": "written later"},
+	}), 200, "a catalog-only edit")
+	if sum := fixOne(pid); sum["filled"] != float64(1) {
+		t.Fatalf("summary %v, want the edit written back", sum)
 	}
 }
 
@@ -355,6 +372,19 @@ func TestHealthFindsAMisstatedPartOfABook(t *testing.T) {
 	if err := os.CopyFS(filepath.Join(h.library, "book"), os.DirFS(staged)); err != nil {
 		t.Fatal(err)
 	}
+	// A copy of the misstated part joins the book as a copy, never as a
+	// fourth part.
+	copied := filepath.Join(h.library, "copied part")
+	if err := os.MkdirAll(copied, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	part, err := os.ReadFile(filepath.Join(bookDir, "03 - Part Three.m4b"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(copied, "Part Three (copy).m4b"), part, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	h.rescanAndWait(t)
 	analyzeAndWait(t, h)
 	if err := h.svc.SweepHealth(ctx); err != nil {
@@ -372,6 +402,41 @@ func TestHealthFindsAMisstatedPartOfABook(t *testing.T) {
 	}
 	if d.PartIndex == nil || *d.PartIndex != 2 {
 		t.Errorf("issue detail names part %v, want 2", d.PartIndex)
+	}
+}
+
+// A one-file book with a copy is still one file to health: its finding
+// names no part, since the copy is not one.
+func TestHealthNamesNoPartForACopiedOneFileBook(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	ctx := context.Background()
+	staged := t.TempDir()
+	m4b, err := fixtures.GenerateM4B(filepath.Join(staged, "Solo Author", "Solo Book"), fixtures.Spec{
+		Name: "Solo Book", Duration: 6 * time.Second,
+		Tags: map[string]string{"TITLE": "Solo Book", "ALBUM": "Solo Book", "ARTIST": "Solo Author", "ALBUMARTIST": "Solo Author"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	understateMP4(t, m4b, 1, 2)
+	for _, dir := range []string{"solo", "solo copy"} {
+		if err := os.CopyFS(filepath.Join(h.library, dir), os.DirFS(staged)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.rescanAndWait(t)
+	analyzeAndWait(t, h)
+	if err := h.svc.SweepHealth(ctx); err != nil {
+		t.Fatalf("sweeping: %v", err)
+	}
+
+	page := decode[HealthIssuePage](t, get(t, h.ts, "/api/v1/library/health/issues?rule=duration-mismatch", h.token))
+	if len(page.Items) != 1 || page.Items[0].MediaType != "audiobook" {
+		t.Fatalf("duration-mismatch issues = %+v, want the one book", page.Items)
+	}
+	if d := page.Items[0].Detail; d == nil || d.PartIndex != nil {
+		t.Fatalf("issue detail = %+v, want no part named for a one-file book", d)
 	}
 }
 
@@ -646,9 +711,8 @@ func releaseGroupOf(t *testing.T, h *harness, title string) string {
 }
 
 // TestUpgradesEndpoints exercises the listing and resolve validation.
-// The fixtures are never fingerprint-analyzed in the harness (analysis
-// is a separate catalog pass no server path triggers here), so the
-// listing is legitimately empty; grouping itself is upstream-tested.
+// The harness's library holds no two encodings of one recording, so the
+// listing is legitimately empty; upgrades_integration_test.go has some.
 func TestUpgradesEndpoints(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
@@ -761,5 +825,41 @@ func TestEnrichmentStatusAndItemEnrich(t *testing.T) {
 	}
 	if strings.Contains(string(body), "WAXBIN_ENRICH_CONTACT") {
 		t.Errorf("refusal passes upstream's own knob through: %s", body)
+	}
+}
+
+// A duplicate group names its members as the catalog holds them, a name
+// carrying the " / " the audit's sentence separates names with included.
+func TestDuplicateAlbumsNameTheirMembersWhateverTheirTitles(t *testing.T) {
+	t.Parallel()
+	dupes := t.TempDir()
+	// One album tagged in part reads as two albums of one name.
+	tags := func(title string) map[string]string {
+		return map[string]string{"TITLE": title, "ARTIST": "Stone Tribute", "ALBUMARTIST": "Stone Tribute",
+			"ALBUM": "Hot Rocks / 1964-1971"}
+	}
+	tagged := tags("Gimme")
+	tagged["MUSICBRAINZ_ALBUMID"] = "00000000-0000-4000-8000-0000000000b1"
+	for i, spec := range []fixtures.Spec{
+		{Name: "gimme", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second, Tags: tagged},
+		{Name: "angie", Codec: fixtures.CodecFLAC, Duration: 2 * time.Second, Tags: tags("Angie")},
+	} {
+		if _, err := fixtures.Generate(filepath.Join(dupes, fmt.Sprintf("disc%d", i)), spec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := newHarness(t, service.Root{Name: "dupes", Path: dupes})
+	var grp *DuplicateGroup
+	groups := decodeStatus[DuplicateGroups](t, get(t, h.ts, "/api/v1/library/duplicates", h.token), 200, "duplicates").Groups
+	for i := range groups {
+		if groups[i].EntityType == "album" {
+			grp = &groups[i]
+		}
+	}
+	if grp == nil {
+		t.Fatalf("no duplicate album group in %+v", groups)
+	}
+	if grp.Survivor.Name != "Hot Rocks / 1964-1971" || len(grp.Losers) != 1 || grp.Losers[0].Name != "Hot Rocks / 1964-1971" {
+		t.Fatalf("group = %+v, want both albums named", *grp)
 	}
 }

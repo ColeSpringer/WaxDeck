@@ -15,6 +15,7 @@ part 'tag_edit.g.dart';
 /// * [values] - Ordered values; empty clears the tag.
 /// * [lock] - Lock `tag.KEY`.
 /// * [force] - Override an existing lock.
+/// * [writeBack] - Also write the values into the item's files.
 @BuiltValue()
 abstract class TagEdit implements Built<TagEdit, TagEditBuilder> {
   /// Ordered values; empty clears the tag.
@@ -29,6 +30,10 @@ abstract class TagEdit implements Built<TagEdit, TagEditBuilder> {
   @BuiltValueField(wireName: r'force')
   bool? get force;
 
+  /// Also write the values into the item's files.
+  @BuiltValueField(wireName: r'writeBack')
+  bool? get writeBack;
+
   TagEdit._();
 
   factory TagEdit([void updates(TagEditBuilder b)]) = _$TagEdit;
@@ -36,7 +41,8 @@ abstract class TagEdit implements Built<TagEdit, TagEditBuilder> {
   @BuiltValueHook(initializeBuilder: true)
   static void _defaults(TagEditBuilder b) => b
       ..lock = true
-      ..force = false;
+      ..force = false
+      ..writeBack = false;
 
   @BuiltValueSerializer(custom: true)
   static Serializer<TagEdit> get serializer => _$TagEditSerializer();
@@ -70,6 +76,13 @@ class _$TagEditSerializer implements PrimitiveSerializer<TagEdit> {
       yield r'force';
       yield serializers.serialize(
         object.force,
+        specifiedType: const FullType(bool),
+      );
+    }
+    if (object.writeBack != null) {
+      yield r'writeBack';
+      yield serializers.serialize(
+        object.writeBack,
         specifiedType: const FullType(bool),
       );
     }
@@ -118,6 +131,14 @@ class _$TagEditSerializer implements PrimitiveSerializer<TagEdit> {
           ) as bool?;
           if (valueDes == null) continue;
           result.force = valueDes;
+          break;
+        case r'writeBack':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(bool),
+          ) as bool?;
+          if (valueDes == null) continue;
+          result.writeBack = valueDes;
           break;
         default:
           unhandled.add(key);

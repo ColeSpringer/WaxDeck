@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -237,6 +238,39 @@ func (h *harness) toolTask(t *testing.T, id string) ToolTask {
 	return decode[ToolTask](t, resp)
 }
 
+// setFileModes sets the mode of every file of each item.
+func (h *harness) setFileModes(t *testing.T, mode os.FileMode, pids ...string) {
+	t.Helper()
+	for _, pid := range pids {
+		for _, f := range h.itemFiles(t, h.token, pid) {
+			if err := os.Chmod(*f.Path, mode); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+}
+
+// wantFileModes fails unless every file of each item has mode: a tool's
+// output is read by whatever else reads the library, so it takes the
+// mode of the file it was made from.
+func (h *harness) wantFileModes(t *testing.T, mode os.FileMode, pids ...string) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		return
+	}
+	for _, pid := range pids {
+		for _, f := range h.itemFiles(t, h.token, pid) {
+			st, err := os.Stat(*f.Path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if st.Mode().Perm() != mode {
+				t.Errorf("%s mode = %v, want %v", *f.Path, st.Mode().Perm(), mode)
+			}
+		}
+	}
+}
+
 func TestBookMergeEndToEnd(t *testing.T) {
 	t.Parallel()
 	h := newToolHarness(t)
@@ -258,6 +292,7 @@ func TestBookMergeEndToEnd(t *testing.T) {
 	}
 	resp.Body.Close()
 
+	h.setFileModes(t, 0o640, book.Pid)
 	resp = h.postJSON(t, "/api/v1/books/"+book.Pid+"/merge", map[string]any{
 		"titles": []string{"One", "Two", "Three"},
 	})
@@ -281,6 +316,7 @@ func TestBookMergeEndToEnd(t *testing.T) {
 	if !strings.HasPrefix(newPid, "bk-") {
 		t.Fatalf("result pid = %q", newPid)
 	}
+	h.wantFileModes(t, 0o640, newPid)
 
 	// The merged file replaces the parts. The catalog resolves the
 	// import by the book's identity key, so the logical book (and its
@@ -406,6 +442,7 @@ func TestBookSplitEndToEnd(t *testing.T) {
 	}
 	resp.Body.Close()
 
+	h.setFileModes(t, 0o640, chaptered)
 	resp = h.postJSON(t, "/api/v1/books/"+chaptered+"/split", map[string]any{})
 	if resp.StatusCode != 202 {
 		t.Fatalf("split status = %d", resp.StatusCode)
@@ -427,6 +464,7 @@ func TestBookSplitEndToEnd(t *testing.T) {
 	if !strings.HasPrefix(newPid, "bk-") {
 		t.Fatalf("result pid = %q", newPid)
 	}
+	h.wantFileModes(t, 0o640, newPid)
 
 	// The pieces re-imported as one multi-file book. The identity key
 	// keeps the logical book stable across the split, so the proof is
@@ -516,6 +554,7 @@ func TestCueSplitEndToEnd(t *testing.T) {
 	}
 	resp.Body.Close()
 
+	h.setFileModes(t, 0o640, one.Pid)
 	resp = h.postJSON(t, "/api/v1/items/"+one.Pid+"/split-cue", map[string]any{})
 	if resp.StatusCode != 202 {
 		t.Fatalf("split-cue status = %d", resp.StatusCode)
@@ -545,6 +584,7 @@ func TestCueSplitEndToEnd(t *testing.T) {
 	// swap is the whole question. resultPids are in sibling order, so [1]
 	// is Cue Two's replacement.
 	pieces := *done.ResultPids
+	h.wantFileModes(t, 0o640, pieces...)
 	listed := map[string]ItemSummary{}
 	deadline := time.Now().Add(30 * time.Second)
 	for {

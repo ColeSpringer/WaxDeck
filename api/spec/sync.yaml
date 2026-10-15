@@ -157,9 +157,15 @@ components:
         episode carries `item` and additionally `episode`, the full
         episode summary; clients that only know items keep reading
         `item`. Snapshot pages contain only upserts, of both kinds.
-        `op` is a string, not a closed enum, so new operations can
-        appear; clients must drop entries whose `op` they do not
-        recognize.
+        A pid's prefix follows its item's kind, and an item whose kind
+        changed (`POST /items/kind`) comes back as an `upsert` under its
+        new prefix with no `delete` for the old one: mirrors key items
+        by the ULID after the prefix, so the upsert replaces the row the
+        old pid held, and a `delete` likewise matches whatever prefix
+        the mirror stored. Items folded into another arrive as `delete`
+        tombstones. `op` is a string, not a closed enum, so new
+        operations can appear; clients must drop entries whose `op`
+        they do not recognize.
       required: [op, pid]
       properties:
         op:

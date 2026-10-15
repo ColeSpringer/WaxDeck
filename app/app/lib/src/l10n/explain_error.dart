@@ -1,5 +1,6 @@
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../shell/shell_messages.dart' show ShellMessenger;
 import 'gen/app_localizations.dart';
 
 /// One sentence for an error surface.
@@ -47,7 +48,10 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   'quota-exceeded' => l.errorQuotaExceeded,
   'storage-full' => l.errorStorageFull,
   'field-locked' => l.errorFieldLocked,
-  'unsupported-format' => l.errorUnsupportedFormat,
+  'unsupported-format' => switch (e.params?['reason']) {
+    'unreadable' => l.errorUnreadableFile,
+    _ => l.errorUnsupportedFormat,
+  },
   'drm-protected' => l.errorDrmProtected,
   'read-only' => l.errorReadOnly,
   'transcode-limited' => l.errorTranscodeLimited,
@@ -117,6 +121,36 @@ String explainRefusal(AppLocalizations l10n, Object error) {
     return error.message;
   }
   return explainError(l10n, error);
+}
+
+/// Shows [text] for something refused, with a Retry for the requests in
+/// [refused] (keyed, with the code each was refused with) whose refusal
+/// clears on its own: a busy catalog lets go once the job holding it
+/// ends, so those are offered again rather than left to be redone.
+/// [retry] gets their keys and runs only while [mounted] holds, since
+/// what it sends again was started from the caller's own state. With
+/// none of them, the message stands alone.
+void showRefusal<K>(
+  ShellMessenger messenger,
+  AppLocalizations l10n,
+  String text, {
+  required Map<K, String?> refused,
+  required bool Function() mounted,
+  required void Function(List<K> again) retry,
+}) {
+  final again = <K>[
+    for (final MapEntry(:key, :value) in refused.entries)
+      if (value == 'catalog-busy') key,
+  ];
+  messenger.show(
+    text,
+    actionLabel: again.isEmpty ? null : l10n.commonRetry,
+    onAction: again.isEmpty
+        ? null
+        : () {
+            if (mounted()) retry(again);
+          },
+  );
 }
 
 /// The sentence for an `invalid-request` whose `reason` this client words

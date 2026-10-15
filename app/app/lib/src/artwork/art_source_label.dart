@@ -110,6 +110,7 @@ String provenanceProducerName(AppLocalizations l10n, String key) {
     'sidecar' => l10n.metadataSourceSidecar,
     'user' => l10n.metadataSourceUser,
     'organize' => l10n.metadataSourceOrganize,
+    'normalize' => l10n.metadataSourceNormalize,
     'enrichment' => l10n.metadataSourceEnrichment,
     'feed' => l10n.metadataSourceFeed,
     _ => key,

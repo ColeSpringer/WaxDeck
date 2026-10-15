@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/artwork/artwork_providers.dart';
+import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
@@ -12,6 +13,7 @@ import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
+import 'package:waxdeck/src/review/review_controller.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -519,6 +521,57 @@ void main() {
     expect(_byId(SemanticsIds.homeReviewPending), findsOneWidget);
     expect(find.text('2 items are waiting in review'), findsOneWidget);
     expect(_byId(SemanticsIds.homeReviewPendingOpen), findsOneWidget);
+  });
+
+  testWidgets('the review notice reads the pending count from the stats', (
+    tester,
+  ) async {
+    // More than one queue page: a count taken from the listing would stop
+    // at its length.
+    final repo = _repo()
+      ..sessionState = const SessionState(authenticated: true, user: _uploader)
+      ..reviewEntries = <ReviewEntry>[
+        for (var i = 0; i < 60; i++) _pendingEntry('rv-$i'),
+      ];
+    await _pumpHome(tester, repo);
+
+    expect(find.text('60 items are waiting in review'), findsOneWidget);
+  });
+
+  test('the review count is read again for the next account', () async {
+    final repo = _repo()
+      ..sessionState = const SessionState(authenticated: true, user: _uploader)
+      ..reviewEntries = <ReviewEntry>[
+        for (var i = 0; i < 5; i++) _pendingEntry('rv-$i'),
+      ];
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+      ],
+    );
+    addTearDown(container.dispose);
+    final held = container.listen(pendingReviewCountProvider, (_, _) {});
+    addTearDown(held.close);
+    await container.read(authControllerProvider.future);
+    expect(await container.read(pendingReviewCountProvider.future), 5);
+
+    // Somebody else signs in on the same server, where nothing of theirs
+    // waits.
+    repo
+      ..reviewEntries = <ReviewEntry>[]
+      ..sessionState = const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(
+          id: 'us-01JZX5N8QW3F4V9T2B7KDOTHER1',
+          username: 'other',
+          roles: ['member'],
+          uploadEnabled: true,
+        ),
+      );
+    await container.read(authControllerProvider.notifier).refreshSession();
+
+    expect(await container.read(pendingReviewCountProvider.future), 0);
   });
 
   testWidgets('the review door stands over the first-run state too', (

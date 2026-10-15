@@ -8,16 +8,23 @@
     "itemFactsError": "item-facts-error",
     "itemFactsRow": "item-facts-{key}",
     "itemFactsSheet": "item-facts-sheet-{pid}",
+    "itemFileDelete": "item-file-delete-{filePid}",
+    "itemFileRow": "item-file-{filePid}",
     "itemMenuDetach": "item-menu-detach",
     "itemMenuDetachConfirm": "item-menu-detach-confirm",
     "itemMenuDetachWriteBack": "item-menu-detach-writeback",
     "itemMenuDetails": "item-menu-details",
     "itemMenuGoAlbum": "item-menu-go-album",
     "itemMenuGoArtist": "item-menu-go-artist",
+    "itemMenuKindAlbum": "item-menu-kind-album",
+    "itemMenuKindBook": "item-menu-kind-book",
+    "itemMenuKindMusic": "item-menu-kind-music",
     "itemMenuMix": "item-menu-mix",
     "itemMenuShare": "item-menu-share-album",
     "itemMenuShareItem": "item-menu-share",
     "itemMenuSheet": "item-menu-sheet-{pid}",
+    "kindConfirm": "kind-confirm",
+    "kindWriteBack": "kind-write-back",
     "offlineBanner": "offline-banner"
   }
 }

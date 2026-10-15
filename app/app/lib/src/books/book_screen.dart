@@ -10,6 +10,8 @@ import '../artwork/artwork_providers.dart';
 import '../auth/auth_controller.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
+import '../library/item_kind.dart';
+import '../metadata/metadata_controller.dart';
 import '../player/download_action.dart';
 import '../player/item_star_rating_row.dart';
 import '../player/now_playing_controller.dart';
@@ -38,6 +40,7 @@ enum _BookAction {
   merge,
   split,
   mergeSeries,
+  treatAsMusic,
 }
 
 /// One audiobook: its cover, who made it, where the listener is in it,
@@ -540,6 +543,15 @@ class _BookOverflow extends ConsumerWidget {
           label: l10n.bookShareLink,
           glyph: WaxIcons.share,
         ),
+        // Whoever may edit the book, as the server gates it: the
+        // uploader of a book that was music all along takes it back.
+        if (ref.watch(mayCurateItemProvider(book.pid)).value ?? false)
+          WaxMenuItem<_BookAction>(
+            value: _BookAction.treatAsMusic,
+            label: l10n.libraryKindToMusic,
+            glyph: WaxIcons.music,
+            semanticsId: SemanticsIds.itemMenuKindMusic,
+          ),
         if (isAdmin) ...<WaxMenuItem<_BookAction>>[
           WaxMenuItem<_BookAction>(
             value: _BookAction.editMetadata,
@@ -612,6 +624,8 @@ class _BookOverflow extends ConsumerWidget {
         );
       case _BookAction.mergeSeries:
         unawaited(showSeriesMergeSheet(context, book: book));
+      case _BookAction.treatAsMusic:
+        unawaited(confirmSetKind(context, pids: [book.pid], to: 'music'));
     }
   }
 

@@ -551,6 +551,183 @@ void main() {
     );
   });
 
+  testWidgets('a finished scan lists its copies and what it could not read', (
+    tester,
+  ) async {
+    final started = DateTime.utc(2026, 9, 29, 10);
+    Map<String, Object?> run(
+      String name,
+      int files,
+      int copies, {
+      bool gone = false,
+    }) => {
+      'libraryPid': 'lb-$name',
+      'library': name,
+      'audioFiles': files,
+      'copies': copies,
+      'rootUnreachable': gone,
+    };
+    final repo =
+        FakeRepository(
+            sessionState: const SessionState(authenticated: true, user: _admin),
+          )
+          ..jobs = [
+            Job(
+              pid: 'jb-7',
+              kind: 'scan',
+              state: 'done',
+              startedAt: started,
+              finishedAt: started.add(const Duration(minutes: 1)),
+              result: {
+                'created': 3,
+                'updated': 1,
+                'copies': 2,
+                'missing': 0,
+                'errored': 0,
+                'walkErrors': 1,
+                'rootUnreachable': true,
+                'runs': [
+                  run('Music', 412, 2),
+                  run('Archive', 0, 0, gone: true),
+                ],
+              },
+            ),
+          ];
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    final scan = _job('jb-7');
+    expect(
+      find.descendant(
+        of: scan,
+        matching: find.text(
+          'added 3, updated 1, copies 2, missing 0, errored 0, '
+          'unreadable 1, folder not reachable',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: scan,
+        matching: find.text('Music: 412 files, 2 copies'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: scan,
+        matching: find.text('Archive: folder not reachable'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a finished analysis counts the fingerprints that fell back', (
+    tester,
+  ) async {
+    final started = DateTime.utc(2026, 9, 29, 10);
+    final repo =
+        FakeRepository(
+            sessionState: const SessionState(authenticated: true, user: _admin),
+          )
+          ..jobs = [
+            Job(
+              pid: 'jb-8',
+              kind: 'analyze',
+              state: 'done',
+              startedAt: started,
+              finishedAt: started.add(const Duration(minutes: 5)),
+              result: const {
+                'analyzed': 60,
+                'errored': 0,
+                'fingerprintFallbacks': 58,
+                'fingerprintPartialReads': 2,
+              },
+            ),
+            Job(
+              pid: 'jb-9',
+              kind: 'analyze',
+              state: 'done',
+              startedAt: started,
+              finishedAt: started.add(const Duration(minutes: 5)),
+              result: const {
+                'analyzed': 4,
+                'errored': 0,
+                'fingerprintFallbacks': 0,
+              },
+            ),
+          ];
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: _job('jb-8'),
+        matching: find.text('analyzed 60, errored 0, fell back 58'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: _job('jb-9'),
+        matching: find.text('analyzed 4, errored 0'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a finished kind change says what changed and what folded', (
+    tester,
+  ) async {
+    final started = DateTime.utc(2026, 10, 14, 10);
+    final repo =
+        FakeRepository(
+            sessionState: const SessionState(authenticated: true, user: _admin),
+          )
+          ..jobs = [
+            Job(
+              pid: 'jb-k',
+              kind: 'set-kind',
+              state: 'done',
+              // Targeted, as the server starts it, and listed finished
+              // all the same.
+              target: const JobTarget(
+                type: 'item',
+                pid: 'bk-1',
+                name: 'The Loose Chapters',
+              ),
+              startedAt: started,
+              finishedAt: started.add(const Duration(seconds: 3)),
+              result: const {
+                'converted': ['bk-1'],
+                'absorbed': {'tr-2': 'bk-1', 'tr-3': 'bk-1'},
+                'created': <String>[],
+                'writeBackFailures': [
+                  {'filePid': 'fl-1', 'reason': 'read-only'},
+                ],
+              },
+            ),
+          ];
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: _job('jb-k'),
+        matching: find.text('Kind change: The Loose Chapters'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: _job('jb-k'),
+        matching: find.text('changed 1, folded 2, not written 1'),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a job that lands above the others leaves them their rows', (
     tester,
   ) async {

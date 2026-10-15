@@ -74,7 +74,13 @@ Conventions:
   `pe-` player endpoint, `ps-` playback session, `rv-` review
   entry, `up-` upload, `tk-` tool task, `iv-` invite, `bu-` backup
   archive, `th-` trash entry, `sh-` share link, `nf-` inbox row,
-  `mx-` staged migration export, `tl-` gapless rendering).
+  `mx-` staged migration export, `tl-` gapless rendering, `fl-` file
+  behind an item). A track's
+  and a book's prefix follow the item's kind, which can change under
+  it (`POST /items/kind`, a library made to hold audiobooks, a
+  retag), so either of the two reaches the item: a queue or a
+  playlist holding the old form still resolves, and every answer
+  carries the current one. Other prefixes are strict.
 - List endpoints use opaque keyset cursors (`cursor` in, `nextCursor` out),
   never offsets.
 - Errors are always the `Error` schema. `code` is a stable machine-readable
@@ -151,7 +157,12 @@ Conventions:
   running without the streaming engine), and other refusals under
   that code carry no params yet. Under `conflict`, a bookmark create
   replaying the id of a removed bookmark carries `reason: removed`,
-  and a client drops its copy. Under `invalid-request`, `reason` names
+  and a client drops its copy; a completed upload whose bytes miss
+  their declared SHA-256 carries `reason: checksum-mismatch`, its
+  session already ended. Under `unsupported-format`,
+  `reason: unreadable` marks a completed upload whose bytes do not
+  read as audio at all, a damaged file rather than a format the
+  server refuses. Under `invalid-request`, `reason` names
   two refusals a client words itself: `incompatible-schema` (a backup
   whose schema this server cannot open) and `cue-rip` (a delete
   naming some tracks of a cue rip but not all). Values are
@@ -406,6 +417,8 @@ Class | Method | HTTP request | Description
 [*AdminApi*](doc/AdminApi.md) | [**putTranscodingLimits**](doc/AdminApi.md#puttranscodinglimits) | **PUT** /admin/transcoding | Replace the transcoding limits
 [*AdminApi*](doc/AdminApi.md) | [**rescanLibrary**](doc/AdminApi.md#rescanlibrary) | **POST** /library/rescan | Start a library rescan
 [*AdminApi*](doc/AdminApi.md) | [**restoreTrashEntry**](doc/AdminApi.md#restoretrashentry) | **POST** /admin/trash/{trashId}/restore | Restore a trashed file
+[*AdminApi*](doc/AdminApi.md) | [**setLibraryFolderFallback**](doc/AdminApi.md#setlibraryfolderfallback) | **PUT** /libraries/{pid}/folder-fallback | Name untagged files from their folders
+[*AdminApi*](doc/AdminApi.md) | [**setLibraryMedia**](doc/AdminApi.md#setlibrarymedia) | **PUT** /libraries/{pid}/media | Change what a library holds
 [*AdminApi*](doc/AdminApi.md) | [**setLibraryProfile**](doc/AdminApi.md#setlibraryprofile) | **PUT** /libraries/{pid}/profile | Set a managed library&#39;s organize profile
 [*AdminApi*](doc/AdminApi.md) | [**setLibraryReadOnly**](doc/AdminApi.md#setlibraryreadonly) | **PUT** /libraries/{pid}/read-only | Set a library&#39;s read-only mode
 [*AdminApi*](doc/AdminApi.md) | [**stageMigrationExport**](doc/AdminApi.md#stagemigrationexport) | **POST** /admin/migrations/exports | Upload an account data export to import from
@@ -449,11 +462,13 @@ Class | Method | HTTP request | Description
 [*HealthApi*](doc/HealthApi.md) | [**resolveUpgrade**](doc/HealthApi.md#resolveupgrade) | **POST** /library/upgrades/resolve | Keep the best encoding
 [*HealthApi*](doc/HealthApi.md) | [**sweepLibraryHealth**](doc/HealthApi.md#sweeplibraryhealth) | **POST** /library/health/sweep | Re-sweep health now
 [*LibraryApi*](doc/LibraryApi.md) | [**browseList**](doc/LibraryApi.md#browselist) | **GET** /library/browse | Browse a discovery list
+[*LibraryApi*](doc/LibraryApi.md) | [**deleteItemFiles**](doc/LibraryApi.md#deleteitemfiles) | **POST** /items/{pid}/files/delete | Delete some of an item&#39;s files
 [*LibraryApi*](doc/LibraryApi.md) | [**deleteLibraryItems**](doc/LibraryApi.md#deletelibraryitems) | **POST** /library/items/delete | Delete library items
 [*LibraryApi*](doc/LibraryApi.md) | [**getAlbum**](doc/LibraryApi.md#getalbum) | **GET** /albums/{pid} | Get one album&#39;s identity
 [*LibraryApi*](doc/LibraryApi.md) | [**getItem**](doc/LibraryApi.md#getitem) | **GET** /items/{pid} | Get one item&#39;s detail
 [*LibraryApi*](doc/LibraryApi.md) | [**getItemArt**](doc/LibraryApi.md#getitemart) | **GET** /items/{pid}/art | Get artwork
 [*LibraryApi*](doc/LibraryApi.md) | [**getItemArtRoles**](doc/LibraryApi.md#getitemartroles) | **GET** /items/{pid}/art-roles | List the artwork slots an entity holds
+[*LibraryApi*](doc/LibraryApi.md) | [**getItemFiles**](doc/LibraryApi.md#getitemfiles) | **GET** /items/{pid}/files | List the files behind an item
 [*LibraryApi*](doc/LibraryApi.md) | [**getItemLyrics**](doc/LibraryApi.md#getitemlyrics) | **GET** /items/{pid}/lyrics | Get an item&#39;s lyrics
 [*LibraryApi*](doc/LibraryApi.md) | [**listFacets**](doc/LibraryApi.md#listfacets) | **GET** /library/facets | Enumerate a browse dimension
 [*LibraryApi*](doc/LibraryApi.md) | [**listItems**](doc/LibraryApi.md#listitems) | **GET** /library/items | Browse library items
@@ -484,6 +499,7 @@ Class | Method | HTTP request | Description
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemAcquisition**](doc/MetadataApi.md#setitemacquisition) | **PUT** /items/{pid}/acquisition | Correct an item&#39;s recorded origin
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemArtwork**](doc/MetadataApi.md#setitemartwork) | **PUT** /items/{pid}/artwork | Set item artwork
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemCredits**](doc/MetadataApi.md#setitemcredits) | **PUT** /items/{pid}/credits | Replace one credit role
+[*MetadataApi*](doc/MetadataApi.md) | [**setItemKind**](doc/MetadataApi.md#setitemkind) | **POST** /items/kind | Change what items are
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemLocks**](doc/MetadataApi.md#setitemlocks) | **PUT** /items/{pid}/locks | Lock or unlock fields
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemLyrics**](doc/MetadataApi.md#setitemlyrics) | **PUT** /items/{pid}/lyrics | Set lyrics
 [*MetadataApi*](doc/MetadataApi.md) | [**setItemTag**](doc/MetadataApi.md#setitemtag) | **PUT** /items/{pid}/tags/{key} | Set a custom tag
@@ -717,9 +733,11 @@ Class | Method | HTTP request | Description
  - [CreditsEdit](doc/CreditsEdit.md)
  - [CueSplitRequest](doc/CueSplitRequest.md)
  - [CustomTag](doc/CustomTag.md)
+ - [DeleteItemFilesRequest](doc/DeleteItemFilesRequest.md)
  - [DeleteItemsRequest](doc/DeleteItemsRequest.md)
  - [DeleteItemsResult](doc/DeleteItemsResult.md)
  - [DeletePlanEntry](doc/DeletePlanEntry.md)
+ - [DeletePlanFile](doc/DeletePlanFile.md)
  - [DetachRequest](doc/DetachRequest.md)
  - [DetachResult](doc/DetachResult.md)
  - [DeviceSession](doc/DeviceSession.md)
@@ -799,6 +817,8 @@ Class | Method | HTTP request | Description
  - [Item](doc/Item.md)
  - [ItemAcquisition](doc/ItemAcquisition.md)
  - [ItemAcquisitionEdit](doc/ItemAcquisitionEdit.md)
+ - [ItemFile](doc/ItemFile.md)
+ - [ItemFiles](doc/ItemFiles.md)
  - [ItemMetadata](doc/ItemMetadata.md)
  - [ItemPage](doc/ItemPage.md)
  - [ItemPermissions](doc/ItemPermissions.md)
@@ -812,7 +832,10 @@ Class | Method | HTTP request | Description
  - [LibraryAccess](doc/LibraryAccess.md)
  - [LibraryCreate](doc/LibraryCreate.md)
  - [LibraryCreated](doc/LibraryCreated.md)
+ - [LibraryFolderFallback](doc/LibraryFolderFallback.md)
  - [LibraryMatching](doc/LibraryMatching.md)
+ - [LibraryMedia](doc/LibraryMedia.md)
+ - [LibraryMediaChanged](doc/LibraryMediaChanged.md)
  - [LibraryProfile](doc/LibraryProfile.md)
  - [LibraryReadOnly](doc/LibraryReadOnly.md)
  - [LinkedIdentity](doc/LinkedIdentity.md)
@@ -976,6 +999,7 @@ Class | Method | HTTP request | Description
  - [SessionInfo](doc/SessionInfo.md)
  - [SessionList](doc/SessionList.md)
  - [SessionRename](doc/SessionRename.md)
+ - [SetItemKindRequest](doc/SetItemKindRequest.md)
  - [Share](doc/Share.md)
  - [ShareCreate](doc/ShareCreate.md)
  - [SharePage](doc/SharePage.md)

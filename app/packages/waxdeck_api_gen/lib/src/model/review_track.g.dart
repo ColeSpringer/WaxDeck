@@ -21,6 +21,10 @@ class _$ReviewTrack extends ReviewTrack {
   final int? discNo;
   @override
   final int durationMs;
+  @override
+  final DuplicateWarning? duplicate;
+  @override
+  final bool? joined;
 
   factory _$ReviewTrack([void Function(ReviewTrackBuilder)? updates]) =>
       (ReviewTrackBuilder()..update(updates))._build();
@@ -33,6 +37,8 @@ class _$ReviewTrack extends ReviewTrack {
     this.trackNo,
     this.discNo,
     required this.durationMs,
+    this.duplicate,
+    this.joined,
   }) : super._();
   @override
   ReviewTrack rebuild(void Function(ReviewTrackBuilder) updates) =>
@@ -51,7 +57,9 @@ class _$ReviewTrack extends ReviewTrack {
         artist == other.artist &&
         trackNo == other.trackNo &&
         discNo == other.discNo &&
-        durationMs == other.durationMs;
+        durationMs == other.durationMs &&
+        duplicate == other.duplicate &&
+        joined == other.joined;
   }
 
   @override
@@ -64,6 +72,8 @@ class _$ReviewTrack extends ReviewTrack {
     _$hash = $jc(_$hash, trackNo.hashCode);
     _$hash = $jc(_$hash, discNo.hashCode);
     _$hash = $jc(_$hash, durationMs.hashCode);
+    _$hash = $jc(_$hash, duplicate.hashCode);
+    _$hash = $jc(_$hash, joined.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -77,7 +87,9 @@ class _$ReviewTrack extends ReviewTrack {
           ..add('artist', artist)
           ..add('trackNo', trackNo)
           ..add('discNo', discNo)
-          ..add('durationMs', durationMs))
+          ..add('durationMs', durationMs)
+          ..add('duplicate', duplicate)
+          ..add('joined', joined))
         .toString();
   }
 }
@@ -113,6 +125,16 @@ class ReviewTrackBuilder implements Builder<ReviewTrack, ReviewTrackBuilder> {
   int? get durationMs => _$this._durationMs;
   set durationMs(int? durationMs) => _$this._durationMs = durationMs;
 
+  DuplicateWarningBuilder? _duplicate;
+  DuplicateWarningBuilder get duplicate =>
+      _$this._duplicate ??= DuplicateWarningBuilder();
+  set duplicate(DuplicateWarningBuilder? duplicate) =>
+      _$this._duplicate = duplicate;
+
+  bool? _joined;
+  bool? get joined => _$this._joined;
+  set joined(bool? joined) => _$this._joined = joined;
+
   ReviewTrackBuilder() {
     ReviewTrack._defaults(this);
   }
@@ -127,6 +149,8 @@ class ReviewTrackBuilder implements Builder<ReviewTrack, ReviewTrackBuilder> {
       _trackNo = $v.trackNo;
       _discNo = $v.discNo;
       _durationMs = $v.durationMs;
+      _duplicate = $v.duplicate?.toBuilder();
+      _joined = $v.joined;
       _$v = null;
     }
     return this;
@@ -146,29 +170,47 @@ class ReviewTrackBuilder implements Builder<ReviewTrack, ReviewTrackBuilder> {
   ReviewTrack build() => _build();
 
   _$ReviewTrack _build() {
-    final _$result =
-        _$v ??
-        _$ReviewTrack._(
-          pid: pid,
-          path: BuiltValueNullFieldError.checkNotNull(
-            path,
-            r'ReviewTrack',
-            'path',
-          ),
-          title: BuiltValueNullFieldError.checkNotNull(
-            title,
-            r'ReviewTrack',
-            'title',
-          ),
-          artist: artist,
-          trackNo: trackNo,
-          discNo: discNo,
-          durationMs: BuiltValueNullFieldError.checkNotNull(
-            durationMs,
-            r'ReviewTrack',
-            'durationMs',
-          ),
+    _$ReviewTrack _$result;
+    try {
+      _$result =
+          _$v ??
+          _$ReviewTrack._(
+            pid: pid,
+            path: BuiltValueNullFieldError.checkNotNull(
+              path,
+              r'ReviewTrack',
+              'path',
+            ),
+            title: BuiltValueNullFieldError.checkNotNull(
+              title,
+              r'ReviewTrack',
+              'title',
+            ),
+            artist: artist,
+            trackNo: trackNo,
+            discNo: discNo,
+            durationMs: BuiltValueNullFieldError.checkNotNull(
+              durationMs,
+              r'ReviewTrack',
+              'durationMs',
+            ),
+            duplicate: _duplicate?.build(),
+            joined: joined,
+          );
+    } catch (_) {
+      late String _$failedField;
+      try {
+        _$failedField = 'duplicate';
+        _duplicate?.build();
+      } catch (e) {
+        throw BuiltValueNestedFieldError(
+          r'ReviewTrack',
+          _$failedField,
+          e.toString(),
         );
+      }
+      rethrow;
+    }
     replace(_$result);
     return _$result;
   }

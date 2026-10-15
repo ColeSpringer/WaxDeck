@@ -521,13 +521,11 @@ func TestDecideImportFailureKeepsEntryAndBytes(t *testing.T) {
 	}
 }
 
-// TestDiscardRefusedAfterPartialImport drives a unit where one track
-// imports and its sibling cannot (its rendered destination is already
-// occupied): the decide must fail carrying the planner's own verdict,
-// the imported half must settle while the failed half keeps its staged
-// bytes, and discarding the pending entry must be refused while the
-// imported item still exists - discard would otherwise orphan it.
-func TestDiscardRefusedAfterPartialImport(t *testing.T) {
+// A unit with a file the library cannot take lands nothing: every file
+// is planned before any moves, so the occupied place refuses the decide
+// with the planner's own verdict, both files stay staged, and discarding
+// the entry is a clean way out.
+func TestAUnitTheLibraryCannotTakeLandsNothing(t *testing.T) {
 	t.Parallel()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		for i := range cfg.Roots {
@@ -545,11 +543,8 @@ func TestDiscardRefusedAfterPartialImport(t *testing.T) {
 	}
 	occ := uploadFile(t, h, h.token, paths[0], "music", "")
 	drainMatches(t, h)
-	resp := h.postJSON(t, "/api/v1/review/queue/"+*occ.ReviewEntryId+"/decide",
-		map[string]any{"action": "as-is"})
-	if resp.StatusCode != 200 {
-		t.Fatalf("occupant as-is status = %d", resp.StatusCode)
-	}
+	wantStatus(t, h.postJSON(t, "/api/v1/review/queue/"+*occ.ReviewEntryId+"/decide",
+		map[string]any{"action": "as-is"}), 200, "occupant as-is")
 
 	member, err := fixtures.Generate(staging,
 		batchTrackSpec("collider", "First Half", "Split Decision", "Beacon Row", "1", 5),
@@ -560,45 +555,67 @@ func TestDiscardRefusedAfterPartialImport(t *testing.T) {
 	batch := createBatch(t, h, h.token, "album", "music")
 	collider := uploadBatchMember(t, h, h.token, member[0], "music", batch.Id, "")
 	survivor := uploadBatchMember(t, h, h.token, member[1], "music", batch.Id, "")
-	done := finalizeBatch(t, h, h.token, batch.Id)
-	if len(done.ReviewEntryIds) != 1 {
-		t.Fatalf("batch entries = %d, want 1", len(done.ReviewEntryIds))
-	}
-	entryID := done.ReviewEntryIds[0]
+	entryID := finalizeBatch(t, h, h.token, batch.Id).ReviewEntryIds[0]
 	drainMatches(t, h)
 
-	resp = h.postJSON(t, "/api/v1/review/queue/"+entryID+"/decide",
-		map[string]any{"action": "as-is"})
+	resp := h.postJSON(t, "/api/v1/review/queue/"+entryID+"/decide", map[string]any{"action": "as-is"})
+	if resp.StatusCode != 409 {
+		t.Fatalf("decide status = %d, want 409", resp.StatusCode)
+	}
+	if apiErr := decode[Error](t, resp); !strings.Contains(apiErr.Message, "destination already exists") {
+		t.Fatalf("conflict message = %q, want the planner's verdict", apiErr.Message)
+	}
+	for _, up := range []Upload{collider, survivor} {
+		if u := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+up.Id, h.token)); u.State != "staged" {
+			t.Fatalf("%s state = %q, want staged: nothing lands", up.FileName, u.State)
+		}
+	}
+	wantStatus(t, h.postJSON(t, "/api/v1/review/queue/"+entryID+"/decide",
+		map[string]any{"action": "discard"}), 200, "discard")
+	for _, up := range []Upload{collider, survivor} {
+		if u := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+up.Id, h.token)); u.State != "discarded" {
+			t.Fatalf("%s state = %q, want discarded", up.FileName, u.State)
+		}
+	}
+}
+
+// Two files of one unit that collide with each other pass the plan,
+// which sees neither in the library, so the first lands and the second
+// is refused. The staged half then holds its bytes against the expiry
+// sweep and a session delete, for a retry; discarding the entry drops
+// that half and keeps what landed, saying so.
+func TestDiscardAfterAPartialLandingKeepsWhatLanded(t *testing.T) {
+	t.Parallel()
+	h := newHarnessWith(t, func(cfg *service.Config) {
+		for i := range cfg.Roots {
+			cfg.Roots[i].Managed = true
+		}
+	})
+	member, err := fixtures.Generate(t.TempDir(),
+		batchTrackSpec("twin-a", "Twin Track", "Twin Peaks Demo", "Beacon Row", "1", 3),
+		batchTrackSpec("twin-b", "Twin Track", "Twin Peaks Demo", "Beacon Row", "1", 5))
+	if err != nil {
+		t.Fatal(err)
+	}
+	batch := createBatch(t, h, h.token, "album", "music")
+	first := uploadBatchMember(t, h, h.token, member[0], "music", batch.Id, "")
+	second := uploadBatchMember(t, h, h.token, member[1], "music", batch.Id, "")
+	entryID := finalizeBatch(t, h, h.token, batch.Id).ReviewEntryIds[0]
+	drainMatches(t, h)
+
+	resp := h.postJSON(t, "/api/v1/review/queue/"+entryID+"/decide", map[string]any{"action": "as-is"})
 	if resp.StatusCode != 409 {
 		t.Fatalf("partial decide status = %d, want 409", resp.StatusCode)
 	}
-	apiErr := decode[Error](t, resp)
-	if !strings.Contains(apiErr.Message, "destination already exists") {
+	if apiErr := decode[Error](t, resp); !strings.Contains(apiErr.Message, "destination already exists") {
 		t.Fatalf("conflict message = %q, want the planner's verdict", apiErr.Message)
 	}
-	if e := getReview(t, h, entryID); e.Status != "pending" {
-		t.Fatalf("entry status after partial decide = %q, want pending", e.Status)
-	}
-	if u := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+collider.Id, h.token)); u.State != "staged" {
-		t.Fatalf("collider state = %q, want staged", u.State)
-	}
-	if u := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+survivor.Id, h.token)); u.State != "imported" {
-		t.Fatalf("survivor state = %q, want imported", u.State)
+	if u := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+first.Id, h.token)); u.State != "imported" {
+		t.Fatalf("first state = %q, want imported", u.State)
 	}
 
-	resp = h.postJSON(t, "/api/v1/review/queue/"+entryID+"/decide",
-		map[string]any{"action": "discard"})
-	if resp.StatusCode != 409 {
-		t.Fatalf("discard after partial import status = %d, want 409", resp.StatusCode)
-	}
-	apiErr = decode[Error](t, resp)
-	if !strings.Contains(apiErr.Message, "already entered the library") {
-		t.Fatalf("discard refusal message = %q", apiErr.Message)
-	}
-
-	// Deleting the still-staged half must be refused the same way: it
-	// would discard the pending entry and orphan the landed items.
-	req, _ := http.NewRequest("DELETE", h.ts.URL+"/api/v1/uploads/"+collider.Id, nil)
+	// The staged half survives a session delete and the expiry sweep.
+	req, _ := http.NewRequest("DELETE", h.ts.URL+"/api/v1/uploads/"+second.Id, nil)
 	req.Header.Set("Authorization", "Bearer "+h.token)
 	dresp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -606,12 +623,9 @@ func TestDiscardRefusedAfterPartialImport(t *testing.T) {
 	}
 	dresp.Body.Close()
 	if dresp.StatusCode != 409 {
-		t.Fatalf("delete of partial unit's staged upload status = %d, want 409", dresp.StatusCode)
+		t.Fatalf("delete of the staged half status = %d, want 409", dresp.StatusCode)
 	}
-
-	// The expiry janitor must defer the row, not reclaim it: bytes kept,
-	// expiry re-armed, entry still pending.
-	row, err := h.store.UploadByID(context.Background(), collider.Id)
+	row, err := h.store.UploadByID(context.Background(), second.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -620,19 +634,26 @@ func TestDiscardRefusedAfterPartialImport(t *testing.T) {
 		t.Fatal(err)
 	}
 	h.svc.DrainExpiredUploads(context.Background())
-	row, err = h.store.UploadByID(context.Background(), collider.Id)
+	row, err = h.store.UploadByID(context.Background(), second.Id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if row.State != "staged" {
-		t.Fatalf("expired collider state = %q, want staged", row.State)
+	if row.State != "staged" || row.ExpiresAtNS <= time.Now().UnixNano() {
+		t.Fatalf("expired staged half = %s expiring %d, want staged and re-armed", row.State, row.ExpiresAtNS)
 	}
-	if row.ExpiresAtNS <= time.Now().UnixNano() {
-		t.Fatal("collider expiry was not re-armed")
+
+	res := decodeStatus[ReviewDecideResult](t, h.postJSON(t, "/api/v1/review/queue/"+entryID+"/decide",
+		map[string]any{"action": "discard"}), 200, "discard after a partial landing")
+	if res.Warnings == nil || len(*res.Warnings) != 1 || !strings.Contains((*res.Warnings)[0], "1 of the files already entered the library") {
+		t.Fatalf("discard warnings = %v, want the landed file named", res.Warnings)
 	}
-	if e := getReview(t, h, entryID); e.Status != "pending" {
-		t.Fatalf("entry status after expiry sweep = %q, want pending", e.Status)
+	if e := getReview(t, h, entryID); e.Status != "discarded" {
+		t.Fatalf("entry = %s, want discarded", e.Status)
 	}
+	if u := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+second.Id, h.token)); u.State != "discarded" {
+		t.Fatalf("staged half = %s, want discarded", u.State)
+	}
+	h.itemTitled(t, h.token, "Twin Track")
 }
 
 // TestUploadPermissionsAndQuota covers the grant and the quota gates.
@@ -704,6 +725,25 @@ func TestUploadPermissionsAndQuota(t *testing.T) {
 	}
 	if r3.StatusCode != 415 {
 		t.Fatalf("bad extension status = %d, want 415", r3.StatusCode)
+	}
+	if e := decode[Error](t, r3); e.Message != ".exe files are not accepted" {
+		t.Fatalf("bad extension refusal = %q", e.Message)
+	}
+	for _, c := range []struct {
+		body    map[string]any
+		message string
+	}{
+		{map[string]any{"fileName": "README", "sizeBytes": 10, "mediaType": "music"}, "files without an extension are not accepted"},
+		{map[string]any{"fileName": "silence.flac", "sizeBytes": 0, "mediaType": "music"}, "an empty file cannot be uploaded"},
+	} {
+		resp := h.postJSON(t, "/api/v1/uploads", c.body)
+		if resp.StatusCode/100 != 4 {
+			resp.Body.Close()
+			t.Fatalf("%v = %d, want a refusal", c.body, resp.StatusCode)
+		}
+		if e := decode[Error](t, resp); e.Message != c.message {
+			t.Fatalf("%v refusal = %q, want %q", c.body, e.Message, c.message)
+		}
 	}
 }
 

@@ -227,8 +227,9 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 			ResponseErrorHandlerFunc: srv.ResponseErrorHandler,
 		}),
 		StdHTTPServerOptions{
-			BaseURL:     "/api/v1",
-			Middlewares: []MiddlewareFunc{srv.AuthMiddleware},
+			BaseURL:          "/api/v1",
+			Middlewares:      []MiddlewareFunc{srv.AuthMiddleware},
+			ErrorHandlerFunc: RequestErrorHandler,
 		},
 	)
 	h.srv = srv
@@ -471,7 +472,9 @@ func (h *harness) rescanAndWaitWith(t *testing.T, body string) string {
 	if !strings.HasPrefix(job.Pid, "jb-") {
 		t.Fatalf("job pid = %q, want jb- prefix", job.Pid)
 	}
-	deadline := time.Now().Add(30 * time.Second)
+	// Generous: under -race, beside the package's other parallel tests,
+	// a library of a few hundred files takes well over half a minute.
+	deadline := time.Now().Add(2 * time.Minute)
 	for {
 		resp := get(t, h.ts, "/api/v1/jobs/"+job.Pid, h.token)
 		j := decode[Job](t, resp)

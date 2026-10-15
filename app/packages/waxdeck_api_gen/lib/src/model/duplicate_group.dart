@@ -16,7 +16,7 @@ part 'duplicate_group.g.dart';
 /// * [entityType] - `artist`, `album`, `release-group`, or `genre`.
 /// * [survivor] 
 /// * [losers] - The suggested merge losers.
-/// * [detail] - The audit's explanation of the finding.
+/// * [detail] - Why the members were paired, in the catalog's words (for example `same collation key`, or `same title and album artist` for albums a folder keeps apart). Absent when the catalog gave none. 
 @BuiltValue()
 abstract class DuplicateGroup implements Built<DuplicateGroup, DuplicateGroupBuilder> {
   /// `artist`, `album`, `release-group`, or `genre`.
@@ -30,7 +30,7 @@ abstract class DuplicateGroup implements Built<DuplicateGroup, DuplicateGroupBui
   @BuiltValueField(wireName: r'losers')
   BuiltList<DuplicateEntity> get losers;
 
-  /// The audit's explanation of the finding.
+  /// Why the members were paired, in the catalog's words (for example `same collation key`, or `same title and album artist` for albums a folder keeps apart). Absent when the catalog gave none. 
   @BuiltValueField(wireName: r'detail')
   String? get detail;
 

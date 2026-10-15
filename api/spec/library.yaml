@@ -776,6 +776,96 @@ paths:
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
+  /items/{pid}/files:
+    get:
+      operationId: getItemFiles
+      summary: List the files behind an item
+      description: >
+        The files behind one item: its primary file, or a book's parts in
+        reading order, then its copies. A copy is a file a scan found
+        holding the same audio as one of the item's files (`same-audio`)
+        or another encoding of its recording (`other-encoding`), and
+        attached to the item rather than giving it an item of its own:
+        its tags do not describe the item, and it plays only when it takes
+        a removed file's place. A copy in a library the caller cannot see
+        is left out. Needs the `download` permission or the admin role,
+        and the item must be visible to the caller; `path` is
+        administrators' only.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      responses:
+        "200":
+          description: The item's files.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemFiles"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
+  /items/{pid}/files/delete:
+    post:
+      operationId: deleteItemFiles
+      summary: Delete some of an item's files
+      description: >
+        Deletes files of one item, to the catalog trash by default or
+        permanently (`mode` `permanent`, administrators only), as
+        deleteLibraryItems deletes whole items. A copy goes alone; the
+        primary or a part gives its place to a copy when the item has
+        one, which `warnings` names, and an item that loses its last file
+        is archived. `dryRun` answers the plan without deleting. Needs the
+        `delete` permission or the admin role; the item must be visible
+        to the caller and every file one of its files in a library the
+        caller can see (`not-found` otherwise). A read-only library answers
+        `read-only`. The file of a cue rip plays every track carved from
+        it, so deleting it here when it plays other tracks is
+        `invalid-request` with `params.reason` `cue-rip`: delete those
+        tracks together through deleteLibraryItems.
+      tags: [library]
+      parameters:
+        - $ref: "#/components/parameters/Pid"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeleteItemFilesRequest"
+      responses:
+        "200":
+          description: The plan (dry run) or the applied result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteItemsResult"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The delete was refused. `read-only`: the file's library, or
+            the whole server, is in read-only mode. `catalog-busy`:
+            another job holds the catalog's shared file-mutation scope,
+            which clears on its own, so an unattended retry is worth
+            something.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          $ref: "#/components/responses/CatalogMaintenance"
+
   /library/items/delete:
     post:
       operationId: deleteLibraryItems
@@ -790,7 +880,10 @@ paths:
         pid must be visible to the caller (`not-found` otherwise).
         Items keep their catalog identity: an item that loses its
         last file is archived, not erased, and play history
-        survives. A read-only library answers `read-only`.
+        survives. An item's copies (getItemFiles) go with it, except
+        one in a read-only library or a library the caller cannot see,
+        which stays and keeps the item (`itemSurvives`). A read-only
+        library holding the item's own file answers `read-only`.
         Podcast episodes are not deletable here, and one anywhere in
         `pids` refuses the whole call (`invalid-request`): the podcast
         download tree owns its own files, and removing an episode's
@@ -1192,7 +1285,10 @@ components:
           properties:
             genres:
               type: array
-              description: Display genres.
+              description: >
+                The item's display genres, one each: a tag holding
+                several (`Rock; Pop / Indie`) is split on `;`, `/` and
+                `\`, as the genre facet splits it.
               items:
                 type: string
                 example: blues
@@ -1225,7 +1321,17 @@ components:
             addedAt:
               type: string
               format: date-time
-              description: When the item entered the library.
+              description: >
+                When the item entered the library: when its primary file,
+                or a copy of it the caller can see found before that, was
+                found.
+            copies:
+              type: integer
+              description: >
+                How many copies the item holds beside its own files
+                (getItemFiles lists them), counting those in libraries
+                the caller can see. Absent when none.
+              example: 1
             mbid:
               type: string
               description: >
@@ -1306,6 +1412,16 @@ components:
           description: Per-item breakdown.
           items:
             $ref: "#/components/schemas/DeletePlanEntry"
+        warnings:
+          type: array
+          description: >
+            What the deletion did beside removing files, in sentences: a
+            copy that took a deleted file's place, and a file it could
+            not remove, which stayed and is not counted in `entries`. A
+            whole-item delete names each under its item's name. Absent
+            when there is nothing to say.
+          items:
+            type: string
 
     DeletePlanEntry:
       type: object
@@ -1327,6 +1443,140 @@ components:
           type: integer
           format: int64
           description: Bytes reclaimed (or to reclaim).
+        fileList:
+          type: array
+          description: >
+            The files `files` counts, by name. Absent for an entry whose
+            file counts under another track of its rip.
+          items:
+            $ref: "#/components/schemas/DeletePlanFile"
+        itemSurvives:
+          type: boolean
+          description: >
+            The item keeps a file after the deletion (a copy it holds, or
+            one left in place), so it stays in the library rather than
+            being archived.
+
+    DeletePlanFile:
+      type: object
+      description: One file a deletion removes (or would remove).
+      required: [filePid, name, role]
+      properties:
+        filePid:
+          type: string
+          description: The file, as getItemFiles names it.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        name:
+          type: string
+          description: The file's name, without its folder.
+          example: 01 - Hell Shell.m4a
+        sizeBytes:
+          type: integer
+          format: int64
+          description: The file's size in bytes, when it could be read.
+        role:
+          type: string
+          description: >
+            `primary`, `part` or `alternate`, as getItemFiles reports
+            it; new roles may appear.
+          example: alternate
+
+    DeleteItemFilesRequest:
+      type: object
+      description: A deletion (or a dry-run plan) of some of one item's files.
+      required: [filePids]
+      properties:
+        filePids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The files to delete, as getItemFiles names them.
+          items:
+            type: string
+            example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        mode:
+          type: string
+          enum: [trash, permanent]
+          default: trash
+          description: >
+            `trash` is reversible from the trash surface;
+            `permanent` bypasses it (administrators only).
+        dryRun:
+          type: boolean
+          default: false
+          description: Answer the plan without deleting.
+
+    ItemFiles:
+      type: object
+      description: The files behind one item.
+      required: [files]
+      properties:
+        files:
+          type: array
+          description: >
+            The primary, or a book's parts in reading order, then the
+            copies.
+          items:
+            $ref: "#/components/schemas/ItemFile"
+
+    ItemFile:
+      type: object
+      description: One file behind an item.
+      required: [filePid, role, name]
+      properties:
+        filePid:
+          type: string
+          description: The file.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        role:
+          type: string
+          description: >
+            `primary` (the file the item's details come from), `part` (a
+            book's other files) or `alternate` (a copy); new roles may
+            appear.
+          example: primary
+        name:
+          type: string
+          description: The file's name, without its folder.
+          example: 01 - Hell Shell.flac
+        path:
+          type: string
+          description: The file's path on the server. Administrators only.
+        sizeBytes:
+          type: integer
+          format: int64
+          description: The file's size in bytes, when it could be read.
+        codec:
+          type: string
+          example: flac
+        container:
+          type: string
+          example: flac
+        bitrate:
+          type: integer
+          description: Bitrate in kilobits per second, when known.
+        sampleRate:
+          type: integer
+          description: Sample rate in Hz, when known.
+        bitDepth:
+          type: integer
+          description: Bits per sample of a lossless file, when known.
+        durationMs:
+          type: integer
+          format: int64
+          description: The file's length in milliseconds, when known.
+        libraryPid:
+          type: string
+          description: >
+            The library the file sits in, which for a copy can differ
+            from the item's.
+        reason:
+          type: string
+          description: >
+            Why a copy is one: `same-audio` (the same audio as one of the
+            item's files) or `other-encoding` (another encoding of its
+            recording). Copies only; new reasons may appear.
+          example: same-audio
 
     ArtRoleInfo:
       type: object

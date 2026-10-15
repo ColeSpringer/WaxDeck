@@ -137,8 +137,10 @@ func TestMetadataFieldsVocabulary(t *testing.T) {
 	if f := field(music, "isrc"); f == nil || !f.WriteBack {
 		t.Fatalf("music isrc = %+v, want writeBack true", f)
 	}
-	if f := field(music, "composer_sort"); f == nil || !f.WriteBack {
-		t.Fatalf("music composer_sort = %+v, want writeBack true", f)
+	for _, name := range []string{"composer_sort", "track_total", "disc_total"} {
+		if f := field(music, name); f == nil || !f.WriteBack {
+			t.Fatalf("music %s = %+v, want writeBack true", name, f)
+		}
 	}
 	if len(music.CreditRoles) != 11 {
 		t.Fatalf("music roles = %d, want 11", len(music.CreditRoles))
@@ -724,14 +726,27 @@ func TestMetadataWriteBackIssues(t *testing.T) {
 		t.Fatalf("edit reported no write-back failure: %+v", res)
 	}
 
-	md := h.itemMeta(t, item)
-	if len(md.WriteBackIssues) != 1 {
-		t.Fatalf("writeBackIssues = %+v, want one", md.WriteBackIssues)
+	// The failed write leaves the file out of sync and the edited value
+	// owed to it, the owed row naming its field.
+	issues := func(list []WriteBackIssue) map[string]WriteBackIssue {
+		t.Helper()
+		byCode := map[string]WriteBackIssue{}
+		for _, i := range list {
+			byCode[i.Code] = i
+		}
+		if len(list) != 2 || len(byCode) != 2 {
+			t.Fatalf("writeBackIssues = %+v, want one unsynced and one owed", list)
+		}
+		if owed := byCode["tag-write-owed"]; owed.TagKey == nil || *owed.TagKey != "title" {
+			t.Fatalf("owed issue key = %v, want title", deref(owed.TagKey))
+		}
+		return byCode
 	}
-	issue := md.WriteBackIssues[0]
+	md := h.itemMeta(t, item)
 	// The catalog names the code in snake_case; the contract is kebab.
-	if issue.Code != "tag-write-unsynced" {
-		t.Errorf("issue code = %q, want tag-write-unsynced", issue.Code)
+	issue, ok := issues(md.WriteBackIssues)["tag-write-unsynced"]
+	if !ok {
+		t.Fatalf("writeBackIssues = %+v, want tag-write-unsynced", md.WriteBackIssues)
 	}
 	if issue.FilePid == "" {
 		t.Error("issue carries no filePid")
@@ -760,15 +775,14 @@ func TestMetadataWriteBackIssues(t *testing.T) {
 		t.Fatalf("non-admin metadata read = %d, want 200", resp.StatusCode)
 	}
 	plain := decode[ItemMetadata](t, resp)
-	if len(plain.WriteBackIssues) != 1 {
-		t.Fatalf("non-admin writeBackIssues = %+v, want one", plain.WriteBackIssues)
+	seen := issues(plain.WriteBackIssues)["tag-write-unsynced"]
+	if seen.FilePid != issue.FilePid {
+		t.Errorf("non-admin issue = %+v, want the same file", seen)
 	}
-	seen := plain.WriteBackIssues[0]
-	if seen.Code != "tag-write-unsynced" || seen.FilePid != issue.FilePid {
-		t.Errorf("non-admin issue = %+v, want the same code and file", seen)
-	}
-	if seen.Detail != nil {
-		t.Errorf("non-admin detail = %q, want it withheld", *seen.Detail)
+	for _, i := range plain.WriteBackIssues {
+		if i.Detail != nil {
+			t.Errorf("non-admin %s detail = %q, want it withheld", i.Code, *i.Detail)
+		}
 	}
 
 	// A clean write-back clears it: the field is drift, not history.

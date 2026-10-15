@@ -3,7 +3,9 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
+import 'package:waxdeck/src/books/book_screen.dart';
 import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/library/item_kind.dart';
 import 'package:waxdeck/src/music/album_screen.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/entity_facts.dart';
@@ -22,6 +24,11 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 import 'fakes.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
+
+const _adminSession = SessionState(
+  authenticated: true,
+  user: WaxDeckUser(id: 'us-1', username: 'admin', roles: <String>['admin']),
+);
 
 ItemSummary _track(
   String title, {
@@ -469,6 +476,119 @@ void main() {
       expect(repository.detachCalls.single.writeBack, isTrue);
     });
 
+    testWidgets(
+      'an uploader is offered the change only on what they may edit',
+      (tester) async {
+        final repository =
+            FakeRepository(
+                sessionState: const SessionState(
+                  authenticated: true,
+                  user: WaxDeckUser(
+                    id: 'us-2',
+                    username: 'sam',
+                    roles: <String>['user'],
+                    uploadEnabled: true,
+                  ),
+                ),
+              )
+              ..mayCurateItems = false
+              ..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+        await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+        await tester.tap(_byId(SemanticsIds.albumTrackMore(0)));
+        await tester.pumpAndSettle();
+        expect(_byId(SemanticsIds.itemMenuSheet('tr-One')), findsOneWidget);
+        expect(_byId(SemanticsIds.itemMenuKindBook), findsNothing);
+      },
+    );
+
+    testWidgets('a track row becomes an audiobook, and the book opens', (
+      tester,
+    ) async {
+      final repository = FakeRepository(sessionState: _adminSession)
+        ..facetItems['album 1'] = <ItemSummary>[_track('One', track: 1)];
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.albumTrackMore(0)));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuKindBook));
+      await tester.pumpAndSettle();
+      expect(find.text('Make this an audiobook?'), findsOneWidget);
+      expect(repository.setKindCalls, isEmpty);
+
+      await tester.tap(_byId(SemanticsIds.kindConfirm));
+      await tester.pump();
+      await tester.pump(kindChangePoll);
+      await tester.pumpAndSettle();
+      expect(repository.setKindCalls.single.pids, ['tr-One']);
+      expect(repository.setKindCalls.single.mediaType, 'audiobook');
+      expect(repository.setKindCalls.single.writeBack, isFalse);
+      expect(
+        find.byWidgetPredicate((w) => w is BookScreen && w.pid == 'bk-One'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an album becomes one audiobook from its overflow', (
+      tester,
+    ) async {
+      final repository = FakeRepository(sessionState: _adminSession)
+        ..facetItems['album 1'] = <ItemSummary>[
+          _track('One', track: 1),
+          _track('Two', track: 2),
+        ];
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuKindAlbum));
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('These 2 tracks become one audiobook'),
+        findsOneWidget,
+      );
+      await tester.tap(_byId(SemanticsIds.kindWriteBack));
+      await tester.pump();
+      await tester.tap(_byId(SemanticsIds.kindConfirm));
+      await tester.pump();
+      await tester.pump(kindChangePoll);
+      await tester.pumpAndSettle();
+      expect(repository.setKindCalls.single.pids, ['tr-One', 'tr-Two']);
+      expect(repository.setKindCalls.single.writeBack, isTrue);
+      expect(
+        find.byWidgetPredicate((w) => w is BookScreen && w.pid == 'bk-One'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an album past what one change takes says so and sends '
+        'nothing', (tester) async {
+      // A long book ripped as one album: more tracks than a page, and
+      // more than one change may name.
+      final repository = FakeRepository(sessionState: _adminSession)
+        ..facetItems['album 1'] = <ItemSummary>[
+          for (var i = 1; i <= 650; i++) _track('T$i', track: i),
+        ];
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
+      final drills = repository.facetDrills.length;
+
+      await tester.tap(_byId(SemanticsIds.entityOverflow));
+      await tester.pumpAndSettle();
+      await tester.tap(_byId(SemanticsIds.itemMenuKindAlbum));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'This album has more than 500 tracks, too many to change in one go.',
+        ),
+        findsOneWidget,
+      );
+      expect(_byId(SemanticsIds.kindConfirm), findsNothing);
+      expect(repository.setKindCalls, isEmpty);
+      // One page past the one on screen is what tells.
+      expect(repository.facetDrills.length - drills, 1);
+    });
+
     testWidgets('a member is offered the pin and not the editor', (
       tester,
     ) async {
@@ -516,6 +636,7 @@ void main() {
             'the row menu must actually open for the assertion below to mean anything',
       );
       expect(_byId(SemanticsIds.itemMenuDetach), findsNothing);
+      expect(_byId(SemanticsIds.itemMenuKindBook), findsNothing);
     });
   });
 

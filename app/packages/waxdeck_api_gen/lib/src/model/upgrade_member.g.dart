@@ -10,6 +10,10 @@ class _$UpgradeMember extends UpgradeMember {
   @override
   final String itemPid;
   @override
+  final String filePid;
+  @override
+  final String? path;
+  @override
   final String title;
   @override
   final String? artist;
@@ -31,6 +35,8 @@ class _$UpgradeMember extends UpgradeMember {
 
   _$UpgradeMember._({
     required this.itemPid,
+    required this.filePid,
+    this.path,
     required this.title,
     this.artist,
     required this.codec,
@@ -52,6 +58,8 @@ class _$UpgradeMember extends UpgradeMember {
     if (identical(other, this)) return true;
     return other is UpgradeMember &&
         itemPid == other.itemPid &&
+        filePid == other.filePid &&
+        path == other.path &&
         title == other.title &&
         artist == other.artist &&
         codec == other.codec &&
@@ -66,6 +74,8 @@ class _$UpgradeMember extends UpgradeMember {
   int get hashCode {
     var _$hash = 0;
     _$hash = $jc(_$hash, itemPid.hashCode);
+    _$hash = $jc(_$hash, filePid.hashCode);
+    _$hash = $jc(_$hash, path.hashCode);
     _$hash = $jc(_$hash, title.hashCode);
     _$hash = $jc(_$hash, artist.hashCode);
     _$hash = $jc(_$hash, codec.hashCode);
@@ -82,6 +92,8 @@ class _$UpgradeMember extends UpgradeMember {
   String toString() {
     return (newBuiltValueToStringHelper(r'UpgradeMember')
           ..add('itemPid', itemPid)
+          ..add('filePid', filePid)
+          ..add('path', path)
           ..add('title', title)
           ..add('artist', artist)
           ..add('codec', codec)
@@ -101,6 +113,14 @@ class UpgradeMemberBuilder
   String? _itemPid;
   String? get itemPid => _$this._itemPid;
   set itemPid(String? itemPid) => _$this._itemPid = itemPid;
+
+  String? _filePid;
+  String? get filePid => _$this._filePid;
+  set filePid(String? filePid) => _$this._filePid = filePid;
+
+  String? _path;
+  String? get path => _$this._path;
+  set path(String? path) => _$this._path = path;
 
   String? _title;
   String? get title => _$this._title;
@@ -142,6 +162,8 @@ class UpgradeMemberBuilder
     final $v = _$v;
     if ($v != null) {
       _itemPid = $v.itemPid;
+      _filePid = $v.filePid;
+      _path = $v.path;
       _title = $v.title;
       _artist = $v.artist;
       _codec = $v.codec;
@@ -177,6 +199,12 @@ class UpgradeMemberBuilder
             r'UpgradeMember',
             'itemPid',
           ),
+          filePid: BuiltValueNullFieldError.checkNotNull(
+            filePid,
+            r'UpgradeMember',
+            'filePid',
+          ),
+          path: path,
           title: BuiltValueNullFieldError.checkNotNull(
             title,
             r'UpgradeMember',

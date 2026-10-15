@@ -3,6 +3,7 @@ package service
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
 
@@ -119,7 +120,7 @@ func TestWriteFileCrashSafe(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "song.lrc")
-	if err := writeFileCrashSafe(path, []byte("[00:01.000]Hello\n")); err != nil {
+	if err := writeFileCrashSafe(path, []byte("[00:01.000]Hello\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(path)
@@ -130,7 +131,7 @@ func TestWriteFileCrashSafe(t *testing.T) {
 		t.Fatalf("content = %q", got)
 	}
 	// Overwrite replaces atomically and leaves no temp files behind.
-	if err := writeFileCrashSafe(path, []byte("replaced\n")); err != nil {
+	if err := writeFileCrashSafe(path, []byte("replaced\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := os.ReadFile(path); string(got) != "replaced\n" {
@@ -142,6 +143,46 @@ func TestWriteFileCrashSafe(t *testing.T) {
 	}
 	if len(entries) != 1 {
 		t.Fatalf("directory holds %d entries, want just the sidecar", len(entries))
+	}
+}
+
+// A replaced sidecar keeps the mode it had; a new one takes its audio's,
+// less any execute bit, so a player reading the library as another user
+// reads the lyrics too; with neither, it is 0644.
+func TestASidecarTakesTheModeOfWhatItSitsBeside(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("windows has no POSIX file modes")
+	}
+	dir := t.TempDir()
+	audio := filepath.Join(dir, "song.flac")
+	sidecar := filepath.Join(dir, "song.lrc")
+	if err := os.WriteFile(audio, []byte("audio"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(audio, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := sidecarMode(sidecar, audio); got != 0o644 {
+		t.Errorf("beside a 0755 audio file = %o, want 0644", got)
+	}
+	if err := os.Chmod(audio, 0o664); err != nil {
+		t.Fatal(err)
+	}
+	if got := sidecarMode(sidecar, audio); got != 0o664 {
+		t.Errorf("beside a 0664 audio file = %o, want 0664", got)
+	}
+	if err := writeFileCrashSafe(sidecar, []byte("lyrics\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := os.Stat(sidecar); err != nil || st.Mode().Perm() != 0o640 {
+		t.Fatalf("written sidecar mode = %v (%v), want 0640", st.Mode().Perm(), err)
+	}
+	if got := sidecarMode(sidecar, audio); got != 0o640 {
+		t.Errorf("replacing a 0640 sidecar = %o, want its own 0640", got)
+	}
+	if got := sidecarMode(filepath.Join(dir, "none.lrc"), filepath.Join(dir, "none.flac")); got != 0o644 {
+		t.Errorf("beside nothing = %o, want 0644", got)
 	}
 }
 
@@ -238,5 +279,36 @@ func TestSetItemLyricsReportsSkippedLines(t *testing.T) {
 	want := []string{"lrc line 1: no timed lyric, skipped", "lrc line 2: no timed lyric, skipped"}
 	if !slices.Equal(out.Warnings, want) {
 		t.Fatalf("warnings = %q, want %q", out.Warnings, want)
+	}
+}
+
+// A piece a tool copies into the library takes the mode of the file it
+// was cut from, not of its 0600 staging copy.
+func TestACopiedToolPieceTakesItsOriginalsMode(t *testing.T) {
+	t.Parallel()
+	if runtime.GOOS == "windows" {
+		t.Skip("no unix modes")
+	}
+	dir := t.TempDir()
+	original := filepath.Join(dir, "book.m4b")
+	piece := filepath.Join(t.TempDir(), "piece.m4b")
+	if err := os.WriteFile(original, []byte("x"), 0o664); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(original, 0o664); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(piece, []byte("y"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	dst := filepath.Join(dir, "Book", "01 - piece.m4b")
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := copyToolFile(piece, dst, fileModeBeside(original)); err != nil {
+		t.Fatal(err)
+	}
+	if st, err := os.Stat(dst); err != nil || st.Mode().Perm() != 0o664 {
+		t.Fatalf("copied piece mode = %v (%v), want the original's 0664", st.Mode().Perm(), err)
 	}
 }

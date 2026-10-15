@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck/src/shell/async_box_face.dart';
 import 'package:waxdeck/src/uploads/uploads_controller.dart';
@@ -65,6 +66,22 @@ Widget _host(FakeRepository repo, {FilePickerPort? picker}) => ProviderScope(
     filePickerProvider.overrideWithValue(picker),
   ],
   child: routedHost(const UploadsScreen()),
+);
+
+/// The server refusing a session its allowance cannot take.
+const _quotaRefusal = WaxDeckApiException(
+  code: 'quota-exceeded',
+  message:
+      'uploads waiting for review may total 1024 bytes, 0 in use; this one '
+      'needs 2048 more',
+  statusCode: 413,
+);
+
+/// The last message the shell was asked to show.
+String? _message(WidgetTester tester) => shellMessageText(
+  ProviderScope.containerOf(
+    tester.element(find.byType(UploadsScreen)),
+  ).read(shellMessengerProvider),
 );
 
 void main() {
@@ -158,6 +175,52 @@ void main() {
     expect(
       find.bySemanticsIdentifier(SemanticsIds.uploadReview('up-2')),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('an imported duplicate says the library kept what it had', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.uploadsById['up-1'] = testUpload(
+      'up-1',
+      fileName: 'meridian.flac',
+      state: 'imported',
+      duplicate: const DuplicateWarning(
+        itemPid: 'tr-9',
+        kind: 'content',
+        title: 'Neon Meridian',
+        artist: 'The Cardinal Waves',
+      ),
+    );
+    repo.uploadsById['up-2'] = testUpload(
+      'up-2',
+      fileName: 'elsewhere.flac',
+      state: 'staged',
+      duplicate: const DuplicateWarning(kind: 'id'),
+    );
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.uploadDuplicate('up-1')),
+        matching: find.text(
+          'Already in the library: Neon Meridian by The Cardinal Waves. '
+          'Its details stay as they were.',
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.bySemanticsIdentifier(SemanticsIds.uploadDuplicate('up-2')),
+        matching: find.text(
+          'Duplicate (same identifier): an item in a library you cannot open',
+        ),
+      ),
+      findsOneWidget,
+      reason: 'a holder the uploader cannot see is not named',
     );
   });
 
@@ -313,6 +376,30 @@ void main() {
     expect(find.bySemanticsIdentifier(SemanticsIds.acquireUrl), findsNothing);
   });
 
+  testWidgets('a link that is not http is caught before it is sent', (
+    tester,
+  ) async {
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadFromUrl));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.acquireUrl),
+      'tube.example/watch?v=neon-meridian',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
+    await tester.pumpAndSettle();
+
+    expect(repo.acquisitionCalls, isEmpty);
+    expect(
+      find.text('Enter a link starting with http:// or https://'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('acquiring can pick a download format', (tester) async {
     final repo = FakeRepository(sessionState: testUploaderSession());
     await tester.pumpWidget(_host(repo));
@@ -405,6 +492,136 @@ void main() {
     expect(repo.completedBatchIds, [batch.id]);
   });
 
+  testWidgets('a picked Audible file is refused before the media-type '
+      'question', (tester) async {
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    final picker = _FakePicker([readerFile('book.aax', Uint8List(32))]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+      findsNothing,
+    );
+    expect(
+      _message(tester),
+      "Skipped 1 Audible file; DRM audio can't be played",
+    );
+    expect(repo.uploadsById, isEmpty);
+  });
+
+  testWidgets('quota-exceeded says import or discard, not storage full', (
+    tester,
+  ) async {
+    final repo = FakeRepository(sessionState: testUploaderSession())
+      // The file fits the allowance; what is staged already does not
+      // leave room for it.
+      ..uploadPageQuota = const UploadQuota(bytesInUse: 1000, quotaBytes: 1024)
+      ..createUploadRefusal = _quotaRefusal;
+    final picker = _FakePicker([readerFile('big.flac', Uint8List(32))]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      _message(tester),
+      'big.flac: You already have as much waiting as your limit allows. '
+      'Import or discard some in Past uploads, then try again.',
+    );
+  });
+
+  testWidgets('a file larger than the whole allowance says no clearing '
+      'makes room', (tester) async {
+    final repo = FakeRepository(sessionState: testUploaderSession())
+      ..uploadPageQuota = const UploadQuota(bytesInUse: 0, quotaBytes: 1024)
+      ..createUploadRefusal = _quotaRefusal;
+    final picker = _FakePicker([readerFile('big.flac', Uint8List(2048))]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      _message(tester),
+      'big.flac: Larger than your whole upload limit of 1 KB, so clearing '
+      'Past uploads cannot make room. An administrator can raise the limit.',
+    );
+  });
+
+  testWidgets('quota-exceeded against an allowance not known says only '
+      'that', (tester) async {
+    // Without the limit nothing tells a full allowance from a file no
+    // allowance admits, and the table's sentence is true of both.
+    final repo = FakeRepository(sessionState: testUploaderSession())
+      ..createUploadRefusal = _quotaRefusal;
+    final picker = _FakePicker([readerFile('big.flac', Uint8List(32))]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      _message(tester),
+      'big.flac: That is over a limit this server keeps.',
+    );
+  });
+
+  testWidgets('a zero-byte file is named, not sent', (tester) async {
+    final repo = FakeRepository(sessionState: testUploaderSession());
+    final picker = _FakePicker([
+      readerFile('silence.flac', Uint8List(0)),
+      readerFile('sound.flac', Uint8List(32)),
+    ]);
+    await tester.pumpWidget(_host(repo, picker: picker));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    // One file goes, so no grouping question and no batch.
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadGrouping),
+      findsNothing,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+    );
+    await tester.pumpAndSettle();
+    expect(repo.uploadsById.values.map((u) => u.fileName), ['sound.flac']);
+    expect(repo.batchesById, isEmpty);
+
+    // Nothing but an empty file asks nothing at all.
+    picker.files
+      ..clear()
+      ..add(readerFile('silence.flac', Uint8List(0)));
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadPick));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.uploadMediaConfirm),
+      findsNothing,
+    );
+    expect(_message(tester), 'silence.flac: The file is empty');
+    expect(repo.uploadsById, hasLength(1));
+  });
+
   testWidgets('a failing file does not stop the batch or its finalize', (
     tester,
   ) async {
@@ -413,7 +630,7 @@ void main() {
       repo.uploadError = fileName == 'broken.flac'
           ? const WaxDeckApiException(
               code: 'unsupported-format',
-              message: 'files of type "flac" are not accepted',
+              message: '.flac files are not accepted',
               statusCode: 415,
             )
           : null;

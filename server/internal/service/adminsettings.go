@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"strconv"
 	"time"
+
+	"github.com/colespringer/waxbin/model"
 )
 
 // AdminSettings are the runtime-editable server settings.
@@ -298,6 +300,39 @@ func (l *Library) LibraryReadOnlySet(ctx context.Context, actor *UserCtx, apiLib
 	l.Audit(ctx, actor, "library.read-only",
 		AuditTarget{Kind: "library", PID: apiLibraryPID},
 		map[string]any{"readOnly": readOnly})
+	return nil
+}
+
+// LibraryFolderFallbackSet lets a scan name a library's untagged files
+// from their folders, or stops it. Only an in-place library takes it.
+func (l *Library) LibraryFolderFallbackSet(ctx context.Context, actor *UserCtx, apiLibraryPID string, on bool) error {
+	prefix, pid, ok := parseAPIPID(apiLibraryPID)
+	if !ok || prefix != PrefixLibrary {
+		return errInvalid("bad library pid " + apiLibraryPID)
+	}
+	if on {
+		lib, err := l.libraryByPID(ctx, pid)
+		if err != nil {
+			return err
+		}
+		var why string
+		switch lib.Mode {
+		case model.ModeManaged:
+			why = "a managed library names its folders itself"
+		case model.ModePodcast:
+			why = "a podcast library's names come from its feeds"
+		}
+		if why != "" {
+			return errInvalid("only a library that keeps its files in place takes a folder fallback; " + why)
+		}
+	}
+	if _, err := l.lib.SetLibraryFolderFallback(ctx, pid, on); err != nil {
+		return classify(err)
+	}
+	l.refreshLibraryState(ctx)
+	l.Audit(ctx, actor, "library.folder-fallback",
+		AuditTarget{Kind: "library", PID: apiLibraryPID},
+		map[string]any{"folderFallback": on})
 	return nil
 }
 

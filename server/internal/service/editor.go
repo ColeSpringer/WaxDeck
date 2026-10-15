@@ -2,12 +2,15 @@ package service
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"errors"
+	"io/fs"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +19,7 @@ import (
 	"github.com/colespringer/waxbin"
 	waxart "github.com/colespringer/waxbin/art"
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/scan"
 	waxlabel "github.com/colespringer/waxlabel"
 )
 
@@ -93,10 +97,12 @@ type BulkEditOutcomeDTO struct {
 	ResultingAlbumPID string
 }
 
-// TagEditOutcomeDTO reports a custom-tag edit.
+// TagEditOutcomeDTO reports a custom-tag edit, with the files a
+// write-back could not update.
 type TagEditOutcomeDTO struct {
-	Key    string
-	Stored int
+	Key      string
+	Stored   int
+	Failures []WriteBackFailureDTO
 }
 
 // FieldProvenanceDTO is one field's provenance row.
@@ -225,8 +231,9 @@ type MetadataEditParams struct {
 var editorTrackFields = []EditableFieldDTO{
 	{"title", true}, {"artist", true}, {"album_artist", true}, {"album", true},
 	{"composer", true}, {"composer_sort", true}, {"comment", true}, {"genre", true},
-	{"year", true}, {"track_no", true}, {"disc_no", true}, {"bpm", true},
-	{"isrc", true}, {"mbid", true}, {"compilation", true},
+	{"year", true}, {"track_no", true}, {"track_total", true}, {"disc_no", true},
+	{"disc_total", true}, {"bpm", true}, {"isrc", true}, {"mbid", true},
+	{"compilation", true},
 }
 
 // editorBookFields is the book scalar vocabulary. Only the fields the
@@ -434,7 +441,8 @@ func validateFieldEdits(it *model.ItemView, fields map[string]string, writeBack 
 	}
 	for name, value := range fields {
 		if !allowed[name] {
-			return errInvalid("field " + name + " is not editable on a " + mediaTypeForKind(it.Kind) + " item")
+			return errInvalid("field " + name + " is not editable on a " + mediaTypeForKind(it.Kind) + " item" +
+				bookOnlyHint(it.Kind, slices.ContainsFunc(editorBookFields, func(f EditableFieldDTO) bool { return f.Name == name })))
 		}
 		if err := validateIdentifierField(name, value); err != nil {
 			return err
@@ -454,6 +462,43 @@ func editOutcomeFromWriteBack(err error) (EditOutcomeDTO, error) {
 		return EditOutcomeDTO{Failures: writeBackFailures(wbe)}, nil
 	}
 	return EditOutcomeDTO{}, classify(err)
+}
+
+// WriteBackFailuresFor is a write-back's failures as uc may read them:
+// whole for an administrator; for anyone else only the files in
+// libraries they are granted, each by its name, worded without the
+// server's paths or a library's operations. A file is placed by its pid,
+// so narrowing twice changes nothing.
+func (l *Library) WriteBackFailuresFor(ctx context.Context, uc *UserCtx, fs []WriteBackFailureDTO) []WriteBackFailureDTO {
+	if uc.Admin || len(fs) == 0 {
+		return fs
+	}
+	out := make([]WriteBackFailureDTO, 0, len(fs))
+	for _, f := range fs {
+		if f.FilePID != "" && !l.fileGranted(ctx, uc, model.PID(f.FilePID)) {
+			continue
+		}
+		f.Reason = l.failureWords(f.Reason)
+		if f.Path != "" {
+			f.Path = filepath.Base(f.Path)
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// fileGranted reports whether a file sits in a library uc is granted; a
+// file the catalog cannot place is not.
+func (l *Library) fileGranted(ctx context.Context, uc *UserCtx, pid model.PID) bool {
+	if uc.AllLibraries {
+		return true
+	}
+	f, err := l.lib.File(ctx, pid)
+	if err != nil {
+		return false
+	}
+	lib, err := l.libraryForPath(ctx, cmp.Or(f.DisplayPath, string(f.Path)))
+	return err == nil && lib != "" && libraryGranted(uc, model.PID(lib))
 }
 
 func writeBackFailures(wbe *waxbin.WriteBackError) []WriteBackFailureDTO {
@@ -607,7 +652,8 @@ func (l *Library) SetItemCredits(ctx context.Context, uc *UserCtx, apiPID, role 
 	}
 	r := model.ContributorRole(strings.ToLower(strings.TrimSpace(role)))
 	if !model.RoleValidForKind(r, it.Kind) {
-		return EditOutcomeDTO{}, errInvalid("role " + role + " does not apply to a " + mediaTypeForKind(it.Kind) + " item")
+		return EditOutcomeDTO{}, errInvalid("role " + role + " does not apply to a " + mediaTypeForKind(it.Kind) + " item" +
+			bookOnlyHint(it.Kind, model.RoleValidForKind(r, model.KindBook)))
 	}
 	if len(names) > 100 {
 		return EditOutcomeDTO{}, errInvalid("at most 100 names per role")
@@ -659,7 +705,8 @@ func (l *Library) SetItemCreditsBatch(ctx context.Context, uc *UserCtx, apiPID s
 	for _, cr := range credits {
 		r := model.ContributorRole(strings.ToLower(strings.TrimSpace(cr.Role)))
 		if !model.RoleValidForKind(r, it.Kind) {
-			return EditOutcomeDTO{}, errInvalid("role " + cr.Role + " does not apply to a " + mediaTypeForKind(it.Kind) + " item")
+			return EditOutcomeDTO{}, errInvalid("role " + cr.Role + " does not apply to a " + mediaTypeForKind(it.Kind) + " item" +
+				bookOnlyHint(it.Kind, model.RoleValidForKind(r, model.KindBook)))
 		}
 		if len(cr.Names) > 100 {
 			return EditOutcomeDTO{}, errInvalid("at most 100 names per role, and " + cr.Role + " carries more")
@@ -739,7 +786,7 @@ func (l *Library) SetItemLyrics(ctx context.Context, uc *UserCtx, apiPID, lrc, p
 	}
 	out := EditOutcomeDTO{Warnings: warnings}
 	if p.WriteBack {
-		if fail := l.writeLyricsSidecar(it, synced, plain); fail != nil {
+		if fail := l.writeLyricsSidecar(ctx, it, synced, plain); fail != nil {
 			out.Failures = append(out.Failures, *fail)
 		}
 	}
@@ -748,20 +795,16 @@ func (l *Library) SetItemLyrics(ctx context.Context, uc *UserCtx, apiPID, lrc, p
 
 // writeLyricsSidecar writes the .lrc sidecar next to the item's backing
 // file. The catalog edit has already committed, so any refusal or
-// failure is reported as a write-back failure, never an error.
-func (l *Library) writeLyricsSidecar(it *model.ItemView, synced []model.SyncedLine, plain string) *WriteBackFailureDTO {
-	fail := func(path, reason string) *WriteBackFailureDTO {
-		return &WriteBackFailureDTO{FilePID: string(it.FilePID), Path: path, Reason: reason}
-	}
+// failure is reported as a write-back failure, never an error. A carved
+// track's would be the whole rip's, which a scan reads into none of its
+// tracks.
+func (l *Library) writeLyricsSidecar(ctx context.Context, it *model.ItemView, synced []model.SyncedLine, plain string) *WriteBackFailureDTO {
 	if it.Virtual {
-		return fail(it.DisplayPath, "the backing file is shared by several items; sidecar write-back is refused")
+		return sidecarFailure(it, it.DisplayPath, "the backing file is shared by several items; sidecar write-back is refused")
 	}
-	path := string(it.Path)
-	if path == "" {
-		path = it.DisplayPath
-	}
-	if path == "" {
-		return fail("", "no backing file path is known")
+	path, sidecar, fail := l.lyricsSidecarFor(ctx, it)
+	if fail != nil {
+		return fail
 	}
 	var content string
 	if len(synced) > 0 {
@@ -778,17 +821,70 @@ func (l *Library) writeLyricsSidecar(it *model.ItemView, synced []model.SyncedLi
 	if !strings.HasSuffix(content, "\n") {
 		content += "\n"
 	}
-	sidecar := strings.TrimSuffix(path, filepath.Ext(path)) + ".lrc"
-	if err := writeFileCrashSafe(sidecar, []byte(content)); err != nil {
-		return fail(sidecar, "sidecar write failed: "+err.Error())
+	if err := writeFileCrashSafe(sidecar, []byte(content), sidecarMode(sidecar, path)); err != nil {
+		return sidecarFailure(it, sidecar, "sidecar write failed: "+err.Error())
 	}
 	return nil
 }
 
+// lyricsSidecarFor is what writing and removing an item's .lrc share:
+// the audio file it sits beside and the sidecar, or the failure that
+// leaves it alone. A sidecar another audio file of that name reads is
+// that file's too, and one in a folder that cannot be listed may be.
+func (l *Library) lyricsSidecarFor(ctx context.Context, it *model.ItemView) (audio, sidecar string, fail *WriteBackFailureDTO) {
+	audio = cmp.Or(string(it.Path), it.DisplayPath)
+	if audio == "" {
+		return "", "", sidecarFailure(it, "", "no backing file path is known")
+	}
+	sidecar = lyricsSidecar(audio)
+	switch shared, err := l.sidecarShared(ctx, it.PID, audio); {
+	case err != nil:
+		return "", "", sidecarFailure(it, sidecar, "whether another audio file of this name reads the sidecar could not be checked, so it stayed: "+err.Error())
+	case shared:
+		return "", "", sidecarFailure(it, sidecar, "another audio file of this name reads the sidecar too, so it stayed")
+	}
+	return audio, sidecar, nil
+}
+
+// sidecarFailure is a sidecar write-back failure on the item's file.
+func sidecarFailure(it *model.ItemView, path, reason string) *WriteBackFailureDTO {
+	return &WriteBackFailureDTO{FilePID: string(it.FilePID), Path: path, Reason: reason}
+}
+
+// lyricsSidecar is the .lrc beside an audio file.
+func lyricsSidecar(audio string) string {
+	return strings.TrimSuffix(audio, filepath.Ext(audio)) + ".lrc"
+}
+
+// sidecarMode is the mode a file written beside another takes: the mode
+// of the file it replaces, else fileModeBeside's. A temp file is created
+// 0600, which would leave lyrics a player reading the library as another
+// user cannot open.
+func sidecarMode(target, beside string) os.FileMode {
+	if st, err := os.Stat(target); err == nil {
+		return st.Mode().Perm()
+	}
+	return fileModeBeside(beside)
+}
+
+// fileModeBeside is the mode of a new file made from or beside another:
+// the other's less any execute bit, else 0644.
+func fileModeBeside(other string) os.FileMode {
+	if st, err := os.Stat(other); err == nil {
+		return st.Mode().Perm() &^ 0o111
+	}
+	return 0o644
+}
+
+// chmodTempFile sets a crash-safe write's temp file mode; a test stands a
+// mount that refuses it in. Nothing in the server sets it.
+var chmodTempFile = (*os.File).Chmod
+
 // writeFileCrashSafe writes bytes with the repo's durability rule:
 // temp file in the target directory, verify the written bytes, fsync,
-// atomic rename, fsync the directory.
-func writeFileCrashSafe(path string, data []byte) error {
+// atomic rename, fsync the directory. The file takes perm where the
+// mount keeps modes.
+func writeFileCrashSafe(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp*")
 	if err != nil {
@@ -800,6 +896,9 @@ func writeFileCrashSafe(path string, data []byte) error {
 		tmp.Close()
 		return err
 	}
+	// A temp file is created 0600. The mode is best effort, as the tag
+	// writer's is: a mount that refuses it still takes the sidecar.
+	_ = chmodTempFile(tmp, perm)
 	if err := tmp.Sync(); err != nil {
 		tmp.Close()
 		return err
@@ -824,18 +923,84 @@ func writeFileCrashSafe(path string, data []byte) error {
 	return nil
 }
 
-// ClearItemLyrics removes the stored lyrics and their lock; files are
-// untouched. Force is implied: the caller explicitly chose the clear,
-// and the lock exists to fend off scans and enrichment.
-func (l *Library) ClearItemLyrics(ctx context.Context, uc *UserCtx, apiPID string) error {
+// ClearItemLyrics removes the stored lyrics and their lock. Force is
+// implied: the caller explicitly chose the clear, which also unlocks.
+// With writeBack the .lrc sidecar a write-back set wrote goes too, so a
+// rescan cannot read the lyrics back from it; lyrics embedded in the
+// audio stay. A sidecar that could not go is a write-back failure beside
+// the standing clear. A carved track has none to remove.
+func (l *Library) ClearItemLyrics(ctx context.Context, uc *UserCtx, apiPID string, p MetadataEditParams) (EditOutcomeDTO, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiPID)
 	if err != nil {
-		return err
+		return EditOutcomeDTO{}, err
+	}
+	if p.WriteBack {
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			return EditOutcomeDTO{}, err
+		}
 	}
 	if err := l.lib.SetLyrics(ctx, it.PID, nil, model.LockOff, true); err != nil {
-		return classify(err)
+		return EditOutcomeDTO{}, classify(err)
+	}
+	if !p.WriteBack {
+		return EditOutcomeDTO{}, nil
+	}
+	if fail := l.removeLyricsSidecar(ctx, it); fail != nil {
+		return EditOutcomeDTO{Failures: []WriteBackFailureDTO{*fail}}, nil
+	}
+	return EditOutcomeDTO{}, nil
+}
+
+// removeLyricsSidecar deletes the .lrc beside the item's file, as the
+// sidecar write-back's undo; one that is not there is already gone. A
+// carved track has none: a scan reads no sidecar into one, and the rip's
+// is no track's to remove.
+func (l *Library) removeLyricsSidecar(ctx context.Context, it *model.ItemView) *WriteBackFailureDTO {
+	if it.Virtual {
+		return nil
+	}
+	_, sidecar, fail := l.lyricsSidecarFor(ctx, it)
+	if fail != nil {
+		return fail
+	}
+	if err := os.Remove(sidecar); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return sidecarFailure(it, sidecar, "sidecar removal failed: "+err.Error())
+	}
+	if d, err := os.Open(filepath.Dir(sidecar)); err == nil {
+		_ = d.Sync()
+		d.Close()
 	}
 	return nil
+}
+
+// sidecarShared reports whether an audio file beside path shares its
+// name, so reads path's sidecar, other than the item's own files: its
+// other encodings read the item's lyrics. Names compare without case, as
+// a case-insensitive filesystem would give either file the sidecar. What
+// it cannot read, the item's files or the folder, is an error, never a no.
+func (l *Library) sidecarShared(ctx context.Context, item model.PID, path string) (bool, error) {
+	dir := filepath.Dir(path)
+	own := map[string]bool{filepath.Base(path): true}
+	refs, err := l.lib.ItemFiles(ctx, item)
+	if err != nil {
+		return false, err
+	}
+	for _, ref := range refs {
+		if p := cmp.Or(string(ref.Path), ref.DisplayPath); filepath.Dir(p) == dir {
+			own[filepath.Base(p)] = true
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false, err
+	}
+	stem := func(name string) string { return strings.ToLower(strings.TrimSuffix(name, filepath.Ext(name))) }
+	for _, e := range entries {
+		if !own[e.Name()] && e.Type().IsRegular() && scan.IsAudio(e.Name()) && stem(e.Name()) == stem(filepath.Base(path)) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // --- chapters ---------------------------------------------------------------------
@@ -1369,40 +1534,80 @@ func (l *Library) clearPlaylistArtwork(ctx context.Context, uc *UserCtx, apiPlay
 	return nil
 }
 
+// bookOnlyHint ends a refusal of a book's own field or role on a track
+// with the way a track becomes a book, which editing never is.
+func bookOnlyHint(kind model.Kind, bookOnly bool) string {
+	if kind != model.KindTrack || !bookOnly {
+		return ""
+	}
+	return "; a track becomes an audiobook by changing its kind, not by editing this field"
+}
+
 // --- custom tags ------------------------------------------------------------------
+
+// kindTagRefusal refuses the custom tags that read as what an item is,
+// before the catalog does: its own sentence sends a person to an edit
+// surface a track does not have.
+func kindTagRefusal(kind model.Kind, key string) error {
+	switch strings.ToUpper(strings.TrimSpace(key)) {
+	case "MEDIATYPE":
+		return errInvalid("MEDIATYPE is not a custom tag; an item becomes an audiobook or music by changing its kind")
+	case "NARRATOR":
+		if kind == model.KindTrack {
+			return errInvalid("NARRATOR is not a custom tag; a track becomes an audiobook by changing its kind, and then takes narrator credits")
+		}
+		return errInvalid("NARRATOR is not a custom tag; edit the narrator credits instead")
+	}
+	return nil
+}
 
 // SetItemTag replaces one custom tag's ordered values. The catalog
 // canonicalizes the key and rejects reserved keys it owns through
 // another surface.
-func (l *Library) SetItemTag(ctx context.Context, uc *UserCtx, apiPID, key string, values []string, lock, force bool) (TagEditOutcomeDTO, error) {
+func (l *Library) SetItemTag(ctx context.Context, uc *UserCtx, apiPID, key string, values []string, p MetadataEditParams) (TagEditOutcomeDTO, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiPID)
 	if err != nil {
+		return TagEditOutcomeDTO{}, err
+	}
+	if err := kindTagRefusal(it.Kind, key); err != nil {
 		return TagEditOutcomeDTO{}, err
 	}
 	if len(values) > 100 {
 		return TagEditOutcomeDTO{}, errInvalid("at most 100 values per tag")
 	}
-	canon, stored, err := l.lib.SetItemTag(ctx, it.PID, key, values, waxbin.TagEditOptions{
-		Lock: model.LockOf(lock), Force: force,
-	})
-	if err != nil {
-		return TagEditOutcomeDTO{}, classify(err)
+	if p.WriteBack {
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			return TagEditOutcomeDTO{}, err
+		}
 	}
-	return TagEditOutcomeDTO{Key: canon, Stored: stored}, nil
+	canon, stored, err := l.lib.SetItemTag(ctx, it.PID, key, values, waxbin.TagEditOptions{
+		Lock: model.LockOf(p.Lock), Force: p.Force, WriteBack: p.WriteBack,
+	})
+	// A file that could not take the values leaves the edit standing.
+	outcome, err := editOutcomeFromWriteBack(err)
+	if err != nil {
+		return TagEditOutcomeDTO{}, err
+	}
+	return TagEditOutcomeDTO{Key: canon, Stored: stored, Failures: outcome.Failures}, nil
 }
 
-// ClearItemTag removes the tag and its lock.
-func (l *Library) ClearItemTag(ctx context.Context, uc *UserCtx, apiPID, key string) error {
+// ClearItemTag removes the tag and its lock, from the files too with
+// writeBack; the files it could not reach are answered for the commit
+// to report, the edit standing either way.
+func (l *Library) ClearItemTag(ctx context.Context, uc *UserCtx, apiPID, key string, p MetadataEditParams) (EditOutcomeDTO, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiPID)
 	if err != nil {
-		return err
+		return EditOutcomeDTO{}, err
 	}
-	if _, _, err := l.lib.SetItemTag(ctx, it.PID, key, nil, waxbin.TagEditOptions{
-		Lock: model.LockOff, Force: true,
-	}); err != nil {
-		return classify(err)
+	if p.WriteBack {
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			return EditOutcomeDTO{}, err
+		}
 	}
-	return nil
+	_, _, err = l.lib.SetItemTag(ctx, it.PID, key, nil, waxbin.TagEditOptions{
+		Lock: model.LockOff, Force: true, WriteBack: p.WriteBack,
+	})
+	return editOutcomeFromWriteBack(err)
 }
 
 // --- locks ------------------------------------------------------------------------
@@ -1665,15 +1870,17 @@ func (l *Library) DetachItem(ctx context.Context, uc *UserCtx, apiPID string, wr
 
 // SetReleaseStatus marks or clears the item's unofficial state (a
 // locked RELEASESTATUS custom tag of unofficial).
-func (l *Library) SetReleaseStatus(ctx context.Context, uc *UserCtx, apiPID string, unofficial bool) error {
+func (l *Library) SetReleaseStatus(ctx context.Context, uc *UserCtx, apiPID string, unofficial bool, p MetadataEditParams) (EditOutcomeDTO, error) {
 	it, err := l.getVisibleItem(ctx, uc, apiPID)
 	if err != nil {
-		return err
+		return EditOutcomeDTO{}, err
 	}
-	if unofficial {
-		return l.markUnofficial(ctx, it.PID)
+	if p.WriteBack {
+		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
+			return EditOutcomeDTO{}, err
+		}
 	}
-	return l.clearUnofficial(ctx, it.PID)
+	return editOutcomeFromWriteBack(l.setReleaseStatus(ctx, it.PID, unofficial, p.WriteBack))
 }
 
 // --- compound commit --------------------------------------------------------------
@@ -1936,7 +2143,7 @@ func (l *Library) commitSteps(pid string, uc *UserCtx, c MetadataCommitDTO) []co
 		}})
 	case c.ClearLyrics:
 		steps = append(steps, commitStep{part: CommitPartLyrics, run: func(ctx context.Context) (EditOutcomeDTO, error) {
-			return EditOutcomeDTO{}, l.ClearItemLyrics(ctx, uc, pid)
+			return l.ClearItemLyrics(ctx, uc, pid, c.Params)
 		}})
 	}
 	if c.Chapters != nil {
@@ -1946,18 +2153,18 @@ func (l *Library) commitSteps(pid string, uc *UserCtx, c MetadataCommitDTO) []co
 	}
 	for _, key := range sortedKeys(c.TagSets) {
 		steps = append(steps, commitStep{part: CommitPartTagSet, detail: key, run: func(ctx context.Context) (EditOutcomeDTO, error) {
-			_, err := l.SetItemTag(ctx, uc, pid, key, c.TagSets[key], c.Params.Lock, c.Params.Force)
-			return EditOutcomeDTO{}, err
+			out, err := l.SetItemTag(ctx, uc, pid, key, c.TagSets[key], c.Params)
+			return EditOutcomeDTO{Failures: out.Failures}, err
 		}})
 	}
 	for _, key := range c.TagRemoves {
 		steps = append(steps, commitStep{part: CommitPartTagRemove, detail: key, run: func(ctx context.Context) (EditOutcomeDTO, error) {
-			return EditOutcomeDTO{}, l.ClearItemTag(ctx, uc, pid, key)
+			return l.ClearItemTag(ctx, uc, pid, key, c.Params)
 		}})
 	}
 	if c.Unofficial != nil {
 		steps = append(steps, commitStep{part: CommitPartReleaseStatus, run: func(ctx context.Context) (EditOutcomeDTO, error) {
-			return EditOutcomeDTO{}, l.SetReleaseStatus(ctx, uc, pid, *c.Unofficial)
+			return l.SetReleaseStatus(ctx, uc, pid, *c.Unofficial, c.Params)
 		}})
 	}
 	return steps
@@ -1983,6 +2190,7 @@ func sortedKeys(m map[string][]string) []string {
 var writeBackIssueCodes = map[model.DiagnosticCode]string{
 	model.DiagTagWriteUnsynced: "tag-write-unsynced",
 	model.DiagTagWriteLost:     "tag-write-lost",
+	model.DiagTagWriteOwed:     "tag-write-owed",
 }
 
 // writeBackIssues reads the write-back drift recorded against one item's
@@ -2008,10 +2216,23 @@ func (l *Library) writeBackIssues(ctx context.Context, uc *UserCtx, itemPID mode
 	if err != nil {
 		return nil, classify(err)
 	}
+	// A file in a library the reader is not granted is left out, as its
+	// file list leaves it out.
+	var seen map[model.PID]bool
+	if !uc.AllLibraries {
+		files, err := l.visibleItemFiles(ctx, uc, itemPID)
+		if err != nil {
+			return nil, err
+		}
+		seen = make(map[model.PID]bool, len(files))
+		for _, f := range files {
+			seen[f.ref.FilePID] = true
+		}
+	}
 	out := make([]WriteBackIssueDTO, 0, len(rows))
 	for _, d := range rows {
 		code, ok := writeBackIssueCodes[d.Code]
-		if !ok {
+		if !ok || (seen != nil && d.FilePID != "" && !seen[d.FilePID]) {
 			continue
 		}
 		issue := WriteBackIssueDTO{
@@ -2377,7 +2598,9 @@ func editorScalarFields(it *model.ItemView, prov []model.FieldProvenance) map[st
 		set("genre", it.Genre)
 		setInt("year", it.Year)
 		setInt("track_no", it.TrackNo)
+		setInt("track_total", it.TrackTotal)
 		setInt("disc_no", it.DiscNo)
+		setInt("disc_total", it.DiscTotal)
 		setInt("bpm", it.BPM)
 		set("isrc", it.ISRC)
 		set("mbid", it.MBID)

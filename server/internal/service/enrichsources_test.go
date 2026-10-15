@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -276,12 +277,25 @@ func TestAPutWhoseStatusCannotBeReadSavesNothing(t *testing.T) {
 }
 
 // lyricist answers a lyrics lookup with its own name; with a gate it
-// signals asked and waits for the gate first.
+// signals asked and waits for the gate first. The wait ignores the call's
+// deadline: the pass gives each lookup fifteen seconds, which a slow run
+// (the race detector under load) outlasts, and a pass that moved on would
+// no longer be the one the test holds open. A test with a gate defers
+// open, so the lookup ends however the test does, before its cleanup.
 type lyricist struct {
-	name  string
-	asked chan struct{}
-	gate  chan struct{}
+	name   string
+	asked  chan struct{}
+	gate   chan struct{}
+	opened sync.Once
 }
+
+// gatedLyricist is a lyricist that waits for open.
+func gatedLyricist(name string) *lyricist {
+	return &lyricist{name: name, asked: make(chan struct{}, 1), gate: make(chan struct{})}
+}
+
+// open lets a gated lookup answer; again is a no-op.
+func (p *lyricist) open() { p.opened.Do(func() { close(p.gate) }) }
 
 func (p *lyricist) Name() string                    { return p.name }
 func (p *lyricist) Capabilities() enrich.Capability { return enrich.CapLyrics }
@@ -291,11 +305,7 @@ func (p *lyricist) Enrich(ctx context.Context, req enrich.Request) (*enrich.Cand
 		case p.asked <- struct{}{}:
 		default:
 		}
-		select {
-		case <-p.gate:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
+		<-p.gate
 	}
 	return &enrich.Candidate{Lyrics: &model.Lyrics{Unsynced: "sung by " + p.name}}, nil
 }
@@ -323,14 +333,15 @@ func openLyricsFixture(t *testing.T, providers ...enrich.Provider) (context.Cont
 // upload writes one import job per track.
 func TestAPassOutlastsTheJobWindow(t *testing.T) {
 	t.Parallel()
-	a := &lyricist{name: "a", asked: make(chan struct{}, 1), gate: make(chan struct{})}
+	a := gatedLyricist("a")
+	defer a.open()
 	ctx, svc, uc, _ := openLyricsFixture(t, a, &lyricist{name: "b"})
 	pid, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer waitForJob(t, ctx, svc, pid)
-	defer close(a.gate)
+	defer a.open()
 	<-a.asked
 	for range enrichJobWindow + 1 {
 		if _, err := svc.lib.Scan(ctx, waxbin.ScanRequest{}); err != nil {
@@ -350,7 +361,8 @@ func TestAPassOutlastsTheJobWindow(t *testing.T) {
 // the order it started with, and the next one asks by the new order.
 func TestASaveDuringAPassAppliesToTheNextOne(t *testing.T) {
 	t.Parallel()
-	a := &lyricist{name: "a", asked: make(chan struct{}, 1), gate: make(chan struct{})}
+	a := gatedLyricist("a")
+	defer a.open()
 	ctx, svc, uc, track := openLyricsFixture(t, a, &lyricist{name: "b"})
 
 	pid, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{})
@@ -361,7 +373,7 @@ func TestASaveDuringAPassAppliesToTheNextOne(t *testing.T) {
 	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"b", true}, {"a", true}}); err != nil {
 		t.Fatalf("a save during a pass: %v", err)
 	}
-	close(a.gate)
+	a.open()
 	waitForJob(t, ctx, svc, pid)
 	if ly, err := svc.lib.Lyrics(ctx, track); err != nil || ly.Provider != "a" {
 		t.Fatalf("lyrics = %+v (%v), want a's", ly, err)
@@ -408,7 +420,8 @@ func TestAPassAfterAReorderCreditsTheNewFirstSource(t *testing.T) {
 // phase only a source switched on since then supplies.
 func TestAForcedRunDuringAPassIsAConflict(t *testing.T) {
 	t.Parallel()
-	a := &lyricist{name: "a", asked: make(chan struct{}, 1), gate: make(chan struct{})}
+	a := gatedLyricist("a")
+	defer a.open()
 	ctx, svc, uc, _ := openLyricsFixture(t, a, answeringProvider{"fanart", enrich.CapAuxArt})
 	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"fanart", false}}); err != nil {
 		t.Fatal(err)
@@ -419,7 +432,7 @@ func TestAForcedRunDuringAPassIsAConflict(t *testing.T) {
 	}
 	_, pid, _ := parseAPIPID(api)
 	<-a.asked
-	defer func() { close(a.gate); waitForJob(t, ctx, svc, pid) }()
+	defer func() { a.open(); waitForJob(t, ctx, svc, pid) }()
 	if _, err := svc.PutEnrichmentSources(ctx, uc, []EnrichmentSource{{"a", true}, {"fanart", true}}); err != nil {
 		t.Fatal(err)
 	}
@@ -481,7 +494,8 @@ func TestASwitchedOffSourceIsCalledThat(t *testing.T) {
 // one row rather than rebuilding the whole status.
 func TestTheStatusNamesTheRunningPass(t *testing.T) {
 	t.Parallel()
-	a := &lyricist{name: "a", asked: make(chan struct{}, 1), gate: make(chan struct{})}
+	a := gatedLyricist("a")
+	defer a.open()
 	ctx, svc, uc, _ := openLyricsFixture(t, a)
 	api, err := svc.RunEnrichment(ctx, uc, false, nil, nil)
 	if err != nil {
@@ -490,7 +504,7 @@ func TestTheStatusNamesTheRunningPass(t *testing.T) {
 	_, pid, _ := parseAPIPID(api)
 	<-a.asked
 	st, err := svc.EnrichmentStatusFor(ctx, uc)
-	close(a.gate)
+	a.open()
 	waitForJob(t, ctx, svc, pid)
 	if err != nil || !st.Running || st.RunningJob != api {
 		t.Fatalf("status while running = running %v, job %q (%v); want %s", st.Running, st.RunningJob, err, api)

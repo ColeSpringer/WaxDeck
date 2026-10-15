@@ -88,6 +88,23 @@ Future<List<String>> mirrorInProgressPids(
   return [for (final r in rows) r.pid];
 }
 
+/// The pid the mirror holds for [pid]'s item when that is another one.
+/// A kind change gives an item a new prefix on the same ULID, and what
+/// was built before it (a saved queue, a summary read earlier) still
+/// names the old pid. Null when the mirror holds [pid] itself, or
+/// nothing under its ULID.
+Future<String?> mirrorRenamedPid(MirrorDatabase db, String pid) async {
+  final dash = pid.indexOf('-');
+  final t = db.mirrorItems;
+  final row =
+      await (db.selectOnly(t)
+            ..addColumns([t.pid])
+            ..where(t.ulid.equals(dash < 0 ? pid : pid.substring(dash + 1))))
+          .getSingleOrNull();
+  final now = row?.read(t.pid);
+  return now == pid ? null : now;
+}
+
 /// One mirror row by pid, for hydrating id lists into entries.
 Future<ItemSummary?> mirrorItemByPid(MirrorDatabase db, String pid) async {
   final row = await (db.select(

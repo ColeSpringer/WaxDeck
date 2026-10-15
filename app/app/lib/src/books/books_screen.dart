@@ -13,6 +13,7 @@ import '../player/play_progress.dart';
 import '../search/search_chrome.dart';
 import '../shell/account_chrome.dart';
 import '../settings/client_prefs.dart';
+import '../settings/settings_registry.dart';
 import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
@@ -120,6 +121,14 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
                 title: l10n.booksEmptyTitle,
                 message: l10n.booksEmptyMessage,
                 glyph: WaxIcons.audiobooks,
+                // The way a folder of books arrives is a library that
+                // holds them, which an administrator adds.
+                actionLabel: ref.watch(isAdminProvider)
+                    ? l10n.booksAddLibrary
+                    : null,
+                onAction: ref.watch(isAdminProvider)
+                    ? () => context.go(WaxRoute.libraries)
+                    : null,
               ),
             ),
             false when more => SliverFillRemaining(

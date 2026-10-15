@@ -33,7 +33,7 @@ func (f genreFixture) restricted(allow, deny []TagRule) *UserCtx {
 func (f genreFixture) tag(t *testing.T, title, key string, values ...string) {
 	t.Helper()
 	it := f.itemNamed(t, title)
-	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), key, values, false, false); err != nil {
+	if _, err := f.svc.SetItemTag(f.ctx, f.uc, apiPID(PrefixTrack, it.PID), key, values, MetadataEditParams{Lock: false, Force: false}); err != nil {
 		t.Fatalf("tagging %s: %v", title, err)
 	}
 }

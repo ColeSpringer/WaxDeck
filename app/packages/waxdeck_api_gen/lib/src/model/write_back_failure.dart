@@ -8,23 +8,23 @@ import 'package:built_value/serializer.dart';
 
 part 'write_back_failure.g.dart';
 
-/// One file a write-back could not update.
+/// One file a write-back could not update. A caller who is not an administrator is told only of files in libraries they are granted. 
 ///
 /// Properties:
-/// * [filePid] - The file.
-/// * [path] - Its display path.
-/// * [reason] - Why the write failed or was refused.
+/// * [filePid] - The file; empty for a failure no one file caused.
+/// * [path] - Its display path, or its file name for a caller who is not an administrator. 
+/// * [reason] - Why the write failed or was refused, without the server's paths for a caller who is not an administrator. 
 @BuiltValue()
 abstract class WriteBackFailure implements Built<WriteBackFailure, WriteBackFailureBuilder> {
-  /// The file.
+  /// The file; empty for a failure no one file caused.
   @BuiltValueField(wireName: r'filePid')
   String get filePid;
 
-  /// Its display path.
+  /// Its display path, or its file name for a caller who is not an administrator. 
   @BuiltValueField(wireName: r'path')
   String? get path;
 
-  /// Why the write failed or was refused.
+  /// Why the write failed or was refused, without the server's paths for a caller who is not an administrator. 
   @BuiltValueField(wireName: r'reason')
   String get reason;
 

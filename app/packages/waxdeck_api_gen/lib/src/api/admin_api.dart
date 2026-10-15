@@ -26,6 +26,9 @@ import 'package:waxdeck_api_gen/src/model/job_list.dart';
 import 'package:waxdeck_api_gen/src/model/libraries.dart';
 import 'package:waxdeck_api_gen/src/model/library_create.dart';
 import 'package:waxdeck_api_gen/src/model/library_created.dart';
+import 'package:waxdeck_api_gen/src/model/library_folder_fallback.dart';
+import 'package:waxdeck_api_gen/src/model/library_media.dart';
+import 'package:waxdeck_api_gen/src/model/library_media_changed.dart';
 import 'package:waxdeck_api_gen/src/model/library_profile.dart';
 import 'package:waxdeck_api_gen/src/model/library_read_only.dart';
 import 'package:waxdeck_api_gen/src/model/migration_create.dart';
@@ -1222,7 +1225,7 @@ class AdminApi {
   }
 
   /// Get one job&#39;s state
-  /// State and progress of a server-run catalog job, for the audience the &#x60;job&#x60; sync marker reaches: administrators, and the starter of a targeted job until its end has been announced to them; anyone else is &#x60;forbidden&#x60;. A timeline-measurement job (the job a queue timeline answers &#x60;202&#x60; with) is readable by the account whose queue it measures alone, and is &#x60;not-found&#x60; to any other. 
+  /// State and progress of a server-run catalog job, for the audience the &#x60;job&#x60; sync marker reaches: administrators, and the starter of a targeted job until its end has been announced to them. Once a job on an item has ended, anyone who may edit that item (its &#x60;mayCurate&#x60;) reads it too, which is how a kind change&#39;s starter reads its result after the end notice; anyone else is &#x60;forbidden&#x60;. For a reader who is not an administrator, a scan&#39;s &#x60;runs&#x60; and the write-back failures&#39; &#x60;path&#x60;s are left out and &#x60;error&#x60; carries no server paths. A timeline-measurement job (the job a queue timeline answers &#x60;202&#x60; with) is readable by the account whose queue it measures alone, and is &#x60;not-found&#x60; to any other. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
@@ -2020,7 +2023,7 @@ class AdminApi {
   }
 
   /// List recent catalog jobs
-  /// Recent catalog jobs, newest first: &#x60;limit&#x60; of them, after any still running. A finished targeted job is left out; read it by pid. The &#x60;job&#x60; sync marker says when to read again. Administrators only. 
+  /// Recent catalog jobs, newest first: &#x60;limit&#x60; of them, after any still running. A finished targeted job is left out (read it by pid), except a kind change (&#x60;set-kind&#x60;), which lists with its result. The &#x60;job&#x60; sync marker says when to read again. Administrators only. 
   ///
   /// Parameters:
   /// * [limit] - Maximum jobs returned.
@@ -3371,6 +3374,222 @@ class AdminApi {
     );
 
     return _response;
+  }
+
+  /// Name untagged files from their folders
+  /// Lets a scan name a track that carries no artist, album artist or album at all from its folders: the grandparent folder as the artist and the parent as the album, less a trailing &#x60; (YYYY)&#x60;. It needs a file two folders down, so a loose file names nothing, and never applies to a book. Files scanned from now on take it; an unchanged file already scanned takes it on a rescan that reads every file again (&#x60;force&#x60;). Only an in-place library takes it: a managed library&#39;s folders are the catalog&#39;s own rendering, and asking for one answers &#x60;invalid-request&#x60;, as the podcast library does. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [libraryFolderFallback] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [LibraryFolderFallback] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<LibraryFolderFallback>> setLibraryFolderFallback({ 
+    required String pid,
+    required LibraryFolderFallback libraryFolderFallback,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/libraries/{pid}/folder-fallback'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'PUT',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(LibraryFolderFallback);
+      _bodyData = _serializers.serialize(libraryFolderFallback, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    LibraryFolderFallback? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(LibraryFolderFallback),
+      ) as LibraryFolderFallback;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<LibraryFolderFallback>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
+  }
+
+  /// Change what a library holds
+  /// Changes the library&#39;s content class in place and starts the scan that applies it to the files already there. Onto &#x60;audiobook&#x60;, the library&#39;s audio files become books (its plain parts gathered into one book per album and author) on an ordinary scan. Onto &#x60;music&#x60; or &#x60;mixed&#x60;, the scan re-reads every file and classifies it by its tags: in &#x60;music&#x60; a book its parts&#39; tags do not make one is read again as tracks, while in &#x60;mixed&#x60; a book whose parts already make one keeps them. Items whose kind was set by hand or by an upload keep it either way. The podcast library is &#x60;invalid-request&#x60;, and so is moving a root &#x60;WAXDECK_AUDIOBOOK_ROOTS&#x60; declares (&#x60;mediaDeclared&#x60;) off audiobook. Administrators only. 
+  ///
+  /// Parameters:
+  /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).
+  /// * [libraryMedia] 
+  /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
+  /// * [headers] - Can be used to add additional headers to the request
+  /// * [extras] - Can be used to add flags to the request
+  /// * [validateStatus] - A [ValidateStatus] callback that can be used to determine request success based on the HTTP status of the response
+  /// * [onSendProgress] - A [ProgressCallback] that can be used to get the send progress
+  /// * [onReceiveProgress] - A [ProgressCallback] that can be used to get the receive progress
+  ///
+  /// Returns a [Future] containing a [Response] with a [LibraryMediaChanged] as data
+  /// Throws [DioException] if API call or serialization fails
+  Future<Response<LibraryMediaChanged>> setLibraryMedia({ 
+    required String pid,
+    required LibraryMedia libraryMedia,
+    CancelToken? cancelToken,
+    Map<String, dynamic>? headers,
+    Map<String, dynamic>? extra,
+    ValidateStatus? validateStatus,
+    ProgressCallback? onSendProgress,
+    ProgressCallback? onReceiveProgress,
+  }) async {
+    final _path = r'/libraries/{pid}/media'.replaceAll('{' r'pid' '}', encodeQueryParameter(_serializers, pid, const FullType(String)).toString());
+    final _options = Options(
+      method: r'PUT',
+      headers: <String, dynamic>{
+        ...?headers,
+      },
+      extra: <String, dynamic>{
+        'secure': <Map<String, String>>[
+          {
+            'type': 'apiKey',
+            'name': 'cookieAuth',
+            'keyName': 'waxdeck_session',
+            'where': '',
+          },{
+            'type': 'http',
+            'scheme': 'bearer',
+            'name': 'bearerAuth',
+          },
+        ],
+        ...?extra,
+      },
+      contentType: 'application/json',
+      validateStatus: validateStatus,
+    );
+
+    dynamic _bodyData;
+
+    try {
+      const _type = FullType(LibraryMedia);
+      _bodyData = _serializers.serialize(libraryMedia, specifiedType: _type);
+
+    } catch(error, stackTrace) {
+      throw DioException(
+         requestOptions: _options.compose(
+          _dio.options,
+          _path,
+        ),
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    final _response = await _dio.request<Object>(
+      _path,
+      data: _bodyData,
+      options: _options,
+      cancelToken: cancelToken,
+      onSendProgress: onSendProgress,
+      onReceiveProgress: onReceiveProgress,
+    );
+
+    LibraryMediaChanged? _responseData;
+
+    try {
+      final rawResponse = _response.data;
+      _responseData = rawResponse == null ? null : _serializers.deserialize(
+        rawResponse,
+        specifiedType: const FullType(LibraryMediaChanged),
+      ) as LibraryMediaChanged;
+
+    } catch (error, stackTrace) {
+      throw DioException(
+        requestOptions: _response.requestOptions,
+        response: _response,
+        type: DioExceptionType.unknown,
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+
+    return Response<LibraryMediaChanged>(
+      data: _responseData,
+      headers: _response.headers,
+      isRedirect: _response.isRedirect,
+      requestOptions: _response.requestOptions,
+      redirects: _response.redirects,
+      statusCode: _response.statusCode,
+      statusMessage: _response.statusMessage,
+      extra: _response.extra,
+    );
   }
 
   /// Set a managed library&#39;s organize profile

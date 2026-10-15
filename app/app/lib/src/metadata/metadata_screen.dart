@@ -5,6 +5,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/art_source_label.dart';
 import '../l10n/l10n.dart';
+import '../library/item_kind.dart';
 import '../media_view.dart';
 import '../music/music_controllers.dart';
 import '../providers.dart';
@@ -396,6 +397,9 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
       ArtworkManager(
         pid: widget.pid,
         hasArtwork: state.metadata.hasArtwork,
+        // The cover applies when chosen, so it rides the switch as it
+        // stands rather than the save.
+        writeBack: _canWriteBack(state) && _writeBack,
         // An episode's picture is the feed's: the item art lock only
         // applies to tracks and books, and the store refuses it.
         pinnable: state.metadata.mediaType != MediaType.podcast,
@@ -572,6 +576,9 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
   Widget _actionsSection(BuildContext context, MetadataEditorState state) {
     final colors = WaxColors.of(context);
     final l10n = context.l10n;
+    // A kind change leaves for what the item became, so it waits for
+    // the draft to be saved or dropped rather than discarding it.
+    final kindBlocked = _busy || !_draft.changes(state).isEmpty;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -599,6 +606,37 @@ class _MetadataPaneState extends ConsumerState<MetadataPane> {
               semanticsId: SemanticsIds.metadataEnrich,
               onPressed: _busy ? null : () => _enrich(state),
             ),
+            // What the item is, beside how it is identified: a book read
+            // as music is put right here rather than by editing fields
+            // a track does not have.
+            if (state.metadata.mediaType == MediaType.music)
+              WaxButton(
+                label: l10n.libraryKindToBook,
+                kind: WaxButtonKind.tonal,
+                icon: WaxIcons.audiobooks,
+                semanticsId: SemanticsIds.itemMenuKindBook,
+                onPressed: kindBlocked
+                    ? null
+                    : () => confirmSetKind(
+                        context,
+                        pids: [widget.pid],
+                        to: 'audiobook',
+                      ),
+              )
+            else if (state.metadata.mediaType == MediaType.audiobook)
+              WaxButton(
+                label: l10n.libraryKindToMusic,
+                kind: WaxButtonKind.tonal,
+                icon: WaxIcons.music,
+                semanticsId: SemanticsIds.itemMenuKindMusic,
+                onPressed: kindBlocked
+                    ? null
+                    : () => confirmSetKind(
+                        context,
+                        pids: [widget.pid],
+                        to: 'music',
+                      ),
+              ),
           ],
         ),
       ],
@@ -629,7 +667,7 @@ class _Header extends ConsumerWidget {
   ) {
     final counts = <String, int>{};
     for (final entry in metadata.provenance) {
-      if (entry.isArtifact) continue;
+      if (entry.isArtifact || entry.isKind) continue;
       final source = entry.provider ?? entry.source;
       counts[source] = (counts[source] ?? 0) + 1;
     }
@@ -800,6 +838,16 @@ class _Header extends ConsumerWidget {
               for (final line in artifactSources(l10n, metadata))
                 Text(
                   line,
+                  style: WaxType.caption.copyWith(color: colors.textTertiary),
+                ),
+              if (metadata.provenance.any((p) => p.isKind && p.locked))
+                Text(
+                  l10n.metadataKindPinned(
+                    DomainBadge.defaultLabel(
+                      context.waxL10n,
+                      waxDomainOf(metadata.mediaType),
+                    ),
+                  ),
                   style: WaxType.caption.copyWith(color: colors.textTertiary),
                 ),
             ],

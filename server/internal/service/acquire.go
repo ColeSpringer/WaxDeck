@@ -1,6 +1,7 @@
 package service
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -12,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/colespringer/waxbin/fingerprint"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/source"
 	waxlabel "github.com/colespringer/waxlabel"
@@ -84,7 +84,7 @@ func (l *Library) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, med
 	}
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
-		return ToolTaskDTO{}, errInvalid("url must be an http or https URL")
+		return ToolTaskDTO{}, errInvalid("the address must start with http:// or https://")
 	}
 	if err := l.guardAcquireHost(ctx, parsed.Hostname()); err != nil {
 		return ToolTaskDTO{}, err
@@ -436,18 +436,17 @@ func (l *Library) fetchAcquireItem(ctx context.Context, provider source.Provider
 	}
 	// The provider embeds the source metadata; read it back so the
 	// identify pipeline and the review diff see what the file carries.
-	if tags, err := parseFileTags(ctx, final); err == nil {
+	var length time.Duration
+	if tags, dur, err := parseFileTags(ctx, final); err == nil {
 		doc.Tags = tags
 		doc.Title = firstNonEmpty(tags["TITLE"], doc.Title)
 		doc.Artist = tags["ARTIST"]
 		doc.TrackNo = parseIntTag(tags["TRACKNUMBER"])
+		length = dur
 	}
-	if l.fpcalcPath != "" {
-		if fp, dur, err := fingerprint.ChromaprintCompressed(ctx, l.fpcalcPath, final, 0); err == nil {
-			doc.Fingerprint = fp
-			doc.DurationMS = int64(dur) * 1000
-		}
-	}
+	fp, fpSecs := l.fingerprintFile(ctx, final, length)
+	doc.Fingerprint = fp
+	doc.DurationMS = cmp.Or(length.Milliseconds(), int64(fpSecs)*1000)
 
 	row := wdb.Upload{
 		ID:            uploadID,
@@ -611,10 +610,10 @@ func acquireFileName(title, contentType string, index int) string {
 
 // parseFileTags reads a file's embedded tags as the engine's canonical
 // map; a parse failure just yields no tags.
-func parseFileTags(ctx context.Context, path string) (map[string]string, error) {
+func parseFileTags(ctx context.Context, path string) (map[string]string, time.Duration, error) {
 	doc, err := waxlabel.ParseFile(ctx, path)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return flatTags(doc), nil
+	return flatTags(doc), doc.Properties().Duration(), nil
 }

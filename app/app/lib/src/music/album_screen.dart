@@ -11,6 +11,7 @@ import '../auth/auth_controller.dart';
 import '../discovery/discovery_actions.dart';
 import '../home/pin_action.dart';
 import '../l10n/l10n.dart';
+import '../library/item_kind.dart';
 import '../library/item_menu.dart';
 import '../sharing/share_dialog.dart';
 import '../player/entity_star_rating_row.dart';
@@ -25,6 +26,7 @@ import '../shell/async_sliver_face.dart';
 import '../shell/commands.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../shell/shell_messages.dart';
 import 'album_detail.dart';
 import 'album_play.dart';
 import 'entity_facts.dart';
@@ -239,6 +241,34 @@ class _Header extends ConsumerWidget {
   final AlbumFacts facts;
   final List<ItemSummary> tracks;
 
+  /// Names every track of the album or none: the listing is read on past
+  /// the screen's page until it is whole or longer than one change may
+  /// name, which the dialog then refuses rather than sending a part.
+  Future<void> _toBook(BuildContext context, WidgetRef ref) async {
+    final l10n = context.l10n;
+    final messenger = ref.read(shellMessengerProvider.notifier);
+    final List<ItemSummary> all;
+    try {
+      all = await ref
+          .read(
+            musicItemsProvider((
+              dimension: MusicDimension.albums,
+              segment: pid,
+            )).notifier,
+          )
+          .readThrough(atMost: kindChangeMaxItems);
+    } on WaxDeckApiException catch (e) {
+      messenger.show(explainError(l10n, e));
+      return;
+    }
+    if (!context.mounted) return;
+    await confirmSetKind(
+      context,
+      pids: [for (final t in albumOrder(all)) t.pid],
+      to: 'audiobook',
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isAdmin =
@@ -319,6 +349,16 @@ class _Header extends ConsumerWidget {
                 glyph: WaxIcons.edit,
                 semanticsId: SemanticsIds.albumEditDetails,
               ),
+            // Each track is gated per item on the server, so the door is
+            // the item editor's: an uploader may turn an album of their
+            // own uploads into one book.
+            if (tracks.isNotEmpty && mayOfferItemEdit(ref))
+              WaxMenuItem<String>(
+                value: 'kind',
+                label: context.l10n.libraryKindAlbumToBook,
+                glyph: WaxIcons.audiobooks,
+                semanticsId: SemanticsIds.itemMenuKindAlbum,
+              ),
           ],
           // Every value named, none inferred: the last arm used to be
           // "anything else opens the editor", which would hand the
@@ -335,6 +375,8 @@ class _Header extends ConsumerWidget {
                 unawaited(showShareLinkDialog(context, pid: pid));
               case 'edit':
                 unawaited(context.push(WaxRoute.metadata(pid)));
+              case 'kind':
+                unawaited(_toBook(context, ref));
             }
           },
         ),

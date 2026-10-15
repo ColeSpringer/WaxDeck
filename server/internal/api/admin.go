@@ -526,16 +526,35 @@ func (s *Server) DeleteLibraryItems(ctx context.Context, req DeleteLibraryItemsR
 		}
 		return nil, err
 	}
+	return DeleteLibraryItems200JSONResponse(deleteResultJSON(res)), nil
+}
+
+// deleteResultJSON is a deletion's plan or outcome in the spec's words.
+func deleteResultJSON(res service.DeleteItemsResultDTO) DeleteItemsResult {
 	out := DeleteItemsResult{Applied: res.Applied, Mode: res.Mode,
 		Entries: make([]DeletePlanEntry, 0, len(res.Entries))}
 	for _, e := range res.Entries {
-		row := DeletePlanEntry{Pid: e.PID, Files: e.Files, Bytes: e.Bytes}
+		row := DeletePlanEntry{Pid: e.PID, Files: e.Files, Bytes: e.Bytes, ItemSurvives: ptr(e.ItemSurvives)}
 		if e.Name != "" {
 			row.Name = ptr(e.Name)
 		}
+		if len(e.FileList) > 0 {
+			files := make([]DeletePlanFile, 0, len(e.FileList))
+			for _, f := range e.FileList {
+				file := DeletePlanFile{FilePid: service.FileAPIPID(f.FilePID), Name: f.Name, Role: f.Role}
+				if f.SizeBytes > 0 {
+					file.SizeBytes = ptr(f.SizeBytes)
+				}
+				files = append(files, file)
+			}
+			row.FileList = &files
+		}
 		out.Entries = append(out.Entries, row)
 	}
-	return DeleteLibraryItems200JSONResponse(out), nil
+	if len(res.Warnings) > 0 {
+		out.Warnings = &res.Warnings
+	}
+	return out
 }
 
 // --- catalog jobs ------------------------------------------------------------------
@@ -586,6 +605,55 @@ func (s *Server) SetLibraryReadOnly(ctx context.Context, req SetLibraryReadOnlyR
 		return nil, err
 	}
 	return SetLibraryReadOnly200JSONResponse(LibraryReadOnly{ReadOnly: req.Body.ReadOnly, LibraryPid: ptr(req.Pid)}), nil
+}
+
+func (s *Server) SetLibraryFolderFallback(ctx context.Context, req SetLibraryFolderFallbackRequestObject) (SetLibraryFolderFallbackResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return SetLibraryFolderFallback403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if req.Body == nil {
+		return SetLibraryFolderFallback400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	if err := s.svc.LibraryFolderFallbackSet(ctx, uc, req.Pid, req.Body.FolderFallback); err != nil {
+		switch service.KindOf(err) {
+		case service.KindNotFound:
+			return SetLibraryFolderFallback404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no library with pid "+req.Pid))}, nil
+		case service.KindInvalid:
+			return SetLibraryFolderFallback400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return SetLibraryFolderFallback200JSONResponse(LibraryFolderFallback{
+		FolderFallback: req.Body.FolderFallback, LibraryPid: ptr(req.Pid),
+	}), nil
+}
+
+func (s *Server) SetLibraryMedia(ctx context.Context, req SetLibraryMediaRequestObject) (SetLibraryMediaResponseObject, error) {
+	uc, p, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !p.IsAdmin() {
+		return SetLibraryMedia403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators only"))}, nil
+	}
+	if req.Body == nil {
+		return SetLibraryMedia400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	lib, err := s.svc.SetLibraryMedia(ctx, uc, req.Pid, string(req.Body.Media))
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindNotFound:
+			return SetLibraryMedia404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no library with pid "+req.Pid))}, nil
+		case service.KindInvalid:
+			return SetLibraryMedia400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		}
+		return nil, err
+	}
+	return SetLibraryMedia200JSONResponse(libraryMediaChangedJSON(lib)), nil
 }
 
 func (s *Server) SetLibraryProfile(ctx context.Context, req SetLibraryProfileRequestObject) (SetLibraryProfileResponseObject, error) {
@@ -642,36 +710,65 @@ func (s *Server) CreateLibrary(ctx context.Context, req CreateLibraryRequestObje
 		}
 		return nil, err
 	}
-	// The generators flatten the allOf, so this is Library's fields plus
-	// the warning rather than an embedded value.
+	return CreateLibrary201JSONResponse(libraryCreatedJSON(lib)), nil
+}
+
+// libraryCreatedJSON is Library's fields plus the warning and the scan
+// flag: the generators flatten the allOf rather than embed a Library.
+func libraryCreatedJSON(lib service.LibraryInfo) LibraryCreated {
 	base := libraryDTO(lib)
 	out := LibraryCreated{
-		Pid:       base.Pid,
-		Name:      base.Name,
-		Media:     base.Media,
-		Path:      base.Path,
-		ItemCount: base.ItemCount,
-		ReadOnly:  base.ReadOnly,
-		Managed:   base.Managed,
-		Profile:   base.Profile,
+		Pid:            base.Pid,
+		Name:           base.Name,
+		Media:          base.Media,
+		Path:           base.Path,
+		ItemCount:      base.ItemCount,
+		ReadOnly:       base.ReadOnly,
+		FolderFallback: base.FolderFallback,
+		MediaDeclared:  base.MediaDeclared,
+		Managed:        base.Managed,
+		Profile:        base.Profile,
 	}
 	if lib.StreamingWarning != "" {
 		out.StreamingWarning = ptr(lib.StreamingWarning)
 	}
 	out.ScanStarted = ptr(lib.ScanStarted)
-	return CreateLibrary201JSONResponse(out), nil
+	return out
+}
+
+// libraryMediaChangedJSON is a media change's answer: the library, and
+// whether its scan started.
+func libraryMediaChangedJSON(lib service.LibraryInfo) LibraryMediaChanged {
+	base := libraryDTO(lib)
+	return LibraryMediaChanged{
+		Pid:            base.Pid,
+		Name:           base.Name,
+		Media:          base.Media,
+		MediaDeclared:  base.MediaDeclared,
+		Path:           base.Path,
+		ItemCount:      base.ItemCount,
+		ReadOnly:       base.ReadOnly,
+		FolderFallback: base.FolderFallback,
+		Managed:        base.Managed,
+		Profile:        base.Profile,
+		ScanStarted:    lib.ScanStarted,
+	}
 }
 
 // libraryDTO renders a catalog library for the admin surface. The count
 // is omitted rather than sent as zero where nothing counted it (a
 // create), so a client can tell "nothing here yet" from "not asked".
 func libraryDTO(lib service.LibraryInfo) Library {
-	out := Library{Pid: lib.PID, Name: lib.Name, ReadOnly: lib.ReadOnly, Managed: lib.Managed}
+	out := Library{Pid: lib.PID, Name: lib.Name, ReadOnly: lib.ReadOnly, Managed: lib.Managed,
+		FolderFallback: ptr(lib.FolderFallback)}
 	if lib.Managed && lib.Profile != "" {
 		out.Profile = ptr(lib.Profile)
 	}
 	if lib.Media != "" {
 		out.Media = ptr(lib.Media)
+	}
+	if lib.MediaDeclared {
+		out.MediaDeclared = ptr(true)
 	}
 	if lib.Path != "" {
 		out.Path = ptr(lib.Path)

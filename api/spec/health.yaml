@@ -21,6 +21,12 @@ paths:
         seconds and two percent; it has no bulk fix. A multi-file book
         fails a file's rule (`corrupt-audio`, `write-unsynced`,
         `legacy-tags`, `duration-mismatch`) when any of its parts does.
+        `write-unsynced` lists files whose tags lag the catalog: a
+        refused or failed write-back, a value the format could not
+        store, and a value an edit changed in the catalog without
+        writing it (a value a clean-up pass normalized in the catalog
+        alone does not count). Its fix writes those values and counts
+        an item filled only when none remains.
         `genre-whitelist` flags an
         item carrying a genre the server's genre tree does not know; it
         is deliberately not bulk-fixable, because the background
@@ -302,10 +308,15 @@ paths:
       operationId: listUpgrades
       summary: List quality upgrade groups
       description: >
-        Groups of the same recording in different encodings, found
-        through the fingerprint index, best quality first within each
-        group. The resolve endpoint keeps the best and trashes the
-        rest; play history merges onto the kept item.
+        Groups of the same recording in different encodings, best
+        quality first within each group, each encoding named by its
+        file. An item holding another encoding of its recording as one
+        of its files (tied by their recording id) is a group of its
+        own, listed first; then items the fingerprint index finds are
+        the same recording, which needs the library analyzed. A copy
+        of the same audio is not an encoding and never appears (the
+        item's files list it). The resolve endpoint keeps one and
+        trashes the rest.
       tags: [health]
       responses:
         "200":
@@ -326,11 +337,23 @@ paths:
       operationId: resolveUpgrade
       summary: Keep the best encoding
       description: >
-        Keeps one item of an upgrade group and moves the named
-        inferior encodings to the trash (recoverable within the
-        retention window). A named encoding in a read-only library,
-        or any while the server is read-only, refuses the whole call
-        with `read-only`. Administrators only.
+        Keeps one encoding of an upgrade group and moves the named
+        inferior ones to the trash (recoverable within the retention
+        window). Across items, `removeItemPids` names the items to
+        trash, each with all of its files. Within one item - a group
+        whose members share its pid - `keepFilePid` and
+        `removeFilePids` name the files: the removed ones go together
+        with any copy of their audio, and the item stays on the kept
+        one. Exactly one of the two removal lists is given. A cue rip's
+        file plays every track carved from it, so a removal that would
+        take it from under tracks the call does not name is
+        `invalid-request` with `params.reason` `cue-rip`. A named
+        encoding in a read-only library, or any while the server is
+        read-only, refuses the whole call with `read-only`, as does a
+        copy in a read-only library unless the kept encoding's library
+        is writable, when the copy stays; a move the trash could not
+        make refuses it with `conflict` after the others went.
+        Administrators only.
       tags: [health]
       requestBody:
         required: true
@@ -356,9 +379,10 @@ paths:
         "409":
           description: >
             The resolution was refused. `read-only`: a named encoding's
-            library, or the whole server, is read-only. `conflict`:
+            library, or the whole server, is read-only. `catalog-busy`:
             another catalog job holds the file-mutation scope the move
-            to the trash needs; retry when it ends.
+            to the trash needs; retry when it ends. `conflict`: a move
+            to the trash failed, and the message says how many.
           content:
             application/json:
               schema:
@@ -389,7 +413,12 @@ components:
           - cue_track_dropped
           - tag_write_lost
           - tag_write_unsynced
+          - tag_write_owed
           - corrupt_audio
+          - sort_name_fallback
+          - fingerprint_fallback
+          - duplicate_copy
+          - alternate_encoding
     DiagnosticSeverityFilter:
       name: severity
       in: query
@@ -630,7 +659,11 @@ components:
             $ref: "#/components/schemas/DuplicateEntity"
         detail:
           type: string
-          description: The audit's explanation of the finding.
+          description: >
+            Why the members were paired, in the catalog's words (for
+            example `same collation key`, or `same title and album
+            artist` for albums a folder keeps apart). Absent when the
+            catalog gave none.
 
     DuplicateEntity:
       type: object
@@ -709,11 +742,23 @@ components:
     UpgradeMember:
       type: object
       description: One encoding of a recording.
-      required: [itemPid, title, codec, best, lossless]
+      required: [itemPid, filePid, title, codec, best, lossless]
       properties:
         itemPid:
           type: string
           description: The item.
+        filePid:
+          type: string
+          description: >
+            The file this encoding is, as getItemFiles names it. Within
+            one item it is what tells the members apart.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        path:
+          type: string
+          description: >
+            The file's path on the server, given where another member
+            of the group has the same codec and bitrate: there its
+            file's name is what tells the two apart.
         title:
           type: string
           description: Its title.
@@ -725,13 +770,13 @@ components:
           description: Audio codec.
         bitrate:
           type: integer
-          description: Bitrate in bits per second, 0 when unknown.
+          description: Bitrate in kilobits per second; absent when unknown.
         sampleRate:
           type: integer
-          description: Sample rate in Hz, 0 when unknown.
+          description: Sample rate in Hz; absent when unknown.
         bitDepth:
           type: integer
-          description: Bit depth, 0 when unknown or lossy.
+          description: Bit depth; absent when unknown or lossy.
         lossless:
           type: boolean
           description: Whether the encoding is lossless.
@@ -741,19 +786,35 @@ components:
 
     UpgradeResolveRequest:
       type: object
-      description: Keep one encoding, trash the rest.
-      required: [keepItemPid, removeItemPids]
+      description: >
+        Keep one encoding, trash the rest: by item across items, or by
+        file within one.
+      required: [keepItemPid]
       properties:
         keepItemPid:
           type: string
-          description: The item to keep.
+          description: The item to keep, or the item whose files these are.
         removeItemPids:
           type: array
           minItems: 1
           maxItems: 100
-          description: The inferior encodings to trash.
+          description: The inferior encodings to trash, as whole items.
           items:
             type: string
+        keepFilePid:
+          type: string
+          description: >
+            The file to keep, within `keepItemPid`; required with
+            `removeFilePids`.
+          example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
+        removeFilePids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          description: The inferior encodings to trash, as files of `keepItemPid`.
+          items:
+            type: string
+            example: fl-01JZX5N8QW3F4V9T2B7KD3M9R6
 
     UpgradeResolveResult:
       type: object
@@ -762,7 +823,7 @@ components:
       properties:
         trashed:
           type: integer
-          description: Items moved to the trash.
+          description: Files moved to the trash.
 
     FileDiagnostic:
       type: object
@@ -787,8 +848,19 @@ components:
           description: >
             What was observed (`unsupported_format`, `legacy_only_tags`,
             `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`,
-            `tag_write_lost`, `tag_write_unsynced`, or `corrupt_audio`); new
-            codes may appear, so treat an unknown value as a generic finding.
+            `tag_write_lost`, `tag_write_unsynced`, `tag_write_owed`,
+            `corrupt_audio`, `sort_name_fallback`, `fingerprint_fallback`,
+            `duplicate_copy`, or `alternate_encoding`); new codes may
+            appear, so treat an unknown value as a generic finding.
+            `duplicate_copy` marks a file holding the same audio as its
+            item's primary file and `alternate_encoding` another encoding
+            of its recording that ranked below the primary, both attached
+            to the item as copies with the primary's path as `detail`;
+            `tag_write_owed` a value the catalog holds but has not yet
+            written to the file; `sort_name_fallback` display fields
+            filled from sort tags or a number taken from the file name;
+            and `fingerprint_fallback` a file fpcalc could not
+            fingerprint, with fpcalc's reason as `detail`.
         severity:
           type: string
           description: "`info`, `warn`, or `error`."

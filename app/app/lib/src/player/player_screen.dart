@@ -14,6 +14,7 @@ import '../connect/device_picker.dart';
 import '../discovery/discovery_actions.dart';
 import '../l10n/l10n.dart';
 import '../library/item_delete.dart';
+import '../library/item_kind.dart';
 import '../media_view.dart';
 import '../metadata/artwork_manager.dart' show ArtSlot;
 import '../metadata/metadata_controller.dart';
@@ -57,6 +58,7 @@ enum _PlayerMenuAction {
   visualizer,
   carMode,
   editMetadata,
+  treatAsBook,
 }
 
 /// The e2e handles the player's own controls carry. One place, because
@@ -913,6 +915,15 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
               label: l10n.reviewEditMetadata,
               semanticsId: SemanticsIds.editMetadata(_item.pid),
             ),
+          // A chapter of a misfiled book is found by playing it; the way
+          // out is where it was found, behind the same permission.
+          if (mayCurate && _music)
+            WaxMenuItem(
+              value: _PlayerMenuAction.treatAsBook,
+              glyph: WaxIcons.audiobooks,
+              label: l10n.libraryKindToBook,
+              semanticsId: SemanticsIds.itemMenuKindBook,
+            ),
           // Not for episodes: the podcast tree owns its own files and the
           // server refuses this verb there. "Remove download" is the
           // episode's equivalent, and it lives on the episode's surfaces.
@@ -967,6 +978,13 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           ),
           _PlayerMenuAction.carMode => Future<void>.sync(
             () => context.push(WaxRoute.carMode),
+          ),
+          // The dialog goes to the book with `go`, for the reason the
+          // editor row above gives.
+          _PlayerMenuAction.treatAsBook => confirmSetKind(
+            context,
+            pids: [_item.pid],
+            to: 'audiobook',
           ),
           _PlayerMenuAction.funding =>
             ref.read(urlOpenerProvider).open(_funding!.url),

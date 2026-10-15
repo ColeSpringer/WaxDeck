@@ -18,6 +18,9 @@ abstract mixin class ModelLibraryBuilder {
   String? get media;
   set media(String? media);
 
+  bool? get mediaDeclared;
+  set mediaDeclared(bool? mediaDeclared);
+
   String? get path;
   set path(String? path);
 
@@ -26,6 +29,9 @@ abstract mixin class ModelLibraryBuilder {
 
   bool? get readOnly;
   set readOnly(bool? readOnly);
+
+  bool? get folderFallback;
+  set folderFallback(bool? folderFallback);
 
   bool? get managed;
   set managed(bool? managed);
@@ -42,11 +48,15 @@ class _$$ModelLibrary extends $ModelLibrary {
   @override
   final String? media;
   @override
+  final bool? mediaDeclared;
+  @override
   final String? path;
   @override
   final int? itemCount;
   @override
   final bool readOnly;
+  @override
+  final bool? folderFallback;
   @override
   final bool managed;
   @override
@@ -59,9 +69,11 @@ class _$$ModelLibrary extends $ModelLibrary {
     required this.pid,
     required this.name,
     this.media,
+    this.mediaDeclared,
     this.path,
     this.itemCount,
     required this.readOnly,
+    this.folderFallback,
     required this.managed,
     this.profile,
   }) : super._();
@@ -79,9 +91,11 @@ class _$$ModelLibrary extends $ModelLibrary {
         pid == other.pid &&
         name == other.name &&
         media == other.media &&
+        mediaDeclared == other.mediaDeclared &&
         path == other.path &&
         itemCount == other.itemCount &&
         readOnly == other.readOnly &&
+        folderFallback == other.folderFallback &&
         managed == other.managed &&
         profile == other.profile;
   }
@@ -92,9 +106,11 @@ class _$$ModelLibrary extends $ModelLibrary {
     _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, name.hashCode);
     _$hash = $jc(_$hash, media.hashCode);
+    _$hash = $jc(_$hash, mediaDeclared.hashCode);
     _$hash = $jc(_$hash, path.hashCode);
     _$hash = $jc(_$hash, itemCount.hashCode);
     _$hash = $jc(_$hash, readOnly.hashCode);
+    _$hash = $jc(_$hash, folderFallback.hashCode);
     _$hash = $jc(_$hash, managed.hashCode);
     _$hash = $jc(_$hash, profile.hashCode);
     _$hash = $jf(_$hash);
@@ -107,9 +123,11 @@ class _$$ModelLibrary extends $ModelLibrary {
           ..add('pid', pid)
           ..add('name', name)
           ..add('media', media)
+          ..add('mediaDeclared', mediaDeclared)
           ..add('path', path)
           ..add('itemCount', itemCount)
           ..add('readOnly', readOnly)
+          ..add('folderFallback', folderFallback)
           ..add('managed', managed)
           ..add('profile', profile))
         .toString();
@@ -134,6 +152,11 @@ class $ModelLibraryBuilder
   String? get media => _$this._media;
   set media(covariant String? media) => _$this._media = media;
 
+  bool? _mediaDeclared;
+  bool? get mediaDeclared => _$this._mediaDeclared;
+  set mediaDeclared(covariant bool? mediaDeclared) =>
+      _$this._mediaDeclared = mediaDeclared;
+
   String? _path;
   String? get path => _$this._path;
   set path(covariant String? path) => _$this._path = path;
@@ -145,6 +168,11 @@ class $ModelLibraryBuilder
   bool? _readOnly;
   bool? get readOnly => _$this._readOnly;
   set readOnly(covariant bool? readOnly) => _$this._readOnly = readOnly;
+
+  bool? _folderFallback;
+  bool? get folderFallback => _$this._folderFallback;
+  set folderFallback(covariant bool? folderFallback) =>
+      _$this._folderFallback = folderFallback;
 
   bool? _managed;
   bool? get managed => _$this._managed;
@@ -164,9 +192,11 @@ class $ModelLibraryBuilder
       _pid = $v.pid;
       _name = $v.name;
       _media = $v.media;
+      _mediaDeclared = $v.mediaDeclared;
       _path = $v.path;
       _itemCount = $v.itemCount;
       _readOnly = $v.readOnly;
+      _folderFallback = $v.folderFallback;
       _managed = $v.managed;
       _profile = $v.profile;
       _$v = null;
@@ -202,6 +232,7 @@ class $ModelLibraryBuilder
             'name',
           ),
           media: media,
+          mediaDeclared: mediaDeclared,
           path: path,
           itemCount: itemCount,
           readOnly: BuiltValueNullFieldError.checkNotNull(
@@ -209,6 +240,7 @@ class $ModelLibraryBuilder
             r'$ModelLibrary',
             'readOnly',
           ),
+          folderFallback: folderFallback,
           managed: BuiltValueNullFieldError.checkNotNull(
             managed,
             r'$ModelLibrary',

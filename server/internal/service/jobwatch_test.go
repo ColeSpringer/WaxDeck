@@ -3,12 +3,16 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
+	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/colespringer/waxbin"
+	"github.com/colespringer/waxbin/analyze"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/organize"
 	"github.com/colespringer/waxbin/scan"
@@ -122,6 +126,39 @@ func TestAStartersJobIsFollowedWhateverTheFeedDropped(t *testing.T) {
 	waitFor(t, followed, "recording the starter should hand the job to the follower")
 	gate()
 	waitForInbox(t, ctx, svc, uc, "job-finished")
+}
+
+// A job whose starter could not be recorded is followed all the same:
+// nobody is told of its end, but its progress, and a kind change's rows,
+// still need the follower.
+func TestAJobWhoseStarterCouldNotBeRecordedIsStillFollowed(t *testing.T) {
+	t.Parallel()
+	a := &lyricist{name: "a", asked: make(chan struct{}, 1), gate: make(chan struct{})}
+	ctx, svc, uc, _ := openLyricsFixture(t, a)
+	pid, err := svc.lib.StartEnrich(ctx, waxbin.EnrichOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := sync.OnceFunc(func() { close(a.gate) })
+	defer waitForJob(t, ctx, svc, pid)
+	defer gate()
+	<-a.asked
+	followed := func() bool {
+		svc.jobs.mu.Lock()
+		defer svc.jobs.mu.Unlock()
+		_, ok := svc.jobs.running[pid]
+		return ok
+	}
+	waitFor(t, followed, "the feed's row should reach the follower")
+	// As if the feed had never passed the job on.
+	svc.jobs.mu.Lock()
+	delete(svc.jobs.running, pid)
+	delete(svc.jobs.changed, pid)
+	svc.jobs.mu.Unlock()
+
+	refuseJobOriginWrites(t, ctx, svc)
+	svc.adoptJob(ctx, pid, uc.ID, "")
+	waitFor(t, followed, "a starter that could not be recorded should still hand the job to the follower")
 }
 
 // waitFor polls cond until it holds, failing with what it waited for.
@@ -305,6 +342,53 @@ func TestAScanOfOneLibraryAnnouncesItsEnd(t *testing.T) {
 	}
 }
 
+// A scan's runs are named by the root table, never by the path WaxBin
+// names them with, and only administrators read them: an account reading
+// a job it started gets the total alone.
+func TestScanRunsAreNamedByRootNameNotPath(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newCatalogFixture(t)
+	lib := svc.libraryRoots()[0]
+	pid, err := svc.lib.StartScan(ctx, waxbin.ScanRequest{LibraryPID: model.PID(lib.PID)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForJob(t, ctx, svc, pid)
+	job, err := svc.JobStatusFor(ctx, admin, apiPID(PrefixJob, pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if job.Scan == nil || len(job.Scan.Runs) != 1 {
+		t.Fatalf("tally = %+v, want one run", job.Scan)
+	}
+	run := job.Scan.Runs[0]
+	if run.LibraryPID != apiPID(PrefixLibrary, model.PID(lib.PID)) || run.Library != lib.Name {
+		t.Fatalf("run = %s %q, want %s %q", run.LibraryPID, run.Library, apiPID(PrefixLibrary, model.PID(lib.PID)), lib.Name)
+	}
+	if strings.Contains(run.Library, string(filepath.Separator)) || run.Library == lib.Path {
+		t.Fatalf("run named %q, a path", run.Library)
+	}
+
+	acct, err := svc.CreateAccount(ctx, AccountCreate{Username: "starter", Password: "correct-horse"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	starter, err := svc.UserCtx(ctx, acct.User)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.db.InsertJobOrigin(ctx, wdb.JobOrigin{PID: string(pid), UserID: starter.ID, CreatedAtNS: time.Now().UnixNano()}); err != nil {
+		t.Fatal(err)
+	}
+	mine, err := svc.JobStatusFor(ctx, starter, apiPID(PrefixJob, pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mine.Scan == nil || mine.Scan.Runs != nil || mine.Scan.AudioFiles != job.Scan.AudioFiles {
+		t.Fatalf("starter's tally = %+v, want the total without runs", mine.Scan)
+	}
+}
+
 // The status's last run is the newest whole pass, not an item's.
 func TestTheLastRunIsAWholePass(t *testing.T) {
 	t.Parallel()
@@ -330,17 +414,25 @@ func TestTheLastRunIsAWholePass(t *testing.T) {
 }
 
 // A scan records its total over every library with each library's own
-// run beside it, and the tally reads the total.
-func TestReadResultReadsTheScanTotal(t *testing.T) {
+// run beside it; the tally carries the whole partition of both, and a run
+// keeps its library's pid for naming, never the path WaxBin names it by.
+func TestReadResultCarriesTheScanPartition(t *testing.T) {
 	t.Parallel()
+	total := scan.Result{
+		FilesSeen: 12, AudioFiles: 10, ItemsCreated: 2, ItemsUpdated: 1, SidecarsUpdated: 1,
+		Copies: 2, Unchanged: 3, Errored: 1, Relinked: 1, Reread: 4, Missing: 1,
+		Promoted: 1, Dropped: 2, Skipped: 2, WalkErrors: 1, RootUnreachable: true,
+	}
 	raw, err := json.Marshal(struct {
 		scan.Result
 		Runs []scan.Result
 	}{
-		Result: scan.Result{FilesSeen: 3, ItemsCreated: 2, Unchanged: 1},
+		Result: total,
 		Runs: []scan.Result{
-			{FilesSeen: 3, ItemsCreated: 2, Unchanged: 1, LibraryName: "/music"},
-			{LibraryName: "/unmounted", RootUnreachable: true, WalkErrors: 1},
+			{FilesSeen: 12, AudioFiles: 10, ItemsCreated: 2, ItemsUpdated: 1, SidecarsUpdated: 1,
+				Copies: 2, Unchanged: 3, Errored: 1, Relinked: 1, Reread: 4, Missing: 1,
+				Promoted: 1, Dropped: 2, Skipped: 2, LibraryPID: "01LIBA", LibraryName: "/music"},
+			{WalkErrors: 1, RootUnreachable: true, LibraryPID: "01LIBB", LibraryName: "/unmounted"},
 		},
 	})
 	if err != nil {
@@ -348,8 +440,48 @@ func TestReadResultReadsTheScanTotal(t *testing.T) {
 	}
 	j := Job{Kind: "scan"}
 	j.readResult(string(raw))
-	if j.Scan == nil || j.Scan.FilesSeen != 3 || j.Scan.Created != 2 || j.Scan.Unchanged != 1 {
-		t.Fatalf("tally = %+v, want the total", j.Scan)
+	want := ScanTallyDTO{
+		FilesSeen: 12, AudioFiles: 10, Created: 2, Updated: 1, SidecarsUpdated: 1,
+		Copies: 2, Unchanged: 3, Errored: 1, Relinked: 1, Reread: 4, Missing: 1,
+		Promoted: 1, Dropped: 2, Skipped: 2, WalkErrors: 1, RootUnreachable: true,
+	}
+	if j.Scan == nil {
+		t.Fatal("no tally read")
+	}
+	got := *j.Scan
+	got.Runs = nil
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("total = %+v, want %+v", got, want)
+	}
+	if n := len(j.Scan.Runs); n != 2 {
+		t.Fatalf("runs = %d, want 2", n)
+	}
+	first, second := j.Scan.Runs[0], j.Scan.Runs[1]
+	if first.LibraryPID != "lb-01LIBA" || first.Copies != 2 || first.Reread != 4 || first.RootUnreachable {
+		t.Errorf("first run = %+v, want the music library's own counts", first)
+	}
+	if second.LibraryPID != "lb-01LIBB" || second.WalkErrors != 1 || !second.RootUnreachable {
+		t.Errorf("second run = %+v, want the unreachable library", second)
+	}
+	for _, r := range j.Scan.Runs {
+		if r.Library != "" {
+			t.Errorf("run %s is named %q before the root table named it", r.LibraryPID, r.Library)
+		}
+	}
+}
+
+// An analyze pass's summary carries how many fingerprints fell back to
+// the pure-Go form and how many fpcalc reads were kept past an error.
+func TestAnAnalyzeSummaryCarriesItsFingerprintCounts(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(analyze.Result{Analyzed: 60, FingerprintFallbacks: 58, FingerprintPartialReads: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := Job{Kind: "analyze"}
+	j.readResult(string(raw))
+	if a := j.Analyze; a == nil || a.Analyzed != 60 || a.FingerprintFallbacks != 58 || a.FingerprintPartialReads != 2 {
+		t.Fatalf("tally = %+v, want the fingerprint counts", j.Analyze)
 	}
 }
 

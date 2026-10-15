@@ -1,7 +1,7 @@
 import { test, expect } from './fixtures';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { J, T } from './driver';
+import { J, T, retryCatalogBusy } from './driver';
 import type { App } from './driver';
 import { clickThrough, clickToward } from './driver/gestures';
 
@@ -71,10 +71,12 @@ async function importOwnAlbum(
       { timeout: T.fetch, message: 'the entry should settle to pending' },
     )
     .toBe('pending');
-  await app.api.post('/review/queue/{entryId}/decide', {
-    path: { entryId: entryId! },
-    data: { action: 'as-is' },
-  });
+  await retryCatalogBusy(() =>
+    app.api.post('/review/queue/{entryId}/decide', {
+      path: { entryId: entryId! },
+      data: { action: 'as-is' },
+    }),
+  );
 
   // The import fills the entry's tracks with their catalog pids.
   let trackPids: string[] = [];
@@ -124,10 +126,10 @@ test('the workbench edits a member, bulk-writes the pair, and renames the releas
     app.metadata.itemField('title'),
   );
 
-  // Check both members and bulk-write a comment through one batch. A
-  // long press starts the selection, the same gesture as on touch; the
-  // second row joins by tap, and the pane's own heading is the proof
-  // both are in.
+  // Check both members and bulk-write a comment and a track total
+  // through one batch. A long press starts the selection, the same
+  // gesture as on touch; the second row joins by tap, and the pane's own
+  // heading is the proof both are in.
   await app.metadata.hold(app.metadata.trackRow(trackPids[0]));
   await app.metadata.bulkPane().waitFor({ timeout: T.step });
   // One attempt, not a retried click: a second click would toggle the
@@ -141,32 +143,32 @@ test('the workbench edits a member, bulk-writes the pair, and renames the releas
     app.metadata.bulkPane(),
   );
   await app.metadata.type(app.metadata.bulkField('comment'), comment);
+  await app.metadata.intoView(
+    app.metadata.bulkField('track_total'),
+    app.metadata.bulkPane(),
+  );
+  await app.metadata.type(app.metadata.bulkField('track_total'), '2');
   // Goal first, then the click: a landed save disables the button, so
   // a retry that leads with the click would wait on a control that is
   // never coming back. The server's own record is the goal.
-  const commentLanded = async () =>
-    (
-      await app.api.tryGet('/items/{pid}/metadata', {
-        path: { pid: trackPids[0] },
-      })
-    )?.fields?.comment === comment;
+  const written = async (pid: string) => {
+    const fields = (
+      await app.api.tryGet('/items/{pid}/metadata', { path: { pid } })
+    )?.fields;
+    return [fields?.comment, fields?.track_total];
+  };
   await expect(async () => {
-    if (await commentLanded()) return;
+    if ((await written(trackPids[0]))[0] === comment) return;
     await app.metadata.bulkSave().click({ timeout: T.step });
-    expect(await commentLanded()).toBe(true);
+    expect((await written(trackPids[0]))[0]).toBe(comment);
   }).toPass({ timeout: T.fetch });
   for (const pid of trackPids) {
     await expect
-      .poll(
-        async () => {
-          const metadata = await app.api.tryGet('/items/{pid}/metadata', {
-            path: { pid },
-          });
-          return metadata?.fields?.comment;
-        },
-        { timeout: T.fetch, message: 'the bulk comment should reach both members' },
-      )
-      .toBe(comment);
+      .poll(() => written(pid), {
+        timeout: T.fetch,
+        message: 'the bulk comment and total should reach both members',
+      })
+      .toEqual([comment, '2']);
   }
 
   // The album row leaves the selection and returns the release's own

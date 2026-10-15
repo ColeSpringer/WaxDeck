@@ -362,10 +362,11 @@ func (l *Library) showCards(ctx context.Context, uc *UserCtx, pids []model.PID) 
 // same per-item visibility and content rules every other item read
 // applies, and a book that fails either is dropped.
 //
-// Departed is a book the catalog itself cannot find. One that exists
-// and is out of the caller's sight - a grant, a content rule, the
-// trash a restore could empty - is dropped without being departed,
-// because each of those states can end with the book back.
+// Departed is a book the catalog itself cannot find, or an item that
+// is no longer a book. One that exists and is out of the caller's
+// sight - a grant, a content rule, the trash a restore could empty - is
+// dropped without being departed, because each of those states can end
+// with the book back.
 func (l *Library) bookCards(ctx context.Context, uc *UserCtx, pids []model.PID) (map[string]EntityCard, map[string]bool, error) {
 	out := make(map[string]EntityCard, len(pids))
 	departed := map[string]bool{}
@@ -378,6 +379,10 @@ func (l *Library) bookCards(ctx context.Context, uc *UserCtx, pids []model.PID) 
 				continue
 			}
 			return nil, nil, err
+		}
+		if it.Kind != model.KindBook {
+			departed[api] = true
+			continue
 		}
 		if !l.itemVisible(ctx, uc, it.PID) || !l.allowedByContent(ctx, uc, it) {
 			continue

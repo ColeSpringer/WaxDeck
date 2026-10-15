@@ -13,7 +13,7 @@ part 'file_diagnostic.g.dart';
 /// Properties:
 /// * [path] - The file's display path.
 /// * [origin] - The writer that recorded it (`scan`, `organize`, `replaygain`, `edit`, `enrichment`, or `analyze`); new writers may appear. `analyze` records the decode damage the analyze pass found or worked around, replaced each time the pass reads the file. 
-/// * [code] - What was observed (`unsupported_format`, `legacy_only_tags`, `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`, `tag_write_lost`, `tag_write_unsynced`, or `corrupt_audio`); new codes may appear, so treat an unknown value as a generic finding. 
+/// * [code] - What was observed (`unsupported_format`, `legacy_only_tags`, `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`, `tag_write_lost`, `tag_write_unsynced`, `tag_write_owed`, `corrupt_audio`, `sort_name_fallback`, `fingerprint_fallback`, `duplicate_copy`, or `alternate_encoding`); new codes may appear, so treat an unknown value as a generic finding. `duplicate_copy` marks a file holding the same audio as its item's primary file and `alternate_encoding` another encoding of its recording that ranked below the primary, both attached to the item as copies with the primary's path as `detail`; `tag_write_owed` a value the catalog holds but has not yet written to the file; `sort_name_fallback` display fields filled from sort tags or a number taken from the file name; and `fingerprint_fallback` a file fpcalc could not fingerprint, with fpcalc's reason as `detail`. 
 /// * [severity] - `info`, `warn`, or `error`.
 /// * [tagKey] - The tag key a key-specific diagnostic concerns, when any.
 /// * [detail] - The writer's own note, when it carries one.
@@ -28,7 +28,7 @@ abstract class FileDiagnostic implements Built<FileDiagnostic, FileDiagnosticBui
   @BuiltValueField(wireName: r'origin')
   String get origin;
 
-  /// What was observed (`unsupported_format`, `legacy_only_tags`, `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`, `tag_write_lost`, `tag_write_unsynced`, or `corrupt_audio`); new codes may appear, so treat an unknown value as a generic finding. 
+  /// What was observed (`unsupported_format`, `legacy_only_tags`, `lyrics_partial`, `sidecar_skipped`, `cue_track_dropped`, `tag_write_lost`, `tag_write_unsynced`, `tag_write_owed`, `corrupt_audio`, `sort_name_fallback`, `fingerprint_fallback`, `duplicate_copy`, or `alternate_encoding`); new codes may appear, so treat an unknown value as a generic finding. `duplicate_copy` marks a file holding the same audio as its item's primary file and `alternate_encoding` another encoding of its recording that ranked below the primary, both attached to the item as copies with the primary's path as `detail`; `tag_write_owed` a value the catalog holds but has not yet written to the file; `sort_name_fallback` display fields filled from sort tags or a number taken from the file name; and `fingerprint_fallback` a file fpcalc could not fingerprint, with fpcalc's reason as `detail`. 
   @BuiltValueField(wireName: r'code')
   String get code;
 

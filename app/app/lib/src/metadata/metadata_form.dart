@@ -15,6 +15,11 @@ import 'metadata_controller.dart';
 /// so no section carries a write button of its own, and a change is
 /// dirty state the bar counts rather than a request already sent.
 
+/// The reserved tag keys that read as what an item is: their refusal
+/// says what the item in the editor can do instead, which depends on
+/// what it already is.
+const _kindTagKeys = {'NARRATOR', 'MEDIATYPE'};
+
 /// What one editable field is called in the reader's language.
 ///
 /// The vocabulary arrives from the server as wire keys - `album_artist`,
@@ -34,7 +39,9 @@ String metadataFieldLabel(AppLocalizations l10n, String name) => switch (name) {
   'genre' => l10n.metadataFieldGenre,
   'year' => l10n.metadataFieldYear,
   'track_no' => l10n.metadataFieldTrackNo,
+  'track_total' => l10n.metadataFieldTrackTotal,
   'disc_no' => l10n.metadataFieldDiscNo,
+  'disc_total' => l10n.metadataFieldDiscTotal,
   'bpm' => l10n.metadataFieldBpm,
   'isrc' => l10n.metadataFieldIsrc,
   'mbid' => l10n.metadataFieldMbid,
@@ -92,7 +99,9 @@ enum MetadataFieldType { text, count, toggle, genres, choice }
 MetadataFieldType metadataFieldType(String name) => switch (name) {
   'year' ||
   'track_no' ||
+  'track_total' ||
   'disc_no' ||
+  'disc_total' ||
   'bpm' ||
   'season' ||
   'episode_no' => MetadataFieldType.count,
@@ -1652,6 +1661,20 @@ class _MetadataTagsSectionState extends State<MetadataTagsSection> {
     super.dispose();
   }
 
+  /// Why [key] was refused, pointed where this item can go instead: a
+  /// track to a kind change, a book to its narrator credits or a kind
+  /// change, and an episode, which changes kind to nothing, nowhere.
+  static String _refusal(AppLocalizations l10n, String key, MediaType kind) {
+    if (!_kindTagKeys.contains(key)) return l10n.metadataTagReserved(key);
+    return switch (kind) {
+      MediaType.music => l10n.metadataTagReservedKind(key),
+      MediaType.audiobook when key == 'NARRATOR' =>
+        l10n.metadataTagReservedNarrator(key),
+      MediaType.audiobook => l10n.metadataTagReservedBookKind(key),
+      MediaType.podcast => l10n.metadataTagReservedEpisode(key),
+    };
+  }
+
   void _add() {
     final key = _key.text.trim();
     final values = _values.text
@@ -1720,7 +1743,7 @@ class _MetadataTagsSectionState extends State<MetadataTagsSection> {
                 controller: _key,
                 errorText: _reserved == null
                     ? null
-                    : l10n.metadataTagReserved(_reserved!),
+                    : _refusal(l10n, _reserved!, state.metadata.mediaType),
                 semanticsId: SemanticsIds.tagKey,
               ),
             ),

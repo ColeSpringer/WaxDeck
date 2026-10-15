@@ -32,10 +32,11 @@ func editParams(writeBack, lock, force *bool) service.MetadataEditParams {
 	}
 }
 
-func editResultJSON(o service.EditOutcomeDTO) MetadataEditResult {
+// editResultJSON renders an edit's outcome for the caller, its
+// write-back failures as they may read them.
+func (s *Server) editResultJSON(ctx context.Context, uc *service.UserCtx, o service.EditOutcomeDTO) MetadataEditResult {
 	out := MetadataEditResult{Applied: true}
-	if len(o.Failures) > 0 {
-		fs := writeBackFailuresJSON(o.Failures)
+	if fs := s.writeBackFailuresJSON(ctx, uc, o.Failures); len(fs) > 0 {
 		out.WriteBackFailures = &fs
 	}
 	if len(o.Warnings) > 0 {
@@ -52,10 +53,18 @@ func editResultJSON(o service.EditOutcomeDTO) MetadataEditResult {
 	return out
 }
 
-func writeBackFailuresJSON(failures []service.WriteBackFailureDTO) []WriteBackFailure {
+// writeBackFailuresJSON renders a write-back's failures as the caller
+// may read them: only an administrator reads every file, by its path.
+func (s *Server) writeBackFailuresJSON(ctx context.Context, uc *service.UserCtx, failures []service.WriteBackFailureDTO) []WriteBackFailure {
+	return narrowedWriteBackFailuresJSON(s.svc.WriteBackFailuresFor(ctx, uc, failures))
+}
+
+// narrowedWriteBackFailuresJSON renders failures the service already
+// narrowed for their reader.
+func narrowedWriteBackFailuresJSON(failures []service.WriteBackFailureDTO) []WriteBackFailure {
 	out := make([]WriteBackFailure, 0, len(failures))
 	for _, f := range failures {
-		wf := WriteBackFailure{FilePid: f.FilePID, Reason: f.Reason}
+		wf := WriteBackFailure{FilePid: service.FileAPIPID(f.FilePID), Reason: f.Reason}
 		if f.Path != "" {
 			wf.Path = ptr(f.Path)
 		}
@@ -145,7 +154,7 @@ func itemMetadataJSON(d service.ItemMetadataDTO) ItemMetadata {
 		out.CustomTags = append(out.CustomTags, CustomTag{Key: tg.Key, Values: tg.Values})
 	}
 	for _, w := range d.WriteBackIssues {
-		wi := WriteBackIssue{FilePid: w.FilePID, Code: w.Code}
+		wi := WriteBackIssue{FilePid: service.FileAPIPID(w.FilePID), Code: w.Code}
 		if w.TagKey != "" {
 			wi.TagKey = ptr(w.TagKey)
 		}
@@ -255,7 +264,7 @@ func (s *Server) EditItemMetadata(ctx context.Context, req EditItemMetadataReque
 		}
 		return nil, err
 	}
-	return EditItemMetadata200JSONResponse(editResultJSON(out)), nil
+	return EditItemMetadata200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 // CommitItemMetadata runs a whole staged editor draft in one request.
@@ -290,7 +299,7 @@ func (s *Server) CommitItemMetadata(ctx context.Context, req CommitItemMetadataR
 		}
 		return nil, err
 	}
-	return CommitItemMetadata200JSONResponse(commitResultJSON(out)), nil
+	return CommitItemMetadata200JSONResponse(s.commitResultJSON(ctx, uc, out)), nil
 }
 
 // metadataCommitDTO reads the wire body into the service's staged-parts
@@ -334,7 +343,7 @@ func metadataCommitDTO(b MetadataCommit) service.MetadataCommitDTO {
 
 // commitResultJSON is the compound commit's envelope, assembled the way
 // the bulk edit's is.
-func commitResultJSON(out service.MetadataCommitOutcomeDTO) MetadataCommitResult {
+func (s *Server) commitResultJSON(ctx context.Context, uc *service.UserCtx, out service.MetadataCommitOutcomeDTO) MetadataCommitResult {
 	result := MetadataCommitResult{Parts: make([]MetadataCommitPart, 0, len(out.Parts))}
 	for _, p := range out.Parts {
 		part := MetadataCommitPart{
@@ -350,8 +359,7 @@ func commitResultJSON(out service.MetadataCommitOutcomeDTO) MetadataCommitResult
 		}
 		result.Parts = append(result.Parts, part)
 	}
-	if len(out.Failures) > 0 {
-		fs := writeBackFailuresJSON(out.Failures)
+	if fs := s.writeBackFailuresJSON(ctx, uc, out.Failures); len(fs) > 0 {
 		result.WriteBackFailures = &fs
 	}
 	if len(out.Warnings) > 0 {
@@ -408,8 +416,7 @@ func (s *Server) BulkEditMetadata(ctx context.Context, req BulkEditMetadataReque
 		return nil, err
 	}
 	result := BulkEditResult{Edited: out.Edited, Skipped: out.Skipped}
-	if len(out.Failures) > 0 {
-		fs := writeBackFailuresJSON(out.Failures)
+	if fs := s.writeBackFailuresJSON(ctx, uc, out.Failures); len(fs) > 0 {
 		result.WriteBackFailures = &fs
 	}
 	if out.ResultingAlbumPID != "" {
@@ -444,7 +451,7 @@ func (s *Server) SetItemCredits(ctx context.Context, req SetItemCreditsRequestOb
 		}
 		return nil, err
 	}
-	return SetItemCredits200JSONResponse(editResultJSON(out)), nil
+	return SetItemCredits200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 // --- lyrics -----------------------------------------------------------------------
@@ -473,7 +480,7 @@ func (s *Server) SetItemLyrics(ctx context.Context, req SetItemLyricsRequestObje
 		}
 		return nil, err
 	}
-	return SetItemLyrics200JSONResponse(editResultJSON(out)), nil
+	return SetItemLyrics200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 func (s *Server) ClearItemLyrics(ctx context.Context, req ClearItemLyricsRequestObject) (ClearItemLyricsResponseObject, error) {
@@ -484,11 +491,17 @@ func (s *Server) ClearItemLyrics(ctx context.Context, req ClearItemLyricsRequest
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return ClearItemLyrics403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
 	}
-	if err := s.svc.ClearItemLyrics(ctx, uc, req.Pid); err != nil {
+	out, err := s.svc.ClearItemLyrics(ctx, uc, req.Pid,
+		service.MetadataEditParams{WriteBack: derefBool(req.Params.WriteBack)})
+	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {
 			return ClearItemLyrics404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
 		}
 		return nil, err
+	}
+	// A 204 carries no body to name a sidecar that stayed.
+	for _, f := range out.Failures {
+		s.log.Warn("clearing lyrics: the sidecar stayed", "item", req.Pid, "reason", f.Reason)
 	}
 	return ClearItemLyrics204Response{}, nil
 }
@@ -523,7 +536,7 @@ func (s *Server) SetBookChapters(ctx context.Context, req SetBookChaptersRequest
 		}
 		return nil, err
 	}
-	return SetBookChapters200JSONResponse(editResultJSON(out)), nil
+	return SetBookChapters200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 // --- artwork ----------------------------------------------------------------------
@@ -568,7 +581,7 @@ func (s *Server) SetItemArtwork(ctx context.Context, req SetItemArtworkRequestOb
 		}
 		return nil, err
 	}
-	return SetItemArtwork200JSONResponse(editResultJSON(out)), nil
+	return SetItemArtwork200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 func (s *Server) ClearItemArtwork(ctx context.Context, req ClearItemArtworkRequestObject) (ClearItemArtworkResponseObject, error) {
@@ -653,7 +666,7 @@ func (s *Server) SetEntityArtwork(ctx context.Context, req SetEntityArtworkReque
 		}
 		return nil, err
 	}
-	return SetEntityArtwork200JSONResponse(editResultJSON(out)), nil
+	return SetEntityArtwork200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 func (s *Server) ClearEntityArtwork(ctx context.Context, req ClearEntityArtworkRequestObject) (ClearEntityArtworkResponseObject, error) {
@@ -751,7 +764,7 @@ func (s *Server) SetItemTag(ctx context.Context, req SetItemTagRequestObject) (S
 		return SetItemTag400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a values body is required"))}, nil
 	}
 	out, err := s.svc.SetItemTag(ctx, uc, req.Pid, req.Key, req.Body.Values,
-		boolOr(req.Body.Lock, true), derefBool(req.Body.Force))
+		editParams(req.Body.WriteBack, req.Body.Lock, req.Body.Force))
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
@@ -759,11 +772,15 @@ func (s *Server) SetItemTag(ctx context.Context, req SetItemTagRequestObject) (S
 		case service.KindNotFound:
 			return SetItemTag404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
 		case service.KindLocked:
-			return SetItemTag409JSONResponse{FieldLockedJSONResponse(errObj("field-locked", err.Error()))}, nil
+			return SetItemTag409JSONResponse(errObj("field-locked", err.Error())), nil
 		}
 		return nil, err
 	}
-	return SetItemTag200JSONResponse(TagEditResult{Key: out.Key, Stored: out.Stored}), nil
+	res := TagEditResult{Key: out.Key, Stored: out.Stored}
+	if fs := s.writeBackFailuresJSON(ctx, uc, out.Failures); len(fs) > 0 {
+		res.WriteBackFailures = &fs
+	}
+	return SetItemTag200JSONResponse(res), nil
 }
 
 func (s *Server) ClearItemTag(ctx context.Context, req ClearItemTagRequestObject) (ClearItemTagResponseObject, error) {
@@ -774,11 +791,21 @@ func (s *Server) ClearItemTag(ctx context.Context, req ClearItemTagRequestObject
 	if !s.svc.CanCurateItem(ctx, uc, string(req.Pid)) {
 		return ClearItemTag403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", "administrators, or the user whose upload brought the item in"))}, nil
 	}
-	if err := s.svc.ClearItemTag(ctx, uc, req.Pid, req.Key); err != nil {
-		if service.KindOf(err) == service.KindNotFound {
+	out, err := s.svc.ClearItemTag(ctx, uc, req.Pid, req.Key,
+		service.MetadataEditParams{WriteBack: derefBool(req.Params.WriteBack)})
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindNotFound:
 			return ClearItemTag404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
+		case service.KindInvalid:
+			return ClearItemTag400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 		}
 		return nil, err
+	}
+	// A 204 carries no body to name the files a write-back missed; the
+	// health rule lists them.
+	for _, f := range out.Failures {
+		s.log.Warn("clearing a custom tag: a file kept it", "item", req.Pid, "key", req.Key, "reason", f.Reason)
 	}
 	return ClearItemTag204Response{}, nil
 }
@@ -828,7 +855,7 @@ func (s *Server) SetItemAcquisition(ctx context.Context, req SetItemAcquisitionR
 		}
 		return nil, err
 	}
-	return SetItemAcquisition200JSONResponse(editResultJSON(out)), nil
+	return SetItemAcquisition200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 func (s *Server) ClearItemAcquisition(ctx context.Context, req ClearItemAcquisitionRequestObject) (ClearItemAcquisitionResponseObject, error) {
@@ -910,7 +937,7 @@ func (s *Server) EditEntity(ctx context.Context, req EditEntityRequestObject) (E
 		}
 		return nil, err
 	}
-	return EditEntity200JSONResponse(editResultJSON(out)), nil
+	return EditEntity200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }
 
 // RenameEntity moves a whole entity onto new keying values. The
@@ -958,8 +985,7 @@ func (s *Server) RenameEntity(ctx context.Context, req RenameEntityRequestObject
 		moved := append([]string{}, out.MovedAlbums...)
 		res.MovedAlbums = &moved
 	}
-	if len(out.Failures) > 0 {
-		fs := writeBackFailuresJSON(out.Failures)
+	if fs := s.writeBackFailuresJSON(ctx, uc, out.Failures); len(fs) > 0 {
 		res.Failures = &fs
 	}
 	return RenameEntity200JSONResponse(res), nil
@@ -991,6 +1017,32 @@ func (s *Server) GetEntityCuration(ctx context.Context, req GetEntityCurationReq
 }
 
 // --- detach -------------------------------------------------------------------------
+
+// SetItemKind starts a kind change, answering its job at once.
+func (s *Server) SetItemKind(ctx context.Context, req SetItemKindRequestObject) (SetItemKindResponseObject, error) {
+	uc, _, err := s.requireUserCtx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if req.Body == nil {
+		return SetItemKind400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "a body is required"))}, nil
+	}
+	job, err := s.svc.SetItemsKind(ctx, uc, req.Body.Pids, string(req.Body.MediaType), derefBool(req.Body.WriteBack))
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
+			return SetItemKind400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return SetItemKind403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		case service.KindNotFound:
+			return SetItemKind404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
+		case service.KindConflict, service.KindCatalogBusy, service.KindReadOnly:
+			return SetItemKind409JSONResponse(errObj(string(service.KindOf(err)), err.Error())), nil
+		}
+		return nil, err
+	}
+	return SetItemKind202JSONResponse(jobJSON(job)), nil
+}
 
 // DetachItem pulls one track off its mbid-pinned release. Curate-gated
 // like every item mutation beside it; the refusals are upstream's own
@@ -1025,8 +1077,7 @@ func (s *Server) DetachItem(ctx context.Context, req DetachItemRequestObject) (D
 	if out.NewReleaseGroupPID != "" {
 		res.NewReleaseGroupPid = ptr(out.NewReleaseGroupPID)
 	}
-	if len(out.Failures) > 0 {
-		fs := writeBackFailuresJSON(out.Failures)
+	if fs := s.writeBackFailuresJSON(ctx, uc, out.Failures); len(fs) > 0 {
 		res.Failures = &fs
 	}
 	return DetachItem200JSONResponse(res), nil
@@ -1045,7 +1096,9 @@ func (s *Server) SetReleaseStatus(ctx context.Context, req SetReleaseStatusReque
 	if req.Body == nil {
 		return SetReleaseStatus400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", "an unofficial body is required"))}, nil
 	}
-	if err := s.svc.SetReleaseStatus(ctx, uc, req.Pid, req.Body.Unofficial); err != nil {
+	out, err := s.svc.SetReleaseStatus(ctx, uc, req.Pid, req.Body.Unofficial,
+		service.MetadataEditParams{WriteBack: derefBool(req.Body.WriteBack)})
+	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
 			return SetReleaseStatus400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
@@ -1054,5 +1107,5 @@ func (s *Server) SetReleaseStatus(ctx context.Context, req SetReleaseStatusReque
 		}
 		return nil, err
 	}
-	return SetReleaseStatus200JSONResponse(MetadataEditResult{Applied: true}), nil
+	return SetReleaseStatus200JSONResponse(s.editResultJSON(ctx, uc, out)), nil
 }

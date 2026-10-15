@@ -452,6 +452,23 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
     return MusicItemsState(items: page.items, nextCursor: page.nextCursor);
   }
 
+  /// The listing's items to its end, or until more than [atMost] are
+  /// known, for a verb that names a bucket whole or not at all. Pages
+  /// past the held ones are read without being shown; one that fails
+  /// throws.
+  Future<List<ItemSummary>> readThrough({required int atMost}) async {
+    final held = await future;
+    final items = [...held.items];
+    var cursor = held.nextCursor;
+    while (cursor != null && items.length <= atMost) {
+      final page = await _page(cursor);
+      if (page.items.isEmpty) break;
+      items.addAll(page.items);
+      cursor = page.nextCursor;
+    }
+    return items;
+  }
+
   Future<void> loadMore() async {
     final current = state.value;
     if (current == null || !current.hasMore || current.loadingMore) return;

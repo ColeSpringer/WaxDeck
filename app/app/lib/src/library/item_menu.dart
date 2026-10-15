@@ -9,6 +9,7 @@ import '../discovery/discovery_actions.dart';
 import '../home/pin_action.dart';
 import '../home/pinned_controller.dart';
 import '../l10n/l10n.dart';
+import '../metadata/metadata_controller.dart';
 import '../music/album_detail.dart';
 import '../music/music_controllers.dart';
 import '../settings/settings_registry.dart';
@@ -19,6 +20,7 @@ import '../shell/shell_messages.dart';
 import '../uploads/add_to_library.dart';
 import 'item_detach.dart';
 import 'item_facts_sheet.dart';
+import 'item_kind.dart';
 
 /// Whether this session gets an editor door on item rows: what the
 /// session already knows - the admin role, or the upload right while a
@@ -244,6 +246,23 @@ Future<void> showItemMenuSheet(
                   onTap: () {
                     close();
                     unawaited(confirmDetachItem(rootContext, pid: pid));
+                  },
+                ),
+              // A misfiled book (a folder of MP3 parts read as music)
+              // becomes one here. The dialog has no refusal page of its
+              // own, so the row asks the item, as the player does.
+              if (music &&
+                  mayOfferItemEdit(sheetRef) &&
+                  (sheetRef.watch(mayCurateItemProvider(pid)).value ?? false))
+                WaxOptionRow(
+                  title: l10n.libraryKindToBook,
+                  glyph: WaxIcons.audiobooks,
+                  semanticsId: SemanticsIds.itemMenuKindBook,
+                  onTap: () {
+                    close();
+                    unawaited(
+                      confirmSetKind(rootContext, pids: [pid], to: 'audiobook'),
+                    );
                   },
                 ),
               if (music && albumPid != null)

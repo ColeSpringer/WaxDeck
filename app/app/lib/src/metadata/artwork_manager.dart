@@ -107,8 +107,9 @@ class ArtworkManager extends ConsumerStatefulWidget {
   /// entity ones, which additionally carry the cover pin.
   final String? entityType;
 
-  /// Whether setting an entity's front cover also embeds it into the
-  /// member files. Albums only, and ignored elsewhere by the endpoint.
+  /// Whether setting a front cover also embeds it in the files: an
+  /// item's own, or an album's member files (the endpoint ignores it for
+  /// other entities). The other slots are the catalog's alone.
   final bool writeBack;
 
   /// Whether the item branch offers the front-cover pin. The `art`
@@ -203,23 +204,27 @@ class _ArtworkManagerState extends ConsumerState<ArtworkManager> {
       final bytes = builder.takeBytes();
       final repository = ref.read(repositoryProvider);
       final entity = widget.entityType;
-      if (entity == null) {
-        await repository.setItemArtwork(
-          widget.pid,
-          bytes: bytes,
-          role: slot.role,
-        );
-      } else {
-        await repository.setEntityArtwork(
-          entity,
-          widget.pid,
-          bytes: bytes,
-          role: slot.role,
-          writeBack: widget.writeBack && slot == ArtSlot.front,
-        );
-      }
+      final writeBack = widget.writeBack && slot == ArtSlot.front;
+      final result = entity == null
+          ? await repository.setItemArtwork(
+              widget.pid,
+              bytes: bytes,
+              role: slot.role,
+              writeBack: writeBack,
+            )
+          : await repository.setEntityArtwork(
+              entity,
+              widget.pid,
+              bytes: bytes,
+              role: slot.role,
+              writeBack: writeBack,
+            );
       await _refresh(slot);
-      messenger.show(l10n.artworkReplaced(slot.labelOf(l10n)));
+      messenger.show(
+        result.writeBackFailures.isEmpty
+            ? l10n.artworkReplaced(slot.labelOf(l10n))
+            : l10n.artworkReplacedTagsFailed(slot.labelOf(l10n)),
+      );
     } on WaxDeckApiException catch (e) {
       messenger.show(explainError(l10n, e));
     } finally {

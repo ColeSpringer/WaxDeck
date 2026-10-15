@@ -15,6 +15,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -27,6 +28,7 @@ import (
 	"github.com/colespringer/waxbin/organize"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
+	"github.com/colespringer/waxbin/trash"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/genre"
@@ -197,9 +199,12 @@ type MergeResultDTO struct {
 	ChildrenMoved int
 }
 
-// UpgradeMemberDTO is one encoding of a recording.
+// UpgradeMemberDTO is one encoding of a recording: an item, and the file
+// it is, which tells apart the encodings one item holds.
 type UpgradeMemberDTO struct {
 	ItemPID    string
+	FilePID    string
+	Path       string
 	Title      string
 	Artist     string
 	Codec      string
@@ -459,6 +464,9 @@ func (l *Library) unofficialItems(ctx context.Context) (map[model.PID]bool, erro
 type fileFinding struct {
 	rules               []string
 	headerMS, decodedMS int64
+	// owed is the keys an edit changed in the catalog without writing
+	// them into this file.
+	owed []string
 }
 
 // fileDiagnosticRules runs the audit's per-file checks once per sweep, keyed
@@ -504,6 +512,20 @@ func (l *Library) fileDiagnosticRules(ctx context.Context) (map[string]*fileFind
 			}
 		}
 	}
+	// What edits left owed is read with its keys, which the audit's
+	// sentence only quotes: the rule weighs each key's source per item.
+	owed, err := l.lib.FileDiagnostics(ctx, model.DiagnosticFilter{Code: model.DiagTagWriteOwed})
+	if err != nil {
+		return nil, classify(err)
+	}
+	for _, d := range owed {
+		ff := out[string(d.FilePID)]
+		if ff == nil {
+			ff = &fileFinding{}
+			out[string(d.FilePID)] = ff
+		}
+		ff.owed = append(ff.owed, d.TagKey)
+	}
 	return out, nil
 }
 
@@ -529,37 +551,86 @@ func (l *Library) itemFileRules(ctx context.Context, it *model.ItemView, finding
 	if len(findings) == 0 {
 		return nil, nil
 	}
+	rules, d, owed := l.itemFindings(ctx, it, findings)
+	// Owed values make the item out of sync only where a person or a
+	// source set them; a clean-up pass's catalog-only rewrite is the
+	// file's to keep.
+	if len(owed) > 0 && !slices.Contains(rules, ruleWriteUnsynced) {
+		if keys, err := l.owedBesideNormalized(ctx, it.PID, owed); err != nil || len(keys) > 0 {
+			rules = append(slices.Clone(rules), ruleWriteUnsynced)
+		}
+	}
+	return rules, d
+}
+
+// gradedFiles are the files an item is graded by: its primary, or a
+// multi-part book's parts. Copies follow them and are no part of the
+// grade: a finding on one belongs to the copy, not to a part it would
+// misnumber.
+func (l *Library) gradedFiles(ctx context.Context, it *model.ItemView) []model.ItemFileRef {
 	if it.Kind == model.KindBook {
-		if parts, err := l.lib.ItemFiles(ctx, it.PID); err == nil && len(parts) > 1 {
-			var rules []string
-			var worst *DurationMismatchDTO
-			for i, p := range parts {
-				ff := findingFor(findings, p.FilePID, p.DisplayPath)
-				if ff == nil {
-					continue
-				}
-				for _, r := range ff.rules {
-					if !slices.Contains(rules, r) {
-						rules = append(rules, r)
-					}
-				}
-				if d := ff.duration(); d != nil && (worst == nil || d.gap() > worst.gap()) {
-					d.PartIndex = &i
-					worst = d
+		parts, err := l.lib.ItemFiles(ctx, it.PID)
+		parts = slices.DeleteFunc(parts, func(f model.ItemFileRef) bool { return f.Role == fileRoleAlternate })
+		if err == nil && len(parts) > 1 {
+			return parts
+		}
+	}
+	return []model.ItemFileRef{{FilePID: it.FilePID, DisplayPath: it.DisplayPath}}
+}
+
+// itemFindings reads an item's files' findings: their rules, the worst
+// duration mismatch, and the keys owed to them.
+func (l *Library) itemFindings(ctx context.Context, it *model.ItemView, findings map[string]*fileFinding) ([]string, *DurationMismatchDTO, []string) {
+	if parts := l.gradedFiles(ctx, it); len(parts) > 1 {
+		var rules, owed []string
+		var worst *DurationMismatchDTO
+		for i, p := range parts {
+			ff := findingFor(findings, p.FilePID, p.DisplayPath)
+			if ff == nil {
+				continue
+			}
+			for _, r := range ff.rules {
+				if !slices.Contains(rules, r) {
+					rules = append(rules, r)
 				}
 			}
-			return rules, worst
+			owed = append(owed, ff.owed...)
+			if d := ff.duration(); d != nil && (worst == nil || d.gap() > worst.gap()) {
+				d.PartIndex = &i
+				worst = d
+			}
 		}
+		return rules, worst, owed
 	}
 	ff := findingFor(findings, it.FilePID, it.DisplayPath)
 	if ff == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	d := ff.duration()
 	if d != nil {
 		d.WholeFile = it.Virtual
 	}
-	return ff.rules, d
+	return ff.rules, d, ff.owed
+}
+
+// owedBesideNormalized drops the owed keys whose catalog value a clean-up
+// pass set: those rewrite the catalog alone by design, and the file keeps
+// what it says.
+func (l *Library) owedBesideNormalized(ctx context.Context, pid model.PID, keys []string) ([]string, error) {
+	if len(keys) == 0 {
+		return nil, nil
+	}
+	prov, err := l.lib.Provenance(ctx, pid)
+	if err != nil {
+		return keys, classify(err)
+	}
+	normalized := map[string]bool{}
+	for _, p := range prov {
+		if p.Source == model.SourceNormalize {
+			normalized[p.Field] = true
+		}
+	}
+	return slices.DeleteFunc(slices.Clone(keys), func(k string) bool { return normalized[k] }), nil
 }
 
 // plannedMoves plans the default organize profile across the library
@@ -846,49 +917,61 @@ func (l *Library) ListDuplicateGroups(ctx context.Context, uc *UserCtx) ([]Dupli
 	if err != nil {
 		return nil, classify(err)
 	}
-	out := []DuplicateGroupDTO{}
+	var findings []model.AuditFinding
+	byKind := map[read.EntityKind][]model.PID{}
 	for _, f := range rep.Findings {
 		if f.MergeType == "" || len(f.Entities) < 2 {
 			continue
 		}
-		if len(out) >= duplicateGroupCap {
+		if len(findings) >= duplicateGroupCap {
 			break
 		}
-		names := duplicateNamesFromMessage(f.Message, len(f.Entities))
+		findings = append(findings, f)
+		kind := read.EntityKind(f.MergeType)
+		byKind[kind] = append(byKind[kind], f.Entities...)
+	}
+	// Names are read by pid, one call per kind: the finding's sentence
+	// separates them with " / ", which a name can hold too.
+	names := map[model.PID]string{}
+	for kind, pids := range byKind {
+		infos, err := l.lib.EntityByPIDs(ctx, kind, pids)
+		if err != nil {
+			return nil, classify(err)
+		}
+		for pid, info := range infos {
+			names[pid] = info.Name
+		}
+	}
+	out := make([]DuplicateGroupDTO, 0, len(findings))
+	for _, f := range findings {
 		g := DuplicateGroupDTO{
 			EntityType: strings.ReplaceAll(string(f.MergeType), "_", "-"),
-			Detail:     f.Message,
-			Survivor:   DuplicateEntityDTO{PID: string(f.Entities[0]), Name: names[0]},
+			Detail:     duplicateReason(f.Message),
+			Survivor:   DuplicateEntityDTO{PID: string(f.Entities[0]), Name: names[f.Entities[0]]},
 			Losers:     make([]DuplicateEntityDTO, 0, len(f.Entities)-1),
 		}
-		for i, pid := range f.Entities[1:] {
-			g.Losers = append(g.Losers, DuplicateEntityDTO{PID: string(pid), Name: names[i+1]})
+		for _, pid := range f.Entities[1:] {
+			g.Losers = append(g.Losers, DuplicateEntityDTO{PID: string(pid), Name: names[pid]})
 		}
 		out = append(out, g)
 	}
 	return out, nil
 }
 
-// duplicateNamesFromMessage recovers member display names from the
-// audit finding's message, which upstream renders as
-// "duplicate <type> (<reason>): A / B; merge with `waxbin merge`" with
-// names in entity order. Best-effort: a name containing " / " defeats
-// the split, in which case every name stays empty rather than being
-// misattributed.
-func duplicateNamesFromMessage(msg string, n int) []string {
-	names := make([]string, n)
-	_, rest, ok := strings.Cut(msg, "): ")
+// duplicateReason is why the audit paired a group, the parenthesis of
+// its message ("duplicate <type> (<reason>): ..."): the rest repeats the
+// names and closes with advice for the command line. Empty when the
+// message has another shape.
+func duplicateReason(msg string) string {
+	head, _, ok := strings.Cut(msg, "): ")
 	if !ok {
-		return names
+		return ""
 	}
-	if i := strings.LastIndex(rest, "; merge with"); i >= 0 {
-		rest = rest[:i]
+	_, reason, ok := strings.Cut(head, " (")
+	if !ok {
+		return ""
 	}
-	parts := strings.Split(rest, " / ")
-	if len(parts) != n {
-		return names
-	}
-	return parts
+	return reason
 }
 
 // MergeDuplicates merges the losers into the survivor atomically.
@@ -943,24 +1026,40 @@ func bareEntityPID(s string) (model.PID, bool) {
 	return pid, pid.Valid()
 }
 
-// ListUpgradeGroups reports same-recording different-encoding groups
-// from the fingerprint index, best quality first within each group.
+// ListUpgradeGroups reports same-recording different-encoding groups,
+// best quality first within each: an item holding a lesser encoding of
+// its recording, then items the fingerprint index ties together.
 func (l *Library) ListUpgradeGroups(ctx context.Context, uc *UserCtx) ([]UpgradeGroupDTO, error) {
 	if !uc.Admin {
 		return nil, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
 	groups, err := l.lib.FindUpgrades(ctx)
 	if err != nil {
+		// The listing names no resource, so a miss inside the catalog's
+		// walk is its fault, never a 404.
+		if KindOf(err) == KindNotFound {
+			l.log.Error("listing upgrade groups", "err", err)
+			return nil, &Error{Kind: KindInternal, Err: err}
+		}
 		return nil, classify(err)
 	}
 	out := make([]UpgradeGroupDTO, 0, len(groups))
 	for _, g := range groups {
 		dg := UpgradeGroupDTO{Members: make([]UpgradeMemberDTO, 0, len(g.Members))}
+		alike := alikeMembers(g.Members)
 		for _, m := range g.Members {
+			path := ""
+			if alike[m.FilePID] {
+				if f, err := l.lib.File(ctx, m.FilePID); err == nil {
+					path = f.DisplayPath
+				}
+			}
 			// Upgrade groups are track-only upstream (FindUpgrades
 			// queries the tracks entity), so the prefix is fixed.
 			dg.Members = append(dg.Members, UpgradeMemberDTO{
 				ItemPID:    apiPID(PrefixTrack, m.ItemPID),
+				FilePID:    string(m.FilePID),
+				Path:       path,
 				Title:      m.Title,
 				Artist:     m.Artist,
 				Codec:      m.Codec,
@@ -976,21 +1075,63 @@ func (l *Library) ListUpgradeGroups(ctx context.Context, uc *UserCtx) ([]Upgrade
 	return out, nil
 }
 
-// ResolveUpgrade keeps one item and moves the named inferior encodings
-// to the trash (recoverable within the retention window).
-func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, keepPid string, removePids []string) (int, error) {
+// alikeMembers are the members of an upgrade group another member
+// shares a codec and a bitrate with. Their files' names are what tell
+// them apart, so only theirs are read; the rest go without a path.
+func alikeMembers(ms []waxbin.UpgradeCandidate) map[model.PID]bool {
+	type quality struct {
+		codec   string
+		bitrate int
+	}
+	n := map[quality]int{}
+	for _, m := range ms {
+		n[quality{m.Codec, m.Bitrate}]++
+	}
+	out := map[model.PID]bool{}
+	for _, m := range ms {
+		if n[quality{m.Codec, m.Bitrate}] > 1 {
+			out[m.FilePID] = true
+		}
+	}
+	return out
+}
+
+// UpgradeResolveDTO names what a resolve keeps and trashes: whole items
+// across items, or files of the kept item within it.
+type UpgradeResolveDTO struct {
+	KeepItemPID    string
+	RemoveItemPIDs []string
+	KeepFilePID    string
+	RemoveFilePIDs []string
+}
+
+// ResolveUpgrade keeps one encoding and moves the named inferior ones to
+// the trash (recoverable within the retention window): items across
+// items, files within one.
+func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, req UpgradeResolveDTO) (int, error) {
 	if !uc.Admin {
 		return 0, &Error{Kind: KindForbidden, Msg: "administrators only"}
 	}
-	keepPrefix, keep, ok := parseAPIPID(keepPid)
+	keepPrefix, keep, ok := parseAPIPID(req.KeepItemPID)
 	if !ok || !itemPrefix(keepPrefix) {
-		return 0, errInvalid("bad item pid " + keepPid)
+		return 0, errInvalid("bad item pid " + req.KeepItemPID)
 	}
-	if len(removePids) == 0 {
-		return 0, errInvalid("removeItemPids are required")
+	switch {
+	case len(req.RemoveItemPIDs) > 100 || len(req.RemoveFilePIDs) > 100:
+		return 0, errInvalid("a resolve names at most 100 files or items")
+	case len(req.RemoveItemPIDs) > 0 && len(req.RemoveFilePIDs) > 0:
+		return 0, errInvalid("name either removeItemPids or removeFilePids, not both")
+	case len(req.RemoveFilePIDs) > 0:
+		return l.resolveUpgradeFiles(ctx, uc, keep, req)
+	case len(req.RemoveItemPIDs) == 0:
+		return 0, errInvalid("removeItemPids or removeFilePids are required")
 	}
-	removes := make([]model.PID, 0, len(removePids))
-	for _, p := range removePids {
+	if err := l.CheckWritable(ctx, ""); err != nil {
+		return 0, err
+	}
+	removes := make([]model.PID, 0, len(req.RemoveItemPIDs))
+	carved := false
+	for _, p := range req.RemoveItemPIDs {
 		prefix, pid, ok := parseAPIPID(p)
 		if !ok || !itemPrefix(prefix) {
 			return 0, errInvalid("bad item pid " + p)
@@ -1011,8 +1152,18 @@ func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, keepPid strin
 		if it.Kind == model.KindEpisode {
 			return 0, errEpisodeNotDeletable()
 		}
-		if err := l.checkPathWritable(ctx, string(it.Path)); err != nil {
-			return 0, err
+		carved = carved || it.Virtual
+		// Every file goes with the item, so every one's library has to
+		// take the move: a copy left in a read-only one would keep the
+		// item, on its lesser encoding.
+		refs, err := l.lib.ItemFiles(ctx, pid)
+		if err != nil {
+			return 0, classify(err)
+		}
+		for _, ref := range refs {
+			if err := l.CheckWritable(ctx, string(ref.LibraryPID)); err != nil {
+				return 0, err
+			}
 		}
 		removes = append(removes, pid)
 	}
@@ -1023,14 +1174,129 @@ func (l *Library) ResolveUpgrade(ctx context.Context, uc *UserCtx, keepPid strin
 	}
 	plan, err := l.lib.PlanDeletePIDs(ctx, removes, model.DeleteTrash)
 	if err != nil {
-		return 0, classify(err)
+		return 0, planRefusal(err, carved)
 	}
-	rep, err := l.lib.ApplyDelete(ctx, plan)
+	trashed, err := l.applyUpgradeDelete(ctx, plan, "")
+	if trashed > 0 {
+		l.Audit(ctx, uc, "items.delete",
+			AuditTarget{Kind: "item", PID: req.KeepItemPID},
+			map[string]any{"reason": "quality-upgrade", "removed": req.RemoveItemPIDs, "trashed": trashed})
+	}
+	if err != nil {
+		return 0, err
+	}
+	return trashed, nil
+}
+
+// resolveUpgradeFiles trashes lesser encodings one item holds as its
+// files, keeping the named one. A copy of a removed file's audio goes
+// with it, so the place the removed file leaves can only go to the kept
+// encoding, and the alternates go before the primary for the same
+// reason. A copy in a read-only library stays when the kept encoding is
+// in a writable one, which the catalog promotes first.
+func (l *Library) resolveUpgradeFiles(ctx context.Context, uc *UserCtx, item model.PID, req UpgradeResolveDTO) (int, error) {
+	if req.KeepFilePID == "" {
+		return 0, errInvalid("keepFilePid is required with removeFilePids")
+	}
+	refs, err := l.lib.ItemFiles(ctx, item)
 	if err != nil {
 		return 0, classify(err)
 	}
-	l.Audit(ctx, uc, "items.delete",
-		AuditTarget{Kind: "item", PID: keepPid},
-		map[string]any{"reason": "quality-upgrade", "removed": removePids, "trashed": rep.Trashed})
+	byPID := make(map[string]model.ItemFileRef, len(refs))
+	for _, ref := range refs {
+		byPID[string(ref.FilePID)] = ref
+	}
+	if _, ok := byPID[req.KeepFilePID]; !ok {
+		return 0, errNotFound("item " + req.KeepItemPID + " has no file " + FileAPIPID(req.KeepFilePID))
+	}
+	essences := map[string]bool{}
+	going := map[string]bool{}
+	for _, fp := range req.RemoveFilePIDs {
+		if fp == req.KeepFilePID {
+			return 0, errInvalid("keepFilePid cannot also be removed")
+		}
+		if _, ok := byPID[fp]; !ok {
+			return 0, errNotFound("item " + req.KeepItemPID + " has no file " + FileAPIPID(fp))
+		}
+		going[fp] = true
+		if f, err := l.lib.File(ctx, model.PID(fp)); err == nil && f.EssenceHash != "" {
+			essences[f.EssenceHash] = true
+		}
+	}
+	for _, ref := range refs {
+		fp := string(ref.FilePID)
+		if going[fp] || fp == req.KeepFilePID || ref.Role != fileRoleAlternate {
+			continue
+		}
+		if f, err := l.lib.File(ctx, ref.FilePID); err == nil && essences[f.EssenceHash] {
+			going[fp] = true
+		}
+	}
+	named := make(map[string]bool, len(req.RemoveFilePIDs))
+	for _, fp := range req.RemoveFilePIDs {
+		named[fp] = true
+	}
+	keeperWritable := l.CheckWritable(ctx, string(byPID[req.KeepFilePID].LibraryPID)) == nil
+	var files []model.PID
+	for _, primaryLast := range []bool{false, true} {
+		for _, ref := range refs {
+			if !going[string(ref.FilePID)] || (ref.Role == fileRoleAlternate) == primaryLast {
+				continue
+			}
+			if err := l.CheckWritable(ctx, string(ref.LibraryPID)); err != nil {
+				if keeperWritable && !named[string(ref.FilePID)] && KindOf(err) == KindReadOnly {
+					continue
+				}
+				return 0, err
+			}
+			files = append(files, ref.FilePID)
+		}
+	}
+	plan, err := l.lib.PlanDeleteFiles(ctx, files, model.DeleteTrash)
+	if err != nil {
+		return 0, classify(err)
+	}
+	trashed, err := l.applyUpgradeDelete(ctx, plan, item)
+	if trashed > 0 {
+		l.Audit(ctx, uc, "items.delete-files",
+			AuditTarget{Kind: "item", PID: req.KeepItemPID},
+			map[string]any{"reason": "quality-upgrade", "kept": req.KeepFilePID, "removed": files, "trashed": trashed})
+	}
+	if err != nil {
+		return 0, err
+	}
+	return trashed, nil
+}
+
+// applyUpgradeDelete moves an upgrade's lesser encodings to the trash.
+// A file the plan cannot take refuses the resolve before anything
+// moves, as does, for files of one item, a cue rip's file that plays
+// other tracks too; a move that then fails refuses it after the others
+// went, with how many did, rather than answering a smaller count as
+// success.
+func (l *Library) applyUpgradeDelete(ctx context.Context, plan *trash.Plan, item model.PID) (int, error) {
+	for _, a := range plan.Actions {
+		if a.Skip {
+			return 0, &Error{Kind: KindConflict, Msg: filepath.Base(a.Src) + ": " + a.Reason}
+		}
+		if item != "" && ripPlaysOthers(a, item) {
+			return 0, errCueRipPart()
+		}
+	}
+	rep, stayed, err := l.applyDeletion(ctx, plan)
+	if err != nil {
+		return 0, err
+	}
+	if left := rep.Errored + rep.Skipped; left > 0 {
+		reason := ""
+		for _, a := range plan.Actions {
+			if why, ok := stayed[a.FilePID]; ok {
+				reason = ": " + why
+				break
+			}
+		}
+		return rep.Trashed, &Error{Kind: KindConflict,
+			Msg: fmt.Sprintf("%d of the files could not be moved to the trash%s", left, reason)}
+	}
 	return rep.Trashed, nil
 }

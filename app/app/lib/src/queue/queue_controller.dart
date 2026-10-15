@@ -350,6 +350,20 @@ class QueueController extends Notifier<QueueState> {
     );
   }
 
+  /// Drops every entry but the current one whose item is one of [ulids]
+  /// (pids without their prefix), answering whether the current entry's
+  /// is too: items a kind change folded into another are gone under
+  /// either prefix, and what to do about the one playing is the caller's.
+  bool dropItems(Set<String> ulids) {
+    if (ulids.isEmpty || state.isEmpty) return false;
+    String ulidOf(String pid) => pid.substring(pid.indexOf('-') + 1);
+    removeSet({
+      for (final e in state.entries)
+        if (ulids.contains(ulidOf(e.pid))) e.queueId,
+    });
+    return ulids.contains(ulidOf(state.currentEntry!.pid));
+  }
+
   /// Gathers every entry in [queueIds] and lands the block at [to].
   ///
   /// The set arrives wherever it was and leaves contiguous, keeping its

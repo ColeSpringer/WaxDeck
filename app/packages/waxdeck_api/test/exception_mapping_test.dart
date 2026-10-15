@@ -130,4 +130,25 @@ void main() {
     // on a slow uplink is a legitimate slow send.
     expect(dio.options.sendTimeout, isNull);
   });
+
+  test('a refusal is a 4xx and nothing else', () {
+    bool refused(int? status) => WaxDeckApiException(
+      code: 'x',
+      message: 'x',
+      statusCode: status,
+    ).isRefusal;
+    expect([400, 404, 409, 499].map(refused), everyElement(isTrue));
+    expect([null, 304, 399, 500, 503].map(refused), everyElement(isFalse));
+  });
+
+  test('a job has ended in exactly the four states the contract names', () {
+    bool ended(String state) =>
+        Job(pid: 'jb-1', kind: 'scan', state: state).ended;
+    expect(
+      ['done', 'failed', 'crashed', 'canceled'].map(ended),
+      everyElement(isTrue),
+    );
+    // An unknown state reads as unfinished, as the contract has it.
+    expect(['queued', 'running', 'settling'].map(ended), everyElement(isFalse));
+  });
 }

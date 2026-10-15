@@ -381,6 +381,12 @@ class _CountingPinStore implements ArtworkPinStore {
   }
 
   @override
+  Future<List<ArtworkPinRecord>> pinsToDraw(String pid) {
+    lookups++;
+    return inner.pinsToDraw(pid);
+  }
+
+  @override
   Future<void> put(ArtworkPinRecord pin) => inner.put(pin);
 
   @override

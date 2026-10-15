@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"time"
 
 	"github.com/colespringer/waxbin"
-	"github.com/colespringer/waxbin/fingerprint"
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
@@ -68,10 +68,15 @@ const (
 // reviewTrackDoc is one file in a stored review unit. Imported records
 // that the file physically entered the library even when its item pid
 // never resolved: a retried decision must not re-import it (the staged
-// copy was moved), and a discard must count it as landed.
+// copy was moved), and a discard must count it as landed. Joined records
+// that it landed on an item the import did not create, which no decision
+// on this entry edits; Held that its audio was already where it would
+// have gone, so nothing of it entered.
 type reviewTrackDoc struct {
 	PID         string            `json:"pid,omitempty"`
 	Imported    bool              `json:"imported,omitempty"`
+	Joined      bool              `json:"joined,omitempty"`
+	Held        bool              `json:"held,omitempty"`
 	Path        string            `json:"path"`
 	Title       string            `json:"title"`
 	Artist      string            `json:"artist,omitempty"`
@@ -80,7 +85,15 @@ type reviewTrackDoc struct {
 	DurationMS  int64             `json:"durationMs"`
 	Tags        map[string]string `json:"tags,omitempty"`
 	Fingerprint string            `json:"fingerprint,omitempty"`
+	// Duplicate is the warning the file's upload arrived with, as the
+	// reader may see it; filled for the read, never stored.
+	Duplicate *DuplicateDTO `json:"-"`
 }
+
+// heldBefore reports a file the library held before this entry: it
+// landed on an item the import did not create, or its audio was already
+// where it would have gone. No decision on the entry edits it.
+func (d reviewTrackDoc) heldBefore() bool { return d.Joined || d.Held }
 
 // reviewPairingDoc is one stored file-to-release-track pairing.
 type reviewPairingDoc struct {
@@ -153,6 +166,9 @@ type reviewPayload struct {
 	// point. A suggestion and nothing else: nothing here is written to
 	// the files, and a stored Override supersedes it.
 	Suggested *reviewOverride `json:"suggested,omitempty"`
+	// WaitingForCatalog records that a declined import met another job
+	// holding the catalog, so the next start takes the wait up again.
+	WaitingForCatalog bool `json:"waitingForCatalog,omitempty"`
 }
 
 // reviewSnapshot preserves pre-apply values for revert: per catalog
@@ -306,6 +322,18 @@ func (l *Library) resolveIdentify(ctx context.Context, userID string, asked *boo
 // the bell; the success path rang the bell for a queue with nothing in
 // it. Both are now the other way round.
 func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
+	// Another change to the entry goes first, and the import once it lets
+	// go, finding the entry decided if that was a decision. Owed before
+	// the second try, so a release in between is not missed.
+	release, ok := l.claimEntry(entryID)
+	if !ok {
+		l.heldOff.Store(entryID, struct{}{})
+		if release, ok = l.claimEntry(entryID); !ok {
+			return
+		}
+		l.heldOff.Delete(entryID)
+	}
+	defer release()
 	entry, err := l.db.ReviewEntryByID(ctx, entryID)
 	if err != nil {
 		l.log.Warn("reading a declined entry to import", "entry", entryID, "err", err)
@@ -321,6 +349,9 @@ func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
 	}
 	if !payload.IdentifyDeclined {
 		return
+	}
+	if payload.WaitingForCatalog {
+		l.markWaiting(ctx, &entry, &payload, false)
 	}
 
 	// Declining is a statement about metadata, not consent to a second
@@ -350,6 +381,14 @@ func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
 	for _, w := range warnings {
 		l.log.Info("importing a declined submission", "entry", entryID, "warning", w)
 	}
+	if KindOf(err) == KindCatalogBusy {
+		// Another job holds the catalog: the import goes again when it
+		// frees, as it would have gone on arrival.
+		l.log.Info("a declined submission waits for the catalog", "entry", entryID)
+		l.markWaiting(ctx, &entry, &payload, true)
+		l.waitingForCatalog.Store(entryID, struct{}{})
+		return
+	}
 	if err != nil {
 		l.log.Warn("a declined submission could not import; it waits for review",
 			"entry", entryID, "err", err)
@@ -371,6 +410,65 @@ func (l *Library) importDeclinedEntry(ctx context.Context, entryID string) {
 	l.notifyImported(ctx, &entry)
 }
 
+// markWaiting records on a declined entry whether it waits for the
+// catalog, so a restart finds the wait an earlier process owed.
+func (l *Library) markWaiting(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload, waiting bool) {
+	payload.WaitingForCatalog = waiting
+	entry.Payload = marshalJSON(*payload)
+	if err := l.db.UpdateReviewEntry(ctx, *entry); err != nil {
+		l.log.Warn("recording a declined submission's wait for the catalog", "entry", entry.ID, "err", err)
+	}
+}
+
+// retryWaitingImports imports again the declined submissions a busy
+// catalog held back. One still held waits for the next try.
+func (l *Library) retryWaitingImports() {
+	var ids []string
+	l.waitingForCatalog.Range(func(k, _ any) bool {
+		ids = append(ids, k.(string))
+		l.waitingForCatalog.Delete(k)
+		return true
+	})
+	l.importLater(ids)
+}
+
+// loadWaitingImports takes up the waits for the catalog an earlier
+// process left on declined entries.
+func (l *Library) loadWaitingImports(ctx context.Context) {
+	ids, err := l.db.ReviewEntriesWaitingForCatalog(ctx)
+	if err != nil {
+		l.log.Warn("listing declined submissions waiting for the catalog", "err", err)
+		return
+	}
+	for _, id := range ids {
+		l.waitingForCatalog.Store(id, struct{}{})
+	}
+}
+
+// waitingImports reports whether a declined submission waits for the
+// catalog.
+func (l *Library) waitingImports() bool {
+	waiting := false
+	l.waitingForCatalog.Range(func(any, any) bool {
+		waiting = true
+		return false
+	})
+	return waiting
+}
+
+// importLater imports declined submissions again off the caller.
+func (l *Library) importLater(ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	l.workers.GoOnce(l.procCtx, "declined-imports", func(ctx context.Context) error {
+		for _, id := range ids {
+			l.importDeclinedEntry(ctx, id)
+		}
+		return nil
+	})
+}
+
 // entryHasFlaggedDuplicate reports whether any session behind an entry
 // arrived carrying a duplicate warning.
 func (l *Library) entryHasFlaggedDuplicate(ctx context.Context, entryID string) bool {
@@ -390,21 +488,50 @@ func (l *Library) entryHasFlaggedDuplicate(ctx context.Context, entryID string) 
 }
 
 // notifyReviewReady tells the administrators and the uploader that an
-// entry is waiting for a decision.
+// entry is waiting for a decision, and how much of it already landed.
 func (l *Library) notifyReviewReady(ctx context.Context, entry *wdb.ReviewEntry) {
-	l.EmitNotification(ctx, "review-ready", "Ready for review",
-		entryWhat(entry.Artist, entry.Title, entry.TrackCount)+
-			" could not be imported on its own and waits for a decision.",
-		l.reviewRecipients(ctx, entry.UploadedBy))
+	body := entryWhat(entry.Artist, entry.Title, entry.TrackCount) +
+		" could not be imported on its own and waits for a decision."
+	var payload reviewPayload
+	if json.Unmarshal([]byte(entry.Payload), &payload) == nil {
+		if landed := l.landedTracks(ctx, &payload); landed > 0 {
+			body = fmt.Sprintf("%s: %d of its %d files were added to the library; the rest wait for a decision.",
+				entryWhat(entry.Artist, entry.Title, entry.TrackCount), landed, len(payload.Tracks))
+		}
+	}
+	l.EmitNotification(ctx, "review-ready", "Ready for review", body, l.reviewRecipients(ctx, entry.UploadedBy))
 }
 
 // notifyImported announces files that reached the library with no
-// decision asked for.
+// decision asked for, saying so of those that joined items the library
+// already had, and of those it already held where they would go, which
+// added nothing.
 func (l *Library) notifyImported(ctx context.Context, entry *wdb.ReviewEntry) {
 	recipients := l.reviewRecipients(ctx, entry.UploadedBy)
-	l.EmitNotificationFor(ctx, "import-completed", "Import finished",
-		entryWhat(entry.Artist, entry.Title, entry.TrackCount)+
-			" was added to the library with the tags it arrived with.", entry.ID, recipients)
+	what := entryWhat(entry.Artist, entry.Title, entry.TrackCount)
+	body := what + " was added to the library with the tags it arrived with."
+	var payload reviewPayload
+	if json.Unmarshal([]byte(entry.Payload), &payload) == nil {
+		held, joined := 0, 0
+		for _, doc := range payload.Tracks {
+			switch {
+			case doc.Held:
+				held++
+			case doc.Joined:
+				joined++
+			}
+		}
+		switch n := len(payload.Tracks); {
+		case held > 0 && held == n:
+			body = what + " was already in the library, so nothing was added."
+		case joined > 0 && joined == n:
+			body = what + " was already in the library and was added to what it holds, which keeps its details."
+		default:
+			body += filesAlready(joined, " and was added to what it holds", " and were added to what it holds")
+			body += filesAlready(held, ", so nothing was added for it", ", so nothing was added for them")
+		}
+	}
+	l.EmitNotificationFor(ctx, "import-completed", "Import finished", body, entry.ID, recipients)
 	seen := map[string]bool{}
 	for _, uid := range recipients {
 		if uid == "" || seen[uid] {
@@ -413,6 +540,18 @@ func (l *Library) notifyImported(ctx context.Context, entry *wdb.ReviewEntry) {
 		seen[uid] = true
 		l.emitUserEvent(ctx, uid, eventImportCompleted, entry.ID)
 	}
+}
+
+// filesAlready is the sentence for n of an entry's files the library
+// already had, closed by what came of the one or of the many.
+func filesAlready(n int, one, many string) string {
+	switch {
+	case n == 1:
+		return " One of its files was already in the library" + one + "."
+	case n > 1:
+		return fmt.Sprintf(" %d of its files were already in the library%s.", n, many)
+	}
+	return ""
 }
 
 // reviewRecipients is every administrator plus the entry's uploader.
@@ -465,8 +604,32 @@ func (l *Library) RematchItem(ctx context.Context, uc *UserCtx, apiItemPID strin
 		Title:      firstNonEmpty(it.Album, it.Title),
 		Artist:     firstNonEmpty(it.AlbumArtist, it.Artist),
 	}
+	if !uc.Admin {
+		// The entry is the asker's to open and decide, so it holds only
+		// the tracks their uploads brought in: an approval must not edit
+		// album siblings they may not curate.
+		entry.UploadedBy = uc.ID
+		if unit, err = l.ownedTracks(ctx, uc, unit); err != nil {
+			return "", err
+		}
+	}
 	// A rematch is a request to identify; there is nothing else it does.
 	return l.openReviewEntry(ctx, entry, reviewPayload{Tracks: unit}, true)
+}
+
+// ownedTracks keeps the docs whose items the caller's uploads brought in.
+func (l *Library) ownedTracks(ctx context.Context, uc *UserCtx, unit []reviewTrackDoc) ([]reviewTrackDoc, error) {
+	kept := unit[:0:0]
+	for _, doc := range unit {
+		owns, err := l.db.UploadOwnsItem(ctx, uc.ID, doc.PID)
+		if err != nil {
+			return nil, &Error{Kind: KindInternal, Err: err}
+		}
+		if owns {
+			kept = append(kept, doc)
+		}
+	}
+	return kept, nil
 }
 
 // albumUnit gathers an item's album siblings as review track docs. It
@@ -577,10 +740,8 @@ func (l *Library) matchTracks(ctx context.Context, docs []reviewTrackDoc) []matc
 		if t.Tags == nil {
 			t.Tags = map[string]string{}
 		}
-		if t.Fingerprint == "" && l.fpcalcPath != "" && filepath.IsAbs(d.Path) {
-			if fp, _, err := fingerprint.ChromaprintCompressed(ctx, l.fpcalcPath, d.Path, 0); err == nil {
-				t.Fingerprint = fp
-			}
+		if t.Fingerprint == "" && filepath.IsAbs(d.Path) {
+			t.Fingerprint, _ = l.fingerprintFile(ctx, d.Path, time.Duration(d.DurationMS)*time.Millisecond)
 		}
 		out = append(out, t)
 	}
@@ -912,16 +1073,60 @@ func (l *Library) identifyEntry(ctx context.Context, entry *wdb.ReviewEntry) err
 		autoApply = false
 		l.log.Info("auto-apply withheld: singles auto-apply is off for the destination library", "entry", entry.ID)
 	}
+	// A unit duplicating the library waits for a person: what to do with
+	// a second copy is theirs to say, and importing is one-way.
+	if autoApply && l.entryHasFlaggedDuplicate(ctx, entry.ID) {
+		autoApply = false
+		l.log.Info("auto-apply withheld: the unit duplicates something the library holds", "entry", entry.ID)
+	}
 	if autoApply {
-		if _, err := l.applyEntry(ctx, entry, &payload, entry.BestMBID, "", true); err != nil {
-			// A failed apply leaves the entry pending for a person; the
-			// evidence is stored either way.
-			l.log.Warn("auto apply failed; leaving entry for review", "entry", entry.ID, "err", err)
-		}
+		l.autoApplyEntry(ctx, entry, &payload)
 	}
 	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
 	l.notifyIdentified(ctx, entry.ID)
 	return nil
+}
+
+// autoApplyEntry applies an identification's confident candidate,
+// unless a person decided the entry meanwhile or is deciding it now.
+func (l *Library) autoApplyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload) {
+	release, ok := l.claimEntry(entry.ID)
+	if !ok {
+		l.log.Info("auto-apply withheld: the entry is being decided", "entry", entry.ID)
+		return
+	}
+	defer release()
+	if fresh, err := l.db.ReviewEntryByID(ctx, entry.ID); err != nil || fresh.Status != reviewPending || fresh.Payload != entry.Payload {
+		l.log.Info("auto-apply withheld: the entry changed since it was identified", "entry", entry.ID)
+		return
+	}
+	if _, err := l.applyEntry(ctx, entry, payload, entry.BestMBID, nil, true); err != nil {
+		// A failed apply leaves the entry pending for a person; the
+		// evidence is stored either way.
+		l.log.Warn("auto apply failed; leaving entry for review", "entry", entry.ID, "err", err)
+	}
+}
+
+// writeBackWarnings words the files a committed batch could not write,
+// those reader may see (every one for an administrator, or with no
+// reader). err is a failure after the commit, which the batch still
+// stands through.
+func (l *Library) writeBackWarnings(ctx context.Context, reader *UserCtx, res *waxbin.BatchEditResult, err error) []string {
+	var out []string
+	if res != nil {
+		for _, wbe := range res.WriteBackErrors {
+			for _, f := range wbe.Failures {
+				if l.mayReadFailure(ctx, reader, f) {
+					out = append(out, l.writeBackWarning(f))
+				}
+			}
+		}
+	}
+	if err != nil {
+		out = append(out, "tags not written: "+l.failureWords(err.Error()))
+	}
+	sort.Strings(out)
+	return out
 }
 
 // errIdentifyStale says the entry was decided or re-queried while the
@@ -1023,7 +1228,7 @@ func candidateDoc(m *match.Match, unit match.Unit, indexOf map[string]int) revie
 // applyEntry applies one candidate's metadata to the unit. For import
 // entries the staged file enters the library first. Returns non-fatal
 // warnings; the entry is decided on return.
-func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload, candidateMBID, decidedBy string, auto bool) ([]string, error) {
+func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payload *reviewPayload, candidateMBID string, decider *UserCtx, auto bool) ([]string, error) {
 	var cand *reviewCandidateDoc
 	for i := range payload.Candidates {
 		if payload.Candidates[i].MBID == candidateMBID {
@@ -1049,9 +1254,16 @@ func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payloa
 	// pid, so if two pairings resolve to the same file the last one wins, the
 	// same outcome the old per-item last-write-wins loop produced.
 	editByPID := make(map[model.PID]map[string]string, len(cand.Pairings))
+	before := make(map[model.PID]*model.ItemView, len(cand.Pairings))
 	var order []model.PID
 	for _, p := range cand.Pairings {
 		doc := payload.Tracks[p.TrackIndex]
+		if doc.heldBefore() {
+			// Its item was the library's before this entry: the match
+			// is for what the entry brings in.
+			warnings = append(warnings, filepath.Base(doc.Path)+": already in the library; its metadata was left alone")
+			continue
+		}
 		if doc.PID == "" {
 			warnings = append(warnings, fmt.Sprintf("%s: not in the library; skipped", filepath.Base(doc.Path)))
 			continue
@@ -1062,10 +1274,13 @@ func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payloa
 			warnings = append(warnings, fmt.Sprintf("%s: %v", doc.PID, err))
 			continue
 		}
-		prior := map[string]string{
+		// The fields the apply may change, as they were: the item's own
+		// recording id included.
+		was := map[string]string{
 			"title": it.Title, "artist": it.Artist, "album_artist": it.AlbumArtist,
 			"album": it.Album, "year": zeroableInt(it.Year), "track_no": zeroableInt(it.TrackNo),
-			"disc_no": zeroableInt(it.DiscNo), "mbid": "",
+			"disc_no": zeroableInt(it.DiscNo), "mbid": it.MBID,
+			"compilation": strconv.FormatBool(it.Compilation),
 		}
 		edits := map[string]string{
 			"album":        cand.Title,
@@ -1097,21 +1312,28 @@ func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payloa
 		}
 		if cand.Compilation {
 			edits["compilation"] = "true"
-			// Record the prior flag so revert restores and unlocks it; without
-			// this the apply leaves a locked compilation field the revert cannot
-			// reach, and scans and enrichment then refuse to change it.
-			prior["compilation"] = strconv.FormatBool(it.Compilation)
+		}
+		// The revert restores, and unlocks, exactly what the apply names:
+		// a field it leaves alone keeps its value and any lock someone
+		// set, and a compilation flag it sets is reached, which scans and
+		// enrichment would otherwise refuse to change.
+		prior := map[string]string{}
+		for f := range edits {
+			prior[f] = was[f]
 		}
 		if _, seen := editByPID[pid]; !seen {
 			order = append(order, pid)
 		}
 		editByPID[pid] = edits
+		before[pid] = it
 		snapshot.Items[doc.PID] = prior
 	}
 
 	// Apply the whole unit in one atomic catalog batch, so a mid-unit failure
 	// rolls the lot back instead of leaving earlier tracks edited under a
-	// returned error. Catalog-only (no WriteBack), so no on-disk tag sync runs.
+	// returned error. The files are written once the batch commits; a file
+	// that cannot take its tags leaves the apply standing and is named in
+	// the warnings.
 	if len(order) > 0 {
 		batch := make([]model.ItemFieldEdit, 0, len(order))
 		for _, pid := range order {
@@ -1122,11 +1344,31 @@ func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payloa
 		// as a reviewer typing them. Without this the metadata editor
 		// shows every approved field as "you", which is both wrong and
 		// the reason nobody can tell an approval from a hand edit.
-		if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{
-			Lock: model.LockOn, Force: true,
+		//
+		// The files take what the catalog takes where their library
+		// allows; the catalog refuses the others file by file, which the
+		// warnings name and the health rule lists.
+		res, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{
+			Lock: model.LockOn, Force: true, WriteBack: l.unitWritable(ctx, order),
 			Source: model.SourceEnrichment, Provider: reviewMatchProvider,
-		}); err != nil {
+		})
+		if err != nil && (res == nil || len(res.Edited) == 0) {
 			return warnings, classify(err)
+		}
+		warnings = append(warnings, l.writeBackWarnings(ctx, decider, res, err)...)
+		// A total a new number past it cleared is the apply's doing too.
+		for _, pid := range order {
+			now, err := l.lib.Get(ctx, pid)
+			if err != nil {
+				continue
+			}
+			was, prior := before[pid], snapshot.Items[string(pid)]
+			if now.TrackTotal != was.TrackTotal {
+				prior["track_total"] = zeroableInt(was.TrackTotal)
+			}
+			if now.DiscTotal != was.DiscTotal {
+				prior["disc_total"] = zeroableInt(was.DiscTotal)
+			}
 		}
 	}
 
@@ -1147,7 +1389,10 @@ func (l *Library) applyEntry(ctx context.Context, entry *wdb.ReviewEntry, payloa
 		entry.Status = reviewAutoApplied
 	}
 	entry.DecidedAtNS = time.Now().UnixNano()
-	entry.DecidedBy = decidedBy
+	entry.DecidedBy = ""
+	if decider != nil {
+		entry.DecidedBy = decider.ID
+	}
 	entry.BestMBID = cand.MBID
 	entry.BestTitle = cand.Title
 	entry.BestArtist = cand.Artist
@@ -1189,14 +1434,21 @@ func (l *Library) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decid
 	// side of it, since the alternative said "you" for every field an
 	// approval had taken off a file.
 	//
-	// Catalog-only (no WriteBack, like the apply), so the batch does no
-	// on-disk tag sync and reports no per-item write-back failures;
-	// revert surfaces only a hard error, not the warnings the apply
-	// collects.
-	if _, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{
-		Lock: model.LockOff, Force: true, Source: model.SourceTag,
-	}); err != nil {
+	// Written to the files as the apply was, under the same rule; a file
+	// that cannot take its tags leaves the revert standing, and the
+	// health rule lists it.
+	pids := make([]model.PID, 0, len(snap.Items))
+	for pid := range snap.Items {
+		pids = append(pids, model.PID(pid))
+	}
+	res, err := l.lib.EditItemsFields(ctx, batch, waxbin.EditOptions{
+		Lock: model.LockOff, Force: true, Source: model.SourceTag, WriteBack: l.unitWritable(ctx, pids),
+	})
+	if err != nil && (res == nil || len(res.Edited) == 0) {
 		return classify(err)
+	}
+	for _, w := range l.writeBackWarnings(ctx, nil, res, err) {
+		l.log.Info("reverting a review entry", "entry", entry.ID, "warning", w)
 	}
 	for pid, fields := range snap.Items {
 		names := make([]string, 0, len(fields))
@@ -1215,6 +1467,22 @@ func (l *Library) revertEntry(ctx context.Context, entry *wdb.ReviewEntry, decid
 	}
 	l.notifyReview(ctx, entry.ID, entry.UploadedBy)
 	return nil
+}
+
+// unitWritable reports whether a decision over a unit writes its files:
+// when the server takes writes and any member's library does. A member
+// whose library is read-only is then refused by the catalog file by
+// file, and a unit with none to write stays catalog-only, owing them.
+func (l *Library) unitWritable(ctx context.Context, pids []model.PID) bool {
+	if l.CheckWritable(ctx, "") != nil {
+		return false
+	}
+	for _, pid := range pids {
+		if it, err := l.lib.Get(ctx, pid); err == nil && l.checkPathWritable(ctx, string(it.Path)) == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // isUUID reports the canonical 8-4-4-4-12 hex form.

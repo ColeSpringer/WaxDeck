@@ -34,6 +34,8 @@ class _$ReviewEntryDetail extends ReviewEntryDetail {
   @override
   final int trackCount;
   @override
+  final int? duplicateCount;
+  @override
   final String? libraryPid;
   @override
   final String? uploadedBy;
@@ -68,6 +70,7 @@ class _$ReviewEntryDetail extends ReviewEntryDetail {
     this.title,
     this.artist,
     required this.trackCount,
+    this.duplicateCount,
     this.libraryPid,
     this.uploadedBy,
     required this.identifying,
@@ -102,6 +105,7 @@ class _$ReviewEntryDetail extends ReviewEntryDetail {
         title == other.title &&
         artist == other.artist &&
         trackCount == other.trackCount &&
+        duplicateCount == other.duplicateCount &&
         libraryPid == other.libraryPid &&
         uploadedBy == other.uploadedBy &&
         identifying == other.identifying &&
@@ -128,6 +132,7 @@ class _$ReviewEntryDetail extends ReviewEntryDetail {
     _$hash = $jc(_$hash, title.hashCode);
     _$hash = $jc(_$hash, artist.hashCode);
     _$hash = $jc(_$hash, trackCount.hashCode);
+    _$hash = $jc(_$hash, duplicateCount.hashCode);
     _$hash = $jc(_$hash, libraryPid.hashCode);
     _$hash = $jc(_$hash, uploadedBy.hashCode);
     _$hash = $jc(_$hash, identifying.hashCode);
@@ -156,6 +161,7 @@ class _$ReviewEntryDetail extends ReviewEntryDetail {
           ..add('title', title)
           ..add('artist', artist)
           ..add('trackCount', trackCount)
+          ..add('duplicateCount', duplicateCount)
           ..add('libraryPid', libraryPid)
           ..add('uploadedBy', uploadedBy)
           ..add('identifying', identifying)
@@ -237,6 +243,11 @@ class ReviewEntryDetailBuilder
   int? get trackCount => _$this._trackCount;
   set trackCount(covariant int? trackCount) => _$this._trackCount = trackCount;
 
+  int? _duplicateCount;
+  int? get duplicateCount => _$this._duplicateCount;
+  set duplicateCount(covariant int? duplicateCount) =>
+      _$this._duplicateCount = duplicateCount;
+
   String? _libraryPid;
   String? get libraryPid => _$this._libraryPid;
   set libraryPid(covariant String? libraryPid) =>
@@ -294,6 +305,7 @@ class ReviewEntryDetailBuilder
       _title = $v.title;
       _artist = $v.artist;
       _trackCount = $v.trackCount;
+      _duplicateCount = $v.duplicateCount;
       _libraryPid = $v.libraryPid;
       _uploadedBy = $v.uploadedBy;
       _identifying = $v.identifying;
@@ -363,6 +375,7 @@ class ReviewEntryDetailBuilder
               r'ReviewEntryDetail',
               'trackCount',
             ),
+            duplicateCount: duplicateCount,
             libraryPid: libraryPid,
             uploadedBy: uploadedBy,
             identifying: BuiltValueNullFieldError.checkNotNull(

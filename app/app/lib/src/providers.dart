@@ -28,11 +28,7 @@ import 'uploads/share_intake.dart';
 /// server had a provider re-asking forever, and everything awaiting its
 /// future waited with it.
 Duration? retryUnlessRefused(int attempt, Object error) {
-  if (error case WaxDeckApiException(
-    statusCode: final int status,
-  ) when status >= 400 && status < 500) {
-    return null;
-  }
+  if (error case WaxDeckApiException(isRefusal: true)) return null;
   return ProviderContainer.defaultRetry(attempt, error);
 }
 

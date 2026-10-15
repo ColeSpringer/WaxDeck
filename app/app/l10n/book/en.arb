@@ -335,6 +335,10 @@
   "@bookYes": {
     "description": "The value of a yes-or-no row in a book's edition details."
   },
+  "booksAddLibrary": "Add a library",
+  "@booksAddLibrary": {
+    "description": "Action on the empty Books hub, for administrators: opens the libraries screen where a Books library is added."
+  },
   "booksAddToLibrary": "Add to library",
   "@booksAddToLibrary": {
     "description": "Accessible name of the add control on the audiobook hub, which opens the same sheet home's does with the audiobook type chosen."
@@ -356,9 +360,9 @@
   "@booksContinueTitle": {
     "description": "Shelf on the audiobook hub holding the books part way through."
   },
-  "booksEmptyMessage": "Books turn up here as the library scans them. Point a library at your audiobook folder and they arrive with their chapters.",
+  "booksEmptyMessage": "In a library that holds Books every audio file becomes a book, parts and all. Elsewhere a file is a book when its tags say so, or when someone who may edit it chooses Treat as audiobook.",
   "@booksEmptyMessage": {
-    "description": "Message under the empty state of the audiobook hub."
+    "description": "Message of the Books hub when there are no audiobooks: how a file becomes a book. 'Treat as audiobook' is the menu row of that name (libraryKindToBook)."
   },
   "booksEmptyTitle": "No audiobooks yet",
   "@booksEmptyTitle": {

@@ -21,6 +21,10 @@
   "@libraryDeleteFilesMenu": {
     "description": "Row in an item's overflow menu that opens the delete dialog. The ellipsis says a dialog follows."
   },
+  "libraryDeleteKeepsItem": "The item stays in your library on its remaining files.",
+  "@libraryDeleteKeepsItem": {
+    "description": "Sentence in the delete dialog when the item keeps a file after the deletion (a copy that takes the deleted file's place, or a file left where it is), so the item is not removed from the library."
+  },
   "libraryDeleteModePermanent": "Delete permanently",
   "@libraryDeleteModePermanent": {
     "description": "Option deleting the files outright rather than trashing them."
@@ -40,6 +44,16 @@
   "libraryDeleteMore": "More",
   "@libraryDeleteMore": {
     "description": "Tooltip of the overflow menu on an item screen."
+  },
+  "libraryDeleteMoreFiles": "{count, plural, =1{and 1 more file} other{and {count} more files}}",
+  "@libraryDeleteMoreFiles": {
+    "description": "Last line of the delete dialog's file list when it names only the first few files: how many more the deletion removes.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "35"
+      }
+    }
   },
   "libraryDeletePermanentDone": "{count, plural, =1{Deleted 1 file for good} other{Deleted {count} files for good}}",
   "@libraryDeletePermanentDone": {
@@ -100,6 +114,10 @@
   "@libraryFactsDuration": {
     "description": "Facts sheet row label: how long the item runs."
   },
+  "libraryFactsFiles": "Files",
+  "@libraryFactsFiles": {
+    "description": "Label of the Details sheet row counting the files behind an item: its own file (or a book's parts) and any copies of it the library holds."
+  },
   "libraryFactsGenres": "Genres",
   "@libraryFactsGenres": {
     "description": "Facts sheet row label: the item's genres, comma separated."
@@ -140,13 +158,146 @@
   "@libraryFactsYear": {
     "description": "Facts sheet row label: the release or publication year."
   },
+  "libraryFileDeleteCopy": "Delete this copy",
+  "@libraryFileDeleteCopy": {
+    "description": "Accessible label of the button that deletes one copy from an item's file list, leaving the item on its own file."
+  },
+  "libraryFileRoleCopy": "Copy",
+  "@libraryFileRoleCopy": {
+    "description": "What one file in an item's file list is: another file holding the same audio, kept beside the item rather than made an item of its own."
+  },
+  "libraryFileRoleOtherEncoding": "Other encoding",
+  "@libraryFileRoleOtherEncoding": {
+    "description": "What one file in an item's file list is: another encoding of the same recording (an MP3 beside a FLAC, say), kept beside the item rather than made an item of its own."
+  },
+  "libraryFileRolePart": "Part",
+  "@libraryFileRolePart": {
+    "description": "What one file in an item's file list is: one of an audiobook's files, in reading order."
+  },
+  "libraryFileRolePrimary": "Primary",
+  "@libraryFileRolePrimary": {
+    "description": "What one file in an item's file list is: the file the item's details and playback come from."
+  },
+  "libraryFilesCount": "{count, plural, =1{1 file} other{{count} files}}",
+  "@libraryFilesCount": {
+    "description": "Value of the Details sheet's Files row: how many files are behind the item, copies included.",
+    "placeholders": {
+      "count": {
+        "type": "int",
+        "example": "2"
+      }
+    }
+  },
   "libraryKindAlbum": "album",
   "@libraryKindAlbum": {
     "description": "The word for an album where it stands inside a sentence, such as the star row's accessible names. Lower case."
   },
+  "libraryKindAlbumToBook": "Treat album as one audiobook",
+  "@libraryKindAlbumToBook": {
+    "description": "Menu row on an album that turns all its tracks into one audiobook, the parts in order."
+  },
+  "libraryKindAlbumTooLarge": "This album has more than {max} tracks, too many to change in one go.",
+  "@libraryKindAlbumTooLarge": {
+    "description": "Body of the dialog for an album with more tracks than one kind change can name; it offers no confirm. {max} is that limit.",
+    "placeholders": {
+      "max": {
+        "type": "int",
+        "example": "500"
+      }
+    }
+  },
+  "libraryKindAlreadyBook": "{count, plural, =1{This is already an audiobook} other{These are already audiobooks}}, so nothing changed.",
+  "@libraryKindAlreadyBook": {
+    "description": "Message when a change to audiobook ended having converted nothing, because every item named already was one (a view drawn before another device changed it). {count} is how many items were named.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryKindAlreadyMusic": "{count, plural, =1{This is already music} other{These are already music}}, so nothing changed.",
+  "@libraryKindAlreadyMusic": {
+    "description": "Message when a change to music ended having converted nothing, because every item named already was music (a view drawn before another device changed it). {count} is how many items were named.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "libraryKindArtist": "artist",
   "@libraryKindArtist": {
     "description": "The word for an artist where it stands inside a sentence, such as the star row's accessible names. Lower case."
+  },
+  "libraryKindConfirm": "Change",
+  "@libraryKindConfirm": {
+    "description": "Confirm button of the dialog changing what items are."
+  },
+  "libraryKindFailed": "The change could not be made.",
+  "@libraryKindFailed": {
+    "description": "Message when a kind change job failed without a reason of its own."
+  },
+  "libraryKindFailedWhy": "The change could not be made: {reason}",
+  "@libraryKindFailedWhy": {
+    "description": "Message when a kind change job failed. {reason} is the server's own sentence for why, which a failed job carries without a code to translate.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "a file of the item is not on disk"
+      }
+    }
+  },
+  "libraryKindJoinedUnseen": "It became part of an item in a library you cannot open.",
+  "@libraryKindJoinedUnseen": {
+    "description": "Message when a kind change folded the user's item into one in a library they are not granted, so there is nothing to open."
+  },
+  "libraryKindQueued": "It carries on in the background; you will be told when it is done.",
+  "@libraryKindQueued": {
+    "description": "Message when a kind change is still running after the dialog stopped watching it (accounts without the Tasks screen)."
+  },
+  "libraryKindStillRunning": "Still changing. Follow it in Tasks.",
+  "@libraryKindStillRunning": {
+    "description": "Message, with a Tasks action, when a kind change is still running after the dialog stopped watching it (administrators)."
+  },
+  "libraryKindStoppedPlaying": "What was playing is part of the book now; play it from here.",
+  "@libraryKindStoppedPlaying": {
+    "description": "Message when a kind change folded the item playing into a book, which stopped it; the book's screen opens after it."
+  },
+  "libraryKindToBook": "Treat as audiobook",
+  "@libraryKindToBook": {
+    "description": "Menu row on a music track (item menu, player More menu, metadata actions) that turns it into an audiobook."
+  },
+  "libraryKindToBookBody": "{count, plural, =1{This track becomes an audiobook in Books.} other{These {count} tracks become one audiobook in Books, the parts in order.}} Plays, stars and playlist entries come with it, and later scans keep the choice.",
+  "@libraryKindToBookBody": {
+    "description": "Body of the dialog confirming tracks become an audiobook. {count} is how many tracks.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "libraryKindToBookTitle": "Make this an audiobook?",
+  "@libraryKindToBookTitle": {
+    "description": "Title of the dialog confirming tracks become an audiobook."
+  },
+  "libraryKindToMusic": "Treat as music",
+  "@libraryKindToMusic": {
+    "description": "Overflow row on a book that turns its parts back into music tracks."
+  },
+  "libraryKindToMusicBody": "This book's parts become tracks in Music. Plays and stars stay with them, and later scans keep the choice.",
+  "@libraryKindToMusicBody": {
+    "description": "Body of the dialog confirming a book becomes music tracks."
+  },
+  "libraryKindToMusicTitle": "Make this music?",
+  "@libraryKindToMusicTitle": {
+    "description": "Title of the dialog confirming a book becomes music tracks."
+  },
+  "libraryKindWorking": "Reading the files again",
+  "@libraryKindWorking": {
+    "description": "Shown in the dialog while the server reads the items' files as their new kind."
+  },
+  "libraryKindWriteBackHelp": "Writes the choice into the files too. Even a catalog rebuilt from scratch then reads a book as a book, and a track as music unless something else in its file says book.",
+  "@libraryKindWriteBackHelp": {
+    "description": "Help under the write-back switch in the dialog changing what items are."
   },
   "libraryMenuDetach": "Detach from release",
   "@libraryMenuDetach": {

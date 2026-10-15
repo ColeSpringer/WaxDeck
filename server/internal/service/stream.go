@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/colespringer/waxbin/model"
+	"github.com/colespringer/waxbin/waxerr"
 
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
@@ -192,11 +193,16 @@ func playParts(bd *model.BookDetail) []PlayPart {
 // book as one item that is really its first forty minutes.
 func (l *Library) BookParts(ctx context.Context, apiItemPID string) ([]PlayPart, error) {
 	prefix, pid, ok := parseAPIPID(apiItemPID)
-	if !ok || prefix != PrefixBook {
+	if !ok || !bookOrTrackPrefix(prefix) {
 		return nil, nil
 	}
+	// Either prefix can name a book, or what was one: the catalog's
+	// "not a book" is the second, a track that streams as itself.
 	bd, err := l.lib.Book(ctx, pid)
 	if err != nil {
+		if waxerr.Is(err, waxerr.CodeInvalid) {
+			return nil, nil
+		}
 		if out := classify(err); KindOf(out) == KindNotFound {
 			return nil, nil
 		}
@@ -358,12 +364,15 @@ func (l *Library) EffectiveVoiceBoost(ctx context.Context, uc *UserCtx, apiItemP
 			return false
 		}
 		return sub.VoiceBoost != nil && *sub.VoiceBoost
-	case PrefixBook:
+	case PrefixBook, PrefixTrack:
+		// Either prefix reaches a book, whose setting holds while it is
+		// one; the catalog is asked only when a setting is on.
 		bs, err := l.db.BookSettingsFor(ctx, uc.ID, string(pid))
-		if err != nil {
+		if err != nil || bs.VoiceBoost == nil || !*bs.VoiceBoost {
 			return false
 		}
-		return bs.VoiceBoost != nil && *bs.VoiceBoost
+		it, err := l.lib.Get(ctx, pid)
+		return err == nil && it.Kind == model.KindBook
 	}
 	return false
 }

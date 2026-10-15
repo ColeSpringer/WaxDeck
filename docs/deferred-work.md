@@ -295,11 +295,45 @@ Every entry carries a gate tag saying what actually blocks it:
   `WAXDECK_ALLOW_PRIVATE_FEED_HOSTS` is on, so it wants a decision on
   whether a configured mirror is exempt.
 
-- `[roadmap]` **An upload's duplicate warning names the matched item's
-  pid to an uploader who cannot see it.** The title and artist are
-  withheld; the pid stays because `DuplicateWarning` requires it, and it
-  opens nothing to that uploader. The upload review rework, which
-  reshapes the warning, withdraws it.
+- `[in-repo]` **An upload that declined identification waits for
+  review when its import meets a busy catalog.** It imports inside the
+  completing request (`importDeclinedEntry`), so when a scan or
+  organize holds the file-mutation scope the import answers
+  catalog-busy and the entry is left pending as "Ready for review"
+  rather than landing once the scope frees. Retrying in the request
+  would stall it for as long as a scan runs; the fix is a background
+  retry of declined entries that failed only for being busy, marked so
+  the ones waiting on a duplicate or a read-only library are not
+  re-notified on every pass.
+
+- `[in-repo]` **A folded-away item that was playing stops rather than
+  carrying on in its book.** When a kind change folds the item playing
+  into a book, the app stops it, drops the folded items from its queue,
+  that one included, and opens the book, whose resume starts the book
+  from its own position. Carrying on at the same moment would need the part's
+  offset in the book, which the job result does not carry.
+
+- `[in-repo]` **A kind change leaves a folded-away item's references
+  behind.** A converted item keeps its pid, and either prefix reaches
+  it, so every reference to it still resolves; `RemapItems` also
+  revokes the folded-away (absorbed) items' shares and moves their
+  listens, play-state stamps and playlist-source entries. A converted
+  item's tool tasks (and the result lists that name it), audit entries
+  and Subsonic bookmarks take its current prefix too. A folded item's
+  stay on its pid by design: a queued task must not run on another item
+  than asked, a record of what was done to an item keeps naming it, and
+  a place inside it means nothing on the item that took it in. Not
+  moved: a folded item's `book_settings`, `book_bookmarks` and
+  `embeddings` rows (rare: a folded item is almost always a track), and
+  a folded item's pid in a Connect session's queue
+  (`playback_sessions.state` JSON and the live sessions in
+  `connect.Service`, which would need a rewrite hook) or in a review
+  entry's payload, which then name an item that is gone, as a deleted
+  one would. Nor does the fold outlive the remap: a write that names a
+  folded pid after it - a listen or position a phone queued offline, a
+  star - is answered not-found and dropped, where a kept fold map could
+  carry a listen or a star to the item that took it in (a position
+  inside a folded chapter means nothing on the book).
 
 ## Localization
 

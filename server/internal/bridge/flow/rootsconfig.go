@@ -43,14 +43,15 @@ func readRootsConfig(path string) ([]byte, os.FileMode, error) {
 	return raw, info.Mode().Perm(), nil
 }
 
-// SeedRoots is a bridge's starting roots: the configured ones, and those the
-// sidecar's file holds. A root it refused would ride every later reload and
-// fail it; without a file there is no reload to poison.
+// SeedRoots is a bridge's starting roots: those the sidecar's file holds.
+// A root it refused would ride every later reload and fail it, and a
+// configured root the file lacks is left out to be taught, which writes it
+// there. Without a file there is no reload to poison and nothing to teach
+// through, so every root goes in, as does every configured one when the
+// file cannot be read.
 func SeedRoots(configured, table []Root, configPath string) []Root {
 	accepted := map[string]bool{}
-	for _, r := range configured {
-		accepted[r.Name] = true
-	}
+	read := false
 	if configPath != "" {
 		if raw, _, err := readRootsConfig(configPath); err == nil {
 			var cfg struct {
@@ -59,10 +60,16 @@ func SeedRoots(configured, table []Root, configPath string) []Root {
 				} `json:"roots"`
 			}
 			if json.Unmarshal(raw, &cfg) == nil {
+				read = true
 				for _, r := range cfg.Roots {
 					accepted[r.Name] = true
 				}
 			}
+		}
+	}
+	if !read {
+		for _, r := range configured {
+			accepted[r.Name] = true
 		}
 	}
 	var out []Root

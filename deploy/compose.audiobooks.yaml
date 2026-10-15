@@ -1,0 +1,25 @@
+# Optional: an audiobook folder beside the music library, cataloged as
+# books (every audio file in it becomes a book, parts and all). `make up`
+# adds this file when deploy/.env sets WAXDECK_AUDIOBOOKS; by hand it is
+# docker compose -f deploy/compose.yaml -f deploy/compose.audiobooks.yaml.
+# WaxDeck teaches the streaming engine the root itself, so the engine
+# only needs the same folder at the same path.
+
+services:
+  waxdeck:
+    environment:
+      WAXDECK_LIBRARY_ROOTS: lib=/library,books=/audiobooks
+      WAXDECK_AUDIOBOOK_ROOTS: books
+    volumes:
+      - ${WAXDECK_AUDIOBOOKS:?set WAXDECK_AUDIOBOOKS in deploy/.env}:/audiobooks
+
+  waxflow:
+    volumes:
+      - ${WAXDECK_AUDIOBOOKS:?set WAXDECK_AUDIOBOOKS in deploy/.env}:/audiobooks:ro
+
+  waxdeck-cast:
+    environment:
+      WAXDECK_LIBRARY_ROOTS: lib=/library,books=/audiobooks
+      WAXDECK_AUDIOBOOK_ROOTS: books
+    volumes:
+      - ${WAXDECK_AUDIOBOOKS:?set WAXDECK_AUDIOBOOKS in deploy/.env}:/audiobooks
