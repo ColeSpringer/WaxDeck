@@ -2,6 +2,7 @@ import { test, expect } from './fixtures';
 import { T } from './driver';
 import { SemanticsIds } from './semantics-ids';
 import type { components } from './api-types';
+import { isNoCover } from './support/artwork';
 
 type TimelineFormat = components['schemas']['TimelineFormat'];
 
@@ -36,20 +37,23 @@ test('a music queue plays as one stream and crosses inside it', async ({ app, pa
     status?: number;
   }[] = [];
   // Browser-side diagnostics: a stream lost mid-listen re-mints, and
-  // what said so is in the console.
+  // what said so is in the console. A failed load is recorded once, from
+  // its response; Chrome's console echo of it would only repeat that,
+  // and the artwork endpoint's "no cover" is no failure at all
+  // (support/artwork.ts).
   const noise: string[] = [];
   page.on('console', (message) => {
     const text = message.text();
     // The app's own debugPrint reaches the console in a release web
     // build, and it is where every give-up on this path says so.
     if (/timeline|preload|playback start failed/i.test(text)) noise.push(text.slice(0, 200));
-    else if (message.type() === 'error' && !/art\?size|woff2|Failed to load resource/.test(text)) {
+    else if (message.type() === 'error' && !/Failed to load resource/.test(text)) {
       noise.push(text.slice(0, 120));
     }
   });
   page.on('pageerror', (error) => noise.push(`pageerror: ${error.message.slice(0, 160)}`));
   page.on('response', (response) => {
-    if (response.status() >= 400) {
+    if (response.status() >= 400 && !isNoCover(response.status(), response.url())) {
       noise.push(`http ${response.status()} ${response.url().slice(0, 120)}`);
     }
   });

@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { T } from './driver';
+import { isNoCover, isNoCoverEcho } from './support/artwork';
 
 // The first-party web UI journey: log in through the real login form,
 // walk the chrome to the tracks index, open the player, and observe the
@@ -18,17 +19,23 @@ test('login, browse the grid, and play a track', async ({ app, page }) => {
 
   // Browser-side diagnostics: playback-start failures render a terse
   // error pane, so the console and failed requests are the evidence.
+  // Two kinds of line never are, and printing them buried the ones
+  // that were: the artwork endpoint's "no cover" (support/artwork.ts),
+  // and the driver performance note Chrome writes when, with no GPU, it
+  // reads every WebGL frame back to present it - which a bare canvas
+  // with no Flutter on the page draws too.
   page.on('console', (msg) => {
-    if (msg.type() === 'error' || msg.type() === 'warning') {
-      console.log(`[browser ${msg.type()}] ${msg.text()}`);
-    }
+    if (msg.type() !== 'error' && msg.type() !== 'warning') return;
+    if (isNoCoverEcho(msg.text(), msg.location().url)) return;
+    if (msg.text().includes('GPU stall due to ReadPixels')) return;
+    console.log(`[browser ${msg.type()}] ${msg.text()}`);
   });
   page.on('pageerror', (err) => console.log(`[pageerror] ${err.message}`));
   page.on('requestfailed', (req) =>
     console.log(`[requestfailed] ${req.method()} ${req.url()} ${req.failure()?.errorText}`),
   );
   page.on('response', (resp) => {
-    if (resp.status() >= 400) {
+    if (resp.status() >= 400 && !isNoCover(resp.status(), resp.url())) {
       console.log(`[http ${resp.status()}] ${resp.request().method()} ${resp.url()}`);
     }
   });

@@ -15,5 +15,11 @@
     "@types/node": "26.6.2",
     "openapi-typescript": "7.13.0",
     "typescript": "5.9.3"
+  },
+  "allowScripts": {
+    "@scarf/scarf": false
+  },
+  "scarfSettings": {
+    "enabled": false
   }
 }

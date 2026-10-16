@@ -232,14 +232,19 @@
       config: {
         canvasKitBaseUrl: "canvaskit",
         forceSingleThreadedSkwasm: true,
-        // The engine's last-resort font machinery (its Roboto default
-        // and per-glyph Noto shards) downloads from fonts.gstatic.com
-        // by default. Pointing it at this origin keeps an air-gapped
-        // instance identical to an online one: the requests 404, the
-        // engine degrades, and the owned chain in waxdeck_ui is what
-        // actually renders. The path resolves under assets/ and is
-        // deliberately unrouted.
-        fontFallbackBaseUrl: "wax-font-fallback/",
+        // The engine's last-resort font machinery downloads from
+        // fonts.gstatic.com by default: Roboto, its default face, as it
+        // starts, and per-glyph Noto shards for characters nothing
+        // registered covers. Both ask this origin instead, so an
+        // air-gapped instance behaves exactly like an online one. Roboto
+        // is served, vendored at the engine's own path by
+        // tools/fetch-fonts.sh, since the renderers want a face to fall
+        // back on before any text is laid out. The shards are not: the
+        // owned chain in waxdeck_ui covers what WaxDeck renders, so a
+        // shard request 404s and is not repeated. Absolute, because
+        // skwasm puts a relative base under assets/ and CanvasKit does
+        // not, and both have to find the same file.
+        fontFallbackBaseUrl: new URL('vendor/wax-font-fallback/', document.baseURI).href,
       },
     });
   </script>

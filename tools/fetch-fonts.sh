@@ -6,7 +6,8 @@
 # third-party CDN at runtime (Flutter web's default Noto fallback does
 # exactly that, which a LAN-only instance cannot reach).
 #
-# The output lands in app/packages/waxdeck_ui/fonts/ and is committed.
+# The output lands in app/packages/waxdeck_ui/fonts/ and is committed,
+# as does the web engine's own default face, in app/app/web/vendor/.
 # Re-run this only to refresh or re-scope a family; the pinned upstream
 # revision below makes the output reproducible.
 #
@@ -27,6 +28,24 @@ OUT="$ROOT/app/packages/waxdeck_ui/fonts"
 OUT_DEFER="$ROOT/app/packages/waxdeck_ui/assets/fonts"
 CACHE="$ROOT/tools/.cache"
 VENV="$CACHE/fonttools"
+
+# Web only, and the engine's rather than WaxDeck's: the face Flutter
+# web's renderers load as their default before laying out any text,
+# from the app's fontFallbackBaseUrl (web/index.html points it here).
+# Vendored like hls.js, as a collection noticegen walks: the family's
+# licence sits inside it as roboto-LICENSE.txt.
+WEB_FALLBACK="$ROOT/app/app/web/vendor/wax-font-fallback"
+
+# The path both renderers asked for when the face was last fetched, and
+# the bytes it answered. An engine that asks for another fails the fetch
+# on purpose: a new face is a new download to check, licence included,
+# before these move to it.
+ROBOTO_PATH=roboto/v32/KFOmCnqEu92Fr1Me4GZLCzYlKw.woff2
+ROBOTO_SHA256=35b02ca266b79eb4996590f15817425a1ce9ebf48f84471843233ff614656bf2
+# The face's own project at v2.138 (the face is 2.137, which has no tag;
+# the licence is the same file either side of it), pinned by commit.
+ROBOTO_LICENSE_URL=https://raw.githubusercontent.com/googlefonts/roboto-2/ab4876f650a4aeb9b661c83fee47f908c739bb70/LICENSE
+ROBOTO_LICENSE_SHA256=c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4
 
 # google/fonts revision the bundled files come from (2026-07-24).
 FONTS_REV=7ff85c87f93ea6cca5f41c69f2e4edcb90240f26
@@ -244,6 +263,81 @@ if missing:
     sys.exit('fetch-fonts: emoji build gate failed, missing tables: ' + ', '.join(missing))
 print('fetch-fonts: emoji build gate ok (CBDT/CBLC bitmaps and GSUB survived)', file=sys.stderr)
 PYEOF
+
+  # The web engine's own default face. Both renderers download Roboto
+  # from the fallback base unless the app declares a family by that name,
+  # to have something to lay text out in whatever it names. The path is
+  # the engine's, not ours, so it is read from the installed engine -
+  # from both renderers, since a browser may run either - and held
+  # against the pin above. The bytes are what that path answers on
+  # Google's CDN, kept verbatim under the same name. Python does the
+  # hashing and the JSON, being here already, so this runs the same on
+  # a Mac as on Linux.
+  sha256() {
+    python3 -I -c 'import hashlib, sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$1"
+  }
+  flutter_root=${FLUTTER_ROOT:-$(flutter --version --machine 2> /dev/null |
+    python3 -I -c 'import json, sys; print(json.load(sys.stdin)["flutterRoot"])')}
+  engine="$flutter_root/bin/cache/flutter_web_sdk/lib/_engine/engine"
+  [ -d "$engine" ] || flutter precache --web >&2
+  for source in canvaskit/fonts.dart skwasm/skwasm_impl/font_collection.dart; do
+    asks=$(grep -oE 'roboto/v[0-9]+/[A-Za-z0-9_-]+\.woff2' "$engine/$source" 2> /dev/null | head -n 1 || true)
+    if [ "$asks" != "$ROBOTO_PATH" ]; then
+      echo "fetch-fonts: the web engine's $source asks for ${asks:-no Roboto at all}, not $ROBOTO_PATH;" \
+        "check the new face and its licence, then move ROBOTO_PATH and ROBOTO_SHA256" >&2
+      exit 1
+    fi
+  done
+  echo "fetch-fonts: web engine default face $ROBOTO_PATH" >&2
+
+  # Fetched and checked beside where they land, then renamed into place:
+  # a failed download or a wrong byte leaves the vendored face and its
+  # licence exactly as they were.
+  face="$WEB_FALLBACK/$ROBOTO_PATH"
+  licence="$WEB_FALLBACK/roboto-LICENSE.txt"
+  mkdir -p "$(dirname "$face")"
+  face_new=$(mktemp "$face.XXXXXX")
+  licence_new=$(mktemp "$licence.XXXXXX")
+  trap 'rm -rf "$work" "$face_new" "$licence_new"' EXIT
+  curl -fsSL -o "$face_new" "https://fonts.gstatic.com/s/$ROBOTO_PATH"
+  if [ "$(sha256 "$face_new")" != "$ROBOTO_SHA256" ]; then
+    echo "fetch-fonts: $ROBOTO_PATH does not match ROBOTO_SHA256" >&2
+    exit 1
+  fi
+  curl -fsSL -o "$work/roboto-LICENSE" "$ROBOTO_LICENSE_URL"
+  if [ "$(sha256 "$work/roboto-LICENSE")" != "$ROBOTO_LICENSE_SHA256" ]; then
+    echo "fetch-fonts: the Roboto licence does not match ROBOTO_LICENSE_SHA256" >&2
+    exit 1
+  fi
+  {
+    # What the face's own name table says, then the licence it names.
+    echo 'Copyright 2011 Google Inc. All Rights Reserved.'
+    echo
+    cat "$work/roboto-LICENSE"
+    cat <<NOTE
+
+--------------------------------------------------------------------------------
+
+Roboto 2.137, the face Flutter web's renderers load as their default
+before laying out any text, vendored byte for byte from the path the
+engine asks for,
+
+  https://fonts.gstatic.com/s/$ROBOTO_PATH
+
+and served from this origin under the same path below
+vendor/wax-font-fallback/, which web/index.html names as the engine's
+fontFallbackBaseUrl. The licence is the face project's own, from
+$ROBOTO_LICENSE_URL.
+
+Regenerating: make fonts, which reads the path from the installed engine.
+NOTE
+  } > "$licence_new"
+  mv -f "$face_new" "$face"
+  mv -f "$licence_new" "$licence"
+  # A version the engine no longer asks for goes once its successor is in.
+  for old in "$WEB_FALLBACK"/roboto/*/; do
+    [ "${old%/}" = "$(dirname "$face")" ] || rm -rf "$old"
+  done
 fi
 
 # The report must survive a fresh checkout under set -euo pipefail: an
@@ -267,3 +361,7 @@ echo
 report_dir "eager chain" "$OUT"
 report_dir "on-demand" "$OUT_DEFER"
 printf "  %-32s %7.1f KB\n" TOTAL "$(echo "$total_bytes" | awk '{ print $1/1024 }')"
+echo "web engine default ($WEB_FALLBACK):"
+find "$WEB_FALLBACK" -name '*.woff2' 2> /dev/null | while read -r f; do
+  printf "  %s %s bytes\n" "${f#"$WEB_FALLBACK"/}" "$(wc -c < "$f" | tr -d ' ')"
+done

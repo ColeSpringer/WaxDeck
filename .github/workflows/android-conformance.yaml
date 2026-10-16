@@ -28,9 +28,20 @@
 # in, which is when this action hands the device over, and `flutter
 # test` reads `adb devices` once and takes an offline device for none.
 # The script waits for the device to hold steady before the first
-# suite, and a suite that died before its first test with the transport
-# rebuilt under it gets one more try on the same emulator, minutes
-# cheaper than the attempt below.
+# suite. A rebuild can also land later, mid-launch, and either kill the
+# suite before its first test or take the tool's forward to the app
+# with it, after which the tool fails or waits out the budget for an
+# app it can no longer hear. The runner ends a waiting tool at once and
+# counts both as the harness, and either way the suite gets one more
+# try on the same emulator, minutes cheaper than the attempt below.
+#
+# The fourth is the device's network: once, the emulator's Wi-Fi came
+# up with its routes flushed, and every load in both suites failed as a
+# transport error against a tone the device could not reach. The script
+# has the device fetch the tone's headers before the first suite,
+# cycling Wi-Fi once if it cannot, and ends the attempt with that named
+# when it still cannot - or with the tone server named, when the host
+# cannot fetch it either.
 #
 # Why it exists at all: the port contract says a play after completion
 # restarts the item; the FakeEngine implemented that and just_audio did

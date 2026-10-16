@@ -79,9 +79,9 @@ func (h *spaHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// The shell answers navigations only. A subresource miss (a font the
 	// engine's fallback probes for, a wasm path, an icon) must fail as a
 	// 404: answering it with HTML feeds the shell to font and wasm
-	// loaders, which fail later and stranger, and the engine's font
-	// fallback is pointed at an unrouted path on purpose, expecting
-	// exactly that 404. Browsers mark navigations explicitly
+	// loaders, which fail later and stranger, and the engine's per-glyph
+	// font fallback asks this origin for shards the build does not ship,
+	// expecting exactly that 404. Browsers mark navigations explicitly
 	// (Sec-Fetch-Mode); anything older or hand-rolled says what it can
 	// render in Accept.
 	if !isNavigation(r) {

@@ -436,8 +436,9 @@ void main() {
       "its menu sets the labels in the app's type",
       variant: TargetPlatformVariant.all(),
       (tester) async {
-        // The stock labels name no face, and the web build cannot fetch
-        // the engine's default (web/index.html): a blank box.
+        // The stock labels name no face, so they would fall to the
+        // engine's default - Roboto, which the web build serves from
+        // vendor/wax-font-fallback (web/index.html) - not the app's type.
         await tester.pumpWidget(
           _host(const WaxProse('Holds every slot as it is')),
         );

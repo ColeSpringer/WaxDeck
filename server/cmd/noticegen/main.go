@@ -75,49 +75,73 @@ type pkg struct {
 
 // webVendorDir is where the Flutter app keeps the third-party files it
 // serves from its own origin, relative to the server module this runs
-// in. Their licenses sit beside them as <name>-LICENSE.txt.
+// in. A file there is one asset, licensed by <name>-LICENSE.txt beside
+// it. A directory there is a collection - files kept at the paths some
+// engine asks for, like the web engine's default font - and each entry
+// in it is an asset licensed the same way, by <entry>-LICENSE.txt
+// inside it: one licence over a whole tree would let a second family in
+// under the first one's terms.
 const webVendorDir = "../app/app/web/vendor"
 
 // vendoredWebNotices adds one block per vendored web asset's license.
 // A missing directory is not an error - a checkout can legitimately have
-// none - but a vendored file with no license beside it is, because that
-// is the case this exists to catch.
-func vendoredWebNotices(block func(title string, text []byte)) error {
-	entries, err := os.ReadDir(webVendorDir)
-	if errors.Is(err, fs.ErrNotExist) {
+// none - but an asset with no license beside it is, because that is the
+// case this exists to catch, and so is a license with nothing beside it,
+// which is what a removal or a half-finished refresh leaves.
+func vendoredWebNotices(dir string, block func(title string, text []byte)) error {
+	if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
+	return vendoredLicenses(dir, "web/vendor/", true, block)
+}
+
+// vendoredLicenses pairs the assets in dir with their licenses and adds
+// a block per license, titled by prefix. With collections set, a
+// directory is walked as a collection rather than taken as an asset.
+func vendoredLicenses(dir, prefix string, collections bool, block func(title string, text []byte)) error {
+	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return fmt.Errorf("reading %s: %w", webVendorDir, err)
+		return fmt.Errorf("reading %s: %w", dir, err)
 	}
-	var assets, licenses []string
+	var assets, licenses, inner []string
 	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if strings.HasSuffix(e.Name(), "-LICENSE.txt") {
+		switch {
+		case strings.HasSuffix(e.Name(), "-LICENSE.txt"):
 			licenses = append(licenses, e.Name())
-			continue
+		case e.IsDir() && collections:
+			inner = append(inner, e.Name())
+		default:
+			assets = append(assets, e.Name())
 		}
-		assets = append(assets, e.Name())
 	}
 	sort.Strings(assets)
 	sort.Strings(licenses)
+	sort.Strings(inner)
+	stems := map[string]bool{}
 	for _, asset := range assets {
-		want := strings.SplitN(asset, ".", 2)[0] + "-LICENSE.txt"
-		if !slices.Contains(licenses, want) {
-			return fmt.Errorf("vendored web asset %s has no %s beside it", asset, want)
+		stem := strings.SplitN(asset, ".", 2)[0]
+		stems[stem] = true
+		if want := stem + "-LICENSE.txt"; !slices.Contains(licenses, want) {
+			return fmt.Errorf("vendored web asset %s%s has no %s beside it", prefix, asset, want)
 		}
 	}
 	for _, name := range licenses {
-		text, err := os.ReadFile(filepath.Join(webVendorDir, name))
+		if !stems[strings.TrimSuffix(name, "-LICENSE.txt")] {
+			return fmt.Errorf("%s%s licenses nothing: no vendored asset beside it is named for it", prefix, name)
+		}
+		text, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			return err
 		}
 		if !utf8.Valid(text) {
 			return fmt.Errorf("%s: not UTF-8 text", name)
 		}
-		block("web/vendor/"+name, text)
+		block(prefix+name, text)
+	}
+	for _, name := range inner {
+		if err := vendoredLicenses(filepath.Join(dir, name), prefix+name+"/", false, block); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -273,7 +297,7 @@ func run(out string) error {
 	// in no Flutter NOTICES bundle either - that one covers pub packages
 	// - so this is the only place their terms can travel with the binary
 	// they are inside.
-	if err := vendoredWebNotices(block); err != nil {
+	if err := vendoredWebNotices(webVendorDir, block); err != nil {
 		return err
 	}
 

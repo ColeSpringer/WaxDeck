@@ -236,11 +236,19 @@ web:
 # A real file target, so the web bundle rebuilds only when a Dart source
 # is newer: no stale UI, no Flutter compile on Go-only iterations.
 WEB_STAMP := $(WEB_DIST)/flutter_bootstrap.js
-DART_SRCS := $(shell find app/app/lib -name '*.dart' 2>/dev/null) \
-             $(shell find app/packages -path '*/lib/*.dart' 2>/dev/null) \
-             app/app/pubspec.yaml
+# Everything the web build reads, so that none of it can change under a
+# bundle that stays: the Dart and the l10n bundles beside it, every font
+# and asset a pubspec declares, the pubspecs and the lockfile, and the
+# page template with the files served beside it. `make fonts`,
+# `make brand` and a dependency bump each change some of these without
+# touching a line of Dart.
+WEB_INPUTS := $(shell find app/app/lib app/app/web app/app/assets \
+                $(wildcard app/packages/*/lib app/packages/*/fonts app/packages/*/assets) \
+                -type f 2>/dev/null) \
+              $(wildcard app/pubspec.yaml app/pubspec.lock app/app/pubspec.yaml app/app/l10n.yaml \
+                app/packages/*/pubspec.yaml app/packages/*/l10n.yaml)
 
-$(WEB_STAMP): $(DART_SRCS)
+$(WEB_STAMP): $(WEB_INPUTS)
 	$(MAKE) web
 
 # Server binary: `make web build` embeds the UI; `make build TAGS=` gives

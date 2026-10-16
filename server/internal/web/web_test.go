@@ -106,15 +106,15 @@ func TestShellAnswersNavigationsOnly(t *testing.T) {
 	defer ts.Close()
 
 	// Subresource-shaped misses 404 wherever they land: a font the
-	// engine's fallback probes for (deliberately unrouted), a broken
+	// engine's fallback asks for and the build does not ship, a broken
 	// asset reference, a manifest. HTML with a 200 would feed the shell
 	// to font and wasm loaders, which fail later and stranger.
 	for _, tc := range []struct {
 		path    string
 		headers map[string]string
 	}{
-		{"/wax-font-fallback/notosans/v37/shard.woff2", map[string]string{"Sec-Fetch-Mode": "no-cors"}},
-		{"/assets/wax-font-fallback/roboto/v32/x.woff2", nil},
+		{"/vendor/wax-font-fallback/notosans/v37/shard.woff2", map[string]string{"Sec-Fetch-Mode": "no-cors"}},
+		{"/vendor/wax-font-fallback/roboto/v99/moved.woff2", nil},
 		{"/assets/packages/waxdeck_ui/assets/fonts/Missing.otf", nil},
 		{"/canvaskit/nothing.wasm", nil},
 		{"/manifest.json", map[string]string{"Sec-Fetch-Mode": "cors"}},

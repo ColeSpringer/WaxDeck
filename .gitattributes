@@ -7,6 +7,7 @@
 *.ico -text
 *.ttf -text
 *.otf -text
+*.woff2 -text
 *.wma -text
 *.ape -text
 *.wv -text
