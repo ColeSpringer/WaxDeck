@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../providers.dart';
+import '../sync/streamed_play_states.dart';
 
 /// How far through an item the caller is, as rows and cards draw it.
 ///
@@ -105,8 +106,12 @@ class PlayProgressController extends AsyncNotifier<Map<String, PlayProgress>> {
 
   static const separator = ',';
 
-  List<String> get pids =>
-      key.isEmpty ? const <String>[] : key.split(separator);
+  /// Split once: [apply] asks every live window on every report.
+  late final List<String> pids = key.isEmpty
+      ? const <String>[]
+      : key.split(separator);
+
+  late final Set<String> _members = pids.toSet();
 
   /// How many pids one read carries. The endpoint documents pages of
   /// 500; a listing page is smaller, so this only bites where something
@@ -115,6 +120,8 @@ class PlayProgressController extends AsyncNotifier<Map<String, PlayProgress>> {
 
   @override
   Future<Map<String, PlayProgress>> build() async {
+    final live = ref.read(liveProgressWindowsProvider)..add(this);
+    ref.onDispose(() => live.remove(this));
     final all = pids;
     if (all.isEmpty) return const <String, PlayProgress>{};
     final repository = ref.watch(repositoryProvider);
@@ -124,6 +131,18 @@ class PlayProgressController extends AsyncNotifier<Map<String, PlayProgress>> {
       for (final state in await repository.listPlayStates(slice)) {
         out[state.pid] = PlayProgress.of(state);
       }
+    }
+    // What the stream reported while the read was out is newer than what
+    // the read brought back, and a window with no value yet had nothing
+    // for [apply] to write it into; folded by the same rule.
+    final streamed = ref.read(streamedPlayStatesProvider);
+    for (final pid in all) {
+      final report = streamed[pid];
+      if (report == null) continue;
+      final held = out[pid];
+      out[pid] = held == null
+          ? PlayProgress.of(report)
+          : newerProgress(held, report);
     }
     return out;
   }
@@ -163,6 +182,18 @@ class PlayProgressController extends AsyncNotifier<Map<String, PlayProgress>> {
     return true;
   }
 
+  /// Takes [state] as the user stream reported it, without a read; a pid
+  /// outside this window is ignored, and so is a report older than what
+  /// the window already holds.
+  void apply(PlayState state) {
+    if (!_members.contains(state.pid)) return;
+    final held = this.state.value?[state.pid];
+    final next = held == null
+        ? PlayProgress.of(state)
+        : newerProgress(held, state);
+    if (!identical(next, held)) _write(state.pid, next);
+  }
+
   /// Puts [progress] into the held answer without a read.
   void _write(String pid, PlayProgress progress) {
     final current = state.value;
@@ -170,6 +201,13 @@ class PlayProgressController extends AsyncNotifier<Map<String, PlayProgress>> {
     state = AsyncData(<String, PlayProgress>{...current, pid: progress});
   }
 }
+
+/// The progress windows alive in a container: an echo reaches them here
+/// rather than through a read, which would bring a stale one back to life
+/// with a fetch nobody on screen asked for.
+final liveProgressWindowsProvider = Provider<Set<PlayProgressController>>(
+  (ref) => <PlayProgressController>{},
+);
 
 /// `autoDispose`, because the key is the set of rows on screen: a
 /// listing that pages mints a new key per page, and a family that held

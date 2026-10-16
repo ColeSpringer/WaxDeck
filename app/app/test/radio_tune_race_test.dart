@@ -77,6 +77,61 @@ void main() {
     await harness.endPlayback(tester);
   });
 
+  testWidgets('a failure of the stream the dial is leaving does not cancel '
+      'the station being tuned', (tester) async {
+    // The engine announces a failure once its probe answers, which can be
+    // seconds after the stream broke: by then the listener has tapped
+    // another station, whose tune is under way and owns nothing yet.
+    final repo = FakeRepository(items: [testItem('tr-A')]);
+    final coastal = _station('ra-1', 'Coastal FM');
+    final deck = _station('ra-2', 'Deck Radio');
+    for (final station in [coastal, deck]) {
+      repo.radioStationsByPid[station.pid] = station;
+    }
+    final engine = FakeEngine();
+    final container = playbackContainer(repo: repo, engine: engine);
+    final radio = container.read(radioPlaybackProvider.notifier);
+    await radio.play(coastal);
+    await tester.pumpAndSettle();
+    expect(engine.playing, isTrue);
+
+    final gate = Completer<void>();
+    repo.radioPlayInfoGates[deck.pid] = gate;
+    final tuning = radio.play(deck);
+    await tester.pump();
+    engine.failPlayback();
+    await tester.pump();
+    gate.complete();
+    await tuning;
+    await tester.pumpAndSettle();
+
+    expect(container.read(radioPlaybackProvider).station?.pid, deck.pid);
+    expect(engine.loadedUrl, contains(deck.pid));
+    expect(engine.playing, isTrue);
+
+    await radio.stop();
+  });
+
+  testWidgets('a station put back after a stop that would not land still '
+      'says when its stream fails', (tester) async {
+    final repo = FakeRepository(items: [testItem('tr-A')]);
+    final coastal = _station('ra-1', 'Coastal FM');
+    repo.radioStationsByPid[coastal.pid] = coastal;
+    final engine = FakeEngine();
+    final container = playbackContainer(repo: repo, engine: engine);
+    final radio = container.read(radioPlaybackProvider.notifier);
+    await radio.play(coastal);
+    await tester.pumpAndSettle();
+
+    engine.failNextStop = true;
+    await expectLater(radio.interrupt(), throwsA(isA<MediaWillNotRelease>()));
+    expect(container.read(radioPlaybackProvider).station?.pid, coastal.pid);
+
+    engine.failPlayback();
+    await tester.pumpAndSettle();
+    expect(container.read(radioPlaybackProvider).station, isNull);
+  });
+
   testWidgets('an item taking the engine cancels a tune still in its pause', (
     tester,
   ) async {

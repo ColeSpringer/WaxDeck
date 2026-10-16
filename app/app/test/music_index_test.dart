@@ -180,6 +180,46 @@ void main() {
     );
   });
 
+  testWidgets('the tracks index reads on past a run of hidden pages', (
+    tester,
+  ) async {
+    // Pages of rows this caller is not shown, more than a probe would
+    // read, are no proof the library holds no music.
+    final hidden = <ItemSummary>[
+      for (var i = 0; i < 6 * MusicItemsController.pageSize; i++)
+        _track('Hidden $i'),
+    ];
+    final repository = FakeRepository(
+      items: <ItemSummary>[...hidden, _track('Only Visible')],
+    )..hiddenFromListings.addAll(hidden.map((track) => track.pid));
+    await _pump(tester, const MusicListingScreen(), repository);
+
+    expect(find.text('No music yet'), findsNothing);
+    expect(find.text('Only Visible'), findsOneWidget);
+  });
+
+  testWidgets('a listing too short to scroll pages on by itself', (
+    tester,
+  ) async {
+    // One row on the first page and its cursor still out: nothing scrolls,
+    // so nothing but the screen itself asks for the next one.
+    final hidden = <ItemSummary>[
+      for (var i = 0; i < MusicItemsController.pageSize - 1; i++)
+        _track('Hidden $i'),
+    ];
+    final repository = FakeRepository(
+      items: <ItemSummary>[
+        _track('First Visible'),
+        ...hidden,
+        _track('Second Visible'),
+      ],
+    )..hiddenFromListings.addAll(hidden.map((track) => track.pid));
+    await _pump(tester, const MusicListingScreen(), repository);
+
+    expect(find.text('First Visible'), findsOneWidget);
+    expect(find.text('Second Visible'), findsOneWidget);
+  });
+
   testWidgets('a scroll that stops warms the covers just past it', (
     tester,
   ) async {

@@ -4,13 +4,58 @@ import { Locator, expect } from '@playwright/test';
 import { SemanticsIds, sem } from '../../semantics-ids';
 import { Surface } from '../context';
 import { T } from '../budgets';
-import { chooseFromMenu, clickThrough, clickToward, typeInto } from '../gestures';
+import {
+  chooseFromMenu,
+  clickThrough,
+  clickToward,
+  rectAtRest,
+  typeInto,
+} from '../gestures';
+
+/// What a control is called right now. Flutter publishes a button's
+/// label as its text rather than as `aria-label`, so reading only the
+/// attribute answers null and a guard built on it never fires.
+async function nameOf(control: Locator): Promise<string> {
+  return (await control.getAttribute('aria-label')) ?? (await control.textContent()) ?? '';
+}
+
+/// The beat between a rest's two reads: longer than the frames from one
+/// track ending to the next taking its place, which read Play under the
+/// old track's name. A gesture's quirk like `rectAtRest`'s, not a tier.
+const TRACK_CHANGE_BEAT = 400;
 
 export class Player extends Surface {
   /// Play/pause. Also the marker that something is playing at all,
   /// which is why so many navigation steps settle on it.
   toggle(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.playerToggle));
+  }
+
+  /// The deck bar's own play/pause, for playback that stays docked.
+  deckToggle(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.deckPlay));
+  }
+
+  /// The deck bar's skip to the next entry.
+  deckNext(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.deckNext));
+  }
+
+  /// The launch offer's Resume, standing in the deck bar's slot when a
+  /// launch found a queue to put back.
+  offerResume(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.deckOfferResume));
+  }
+
+  /// The Retry on the shell's toast after a start failed - the one a
+  /// listener at the deck bar has, since the pane is the full player's.
+  startRetry(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playerStartRetry));
+  }
+
+  /// The sleep timer's control, whose name says what is armed.
+  sleepTimer(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.sleepTimerOpen));
   }
 
   /// The trim chip, which reports time actually saved once the session
@@ -66,29 +111,149 @@ export class Player extends Surface {
   /// accessible name here (it announces the action, so a paused player
   /// offers Play), not something appearing or disappearing that
   /// `clickToward` could wait on.
-  ///
-  /// Read, click and assert are one retried unit, for two reasons that
-  /// both bite. Flutter web swallows a click while its handlers are
-  /// still attaching, which is why every other gesture here retries;
-  /// and the name is only trustworthy once something is playing, so a
-  /// single read against a player that has not started yet says "Play"
-  /// and would leave this returning with the clock still running - the
-  /// flake it exists to remove. Waiting for /Pause/ first is what makes
-  /// the guard mean "already paused" rather than "not started".
   async pause(): Promise<void> {
     await this.ready();
-    await expect(this.toggle()).toHaveAccessibleName(/Pause/i, {
-      timeout: T.nav,
-    });
+    await this.pauseWith(this.toggle());
+  }
+
+  /// [pause] from the deck bar, leaving playback docked rather than
+  /// expanding the player over the shell - whose chrome, the toasts and
+  /// the bar's own controls, a docked spec goes on to use.
+  async pauseDocked(): Promise<void> {
+    await this.pauseWith(this.deckToggle());
+  }
+
+  /// Read, press and assert as one retried unit, for two reasons that
+  /// both bite. Flutter web swallows a click while its handlers are still
+  /// attaching, which is why every other gesture here retries; and the
+  /// name is the play intent, which a player that has not been asked to
+  /// play yet reads as "Play", so a single read there would leave this
+  /// returning with the clock about to run. Waiting for /Pause/ first is
+  /// what makes the guard mean "already paused" rather than "not
+  /// started". The intent reads Pause from the moment a load means to
+  /// play, so a press then lands that start paused where it began: a spec
+  /// that wants the clock to have run first waits for it.
+  ///
+  /// And Play alone proves nothing: a press swallowed while the queue
+  /// moves on would pass for a landed one wherever the next track rests
+  /// on Play. A press counts once the transport rests on the track it was
+  /// made on ([restsOn]), and the latch that stops a retry pressing again
+  /// holds that track, raised only once the press was dispatched.
+  private async pauseWith(toggle: Locator): Promise<void> {
+    await expect(toggle).toHaveAccessibleName(/Pause/i, { timeout: T.nav });
+    let pressedOn: string | undefined;
     await expect(async () => {
-      if (/Play/i.test((await this.toggle().getAttribute('aria-label')) ?? '')) {
-        return;
-      }
+      if (pressedOn !== undefined && (await this.restsOn(toggle, pressedOn))) return;
+      // Only a control offering Pause is pressed: between tracks it reads
+      // Play, and a press then asks the next one to play.
+      await expect(toggle).toHaveAccessibleName(/Pause/i, { timeout: T.step });
+      const track = await this.nowPlaying();
+      await toggle.click({ force: true });
+      pressedOn = track;
+      await expect
+        .poll(() => this.restsOn(toggle, track), {
+          timeout: T.step,
+          message: 'the transport should rest on the track it was paused on',
+        })
+        .toBe(true);
+    }).toPass({ timeout: T.nav });
+  }
+
+  /// Whether the transport rests on [track]: the control offers Play and
+  /// the browser's media session still names that track. A track change
+  /// names the next one from the start of its load, so it never passes;
+  /// but between the old track ending and the next taking its place the
+  /// session still names the old one, which is why this reads twice, a
+  /// beat apart.
+  private async restsOn(toggle: Locator, track: string): Promise<boolean> {
+    const rests = async () =>
+      /Play/i.test(await nameOf(toggle)) && (await this.nowPlaying()) === track;
+    if (!(await rests())) return false;
+    await new Promise((resolve) => setTimeout(resolve, TRACK_CHANGE_BEAT));
+    return rests();
+  }
+
+  /// What the browser's media session names as playing; empty when it
+  /// names nothing.
+  private nowPlaying(): Promise<string> {
+    return this.ctx.page.evaluate(() => navigator.mediaSession?.metadata?.title ?? '');
+  }
+
+  /// Start the clock again from the full player, and settle when the
+  /// transport agrees it has: [pause] the other way round, with the
+  /// same retried unit and for the same reasons.
+  ///
+  /// The name is the play intent, not proof of sound: a stream that is
+  /// waiting for data reads Pause too, which is the state a spec about
+  /// what happens next wants to start from.
+  async play(): Promise<void> {
+    await this.ready();
+    await expect(async () => {
+      if (/Pause/i.test(await nameOf(this.toggle()))) return;
       await this.toggle().click({ force: true });
-      await expect(this.toggle()).toHaveAccessibleName(/Play/i, {
+      await expect(this.toggle()).toHaveAccessibleName(/Pause/i, {
         timeout: T.step,
       });
     }).toPass({ timeout: T.nav });
+  }
+
+  /// Accept the launch offer. Settles on the deck bar's transport, which
+  /// the offer stands in place of until it is taken.
+  async acceptOffer(): Promise<void> {
+    await clickThrough(this.offerResume(), this.deckToggle());
+  }
+
+  /// Arm the sleep timer to stop where the current chapter ends, opening
+  /// its sheet on the way; the end-of-chapter row is a book's alone. What
+  /// got armed is in the timer control's name, which is the spec's to
+  /// read. Restored per attempt for the reason [setSpeed] is: the control
+  /// sits on the player's dismissing scaffold.
+  async armEndOfChapter(): Promise<void> {
+    await chooseFromMenu(
+      this.sleepTimer(),
+      this.ctx.page.locator(sem(SemanticsIds.sleepTimerChapter)),
+      { restore: () => this.reopen() },
+    );
+  }
+
+  /// The full player's seek bar: a slider whose value is the position
+  /// spelled out against the length.
+  seekBar(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.playerSeek));
+  }
+
+  /// Press the seek bar at `fraction` of its length, the way a pointer
+  /// scrubs it: the press previews and the release commits. By
+  /// coordinate, because a position along a slider has no node of its own.
+  ///
+  /// Pressed again only while `landed` says no press took: over canvas a
+  /// press can be swallowed, and one that did land must not land twice,
+  /// since on a stream the server cuts a seek is a new encode. The caller
+  /// says what proves it landed, which for a cut is the mint it asks for.
+  async seekTo(fraction: number, landed: () => boolean): Promise<void> {
+    const page = this.ctx.page;
+    const bar = this.seekBar();
+    await expect(async () => {
+      if (!landed()) {
+        await rectAtRest(bar);
+        const box = await bar.boundingBox();
+        expect(box, 'the seek bar reports a box').toBeTruthy();
+        await page.mouse.click(box!.x + box!.width * fraction, box!.y + box!.height / 2);
+      }
+      await expect
+        .poll(landed, { timeout: T.step, message: 'the seek should land' })
+        .toBe(true);
+    }).toPass({ timeout: T.nav });
+  }
+
+  /// One press on a chapter row, which seeks the book to that chapter's
+  /// head and leaves play or pause as it was. One attempt, at rest: the
+  /// caller's own loop proves it landed, by the checkpoint the seek
+  /// writes.
+  async tapChapter(index: number): Promise<void> {
+    const row = this.chapter(index);
+    await rectAtRest(row);
+    await row.click({ force: true });
   }
 
   /// Choose a playback rate from the speed sheet. One tap to any rate,

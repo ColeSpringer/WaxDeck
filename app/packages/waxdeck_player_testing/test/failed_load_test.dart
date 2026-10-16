@@ -1,76 +1,15 @@
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
+import 'scripted_platform.dart';
+
 // just_audio 0.10.6 raises a failed activation twice: to the call, and
 // uncaught from a completer nothing listens to yet, which on web reached the
 // page. The engine answers the first and drops the second.
-
-/// A platform whose loads all fail the way the web's does on a file the
-/// browser cannot decode.
-class _RefusingPlatform extends JustAudioPlatform {
-  @override
-  Future<AudioPlayerPlatform> init(InitRequest request) async =>
-      _RefusingPlayer(request.id);
-
-  @override
-  Future<DisposePlayerResponse> disposePlayer(
-    DisposePlayerRequest request,
-  ) async => DisposePlayerResponse();
-
-  @override
-  Future<DisposeAllPlayersResponse> disposeAllPlayers(
-    DisposeAllPlayersRequest request,
-  ) async => DisposeAllPlayersResponse();
-}
-
-class _RefusingPlayer extends AudioPlayerPlatform {
-  _RefusingPlayer(super.id);
-
-  final _events = StreamController<PlaybackEventMessage>.broadcast();
-  final _data = StreamController<PlayerDataMessage>.broadcast();
-
-  @override
-  Stream<PlaybackEventMessage> get playbackEventMessageStream => _events.stream;
-
-  @override
-  Stream<PlayerDataMessage> get playerDataMessageStream => _data.stream;
-
-  @override
-  Future<LoadResponse> load(LoadRequest request) async =>
-      throw PlatformException(code: '4', message: 'Failed to load URL');
-
-  @override
-  Future<SetVolumeResponse> setVolume(SetVolumeRequest request) async =>
-      SetVolumeResponse();
-
-  @override
-  Future<SetSpeedResponse> setSpeed(SetSpeedRequest request) async =>
-      SetSpeedResponse();
-
-  @override
-  Future<SetLoopModeResponse> setLoopMode(SetLoopModeRequest request) async =>
-      SetLoopModeResponse();
-
-  @override
-  Future<SetShuffleModeResponse> setShuffleMode(
-    SetShuffleModeRequest request,
-  ) async => SetShuffleModeResponse();
-
-  @override
-  Future<PauseResponse> pause(PauseRequest request) async => PauseResponse();
-
-  @override
-  Future<DisposeResponse> dispose(DisposeRequest request) async {
-    await _events.close();
-    await _data.close();
-    return DisposeResponse();
-  }
-}
 
 /// A player whose activations leave [echo] uncaught, as wasm's microtask
 /// order always does; the VM's never shows it with the real player.
@@ -88,6 +27,12 @@ class _EchoingPlayer implements AudioPlayer {
 
   @override
   Stream<Duration?> get durationStream => _duration.stream;
+
+  @override
+  Stream<PlayerException> get errorStream => const Stream.empty();
+
+  @override
+  Stream<PlaybackEvent> get playbackEventStream => const Stream.empty();
 
   @override
   ProcessingState get processingState => ProcessingState.idle;
@@ -135,7 +80,7 @@ Future<({List<Object> uncaught, Object? thrown})> _through(
   await runZonedGuarded(() async {
     final engine = JustAudioEngine.withPlayer(
       player(),
-      probe: (_) async => StreamProbe.answered,
+      ask: answering(const ProbeAnswer(StreamProbe.answered)),
     );
     try {
       await (action ?? (e) => e.load('http://x/queued.ape'))(engine);
@@ -152,7 +97,7 @@ Future<({List<Object> uncaught, Object? thrown})> _through(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  setUp(() => JustAudioPlatform.instance = _RefusingPlatform());
+  setUp(() => JustAudioPlatform.instance = ScriptedPlatform(refuseLoads: true));
 
   test('a refused load is reported to its caller and nowhere else', () async {
     final result = await _through(

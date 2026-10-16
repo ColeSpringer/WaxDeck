@@ -136,6 +136,15 @@ abstract interface class MediaSessionPort {
   /// the transport, and a queue of them would appear in an order nobody
   /// chose.
   void showExtra(MediaSessionExtra? extra);
+
+  /// Says the app is opening media of its own that it means to play (a
+  /// start, a stream reopened where it stood), or that it no longer is.
+  ///
+  /// The engine reads stopped through such a load, idle where a failure
+  /// came before it: published as it is, the lock screen would offer play
+  /// over a transport the app draws as playing, and Android would let its
+  /// foreground service go in the middle of a recovery.
+  void publishOpening(bool opening);
 }
 
 /// The app's standing reference to the media session, bound once the
@@ -151,6 +160,7 @@ class MediaSessionHandle implements MediaSessionPort {
   MediaSessionItem? _pendingItem;
   List<MediaSessionItem> _pendingQueue = const <MediaSessionItem>[];
   int _pendingIndex = 0;
+  bool _pendingOpening = false;
 
   /// Set once the platform has answered that there will be no session.
   bool _hopeless = false;
@@ -178,7 +188,8 @@ class MediaSessionHandle implements MediaSessionPort {
     port
       ..publish(_pendingItem)
       ..publishQueue(_pendingQueue, index: _pendingIndex)
-      ..showExtra(_pendingExtra);
+      ..showExtra(_pendingExtra)
+      ..publishOpening(_pendingOpening);
   }
 
   @override
@@ -208,5 +219,12 @@ class MediaSessionHandle implements MediaSessionPort {
     if (_hopeless) return;
     _pendingExtra = extra;
     _port?.showExtra(extra);
+  }
+
+  @override
+  void publishOpening(bool opening) {
+    if (_hopeless) return;
+    _pendingOpening = opening;
+    _port?.publishOpening(opening);
   }
 }

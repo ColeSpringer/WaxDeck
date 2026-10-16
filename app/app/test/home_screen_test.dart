@@ -8,6 +8,8 @@ import 'package:waxdeck/src/auth/auth_controller.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
 import 'package:waxdeck/src/home/home_shelves.dart';
+import 'package:waxdeck/src/home/item_shelf.dart';
+import 'package:waxdeck/src/library/page_walk.dart';
 import 'package:waxdeck/src/music/artist_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/podcasts/episode_screen.dart';
@@ -16,6 +18,9 @@ import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/review/review_controller.dart';
 import 'package:waxdeck/src/shell/routes.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/sync/server_event_bus.dart';
+import 'package:waxdeck/src/sync/streamed_play_states.dart';
+import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -58,10 +63,6 @@ FakeRepository _repo() {
       ),
     ],
   );
-  repo.browseLists[DiscoveryList.recentlyPlayed] = <ItemSummary>[
-    _track(_halfHeard, 'Half Heard'),
-    _track(_favourite, 'Old Favourite'),
-  ];
   repo.browseLists[DiscoveryList.recentlyAdded] = <ItemSummary>[
     _track(_sealed, 'Still Sealed'),
   ];
@@ -74,23 +75,79 @@ FakeRepository _repo() {
   repo.browseLists[DiscoveryList.mostPlayed] = <ItemSummary>[
     _track(_halfHeard, 'Half Heard'),
   ];
-  // Half heard is in progress; the favourite was finished, which is what
-  // keeps it off the resume shelf.
+  // Half heard counted a play once and is part way through again, which
+  // is what puts a track on the resume shelf; the favourite was
+  // finished, which keeps it off.
   repo.playPositions[_halfHeard] = 60000;
+  repo.playStateLastPlayedAt[_halfHeard] = DateTime.utc(2026, 9, 30);
+  repo.playStateUpdatedAt[_halfHeard] = DateTime.utc(2026, 10, 1);
   repo.playPositions[_favourite] = 214000;
   repo.finishedPids.add(_favourite);
   return repo;
 }
 
-Widget _host(FakeRepository repo) => ProviderScope(
+/// The pids [shelf] draws, in its order.
+List<String> _shelfOrder(WidgetTester tester, String shelf) {
+  final prefix = SemanticsIds.shelfCard(shelf, '');
+  return <String>[
+    for (final card in tester.widgetList<MediaCard>(find.byType(MediaCard)))
+      if (card.data.semanticsId case final id? when id.startsWith(prefix))
+        id.substring(prefix.length),
+  ];
+}
+
+/// Rows the listings drop for this caller after they cut a page, which
+/// the contract allows (the server's content check still does it).
+/// Titled to sort first, which is what puts whole empty pages at the head
+/// of the listing.
+List<ItemSummary> _foreignEpisodes(int count) => <ItemSummary>[
+  for (var i = 0; i < count; i++)
+    ItemSummary(
+      pid: 'tr-01JZX5N8QW3F4V9T2B7KF${i.toString().padLeft(5, '0')}',
+      mediaType: MediaType.podcast,
+      title: '"a look into feed drops" $i',
+      artist: 'Somebody Else\'s Show',
+      durationMs: 1800000,
+    ),
+];
+
+/// [repo] with [count] episodes at the head of the listing that this
+/// caller's content settings refuse.
+FakeRepository _behindForeignEpisodes(FakeRepository repo, int count) {
+  final episodes = _foreignEpisodes(count);
+  repo.libraryItems.insertAll(0, episodes);
+  repo.hiddenFromListings.addAll(episodes.map((e) => e.pid));
+  return repo;
+}
+
+/// The library-wide listing reads home's probe made.
+List<({MediaType? mediaType, String? cursor, int? limit})> _probeReads(
+  FakeRepository repo,
+) => repo.listItemsCalls.where((call) => call.mediaType == null).toList();
+
+int _browsesOf(FakeRepository repo, DiscoveryList list) =>
+    repo.browseCalls.where((call) => call.list == list).length;
+
+/// [bus] stands in for the user stream, fed by hand.
+Widget _host(FakeRepository repo, {ServerEventBus? bus}) => ProviderScope(
   overrides: [
     repositoryProvider.overrideWithValue(repo),
     audioEngineProvider.overrideWithValue(FakeEngine()),
     credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
     artworkStoreProvider.overrideWithValue(FakeArtworkStore()),
+    if (bus != null) serverEventBusProvider.overrideWithValue(bus),
   ],
   child: routedHost(const HomeScreen()),
 );
+
+/// How far round [shelf]'s card for [pid] draws its ring.
+double? _ring(WidgetTester tester, String shelf, String pid) => tester
+    .widgetList<MediaCard>(find.byType(MediaCard))
+    .firstWhere(
+      (card) => card.data.semanticsId == SemanticsIds.shelfCard(shelf, pid),
+    )
+    .data
+    .progress;
 
 /// Mounts home in a window tall enough to build every shelf.
 ///
@@ -98,11 +155,15 @@ Widget _host(FakeRepository repo) => ProviderScope(
 /// off-screen slivers are not built, so a default 800x600 test window
 /// draws the first two shelves and nothing else. A test about which
 /// shelves exist has to be able to see them all.
-Future<void> _pumpHome(WidgetTester tester, FakeRepository repo) async {
+Future<void> _pumpHome(
+  WidgetTester tester,
+  FakeRepository repo, {
+  ServerEventBus? bus,
+}) async {
   tester.view.physicalSize = const Size(1200, 4000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(_host(repo));
+  await tester.pumpWidget(_host(repo, bus: bus));
   await tester.pumpAndSettle();
 }
 
@@ -245,6 +306,158 @@ void main() {
     );
   });
 
+  testWidgets('continue listening holds spoken word part way through, '
+      'counted or not, and a track once a play of it has counted', (
+    tester,
+  ) async {
+    // The checkpoints a player writes count no play below the medium's
+    // bar, so a book or an episode left part way through has a position
+    // and no play: a list of counted plays never offered it back.
+    const skipped = 'tr-01JZX5N8QW3F4V9T2B7KDSKIP01';
+    const episode = 'tr-01JZX5N8QW3F4V9T2B7KDEPISOD';
+    final repo = _repo()
+      ..libraryItems.addAll(<ItemSummary>[
+        _track(skipped, 'Skipped Through'),
+        const ItemSummary(
+          pid: episode,
+          mediaType: MediaType.podcast,
+          title: 'Second Breakfast',
+          artist: 'The Prancing Pony Hour',
+          durationMs: 1800000,
+        ),
+      ])
+      ..playPositions[_book] = 1800000
+      ..playStateUpdatedAt[_book] = DateTime.utc(2026, 10, 3)
+      ..playPositions[episode] = 600000
+      ..playStateUpdatedAt[episode] = DateTime.utc(2026, 10, 2)
+      // A track left a few seconds in: a position, and nothing counted.
+      ..playPositions[skipped] = 5000
+      ..playStateUpdatedAt[skipped] = DateTime.utc(2026, 10, 4);
+    await _pumpHome(tester, repo);
+
+    expect(_shelfOrder(tester, 'continue'), <String>[
+      _book,
+      episode,
+      _halfHeard,
+    ], reason: 'most recently progressed first');
+  });
+
+  testWidgets('a report for an item on no shelf rebuilds none of them', (
+    tester,
+  ) async {
+    // The reports map is replaced on every report, for any item, and a
+    // shelf that watched all of it re-sorted itself each time.
+    await _pumpHome(tester, _repo());
+    final shelves = tester.elementList(find.byType(ItemShelf)).toList();
+    expect(shelves, isNotEmpty);
+    ProviderScope.containerOf(shelves.first)
+        .read(streamedPlayStatesProvider.notifier)
+        .record(
+          PlayState(
+            pid: 'tr-01JZX5N8QW3F4V9T2B7KDELSEWH',
+            positionMs: 1000,
+            played: false,
+            finished: false,
+            playCount: 0,
+            starred: false,
+            updatedAt: DateTime.utc(2026, 10, 1),
+          ),
+        );
+    expect(shelves.where((shelf) => shelf.dirty), isEmpty);
+  });
+
+  testWidgets('a position the stream reports moves the resume ring without '
+      'a refetch', (tester) async {
+    // A player checkpoints every few seconds; each report used to refetch
+    // every shelf, which was also the only thing that moved the ring.
+    final bus = ServerEventBus();
+    addTearDown(bus.dispose);
+    final repo = _repo()
+      ..sessionState = const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(id: 'us-1', username: 'listener'),
+      );
+    await _pumpHome(tester, repo, bus: bus);
+    final binder = ProviderScope.containerOf(
+      tester.element(find.byType(HomeScreen)),
+    ).listen(syncBinderProvider, (_, _) {});
+    addTearDown(binder.close);
+    ServerSyncEvent report(int positionMs, int minute) => ServerSyncEvent(
+      kind: 'play-state',
+      pid: _halfHeard,
+      playState: PlayState(
+        pid: _halfHeard,
+        positionMs: positionMs,
+        played: false,
+        finished: false,
+        playCount: 0,
+        starred: false,
+        updatedAt: DateTime.utc(2026, 10, 1, 12, minute),
+      ),
+    );
+    // The first report of an item can change what a shelf holds, so it
+    // is let through; the window it opens is waited out.
+    bus.add(report(60000, 1));
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    final browses = repo.browseCalls.length;
+
+    bus.add(report(107000, 2));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+
+    expect(_ring(tester, 'continue', _halfHeard), closeTo(0.5, 0.001));
+    expect(repo.browseCalls.length, browses);
+  });
+
+  testWidgets('a position the stream reports brings its card to the front '
+      'of the resume shelf without a refetch', (tester) async {
+    // The shelf is ordered by progress, and a report newer than the read
+    // is progress made since it: newer than anything the read ordered.
+    final bus = ServerEventBus();
+    addTearDown(bus.dispose);
+    final repo = _repo()
+      ..sessionState = const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(id: 'us-1', username: 'listener'),
+      )
+      ..playPositions[_book] = 1800000
+      ..playStateUpdatedAt[_book] = DateTime.utc(2026, 10, 3);
+    await _pumpHome(tester, repo, bus: bus);
+    final binder = ProviderScope.containerOf(
+      tester.element(find.byType(HomeScreen)),
+    ).listen(syncBinderProvider, (_, _) {});
+    addTearDown(binder.close);
+    expect(_shelfOrder(tester, 'continue'), <String>[_book, _halfHeard]);
+    ServerSyncEvent report(int positionMs, int minute) => ServerSyncEvent(
+      kind: 'play-state',
+      pid: _halfHeard,
+      playState: PlayState(
+        pid: _halfHeard,
+        positionMs: positionMs,
+        played: true,
+        finished: false,
+        playCount: 1,
+        lastPlayedAt: DateTime.utc(2026, 9, 30),
+        starred: false,
+        updatedAt: DateTime.utc(2026, 10, 5, 12, minute),
+      ),
+    );
+    // The first report of an item can change what a shelf holds, so it
+    // is let through; the window it opens is waited out.
+    bus.add(report(60000, 1));
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    final browses = repo.browseCalls.length;
+
+    bus.add(report(107000, 2));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 6));
+
+    expect(_shelfOrder(tester, 'continue'), <String>[_halfHeard, _book]);
+    expect(repo.browseCalls.length, browses);
+  });
+
   testWidgets('a loading shelf ghosts instead of vanishing', (tester) async {
     final repo = _repo()..browseGate = Completer<void>();
     await _pumpHome(tester, repo);
@@ -283,6 +496,164 @@ void main() {
     expect(_byId(SemanticsIds.shelf('recent')), findsNothing);
   });
 
+  group('whether the library holds anything', () {
+    testWidgets('a first page that is empty but continues is not first-run', (
+      tester,
+    ) async {
+      // A show whose episodes sort first is one this caller's content
+      // settings refuse, so the head of the listing is rows it may not
+      // see.
+      final repo = _behindForeignEpisodes(_repo(), 60);
+      await _pumpHome(tester, repo);
+
+      expect(find.text('Nothing here yet'), findsNothing);
+      expect(_byId(SemanticsIds.shelf('recent')), findsOneWidget);
+    });
+
+    testWidgets('a listing read to its end with nothing in it is first-run', (
+      tester,
+    ) async {
+      final repo = _behindForeignEpisodes(FakeRepository(), 120);
+      await _pumpHome(tester, repo);
+
+      expect(find.text('Nothing here yet'), findsOneWidget);
+      expect(
+        _probeReads(repo).last.cursor,
+        isNotNull,
+        reason: 'only the page without a cursor proves the library empty',
+      );
+    });
+
+    testWidgets('the probe asks for one row, and reads wide only past a '
+        'page that showed nothing', (tester) async {
+      // A row answers the question whenever the listing shows it. Only a
+      // hidden one leaves the page saying nothing, and then a wide page
+      // is worth reading rather than a row at a time.
+      final repo = _behindForeignEpisodes(_repo(), 60);
+      await _pumpHome(tester, repo);
+
+      final limits = <int?>[for (final read in _probeReads(repo)) read.limit];
+      expect(limits.first, 1);
+      expect(limits.skip(1), isNotEmpty);
+      expect(limits.skip(1), everyElement(kProbePageSize));
+    });
+
+    testWidgets('a probe that cannot prove emptiness shows the shelves', (
+      tester,
+    ) async {
+      // Past what the probe reads, it cannot say the library is empty,
+      // and a first-run invitation over a full library is the worse
+      // mistake: each shelf hides itself when it has nothing.
+      final repo = _behindForeignEpisodes(_repo(), 400);
+      await _pumpHome(tester, repo);
+
+      expect(find.text('Nothing here yet'), findsNothing);
+      expect(_byId(SemanticsIds.shelf('recent')), findsOneWidget);
+      expect(
+        _probeReads(repo),
+        hasLength(kProbePageBudget),
+        reason: 'the budget, no more',
+      );
+    });
+  });
+
+  group('a shelf over a filtered list', () {
+    testWidgets('reads past an empty page that carries a cursor', (
+      tester,
+    ) async {
+      final repo = _repo()
+        ..browsePages[DiscoveryList.recentlyAdded] = <ItemPage>[
+          const ItemPage(items: <ItemSummary>[], nextCursor: '1'),
+          const ItemPage(items: <ItemSummary>[], nextCursor: '2'),
+          ItemPage(items: <ItemSummary>[_track(_sealed, 'Still Sealed')]),
+        ];
+      await _pumpHome(tester, repo);
+
+      expect(_byId(SemanticsIds.shelfCard('recent', _sealed)), findsOneWidget);
+    });
+
+    testWidgets('stops after its page budget', (tester) async {
+      final repo = _repo()
+        ..browsePages[DiscoveryList.recentlyAdded] = <ItemPage>[
+          for (var i = 1; i <= 3; i++)
+            ItemPage(items: const <ItemSummary>[], nextCursor: '$i'),
+          ItemPage(items: <ItemSummary>[_track(_sealed, 'Still Sealed')]),
+        ];
+      await _pumpHome(tester, repo);
+
+      expect(_byId(SemanticsIds.shelf('recent')), findsNothing);
+      expect(_browsesOf(repo, DiscoveryList.recentlyAdded), 3);
+    });
+
+    testWidgets('keeps what it read when a later page fails', (tester) async {
+      // A short page sends the shelf on to the next; that one failing is
+      // no reason to throw away the cards the first already gave.
+      final repo = _repo()
+        ..browsePages[DiscoveryList.recentlyAdded] = <ItemPage>[
+          ItemPage(
+            items: <ItemSummary>[_track(_sealed, 'Still Sealed')],
+            nextCursor: '1',
+          ),
+        ]
+        ..rejectedCursors.add('1');
+      await _pumpHome(tester, repo);
+
+      expect(_byId(SemanticsIds.shelfCard('recent', _sealed)), findsOneWidget);
+    });
+
+    testWidgets('reads positions for each page it draws from', (tester) async {
+      final repo = _repo()
+        ..browsePages[DiscoveryList.inProgress] = <ItemPage>[
+          ItemPage(
+            items: <ItemSummary>[_track(_favourite, 'Old Favourite')],
+            nextCursor: '1',
+          ),
+          ItemPage(items: <ItemSummary>[_track(_halfHeard, 'Half Heard')]),
+        ];
+      await _pumpHome(tester, repo);
+
+      expect(
+        repo.playStateBatches,
+        containsAll(<Object>[
+          <String>[_favourite],
+          <String>[_halfHeard],
+        ]),
+      );
+    });
+
+    test('a random list carries its seed to the next page', () async {
+      // A shuffle read on with a fresh seed is a different shuffle, so
+      // the second page would repeat or skip rows of the first.
+      final repo =
+          FakeRepository(
+              items: <ItemSummary>[
+                ..._foreignEpisodes(kHomeShelfCards),
+                _track(_sealed, 'Still Sealed'),
+              ],
+            )
+            ..hiddenFromListings.addAll(
+              _foreignEpisodes(kHomeShelfCards).map((e) => e.pid),
+            );
+      final shelf = FutureProvider.autoDispose<HomeShelfItems>(
+        (ref) => readShelf(ref, DiscoveryList.random),
+      );
+      final container = ProviderContainer(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+      final held = container.listen(shelf, (_, _) {});
+      addTearDown(held.close);
+
+      final read = await container.read(shelf.future);
+
+      expect(read.items.map((i) => i.pid), [_sealed]);
+      expect(repo.randomBrowses, [
+        (seed: null, cursor: null),
+        (seed: repo.randomSeed, cursor: '$kHomeShelfCards'),
+      ]);
+    });
+  });
+
   testWidgets('an uploader gets the add top-right, not a floating one', (
     tester,
   ) async {
@@ -316,7 +687,7 @@ void main() {
     expect(find.text('Add to library'), findsOneWidget);
   });
 
-  testWidgets('the shelves ask for the lists 6.1 names, once each', (
+  testWidgets('the shelves ask for the lists home draws, once each', (
     tester,
   ) async {
     final repo = _repo();
@@ -324,7 +695,7 @@ void main() {
 
     final asked = repo.browseCalls.map((call) => call.list).toList();
     expect(asked.toSet(), <DiscoveryList>{
-      DiscoveryList.recentlyPlayed,
+      DiscoveryList.inProgress,
       DiscoveryList.recentlyAdded,
       DiscoveryList.neverPlayed,
       DiscoveryList.rediscover,
@@ -499,14 +870,26 @@ void main() {
     semantics.dispose();
   });
 
-  testWidgets('a shelf reads a window and draws a card row', (tester) async {
-    final repo = _repo();
+  testWidgets('a shelf draws a card row, however long its list', (
+    tester,
+  ) async {
+    final repo = _repo()
+      ..browseLists[DiscoveryList.recentlyAdded] = <ItemSummary>[
+        for (var i = 0; i < 2 * kHomeShelfCards; i++)
+          _track(
+            'tr-01JZX5N8QW3F4V9T2B7KDROW${'$i'.padLeft(3, '0')}',
+            'Row $i',
+          ),
+      ];
     await _pumpHome(tester, repo);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(HomeScreen)),
+    );
 
-    // The window is generous on purpose: the resume shelf drops what is
-    // finished, and a media-scoped shelf gets a filtered window rather
-    // than a filtered list.
-    expect(kHomeShelfWindow, greaterThan(kHomeShelfCards));
+    expect(
+      container.read(recentlyAddedShelfProvider).value?.items,
+      hasLength(kHomeShelfCards),
+    );
   });
 
   testWidgets('additions waiting in review get a door on home', (tester) async {

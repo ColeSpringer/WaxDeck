@@ -1,11 +1,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
@@ -136,6 +139,8 @@ QueueTimeline _mint(List<String> pids, {required String format, String? pid}) {
     members: members,
   );
 }
+
+final _l10n = AppLocalizationsEn();
 
 void main() {
   test(
@@ -371,6 +376,77 @@ void main() {
     },
   );
 
+  test('a timeline lost again before it proves itself starts the item the '
+      'ordinary way', () async {
+    // Each loss is a re-mint, a render and a slot on the server: a stream
+    // that keeps failing at once gets two and then plays the item on its
+    // own, rather than minting once per loss for as long as it fails.
+    final h = _harness();
+    h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+    await pumpEventQueue();
+    await _play(h.engine, 10000);
+
+    for (var i = 0; i < 3; i++) {
+      h.engine.loseTimeline();
+      await pumpEventQueue();
+    }
+
+    expect(h.repo.timelineCalls, hasLength(3), reason: 'two re-mints');
+    expect(h.engine.loadedTimeline, isNull);
+    expect(h.engine.loadedUrl, contains(_a));
+    expect(h.engine.playing, isTrue);
+  });
+
+  test('a rendering that will not load at the start plays the item the '
+      'ordinary way', () async {
+    // The rendering is what failed, not the track: a skip would spend the
+    // queue on a stream every member shares, and a retry would be handed
+    // the same rendering back.
+    final h = _harness();
+    h.engine
+      ..failNextLoad = true
+      ..loadFault = MediaFault.transport;
+    h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+    await pumpEventQueue();
+    await pumpEventQueue();
+
+    expect(h.repo.timelineCalls, hasLength(1));
+    expect(h.engine.loadedTimeline, isNull);
+    expect(h.engine.loadedUrl, contains(_a));
+    expect(h.engine.playing, isTrue);
+    expect(h.container.read(nowPlayingProvider).error, isNull);
+    expect(h.container.queueState.currentPid, _a);
+  });
+
+  test('a rendering the transcode limit refused at its first fetch says '
+      'the queue plays one track at a time', () async {
+    // Nothing had played, so playback did not pause: the item starts the
+    // ordinary way, which is what a refusal at the mint leads to as well.
+    final h = _harness();
+    final raised = <ShellMessage>[];
+    h.container.listen(shellMessengerProvider, (_, next) {
+      if (next != null) raised.add(next);
+    });
+    h.engine
+      ..failNextLoad = true
+      ..loadFault = MediaFault.transport
+      ..loadRefusal = const StreamRefusal(
+        status: 429,
+        code: 'transcode-limited',
+      );
+    h.container.playback.play([testItem(_a), testItem(_b)], source: _album);
+    await pumpEventQueue();
+    await pumpEventQueue();
+
+    expect(h.engine.loadedUrl, contains(_a));
+    expect(h.engine.playing, isTrue);
+    expect(
+      [for (final m in raised) m.resolve(_l10n)],
+      [_l10n.playerGaplessBusy],
+    );
+    expect(h.container.read(webGaplessStatusProvider), 'transcode-limited');
+  });
+
   test('an engine that cannot play a timeline is never asked to', () async {
     final h = _harness();
     // A browser whose player library never arrived, or whose media
@@ -451,6 +527,37 @@ void main() {
     },
   );
 
+  test(
+    'a mint the transcode limit turned down says so once on the shell',
+    () async {
+      final h = _harness();
+      final raised = <ShellMessage>[];
+      h.container.listen(shellMessengerProvider, (_, next) {
+        if (next != null) raised.add(next);
+      });
+      h.repo.timelineError = WaxDeckApiException(
+        code: 'transcode-limited',
+        message: 'busy',
+        statusCode: 429,
+      );
+      h.container.playback.play([
+        testItem(_a),
+        testItem(_b),
+        testItem(_c),
+      ], source: _album);
+      await pumpEventQueue();
+      h.container.queue.jumpTo(1);
+      await pumpEventQueue();
+
+      final busy = raised.where(
+        (m) => m.resolve(_l10n) == _l10n.playerGaplessBusy,
+      );
+      expect(busy, hasLength(1), reason: 'said as it happens, not per track');
+      expect(h.engine.playing, isTrue, reason: 'the ordinary path plays on');
+      h.repo.timelineError = null;
+    },
+  );
+
   test('a member the stream will not reach next is never armed', () async {
     final h = _harness();
     h.container.playback.play([
@@ -492,6 +599,11 @@ void main() {
       expect(h.container.read(webGaplessStatusProvider), 'transcode-limited');
       expect(h.repo.timelineCalls, hasLength(1), reason: 'no re-mint helps');
       expect(h.engine.playing, isFalse);
+      expect(
+        h.container.read(shellMessengerProvider)?.resolve(_l10n),
+        _l10n.playerGaplessPaused,
+        reason: 'playback stopped, and the listener is told why',
+      );
     },
   );
 

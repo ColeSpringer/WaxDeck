@@ -4,6 +4,17 @@ import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../sync/sync_providers.dart';
 
+/// Whether [next] is a rejected mutation: the failure the protocol emits
+/// over the settled value it then restores. A read that fails - the
+/// first, or one a change elsewhere asked for - lands after a load
+/// instead, and is nothing the user tapped.
+bool rejectedMutation<T>(AsyncValue<T>? previous, AsyncValue<T> next) =>
+    next.hasError &&
+    !next.isLoading &&
+    previous != null &&
+    previous.hasValue &&
+    !previous.isLoading;
+
 /// The optimistic-mutation protocol shared by the play-state controllers
 /// (items, and their artist/album twin).
 ///

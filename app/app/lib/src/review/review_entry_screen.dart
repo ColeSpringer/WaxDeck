@@ -4,6 +4,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../shell/async_box_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -111,9 +112,15 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
 
   @override
   Widget build(BuildContext context) {
-    final detail = ref.watch(reviewEntryProvider(widget.entryId));
-    return switch (detail) {
-      AsyncData(:final value) => Column(
+    // The shared face rather than a switch on the state's type: a read
+    // Riverpod is retrying is a loading state carrying its error, which a
+    // type switch drew as a skeleton for as long as the retries ran.
+    return AsyncBoxFace<ReviewEntryDetail>(
+      state: ref.watch(reviewEntryProvider(widget.entryId)),
+      skeleton: SkeletonShape.detail,
+      errorTitle: context.l10n.reviewEntryLoadError,
+      onRetry: () => ref.invalidate(reviewEntryProvider(widget.entryId)),
+      builder: (context, value) => Column(
         children: <Widget>[
           Expanded(child: _body(context, value)),
           _ActionBar(
@@ -124,16 +131,7 @@ class _ReviewEntryViewState extends ConsumerState<ReviewEntryView> {
           ),
         ],
       ),
-      AsyncError(:final error) => Padding(
-        padding: const EdgeInsets.all(WaxSpace.s16),
-        child: ErrorState(
-          title: context.l10n.reviewEntryLoadError,
-          message: context.explain(error),
-          onRetry: () => ref.invalidate(reviewEntryProvider(widget.entryId)),
-        ),
-      ),
-      _ => const SkeletonShapes(shape: SkeletonShape.detail),
-    };
+    );
   }
 
   Widget _body(BuildContext context, ReviewEntryDetail detail) {

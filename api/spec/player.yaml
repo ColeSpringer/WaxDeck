@@ -291,8 +291,10 @@ paths:
         after which re-requesting answers 201 immediately. A rendering
         counts against the concurrent transcode limits like a stream
         does: one slot a listener, however many timelines they hold
-        live at once, taken at the mint and given back once every one
-        of them has gone unfetched for a minute - so a mint over the
+        live at once (and the HLS streams `getPlayInfo` serves them
+        share it), taken at the mint unless they hold it already and
+        given back once every one of those has gone unfetched for a
+        minute - so a mint over the
         cap answers `transcode-limited` before anything plays, and a
         fetch resuming a listen whose slot was released can answer it
         too. A client that stops playing releases the rendering it

@@ -120,6 +120,12 @@ class _HangingPlayer implements AudioPlayer {
   Stream<ProcessingState> get processingStateStream => _states.stream;
 
   @override
+  Stream<PlayerException> get errorStream => const Stream.empty();
+
+  @override
+  Stream<PlaybackEvent> get playbackEventStream => const Stream.empty();
+
+  @override
   bool get playing => _playing;
 
   @override
@@ -199,16 +205,22 @@ class _HangingPlayer implements AudioPlayer {
 /// the run.
 const _patience = Duration(seconds: 3);
 
+/// A probe that finds [found] whatever it is asked.
+StreamAsk _finding(StreamProbe found) =>
+    (_, {segmentAt}) async => ProbeAnswer(found);
+
 /// An engine over [player] with a deadline short enough to wait out.
 JustAudioEngine _engine(
   _HangingPlayer player, {
   required StreamProbe found,
   Duration deadline = const Duration(milliseconds: 40),
+  bool isWeb = false,
 }) => JustAudioEngine.withPlayer(
   player,
   loadDeadline: deadline,
   stopGrace: const Duration(milliseconds: 40),
-  probe: (_) async => found,
+  ask: _finding(found),
+  isWeb: isWeb,
 );
 
 void main() {
@@ -241,6 +253,20 @@ void main() {
     expect(fault, MediaFault.source);
   });
 
+  test('an HLS playlist that answers does not make the media bad', () async {
+    // The presentation's segments are where it fails; its master answers
+    // regardless, so the load that never finished is the way to it.
+    final player = _HangingPlayer();
+    final engine = _engine(player, found: StreamProbe.answered);
+    addTearDown(engine.dispose);
+
+    final fault = await engine
+        .load('http://x/media/hls/master.m3u8?it=k&mt=t')
+        .then<MediaFault?>((_) => null)
+        .onError<MediaLoadException>((e, _) => e.fault);
+    expect(fault, MediaFault.transport);
+  });
+
   test('a URL that refuses the file is the media too', () async {
     // The case the desktop had no answer for: a file the server will
     // not serve as audio answers 415, mpv sits on it until the
@@ -257,6 +283,64 @@ void main() {
         .then<MediaFault?>((_) => null)
         .onError<MediaLoadException>((e, _) => e.fault);
     expect(fault, MediaFault.source);
+  });
+
+  test('on the web, a URL that answers is not the media', () async {
+    // The element reports a file it cannot decode, so a load that never
+    // finished there is the way to it (a player held behind another
+    // call), and blaming the file skipped a good track.
+    final player = _HangingPlayer();
+    final engine = _engine(player, found: StreamProbe.answered, isWeb: true);
+    addTearDown(engine.dispose);
+
+    final fault = await engine
+        .load('http://x/a.mp3')
+        .then<MediaFault?>((_) => null)
+        .onError<MediaLoadException>((e, _) => e.fault);
+    expect(fault, MediaFault.transport);
+  });
+
+  test(
+    'on the web, a URL the server will not serve is still the media',
+    () async {
+      final player = _HangingPlayer();
+      final engine = _engine(
+        player,
+        found: StreamProbe.unplayable,
+        isWeb: true,
+      );
+      addTearDown(engine.dispose);
+
+      final fault = await engine
+          .load('http://x/garbage.flac')
+          .then<MediaFault?>((_) => null)
+          .onError<MediaLoadException>((e, _) => e.fault);
+      expect(fault, MediaFault.source);
+    },
+  );
+
+  test('a refusal the probe read is never the media', () async {
+    // The server answered and said why; whatever else came back, that is
+    // the way to the file and not the file.
+    final player = _HangingPlayer();
+    final engine = JustAudioEngine.withPlayer(
+      player,
+      loadDeadline: const Duration(milliseconds: 40),
+      stopGrace: const Duration(milliseconds: 40),
+      ask: (_, {segmentAt}) async => const ProbeAnswer(
+        StreamProbe.answered,
+        StreamRefusal(status: 429, code: 'transcode-limited'),
+      ),
+      isWeb: false,
+    );
+    addTearDown(engine.dispose);
+
+    final error = await engine
+        .load('http://x/a.mp3')
+        .then<MediaLoadException?>((_) => null)
+        .onError<MediaLoadException>((e, _) => e);
+    expect(error?.fault, MediaFault.transport);
+    expect(error?.refusal?.code, 'transcode-limited');
   });
 
   test('a URL that reaches nothing is the transport', () async {
@@ -331,7 +415,7 @@ void main() {
       player,
       loadDeadline: const Duration(milliseconds: 200),
       stopGrace: const Duration(milliseconds: 40),
-      probe: (_) async => StreamProbe.unreachable,
+      ask: _finding(StreamProbe.unreachable),
     );
     addTearDown(engine.dispose);
 
@@ -364,7 +448,7 @@ void main() {
     final engine = JustAudioEngine.withPlayer(
       player,
       loadDeadline: const Duration(milliseconds: 40),
-      probe: (_) => throw StateError('probe broke'),
+      ask: (_, {segmentAt}) => throw StateError('probe broke'),
     );
     addTearDown(engine.dispose);
 
@@ -383,9 +467,9 @@ void main() {
     final engine = JustAudioEngine.withPlayer(
       player,
       loadDeadline: const Duration(seconds: 5),
-      probe: (_) async {
+      ask: (_, {segmentAt}) async {
         probed = true;
-        return StreamProbe.answered;
+        return const ProbeAnswer(StreamProbe.answered);
       },
     );
     addTearDown(engine.dispose);
@@ -706,7 +790,7 @@ void main() {
         player,
         loadDeadline: const Duration(seconds: 2),
         stopGrace: const Duration(milliseconds: 40),
-        probe: (_) async => StreamProbe.answered,
+        ask: _finding(StreamProbe.answered),
       );
       addTearDown(engine.dispose);
       await engine.load('http://x/a.mp3');

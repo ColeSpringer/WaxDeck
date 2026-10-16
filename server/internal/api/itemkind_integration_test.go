@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/colespringer/waxdeck/fixtures"
+
+	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
 // waitForJobDone polls a job until it ends and answers it.
@@ -138,6 +140,54 @@ func TestTreatAnAlbumAsAnAudiobook(t *testing.T) {
 	}
 	if !h.svc.EffectiveVoiceBoost(ctx, uc, tracks[0]) {
 		t.Fatal("the old track pid plays the book without its stored voice boost")
+	}
+}
+
+// A Subsonic client keeps the ids it was handed, and a stream follows the
+// item's kind, not its pid's prefix: a track's id that became a book in
+// parts streams the whole book joined, with the engine and without it,
+// and the book's id turned back into a track streams the track.
+func TestSubsonicStreamFollowsAKindChange(t *testing.T) {
+	t.Parallel()
+	for name, c := range map[string]struct {
+		harness func(*testing.T) *harness
+		joined  func(loc string) bool
+	}{
+		"with the engine": {
+			harness: func(t *testing.T) *harness { return newHarness(t) },
+			joined:  func(loc string) bool { return redirectQuery(t, loc).Get("join") == "1" },
+		},
+		"without the engine": {
+			harness: newHarnessDirect,
+			joined:  func(loc string) bool { return redirectQuery(t, loc).Get(service.JoinKey) == "1" },
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			h := c.harness(t)
+			secret := newSubsonicSecret(t, h)
+			tracks := looseTracks(t, h)
+			stream := func(id string) string {
+				return streamRedirect(t, h, "/rest/stream.view?apiKey="+secret+"&id="+id)
+			}
+			if loc := stream(tracks[0]); c.joined(loc) {
+				t.Fatalf("a track streams as %s, want itself", loc)
+			}
+			setKind(t, h, h.token, tracks, "audiobook")
+			if loc := stream(tracks[0]); !c.joined(loc) {
+				t.Fatalf("the track's id of the book it became streams as %s, want the book joined", loc)
+			}
+			// The app's play-info reads the kind the same way: a position
+			// in the second chapter resolves to the book's second part.
+			pi := decode[PlayInfo](t, get(t, h.ts, "/api/v1/items/"+tracks[0]+"/play-info?positionMs=3500", h.token))
+			if pi.PartCount == nil || *pi.PartCount != 2 || pi.PartIndex == nil || *pi.PartIndex != 1 {
+				t.Fatalf("play-info 3.5 s into the track's id of the book = parts %v, index %v; want part two of two", pi.PartCount, pi.PartIndex)
+			}
+			book := "bk-" + strings.TrimPrefix(tracks[0], "tr-")
+			setKind(t, h, h.token, []string{book}, "music")
+			if loc := stream(book); c.joined(loc) {
+				t.Fatalf("the book's id of the track it became streams as %s, want the track", loc)
+			}
+		})
 	}
 }
 

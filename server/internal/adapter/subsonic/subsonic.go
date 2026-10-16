@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"math"
 	"math/rand/v2"
 	"net/http"
 	"net/url"
@@ -56,6 +57,7 @@ const maxCoverArtSize = service.ArtSizeMax
 // when streaming is not configured.
 type streamer interface {
 	PlayInfoFor(ctx context.Context, user, apiItemPID string, opts flow.PlayOptions) (flow.PlayInfo, error)
+	JoinedPlayInfo(ctx context.Context, user, apiItemPID string, opts flow.PlayOptions) (flow.PlayInfo, error)
 	Up() bool
 }
 
@@ -668,7 +670,10 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 		h.fail(w, r, 10, "missing id")
 		return
 	}
-	if err := h.svc.VisibleItem(r.Context(), uc, id); err != nil {
+	// Only a book can lay out in parts, and the visibility read says
+	// whether this is one, so nothing else is read for its layout.
+	book, err := h.svc.VisibleBook(r.Context(), uc, id)
+	if err != nil {
 		h.fail(w, r, 70, "no such song")
 		return
 	}
@@ -680,7 +685,30 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 			h.fail(w, r, 0, "streaming is not configured on this server")
 			return
 		}
-		res, err := h.svc.DirectPlayInfo(r.Context(), uc, id, "")
+		// A book in parts streams as one where no encode is needed: parts
+		// all MP3 at one rate and one channel count join frame by frame.
+		// Any other plays its first part, named, since the download route
+		// serves a book in parts one file at a time.
+		var parts []flow.Part
+		if book {
+			if parts, err = h.svc.StreamParts(r.Context(), id); err != nil {
+				h.failFromService(w, r, err, "no such song")
+				return
+			}
+		}
+		if service.JoinableMP3(parts) {
+			token, _ := h.media.MintFor(auth.MediaClaims{
+				User: uc.ID, Cred: credOf(r), Purpose: auth.PurposeStream, PID: id, Shape: service.JoinShape,
+			}, 0)
+			http.Redirect(w, r, "/media/download?pid="+url.QueryEscape(id)+
+				"&mt="+url.QueryEscape(token)+"&"+service.JoinShape, http.StatusFound)
+			return
+		}
+		part := ""
+		if len(parts) > 1 {
+			part = parts[0].FilePID
+		}
+		res, err := h.svc.DirectPlayInfo(r.Context(), uc, id, part)
 		if err != nil {
 			if h.redirectToEnclosure(w, r, uc.ID, id, err) {
 				return
@@ -695,16 +723,31 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 		token, _ := h.media.MintFor(auth.MediaClaims{
 			User: uc.ID, Cred: credOf(r), Purpose: auth.PurposeStream, PID: id,
 		}, 0)
-		http.Redirect(w, r, "/media/download?pid="+url.QueryEscape(id)+
-			"&mt="+url.QueryEscape(token)+"&id="+url.QueryEscape(res.File.ETag), http.StatusFound)
+		loc := "/media/download?pid=" + url.QueryEscape(id) + "&mt=" + url.QueryEscape(token) +
+			"&id=" + url.QueryEscape(res.File.ETag)
+		if part != "" {
+			loc += "&f=" + url.QueryEscape(part)
+		}
+		http.Redirect(w, r, loc, http.StatusFound)
 		return
 	}
-	// A bitrate cap is the one stream parameter this surface honours.
-	// It is clamped here because the mint does not range-check one: an
-	// out-of-range br reaches the URL and is refused at fetch, after a
-	// session slot was already charged.
+	format := strings.ToLower(strings.TrimSpace(r.Form.Get("format")))
+	// A book in parts is one song here, so it streams as one.
+	if book {
+		parts, err := h.svc.BookParts(r.Context(), id)
+		if err != nil {
+			h.fail(w, r, 0, "resolving stream failed")
+			return
+		}
+		if len(parts) > 1 {
+			h.streamBook(w, r, uc.ID, id, format, parts)
+			return
+		}
+	}
+	// A bitrate cap and a start offset are the stream parameters this
+	// surface honours; the mint clamps both.
 	//
-	// `format` is read only alongside it, and only as the encode's
+	// `format` is read only alongside the cap, and only as the encode's
 	// target. `raw` is the protocol's own "do not transcode", so it
 	// beats the cap outright; anything else is what the client says it
 	// decodes, and a cap that landed in another container would be
@@ -712,7 +755,6 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	// play. A format on its own still changes nothing: without a cap
 	// there is no encode to aim.
 	opts := flow.PlayOptions{Cred: credOf(r)}
-	format := strings.ToLower(strings.TrimSpace(r.Form.Get("format")))
 	if br := formInt(r, "maxBitRate", 0); br > 0 && format != "raw" {
 		// Passed on as asked: the protocol has no way to refuse a number
 		// and clients send whatever their setting says, so the mint's own
@@ -720,8 +762,23 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 		opts.MaxBitrateKbps = br
 		opts.CapFormat = format
 	}
+	// An offset is the only way this protocol positions a stream, so it
+	// cuts an original too (which plays directly otherwise); raw is the
+	// file as it is, which a cut is not.
+	if ms, ok := timeOffsetMS(r); ok && format != "raw" {
+		opts.StartMS = ms
+		opts.CutOriginal = true
+	}
 	info, err := h.bridge.PlayInfoFor(r.Context(), uc.ID, id, opts)
 	if err != nil {
+		// An episode the server has not fetched is relayed as the feed's
+		// own file, which no offset cuts. Handed over from its top, it
+		// would play while a client positioning by timeOffset alone reads
+		// its clock as the place it asked for, and saves that back.
+		if opts.StartMS > 0 && errors.Is(err, service.ErrEpisodeNotFetched) {
+			h.fail(w, r, 0, "this episode's audio is not on the server, so it cannot start part way in")
+			return
+		}
 		if h.redirectToEnclosure(w, r, uc.ID, id, err) {
 			return
 		}
@@ -732,6 +789,45 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	// out of the byte path and rides the same proxy as first-party
 	// playback.
 	http.Redirect(w, r, info.URL, http.StatusFound)
+}
+
+// streamBook redirects to a book in parts, laid out as parts, as the one
+// stream the client plays it as: from the part its offset falls in,
+// resolved as play-info resolves it and cut from inside, through the last
+// part. The stream is an encode whatever is asked, since only an encode
+// joins the parts, so a format is a preference it overrides, and raw, the
+// file as it is, which such a book has none of, still gets the book from
+// its offset, at the book's own rate rather than a cap.
+func (h *Handler) streamBook(w http.ResponseWriter, r *http.Request, userID, id, format string, parts []service.PlayPart) {
+	opts := flow.PlayOptions{Cred: credOf(r)}
+	if br := formInt(r, "maxBitRate", 0); br > 0 && format != "raw" {
+		opts.MaxBitrateKbps = br
+	}
+	// Floored on the book, where whole seconds share an encode; a part
+	// starts at any millisecond, so the cut inside it is exact.
+	if ms, ok := timeOffsetMS(r); ok && ms >= 1000 {
+		ms -= ms % 1000
+		part := service.PlayPartAt(parts, ms)
+		opts.FilePID = part.FilePID
+		opts.StartMS = max(ms-part.StartMS, 0)
+	}
+	info, err := h.bridge.JoinedPlayInfo(r.Context(), userID, id, opts)
+	if err != nil {
+		h.fail(w, r, 0, "resolving stream failed")
+		return
+	}
+	http.Redirect(w, r, info.URL, http.StatusFound)
+}
+
+// timeOffsetMS reads stream's timeOffset, in seconds; anything but a
+// finite positive number is no offset. The mint clamps it into the item,
+// so the bound here only keeps the conversion in range.
+func timeOffsetMS(r *http.Request) (int64, bool) {
+	secs, err := strconv.ParseFloat(strings.TrimSpace(r.Form.Get("timeOffset")), 64)
+	if err != nil || math.IsNaN(secs) || math.IsInf(secs, 0) || secs <= 0 {
+		return 0, false
+	}
+	return int64(min(secs, 1e9) * 1000), true
 }
 
 // redirectToEnclosure sends a client to the passthrough relay when the

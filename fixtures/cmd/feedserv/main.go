@@ -3,7 +3,8 @@
 // and chapter documents, with correct content types, Range support, and
 // ETag/Last-Modified conditional GETs so feed polling behaves like it
 // does against a real host. With -generate it first synthesizes the
-// default fixture feed into the directory, enclosure URLs pointing back
+// preset fixture feeds into the directory (the default one at its root,
+// fixtures.EarlyPodcastFeed under early/), enclosure URLs pointing back
 // at itself. It holds no state and must never face a real network.
 //
 //	feedserv -dir /tmp/feed -generate
@@ -27,7 +28,7 @@ func main() {
 	var (
 		addr     = flag.String("addr", envOr("FEEDSERV_ADDR", "127.0.0.1:4421"), "listen address")
 		dir      = flag.String("dir", "", "directory to serve (required)")
-		generate = flag.Bool("generate", false, "synthesize the default podcast feed into -dir before serving")
+		generate = flag.Bool("generate", false, "synthesize the preset podcast feeds into -dir before serving")
 	)
 	flag.Parse()
 	if *dir == "" {
@@ -37,12 +38,11 @@ func main() {
 	}
 
 	if *generate {
-		baseURL := "http://" + *addr
-		feedPath, err := fixtures.GeneratePodcastFeed(*dir, fixtures.DefaultPodcastFeed(baseURL), baseURL)
+		feeds, err := fixtures.GeneratePresetFeeds(*dir, "http://"+*addr)
 		if err != nil {
-			log.Fatalf("feedserv: generating feed: %v", err)
+			log.Fatalf("feedserv: generating feeds: %v", err)
 		}
-		log.Printf("feedserv generated %s", feedPath)
+		log.Printf("feedserv generated %s", strings.Join(feeds, ", "))
 	}
 
 	log.Printf("feedserv serving %s on %s", *dir, *addr)

@@ -57,6 +57,7 @@ gen.DiscoveryList discoveryListToGen(DiscoveryList list) {
     DiscoveryList.alphabetical => gen.DiscoveryList.alphabetical,
     DiscoveryList.neverPlayed => gen.DiscoveryList.neverPlayed,
     DiscoveryList.rediscover => gen.DiscoveryList.rediscover,
+    DiscoveryList.inProgress => gen.DiscoveryList.inProgress,
   };
 }
 
@@ -351,6 +352,7 @@ PlayInfo playInfoFromGen(gen.PlayInfo info, {String baseUrl = ''}) {
     appliedBitrateKbps: info.appliedBitrateKbps,
     spanStartMs: info.spanStartMs,
     spanEndMs: info.spanEndMs,
+    startOffsetMs: info.startOffsetMs ?? 0,
   );
 }
 

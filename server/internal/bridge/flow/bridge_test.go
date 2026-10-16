@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,13 +27,14 @@ func (r staticResolver) StreamSource(context.Context, string, string) (Source, e
 }
 
 // capsJSON is what the fake sidecar reports. aac is an output because
-// the one format whose container and codec can disagree is aac, and
-// voice is a dynamics mode because a boosted stream is the case where
-// forcing the source's own format is still a real encode.
+// the one format whose container and codec can disagree is aac, wav
+// because the jukebox forces it, and voice is a dynamics mode because a
+// boosted stream is the case where forcing the source's own format is
+// still a real encode.
 func capsJSON() string {
 	return `{"schemaVersion":1,
 		"outputs":[{"name":"flac","live":true},{"name":"opus","live":true},
-			{"name":"mp3","live":true},{"name":"aac","live":true}],
+			{"name":"mp3","live":true},{"name":"aac","live":true},{"name":"wav","live":true}],
 		"delivery":{"progressive":true,"cutFormats":["opus","aac"]},
 		"dsp":{"dynamics":["off","voice"],"gainMaxVoiceDb":24}}`
 }
@@ -154,6 +157,181 @@ func TestVirtualTrackWindow(t *testing.T) {
 	}
 }
 
+// wantEnvelope asserts a refusal in WaxDeck's {code, message} envelope:
+// the body a player reads to tell a refusal from a bad file.
+func wantEnvelope(t *testing.T, rec *httptest.ResponseRecorder, status int, code string) {
+	t.Helper()
+	if rec.Code != status {
+		t.Fatalf("status = %d, want %d: %s", rec.Code, status, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("content type = %q, want application/json", ct)
+	}
+	var e struct{ Code, Message string }
+	if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil {
+		t.Fatalf("body %q: %v", rec.Body.String(), err)
+	}
+	if e.Code != code || e.Message == "" {
+		t.Fatalf("envelope = %+v, want code %q and a message", e, code)
+	}
+}
+
+// The stream route's own refusals carry the envelope too: the gate's
+// session limit, and the proxy's answer when the engine cannot be reached.
+func TestStreamRefusalBodiesCarryTheEnvelope(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "song.flac")
+	if err := os.WriteFile(path, []byte("flacbytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := Source{Path: path, Size: 9, MTimeNS: 1, Codec: "flac", Container: "flac", BitrateKbps: 900}
+	capped := func(b *Bridge) string {
+		info, err := b.PlayInfoFor(context.Background(), "us-1", "tr-X", PlayOptions{MaxBitrateKbps: 128})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return info.URL
+	}
+
+	b := newTestBridge(t, func(w http.ResponseWriter, r *http.Request) { io.WriteString(w, "audio") }, src)
+	b.SetTranscodeGate(&fakeGate{refuse: true})
+	rec := httptest.NewRecorder()
+	b.ServeStream(rec, httptest.NewRequest("GET", capped(b), nil))
+	wantEnvelope(t, rec, http.StatusTooManyRequests, "transcode-limited")
+
+	// An engine that drops the connection without answering.
+	b = newTestBridge(t, func(w http.ResponseWriter, r *http.Request) {
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		conn.Close()
+	}, src)
+	rec = httptest.NewRecorder()
+	b.ServeStream(rec, httptest.NewRequest("GET", capped(b), nil))
+	wantEnvelope(t, rec, http.StatusBadGateway, "internal")
+}
+
+// A stream the engine refuses answers in the API's envelope, never the
+// engine's own body, which names the file it could not open; the status a
+// player acts on stays, and so does what a range refusal says of the
+// stream's length. A share visitor and a joined stream's first part are
+// answered the same way.
+func TestStreamRefusalsNameNothingOfTheFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "song.flac")
+	if err := os.WriteFile(path, []byte("flacbytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := Source{Path: path, Size: 9, MTimeNS: 1, Codec: "flac", Container: "flac"}
+	const moved = `{"error":"source: no such file: openat Artist Name/Album Title (2001)/01 Track Title.flac: no such file or directory","code":"not-found","schemaVersion":1}`
+	for name, c := range map[string]struct {
+		status     int
+		body       string
+		header     map[string]string
+		wantStatus int
+		wantCode   string
+		wantHeader map[string]string
+	}{
+		"a file that moved":       {status: 404, body: moved, wantStatus: 404, wantCode: "not-found"},
+		"a file it cannot decode": {status: 422, body: `{"error":"decode Artist Name/x.flac: bad frame","code":"malformed-input"}`, wantStatus: 422, wantCode: "invalid-request"},
+		"a file it cannot read":   {status: 500, body: `{"error":"source: open Artist Name/x.flac: permission denied","code":"source-unreadable"}`, wantStatus: 500, wantCode: "internal"},
+		"a range past the end": {status: 416, body: `{"error":"range past Artist Name/x.flac","code":"invalid-request"}`,
+			header: map[string]string{"Content-Range": "bytes */9"}, wantStatus: 416, wantCode: "invalid-request",
+			wantHeader: map[string]string{"Content-Range": "bytes */9"}},
+		"an engine catalog away": {status: 503, body: `{"error":"catalog for Artist Name unavailable","code":"catalog-unavailable"}`,
+			header: map[string]string{"Retry-After": "2"}, wantStatus: 503, wantCode: "internal",
+			wantHeader: map[string]string{"Retry-After": "2"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			refuse := func(w http.ResponseWriter, r *http.Request) {
+				for k, v := range c.header {
+					w.Header().Set(k, v)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(c.status)
+				io.WriteString(w, c.body)
+			}
+			check := func(how string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				wantEnvelope(t, rec, c.wantStatus, c.wantCode)
+				for _, leak := range []string{"Artist", "openat", "source", c.body} {
+					if strings.Contains(rec.Body.String(), leak) {
+						t.Errorf("%s: answer %q carries %q", how, rec.Body.String(), leak)
+					}
+				}
+				for k, v := range c.wantHeader {
+					if got := rec.Header().Get(k); got != v {
+						t.Errorf("%s: %s = %q, want %q", how, k, got, v)
+					}
+				}
+			}
+			b := newTestBridge(t, refuse, src)
+			rec := httptest.NewRecorder()
+			b.ServeStream(rec, httptest.NewRequest("GET", tokenURL(t, b, "tr-X"), nil))
+			check("a stream", rec)
+			rec = httptest.NewRecorder()
+			b.ServeShareStream(rec, httptest.NewRequest("GET", "/s/x/stream", nil), "tr-X", "us-1")
+			check("a share", rec)
+
+			bk := threeParts(t)
+			jb, _ := newJoinedBridge(t, refuse, bk)
+			info, _ := mintJoined(t, jb, PlayOptions{})
+			rec, _ = fetchJoined(t, jb, httptest.NewRequest("GET", info.URL, nil))
+			check("a joined stream's first part", rec)
+		})
+	}
+}
+
+// The engine refusing the key this server presents is the server's own
+// trouble, which no fresh URL cures: a stream answers what it answers
+// with the engine out of reach, never the expired sign-in a 401 reads as,
+// and the log names the key so an administrator can find it.
+func TestAnEngineRefusingThisServersKeyIsTheServersTrouble(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "song.flac")
+	if err := os.WriteFile(path, []byte("flacbytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	src := Source{Path: path, Size: 9, MTimeNS: 1, Codec: "flac", Container: "flac"}
+	for name, c := range map[string]struct {
+		status int
+		body   string
+	}{
+		"a key it does not hold":   {http.StatusUnauthorized, `{"error":"missing or invalid API key","code":"unauthorized","schemaVersion":1}`},
+		"a credential it rejected": {http.StatusForbidden, `{"error":"signed URLs are not enabled on this daemon","code":"signature-invalid","schemaVersion":1}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			refuse := func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(c.status)
+				io.WriteString(w, c.body)
+			}
+			var logged strings.Builder
+			check := func(how string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				wantEnvelope(t, rec, http.StatusBadGateway, "internal")
+				if !strings.Contains(logged.String(), "API key") {
+					t.Errorf("%s: nothing logged about the key: %q", how, logged.String())
+				}
+				logged.Reset()
+			}
+			b := newTestBridge(t, refuse, src)
+			b.log = slog.New(slog.NewTextHandler(&logged, nil))
+			rec := httptest.NewRecorder()
+			b.ServeStream(rec, httptest.NewRequest("GET", tokenURL(t, b, "tr-X"), nil))
+			check("a stream", rec)
+			rec = httptest.NewRecorder()
+			b.ServeShareStream(rec, httptest.NewRequest("GET", "/s/x/stream", nil), "tr-X", "us-1")
+			check("a share", rec)
+
+			jb, _ := newJoinedBridge(t, refuse, threeParts(t))
+			jb.log = slog.New(slog.NewTextHandler(&logged, nil))
+			info, _ := mintJoined(t, jb, PlayOptions{})
+			rec, _ = fetchJoined(t, jb, httptest.NewRequest("GET", info.URL, nil))
+			check("a joined stream's first part", rec)
+		})
+	}
+}
+
 func TestStreamRejectsBadToken(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "song.mp3")
@@ -188,6 +366,7 @@ func TestForcedFormatMatchingSourceTakesNoSlot(t *testing.T) {
 		src          Source
 		format       string
 		boost        bool
+		encode       bool
 		wantAdmitted int
 		// The format the sidecar is asked for; auto is the direct play.
 		wantEngine string
@@ -198,6 +377,17 @@ func TestForcedFormatMatchingSourceTakesNoSlot(t *testing.T) {
 			src:        Source{Codec: "flac", Container: "flac"},
 			format:     "flac",
 			wantEngine: "auto",
+		},
+		{
+			// A cut of an original, or a cap landing in the file's own
+			// format: the mint's marker, not the rate, says so.
+			name:         "the source's own format marked an encode",
+			file:         "song.flac",
+			src:          Source{Codec: "flac", Container: "flac"},
+			format:       "flac",
+			encode:       true,
+			wantAdmitted: 1,
+			wantEngine:   "flac",
 		},
 		{
 			name:         "a real transcode admits",
@@ -255,6 +445,9 @@ func TestForcedFormatMatchingSourceTakesNoSlot(t *testing.T) {
 			params := url.Values{"fmt": {tc.format}}
 			if tc.boost {
 				params.Set("vb", "1")
+			}
+			if tc.encode {
+				params.Set("enc", "1")
 			}
 			u := shapedURL(t, b, "tr-X", params)
 			rec := httptest.NewRecorder()

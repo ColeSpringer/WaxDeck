@@ -478,11 +478,11 @@ class _PlayerScaffoldState extends State<PlayerScaffold>
     final sizeClass = WaxSizeClass.of(context);
     final size = MediaQuery.sizeOf(context);
     // Side by side when the window is wider than it is tall and there is
-    // not much tall. Compact-landscape is the case 5.3 names, and the
-    // reason it gives - a stack of clusters under a hero does not fit -
-    // is about height rather than about width class: a 740x360 desktop
-    // window is not compact and has the same problem, and stacking there
-    // overflows by the last few pixels of the action row.
+    // not much tall. Compact-landscape is the obvious case, and the reason
+    // - a stack of clusters under a hero does not fit - is about height
+    // rather than about width class: a 740x360 desktop window is not
+    // compact and has the same problem, and stacking there overflows by
+    // the last few pixels of the action row.
     final landscape =
         size.width > size.height &&
         (sizeClass.isCompact || size.height < _shortWindow);

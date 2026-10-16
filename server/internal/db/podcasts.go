@@ -171,6 +171,28 @@ func (d *DB) SubscriptionsByUser(ctx context.Context, userID string) ([]Subscrip
 	return out, rows.Err()
 }
 
+// SubscribedShowPIDsByUser returns the shows one user follows, in show
+// PID order: what scoping that user's listings needs, without the rest of
+// each subscription row.
+func (d *DB) SubscribedShowPIDsByUser(ctx context.Context, userID string) ([]string, error) {
+	rows, err := d.r.QueryContext(ctx, `
+		SELECT show_pid FROM podcast_subscriptions
+		WHERE user_id = ? ORDER BY show_pid`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("db: listing followed shows: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var pid string
+		if err := rows.Scan(&pid); err != nil {
+			return nil, fmt.Errorf("db: scanning followed show: %w", err)
+		}
+		out = append(out, pid)
+	}
+	return out, rows.Err()
+}
+
 // SubscribersByShow returns every user's subscription to one show (the
 // retention union reads these).
 func (d *DB) SubscribersByShow(ctx context.Context, showPID string) ([]Subscription, error) {

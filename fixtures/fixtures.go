@@ -494,6 +494,27 @@ func UploadWorkbenchSources() []Spec {
 	}
 }
 
+// LongTrack is ten seconds of lossless audio on an album of its own, the
+// longest a fixture may be: long enough that a stream of it still
+// arriving holds seconds of play rather than a fraction of one, and
+// lossless, so a bitrate cap always re-encodes it into a stream that
+// answers no ranges. Playing its album plays it alone.
+func LongTrack() []Spec {
+	return []Spec{{
+		Name:       "long-division",
+		Codec:      CodecFLAC,
+		Container:  ContainerFLAC,
+		Duration:   MaxDuration,
+		SampleRate: 44100,
+		Channels:   2,
+		Tags: map[string]string{
+			"TITLE":  "Long Division",
+			"ARTIST": "Slow Signal",
+			"ALBUM":  "Long Division",
+		},
+	}}
+}
+
 // ConformanceMedia returns the single tone the audio-engine conformance
 // suite plays against real engines: long enough that mid-file seek
 // targets are meaningfully far apart, still under the duration cap.

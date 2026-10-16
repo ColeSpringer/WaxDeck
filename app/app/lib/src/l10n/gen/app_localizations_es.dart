@@ -6226,6 +6226,16 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerCollapseCommand => 'Contraer el reproductor';
 
   @override
+  String playerCouldNotContinue(String title) {
+    return 'No se pudo seguir reproduciendo $title';
+  }
+
+  @override
+  String playerCouldNotStart(String title) {
+    return 'No se pudo iniciar $title';
+  }
+
+  @override
   String get playerDeleteFiles => 'Eliminar los archivos...';
 
   @override
@@ -6250,6 +6260,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playerForgetSong => 'Olvidar esta canción';
+
+  @override
+  String get playerGaplessBusy =>
+      'El servidor está ocupado, así que esta cola se reproduce pista a pista. La reproducción sin pausas vuelve cuando se libera una transmisión.';
+
+  @override
+  String get playerGaplessPaused =>
+      'El servidor está ocupado, así que la reproducción se pausó. Pulsa reproducir para volver a intentarlo.';
 
   @override
   String playerGoToName(String name) {
@@ -6303,6 +6321,11 @@ class AppLocalizationsEs extends AppLocalizations {
   String get playerMoreLikeThis => 'Más como esto';
 
   @override
+  String playerMoveFailed(String reason) {
+    return 'No se pudo saltar ahí. $reason';
+  }
+
+  @override
   String get playerNext => 'Siguiente';
 
   @override
@@ -6339,6 +6362,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get playerOfferResume => 'Continúa donde lo dejaste';
+
+  @override
+  String get playerOfflineStart =>
+      'Sin conexión. La reproducción continuará cuando vuelva la conexión.';
 
   @override
   String get playerOpenPlayer => 'Abrir el reproductor';
@@ -10839,7 +10866,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get settingsStreamQualityHelp =>
-      'Automática transmite el original siempre que es posible. Un límite recodifica para ajustarse (Alta 320 kbps, Normal 192, Baja 128), lo que desactiva la reproducción sin pausas y el salto instantáneo, se aplica a partir de la siguiente pista y nunca afecta a las descargas';
+      'Automática transmite el original siempre que es posible. Un límite recodifica para ajustarse (Alta 320 kbps, Normal 192, Baja 128), lo que desactiva la reproducción sin pausas y hace que saltar tarde un momento, se aplica a partir de la siguiente pista y nunca afecta a las descargas';
 
   @override
   String get settingsStreamQualityHigh => 'Alta';

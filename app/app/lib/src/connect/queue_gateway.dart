@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../player/autoplay_gate.dart';
@@ -58,6 +59,15 @@ abstract class QueueGateway {
   /// timeline, and a rate is remembered per show and per book.
   PlaybackSession? get session;
 
+  /// Whether playback means to be running: the engine, or a load of the
+  /// app's own that lands playing (a start, a stream reopened where it
+  /// stood), which the engine reads as stopped.
+  bool get playing;
+
+  /// Changes when a load of the app's own begins or ends meaning to play,
+  /// which moves [playing] without the engine moving.
+  ValueListenable<bool> get opening;
+
   /// Replaces the queue with [pids] and plays the entry at [index] from
   /// [positionMs]. Throws when that entry cannot start, so a routed
   /// command answers for it.
@@ -88,14 +98,30 @@ abstract class QueueGateway {
   /// session, and an empty queue behind it.
   Future<bool> play();
 
-  /// Silences what is playing, for a caller that means it deliberately
-  /// (the sleep timer). An item pauses so it resumes where it stood; a
-  /// station has no pause worth the name and is let go of.
+  /// Silences what is playing, for a pause raised outside a session's own
+  /// controls: the sleep timer, a lock screen, a headset, a routed
+  /// command. An item pauses so it resumes where it stood, an item still
+  /// starting lands paused, and a start that failed waits for a press
+  /// rather than the server's return; a station has no pause worth the
+  /// name and is let go of.
   Future<void> pause();
 
+  /// Pauses where it stands, for the pause on an OS surface (a lock
+  /// screen, a desktop media key), whose own play is what resumes it: a
+  /// station stays tuned with its stream paused, and an item pauses as
+  /// [pause] pauses it.
+  Future<void> pauseInPlace();
+
   /// Ends what is playing, for a stop raised outside the app. Radio is
-  /// let go of; anything else stops at the engine, queue still standing.
+  /// let go of; an item lets its media go, queue still standing, and lands
+  /// paused if it was still loading.
   Future<void> stop();
+
+  /// Moves playback to [position] on the timeline the screens show (a
+  /// whole book, not the part loaded), for a seek raised outside the app.
+  /// Answers whether it landed: a seek a session could not have (a part it
+  /// could not load) says no, so a routed command does not ack it.
+  Future<bool> seek(Duration position);
 
   /// Steps to the next entry. False when the queue has nowhere to go.
   Future<bool> next();
@@ -142,6 +168,12 @@ class LocalQueueGateway implements QueueGateway {
 
   @override
   bool get hasQueue => _ref.read(queueControllerProvider).isNotEmpty;
+
+  @override
+  bool get playing => _playback.meansToPlay;
+
+  @override
+  ValueListenable<bool> get opening => _playback.opening;
 
   @override
   QueueSnapshot? snapshot() {
@@ -220,23 +252,12 @@ class LocalQueueGateway implements QueueGateway {
       await _ref.read(audioEngineProvider).play();
       return true;
     }
-    final session = _playback.liveSession;
-    if (session != null) {
-      await session.play();
-      return true;
-    }
-    // Answered before asking, because `resume` cannot answer for
-    // itself: it bails silently on an empty queue, and a caller told
-    // nothing went wrong reports that the play worked.
-    if (_ref.read(queueControllerProvider).isEmpty) return false;
-    // No station and no session, but a queue still standing: a start
-    // that failed, waiting to be asked again. (A queue restored at
-    // launch does not land here - the queue listener starts it as soon
-    // as it is put back.) Asking again is what the deck's own play does
-    // in this state, and the only reading of a play from a car or a
-    // headset that is not a button doing nothing.
-    _playback.resume();
-    return true;
+    // The rest is playback's: a start in flight, a live session, or a
+    // queue left standing by a start that failed and is waiting to be
+    // asked again, which is what the deck's own play does in that state
+    // and the only reading of a play from a car or a headset that is not
+    // a button doing nothing.
+    return _playback.transportPlay();
   }
 
   @override
@@ -278,14 +299,28 @@ class LocalQueueGateway implements QueueGateway {
   @override
   Future<void> pause() async {
     if (await _releaseStation()) return;
-    await _ref.read(audioEngineProvider).pause();
+    // Through playback, so neither a start nor a load in flight starts
+    // again what this stopped.
+    await _playback.transportPause();
+  }
+
+  @override
+  Future<void> pauseInPlace() async {
+    if (_ref.read(radioPlaybackProvider).station != null) {
+      await _ref.read(audioEngineProvider).pause();
+      return;
+    }
+    await _playback.transportPause();
   }
 
   @override
   Future<void> stop() async {
     if (await _releaseStation()) return;
-    await _ref.read(audioEngineProvider).stop();
+    await _playback.transportStop();
   }
+
+  @override
+  Future<bool> seek(Duration position) => _playback.transportSeek(position);
 
   @override
   void clear() => _queue.clear();

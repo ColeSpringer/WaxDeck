@@ -1613,10 +1613,46 @@ void main() {
     expect(cursors.serverSince, 'scur-2');
   });
 
+  test('a mirrored play state is announced with the state it stored', () async {
+    // What the announcement is for is reacting to the state, and a
+    // listener that had to read the mirror back for it paid a read per
+    // checkpoint, every few seconds a player runs.
+    repo.serverPages.addAll([const ServerSyncPage(nextSince: 'scur-1')]);
+    await engine.pullServer(); // mints
+    final announced = <PlayStateChange>[];
+    final sub = engine.playStateChanged.listen(announced.add);
+    repo.serverPages.add(
+      const ServerSyncPage(
+        events: [
+          ServerSyncEvent(
+            kind: 'play-state',
+            pid: 'tr-A',
+            playState: PlayState(
+              pid: 'tr-A',
+              positionMs: 7000,
+              played: false,
+              finished: false,
+              playCount: 0,
+              starred: true,
+            ),
+          ),
+        ],
+        nextSince: 'scur-2',
+      ),
+    );
+    await engine.pullServer();
+    await Future<void>.delayed(Duration.zero);
+    await sub.cancel();
+
+    expect(announced.single.pid, 'tr-A');
+    expect(announced.single.state?.positionMs, 7000);
+    expect(announced.single.state?.starred, isTrue);
+  });
+
   test('entity-state markers announce their pid without mirroring', () async {
     repo.serverPages.addAll([const ServerSyncPage(nextSince: 'scur-1')]);
     await engine.pullServer(); // mints
-    final announced = <String>[];
+    final announced = <PlayStateChange>[];
     final sub = engine.playStateChanged.listen(announced.add);
     repo.serverPages.add(
       const ServerSyncPage(
@@ -1633,7 +1669,8 @@ void main() {
 
     // The marker is the whole payload: it invalidates the entity views
     // and writes nothing to the item mirror.
-    expect(announced, ['al-A', 'ar-B']);
+    expect(announced.map((change) => change.pid), ['al-A', 'ar-B']);
+    expect(announced.map((change) => change.state), everyElement(isNull));
     expect(await db.select(db.mirrorPlayStates).get(), isEmpty);
     final cursors = await db.select(db.syncCursors).getSingle();
     expect(cursors.serverSince, 'scur-2');

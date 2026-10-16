@@ -141,6 +141,33 @@ void main() {
     expect([null, 304, 399, 500, 503].map(refused), everyElement(isFalse));
   });
 
+  test('a 4xx without the server\'s own error code is not its refusal', () {
+    // Something in front of the server answered: a proxy with no route
+    // for the path, or a server too old to have it. Neither is the server
+    // saying no, and asking again may well get another answer.
+    const proxied = WaxDeckApiException(
+      code: 'transport',
+      message: '404 page not found',
+      statusCode: 404,
+    );
+    expect(proxied.isRefusal, isFalse);
+    expect(proxied.isNotFound, isFalse);
+  });
+
+  test('not-found is the server\'s own code, however it arrived', () {
+    // Over HTTP with its status, or over the socket with none.
+    for (final status in <int?>[404, null]) {
+      expect(
+        WaxDeckApiException(
+          code: 'not-found',
+          message: 'no such item',
+          statusCode: status,
+        ).isNotFound,
+        isTrue,
+      );
+    }
+  });
+
   test('a job has ended in exactly the four states the contract names', () {
     bool ended(String state) =>
         Job(pid: 'jb-1', kind: 'scan', state: state).ended;

@@ -11,6 +11,7 @@ import 'package:waxdeck/src/discovery/track_list_screen.dart';
 import 'package:waxdeck/src/music/listing_screen.dart';
 import 'package:waxdeck/src/music/music_controllers.dart';
 import 'package:waxdeck/src/home/home_screen.dart';
+import 'package:waxdeck/src/library/page_walk.dart';
 import 'package:waxdeck/src/player/deck_bar_host.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
@@ -272,6 +273,68 @@ void main() {
     testWidgets('keeps its tab where the library has one', (tester) async {
       await _pumpShell(tester);
       expect(navFor(WaxNavTarget.books), findsWidgets);
+    });
+
+    test(
+      'keeps its tab when the first page of books is empty but continues',
+      () async {
+        // The listing contract allows a page that comes back empty with
+        // books behind it: rows are dropped after the page is cut.
+        final hidden = <ItemSummary>[
+          for (var i = 0; i < 60; i++)
+            testItem(
+              'bk-01JZX5N8QW3F4V9T2B7KH${i.toString().padLeft(5, '0')}',
+              mediaType: MediaType.audiobook,
+            ),
+        ];
+        final repo = FakeRepository(
+          items: <ItemSummary>[
+            ...hidden,
+            testItem(_bookPid, mediaType: MediaType.audiobook),
+          ],
+        )..hiddenFromListings.addAll(hidden.map((book) => book.pid));
+        final container = ProviderContainer(
+          overrides: [repositoryProvider.overrideWithValue(repo)],
+        );
+        addTearDown(container.dispose);
+
+        expect(
+          await container.read(emptyDomainsProvider.future),
+          isNot(contains(WaxNavTarget.books)),
+        );
+      },
+    );
+
+    test('keeps its tab when its probe runs out of pages unproven', () async {
+      // A walk that spent its budget on rows this caller is not shown has
+      // not shown the library holds no books.
+      final hidden = <ItemSummary>[
+        for (var i = 0; i < kProbePageBudget * kProbePageSize + 10; i++)
+          testItem(
+            'bk-01JZX5N8QW3F4V9T2B7KH${i.toString().padLeft(5, '0')}',
+            mediaType: MediaType.audiobook,
+          ),
+      ];
+      final repo = FakeRepository(
+        items: <ItemSummary>[
+          ...hidden,
+          testItem(_bookPid, mediaType: MediaType.audiobook),
+        ],
+      )..hiddenFromListings.addAll(hidden.map((book) => book.pid));
+      final container = ProviderContainer(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+      );
+      addTearDown(container.dispose);
+
+      expect(
+        await container.read(emptyDomainsProvider.future),
+        isNot(contains(WaxNavTarget.books)),
+      );
+      expect(
+        repo.listItemsCalls,
+        hasLength(kProbePageBudget),
+        reason: 'the probe stops at its budget, short of the one book',
+      );
     });
 
     testWidgets('a book is still reachable by location without the tab', (

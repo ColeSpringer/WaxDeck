@@ -612,6 +612,7 @@ abstract final class SemanticsIds {
   static String playerSpeedPreset(Object percent) => 'player-speed-$percent';
   static const String playerSpeedSheet = 'player-speed-sheet';
   static const String playerSpeedSlower = 'player-speed-slower';
+  static const String playerStartRetry = 'player-start-retry';
   static const String playerStationInfo = 'player-station-info';
   static const String playerSurface = 'player-surface';
   static String playerTimeline(Object name) => 'player-timeline-$name';

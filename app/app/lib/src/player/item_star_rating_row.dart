@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/l10n.dart';
 import '../shell/shell_messages.dart';
+import 'optimistic_state.dart';
 import 'play_state_controller.dart';
 import 'star_rating_row.dart';
 
@@ -29,7 +30,7 @@ class ItemStarRatingRow extends ConsumerWidget {
     // stick while the row keeps rendering the real state.
     final l10n = context.l10n;
     ref.listen(playStateControllerProvider(pid), (previous, next) {
-      if (next.hasError && !next.isLoading) {
+      if (rejectedMutation(previous, next)) {
         ref
             .read(shellMessengerProvider.notifier)
             .show(l10n.playerRatingFailed, channel: ShellChannel.rating);

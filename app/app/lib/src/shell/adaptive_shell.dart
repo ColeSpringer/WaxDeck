@@ -8,6 +8,7 @@ import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../auth/auth_controller.dart';
 import '../l10n/l10n.dart';
+import '../library/page_walk.dart';
 import '../player/deck_bar_host.dart';
 import '../providers.dart';
 import '../search/search_controller.dart';
@@ -263,9 +264,10 @@ const List<WaxNavTarget> waxShellBranches = <WaxNavTarget>[
   WaxNavTarget.radio,
 ];
 
-/// The domains the server has nothing behind, probed once per session.
+/// The domains the server has nothing behind.
 ///
-/// One cheap request per gating domain, cached for the app's lifetime
+/// Each gating domain probes its listing ([probePages]) until it finds
+/// one item or proves there are none, cached for the app's lifetime
 /// rather than auto-disposed: the answer is a property of the library,
 /// the chrome asks on every build, and a library does not gain its first
 /// audiobook while somebody is looking at the tab bar. A catalog
@@ -276,12 +278,16 @@ final emptyDomainsProvider = FutureProvider<Set<WaxNavTarget>>((ref) async {
   final repository = ref.watch(repositoryProvider);
   final empty = <WaxNavTarget>{};
   // One item is all the question needs: the tab is about whether there
-  // is anything at all, not about how much.
-  final books = await repository.listItems(
-    mediaType: MediaType.audiobook,
-    limit: 1,
+  // is anything at all, not about how much. The tab stays where the
+  // probe could not prove there are none.
+  final books = await probePages(
+    (cursor, limit) => repository.listItems(
+      mediaType: MediaType.audiobook,
+      cursor: cursor,
+      limit: limit,
+    ),
   );
-  if (books.items.isEmpty) empty.add(WaxNavTarget.books);
+  if (books.provedEmpty) empty.add(WaxNavTarget.books);
   return empty;
 });
 

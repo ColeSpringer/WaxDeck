@@ -15,6 +15,7 @@ import 'package:waxdeck/src/queue/queue_view.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/shell/commands.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -340,6 +341,12 @@ void main() {
           .playNow(['tr-1', 'tr-2'], source: _album, startIndex: 1);
       await tester.pumpAndSettle();
 
+      // Every message, not only the newest: this fake holds none of the
+      // restored items, so their start fails and says so after the offer.
+      final raised = <ShellMessage>[];
+      container.listen(shellMessengerProvider, (_, next) {
+        if (next != null) raised.add(next);
+      });
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.queueRestoreSession('ps-1')),
       );
@@ -347,9 +354,9 @@ void main() {
       await tester.pump(const Duration(milliseconds: 750));
 
       expect(container.read(queueControllerProvider).pids, ['tr-9', 'tr-8']);
-      expect(raisedMessage(tester)!.actionLabel, 'Undo');
-      expect(raisedMessage(tester)!.persist, isTrue);
-      raisedMessage(tester)!.onAction!();
+      final offer = raised.singleWhere((m) => m.actionLabel == 'Undo');
+      expect(offer.persist, isTrue);
+      offer.onAction!();
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 50));
 

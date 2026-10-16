@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:web/web.dart' as web;
 
 import '../audio_engine_port.dart';
+import '../stream_probe/verdict.dart';
 import '../timeline/timeline_media.dart';
 import 'hls_error_policy.dart';
 
@@ -101,6 +102,11 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
   bool _playingFlag = false;
   EngineProcessingState _state = EngineProcessingState.idle;
 
+  /// Set by a refusal met mid-stream. The server let the slot go and
+  /// loading stopped, so the next play is a fresh mint (announced as the
+  /// stream being lost), never a resume of a stream nothing is fetching.
+  bool _refused = false;
+
   /// The level and the speed this engine was told to hold. Kept beside
   /// the element rather than read off it: attaching media resets an
   /// element's `playbackRate` to its default, so an engine that trusted
@@ -170,6 +176,7 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
       );
     }
     _teardownHls();
+    _refused = false;
     _media = media;
     _member = at;
     _setState(EngineProcessingState.loading);
@@ -269,6 +276,11 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
   @override
   Future<void> play() async {
     if (_media == null) return;
+    if (_refused) {
+      _refused = false;
+      if (!_losses.isClosed) _losses.add(true);
+      return;
+    }
     // A stream that ran off its end restarts the member playing, the
     // way the port says a play after completion does.
     if (_state == EngineProcessingState.completed) {
@@ -314,6 +326,7 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
   Future<void> stop() async {
     _pauseNow();
     _teardownHls();
+    _refused = false;
     _media = null;
     _member = 0;
     _setState(EngineProcessingState.idle);
@@ -360,6 +373,37 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
   @override
   Stream<Duration?> get durationStream => _durations.stream;
 
+  /// How far the element holds the member playing: the end of the
+  /// buffered range the playhead is in, never past the member's own end.
+  @override
+  Duration get bufferedPosition {
+    final media = _media;
+    if (media == null) return Duration.zero;
+    final now = _audio.currentTime;
+    var held = now;
+    final ranges = _audio.buffered;
+    for (var i = 0; i < ranges.length; i++) {
+      // A sliver of slack: a seek lands on a frame boundary, which can sit
+      // just before the range it opened.
+      if (ranges.start(i) <= now + 0.05 && now <= ranges.end(i)) {
+        held = ranges.end(i);
+        break;
+      }
+    }
+    final ms = media.memberPosition(_member, (held * 1000).round());
+    final length = media.memberDurationMs(_member);
+    return Duration(milliseconds: ms < length ? ms : length);
+  }
+
+  /// A timeline is ranged media, positioned by hls.js wherever it is.
+  @override
+  bool get seeksWithinUnrangedStream => true;
+
+  /// hls.js plays the timelines handed to [loadTimeline]; a single item's
+  /// HLS presentation is not one of them.
+  @override
+  bool get playsHls => false;
+
   @override
   bool get playing => _playingFlag;
 
@@ -377,6 +421,11 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
 
   @override
   Stream<Object> get playbackRefused => _refusals.stream;
+
+  /// Nothing: a timeline's failures arrive as [timelineLost] and
+  /// [timelineRefused], which carry what its recovery needs.
+  @override
+  Stream<MediaFailure> get mediaFailed => const Stream<MediaFailure>.empty();
 
   @override
   Stream<void> get itemBoundary => _boundaries.stream;
@@ -563,14 +612,21 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
       // fetch.
       if (!fatal && !refused && !gone) return;
       _pauseNow();
-      if (refused) _refuse();
-      // Only a rendering that is gone, or one this browser cannot
-      // decode, is the source's fault. A media error that survived a
-      // recovery is still the pipeline's: the caller offers a retry
-      // rather than stepping past a track that is fine.
+      // A refusal here is not [timelineRefused], which is a stream that
+      // stopped mid-play: nothing played, the load fails carrying it, and
+      // the teardown that follows stops hls.js retrying the fragment.
+      // The fault means here what it means on every engine: only a
+      // rendering that will not play here is the source's. One that is
+      // gone - a lapsed token, a render let go, files that moved - is the
+      // way to the track, which a fresh mint cures, and a media error that
+      // survived a recovery is still the pipeline's: the caller offers a
+      // retry rather than stepping past a track that is fine. The
+      // server's refusal rides along as the stream probe would read it;
+      // hls.js hands over the status and not the body, and each of these
+      // statuses carries one code on the timeline routes.
       ready.completeError(
         MediaLoadException(
-          gone || kind == HlsErrorKind.unplayable
+          kind == HlsErrorKind.unplayable
               ? MediaFault.source
               : MediaFault.transport,
           StateError(
@@ -578,6 +634,12 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
                 ? (type.isEmpty ? 'hls error' : '$type $details $reason'.trim())
                 : 'http $status',
           ),
+          refusal: switch (status) {
+            401 => const StreamRefusal(status: 401, code: 'unauthenticated'),
+            410 => const StreamRefusal(status: 410, code: 'stream-stale'),
+            429 => const StreamRefusal(status: 429, code: 'transcode-limited'),
+            _ => null,
+          },
         ),
       );
       return;
@@ -619,6 +681,10 @@ class HlsTimelinePlayer implements TimelineAudioEngine {
   }
 
   void _refuse() {
+    // hls.js retries a refused fragment on its own schedule, and every
+    // retry is another request at a server that is already full.
+    _hls?.callMethod<JSAny?>('stopLoad'.toJS);
+    _refused = true;
     if (!_timelineRefusals.isClosed) _timelineRefusals.add('transcode-limited');
   }
 

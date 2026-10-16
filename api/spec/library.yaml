@@ -34,6 +34,11 @@ paths:
             items the dimension is absent from, such as `[Non-Album]`);
             `kind` and custom tag dimensions have no unknown bucket and
             reject an empty key. Ignored without `facet`.
+
+            A key that names nothing the caller can see (an artist merged
+            into another, an album out of the caller's sight) drills an
+            empty page rather than failing: whether an entity is there is
+            what its own read answers.
           schema:
             type: string
         - name: cursor
@@ -74,8 +79,8 @@ paths:
       description: >
         Keyset-paginated discovery lists over the whole library: newest,
         recently added, most played, recently played, random, starred,
-        alphabetical, never played, and rediscover. Play-derived lists
-        reflect the calling user's own listening state.
+        alphabetical, never played, rediscover, and in progress.
+        Play-derived lists reflect the calling user's own listening state.
 
         Most lists span every media type. `newest` does not: it orders by
         release year, which a podcast episode has not got, so it covers
@@ -125,7 +130,9 @@ paths:
             The bucket to scope to, as returned in the enumeration's
             `key`. Send it empty to select the dimension's unknown bucket;
             `kind` and custom tag dimensions have no unknown bucket and
-            reject an empty key. Ignored without `facet`.
+            reject an empty key. Ignored without `facet`. A key that names
+            nothing the caller can see scopes the list to an empty page,
+            as it drills one on `/library/items`.
           schema:
             type: string
         - name: seed
@@ -933,8 +940,8 @@ components:
       type: string
       description: >
         Discovery lists for browsing. `most-played`, `recently-played`,
-        `starred`, `never-played`, and `rediscover` reflect the calling
-        user's own listening state.
+        `starred`, `never-played`, `rediscover`, and `in-progress` reflect
+        the calling user's own listening state.
 
         `never-played` is what the caller has never counted a play of, and
         `rediscover` is what they starred or rated at least 80 and have not
@@ -947,7 +954,16 @@ components:
         listener would recognize: there is no play stamp to sort a
         never-played item by, and sorting the other by how stale it is
         would put the most forgotten thing first every time the shelf is
-        drawn. The other seven keep the orders their names describe.
+        drawn. The others keep the orders their names describe.
+
+        `in-progress` is what the caller is part way through: a saved
+        position on something not finished, most recently progressed
+        first. An episode or an audiobook is on it from its first saved
+        position, whether or not a play has counted. A track is on it
+        only once a play of it has counted, the membership
+        `recently-played` has: a position is saved for a track skipped a
+        few seconds in as for any other, and that is not something to
+        carry on with.
       enum:
         - newest
         - recently-added
@@ -958,6 +974,7 @@ components:
         - alphabetical
         - never-played
         - rediscover
+        - in-progress
 
     BrowseDimension:
       type: string

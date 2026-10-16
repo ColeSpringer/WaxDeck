@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 )
@@ -78,6 +79,42 @@ func TestMediaTokenOpensOnlyItsRouteAndShape(t *testing.T) {
 	art, _ := h.media.MintFor(auth.MediaClaims{User: adminUserID(t, h), Purpose: auth.PurposeArt, PID: pid}, 0)
 	if code := fetchStatus(t, h, "/media/stream?pid="+url.QueryEscape(pid)+"&mt="+url.QueryEscape(art)); code != http.StatusUnauthorized {
 		t.Errorf("an art token on the stream route = %d, want 401", code)
+	}
+}
+
+// A lapsed media token is refused in the contract's words: the code a
+// player reads to mint the stream again rather than blame the file.
+func TestExpiredMediaTokenAnswers401WithTheContractCode(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	pid := h.items(t, "?limit=1").Items[0].Pid
+	claims := auth.MediaClaims{User: adminUserID(t, h), Purpose: auth.PurposeStream, PID: pid}
+	streamURL := func(token string) string {
+		return "/media/stream?pid=" + url.QueryEscape(pid) + "&mt=" + url.QueryEscape(token)
+	}
+	// The same claims inside their lifetime play, so the refusal below is
+	// the expiry's alone.
+	live, _ := h.media.MintFor(claims, 0)
+	if code := fetchStatus(t, h, streamURL(live)); code != 200 {
+		t.Fatalf("a live token = %d, want 200", code)
+	}
+
+	// The shortest lifetime a mint gives: lapsed once its second is over.
+	lapsed, exp := h.media.MintFor(claims, time.Nanosecond)
+	time.Sleep(time.Until(exp.Add(time.Second + 10*time.Millisecond)))
+	resp, err := http.Get(h.ts.URL + streamURL(lapsed))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusUnauthorized {
+		resp.Body.Close()
+		t.Fatalf("a lapsed token = %d, want 401", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("content type = %q, want application/json", ct)
+	}
+	if e := decode[Error](t, resp); e.Code != "unauthenticated" || e.Message == "" {
+		t.Fatalf("refusal = %+v, want code unauthenticated and a message", e)
 	}
 }
 

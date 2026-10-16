@@ -14,6 +14,7 @@ import '../player/play_progress.dart';
 import '../queue/queue_state.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
+import '../sync/streamed_play_states.dart';
 import 'home_shelves.dart';
 
 /// How long a shelf loads before its skeleton appears.
@@ -43,6 +44,7 @@ class ItemShelf extends ConsumerWidget {
     required this.title,
     required this.provider,
     this.withProgress = false,
+    this.orderedByProgress = false,
     this.allLocation,
   });
 
@@ -55,6 +57,11 @@ class ItemShelf extends ConsumerWidget {
 
   /// Whether cards draw a progress ring and a remaining-time readout.
   final bool withProgress;
+
+  /// Whether the list is ordered by progress, most recent first, so a
+  /// position the stream reports reorders it as well as moving a ring.
+  /// Only with [withProgress], whose reports it reads.
+  final bool orderedByProgress;
 
   /// Where "Show all" goes, on the shelves that have a surface behind
   /// them. The collection shelves do not: nothing enumerates "never
@@ -88,11 +95,27 @@ class ItemShelf extends ConsumerWidget {
       return SliverToBoxAdapter(child: DelayedShelfSkeleton(title: title));
     }
     final state = async.value;
-    final items = state?.items ?? const <ItemSummary>[];
-    if (items.isEmpty) {
+    final read = state?.items ?? const <ItemSummary>[];
+    if (read.isEmpty) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
     final progress = state?.progress ?? PlayProgressView.empty;
+    // A position the stream reported after the shelf was read: a
+    // checkpoint moves the ring without the shelf being read again. This
+    // shelf's own items only, since the reports are replaced whole on
+    // every report, for any item.
+    final streamed = <String, PlayState>{
+      if (withProgress)
+        for (final item in read)
+          item.pid: ?ref.watch(
+            streamedPlayStatesProvider.select((all) => all[item.pid]),
+          ),
+    };
+    PlayProgress positionOf(String pid) =>
+        newerProgress(progress[pid], streamed[pid]);
+    final items = orderedByProgress
+        ? _reportedFirst(read, progress, streamed)
+        : read;
     final store = ref.watch(artworkStoreProvider);
     final l10n = context.l10n;
     final wax = context.waxL10n;
@@ -115,13 +138,13 @@ class ItemShelf extends ConsumerWidget {
           domain: waxDomainOf(item.mediaType),
           shape: waxShapeOf(item.mediaType),
           progress: withProgress
-              ? progress[item.pid].fractionOf(item.durationMs)
+              ? positionOf(item.pid).fractionOf(item.durationMs)
               : null,
           trailingText: withProgress
-              ? _left(l10n, wax, progress, item, short: true)
+              ? _left(l10n, wax, positionOf(item.pid), item, short: true)
               : null,
           trailingSpoken: withProgress
-              ? _left(l10n, wax, progress, item, short: false)
+              ? _left(l10n, wax, positionOf(item.pid), item, short: false)
               : null,
           // Scoped by shelf, because the shelves overlap by construction:
           // a fresh unplayed track is on Recently added and on Never
@@ -158,7 +181,7 @@ class ItemShelf extends ConsumerWidget {
             onTapItem: (tile) {
               final at = tiles.indexOf(tile);
               if (at < 0) return;
-              openHomeItem(context, ref, items[at], progress[items[at].pid]);
+              openHomeItem(context, ref, items[at], positionOf(items[at].pid));
             },
             // The cover is the thing that plays here, so it says so
             // under a pointer. Nothing appears for a finger: the
@@ -166,7 +189,7 @@ class ItemShelf extends ConsumerWidget {
             onPlayItem: (tile) {
               final at = tiles.indexOf(tile);
               if (at < 0) return;
-              playHomeItem(ref, items[at], progress[items[at].pid]);
+              playHomeItem(ref, items[at], positionOf(items[at].pid));
             },
             onMoreItem: (tile) {
               final at = tiles.indexOf(tile);
@@ -181,6 +204,42 @@ class ItemShelf extends ConsumerWidget {
         ),
       ),
     );
+  }
+
+  /// [items] with the cards whose position the stream moved since [read]
+  /// in front, newest report first, and the rest in the order read.
+  ///
+  /// For a list ordered by progress: a report newer than its card's read
+  /// is progress made after the read, so newer than anything the read
+  /// ordered by. A finished one keeps its place until the read that
+  /// takes it off, and a report that moved no position (a star) leaves
+  /// the order alone.
+  static List<ItemSummary> _reportedFirst(
+    List<ItemSummary> items,
+    PlayProgressView read,
+    Map<String, PlayState> streamed,
+  ) {
+    DateTime? movedAt(ItemSummary item) {
+      final report = streamed[item.pid];
+      final held = read[item.pid];
+      if (report == null || report.finished) return null;
+      if (report.positionMs == held.positionMs) return null;
+      if (identical(newerProgress(held, report), held)) return null;
+      return report.updatedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    final moved = <(ItemSummary, DateTime)>[
+      for (final item in items)
+        if (movedAt(item) case final at?) (item, at),
+    ];
+    if (moved.isEmpty) return items;
+    moved.sort((a, b) => b.$2.compareTo(a.$2));
+    final ahead = <String>{for (final (item, _) in moved) item.pid};
+    return <ItemSummary>[
+      for (final (item, _) in moved) item,
+      for (final item in items)
+        if (!ahead.contains(item.pid)) item,
+    ];
   }
 
   /// The caption under a card: the artist, and the album where it says
@@ -200,11 +259,11 @@ class ItemShelf extends ConsumerWidget {
   static String? _left(
     AppLocalizations l10n,
     WaxLocalizations wax,
-    PlayProgressView progress,
+    PlayProgress progress,
     ItemSummary item, {
     required bool short,
   }) {
-    final remaining = progress[item.pid].remainingOf(item.durationMs);
+    final remaining = progress.remainingOf(item.durationMs);
     if (remaining == null) return null;
     final span = short
         ? wax.formatSpan(remaining)

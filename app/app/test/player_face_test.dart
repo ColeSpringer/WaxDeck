@@ -181,6 +181,40 @@ void main() {
       await harness.endPlayback(tester);
     });
 
+    testWidgets('a stream reopened where it stood reads Pause, as the deck '
+        'does', (tester) async {
+      final track = _track(_first, 'Salt Harbour');
+      final repo = FakeRepository(items: [track])..transcodedPids.add(_first);
+      final engine = FakeEngine(
+        mediaDuration: const Duration(milliseconds: 214000),
+      )..buffered = const Duration(seconds: 5);
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: track,
+      );
+      String toggle() => tester
+          .getSemantics(find.bySemanticsIdentifier(SemanticsIds.playerToggle))
+          .label;
+
+      final gate = Completer<void>();
+      engine.loadGate = gate;
+      unawaited(
+        harness.playback.liveSession!.seek(const Duration(seconds: 90)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(engine.playing, isFalse, reason: 'the load stopped it');
+      expect(toggle(), 'Pause');
+
+      gate.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(toggle(), 'Pause');
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('shuffle and repeat drive the queue, not the engine', (
       tester,
     ) async {

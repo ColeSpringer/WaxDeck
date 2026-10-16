@@ -3,6 +3,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import '../library/page_walk.dart';
 import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../settings/prefs_controller.dart';
@@ -418,55 +419,74 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
 
   var _generation = 0;
 
-  Future<ItemPage> _page(String? cursor) {
+  /// Whether the walk [generation] started has lost its reader: the
+  /// listing was left, or rebuilt under it.
+  bool _gone(int generation) => !ref.mounted || generation != _generation;
+
+  /// A page reader over the repository as it is now, so a walk reads its
+  /// pages through one repository rather than through the ref each time.
+  Future<ItemPage> Function(String? cursor) _pages() {
+    final repository = ref.read(repositoryProvider);
+    return (cursor) => _page(repository, cursor);
+  }
+
+  Future<ItemPage> _page(WaxDeckRepository repository, String? cursor) {
     final dimension = listing.dimension;
-    return ref
-        .read(repositoryProvider)
-        .listItems(
-          // A bucket is drilled exactly as its count was computed, with
-          // no media type on top. The music dimensions already leave
-          // podcast episodes out server-side, and they take in whatever
-          // else carries an artist or a year - an audiobook has both - so
-          // narrowing to music here would open a bucket of two to an
-          // empty list. A count that disagrees with the list it opens is
-          // the one thing faceted browse cannot do.
-          //
-          // The tracks index is the other case and does filter: it is
-          // "every track", not a bucket of anything.
-          mediaType: dimension == null ? MediaType.music : null,
-          facet: dimension?.wireName,
-          facetKey: dimension == null
-              ? null
-              : musicFacetKey(dimension, listing.segment),
-          cursor: cursor,
-          limit: pageSize,
-        );
+    return repository.listItems(
+      // A bucket is drilled exactly as its count was computed, with
+      // no media type on top. The music dimensions already leave
+      // podcast episodes out server-side, and they take in whatever
+      // else carries an artist or a year - an audiobook has both - so
+      // narrowing to music here would open a bucket of two to an
+      // empty list. A count that disagrees with the list it opens is
+      // the one thing faceted browse cannot do.
+      //
+      // The tracks index is the other case and does filter: it is
+      // "every track", not a bucket of anything.
+      mediaType: dimension == null ? MediaType.music : null,
+      facet: dimension?.wireName,
+      facetKey: dimension == null
+          ? null
+          : musicFacetKey(dimension, listing.segment),
+      cursor: cursor,
+      limit: pageSize,
+    );
   }
 
   @override
   Future<MusicItemsState> build() async {
-    _generation++;
+    final generation = ++_generation;
     // Watched rather than read so a sign-in swap rebuilds the listing.
     ref.watch(repositoryProvider);
-    final page = await _page(null);
-    return MusicItemsState(items: page.items, nextCursor: page.nextCursor);
+    // To the first page with rows on it, past pages the listing emptied
+    // (rows the caller may not see are dropped after the page is cut):
+    // never "nothing here" over rows a page further on. No further, so a
+    // later page that fails takes nothing this read showed and a run of
+    // short pages is not walked to fill a quota; the screen asks for
+    // more as it needs it, a list too short to scroll included.
+    final walk = await readPages(
+      _pages(),
+      want: 1,
+      stop: () => _gone(generation),
+    );
+    return MusicItemsState(items: walk.items, nextCursor: walk.nextCursor);
   }
 
   /// The listing's items to its end, or until more than [atMost] are
   /// known, for a verb that names a bucket whole or not at all. Pages
   /// past the held ones are read without being shown; one that fails
-  /// throws.
+  /// throws, and the walk runs to its answer even if the listing is left
+  /// meanwhile, since its caller is waiting on it.
   Future<List<ItemSummary>> readThrough({required int atMost}) async {
     final held = await future;
-    final items = [...held.items];
-    var cursor = held.nextCursor;
-    while (cursor != null && items.length <= atMost) {
-      final page = await _page(cursor);
-      if (page.items.isEmpty) break;
-      items.addAll(page.items);
-      cursor = page.nextCursor;
-    }
-    return items;
+    final from = held.nextCursor;
+    if (from == null || held.items.length > atMost) return held.items;
+    final rest = await readPages(
+      _pages(),
+      from: from,
+      want: atMost + 1 - held.items.length,
+    );
+    return <ItemSummary>[...held.items, ...rest.items];
   }
 
   Future<void> loadMore() async {
@@ -475,21 +495,29 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
     final generation = _generation;
     state = AsyncData(current.copyWith(loadingMore: true));
     try {
-      final page = await _page(current.nextCursor);
-      if (generation != _generation) return;
+      // To the next page with rows on it, past pages the listing
+      // emptied: one that adds nothing gives the screen nothing to ask
+      // again from.
+      final walk = await readPages(
+        _pages(),
+        from: current.nextCursor,
+        want: 1,
+        stop: () => _gone(generation),
+      );
+      if (_gone(generation)) return;
       state = AsyncData(
         MusicItemsState(
-          items: <ItemSummary>[...current.items, ...page.items],
-          nextCursor: page.nextCursor,
+          items: <ItemSummary>[...current.items, ...walk.items],
+          nextCursor: walk.nextCursor,
         ),
       );
     } on WaxDeckApiException {
-      if (generation != _generation) return;
+      if (_gone(generation)) return;
       state = AsyncData(current.copyWith(loadingMore: false));
     } catch (_) {
       // Same split as the index controller: release the guard for every
       // failure, surface the ones that are defects.
-      if (generation == _generation) {
+      if (!_gone(generation)) {
         state = AsyncData(current.copyWith(loadingMore: false));
       }
       rethrow;
@@ -502,9 +530,11 @@ class MusicItemsController extends AsyncNotifier<MusicItemsState> {
 /// Keeping every drilled bucket's pages alive for the app's lifetime
 /// would grow without bound as someone browsed, and would serve the stale
 /// page set when they came back.
-/// A refusal is about the listing rather than the connection: a bucket
-/// whose entity was deleted answers 404 for good, and the screen draws
-/// its error state instead of spinning through the ladder.
+/// A refusal is about the request rather than the connection (a key a
+/// bucket cannot take is `invalid-request`), so the screen draws its
+/// error state instead of spinning through the ladder. A key that names
+/// nothing is not a refusal: it drills an empty page, and the screens
+/// over one ask the entity's own read whether it is there.
 final musicItemsProvider = AsyncNotifierProvider.autoDispose
     .family<MusicItemsController, MusicItemsState, MusicListing>(
       MusicItemsController.new,

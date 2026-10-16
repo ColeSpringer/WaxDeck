@@ -586,6 +586,7 @@ export const SemanticsIds = {
   playerSpeedPreset: (percent: string | number) => `player-speed-${percent}`,
   playerSpeedSheet: 'player-speed-sheet',
   playerSpeedSlower: 'player-speed-slower',
+  playerStartRetry: 'player-start-retry',
   playerStationInfo: 'player-station-info',
   playerSurface: 'player-surface',
   playerTimeline: (name: string | number) => `player-timeline-${name}`,

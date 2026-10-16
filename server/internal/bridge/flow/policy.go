@@ -404,9 +404,7 @@ func lossless(codec string) bool { return model.LosslessCodec(codec) }
 // MP3 floor) for the lossy rest. An engaged voice boost is a DSP
 // stage, so it forces a real encode: no direct play, no cut.
 func ShapeFor(src Source, caps *client.Caps, voiceBoost bool) Shape {
-	pick := func(format string) Shape {
-		return Shape{Format: format, MimeType: formatMime[format], Seekable: false}
-	}
+	pick := encodeShape
 	if voiceBoost {
 		if hasOutput(caps, "opus") {
 			return pick("opus")
@@ -426,6 +424,12 @@ func ShapeFor(src Source, caps *client.Caps, voiceBoost bool) Shape {
 		return pick("opus")
 	}
 	return pick("mp3")
+}
+
+// encodeShape is the shape of a live encode to format: its live
+// container's media type, never seekable.
+func encodeShape(format string) Shape {
+	return Shape{Format: format, MimeType: formatMime[format], Seekable: false}
 }
 
 func hasOutput(caps *client.Caps, name string) bool {
@@ -496,5 +500,5 @@ func CappedShape(src Source, caps *client.Caps, shape Shape, capKbps int) (Shape
 			format = "opus"
 		}
 	}
-	return Shape{Format: format, MimeType: formatMime[format], Seekable: false}, true
+	return encodeShape(format), true
 }

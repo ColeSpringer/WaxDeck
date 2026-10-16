@@ -118,6 +118,43 @@ class PacedRefresh {
   }
 }
 
+/// Runs a fan-out once its hints stop coming for [quiet]: the trailing
+/// edge alone, for a read worth asking again after a run of changes
+/// rather than during one. What a run left owed (a first build it would
+/// not interrupt) is asked again a [quiet] later, under the same
+/// contract as [PacedRefresh].
+class QuietRefresh {
+  QuietRefresh({required this.fanOut, this.retry, required this.quiet});
+
+  final bool Function() fanOut;
+  final bool Function()? retry;
+  final Duration quiet;
+
+  Timer? _timer;
+  var _disposed = false;
+
+  /// A change hint: the run waits for the hints to stop.
+  void hint() {
+    if (_disposed) return;
+    _timer?.cancel();
+    _timer = Timer(quiet, () => _run(full: true));
+  }
+
+  void _run({required bool full}) {
+    _timer = null;
+    if (_disposed) return;
+    final complete = full ? fanOut() : (retry ?? fanOut)();
+    if (!complete) _timer = Timer(quiet, () => _run(full: false));
+  }
+
+  /// Drops whatever is pending and ignores every later call.
+  void dispose() {
+    _disposed = true;
+    _timer?.cancel();
+    _timer = null;
+  }
+}
+
 /// Which providers are mid-first-build right now, kept from the
 /// observer hooks. Registered on the app's root container in main.dart;
 /// [InvalidationFanOut] reads it to know what not to interrupt.

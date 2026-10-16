@@ -15,6 +15,7 @@ const DiscoveryList _$starred = const DiscoveryList._('starred');
 const DiscoveryList _$alphabetical = const DiscoveryList._('alphabetical');
 const DiscoveryList _$neverPlayed = const DiscoveryList._('neverPlayed');
 const DiscoveryList _$rediscover = const DiscoveryList._('rediscover');
+const DiscoveryList _$inProgress = const DiscoveryList._('inProgress');
 const DiscoveryList _$unknownDefaultOpenApi = const DiscoveryList._(
   'unknownDefaultOpenApi',
 );
@@ -39,6 +40,8 @@ DiscoveryList _$valueOf(String name) {
       return _$neverPlayed;
     case 'rediscover':
       return _$rediscover;
+    case 'inProgress':
+      return _$inProgress;
     case 'unknownDefaultOpenApi':
       return _$unknownDefaultOpenApi;
     default:
@@ -57,6 +60,7 @@ final BuiltSet<DiscoveryList> _$values =
       _$alphabetical,
       _$neverPlayed,
       _$rediscover,
+      _$inProgress,
       _$unknownDefaultOpenApi,
     ]);
 
@@ -71,6 +75,7 @@ class _$DiscoveryListMeta {
   DiscoveryList get alphabetical => _$alphabetical;
   DiscoveryList get neverPlayed => _$neverPlayed;
   DiscoveryList get rediscover => _$rediscover;
+  DiscoveryList get inProgress => _$inProgress;
   DiscoveryList get unknownDefaultOpenApi => _$unknownDefaultOpenApi;
   DiscoveryList valueOf(String name) => _$valueOf(name);
   BuiltSet<DiscoveryList> get values => _$values;
@@ -95,6 +100,7 @@ class _$DiscoveryListSerializer implements PrimitiveSerializer<DiscoveryList> {
     'alphabetical': 'alphabetical',
     'neverPlayed': 'never-played',
     'rediscover': 'rediscover',
+    'inProgress': 'in-progress',
     'unknownDefaultOpenApi': 'unknown_default_open_api',
   };
   static const Map<Object, String> _fromWire = const <Object, String>{
@@ -107,6 +113,7 @@ class _$DiscoveryListSerializer implements PrimitiveSerializer<DiscoveryList> {
     'alphabetical': 'alphabetical',
     'never-played': 'neverPlayed',
     'rediscover': 'rediscover',
+    'in-progress': 'inProgress',
     'unknown_default_open_api': 'unknownDefaultOpenApi',
   };
 

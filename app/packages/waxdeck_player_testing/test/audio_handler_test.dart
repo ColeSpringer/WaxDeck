@@ -50,6 +50,28 @@ void main() {
     live: live,
   );
 
+  test('a load of the app\'s own reads as playing and loading', () async {
+    // The engine reads stopped through a stream reopened where it stood,
+    // and idle where a failure came first: the lock screen keeps the
+    // transport the app draws, and Android keeps its service.
+    await pumpEventQueue();
+    final before = handler.playbackState.value;
+    expect(before.playing, isFalse);
+    expect(before.processingState.name, 'idle');
+
+    handler.publishOpening(true);
+    final opening = handler.playbackState.value;
+    expect(opening.playing, isTrue);
+    expect(opening.processingState.name, 'loading');
+    expect(opening.controls.map((c) => c.label), contains('Pause'));
+
+    handler.publishOpening(false);
+    final after = handler.playbackState.value;
+    expect(after.playing, isFalse);
+    expect(after.processingState.name, 'idle');
+    expect(after.controls.map((c) => c.label), contains('Play'));
+  });
+
   test('what is playing reaches the OS as a media item', () {
     handler.publish(item('tr-1'));
 
@@ -172,6 +194,62 @@ void main() {
     // finalizing without silencing would leave music playing out of an
     // app that is gone.
     expect(ownEngine.processingState, EngineProcessingState.idle);
+  });
+
+  group('seeking from an OS surface', () {
+    // A book's lock-screen scrubber spans the whole book, and a stream the
+    // server cuts starts its own clock at the cut: the engine's position
+    // is neither, so a seek or a hop made on the engine's clock lands in
+    // the wrong place. The app's position and its seek are the ones.
+    late FakeEngine ownEngine;
+    late WaxDeckAudioHandler routed;
+    late List<Duration> sought;
+    var appPosition = const Duration(minutes: 10);
+
+    setUp(() async {
+      ownEngine = FakeEngine();
+      sought = <Duration>[];
+      appPosition = const Duration(minutes: 10);
+      routed = WaxDeckAudioHandler(
+        engine: ownEngine,
+        onPlayFromMediaId: (_) async {},
+        onSeek: (position) async => sought.add(position),
+        position: () => appPosition,
+        controlLabels: _labels,
+      );
+      await ownEngine.load('https://example.test/part-2.flac');
+      await ownEngine.seek(const Duration(seconds: 15));
+    });
+
+    test('a seek goes to the app, not the engine', () async {
+      await routed.seek(const Duration(minutes: 12));
+      expect(sought, <Duration>[const Duration(minutes: 12)]);
+      expect(ownEngine.position, const Duration(seconds: 15));
+    });
+
+    test('the hops step from where the app says it stands', () async {
+      await routed.rewind();
+      await routed.fastForward();
+      expect(sought, <Duration>[
+        const Duration(minutes: 9, seconds: 50),
+        const Duration(minutes: 10, seconds: 30),
+      ]);
+    });
+
+    test('a hop back never goes before the start', () async {
+      appPosition = const Duration(seconds: 4);
+      await routed.rewind();
+      expect(sought, <Duration>[Duration.zero]);
+    });
+
+    test('the OS is told the app\'s position', () async {
+      await ownEngine.play();
+      await Future<void>.delayed(Duration.zero);
+      expect(
+        routed.playbackState.value.updatePosition,
+        const Duration(minutes: 10),
+      );
+    });
   });
 
   test('a task removed with no app behind it still stops the sound', () async {

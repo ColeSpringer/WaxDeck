@@ -18,6 +18,8 @@ Every entry carries a gate tag saying what actually blocks it:
   as forgotten.
 - `[third-party]` needs a fix in a dependency outside the Wax repos;
   the entry names the package and what WaxDeck does meanwhile.
+- `[decision]` held by a product call that is the owner's to make; the
+  entry says when it was made and what lifts it.
 
 ## Playback and apps
 
@@ -213,15 +215,18 @@ Every entry carries a gate tag saying what actually blocks it:
   since fixed upstream, which the precacher had nothing to do with. The
   switch is gone and the claim is withdrawn. Take it with the
   perf-measurement entry above.
-- `[in-repo]` **The web build skips tracks the browser cannot decode.**
-  Monkey's Audio, WavPack, WMA and Musepack stream as the file is, and a
-  browser refuses them (media error 4), so the queue skips each one as a
-  failed start. Play-info's `maxBitrateKbps` is not enough: it re-encodes
-  only a lossless source (APE, WavPack, WMA Lossless) or a lossy one above
+- `[decision]` **The web build skips tracks the browser cannot decode.**
+  Monkey's Audio, WavPack, WMA, Musepack and (outside Safari) AIFF stream
+  as the file is, and a browser refuses them (media error 4), so the queue
+  skips each one as a failed start. Play-info's `maxBitrateKbps` is not
+  enough: it re-encodes only a lossless source (APE, WavPack, WMA
+  Lossless, AIFF) or a lossy one above
   the cap, so a 128 kbps WMA or a Musepack file would still stream as-is.
   The fix is for the client to say which formats it can decode (from
   `canPlayType`) and the server to encode the rest, counted against the
-  caller's transcode limits.
+  caller's transcode limits. Held by the owner's call of 2026-09-27,
+  which named it a deferred feature rather than part of the slice that
+  found it; it is built when the owner schedules it.
 - `[third-party]` **On Android a swipe that starts on selectable text
   selects it rather than changing tab.** Flutter's `SelectionArea` takes
   a horizontal touch drag as its own on Android (it waits for other

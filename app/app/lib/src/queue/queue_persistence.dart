@@ -325,17 +325,16 @@ class QueueRestoreController extends AsyncNotifier<RestorableQueue?> {
     }
   }
 
-  /// Puts the restored queue back in play. Through the playback layer,
-  /// which loads the current entry paused at its checkpoint: accepting
-  /// the offer is "put it back", and the transport is right there for
-  /// the rest.
+  /// Puts the restored queue back in play, playing from its checkpoint:
+  /// the offer's control says Resume, and the tap on it is the gesture a
+  /// browser needs to allow a start.
   void accept() {
     final offer = state.value;
     if (offer == null) return;
     final playback = ref.read(nowPlayingProvider.notifier);
     // The offer read the entry it names; the start needs no second read.
     if (offer.currentItem case final item?) playback.noteSummary(item);
-    playback.restore(offer.queue);
+    playback.restore(offer.queue, autoplay: true);
     state = const AsyncData(null);
   }
 

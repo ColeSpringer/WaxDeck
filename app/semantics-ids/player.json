@@ -51,6 +51,7 @@
     "playerSpeedPreset": "player-speed-{percent}",
     "playerSpeedSheet": "player-speed-sheet",
     "playerSpeedSlower": "player-speed-slower",
+    "playerStartRetry": "player-start-retry",
     "playerStationInfo": "player-station-info",
     "playerSurface": "player-surface",
     "playerTimeline": "player-timeline-{name}",

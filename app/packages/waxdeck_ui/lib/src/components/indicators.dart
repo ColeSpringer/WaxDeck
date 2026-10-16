@@ -145,12 +145,17 @@ class _BarsPainter extends CustomPainter {
 /// control's glyph, never a page's, which draws the shape of what is
 /// coming instead. Still under reduced motion.
 class WaxSpinner extends StatefulWidget {
-  const WaxSpinner({this.size = 16, this.color, super.key});
+  const WaxSpinner({this.size = 16, this.color, this.thickness, super.key});
 
   final double size;
 
   /// Defaults to the accent.
   final Color? color;
+
+  /// The stroke's width. Null takes an eighth of [size], and at least 1.5,
+  /// so a ring grows with the glyph it stands in for; a ring drawn around
+  /// a control rather than in place of its glyph passes a hairline.
+  final double? thickness;
 
   @override
   State<WaxSpinner> createState() => _WaxSpinnerState();
@@ -191,7 +196,9 @@ class _WaxSpinnerState extends State<WaxSpinner>
             turns: _turn,
             // Its own layer, so a turn moves the arcs rather than repainting.
             child: RepaintBoundary(
-              child: CustomPaint(painter: _SpinnerPainter(color)),
+              child: CustomPaint(
+                painter: _SpinnerPainter(color, widget.thickness),
+              ),
             ),
           ),
         ),
@@ -202,13 +209,14 @@ class _WaxSpinnerState extends State<WaxSpinner>
 
 /// A faint track and a quarter of it drawn solid.
 class _SpinnerPainter extends CustomPainter {
-  _SpinnerPainter(this.color);
+  _SpinnerPainter(this.color, this.thickness);
 
   final Color color;
+  final double? thickness;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final thickness = math.max(1.5, size.shortestSide / 8);
+    final thickness = this.thickness ?? math.max(1.5, size.shortestSide / 8);
     final rect = (Offset.zero & size).deflate(thickness / 2);
     final paint = Paint()
       ..style = PaintingStyle.stroke
@@ -231,7 +239,8 @@ class _SpinnerPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_SpinnerPainter oldDelegate) => oldDelegate.color != color;
+  bool shouldRepaint(_SpinnerPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.thickness != thickness;
 }
 
 /// How much room a [LivePill] takes.

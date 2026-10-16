@@ -4,6 +4,7 @@ import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
@@ -273,6 +274,38 @@ void main() {
     // The code's sentence, not the server's: a start that failed is a
     // failed operation rather than a refusal of something just typed.
     expect(find.text('That is not here any more.'), findsOneWidget);
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a transcode-limited start renders the server sentence on the '
+      'player', (tester) async {
+    final repo = FakeRepository(items: [testItem(pid)]);
+    // The stream URL itself was refused (the probe read the 429), not the
+    // play-info: the pane says why rather than blaming the file.
+    final engine = FakeEngine()
+      ..failEveryLoad = true
+      ..loadFault = MediaFault.transport
+      ..loadRefusal = const StreamRefusal(
+        status: 429,
+        code: 'transcode-limited',
+        message: 'too many streams',
+      );
+
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: engine,
+      item: testItem(pid),
+    );
+
+    expect(find.byKey(const Key('player-error')), findsOneWidget);
+    expect(
+      find.text(
+        'Too many streams are being converted at once. Try again in a moment.',
+      ),
+      findsOneWidget,
+    );
+    engine.failEveryLoad = false;
     await harness.endPlayback(tester);
   });
 

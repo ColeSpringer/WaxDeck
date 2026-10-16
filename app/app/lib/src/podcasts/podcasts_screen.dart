@@ -18,6 +18,7 @@ import '../settings/client_prefs.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
+import '../sync/streamed_play_states.dart';
 import '../uploads/file_picker_port.dart';
 import 'add_podcast.dart';
 import 'episode_actions.dart';
@@ -210,8 +211,23 @@ class _UpNextShelf extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final rows =
-        ref.watch(upNextEpisodesProvider).value ?? const <ShelfEpisode>[];
+    // A position the stream reported after the shelf was read: a
+    // checkpoint moves the ring without the shelf being read again. This
+    // shelf's own episodes only, since the reports are replaced whole on
+    // every report, for any item.
+    final rows = <ShelfEpisode>[
+      for (final row
+          in ref.watch(upNextEpisodesProvider).value ?? const <ShelfEpisode>[])
+        ShelfEpisode(
+          episode: row.episode,
+          progress: newerProgress(
+            row.progress,
+            ref.watch(
+              streamedPlayStatesProvider.select((all) => all[row.episode.pid]),
+            ),
+          ),
+        ),
+    ];
     if (rows.isEmpty) return const SizedBox.shrink();
     final store = ref.watch(artworkStoreProvider);
     final l10n = context.l10n;

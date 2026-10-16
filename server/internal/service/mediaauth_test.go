@@ -274,6 +274,21 @@ func TestAuthorizeMediaDecidesEveryPurposeByName(t *testing.T) {
 	}
 }
 
+// One item's HLS rendering is that item's stream by another route, so
+// each fetch re-checks the item as a stream's does.
+func TestAuthorizeMediaChecksAnItemRenderingLikeItsStream(t *testing.T) {
+	t.Parallel()
+	ctx, svc, admin := newCatalogFixture(t)
+	track := fixtureItemPIDs(t, ctx, svc, admin)[0]
+	if err := svc.AuthorizeMedia(ctx, auth.MediaClaims{User: admin.ID, Purpose: auth.PurposeHLS, PID: track}); err != nil {
+		t.Errorf("a visible item's rendering = %v, want it admitted", err)
+	}
+	err := svc.AuthorizeMedia(ctx, auth.MediaClaims{User: admin.ID, Purpose: auth.PurposeHLS, PID: "tr-01NOSUCHTRACK0000000000000"})
+	if KindOf(err) != KindNotFound {
+		t.Errorf("an unknown item's rendering = %v, want not found", err)
+	}
+}
+
 // A group claim that moves an account in or out of the admin role on
 // login changes what it may see, as the same change made by hand does:
 // both epochs move, so its timelines and sync cursors from before end.

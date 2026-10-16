@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
+import 'package:waxdeck/src/player/playback_session.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
@@ -125,14 +126,19 @@ void main() {
 
     final written = repo.putPlayStateCalls.map((c) => c.positionMs).toList();
     expect(
-      written,
-      contains(10000),
-      reason: 'the mid-load pause checkpoints where part 0 stood',
+      written.last,
+      90000,
+      reason: 'the jump writes where it landed, at once',
     );
     expect(
       written,
       isNot(contains(70000)),
       reason: 'nothing may mix part 1\'s start with part 0\'s position',
+    );
+    expect(
+      written,
+      isNot(contains(30000)),
+      reason: 'nor part 0\'s start with part 1\'s position',
     );
     await harness.endPlayback(tester);
   });
@@ -249,4 +255,188 @@ void main() {
     expect(engine.position, const Duration(seconds: 15));
     await harness.endPlayback(tester);
   });
+
+  group('a session over a three-part book', () {
+    const threePartPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK03';
+    late FakeRepository repo;
+    late FakeEngine engine;
+
+    setUp(() {
+      repo = FakeRepository()
+        ..books[threePartPid] = testBook(
+          threePartPid,
+          durationMs: 180000,
+          partCount: 3,
+        );
+      engine = FakeEngine(mediaDuration: const Duration(minutes: 1));
+    });
+
+    Future<PlaybackSession> started({int at = 0, bool play = true}) async {
+      final session = PlaybackSession(
+        repository: repo,
+        engine: engine,
+        item: const ItemSummary(
+          pid: threePartPid,
+          mediaType: MediaType.audiobook,
+          title: 'Three Parts',
+          durationMs: 180000,
+        ),
+        clientId: 'test',
+        initialPositionMs: at,
+      );
+      addTearDown(session.dispose);
+      await session.start(autoplay: play);
+      return session;
+    }
+
+    test('a seek to the exact end of a part loads the next one', () async {
+      // Where a folder-of-files chapter starts: the server's window is
+      // half-open, so this millisecond is part 1's, not part 0's end.
+      final session = await started();
+      await session.seek(const Duration(milliseconds: 60000));
+      expect(engine.loadedUrl, contains('part=1'));
+      expect(engine.position, Duration.zero);
+      expect(session.displayPosition, const Duration(milliseconds: 60000));
+    });
+
+    test('a paused seek into another part says where it landed', () async {
+      final session = await started(at: 150000, play: false);
+      final shown = <Duration>[];
+      final feed = session.displayPositionStream.listen(shown.add);
+      addTearDown(feed.cancel);
+      // The element reports where the new part stands before its load
+      // answers, as a browser's does.
+      final gate = Completer<void>();
+      engine.loadGate = gate;
+      final seeking = session.seek(const Duration(seconds: 30));
+      await pumpEventQueue();
+      gate.complete();
+      await seeking;
+      await pumpEventQueue();
+      expect(engine.playing, isFalse);
+      expect(shown.last, const Duration(seconds: 30));
+    });
+
+    test('a seek to the end of the last part stays on it', () async {
+      final session = await started(at: 150000);
+      final loads = engine.loadedUrls.length;
+      await session.seek(const Duration(milliseconds: 180000));
+      expect(engine.loadedUrls, hasLength(loads));
+      expect(engine.seekCalls.last, const Duration(minutes: 1));
+    });
+
+    test('a jump back across files writes the new position at once', () async {
+      final session = await started(at: 150000);
+      await session.seek(const Duration(seconds: 30));
+      await pumpEventQueue();
+      expect(engine.loadedUrl, contains('part=0'));
+      expect(repo.putPlayStateCalls.last.positionMs, 30000);
+      expect(
+        repo.putPlayStateCalls.map((c) => c.positionMs),
+        everyElement(isNot(anyOf(90000, 150000 + 30000))),
+        reason: 'no write mixes one part\'s start with another\'s position',
+      );
+    });
+
+    test(
+      'letting go during a part load writes where the load is going',
+      () async {
+        final session = await started();
+        engine.advance(const Duration(seconds: 50));
+        await pumpEventQueue();
+        final gate = Completer<void>();
+        engine.loadGate = gate;
+        final seeking = session.seek(const Duration(seconds: 90));
+        await pumpEventQueue();
+        // The engine already holds part 1 at 30 s; the session's timeline
+        // still says part 0.
+        await session.dispose();
+        expect(repo.putPlayStateCalls.last.positionMs, 90000);
+        gate.complete();
+        await seeking;
+      },
+    );
+
+    test('a skip past the end of the book rests at its end', () async {
+      final session = await started(at: 170000);
+      final loads = engine.loadedUrls.length;
+      await session.seek(const Duration(seconds: 200));
+      expect(engine.loadedUrls, hasLength(loads));
+      expect(session.displayPosition, const Duration(seconds: 180));
+    });
+
+    test('seeks while a boosted part reloads load once, at the last', () async {
+      repo.voiceBoostPids.add(threePartPid);
+      engine.buffered = const Duration(seconds: 5);
+      final session = await started();
+      final gate = Completer<void>();
+      repo.playInfoGate = gate;
+      final first = session.seek(const Duration(seconds: 30));
+      await pumpEventQueue();
+      // Folded into the load under way, these answer once it lands.
+      final second = session.seek(const Duration(seconds: 40));
+      final third = session.seek(const Duration(seconds: 50));
+      repo.playInfoGate = null;
+      gate.complete();
+      await first;
+      expect(await second, isTrue);
+      expect(await third, isTrue);
+      await pumpEventQueue();
+      expect(engine.loadedUrls, hasLength(2));
+      expect(engine.loadedUrl, contains('&t=50'));
+    });
+
+    test('a paused seek inside the part is written', () async {
+      final session = await started(play: false);
+      await session.seek(const Duration(seconds: 42));
+      await pumpEventQueue();
+      expect(repo.putPlayStateCalls.last.positionMs, 42000);
+    });
+
+    test('a write that broke does not stop the ones after it', () async {
+      repo = _BreakingOnce()
+        ..books[threePartPid] = testBook(
+          threePartPid,
+          durationMs: 180000,
+          partCount: 3,
+        );
+      final session = await started(play: false);
+      await session.seek(const Duration(seconds: 10));
+      await pumpEventQueue();
+      await session.seek(const Duration(seconds: 20));
+      await pumpEventQueue();
+      expect(repo.putPlayStateCalls.last.positionMs, 20000);
+    });
+
+    test('a slow stale write never lands after a fresh one', () async {
+      final session = await started(play: false);
+      final slow = Completer<void>();
+      repo.putPlayStateHolds.addAll(<Completer<void>?>[slow, null]);
+      await session.seek(const Duration(seconds: 10));
+      await session.seek(const Duration(seconds: 20));
+      await pumpEventQueue();
+      slow.complete();
+      await pumpEventQueue();
+      expect(repo.putPlayStateCalls.last.positionMs, 20000);
+    });
+  });
+}
+
+/// A repository whose first checkpoint breaks with something that is not
+/// the API's own failure.
+class _BreakingOnce extends FakeRepository {
+  var _broke = false;
+
+  @override
+  Future<void> putPlayState(
+    String pid,
+    int positionMs, {
+    DateTime? recordedAt,
+  }) async {
+    if (!_broke) {
+      _broke = true;
+      throw StateError('the write broke');
+    }
+    return super.putPlayState(pid, positionMs, recordedAt: recordedAt);
+  }
 }

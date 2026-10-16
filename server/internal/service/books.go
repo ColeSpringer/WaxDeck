@@ -85,19 +85,16 @@ func (l *Library) BookDetailFor(ctx context.Context, uc *UserCtx, apiBookPID str
 		Edition:         bd.Edition,
 		Abridged:        bd.Abridged,
 		DescriptionHTML: sanitizeShowNotes(bd.Description),
-		DurationMS:      bd.TotalDurationMS,
 	}
+	// The marks and the length on the timeline the parts play on, which
+	// is where every position on this surface is.
+	out.Chapters, out.DurationMS = bookMarks(bd)
 	out.ArtSource = l.artSourceForRef(ctx, model.EntityRef{Type: model.ArtTrack, PID: bd.Item.PID})
 	if out.Authors == nil {
 		out.Authors = []string{}
 	}
 	if out.Narrators == nil {
 		out.Narrators = []string{}
-	}
-	for i, ch := range bd.Chapters {
-		out.Chapters = append(out.Chapters, ChapterMark{
-			Index: i, Title: ch.Title, StartMS: ch.StartMS, EndMS: ch.EndMS,
-		})
 	}
 	out.Parts = bookParts(bd)
 	row, err := l.db.BookSettingsFor(ctx, uc.ID, string(bd.Item.PID))
@@ -134,11 +131,14 @@ func bookParts(bd *model.BookDetail) []BookPart {
 // BookResumeFor returns where the caller left off, with the containing
 // chapter.
 func (l *Library) BookResumeFor(ctx context.Context, uc *UserCtx, apiBookPID string) (BookResumePoint, error) {
-	if _, err := l.getBookDetail(ctx, uc, apiBookPID); err != nil {
+	bd, err := l.getBookDetail(ctx, uc, apiBookPID)
+	if err != nil {
 		return BookResumePoint{}, err
 	}
+	// The state alone: the catalog's BookResume would read the chapters
+	// again for a chapter this answers itself (chapterAt, below).
 	_, pid, _ := parseAPIPID(apiBookPID)
-	st, ch, err := l.lib.BookResume(ctx, model.PID(uc.CatalogPID), pid)
+	st, err := l.lib.Playback().State(ctx, model.PID(uc.CatalogPID), pid)
 	if err != nil {
 		return BookResumePoint{}, classify(err)
 	}
@@ -147,11 +147,10 @@ func (l *Library) BookResumeFor(ctx context.Context, uc *UserCtx, apiBookPID str
 		out.PositionMS = st.PositionMS
 		out.UpdatedAtNS = st.UpdatedAt
 	}
-	if ch != nil {
-		out.Chapter = &ChapterMark{
-			Index: ch.Position, Title: ch.Title, StartMS: ch.StartMS, EndMS: ch.EndMS,
-		}
-	}
+	// The mark the position falls in on the timeline the position is on,
+	// the parts' own, rather than the catalog's reading of it on its own.
+	marks, _ := bookMarks(bd)
+	out.Chapter = chapterAt(marks, out.PositionMS)
 	return out, nil
 }
 
@@ -226,8 +225,9 @@ func (l *Library) CreateBookmark(ctx context.Context, uc *UserCtx, apiBookPID, a
 		}
 	}
 	// A mark past the end of the book is one nothing can seek to.
+	_, total := bookMarks(bd)
 	check := func() error {
-		switch total := bd.TotalDurationMS; {
+		switch {
 		case positionMS < 0:
 			return errInvalid("positionMs must not be negative")
 		case total > 0 && positionMS > total:

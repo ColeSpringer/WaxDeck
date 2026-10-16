@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_continuation.dart';
@@ -7,8 +10,10 @@ import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
 import 'package:waxdeck/src/settings/client_prefs.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
+import 'package:waxdeck_player/waxdeck_player.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 
 import 'fakes.dart';
@@ -28,6 +33,7 @@ const _album = QueueSource(
 /// binds it, so the queue's own notifications reach it.
 ({ProviderContainer container, FakeRepository repo}) _harness({
   List<ItemSummary>? items,
+  FakeEngine? engine,
 }) {
   final repo = FakeRepository(
     items:
@@ -42,7 +48,7 @@ const _album = QueueSource(
   final container = ProviderContainer(
     overrides: [
       repositoryProvider.overrideWithValue(repo),
-      audioEngineProvider.overrideWithValue(FakeEngine()),
+      audioEngineProvider.overrideWithValue(engine ?? FakeEngine()),
       clientSettingsStoreProvider.overrideWithValue(
         MemoryClientSettingsStore(),
       ),
@@ -85,6 +91,158 @@ void main() {
     expect(h.container.read(queueContinuationProvider), <String>{
       h.container.queueState.entries.last.queueId,
     });
+  });
+
+  test(
+    'a lone track that cannot play says so before the mix takes over',
+    () async {
+      final engine = FakeEngine()
+        ..failNextLoad = true
+        ..loadFault = MediaFault.source;
+      final h = _harness(engine: engine);
+      h.repo.instantMixResult = mix;
+      final raised = <ShellMessage>[];
+      h.container.listen(shellMessengerProvider, (_, next) {
+        if (next != null) raised.add(next);
+      });
+
+      h.container.playback.play([testItem(_a)], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      final l10n = AppLocalizationsEn();
+      final skipped = l10n.playerSkippedUnplayable(testItem(_a).title);
+      expect(h.container.queueState.currentPid, _mixed);
+      expect(raised.map((m) => m.resolve(l10n)), contains(skipped));
+      expect(
+        h.container.read(shellMessengerProvider)?.resolve(l10n),
+        skipped,
+        reason: 'nothing the mix starts says anything over it',
+      );
+    },
+  );
+
+  test(
+    'a lone track that failed before its mix arrived moves on to it',
+    () async {
+      final engine = FakeEngine()
+        ..failNextLoad = true
+        ..loadFault = MediaFault.source;
+      final h = _harness(engine: engine);
+      h.repo.instantMixResult = mix;
+      final gate = Completer<void>();
+      h.repo.instantMixGate = gate;
+      final raised = <ShellMessage>[];
+      h.container.listen(shellMessengerProvider, (_, next) {
+        if (next != null) raised.add(next);
+      });
+
+      h.container.playback.play([testItem(_a)], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.container.queueState.currentPid, _a, reason: 'nothing follows');
+
+      gate.complete();
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      final l10n = AppLocalizationsEn();
+      expect(h.container.queueState.currentPid, _mixed);
+      expect(
+        h.container.read(shellMessengerProvider)?.resolve(l10n),
+        l10n.playerSkippedUnplayable(testItem(_a).title),
+      );
+    },
+  );
+
+  test('a lone track put back paused waits paused on the mix that follows '
+      'it', () async {
+    final engine = FakeEngine()
+      ..failNextLoad = true
+      ..loadFault = MediaFault.source;
+    final h = _harness(engine: engine);
+    h.repo.instantMixResult = mix;
+    final gate = Completer<void>();
+    h.repo.instantMixGate = gate;
+
+    h.container.playback.restore(
+      QueueState.fromStored(
+        StoredQueue(
+          entries: const [
+            StoredQueueEntry(queueId: 'q0', pid: _a, sourceRank: 0),
+          ],
+          currentIndex: 0,
+          shuffled: false,
+          repeat: 'off',
+          sourceKind: 'album',
+          sourceLabel: 'Kind of Blue',
+          sourcePid: 'al-1',
+          nextQueueId: 1,
+          updatedAt: DateTime.utc(2026, 7, 25),
+        ),
+      ),
+    );
+    await pumpEventQueue();
+    await pumpEventQueue();
+    gate.complete();
+    await pumpEventQueue();
+    await pumpEventQueue();
+
+    expect(h.container.queueState.currentPid, _mixed);
+    expect(engine.playing, isFalse, reason: 'nobody pressed play');
+  });
+
+  test(
+    'repeat all over a lone track that cannot play keeps its pane',
+    () async {
+      final engine = FakeEngine()
+        ..failNextLoad = true
+        ..loadFault = MediaFault.source;
+      final h = _harness(engine: engine);
+      h.container.read(keepPlayingSimilarProvider.notifier).set(false);
+      final raised = <ShellMessage>[];
+      h.container.listen(shellMessengerProvider, (_, next) {
+        if (next != null) raised.add(next);
+      });
+      h.container.playback.play([testItem(_a)], source: _album);
+      await pumpEventQueue();
+      await pumpEventQueue();
+      expect(h.container.read(nowPlayingProvider).error, isNotNull);
+
+      h.container.queue.setRepeat(QueueRepeat.all);
+      await pumpEventQueue();
+      await pumpEventQueue();
+
+      final l10n = AppLocalizationsEn();
+      expect(h.container.read(nowPlayingProvider).error, isNotNull);
+      expect(
+        raised.map((m) => m.resolve(l10n)),
+        isNot(contains(l10n.playerSkippedUnplayable(testItem(_a).title))),
+      );
+    },
+  );
+
+  test('a retry that played is never skipped when the mix lands', () async {
+    final engine = FakeEngine()
+      ..failNextLoad = true
+      ..loadFault = MediaFault.source;
+    final h = _harness(engine: engine);
+    h.repo.instantMixResult = mix;
+    final gate = Completer<void>();
+    h.repo.instantMixGate = gate;
+
+    h.container.playback.play([testItem(_a)], source: _album);
+    await pumpEventQueue();
+    await pumpEventQueue();
+    h.container.playback.resume();
+    await pumpEventQueue();
+    await pumpEventQueue();
+    expect(engine.playing, isTrue);
+
+    gate.complete();
+    await pumpEventQueue();
+    await pumpEventQueue();
+    expect(h.container.queueState.currentPid, _a);
   });
 
   test('the mix does not repeat anything the queue held', () async {

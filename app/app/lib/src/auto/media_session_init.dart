@@ -49,8 +49,11 @@ Future<void> initMediaSession(ProviderContainer container) async {
               l10n: () => container.read(offTreeL10nProvider),
             ),
       onPlay: queue.play,
-      // The engine cannot let go of a tuned station. Pause stays its
-      // own, being a gap rather than an end.
+      // Through playback, so a load of its own under way lands paused
+      // rather than starting what the press stopped; a station pauses in
+      // place, for this surface's own play to resume.
+      onPause: queue.pauseInPlace,
+      // The engine cannot let go of a tuned station.
       onStop: queue.stop,
       // Swiping the app out of the recents list, which is a departure
       // rather than a stop: the same two things the desktop close does,
@@ -65,6 +68,12 @@ Future<void> initMediaSession(ProviderContainer container) async {
       },
       onSkipNext: queue.next,
       onSkipPrevious: queue.previous,
+      // The session's timeline, not the engine's: a book's scrubber spans
+      // the book, and a stream the server cut starts its clock at the cut.
+      onSeek: queue.seek,
+      position: () =>
+          queue.session?.displayPosition ??
+          container.read(audioEngineProvider).position,
       onPlayFromMediaId: queue.playItem,
       // The device's language rather than the app's: the channel is
       // listed in the system's own settings.

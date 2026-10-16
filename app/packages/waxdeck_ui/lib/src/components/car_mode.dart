@@ -86,8 +86,8 @@ class CarModeScaffold extends StatelessWidget {
   final String? exitSemanticsId;
 
   /// The play button's diameter, and the reason the rest of the layout
-  /// is what it is. 5.6 asks for 96 px targets; this is that, and the
-  /// two beside it are sized from it.
+  /// is what it is: a 96 px target a driver hits without looking, with
+  /// the two beside it sized from it.
   static const double controlSize = 96;
 
   /// How far a swipe has to travel before it counts as a track change,
@@ -182,7 +182,7 @@ class CarModeScaffold extends StatelessWidget {
         // the column ran off the bottom and took the play button with
         // it, which is the one thing on this screen a driver reaches for
         // without looking. Scrolling inside the slot rather than
-        // shrinking the type: 5.6 asks for display size, and a title
+        // shrinking the type: car mode sets display size, and a title
         // quietly set smaller is a worse answer than a title that can be
         // pushed with a thumb.
         Flexible(

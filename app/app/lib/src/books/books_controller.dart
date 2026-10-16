@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../l10n/l10n.dart';
+import '../library/page_walk.dart';
 import '../player/play_progress.dart';
 import '../providers.dart';
 
@@ -138,21 +139,38 @@ class BooksController extends AsyncNotifier<BooksState> {
 
   var _generation = 0;
 
-  Future<ItemPage> _page(String? cursor) => ref
-      .read(repositoryProvider)
-      .listItems(
-        mediaType: MediaType.audiobook,
-        cursor: cursor,
-        limit: pageSize,
-      );
+  /// Whether the walk [generation] started has lost its reader: the hub
+  /// was rebuilt under it, or is gone.
+  bool _gone(int generation) => !ref.mounted || generation != _generation;
+
+  /// A page reader over the repository as it is now, so a walk reads its
+  /// pages through one repository rather than through the ref each time.
+  Future<ItemPage> Function(String? cursor) _pages() {
+    final repository = ref.read(repositoryProvider);
+    return (cursor) => repository.listItems(
+      mediaType: MediaType.audiobook,
+      cursor: cursor,
+      limit: pageSize,
+    );
+  }
 
   @override
   Future<BooksState> build() async {
-    _generation++;
+    final generation = ++_generation;
     // Watched rather than read so a sign-in swap rebuilds the listing.
     ref.watch(repositoryProvider);
-    final page = await _page(null);
-    return BooksState(books: page.items, nextCursor: page.nextCursor);
+    // To the first page with books on it, past pages the listing emptied,
+    // which the contract allows with books behind them: never "no
+    // audiobooks" over books a page further on. No further, so a later
+    // page that fails takes nothing this read showed and a run of short
+    // pages is not walked to fill a quota; the hub asks for more as it
+    // needs it, a grid too short to scroll included.
+    final walk = await readPages(
+      _pages(),
+      want: 1,
+      stop: () => _gone(generation),
+    );
+    return BooksState(books: walk.items, nextCursor: walk.nextCursor);
   }
 
   Future<void> loadMore() async {
@@ -161,21 +179,29 @@ class BooksController extends AsyncNotifier<BooksState> {
     final generation = _generation;
     state = AsyncData(current.copyWith(loadingMore: true));
     try {
-      final page = await _page(current.nextCursor);
-      if (generation != _generation) return;
+      // To the next page with books on it, past pages the listing
+      // emptied: one that adds nothing to the grid gives the hub nothing
+      // to ask again from.
+      final walk = await readPages(
+        _pages(),
+        from: current.nextCursor,
+        want: 1,
+        stop: () => _gone(generation),
+      );
+      if (_gone(generation)) return;
       state = AsyncData(
         BooksState(
-          books: <ItemSummary>[...current.books, ...page.items],
-          nextCursor: page.nextCursor,
+          books: <ItemSummary>[...current.books, ...walk.items],
+          nextCursor: walk.nextCursor,
         ),
       );
     } on WaxDeckApiException {
-      if (generation != _generation) return;
+      if (_gone(generation)) return;
       state = AsyncData(current.copyWith(loadingMore: false));
     } catch (_) {
       // The same split the music controllers make: release the paging
       // guard for every failure, surface the ones that are defects.
-      if (generation == _generation) {
+      if (!_gone(generation)) {
         state = AsyncData(current.copyWith(loadingMore: false));
       }
       rethrow;

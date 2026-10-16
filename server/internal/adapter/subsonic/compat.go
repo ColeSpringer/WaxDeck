@@ -23,11 +23,17 @@ import (
 // actually implements. The envelope declares openSubsonic, which
 // makes this endpoint mandatory.
 func (h *Handler) getOpenSubsonicExtensions(w http.ResponseWriter, r *http.Request) {
-	h.ok(w, r, envelope{OpenSubsonicExtensions: []openSubsonicExtension{
+	exts := []openSubsonicExtension{
 		{Name: "apiKeyAuthentication", Versions: []int{1}},
 		{Name: "formPost", Versions: []int{1}},
 		{Name: "sonicSimilarity", Versions: []int{1}},
-	}})
+	}
+	// stream's timeOffset is a cut the streaming engine makes, so only a
+	// server running one honours it.
+	if h.bridge.Up() {
+		exts = append(exts, openSubsonicExtension{Name: "transcodeOffset", Versions: []int{1}})
+	}
+	h.ok(w, r, envelope{OpenSubsonicExtensions: exts})
 }
 
 func (h *Handler) getIndexes(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {

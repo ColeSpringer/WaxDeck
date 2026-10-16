@@ -267,6 +267,12 @@ abstract class WaxLocalizations {
   /// **'Unstar'**
   String get controlsUnstar;
 
+  /// Spoken with the ring on the now-playing bar's play button, and as the bar's state in place of Playing, while playback was asked for and no sound has started: media still loading, or a stream being fetched again.
+  ///
+  /// In en, this message translates to:
+  /// **'Buffering'**
+  String get deckBarBuffering;
+
   /// Accessible name of the button that hands playback to a speaker or another browser.
   ///
   /// In en, this message translates to:

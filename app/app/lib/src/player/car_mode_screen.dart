@@ -52,8 +52,8 @@ class CarModeScreen extends ConsumerWidget {
             ),
           ),
           builder: (context, session, item, position) => StreamBuilder<bool>(
-            stream: session.engine.playingStream,
-            initialData: session.engine.playing,
+            stream: session.meansToPlayStream,
+            initialData: session.meansToPlay,
             builder: (context, snapshot) {
               final playback = ref.read(nowPlayingProvider.notifier);
               final music = item.mediaType == MediaType.music;

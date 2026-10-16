@@ -447,7 +447,8 @@ also answers folder-mode browsing (`getIndexes`, `getMusicDirectory`,
 the ID3 views), `getRandomSongs` and `getSongsByGenre`,
 `getScanStatus`, empty-but-valid `getArtistInfo`/`getArtistInfo2` and
 `getTopSongs`, `getOpenSubsonicExtensions` (advertising
-`apiKeyAuthentication` and `formPost`, both real), and read-only
+`apiKeyAuthentication`, `formPost`, `sonicSimilarity` and, on a server
+running the streaming engine, `transcodeOffset`, all real), and read-only
 podcasts (`getPodcasts`/`getNewestPodcasts`: your subscriptions, with
 downloaded episodes streamable and everything else honestly marked).
 The test suite replays the startup, browse, and play request
@@ -466,5 +467,29 @@ produce it, so a client that asks for 192 kbps mp3 gets mp3 rather than
 whatever the ladder would have picked; one the server cannot produce
 falls back to the ladder. `format=raw` beats a cap outright and serves
 the file as it is, which is what that value means everywhere else in the
-protocol. A `format` on its own, with no cap beside it, changes nothing:
-there is no encode for it to aim.
+protocol; a book in parts has no one file, and gets the joined stream
+described below. A `format` on its own, with no cap beside it, changes
+nothing: there is no encode for it to aim.
+
+`timeOffset` starts the stream that many whole seconds in, through the
+streaming engine. A track that would otherwise play as the file is
+encoded from that point instead and counts as a transcode like any
+other: lossless stays lossless and a lossy file keeps its codec and
+bitrate where the engine writes them, unless a cap or the account's
+transcode ceiling calls for less. `format=raw` beats it, as it beats a
+cap. A podcast episode whose audio the server has not fetched has only
+the feed's own file to relay, which nothing can cut, so a stream of one
+asked to start part way in is refused rather than played from its start
+under a clock that says otherwise; from its start it plays as ever.
+
+A book in parts is one song to these clients, so its stream is the whole
+book whatever is asked: one MP3 encode from the part the offset falls in,
+cut there (at the whole second of the book), through the book's last
+part, at the book's own bitrate (held to 32 to 320 kbps, and lowered by a
+cap or the account's transcode ceiling), and counted as one transcode.
+MP3 is the one output whose parts join end to end, so a `format` does not
+change it, and `format=raw` gets the same stream, offset included, at the
+book's own bitrate. A server without the streaming engine joins a book
+whose parts are all MP3 at one sample rate and one channel count the same
+way, frame by frame with nothing encoded, from its start; any other book
+in parts streams its first part as its file there.

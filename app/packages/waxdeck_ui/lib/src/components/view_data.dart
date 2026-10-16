@@ -168,6 +168,7 @@ class NowPlayingData {
     this.domain = WaxDomain.music,
     this.shape = ArtworkShape.square,
     this.buffered,
+    this.buffering = false,
     this.live = false,
     this.starred = false,
     this.songSaved = false,
@@ -196,6 +197,13 @@ class NowPlayingData {
   final Duration duration;
   final Duration? buffered;
   final bool playing;
+
+  /// The play intent holds but no sound is coming yet: media still
+  /// loading, a stream being fetched again. The deck bar rings its play
+  /// button while this and [playing] both hold, and a press still pauses.
+  /// The ring appears the moment this turns true, so the caller decides
+  /// how long a wait has to last before it counts.
+  final bool buffering;
 
   /// Radio: no seek bar, no queue, and play/stop rather than play/pause,
   /// because a pause affordance on a live stream is a lie.

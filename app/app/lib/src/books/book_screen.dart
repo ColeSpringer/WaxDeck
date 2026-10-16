@@ -23,6 +23,7 @@ import '../providers.dart';
 import '../queue/queue_state.dart';
 import '../search/search_chrome.dart';
 import '../sharing/share_dialog.dart';
+import '../shell/async_sliver_face.dart';
 import '../shell/routes.dart';
 import '../shell/semantics_ids.dart';
 import '../shell/shell_messages.dart';
@@ -68,8 +69,16 @@ class BookScreen extends ConsumerWidget {
         const SearchAction(),
       ],
       slivers: <Widget>[
-        switch (detail) {
-          AsyncData(:final value) => SliverList.list(
+        // The shared face rather than a switch on the state's type: a
+        // read Riverpod is retrying is a loading state carrying its
+        // error, which a type switch drew as a skeleton for as long as
+        // the retries ran.
+        AsyncSliverFace<BookDetail>(
+          state: detail,
+          skeletonFills: true,
+          errorTitle: l10n.bookLoadError,
+          onRetry: () => ref.invalidate(bookDetailProvider(pid)),
+          builder: (context, value) => SliverList.list(
             children: <Widget>[
               _Header(book: value),
               _Description(book: value),
@@ -79,19 +88,7 @@ class BookScreen extends ConsumerWidget {
               const SizedBox(height: WaxSpace.s32),
             ],
           ),
-          AsyncError(:final error) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: ErrorState(
-              title: l10n.bookLoadError,
-              message: context.explain(error),
-              onRetry: () => ref.invalidate(bookDetailProvider(pid)),
-            ),
-          ),
-          _ => const SliverFillRemaining(
-            hasScrollBody: false,
-            child: SkeletonShapes(shape: SkeletonShape.list),
-          ),
-        },
+        ),
       ],
     );
   }

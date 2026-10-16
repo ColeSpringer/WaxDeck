@@ -533,11 +533,14 @@ knows the user: a server-wide concurrent cap, a per-account cap
 (administrators exempt), and a default bitrate ceiling for accounts
 without their own. Direct-played originals never count. An over-limit
 stream answers `transcode-limited` (HTTP 429); the streaming engine's
-own admission control remains the hard backstop. A client that pins the
+own admission control remains the hard backstop, and its refusal reaches
+the client as the same `transcode-limited`. A client that pins the
 format the file is already in counts as a direct play too: nothing is
 transcoded, so nothing is charged. Pinning any other format, asking for
-one on a track carved out of a larger file, or turning voice boost on
-is a real encode and takes a slot.
+one on a track carved out of a larger file, turning voice boost on, a
+Subsonic client starting an original part way in (`timeOffset`), or any
+Subsonic stream of a book in parts (one slot for the whole book) is a
+real encode and takes a slot.
 
 A queue playing gaplessly - a cast speaker, or a browser with the
 gapless switch on - is a rendering the engine holds open, and it counts
@@ -553,10 +556,23 @@ be refused in turn - the player says so rather than falling back, since
 the ordinary path sits under the same cap. The admin console's activity
 line says how much of its count is this.
 
+The Android and desktop apps get a capped, voice-boosted or carved
+stream as one item's HLS rendering they seek anywhere in, rather than as
+a live encode, and it rides the same slot: the first fetch takes it when
+the listener holds none, a quiet minute across all their renderings
+gives it back, and the next fetch takes it again or is refused with
+`transcode-limited`. Every fetch reads the account's bitrate ceiling
+again, as a live stream's does: a lossy rendering above a ceiling
+lowered meanwhile answers `stream-stale`, and the app asks again and is
+handed one under the new ceiling, while a lossless one plays out. A
+rendered queue keeps the rendering it was minted with until its next
+mint. A browser plays the live encode.
+
 A per-account bitrate ceiling applies to a rendered queue too: with one
-set, the queue is rendered in a lossy format even when the player asks
-for lossless first, the same way a single track is capped. What a player
-asks for says what it can decode, not what it is allowed.
+set, the queue is rendered in a lossy format at the ceiling's rate even
+when the player asks for lossless first, the same way a single track is
+capped. What a player asks for says what it can decode, not what it is
+allowed.
 
 ## Prometheus metrics
 

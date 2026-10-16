@@ -9657,6 +9657,18 @@ abstract class AppLocalizations {
   /// **'Collapse the player'**
   String get playerCollapseCommand;
 
+  /// Message on the shell when an item that was already playing failed part way (a dropped connection, a part that would not load) and the player stands on its error. {title} is the item's title; the message carries a Retry action.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t keep playing {title}'**
+  String playerCouldNotContinue(String title);
+
+  /// Message on the shell when an item could not start and the player stands on its error. {title} is the item's title; the message carries a Retry action.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t start {title}'**
+  String playerCouldNotStart(String title);
+
   /// Menu item that deletes the playing item's files. The trailing dots say a confirmation follows.
   ///
   /// In en, this message translates to:
@@ -9704,6 +9716,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Forget this song'**
   String get playerForgetSong;
+
+  /// Message on the shell when gapless playback is on but the server turned down rendering the queue as one stream because too many streams are being converted.
+  ///
+  /// In en, this message translates to:
+  /// **'The server is busy, so this queue plays one track at a time. Gapless playback returns when a stream frees up.'**
+  String get playerGaplessBusy;
+
+  /// Message on the shell when a gapless stream stopped mid-play because the server reached its limit of streams being converted.
+  ///
+  /// In en, this message translates to:
+  /// **'The server is busy, so playback paused. Press play to try again.'**
+  String get playerGaplessPaused;
 
   /// Accessible name of the control opening the show a playing episode belongs to. {name} is the show's own name.
   ///
@@ -9783,6 +9807,12 @@ abstract class AppLocalizations {
   /// **'More like this'**
   String get playerMoreLikeThis;
 
+  /// Toast when a seek could not be had (the server or the connection turned down the stream it needed), so playback went on where it was. reason is a sentence saying why.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t jump there. {reason}'**
+  String playerMoveFailed(String reason);
+
   /// Accessible name of the control that steps forward a track.
   ///
   /// In en, this message translates to:
@@ -9836,6 +9866,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pick up where you left off'**
   String get playerOfferResume;
+
+  /// Message on the shell when an item could not start because the server cannot be reached; playback starts by itself once the connection returns, and the message also carries a Retry action.
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re offline. Playback will continue when the connection is back.'**
+  String get playerOfflineStart;
 
   /// Sheet row that opens the full player.
   ///
@@ -16560,7 +16596,7 @@ abstract class AppLocalizations {
   /// The line under the streaming quality settings, naming the trade a cap makes so it arrives as a known one.
   ///
   /// In en, this message translates to:
-  /// **'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and instant seeking, applies from the next track, and never affects downloads'**
+  /// **'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and makes seeking take a moment, applies from the next track, and never affects downloads'**
   String get settingsStreamQualityHelp;
 
   /// Streaming quality option: the 320 kbps cap. The number stays in the help line, never in this label.

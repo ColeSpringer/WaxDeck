@@ -193,8 +193,17 @@ that never becomes downloadable 90 days after a check last saw it live.
 Books are one item with chapters on a single timeline, whether they
 are a chaptered m4b or a folder of parts. Progress lives on the book
 timeline, so resuming on another device lands in the right chapter of
-the right part. The book screen offers chapter navigation, per-book
-speed memory, and a sleep timer with an end-of-chapter mode.
+the right part. A chapter mark a file's tags place past the end of its
+audio is held to where the audio ends, so every mark is somewhere there
+is audio to play, and a book lasts as long as its parts' audio. The book
+screen offers chapter navigation, per-book speed memory, and a sleep
+timer with an end-of-chapter mode.
+
+End of chapter stops playback at the head of the next chapter, so
+pressing play picks up there, at any speed and whether or not the
+chapter ends where a file does. At the end of the last chapter the book
+simply stops: nothing queued after it starts under a sleeper. Seeking
+past the chapter end lets the timer go.
 
 Bookmarks are places you mark on purpose, with an optional note, up to
 200 a book. They work offline on the native apps: a mark made with no
@@ -252,7 +261,11 @@ something there). An upload's media type does the same at import.
 Subsonic clients list music only: books reach them through bookmarks,
 so a library of MP3 audiobooks a Subsonic music client used to browse
 as albums leaves its listings once it holds Books. Books play in the
-WaxDeck apps.
+WaxDeck apps. A book in parts that a Subsonic client plays from a
+bookmark streams from there on through its later parts as one stream.
+Without the streaming engine only a book whose parts are all MP3 at one
+sample rate and one channel count does (from its start); any other plays
+its first part.
 
 ## Silence trimming and voice boost
 

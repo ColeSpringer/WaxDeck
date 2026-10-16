@@ -33,6 +33,10 @@ func (s *Server) ServeDownload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid-request", "pid is required")
 		return
 	}
+	if q.Get(service.JoinKey) != "" {
+		s.serveJoinedMP3(w, r, pid, q.Get("mt"))
+		return
+	}
 	// A stream token opens this route only while the engine is away, when
 	// originals stream through here.
 	purposes := []string{auth.PurposeDownload}

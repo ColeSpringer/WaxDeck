@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_player/waxdeck_player.dart';
 
 import '../artwork/artwork_palette.dart';
 import '../artwork/artwork_providers.dart';
@@ -12,6 +13,7 @@ import '../player/session_registry.dart';
 import '../providers.dart';
 import '../settings/integrations_controller.dart';
 import '../settings/prefs_controller.dart';
+import '../shell/shell_messages.dart';
 import 'radio_saved_controller.dart';
 
 /// The shared internet radio station library.
@@ -384,6 +386,12 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
   /// itself as what is on.
   int _tuning = 0;
 
+  /// The tune whose stream the engine holds: set once its load answers,
+  /// so a failure announced before then is about whatever the engine held
+  /// before it (an item's stream, the station left), not the station
+  /// being tuned.
+  int? _streaming;
+
   /// A wake that arrived mid-tune, replayed once the tune publishes: the
   /// tune's own read can predate the first title or cover it announced.
   bool _wokenMidTune = false;
@@ -391,7 +399,31 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
   @override
   RadioPlayback build() {
     ref.onDispose(_stopTitlePoll);
+    final failures = ref
+        .read(audioEngineProvider)
+        .mediaFailed
+        .listen(_onMediaFailed);
+    ref.onDispose(failures.cancel);
     return const RadioPlayback();
+  }
+
+  /// The tuned station's stream failed after it opened (a host that went
+  /// away, a relay that answered an error). The load had already answered,
+  /// so nothing reached the screen that tuned it: say so here, and let go
+  /// of the dial the way a failed tune does. An item session's failures
+  /// are its own; with no station tuned, this one is not radio's.
+  void _onMediaFailed(MediaFailure failure) {
+    final station = state.station;
+    if (station == null || _streaming != _tuning) return;
+    _tuning++;
+    _stopTitlePoll();
+    state = const RadioPlayback();
+    ref
+        .read(shellMessengerProvider.notifier)
+        .showLocalized(
+          (l10n) => l10n.radioCouldNotTune(station.name),
+          channel: ShellChannel.radio,
+        );
   }
 
   Future<void> play(RadioStation station) async {
@@ -403,6 +435,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
     // [stop] and [interrupt], which used to look for a station this
     // had not published yet.
     final tuning = ++_tuning;
+    _streaming = null;
     _stopTitlePoll();
     _wokenMidTune = false;
     // The count belongs to the station being left. Carried over, a
@@ -449,6 +482,7 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
       if (tuning != _tuning) return;
       await engine.load(info.url);
       if (tuning != _tuning) return;
+      _streaming = tuning;
       // Engine speed is player-level state and outlives sources, and
       // radio bypasses the session layer that manages it: without this a
       // station tuned after a 1.5x podcast broadcasts at 1.5x. A live
@@ -596,6 +630,8 @@ class RadioPlaybackController extends Notifier<RadioPlayback> {
         nowPlayingSaved: held.nowPlayingSaved,
         nowPlayingSavedPid: held.nowPlayingSavedPid,
       );
+      // Its stream is still the engine's, so its failures are its own.
+      _streaming = _tuning;
       _startTitlePoll(station.pid);
       rethrow;
     }

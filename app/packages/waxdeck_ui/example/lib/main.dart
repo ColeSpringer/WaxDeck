@@ -236,6 +236,7 @@ class _DeckBarGallery extends StatelessWidget {
       'Podcast': SampleLibrary.nowPlayingPodcast(art),
       'Audiobook': SampleLibrary.nowPlayingBook(art),
       'Radio': SampleLibrary.nowPlayingRadio(art),
+      'Buffering': SampleLibrary.nowPlayingMusic(art, buffering: true),
     };
     return ListView(
       padding: const EdgeInsets.all(WaxSpace.s24),

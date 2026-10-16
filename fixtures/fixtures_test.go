@@ -149,6 +149,21 @@ func TestDefaultLibrary(t *testing.T) {
 	}
 }
 
+func TestLongTrack(t *testing.T) {
+	specs := fixtures.LongTrack()
+	paths, err := fixtures.Generate(t.TempDir(), specs...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 1 {
+		t.Fatalf("got %d paths, want the one track", len(paths))
+	}
+	if specs[0].Duration != fixtures.MaxDuration {
+		t.Errorf("duration %v, want the cap %v", specs[0].Duration, fixtures.MaxDuration)
+	}
+	verifySpec(t, specs[0], paths[0])
+}
+
 func TestConformanceMedia(t *testing.T) {
 	specs := fixtures.ConformanceMedia()
 	dir := t.TempDir()

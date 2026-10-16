@@ -15,11 +15,14 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
     required this.onPlayFromMediaId,
     this.browse,
     this.onPlay,
+    this.onPause,
     this.onStop,
     this.onGoingAway,
     this.onSkipNext,
     this.onSkipPrevious,
     this.onSkipToQueueItem,
+    this.onSeek,
+    this.position,
     required MediaControlLabels controlLabels,
   }) : _labels = controlLabels {
     engine.playingStream.listen(_publishState);
@@ -53,11 +56,15 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   /// of a book to go back to - lives in the app's playback session, not
   /// here. Absent, this falls through to the engine, which is the right
   /// answer for a build with no session layer at all.
-  ///
-  /// Pause is deliberately not paired with this: the session reads a
-  /// pause off the engine's own transition, so that one from the lock
-  /// screen and one from an interruption count alike.
   final Future<void> Function()? onPlay;
+
+  /// How the app pauses, for the pause raised on a lock screen, a desktop
+  /// media key or a browser's transport. Through the app because a load
+  /// of its own may be under way (a stream reopened where it stood), and
+  /// the engine reads stopped through it: a pause there would do nothing,
+  /// and the load would start what the press stopped. Absent, this falls
+  /// through to the engine.
+  final Future<void> Function()? onPause;
 
   /// How the app stops. A stop is an end rather than a gap, and the app
   /// holds state the engine does not - live radio keeps a tuned station
@@ -82,6 +89,15 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   final Future<void> Function()? onSkipNext;
   final Future<void> Function()? onSkipPrevious;
 
+  /// How the app seeks, on the timeline the OS is shown: a whole book
+  /// rather than the part loaded, an item rather than a stream the server
+  /// cut partway in. Absent, this falls through to the engine.
+  final Future<void> Function(Duration position)? onSeek;
+
+  /// Where the app says playback stands, on that same timeline. Absent,
+  /// the engine's position is the one published.
+  final Duration Function()? position;
+
   /// A row of the published queue, chosen on a head unit's up-next list.
   /// By index rather than by media id: the same item queued twice is
   /// ordinary, and an id would step to the wrong one of the pair.
@@ -105,6 +121,16 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   /// Which row of the published queue is playing, so a head unit can
   /// highlight it.
   int? _queueIndex;
+
+  /// The app is opening media it means to play (see [publishOpening]).
+  bool _opening = false;
+
+  @override
+  void publishOpening(bool opening) {
+    if (_opening == opening) return;
+    _opening = opening;
+    _publishState(engine.playing);
+  }
 
   @override
   void publish(MediaSessionItem? item) {
@@ -164,8 +190,11 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
     return super.customAction(name, extras);
   }
 
-  void _publishState(bool playing) {
+  void _publishState(bool enginePlaying) {
     final extra = _extra;
+    // A load of the app's own reads stopped (or idle, a failure before
+    // it) at the engine; what is coming is media the app means to play.
+    final playing = enginePlaying || _opening;
     // A station has no position to move and no queue to step through, so
     // it offers exactly one verb. Drawing the rest would be four controls
     // on a lock screen that do nothing when they are pressed - and on a
@@ -198,14 +227,17 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
               name: extra.action,
             ),
         ],
-        processingState: switch (engine.processingState) {
-          EngineProcessingState.idle => AudioProcessingState.idle,
-          EngineProcessingState.loading => AudioProcessingState.loading,
-          EngineProcessingState.ready => AudioProcessingState.ready,
-          EngineProcessingState.completed => AudioProcessingState.completed,
-        },
+        processingState: _opening
+            ? AudioProcessingState.loading
+            : switch (engine.processingState) {
+                EngineProcessingState.idle => AudioProcessingState.idle,
+                EngineProcessingState.loading => AudioProcessingState.loading,
+                EngineProcessingState.ready => AudioProcessingState.ready,
+                EngineProcessingState.completed =>
+                  AudioProcessingState.completed,
+              },
         playing: playing,
-        updatePosition: engine.position,
+        updatePosition: _position,
         speed: engine.speed,
         queueIndex: _queueIndex,
         // What the desktop surfaces read to decide whether their seek bar
@@ -228,7 +260,7 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
   Future<void> play() => onPlay?.call() ?? engine.play();
 
   @override
-  Future<void> pause() => engine.pause();
+  Future<void> pause() => onPause?.call() ?? engine.pause();
 
   @override
   Future<void> stop() => onStop?.call() ?? engine.stop();
@@ -265,21 +297,22 @@ class WaxDeckAudioHandler extends BaseAudioHandler implements MediaSessionPort {
     await engine.stop();
   }
 
+  Duration get _position => position?.call() ?? engine.position;
+
   @override
-  Future<void> seek(Duration position) => engine.seek(position);
+  Future<void> seek(Duration position) =>
+      onSeek?.call(position) ?? engine.seek(position);
 
   /// Spoken-word friendly jumps for cars and headsets: a short hop
   /// back to recover a missed sentence, a longer hop forward.
   @override
   Future<void> rewind() {
-    final target = engine.position - const Duration(seconds: 10);
-    return engine.seek(target < Duration.zero ? Duration.zero : target);
+    final target = _position - const Duration(seconds: 10);
+    return seek(target < Duration.zero ? Duration.zero : target);
   }
 
   @override
-  Future<void> fastForward() {
-    return engine.seek(engine.position + const Duration(seconds: 30));
-  }
+  Future<void> fastForward() => seek(_position + const Duration(seconds: 30));
 
   @override
   Future<void> skipToNext() async {
@@ -344,19 +377,25 @@ Future<WaxDeckAudioHandler> initWaxDeckAudioService({
   required MediaControlLabels controlLabels,
   BrowseSourcePort? browse,
   Future<void> Function()? onPlay,
+  Future<void> Function()? onPause,
   Future<void> Function()? onStop,
   Future<void> Function()? onGoingAway,
   Future<void> Function()? onSkipNext,
   Future<void> Function()? onSkipPrevious,
   Future<void> Function(int index)? onSkipToQueueItem,
+  Future<void> Function(Duration position)? onSeek,
+  Duration Function()? position,
   Color? notificationColor,
 }) {
   return AudioService.init(
     builder: () => WaxDeckAudioHandler(
       engine: engine,
+      onSeek: onSeek,
+      position: position,
       browse: browse,
       onPlayFromMediaId: onPlayFromMediaId,
       onPlay: onPlay,
+      onPause: onPause,
       onStop: onStop,
       onGoingAway: onGoingAway,
       onSkipNext: onSkipNext,

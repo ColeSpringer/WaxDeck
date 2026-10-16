@@ -24,14 +24,14 @@ import (
 // the retry decision keyed on the engine's own error taxonomy now that
 // the surface is spoken through the typed client, which decodes the
 // response envelope into a waxerr code. An unclassified error (transport
-// trouble, a context cancel) reads as internal and is not permanent.
+// trouble, a context cancel) reads as internal and is not permanent, and
+// neither is the engine refusing this server's credentials: that is the
+// server misconfigured, which a corrected key cures for the same input.
 func PermanentJobErr(err error) bool {
 	switch waxerr.CodeOf(err) {
 	case waxerr.CodeInvalidRequest, waxerr.CodePayloadTooLarge,
 		waxerr.CodeNotFound, waxerr.CodeUnsupportedFormat,
-		waxerr.CodeMalformedInput,
-		waxerr.CodeUnsupportedSource, waxerr.CodeUnauthorized,
-		waxerr.CodeSignatureInvalid, waxerr.CodeSignatureExpired,
+		waxerr.CodeMalformedInput, waxerr.CodeUnsupportedSource,
 		waxerr.CodeSourceChanged:
 		return true
 	}

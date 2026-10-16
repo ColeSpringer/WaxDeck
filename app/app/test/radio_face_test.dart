@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/connect/connect_providers.dart';
+import 'package:waxdeck/src/l10n/gen/app_localizations_en.dart';
 import 'package:waxdeck/src/player/player_screen.dart';
 import 'package:waxdeck/src/player/radio_face.dart';
 import 'package:waxdeck/src/providers.dart';
@@ -14,6 +15,7 @@ import 'package:waxdeck/src/radio/radio_saved_controller.dart';
 import 'package:waxdeck/src/settings/client_settings_providers.dart';
 import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
@@ -169,6 +171,28 @@ void main() {
 
     expect(find.byType(PlayerScaffold), findsNothing);
     expect(find.byKey(const Key('player-idle')), findsNothing);
+  });
+
+  testWidgets('a station whose stream drops says so and lets go of the dial', (
+    tester,
+  ) async {
+    final repo = FakeRepository()..radioStationsByPid[_stationPid] = _station();
+    final engine = FakeEngine();
+    final container = await _pumpTuned(tester, repo: repo, engine: engine);
+
+    // The stream opened and then failed (a host that went away): the load
+    // had already answered, so nothing threw to the screen that tuned it.
+    engine.failPlayback();
+    await tester.pumpAndSettle();
+
+    expect(container.read(radioPlaybackProvider).station, isNull);
+    final message = container.read(shellMessengerProvider);
+    expect(message?.channel, ShellChannel.radio);
+    expect(
+      message?.resolve(AppLocalizationsEn()),
+      AppLocalizationsEn().radioCouldNotTune('Coastal FM'),
+    );
+    expect(find.byType(PlayerScaffold), findsNothing);
   });
 
   testWidgets('a stop under an open dialog leaves the dialog alone', (

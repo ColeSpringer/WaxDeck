@@ -7,6 +7,7 @@ import 'package:waxdeck/src/playlists/playlists_controller.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
 import 'package:waxdeck/src/sync/refresh_pacing.dart';
+import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck/src/uploads/file_picker_port.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
@@ -88,6 +89,78 @@ class _SlowRepository extends FakeRepository {
 }
 
 void main() {
+  group('QuietRefresh', () {
+    testWidgets('runs once a run of hints goes quiet, not during it', (
+      tester,
+    ) async {
+      var runs = 0;
+      final quiet = QuietRefresh(
+        fanOut: () {
+          runs++;
+          return true;
+        },
+        quiet: const Duration(seconds: 5),
+      );
+
+      for (var i = 0; i < 10; i++) {
+        quiet.hint();
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(runs, 0, reason: 'the run is still going');
+
+      await tester.pump(const Duration(seconds: 5));
+      expect(runs, 1);
+      await tester.pump(const Duration(seconds: 30));
+      expect(runs, 1, reason: 'once a run, not once a hint');
+      quiet.dispose();
+    });
+
+    testWidgets('what a run left owed is applied a quiet spell later', (
+      tester,
+    ) async {
+      var retries = 0;
+      var owed = true;
+      final quiet = QuietRefresh(
+        fanOut: () => !owed,
+        retry: () {
+          retries++;
+          return !owed;
+        },
+        quiet: const Duration(seconds: 5),
+      );
+
+      quiet.hint();
+      await tester.pump(const Duration(seconds: 5));
+      expect(retries, 0);
+      await tester.pump(const Duration(seconds: 5));
+      expect(retries, 1, reason: 'still owed, so asked again');
+
+      owed = false;
+      await tester.pump(const Duration(seconds: 5));
+      expect(retries, 2);
+      await tester.pump(const Duration(seconds: 30));
+      expect(retries, 2, reason: 'nothing left to owe');
+      quiet.dispose();
+    });
+
+    testWidgets('a disposed one runs nothing', (tester) async {
+      var runs = 0;
+      final quiet = QuietRefresh(
+        fanOut: () {
+          runs++;
+          return true;
+        },
+        quiet: const Duration(seconds: 5),
+      );
+
+      quiet.hint();
+      quiet.dispose();
+      quiet.hint();
+      await tester.pump(const Duration(seconds: 30));
+      expect(runs, 0);
+    });
+  });
+
   group('PacedRefresh', () {
     testWidgets('the first hint after a quiet spell fans out at once', (
       tester,
@@ -305,6 +378,57 @@ void main() {
       expect(sweeps, 2);
       paced.dispose();
     });
+  });
+
+  group('a window longer than a second', () {
+    for (final (name, window) in <(String, Duration)>[
+      ('catalog', kCatalogRefreshWindow),
+      ('user', kUserRefreshWindow),
+    ]) {
+      testWidgets('the $name window still lets the first hint through at once '
+          'and holds the rest to its end', (tester) async {
+        var runs = 0;
+        final paced = PacedRefresh(
+          fanOut: () {
+            runs++;
+            return true;
+          },
+          window: window,
+        );
+
+        paced.hint();
+        expect(runs, 1, reason: 'a lone change still lands immediately');
+        await tester.pump(const Duration(seconds: 1));
+        paced.hint();
+        await tester.pump(window - const Duration(seconds: 1, milliseconds: 1));
+        expect(runs, 1, reason: 'a second later is still inside the window');
+        await tester.pump(const Duration(milliseconds: 2));
+        expect(runs, 2, reason: 'and it runs at the end of it');
+        paced.dispose();
+      });
+
+      testWidgets('the $name window costs one pass per window under a scan', (
+        tester,
+      ) async {
+        var runs = 0;
+        final paced = PacedRefresh(
+          fanOut: () {
+            runs++;
+            return true;
+          },
+          window: window,
+        );
+
+        // A scan's catalog hint about once a second, for ten seconds.
+        for (var second = 0; second < 10; second++) {
+          paced.hint();
+          await tester.pump(const Duration(seconds: 1));
+        }
+        await tester.pump(window);
+        expect(runs, 1 + 10 ~/ window.inSeconds);
+        paced.dispose();
+      });
+    }
   });
 
   group('FirstBuildObserver', () {

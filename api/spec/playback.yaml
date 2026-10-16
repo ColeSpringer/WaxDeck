@@ -33,11 +33,12 @@ paths:
         containing that position, and read `partIndex`, `partCount`, and
         `partStartMs` from the response; when playback crosses the end of
         a part, re-request play-info with the new book-timeline position.
-        The response's `durationMs` is always the duration of what the
-        client plays: the resolved part for multi-file books, and the
-        item's own window, never the backing file, for span-carved
-        direct playback; the book total
-        lives on the item summary and the book detail. Positions reported
+        The response's `durationMs` is always the length of what the
+        client plays: the resolved part for multi-file books, the item's
+        own window, never the backing file, for span-carved direct
+        playback, and the whole item or part for a stream cut at
+        `positionMs` (see `startOffsetMs`); the book total lives on the
+        item summary and the book detail. Positions reported
         to play-state for multi-file books are always book-timeline
         milliseconds (`partStartMs` plus the in-part position). A podcast
         episode whose audio has not been fetched to the server resolves by
@@ -59,9 +60,13 @@ paths:
         - name: positionMs
           in: query
           description: >
-            Book-timeline position in milliseconds; selects which part of
-            a multi-file audiobook to resolve. Omitting it resolves the
-            first part. Ignored for single-file items.
+            Position on the item's timeline in milliseconds (the book
+            timeline for a multi-file audiobook). Selects which part of a
+            multi-file audiobook to resolve; omitting it resolves the
+            first part. When the minted stream cannot be range-seeked
+            (`seekable: false`), the server also cuts it to begin at this
+            position and reports where in `startOffsetMs`. A seekable
+            stream is not cut: the client seeks it itself.
           schema:
             type: integer
             format: int64
@@ -86,11 +91,14 @@ paths:
           description: >
             Cap the stream's bitrate, in kilobits per second. A lossy
             source already at or below the cap streams unchanged;
-            anything else is re-encoded down to it, which turns off
-            sample-exact seeking and gapless preloading and counts
+            anything else is re-encoded down to it: a live encode,
+            positioned through `positionMs` rather than by range
+            requests (for a caller that sets `hls`, an HLS presentation
+            the player seeks itself), with no gapless preloading, counted
             against the transcode session limits like any other
-            transcode. The cap only narrows what the token authorizes:
-            the server clamps it to the caller's own transcode ceiling,
+            transcode. The cap
+            only narrows what the token authorizes: the server clamps it
+            to the caller's own transcode ceiling,
             and `appliedBitrateKbps` reports the outcome. Honored only
             when the streaming engine is running; a server without one
             serves originals directly and ignores the cap. Omitted,
@@ -100,6 +108,31 @@ paths:
             type: integer
             minimum: 32
             maximum: 320
+        - name: hls
+          in: query
+          description: >
+            The caller plays HLS. A stream the server would otherwise
+            serve as a live encode (a bitrate cap, voice boost, a track
+            carved from a larger file) is then that item's own HLS
+            presentation, wherever the streaming engine renders one:
+            `seekable` is true, `mimeType` is an HLS playlist type, and
+            the player seeks it itself, so `positionMs` cuts nothing
+            (it still selects a multi-file audiobook's part) and
+            `startOffsetMs` is absent. `expiresAt` lies the item's (or
+            part's) length plus a margin away, at least half an hour,
+            as a timeline's does. Every fetch of its playlists and
+            segments re-checks the item as a stream fetch does. The
+            first fetch takes the listener's transcode slot, the one
+            their gapless timelines hold (one a listener, however many
+            renderings), which goes back once every rendering they hold
+            has gone unfetched for a minute and is taken again by the
+            next fetch; a fetch over the limits answers
+            `transcode-limited`. A stream served as the file is, and one
+            the engine cannot render this way (a server whose engine
+            renders no HLS among them), is minted as if this were
+            absent.
+          schema:
+            type: boolean
       responses:
         "200":
           description: Stream resolution for the item.
@@ -1288,14 +1321,17 @@ components:
             Origin-relative, media-token-authenticated stream URL. Short TTL;
             re-request play-info on expiry or a `stream-stale` error. Which
             endpoint it names follows how the item resolves: `/media/stream`
-            through the streaming engine, `/media/download` on a server
+            through the streaming engine (`/media/hls` when that is an
+            HLS presentation, see `hls`), `/media/download` on a server
             running without it, and `/media/enclosure` for a podcast episode
             served by enclosure passthrough. Clients play the url they are
             given and do not parse it.
           example: /media/stream?pid=tr-01JZX5N8QW3F4V9T2B7KD3M9R6&mt=abc123
         mimeType:
           type: string
-          description: MIME type the stream will be served as.
+          description: >
+            MIME type the stream will be served as;
+            `application/vnd.apple.mpegurl` for an HLS presentation.
           example: audio/flac
         durationMs:
           type: integer
@@ -1305,11 +1341,32 @@ components:
         seekable:
           type: boolean
           description: >
-            Whether the stream supports sample-exact seeking. Best effort
-            for an unfetched podcast episode served by enclosure
-            passthrough: the relay forwards ranges, but whether the
-            podcast host honours them is unknown until the first upstream
-            request, so a client should degrade rather than assume.
+            Whether a client can seek anywhere in the stream: it answers
+            byte-range requests, or it is an HLS presentation (see
+            `hls`), whose player fetches the segment a seek lands in.
+            False for a live encode (a bitrate cap, voice boost, a track
+            carved from a larger file): such a stream is positioned by
+            requesting play-info again with `positionMs`, never by
+            seeking the media past what it has buffered. Best effort for
+            an unfetched podcast episode served
+            by enclosure passthrough: the relay forwards ranges, but
+            whether the podcast host honours them is unknown until the
+            first upstream request, so a client should degrade rather
+            than assume.
+        startOffsetMs:
+          type: integer
+          format: int64
+          description: >
+            Milliseconds into the resolved item (into the resolved part,
+            for a multi-file audiobook) at which the served audio begins.
+            Present only when the server cut a non-seekable stream at the
+            requested `positionMs`: the whole second at or before that
+            position within the item or part, or its last whole second
+            when the position lies past its end. The served audio's own
+            timeline starts at zero, so a client adds this to the
+            player's position and seeks the rest of the way itself;
+            `durationMs` stays the length of the whole item or part.
+          example: 90000
         expiresAt:
           type: string
           format: date-time

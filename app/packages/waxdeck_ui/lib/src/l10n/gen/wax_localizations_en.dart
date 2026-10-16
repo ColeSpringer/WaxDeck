@@ -119,6 +119,9 @@ class WaxLocalizationsEn extends WaxLocalizations {
   String get controlsUnstar => 'Unstar';
 
   @override
+  String get deckBarBuffering => 'Buffering';
+
+  @override
   String get deckBarCast => 'Play on another device';
 
   @override

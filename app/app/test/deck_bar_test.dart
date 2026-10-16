@@ -153,6 +153,140 @@ void main() {
       expect(find.byType(DeckBar), findsNothing);
     });
 
+    testWidgets('a stalled stream draws the buffering ring', (tester) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+      expect(find.byType(WaxSpinner), findsNothing);
+
+      engine.buffer();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(
+        find.byType(WaxSpinner),
+        findsNothing,
+        reason: 'a wait that ends at once is not drawn',
+      );
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(find.byType(WaxSpinner), findsOneWidget);
+      expect(find.bySemanticsLabel('Buffering'), findsOneWidget);
+      expect(find.bySemanticsLabel('Pause'), findsOneWidget);
+
+      engine.buffer(on: false);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(WaxSpinner), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a stream reopened where it stood reads as playing and '
+        'waiting', (tester) async {
+      final repo = FakeRepository(items: [testItem('tr-A')])
+        ..transcodedPids.add('tr-A');
+      final engine = FakeEngine()..buffered = const Duration(seconds: 5);
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+
+      final gate = Completer<void>();
+      engine.loadGate = gate;
+      unawaited(
+        harness.playback.liveSession!.seek(const Duration(seconds: 90)),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(engine.playing, isFalse, reason: 'the load stopped it');
+      expect(find.bySemanticsLabel('Pause'), findsOneWidget);
+      expect(find.byType(WaxSpinner), findsOneWidget);
+
+      gate.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(engine.playing, isTrue);
+      expect(find.byType(WaxSpinner), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('Pause pressed while a stream reopens keeps it paused', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A')])
+        ..transcodedPids.add('tr-A');
+      final engine = FakeEngine()..buffered = const Duration(seconds: 5);
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+
+      final gate = Completer<void>();
+      engine.loadGate = gate;
+      unawaited(
+        harness.playback.liveSession!.seek(const Duration(seconds: 90)),
+      );
+      await tester.pump();
+      await tester.tap(find.bySemanticsLabel('Pause'));
+      await tester.pump();
+      expect(find.bySemanticsLabel('Play'), findsOneWidget);
+
+      gate.complete();
+      await tester.pump();
+      await tester.pump();
+      expect(engine.playing, isFalse, reason: 'the press was a pause');
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a track change reads Pause through its load, and a press '
+        'there lands it paused', (tester) async {
+      // The engine stands stopped for the incoming track's load, and the
+      // transport used to read it: Play, said aloud to a screen reader on
+      // every change of track, and a press that did nothing.
+      final repo = FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]);
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      harness.play([testItem('tr-A'), testItem('tr-B')]);
+      await tester.pumpAndSettle();
+
+      final gate = Completer<void>();
+      engine.loadGate = gate;
+      unawaited(harness.playback.next());
+      await tester.pump();
+      await tester.pump();
+      expect(engine.playing, isFalse, reason: 'the load stopped the engine');
+      expect(find.bySemanticsLabel('Pause'), findsOneWidget);
+
+      await tester.tap(find.bySemanticsLabel('Pause'));
+      await tester.pump();
+      expect(find.bySemanticsLabel('Play'), findsOneWidget);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(engine.loadedUrl, contains('tr-B'));
+      expect(engine.playing, isFalse, reason: 'the press was a pause');
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a load that lands at once never draws the ring', (
+      tester,
+    ) async {
+      final repo = FakeRepository(items: [testItem('tr-A')]);
+      final engine = FakeEngine();
+      final harness = await _pumpDeck(tester, repo: repo, engine: engine);
+      harness.play([testItem('tr-A')]);
+      await tester.pumpAndSettle();
+
+      engine.buffer();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(WaxSpinner), findsNothing);
+      engine.buffer(on: false);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      expect(find.byType(WaxSpinner), findsNothing);
+      await harness.endPlayback(tester);
+    });
+
     testWidgets('shows the modes its own controls cycle', (tester) async {
       // A toggle that never changes when pressed is indistinguishable
       // from a dead one, in greyscale and to a screen reader alike.
@@ -491,11 +625,13 @@ void main() {
     testWidgets('does not restart a start that is still loading', (
       tester,
     ) async {
-      // The bar's play button is live while an entry is loading, because
-      // an entry with no session is also what an engine hand-over leaves
+      // The bar's button is live while an entry is loading, because an
+      // entry with no session is also what an engine hand-over leaves
       // behind. Pressing it there used to begin a second start: the
       // first was superseded mid-load, its stream token and listen
-      // session re-minted, and the position it was asked for dropped.
+      // session re-minted, and the position it was asked for dropped. It
+      // reads Pause there now, the start meaning to play, and pressing it
+      // lands that start paused.
       final repo = FakeRepository(items: [testItem('tr-A')]);
       final engine = FakeEngine(mediaDuration: const Duration(minutes: 5));
       final harness = await _pumpDeck(tester, repo: repo, engine: engine);
@@ -509,7 +645,7 @@ void main() {
       await tester.pump();
       final generation = harness.playback.startGeneration;
 
-      await tester.tap(find.bySemanticsLabel('Play'));
+      await tester.tap(find.bySemanticsLabel('Pause'));
       await tester.pumpAndSettle();
       expect(
         harness.playback.startGeneration,
@@ -520,6 +656,7 @@ void main() {
       gate.complete();
       await tester.pumpAndSettle();
       expect(engine.position, const Duration(seconds: 90));
+      expect(engine.playing, isFalse, reason: 'the press was a pause');
       await harness.endPlayback(tester);
       await tester.pump(const Duration(seconds: 1));
     });
@@ -1363,7 +1500,7 @@ void main() {
   });
 
   group('the launch offer', () {
-    testWidgets('names the queue it found and puts it back', (tester) async {
+    testWidgets('names the queue it found and Resume plays it', (tester) async {
       final repo = FakeRepository(items: [testItem('tr-A'), testItem('tr-B')]);
       final engine = FakeEngine();
       final store = RecordingQueueStore()..saved = _storedAlbum();
@@ -1391,9 +1528,10 @@ void main() {
       final queue = container.read(queueControllerProvider);
       expect(queue.length, 2);
       expect(queue.currentPid, 'tr-A');
-      // Putting a queue back is not pressing play: it comes back where
-      // it stood, and the transport is right there.
-      expect(engine.playing, isFalse);
+      // The control says Resume, under "Pick up where you left off", with
+      // a play glyph: the tap is a press of play, and the gesture a
+      // browser needs to allow one.
+      expect(engine.playing, isTrue);
       expect(find.byType(DeckBarOffer), findsNothing);
       expect(find.byType(DeckBar), findsOneWidget);
       await harness.endPlayback(tester);

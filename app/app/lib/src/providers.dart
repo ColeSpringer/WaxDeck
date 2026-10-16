@@ -183,6 +183,11 @@ final oidcFlowProvider = Provider<OidcLoginFlow>(
   ),
 );
 
+/// The wall clock for whatever is judged by elapsed time (the sleep
+/// countdown, how long ago a failure was), so tests can drive it in step
+/// with their fake timers.
+final wallClockProvider = Provider<DateTime Function()>((_) => DateTime.now);
+
 /// The one audio engine. Tests override this with a [FakeEngine].
 ///
 /// In a browser the standard engine is wrapped so a music queue can

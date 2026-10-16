@@ -124,11 +124,10 @@ class _OnlineHome extends ConsumerWidget {
     // is already decided.
     final canUpload = canAddToLibrary(ref);
     final l10n = context.l10n;
-    // This provider rides the catalog fan-out, so every catalog event
-    // rebuilds it into an AsyncLoading carrying the previous answer -
-    // which a switch on the runtime type matches nowhere, and the whole
-    // screen blanks to a skeleton and back. Whether the library holds
-    // anything does not change on a scan tick.
+    // A refresh of the probe (the pull gesture, a libraries change) is
+    // an AsyncLoading carrying the previous answer, which a switch on
+    // the runtime type matches nowhere: the whole screen would blank to
+    // a skeleton and back. The shared face draws what it held.
     return SliverMainAxisGroup(
       slivers: <Widget>[
         // Above the has-anything gate on purpose: the person this
@@ -204,7 +203,7 @@ class _ReviewPendingNotice extends ConsumerWidget {
   }
 }
 
-/// The shelves, in the order 6.1 lists them.
+/// The shelves, in the order home draws them.
 class _Shelves extends StatelessWidget {
   const _Shelves();
 
@@ -216,6 +215,7 @@ class _Shelves extends StatelessWidget {
         title: context.l10n.homeContinueTitle,
         provider: continueListeningShelfProvider,
         withProgress: true,
+        orderedByProgress: true,
       ),
       // Second, under what is half-finished: a pin is the strongest
       // statement a listener makes about the library, and everything

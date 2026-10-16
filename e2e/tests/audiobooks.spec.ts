@@ -259,3 +259,65 @@ test('a series holds its books, and the hub shelf opens the index', async ({ app
   await app.books.openSeriesIndex();
   await expect(app.books.seriesCard(series!.pid)).toBeVisible();
 });
+
+test('end of chapter stops a multi-file book at the file boundary at 1.5x', async ({ app }) => {
+  test.setTimeout(J.long);
+  const book = await app.seed.book('The Fixture Book');
+
+  // The first chapter ends exactly where the second file begins, so the
+  // stop it arms is a file boundary: the part runs out at the same
+  // instant the chapter does, which is where the stop used to be lost.
+  const detail = await app.api.get('/books/{pid}', { path: { pid: book.pid } });
+  expect(detail.parts.length).toBe(3);
+  const boundary = detail.parts[1].startMs;
+  expect(detail.chapters[0].endMs, 'the first chapter should end on a file boundary').toBe(boundary);
+
+  const position = async () =>
+    (await app.api.tryGet('/items/{pid}/play-state', { path: { pid: book.pid } }))?.positionMs ??
+    -1;
+  await app.seed.setPosition(book.pid, 0);
+  await app.nav.enter('books');
+  await app.books.open(book.pid);
+  await app.books.play();
+  // Under way before the pause, which otherwise lands the start paused
+  // where it began: the checkpoint has to have moved off the seeded 0, so
+  // the 0 below can only be the seek's.
+  await expect.poll(position, { timeout: T.nav }).toBeGreaterThan(0);
+  await app.player.pause();
+
+  // In the first chapter, whatever the clock did meanwhile: the parts are
+  // seconds long. A chapter row seeks to its head and leaves the pause,
+  // and the checkpoint the seek writes is what says it landed.
+  await expect(async () => {
+    await app.player.tapChapter(0);
+    await expect.poll(position, { timeout: T.step }).toBe(0);
+  }).toPass({ timeout: T.nav });
+
+  await app.player.setSpeed(150);
+  await app.player.armEndOfChapter();
+  await expect(app.player.sleepTimer()).toHaveAccessibleName(/until the chapter ends/);
+  await app.player.play();
+
+  // It stops itself at the boundary...
+  await expect(app.player.toggle()).toHaveAccessibleName(/Play/i, { timeout: T.nav });
+
+  // ...and the server agrees where: at the head of the second file, and
+  // still there past the checkpoint interval (a playing book writes one
+  // every five seconds), with the transport still at Play, so nothing
+  // played past it.
+  await expect
+    .poll(async () => Math.abs((await position()) - boundary), {
+      message: `the book should rest at the second file's start, ${boundary} ms`,
+    })
+    .toBeLessThanOrEqual(250);
+  const rested = await position();
+  const since = Date.now();
+  await expect
+    .poll(async () => ((await position()) === rested ? Date.now() - since : -1), {
+      message: `the book should stay at ${rested} ms`,
+      timeout: T.assert,
+    })
+    .toBeGreaterThanOrEqual(6000);
+  await expect(app.player.toggle()).toHaveAccessibleName(/Play/i);
+  expect(Math.abs(rested - boundary)).toBeLessThanOrEqual(250);
+});

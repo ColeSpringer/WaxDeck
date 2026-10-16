@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/md5"
 	"encoding/base64"
 	"encoding/hex"
@@ -9,12 +10,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/colespringer/waxdeck/fixtures"
 
+	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
@@ -449,6 +452,111 @@ func TestSubsonicClientSymfonium(t *testing.T) {
 		fmt.Sprintf("&id=%s&time=%d&submission=true", songID, time.Now().Add(-time.Minute).UnixMilli()))
 }
 
+// Symfonium keeps an audiobook's resume point as a Subsonic bookmark and,
+// on a server advertising transcodeOffset, starts the stream there with
+// timeOffset. A book in parts reaches it only as one bookmark entry, so
+// the stream it starts is the rest of the book: the part the bookmark
+// falls in, from the bookmark, then every part after it.
+func TestSubsonicClientSymfoniumResumesABookInParts(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.engineMP3.Store(true)
+	secret := newSubsonicSecret(t, h)
+	const c = "Symfonium"
+	book, _ := subsonicBook(t, h) // parts of 4, 5 and 6 s
+
+	env := mustOK(t, h, secret, c, "getOpenSubsonicExtensions", "")
+	offsets := false
+	for _, e := range jlist(env["openSubsonicExtensions"]) {
+		offsets = offsets || jmap(e)["name"] == "transcodeOffset"
+	}
+	if !offsets {
+		t.Fatal("transcodeOffset is not advertised, so Symfonium would not send an offset")
+	}
+	mustOK(t, h, secret, c, "createBookmark", "&id="+book+"&position=6500")
+	env = mustOK(t, h, secret, c, "getBookmarks", "")
+	var id string
+	var position float64
+	for _, bm := range jlist(jmap(env["bookmarks"])["bookmark"]) {
+		if e := jmap(jmap(bm)["entry"]); e["id"] == book {
+			id, position = book, jmap(bm)["position"].(float64)
+		}
+	}
+	if id == "" || position != 6500 {
+		t.Fatalf("getBookmarks = %v, want the book at 6500", env["bookmarks"])
+	}
+
+	loc := streamRedirect(t, h, fmt.Sprintf("/rest/stream?apiKey=%s&id=%s&timeOffset=%g", secret, id, position/1000))
+	resp, err := http.Get(h.ts.URL + loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil || resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "audio/mpeg" {
+		t.Fatalf("the resumed stream = %d %q (%v), want 200 audio/mpeg", resp.StatusCode, resp.Header.Get("Content-Type"), err)
+	}
+	if got, want := partsAsked(h), []string{"02 - Part Two.m4b@2", "03 - Part Three.m4b"}; !slices.Equal(got, want) {
+		t.Fatalf("the engine encoded %v, want %v", got, want)
+	}
+	// The stand-in encodes each part whole, cut or not: parts two and three.
+	if secs := mp3Seconds(t, body); secs < 11 || secs > 11.2 {
+		t.Fatalf("the resumed stream plays %.3f s, want parts two and three's 11", secs)
+	}
+}
+
+// Symfonium resumes a podcast episode where it left off by starting the
+// stream there with timeOffset, on a server advertising transcodeOffset.
+// An episode the server has not fetched has only the feed's own file to
+// relay, which no offset can cut: the stream is refused rather than handed
+// over from its top while the client's clock reads the resume point (and
+// saves that clock back as the position). From its start it plays through
+// the relay as ever.
+func TestSubsonicClientSymfoniumResumesAnUnfetchedEpisode(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	feed := newFeedServer(t, 1)
+	decodeStatus[Subscription](t, h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()}), 201, "subscribe")
+	secret := newSubsonicSecret(t, h)
+	const c = "Symfonium"
+
+	env := mustOK(t, h, secret, c, "getOpenSubsonicExtensions", "")
+	offsets := false
+	for _, e := range jlist(env["openSubsonicExtensions"]) {
+		offsets = offsets || jmap(e)["name"] == "transcodeOffset"
+	}
+	if !offsets {
+		t.Fatal("transcodeOffset is not advertised, so Symfonium would not send an offset")
+	}
+	env = mustOK(t, h, secret, c, "getPodcasts", "&includeEpisodes=true")
+	var streamID string
+	for _, ch := range jlist(jmap(env["podcasts"])["channel"]) {
+		for _, ep := range jlist(jmap(ch)["episode"]) {
+			if jmap(ep)["status"] == "skipped" {
+				streamID, _ = jmap(ep)["streamId"].(string)
+			}
+		}
+	}
+	if streamID == "" {
+		t.Fatalf("no unfetched episode with a streamId in %v", env["podcasts"])
+	}
+
+	noFollow := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := noFollow.Get(h.ts.URL + "/rest/stream?apiKey=" + secret + "&f=json&c=" + c + "&id=" + streamID + "&timeOffset=60")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"status":"failed"`) {
+		t.Fatalf("a resume 60 s into an unfetched episode = %d to %q (%s), want a refusal, not its top",
+			resp.StatusCode, resp.Header.Get("Location"), body)
+	}
+	if loc := streamRedirect(t, h, "/rest/stream?apiKey="+secret+"&id="+streamID); !strings.HasPrefix(loc, "/media/enclosure?") {
+		t.Fatalf("the episode from its start = %s, want the passthrough relay", loc)
+	}
+}
+
 // TestSubsonicStreamIgnoresClientBitrateHints pins the habit several
 // clients have of asking for lossless with an explicit zero or an empty
 // maxBitRate. The sidecar now refuses both spellings on its own
@@ -559,13 +667,184 @@ func streamRedirect(t *testing.T, h *harness, path string) string {
 		t.Fatalf("stream status = %d, want 302", resp.StatusCode)
 	}
 	loc := resp.Header.Get("Location")
-	for _, forwarded := range []string{"maxBitRate", "bitRate", "format=raw"} {
+	for _, forwarded := range []string{"maxBitRate", "bitRate", "format=raw", "timeOffset"} {
 		if strings.Contains(loc, forwarded) {
 			t.Fatalf("stream redirect forwarded the client's %s: %s", forwarded, loc)
 		}
 	}
+	// A t on the redirect is the adapter's own cut, there only for a
+	// client that asked for an offset; a token-auth client's t is its
+	// password hash.
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", loc, err)
+	}
+	if u.Query().Has("t") && !strings.Contains(path, "timeOffset=") {
+		t.Fatalf("stream redirect carries a t the client never asked for: %s", loc)
+	}
 	return loc
 }
+
+// subsonicSongID finds the song a search3 for query answers first.
+func subsonicSongID(t *testing.T, h *harness, secret, query string) string {
+	t.Helper()
+	env := mustOK(t, h, secret, "test", "search3.view", "&query="+url.QueryEscape(query))
+	songID, _ := jmap(jlist(jmap(env["searchResult3"])["song"])[0])["id"].(string)
+	if !strings.HasPrefix(songID, "tr-") {
+		t.Fatalf("songID = %q", songID)
+	}
+	return songID
+}
+
+// redirectQuery answers the parameters a stream redirect carries.
+func redirectQuery(t *testing.T, loc string) url.Values {
+	t.Helper()
+	u, err := url.Parse(loc)
+	if err != nil {
+		t.Fatalf("parsing %s: %v", loc, err)
+	}
+	return u.Query()
+}
+
+// A client's start offset is the stream's cut: the redirect carries the
+// adapter's own t in whole seconds, never the token-auth t of the same
+// name, and the engine starts there. Anything but a positive number is no
+// offset at all.
+func TestSubsonicTimeOffsetCutsTheStream(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	songID := subsonicSongID(t, h, secret, "Alpha") // a 2 s flac
+
+	salt := "cutsalt"
+	sum := md5.Sum([]byte(secret + salt))
+	tokenAuth := "u=admin&t=" + hex.EncodeToString(sum[:]) + "&s=" + salt + "&v=1.16.1&c=test"
+	loc := streamRedirect(t, h, "/rest/stream.view?"+tokenAuth+"&id="+songID+"&maxBitRate=128&timeOffset=1.5")
+	if q := redirectQuery(t, loc); q.Get("t") != "1" || q.Get("br") != "128" {
+		t.Fatalf("redirect = %s, want a 128 kbps stream cut at 1", loc)
+	}
+	if code := fetchStatus(t, h, loc); code != 200 {
+		t.Fatalf("cut stream = %d", code)
+	}
+	if h.flowReq.cut != "1" || h.flowReq.bitrate != "128" {
+		t.Fatalf("the engine saw cut %q at %q, want 1 at 128", h.flowReq.cut, h.flowReq.bitrate)
+	}
+
+	for _, offset := range []string{"", "0", "-3", "NaN", "Inf", "abc"} {
+		loc := streamRedirect(t, h, "/rest/stream.view?apiKey="+secret+"&id="+songID+"&maxBitRate=128&timeOffset="+offset)
+		if redirectQuery(t, loc).Has("t") {
+			t.Errorf("timeOffset=%q cut the stream: %s", offset, loc)
+		}
+	}
+	// raw is the file as it is, which an offset cannot be.
+	loc = streamRedirect(t, h, "/rest/stream.view?apiKey="+secret+"&id="+songID+"&format=raw&timeOffset=1")
+	if q := redirectQuery(t, loc); q.Has("t") || q.Has("fmt") {
+		t.Errorf("a raw request was cut: %s", loc)
+	}
+}
+
+// An offset into an original is an encode from that point, so it takes a
+// transcode slot like any other: refused while the server is full, where
+// the original played whole is not.
+func TestSubsonicTimeOffsetOnAnOriginalGoesThroughTheGate(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	songID := subsonicSongID(t, h, secret, "Alpha")
+
+	wantStatus(t, h.putJSON(t, "/api/v1/admin/transcoding", map[string]any{
+		"maxConcurrent": 1, "maxConcurrentPerUser": 0, "defaultMaxBitrateKbps": 0,
+	}), 200, "one transcode server-wide")
+	release, err := h.svc.TranscodeGate().Acquire(context.Background(), "someone-else", flow.TranscodeStream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer release()
+
+	cut := streamRedirect(t, h, "/rest/stream.view?apiKey="+secret+"&id="+songID+"&timeOffset=1")
+	if q := redirectQuery(t, cut); q.Get("t") != "1" || q.Get("fmt") != "flac" || q.Get("enc") != "1" {
+		t.Fatalf("redirect = %s, want a lossless encode cut at 1", cut)
+	}
+	if code := fetchStatus(t, h, cut); code != http.StatusTooManyRequests {
+		t.Fatalf("a cut while the server is full = %d, want 429", code)
+	}
+	whole := streamRedirect(t, h, "/rest/stream.view?apiKey="+secret+"&id="+songID)
+	if code := fetchStatus(t, h, whole); code != 200 {
+		t.Fatalf("the original played whole = %d, want 200", code)
+	}
+
+	release()
+	if code := fetchStatus(t, h, cut); code != 200 || h.flowReq.format != "flac" || h.flowReq.cut != "1" {
+		t.Fatalf("the cut once a slot is free = %d, engine saw %s from %q; want flac from 1",
+			code, h.flowReq.format, h.flowReq.cut)
+	}
+}
+
+// A book in parts is one song to a Subsonic client, so a bookmark's offset
+// is on the whole book: the stream resolves the part it falls in, as
+// play-info does, cuts that part from inside rather than the first part at
+// its last second, and plays on through the parts after it.
+func TestSubsonicTimeOffsetIntoABookLandsInItsPart(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	h.engineMP3.Store(true)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	secret := newSubsonicSecret(t, h)
+	books := h.items(t, "?mediaType=audiobook").Items
+	if len(books) != 1 {
+		t.Fatalf("audiobooks = %d, want the fixture book", len(books))
+	}
+	book := books[0].Pid
+
+	// Parts of 4, 5 and 6 s: 6.5 s into the book is 2.5 s into part two.
+	pi := decode[PlayInfo](t, get(t, h.ts, "/api/v1/items/"+book+"/play-info?positionMs=6500", h.token))
+	partTwo := redirectQuery(t, pi.Url).Get("f")
+	if partTwo == "" {
+		t.Fatalf("play-info named no part: %s", pi.Url)
+	}
+	loc := streamRedirect(t, h, "/rest/stream.view?apiKey="+secret+"&id="+book+"&timeOffset=6.5")
+	if q := redirectQuery(t, loc); q.Get("f") != partTwo || q.Get("t") != "2" || q.Get("join") != "1" {
+		t.Fatalf("redirect = %s, want the book from part two (%s), cut at 2", loc, partTwo)
+	}
+	if code := fetchStatus(t, h, loc); code != 200 {
+		t.Fatalf("the stream from part two = %d, want 200", code)
+	}
+	if got, want := partsAsked(h), []string{"02 - Part Two.m4b@2", "03 - Part Three.m4b"}; !slices.Equal(got, want) {
+		t.Fatalf("the engine encoded %v, want %v", got, want)
+	}
+}
+
+// The extension is advertised exactly where it works: a server running
+// the engine that cuts.
+func TestSubsonicAdvertisesTranscodeOffsetWithTheEngine(t *testing.T) {
+	t.Parallel()
+	for name, c := range map[string]struct {
+		h    func(*testing.T) *harness
+		want bool
+	}{
+		"with the engine":    {newHarnessNoExtras, true},
+		"without the engine": {newHarnessDirect, false},
+	} {
+		h := c.h(t)
+		secret := newSubsonicSecret(t, h)
+		env := mustOK(t, h, secret, "test", "getOpenSubsonicExtensions", "")
+		got := false
+		for _, e := range jlist(env["openSubsonicExtensions"]) {
+			if jmap(e)["name"] == "transcodeOffset" {
+				got = true
+			}
+		}
+		if got != c.want {
+			t.Errorf("%s: transcodeOffset advertised %v, want %v", name, got, c.want)
+		}
+	}
+}
+
+// newHarnessNoExtras is newHarness as a function value.
+func newHarnessNoExtras(t *testing.T) *harness { return newHarness(t) }
 
 // streamAndAssertBytes follows the stream redirect into the tokenized
 // proxy and asserts the original bytes arrive: no cap was applied, so

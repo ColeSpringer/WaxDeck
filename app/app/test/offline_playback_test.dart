@@ -316,12 +316,13 @@ void main() {
       await session.dispose();
     });
 
-    test('a crossing with nothing downloaded reports the failure', () async {
+    test('a crossing with nothing downloaded says so and plays on', () async {
       // The fallback is not a swallow: with no local parts the failure
-      // lands on the session's error surface for the layer above to
-      // show. Not rethrown from `seek`, whose call sites are unawaited
-      // (a chapter row, a bookmark, a transcript cue) - an escape there
-      // is an unhandled async error and a dead tap.
+      // is said for the layer above to show. The part playing never
+      // stopped, though, so it is not let go of: the move is what failed.
+      // Not rethrown from `seek`, whose call sites are unawaited (a
+      // chapter row, a bookmark, a transcript cue) - an escape there is
+      // an unhandled async error and a dead tap.
       final repo = FakeRepository()
         ..books[bookPid] = testBook(bookPid, durationMs: 180000, partCount: 3);
       final engine = FakeEngine(mediaDuration: const Duration(minutes: 1));
@@ -336,15 +337,20 @@ void main() {
 
       repo.playInfoError = unreachable;
       final failures = <Object>[];
-      final sub = session.sessionFailed.listen(failures.add);
-      await session.seek(const Duration(seconds: 150));
+      final moves = <Object>[];
+      final sub = session.sessionFailed.listen((f) => failures.add(f.error));
+      final said = session.moveFailed.listen(moves.add);
+      expect(await session.seek(const Duration(seconds: 150)), isFalse);
       await pumpEventQueue();
 
-      expect(failures, [unreachable]);
+      expect(moves, [unreachable]);
+      expect(failures, isEmpty);
+      expect(engine.playing, isTrue);
       // The loaded part is untouched by the refused resolve, timeline
       // state included: a checkpoint now still reads on part 0.
       expect(engine.loadedUrl, contains('part=0'));
       await sub.cancel();
+      await said.cancel();
       await session.dispose();
     });
 
@@ -371,7 +377,7 @@ void main() {
 
       repo.playInfoError = unreachable;
       final failures = <Object>[];
-      final sub = session.sessionFailed.listen(failures.add);
+      final sub = session.sessionFailed.listen((f) => failures.add(f.error));
       await session.replay();
       await pumpEventQueue();
 

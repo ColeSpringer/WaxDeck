@@ -313,7 +313,7 @@
   "settingsSmartRewindMore": "Más",
   "settingsSmartRewindTitle": "Retroceder al reanudar",
   "settingsStreamQualityAuto": "Automática",
-  "settingsStreamQualityHelp": "Automática transmite el original siempre que es posible. Un límite recodifica para ajustarse (Alta 320 kbps, Normal 192, Baja 128), lo que desactiva la reproducción sin pausas y el salto instantáneo, se aplica a partir de la siguiente pista y nunca afecta a las descargas",
+  "settingsStreamQualityHelp": "Automática transmite el original siempre que es posible. Un límite recodifica para ajustarse (Alta 320 kbps, Normal 192, Baja 128), lo que desactiva la reproducción sin pausas y hace que saltar tarde un momento, se aplica a partir de la siguiente pista y nunca afecta a las descargas",
   "settingsStreamQualityHigh": "Alta",
   "settingsStreamQualityKeywords": "bitrate, calidad, ancho de banda, datos, transcodificar, móvil",
   "settingsStreamQualityLow": "Baja",

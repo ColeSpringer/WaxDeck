@@ -195,7 +195,10 @@ abstract final class SampleLibrary {
     ),
   ];
 
-  static NowPlayingData nowPlayingMusic(SampleArt art) => NowPlayingData(
+  static NowPlayingData nowPlayingMusic(
+    SampleArt art, {
+    bool buffering = false,
+  }) => NowPlayingData(
     title: 'Salt Harbour',
     subtitle: 'Nightjar · Salt Harbour',
     provenance: 'Playing from Salt Harbour',
@@ -204,6 +207,7 @@ abstract final class SampleLibrary {
     duration: const Duration(minutes: 4, seconds: 5),
     buffered: const Duration(minutes: 3, seconds: 30),
     playing: true,
+    buffering: buffering,
     starred: true,
   );
 

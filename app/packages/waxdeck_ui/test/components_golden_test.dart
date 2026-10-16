@@ -641,6 +641,63 @@ void main() {
     );
 
     goldenTest(
+      'the deck bar rings its play button while it waits on sound',
+      fileName: 'deck_bar_buffering',
+      // The ring turns until it is told otherwise, so the frame count is
+      // what pins the pose it is baselined in.
+      pumpBeforeTest: _pumpAnimated,
+      builder: () => GoldenTestGroup(
+        columns: 1,
+        children: <Widget>[
+          for (final variant in <WaxThemeVariant>[
+            WaxThemeVariant.dark,
+            WaxThemeVariant.light,
+          ])
+            for (final (form, sizeClass, width)
+                in <(String, WaxSizeClass, double)>[
+                  ('compact', WaxSizeClass.compact, 420),
+                  ('wide', WaxSizeClass.wide, 1100),
+                ])
+              GoldenTestScenario(
+                name: '${variant.name} $form',
+                child: _themed(
+                  variant,
+                  SizedBox(
+                    width: width,
+                    child: DeckBar(
+                      now: const NowPlayingData(
+                        title: 'Salt Harbour',
+                        subtitle: 'Nightjar',
+                        position: Duration(minutes: 2, seconds: 41),
+                        duration: Duration(minutes: 4, seconds: 5),
+                        playing: true,
+                        buffering: true,
+                        starred: true,
+                      ),
+                      sizeClass: sizeClass,
+                      actions: DeckBarActions(
+                        onPlayPause: () {},
+                        onNext: () {},
+                        onPrevious: () {},
+                        onShuffle: () {},
+                        onRepeat: () {},
+                        onSeek: (_) {},
+                        onStar: (_) {},
+                        onQueue: () {},
+                        onLyrics: () {},
+                        onCast: () {},
+                        onMore: () {},
+                        onExpand: () {},
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+        ],
+      ),
+    );
+
+    goldenTest(
       'indicators hold a static pose when nothing is playing',
       fileName: 'indicators',
       pumpBeforeTest: _pumpAnimated,

@@ -6151,6 +6151,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playerCollapseCommand => 'Collapse the player';
 
   @override
+  String playerCouldNotContinue(String title) {
+    return 'Couldn\'t keep playing $title';
+  }
+
+  @override
+  String playerCouldNotStart(String title) {
+    return 'Couldn\'t start $title';
+  }
+
+  @override
   String get playerDeleteFiles => 'Delete files...';
 
   @override
@@ -6175,6 +6185,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerForgetSong => 'Forget this song';
+
+  @override
+  String get playerGaplessBusy =>
+      'The server is busy, so this queue plays one track at a time. Gapless playback returns when a stream frees up.';
+
+  @override
+  String get playerGaplessPaused =>
+      'The server is busy, so playback paused. Press play to try again.';
 
   @override
   String playerGoToName(String name) {
@@ -6227,6 +6245,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get playerMoreLikeThis => 'More like this';
 
   @override
+  String playerMoveFailed(String reason) {
+    return 'Couldn\'t jump there. $reason';
+  }
+
+  @override
   String get playerNext => 'Next';
 
   @override
@@ -6263,6 +6286,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get playerOfferResume => 'Pick up where you left off';
+
+  @override
+  String get playerOfflineStart =>
+      'You\'re offline. Playback will continue when the connection is back.';
 
   @override
   String get playerOpenPlayer => 'Open the player';
@@ -10697,7 +10724,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsStreamQualityHelp =>
-      'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and instant seeking, applies from the next track, and never affects downloads';
+      'Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and makes seeking take a moment, applies from the next track, and never affects downloads';
 
   @override
   String get settingsStreamQualityHigh => 'High';

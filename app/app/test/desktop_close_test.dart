@@ -278,6 +278,29 @@ void main() {
     expect(labels.pause, 'Pausar');
   });
 
+  test('a stream reopened where it stood reads as playing in the tray, as '
+      'on the deck', () async {
+    final h = _Harness();
+    h.repo.transcodedPids.add(_a);
+    h.engine.buffered = const Duration(seconds: 5);
+    await h.start();
+    final session = h.container.read(nowPlayingProvider).session!;
+    final gate = h.engine.loadGate = Completer<void>();
+    unawaited(session.seek(const Duration(seconds: 90)));
+    await pumpEventQueue();
+
+    expect(h.engine.playing, isFalse, reason: 'the load stopped it');
+    expect(h.tray.faces.last.playing, isTrue);
+
+    // A press meanwhile changes only the intent: the engine was stopped
+    // already, so nothing but the session can tell the tray.
+    await session.toggle();
+    await pumpEventQueue();
+    expect(h.tray.faces.last.playing, isFalse);
+    gate.complete();
+    await pumpEventQueue();
+  });
+
   test('an entry still resolving is named as loading', () async {
     final h = _Harness();
     await h.start();

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../l10n/l10n.dart';
 import '../shell/shell_messages.dart';
 import 'entity_play_state_controller.dart';
+import 'optimistic_state.dart';
 import 'star_rating_row.dart';
 
 /// Star toggle plus the five-star rating row for a catalog entity (an
@@ -30,10 +31,11 @@ class EntityStarRatingRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // A failed mutation rolls the value back and lands here as an error
     // still carrying that previous value; tell the user the tap did not
-    // stick while the row keeps rendering the real state.
+    // stick while the row keeps rendering the real state. A read refused
+    // (an artist merged away) is no tap of theirs.
     final l10n = context.l10n;
     ref.listen(entityPlayStateControllerProvider(pid), (previous, next) {
-      if (next.hasError && !next.isLoading) {
+      if (rejectedMutation(previous, next)) {
         ref
             .read(shellMessengerProvider.notifier)
             .show(l10n.playerRatingFailed, channel: ShellChannel.rating);

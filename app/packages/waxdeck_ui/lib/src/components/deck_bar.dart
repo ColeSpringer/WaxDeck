@@ -158,6 +158,11 @@ class DeckBar extends StatelessWidget {
   bool get _spokenWord =>
       now.domain == WaxDomain.podcasts || now.domain == WaxDomain.audiobooks;
 
+  /// Whether the play button wears its ring. It is up exactly when the
+  /// button reads Pause or Stop, so a bar that is paused, or held by the
+  /// browser, has no wait to show even if a load is still in flight.
+  bool get _buffering => now.buffering && now.playing && !autoplayBlocked;
+
   @override
   Widget build(BuildContext context) {
     final sizeClass = this.sizeClass ?? WaxSizeClass.of(context);
@@ -188,7 +193,9 @@ class DeckBar extends StatelessWidget {
       value: <String?>[
         autoplayBlocked
             ? l10n.deckBarPausedByBrowser
-            : (now.playing ? l10n.commonPlaying : l10n.commonPaused),
+            : (_buffering
+                  ? l10n.deckBarBuffering
+                  : (now.playing ? l10n.commonPlaying : l10n.commonPaused)),
         if (now.live) l10n.deckBarLive,
         now.title,
         now.subtitle,
@@ -733,7 +740,13 @@ class DeckBar extends StatelessWidget {
           onPressed: now.live ? null : actions.onPrevious,
           semanticsId: ids.previous,
         ),
-      _playButton(colors, playGlyph, playLabel, compact: compact),
+      _BufferingRing(
+        active: _buffering,
+        // Around the bare glyph in the strip, and a hairline clear of the
+        // 40 px disc on the wide bar.
+        size: compact ? 36 : 48,
+        child: _playButton(colors, playGlyph, playLabel, compact: compact),
+      ),
       if (_spokenWord)
         WaxIconButton(
           glyph: WaxIcons.fastForward,
@@ -816,6 +829,57 @@ class DeckBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A ring drawn around a control while it waits, under the control.
+///
+/// Decoration with a name. It takes no press, and it sits beneath the
+/// control so that the control is still the topmost node at its own
+/// centre, for a pointer, for touch exploration and for the web's
+/// semantics layer alike. The control stays the stack's last child, so it
+/// keeps its state, and with it the keyboard focus, when the ring comes
+/// and goes.
+class _BufferingRing extends StatelessWidget {
+  const _BufferingRing({
+    required this.active,
+    required this.size,
+    required this.child,
+  });
+
+  final bool active;
+
+  /// The ring's outer diameter; it may be larger than the control.
+  final double size;
+
+  final Widget child;
+
+  static const double _thickness = 2;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.center,
+      clipBehavior: Clip.none,
+      children: <Widget>[
+        if (active)
+          Positioned.fill(
+            child: OverflowBox(
+              minWidth: size,
+              maxWidth: size,
+              minHeight: size,
+              maxHeight: size,
+              child: Semantics(
+                label: context.waxL10n.deckBarBuffering,
+                child: IgnorePointer(
+                  child: WaxSpinner(size: size, thickness: _thickness),
+                ),
+              ),
+            ),
+          ),
+        child,
+      ],
     );
   }
 }

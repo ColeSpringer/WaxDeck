@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/misc.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 
 import '../l10n/l10n.dart';
+import '../library/page_walk.dart';
 import '../player/play_progress.dart';
 import '../podcasts/podcast_shelves.dart';
 import '../providers.dart';
@@ -16,22 +17,13 @@ import 'pinned_controller.dart';
 /// what fills a desktop row twice over and a phone row four times.
 const int kHomeShelfCards = 12;
 
-/// How many rows a shelf that discards reads to fill itself.
+/// How many pages a shelf reads before it settles for what it holds.
 ///
-/// Much larger than the shelf, because two kinds of shelf throw rows
-/// away: the resume shelf drops anything finished, and a media-scoped
-/// shelf gets a window filtered rather than a list filtered (the
-/// contract says so). Both can burn most of a page.
-const int kHomeShelfWindow = 100;
-
-/// How many rows a shelf that discards nothing reads.
-///
-/// Not the card count exactly. A caller with restricted library
-/// visibility has rows dropped underneath it - the listing contract says
-/// short pages are legal - so a shelf asking for precisely what it draws
-/// would come back thin for them. Twice over covers that without paying
-/// for a hundred rows to draw a dozen.
-const int kHomeShelfSlack = kHomeShelfCards * 2;
+/// A page can come back short, even empty, and still continue: the
+/// listing contract allows it, though the server keeps out of the page
+/// what the caller may not see. Three ride out a run of those without
+/// turning one shelf into a crawl of the library.
+const int kHomeShelfPages = 3;
 
 /// One shelf's worth of items, with the caller's position on each.
 ///
@@ -44,7 +36,14 @@ const HomeShelfItems _emptyShelf = (
   progress: PlayProgressView.empty,
 );
 
-/// Reads one discovery list, optionally scoped to a medium.
+/// Reads one discovery list, optionally scoped to a medium, on past
+/// short pages until the shelf is full, the list ends, or
+/// [kHomeShelfPages] were read.
+///
+/// Pages of what the shelf draws: the server narrows each list, the
+/// medium and what the caller may see included, so a page comes back
+/// full, and one that does not sends the walk on for the rest. A later
+/// page failing keeps the cards the earlier ones gave.
 ///
 /// [withProgress] asks for the caller's positions alongside the rows.
 /// Only the shelves that draw a ring want them: the sealed shelf is
@@ -57,50 +56,53 @@ Future<HomeShelfItems> readShelf(
   MediaType? mediaType,
   bool withProgress = false,
   int cards = kHomeShelfCards,
-  bool Function(ItemSummary item, PlayProgress progress)? keep,
 }) async {
   final repository = ref.watch(repositoryProvider);
-  final page = await repository.browse(
-    list,
-    mediaType: mediaType,
-    // A shelf that throws rows away has to read past what it draws. The
-    // media type is not one of those: the server narrows the list itself
-    // now, so a filtered page comes back full.
-    limit: keep != null ? kHomeShelfWindow : kHomeShelfSlack,
+  final states = <String, PlayProgress>{};
+  // A random list's order is its seed, so the pages after the first
+  // carry the one the server picked or they deal from another shuffle.
+  int? seed;
+  final walk = await walkPages(
+    (cursor) async {
+      final page = await repository.browse(
+        list,
+        mediaType: mediaType,
+        cursor: cursor,
+        seed: seed,
+        limit: cards,
+      );
+      seed ??= page.seed;
+      if (page.items.isEmpty || !withProgress) return page;
+      final read = await repository.listPlayStates([
+        for (final item in page.items) item.pid,
+      ]);
+      for (final state in read) {
+        states[state.pid] = PlayProgress.of(state);
+      }
+      return page;
+    },
+    want: cards,
+    maxPages: kHomeShelfPages,
+    stop: () => !ref.mounted,
+    keepOnFailure: true,
   );
-  if (page.items.isEmpty) return _emptyShelf;
-  var progress = PlayProgressView.empty;
-  if (withProgress || keep != null) {
-    final states = await repository.listPlayStates([
-      for (final item in page.items) item.pid,
-    ]);
-    progress = PlayProgressView(<String, PlayProgress>{
-      for (final state in states) state.pid: PlayProgress.of(state),
-    });
-  }
-  final kept = <ItemSummary>[];
-  for (final item in page.items) {
-    if (kept.length == cards) break;
-    if (keep != null && !keep(item, progress[item.pid])) continue;
-    kept.add(item);
-  }
-  return (items: kept, progress: progress);
+  if (walk.items.isEmpty) return _emptyShelf;
+  return (
+    items: walk.items.take(cards).toList(),
+    progress: PlayProgressView(states),
+  );
 }
 
-/// What the caller was in the middle of, across every medium.
+/// What the caller is part way through, across every medium, most
+/// recently progressed first.
 ///
-/// The recently-played list carries what they finished too, and a
-/// "continue" card over a finished album is an offer to hear it again
-/// dressed up as an offer to carry on, so the finished rows are dropped
-/// here rather than drawn without a ring.
+/// The server's in-progress list: an episode or a book from its first
+/// saved position, whether or not a play has counted, and a track only
+/// once one has, so a track skipped a few seconds in is not offered back
+/// as something to carry on with.
 final continueListeningShelfProvider =
     FutureProvider.autoDispose<HomeShelfItems>(
-      (ref) => readShelf(
-        ref,
-        DiscoveryList.recentlyPlayed,
-        withProgress: true,
-        keep: (item, progress) => progress.inProgress,
-      ),
+      (ref) => readShelf(ref, DiscoveryList.inProgress, withProgress: true),
     );
 
 /// What the library gained most recently.
@@ -239,27 +241,42 @@ final mixCardsProvider = FutureProvider.autoDispose<List<MixCard>>((ref) async {
 ///
 /// A fresh server answers every shelf empty, and eight empty shelves is
 /// not a screen. This is the one read that decides between the shelves
-/// and the first-run state, and it is the cheapest question there is:
-/// does the library hold one item.
+/// and the first-run state, so only a probe that proved the library
+/// empty draws the latter: one the budget ran out on may hold anything,
+/// and each shelf hides itself when it has nothing.
 final libraryHasAnythingProvider = FutureProvider.autoDispose<bool>((
   ref,
 ) async {
-  final page = await ref.watch(repositoryProvider).listItems(limit: 1);
-  return page.items.isNotEmpty;
+  final repository = ref.watch(repositoryProvider);
+  final walk = await probePages(
+    (cursor, limit) => repository.listItems(cursor: cursor, limit: limit),
+  );
+  return !walk.provedEmpty;
 }, retry: retryUnlessRefused);
 
-/// Every home read, for the pull-to-refresh gesture and for the catalog
-/// fan-out: a scan changes what is on all of them at once.
+/// Every home read, for the pull-to-refresh gesture and the error
+/// state's retry: the ways somebody asks home to check itself again.
 final List<ProviderBase<Object?>> homeShelfProviders = <ProviderBase<Object?>>[
   libraryHasAnythingProvider,
-  pinnedCardsProvider,
-  continueListeningShelfProvider,
-  recentlyAddedShelfProvider,
-  neverPlayedShelfProvider,
-  rediscoverShelfProvider,
-  mostPlayedShelfProvider,
-  mixCardsProvider,
+  ...homeCatalogShelfProviders,
 ];
+
+/// The home reads a catalog change moves, for the catalog fan-out. Every
+/// shelf, because a retag or an enrichment changes the titles and art on
+/// all of them; not the probe, which is not worth a read on every pass
+/// of a scan: the binder asks it again on a pass while it reads empty,
+/// once a run of catalog changes goes quiet, and when the libraries
+/// change.
+final List<ProviderBase<Object?>> homeCatalogShelfProviders =
+    <ProviderBase<Object?>>[
+      pinnedCardsProvider,
+      continueListeningShelfProvider,
+      recentlyAddedShelfProvider,
+      neverPlayedShelfProvider,
+      rediscoverShelfProvider,
+      mostPlayedShelfProvider,
+      mixCardsProvider,
+    ];
 
 /// The home reads that are about the caller rather than about the
 /// library.

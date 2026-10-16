@@ -8112,6 +8112,26 @@
   "@playerCollapseCommand": {
     "description": "Command that closes the full player, in the command palette and the shortcut sheet."
   },
+  "playerCouldNotContinue": "Couldn't keep playing {title}",
+  "@playerCouldNotContinue": {
+    "description": "Message on the shell when an item that was already playing failed part way (a dropped connection, a part that would not load) and the player stands on its error. {title} is the item's title; the message carries a Retry action.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Salt Harbour"
+      }
+    }
+  },
+  "playerCouldNotStart": "Couldn't start {title}",
+  "@playerCouldNotStart": {
+    "description": "Message on the shell when an item could not start and the player stands on its error. {title} is the item's title; the message carries a Retry action.",
+    "placeholders": {
+      "title": {
+        "type": "String",
+        "example": "Salt Harbour"
+      }
+    }
+  },
   "playerDeleteFiles": "Delete files...",
   "@playerDeleteFiles": {
     "description": "Menu item that deletes the playing item's files. The trailing dots say a confirmation follows."
@@ -8149,6 +8169,14 @@
   "playerForgetSong": "Forget this song",
   "@playerForgetSong": {
     "description": "Accessible name of the control that drops a saved radio song."
+  },
+  "playerGaplessBusy": "The server is busy, so this queue plays one track at a time. Gapless playback returns when a stream frees up.",
+  "@playerGaplessBusy": {
+    "description": "Message on the shell when gapless playback is on but the server turned down rendering the queue as one stream because too many streams are being converted."
+  },
+  "playerGaplessPaused": "The server is busy, so playback paused. Press play to try again.",
+  "@playerGaplessPaused": {
+    "description": "Message on the shell when a gapless stream stopped mid-play because the server reached its limit of streams being converted."
   },
   "playerGoToName": "Go to {name}",
   "@playerGoToName": {
@@ -8214,6 +8242,16 @@
   "@playerMoreLikeThis": {
     "description": "Menu offering the two ways of finding music like what is playing."
   },
+  "playerMoveFailed": "Couldn't jump there. {reason}",
+  "@playerMoveFailed": {
+    "description": "Toast when a seek could not be had (the server or the connection turned down the stream it needed), so playback went on where it was. reason is a sentence saying why.",
+    "placeholders": {
+      "reason": {
+        "type": "String",
+        "example": "Can't reach the server."
+      }
+    }
+  },
   "playerNext": "Next",
   "@playerNext": {
     "description": "Accessible name of the control that steps forward a track."
@@ -8255,6 +8293,10 @@
   "playerOfferResume": "Pick up where you left off",
   "@playerOfferResume": {
     "description": "Under the offer to resume an earlier queue."
+  },
+  "playerOfflineStart": "You're offline. Playback will continue when the connection is back.",
+  "@playerOfflineStart": {
+    "description": "Message on the shell when an item could not start because the server cannot be reached; playback starts by itself once the connection returns, and the message also carries a Retry action."
   },
   "playerOpenPlayer": "Open the player",
   "@playerOpenPlayer": {
@@ -14253,7 +14295,7 @@
   "@settingsStreamQualityAuto": {
     "description": "Streaming quality option: no cap, the original plays directly whenever the server can manage it."
   },
-  "settingsStreamQualityHelp": "Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and instant seeking, applies from the next track, and never affects downloads",
+  "settingsStreamQualityHelp": "Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and makes seeking take a moment, applies from the next track, and never affects downloads",
   "@settingsStreamQualityHelp": {
     "description": "The line under the streaming quality settings, naming the trade a cap makes so it arrives as a known one."
   },

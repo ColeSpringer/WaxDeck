@@ -317,6 +317,19 @@ func (l *Library) VisibleItem(ctx context.Context, uc *UserCtx, apiItemPID strin
 	return err
 }
 
+// VisibleBook is VisibleItem answering, off the same read, whether the
+// item is a book, the one kind that can lay out in parts: a caller about
+// to ask for a book's layout asks nothing of anything else. The kind is
+// the catalog's, never the pid's prefix, since a track's pid names the
+// book it became.
+func (l *Library) VisibleBook(ctx context.Context, uc *UserCtx, apiItemPID string) (bool, error) {
+	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
+	if err != nil {
+		return false, err
+	}
+	return it.Kind == model.KindBook, nil
+}
+
 // LibraryInfo is one catalog library for the admin surface.
 type LibraryInfo struct {
 	PID   string

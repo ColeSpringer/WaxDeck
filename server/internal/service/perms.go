@@ -155,10 +155,11 @@ func (l *Library) allowedByContent(ctx context.Context, uc *UserCtx, it *model.I
 
 // advisoryAllows is the episode half of allowedByContent, and the whole
 // of it for a listing whose query already carries the tag rules. It
-// stays per-item because the advisory flags are a per-item decision no
-// aggregation expresses, and it costs no reads: the view projects both
-// flags - the episode's own and its show's - because a feed may mark
-// itself explicit at the channel level and leave every episode unmarked.
+// costs no reads: the view projects both flags - the episode's own and
+// its show's - because a feed may mark itself explicit at the channel
+// level and leave every episode unmarked. A query can carry the same two
+// flags (contentNarrow), and a listing's does, which leaves this its
+// second line.
 func advisoryAllows(uc *UserCtx, it *model.ItemView) bool {
 	if uc.Admin || uc.Explicit {
 		return true

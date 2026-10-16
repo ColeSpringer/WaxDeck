@@ -673,14 +673,13 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
     final playback = ref.read(nowPlayingProvider.notifier);
     final queue = ref.read(queueControllerProvider.notifier);
 
-    // The engine rather than the session's handle on it: they are the
-    // same object, and reading it from the provider is what lets the
-    // transport keep ticking through the window where there is no
-    // session to reach it through.
-    final engine = ref.watch(audioEngineProvider);
     return StreamBuilder<bool>(
-      stream: engine.playingStream,
-      initialData: engine.playing,
+      // Playback's word rather than the session's, which is what keeps the
+      // transport honest through the window where there is no session: a
+      // load that means to play reads as playing, as on the deck, a
+      // reload and a start alike.
+      stream: playback.meansToPlayStream,
+      initialData: playback.meansToPlay,
       builder: (context, snapshot) {
         final playing = snapshot.data ?? false;
         return PlayerScaffold(
@@ -834,7 +833,7 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
         semanticsId: SemanticsIds.playerMore,
         items: <WaxMenuItem<_PlayerMenuAction>>[
           // The episode rows first: they are what a listener reaches
-          // this menu for on a podcast, and 5.3 names them.
+          // this menu for on a podcast.
           if (_episode != null) ...<WaxMenuItem<_PlayerMenuAction>>[
             WaxMenuItem(
               value: _PlayerMenuAction.markPlayed,
@@ -1071,9 +1070,9 @@ class _PlayerFaceState extends ConsumerState<PlayerFace> {
           ...spokenActionChips(_session!)
         else
           ...spokenChipStandIns(context, book: _book),
-        // Every face, not only the spoken-word ones 5.3 lists it under:
-        // falling asleep to a record is what the control is for, and it
-        // is about the device rather than the medium.
+        // Every face, not only the spoken-word ones: falling asleep to a
+        // record is what the control is for, and it is about the device
+        // rather than the medium.
         SleepTimerButton(session: _session),
         // Only where somebody asked for it (5.6). The verb is in the
         // overflow for everybody; this is the row for the listener who
@@ -1512,9 +1511,13 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
                 glyph: WaxIcons.audiobooks,
                 title: l10n.playerTimerChapterEnd,
                 onTap: () {
+                  // Read now rather than when the sheet opened: a sheet
+                  // left open across a chapter end means the chapter
+                  // playing now.
+                  final endMs = _currentChapterEndMs() ?? chapterEndMs;
                   ref
                       .read(sleepTimerProvider.notifier)
-                      .startEndOfChapter(chapterEndMs);
+                      .startEndOfChapter(endMs, pid: widget.session?.item.pid);
                   Navigator.of(context).pop();
                 },
               ),

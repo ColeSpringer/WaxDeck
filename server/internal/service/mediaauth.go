@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
+	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
 
@@ -50,9 +51,15 @@ func (l *Library) AuthorizeMediaFor(ctx context.Context, c auth.MediaClaims) (*U
 	case auth.PurposeRadio:
 		_, err := l.RadioStationByPID(ctx, c.PID)
 		return uc, err
-	case auth.PurposeProbe, auth.PurposeHLS:
-		// A probe opens nothing in the library, and a timeline's items
-		// were checked at its mint and are bound by its reach credential.
+	case auth.PurposeHLS:
+		// A timeline's items were checked at its mint and are bound by
+		// its reach credential; one item's rendering is that item.
+		if strings.HasPrefix(c.PID, flow.TimelinePIDPrefix) {
+			return uc, nil
+		}
+		return uc, l.VisibleItem(ctx, uc, c.PID)
+	case auth.PurposeProbe:
+		// A probe opens nothing in the library.
 		return uc, nil
 	}
 	return nil, &Error{Kind: KindForbidden, Msg: "a media token for an unknown purpose"}

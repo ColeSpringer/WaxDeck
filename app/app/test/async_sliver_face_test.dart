@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/shell/async_sliver_face.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'localized_host.dart';
@@ -158,6 +159,54 @@ void main() {
       findsNothing,
       reason: 'rows that failed to reload may be wrong; say so',
     );
+  });
+
+  for (final (name, missing) in <(String, WaxDeckApiException)>[
+    (
+      'a 404',
+      const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such row',
+        statusCode: 404,
+      ),
+    ),
+    (
+      'a not-found code with no status',
+      const WaxDeckApiException(code: 'not-found', message: 'no such row'),
+    ),
+  ]) {
+    testWidgets('$name says the thing is gone and offers no retry', (
+      tester,
+    ) async {
+      // It answers the same on every ask, so a Try again under it is a
+      // control that cannot work.
+      await _pump(tester);
+      _Rows.next.completeError(missing, StackTrace.empty);
+      await tester.pumpAndSettle();
+
+      expect(find.text('That is not here any more.'), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+    });
+  }
+
+  testWidgets('a bare 404 from something in front of the server keeps its '
+      'retry', (tester) async {
+    // A proxy with no route for the path, or a server without it: no
+    // not-found of the server's, and nothing says the next ask is the
+    // same.
+    await _pump(tester);
+    _Rows.next.completeError(
+      const WaxDeckApiException(
+        code: 'transport',
+        message: '404 page not found',
+        statusCode: 404,
+      ),
+      StackTrace.empty,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('That is not here any more.'), findsNothing);
+    expect(find.text('Try again'), findsOneWidget);
   });
 
   testWidgets('without an empty face an empty value goes to the builder', (

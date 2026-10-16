@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -40,6 +42,12 @@ class _RecordingSession implements MediaSessionPort {
 
   @override
   void showExtra(MediaSessionExtra? extra) {}
+
+  /// Every opening said, in order.
+  final List<bool> openings = <bool>[];
+
+  @override
+  void publishOpening(bool opening) => openings.add(opening);
 }
 
 ItemSummary _item(
@@ -376,4 +384,46 @@ void main() {
     container.read(queueControllerProvider.notifier).clear();
     await pumpEventQueue();
   });
+
+  test(
+    'a start that means to play is said as opening until it lands',
+    () async {
+      const pid = 'tr-01JZX5N8QW3F4V9T2B7KDTRACKA';
+      final repo = FakeRepository(items: [testItem(pid)]);
+      final container = ProviderContainer(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+          localeOverrideProvider.overrideWithValue(null),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.read(systemLocalesProvider.notifier).locales = const [
+        Locale('en'),
+      ];
+      final recorded = _RecordingSession();
+      container.read(mediaSessionProvider).bind(recorded);
+      final subscription = container.listen(
+        mediaSessionFeedProvider,
+        (_, _) {},
+      );
+      addTearDown(subscription.close);
+      final gate = Completer<void>();
+      repo.playInfoGate = gate;
+      final starting = container.read(nowPlayingProvider.notifier).playPids(
+        [pid],
+        source: const QueueSource(kind: QueueSourceKind.album, label: 'Album'),
+      );
+      await pumpEventQueue();
+      expect(recorded.openings.last, isTrue);
+
+      repo.playInfoGate = null;
+      gate.complete();
+      await starting;
+      await pumpEventQueue();
+      expect(recorded.openings.last, isFalse);
+      container.read(queueControllerProvider.notifier).clear();
+      await pumpEventQueue();
+    },
+  );
 }

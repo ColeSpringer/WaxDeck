@@ -652,6 +652,259 @@ void main() {
       expect(played, 1);
       semantics.dispose();
     });
+
+    // The play intent holds and no sound is coming yet.
+    group('buffering', () {
+      // The phone's strip and the three-zone bar draw their play control
+      // differently, so each case runs against both.
+      const forms = <WaxSizeClass>[WaxSizeClass.compact, WaxSizeClass.wide];
+
+      const loading = NowPlayingData(
+        title: 'Salt Harbour',
+        subtitle: 'Nightjar',
+        position: Duration(minutes: 2, seconds: 41),
+        duration: Duration(minutes: 4, seconds: 5),
+        playing: true,
+        buffering: true,
+      );
+      const loadingLive = NowPlayingData(
+        title: 'Coastal FM',
+        subtitle: 'Ora Lune - Bell Tower',
+        domain: WaxDomain.radio,
+        position: Duration.zero,
+        duration: Duration.zero,
+        live: true,
+        playing: true,
+        buffering: true,
+      );
+      // Paused with a load still in flight: nothing is being waited for.
+      const loadingPaused = NowPlayingData(
+        title: 'Salt Harbour',
+        subtitle: 'Nightjar',
+        position: Duration(minutes: 2, seconds: 41),
+        duration: Duration(minutes: 4, seconds: 5),
+        playing: false,
+        buffering: true,
+      );
+
+      Future<void> pumpBar(
+        WidgetTester tester,
+        NowPlayingData now,
+        WaxSizeClass form, {
+        VoidCallback? onPlayPause,
+        bool autoplayBlocked = false,
+        DeckBarIds ids = const DeckBarIds(),
+      }) => _pumpAt(
+        tester,
+        DeckBar(
+          now: now,
+          sizeClass: form,
+          ids: ids,
+          autoplayBlocked: autoplayBlocked,
+          actions: DeckBarActions(onPlayPause: onPlayPause ?? () {}),
+        ),
+        size: Size(form == WaxSizeClass.compact ? 420 : 1280, 600),
+      );
+
+      for (final form in forms) {
+        testWidgets('the ${form.name} bar rings its play button only while '
+            'it waits on sound', (tester) async {
+          final semantics = tester.ensureSemantics();
+          await pumpBar(tester, _music, form);
+          expect(find.byType(WaxSpinner), findsNothing);
+          expect(find.bySemanticsLabel('Buffering'), findsNothing);
+
+          await pumpBar(tester, loading, form);
+          expect(find.byType(WaxSpinner), findsOneWidget);
+          final ring = tester.getSemantics(find.bySemanticsLabel('Buffering'));
+          expect(
+            ring.getSemanticsData().hasAction(SemanticsAction.tap),
+            isFalse,
+            reason: 'a label, not a second control',
+          );
+
+          // The ring waits on the intent to play. A paused bar has nothing
+          // to wait for, and neither has one the browser would not resume.
+          await pumpBar(tester, loadingPaused, form);
+          expect(find.byType(WaxSpinner), findsNothing);
+          await pumpBar(tester, loading, form, autoplayBlocked: true);
+          expect(find.byType(WaxSpinner), findsNothing);
+
+          await pumpBar(tester, loading, form);
+          expect(find.byType(WaxSpinner), findsOneWidget);
+          await pumpBar(tester, _music, form);
+          expect(find.byType(WaxSpinner), findsNothing);
+          semantics.dispose();
+        });
+
+        for (final (name, now) in <(String, NowPlayingData)>[
+          ('Pause', loading),
+          ('Stop', loadingLive),
+        ]) {
+          testWidgets('the ${form.name} bar keeps "$name" and its action '
+              'under the ring', (tester) async {
+            var pressed = 0;
+            final semantics = tester.ensureSemantics();
+            await pumpBar(tester, now, form, onPlayPause: () => pressed++);
+            expect(find.byType(WaxSpinner), findsOneWidget);
+
+            // The ring sits where the press lands and has to let it by.
+            await tester.tap(find.bySemanticsLabel(name));
+            await tester.pump();
+            expect(pressed, 1);
+
+            final node = tester.getSemantics(find.bySemanticsLabel(name));
+            expect(
+              node.getSemanticsData().hasAction(SemanticsAction.tap),
+              isTrue,
+            );
+            tester.binding.performSemanticsAction(
+              SemanticsActionEvent(
+                type: SemanticsAction.tap,
+                nodeId: node.id,
+                viewId: tester.view.viewId,
+              ),
+            );
+            await tester.pump();
+            expect(pressed, 2);
+            semantics.dispose();
+          });
+        }
+
+        testWidgets('the ring stays under the ${form.name} play button for '
+            'touch and for clicks', (tester) async {
+          // Touch exploration, and the web's semantics layer through its
+          // z-index, give a press to whichever node is last in hit-test
+          // order. A label is a leaf that would take it from the button.
+          final semantics = tester.ensureSemantics();
+          await pumpBar(tester, loading, form);
+          final order = tester
+              .getSemantics(find.bySemanticsLabel('Now playing bar'))
+              .debugListChildrenInOrder(DebugSemanticsDumpOrder.inverseHitTest)
+              .map((node) => node.label)
+              .toList();
+          expect(order, contains('Buffering'));
+          expect(order, contains('Pause'));
+          expect(order.indexOf('Buffering'), lessThan(order.indexOf('Pause')));
+          semantics.dispose();
+        });
+
+        testWidgets('the ring moves nothing in the ${form.name} bar', (
+          tester,
+        ) async {
+          final semantics = tester.ensureSemantics();
+          Future<List<Rect>> measure(NowPlayingData now) async {
+            await pumpBar(tester, now, form);
+            return <Rect>[
+              tester.getRect(find.byType(DeckBar)),
+              _transportOf(tester),
+              tester.getRect(find.bySemanticsLabel('Pause')),
+            ];
+          }
+
+          final idle = await measure(_music);
+          expect(await measure(loading), idle);
+
+          // And it is centred on the button it rings.
+          final ring = tester.getCenter(find.byType(WaxSpinner));
+          final button = tester.getCenter(find.bySemanticsLabel('Pause'));
+          expect(ring.dx, moreOrLessEquals(button.dx));
+          expect(ring.dy, moreOrLessEquals(button.dy));
+          semantics.dispose();
+        });
+
+        testWidgets('the ${form.name} play button is not rebuilt when the '
+            'ring comes and goes', (tester) async {
+          // A remount would drop the keyboard focus the press gave it.
+          final semantics = tester.ensureSemantics();
+          const ids = DeckBarIds(play: 'play');
+          Element button() =>
+              tester.element(find.bySemanticsIdentifier('play'));
+
+          await pumpBar(tester, _music, form, ids: ids);
+          final before = button();
+          await pumpBar(tester, loading, form, ids: ids);
+          expect(find.byType(WaxSpinner), findsOneWidget);
+          expect(button(), same(before));
+          await pumpBar(tester, _music, form, ids: ids);
+          expect(button(), same(before));
+          semantics.dispose();
+        });
+      }
+
+      testWidgets('the ring holds still under reduced motion', (tester) async {
+        // One theme object throughout: a new one per pump would animate
+        // the app's theme, which is also a running animation.
+        final theme = buildWaxTheme();
+        Future<void> pump({required bool reduced}) => tester.pumpWidget(
+          MaterialApp(
+            theme: theme,
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.bottomCenter,
+                child: Builder(
+                  builder: (context) => MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(disableAnimations: reduced),
+                    child: const DeckBar(
+                      now: loading,
+                      sizeClass: WaxSizeClass.compact,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+
+        await pump(reduced: false);
+        expect(tester.hasRunningAnimations, isTrue, reason: 'it turns');
+        // Turned on while the ring is up, as a setting changed mid-load.
+        await pump(reduced: true);
+        expect(find.byType(WaxSpinner), findsOneWidget);
+        expect(tester.hasRunningAnimations, isFalse);
+      });
+
+      testWidgets('the bar speaks Buffering where it would say Playing', (
+        tester,
+      ) async {
+        final semantics = tester.ensureSemantics();
+        String spoken() => tester
+            .getSemantics(find.bySemanticsLabel('Now playing bar'))
+            .getSemanticsData()
+            .value;
+
+        await pumpBar(tester, _music, WaxSizeClass.compact);
+        expect(spoken(), startsWith('Playing, Salt Harbour'));
+        await pumpBar(tester, loading, WaxSizeClass.compact);
+        expect(spoken(), startsWith('Buffering, Salt Harbour'));
+        semantics.dispose();
+      });
+
+      testWidgets('the ring is named in the host language', (tester) async {
+        final semantics = tester.ensureSemantics();
+        tester.view.physicalSize = const Size(420, 600);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: buildWaxTheme(),
+            locale: const Locale('es'),
+            localizationsDelegates: waxLocalizationsDelegates,
+            supportedLocales: WaxLocalizations.supportedLocales,
+            home: const Scaffold(
+              body: Align(
+                alignment: Alignment.bottomCenter,
+                child: DeckBar(now: loading, sizeClass: WaxSizeClass.compact),
+              ),
+            ),
+          ),
+        );
+        expect(find.bySemanticsLabel('Cargando'), findsOneWidget);
+        semantics.dispose();
+      });
+    });
   });
 
   group('player scaffold', () {

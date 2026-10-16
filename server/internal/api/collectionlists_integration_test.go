@@ -1,6 +1,7 @@
 package api
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -195,4 +196,82 @@ func TestBrowseMediaTypeFilterOverHTTP(t *testing.T) {
 	// everything, the way the item listing already does.
 	wantStatus(t, get(t, h.ts, "/api/v1/library/browse?list=newest&mediaType=video", h.token),
 		400, "unknown mediaType")
+}
+
+// TestInProgressBrowseListOverHTTP drives the list the resume shelf is
+// built on: what the caller is part way through, most recently
+// progressed first. An episode or a book is on it from its first saved
+// position, counted or not, which a list of counted plays never showed;
+// a track only once a play of it has counted, since the player saves a
+// position for a track skipped a few seconds in like any other.
+func TestInProgressBrowseListOverHTTP(t *testing.T) {
+	t.Parallel()
+	h := newPodcastHarness(t)
+	if _, err := fixtures.GenerateBook(h.library); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+	tracks := h.items(t, "?mediaType=music").Items
+	books := h.items(t, "?mediaType=audiobook").Items
+	if len(tracks) < 3 || len(books) == 0 {
+		t.Fatalf("this needs three tracks and a book: %d tracks, %d books", len(tracks), len(books))
+	}
+	feed := newCountsFeed(t, []countsEpisode{{title: "Part Heard"}, {title: "Untouched"}})
+	resp := h.postJSON(t, "/api/v1/podcasts", map[string]any{"url": feed.feedURL()})
+	show := decode[Subscription](t, resp).Show.Pid
+	episodes := decode[EpisodePage](t, get(t, h.ts, "/api/v1/podcasts/"+show+"/episodes", h.token)).Items
+	var episode EpisodeSummary
+	for _, ep := range episodes {
+		if ep.Title == "Part Heard" {
+			episode = ep
+		}
+	}
+	if episode.Pid == "" {
+		t.Fatalf("the feed's episodes = %+v", episodes)
+	}
+
+	skipped, heard, finished := tracks[0], tracks[1], tracks[2]
+	book := books[0]
+	// Left a few seconds in: a position, and no play counted.
+	putPlayState(t, h, skipped.Pid, skipped.DurationMs*10/100)
+	// Heard past the half-way bar, so a play counted, and left there.
+	reportPartialListen(t, h, "in-progress-heard", heard.Pid, heard.DurationMs*60/100)
+	putPlayState(t, h, heard.Pid, heard.DurationMs*60/100)
+	// Played to its end: done with, not part way through.
+	reportListen(t, h, "in-progress-finished", finished.Pid, finished.DurationMs)
+	// Spoken word, part way and nothing counted.
+	putPlayState(t, h, book.Pid, book.DurationMs/2)
+	putPlayState(t, h, episode.Pid, episode.DurationMs*40/100)
+
+	page := browsePage(t, h, "?list=in-progress")
+	var got []string
+	for _, it := range page.Items {
+		got = append(got, it.Title)
+	}
+	want := []string{episode.Title, book.Title, heard.Title}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("in-progress = %q, want %q, most recently progressed first", got, want)
+	}
+
+	// Scoped like every other list: the spoken-word half alone.
+	scoped := browsePage(t, h, "?list=in-progress&mediaType=audiobook")
+	if len(scoped.Items) != 1 || scoped.Items[0].Pid != book.Pid {
+		t.Fatalf("in-progress scoped to audiobooks = %+v, want just the book", scoped.Items)
+	}
+}
+
+// reportPartialListen reports a listen that stopped part way, which
+// counts a play once it is past the medium's bar.
+func reportPartialListen(t *testing.T, h *harness, sessionID, pid string, msPlayed int64) {
+	t.Helper()
+	resp := h.postJSON(t, "/api/v1/listens", map[string]any{
+		"sessions": []map[string]any{{
+			"sessionId": sessionID,
+			"pid":       pid,
+			"startedAt": time.Now().UTC().Add(-time.Minute).Format(time.RFC3339),
+			"msPlayed":  msPlayed,
+			"finished":  false,
+		}},
+	})
+	wantStatus(t, resp, 200, "report a partial listen")
 }

@@ -215,6 +215,40 @@ note.
   `Files`. Shipped workaround: an item's detail reads only its primary's
   row and each copy's, so a book's `addedAt` is when its primary part, or
   an earlier copy, was found, not its earliest part.
+- **Search cannot be scoped to the shows a caller follows.**
+  `SearchOptions` narrows by library and state only, so the episode group
+  ranks every matching episode in the catalog and the per-group cap
+  applies before WaxDeck drops the episodes of shows the caller does not
+  follow. When another account follows a show whose episodes match best,
+  the caller's episode group comes back short or empty while their own
+  shows hold matches. Wanted: an episode scope on `SearchOptions`, the
+  shows to admit or a `query.Node` applied before the cap. Shipped
+  workaround: the subscription filter runs after the cap; the listings,
+  which page, carry the scope in their query instead.
+- **A book's timeline runs a part by its chapter marks.** `bookChapters`
+  advances the book timeline by each part's effective length (its chapter
+  extent where CHAP frames or a chapter track run past the measured
+  audio), so the marks and `TotalDurationMS` sit off the timeline the
+  parts play on, and `BookDetail` does not say where each part starts on
+  the catalog's. Stored places are remapped on that timeline too, while a
+  player records positions on the audio's. Wanted: each part's catalog
+  start (and effective length) on `BookDetail.Files`, or the timeline laid
+  out by the measured durations where they are known. Shipped workaround:
+  WaxDeck projects each mark onto the parts' own timeline (held to its
+  part's audio, by its file offset) and serves the book's length as the
+  end of its last part's audio, and maps a chapter edit back onto the
+  catalog's timeline from part starts read off the marks themselves,
+  which is exact unless a user-curated book has a part with no mark of
+  its own whose embedded marks ran past its audio.
+- **`CurrentChapter` names the next chapter in a gap between two.** Its
+  doc promises the nearest preceding chapter when a position falls
+  between spans, but the store's loop answers the first chapter ending
+  after the position: with chapters at 0-60 s and 90-120 s, 75 s names
+  the second. `BookResume` reads its chapter through the same loop.
+  Wanted: the last chapter starting at or before the position (the first
+  before any), as documented. Shipped workaround: WaxDeck calls neither;
+  it names a resume's chapter from the marks it serves, the way its
+  player names the chapter playing.
 
 ## WaxTap
 
@@ -244,6 +278,46 @@ note.
   measure exported (or a `Slice` that measures an advisory length).
   Shipped workaround: such a track rests unanalyzed until its audio
   changes, instead of being queued again.
+- **A live encode nobody reads any more runs to the end.** A stream cut
+  with `t` is a fresh encode of the whole remainder, and the read-behind
+  model finishes it even after its last reader leaves, holding a live slot
+  all the while. In a browser WaxDeck positions capped and voice-boosted
+  streams by minting a cut at the listener's position (the native apps
+  seek an HLS rendering instead), so scrubbing through a long boosted
+  book part there starts an encode per distinct second the listener
+  lands on, each running to the end of the part. Subsonic clients seeking
+  with `timeOffset` (every seek into a book in parts) start the same
+  per-second encodes, uncoalesced. The app's failure probe reaches them
+  too: it asks a failed stream with a GET from the top, the one request
+  the engine admits and so the only one its busy refusal answers, and an
+  item rendering's segment the same way, whose worker likewise runs to
+  the rendering's end. Wanted: cancel a live pipeline, or a segment
+  worker, once no reader is left on it. Shipped workaround: the server
+  floors every cut it mints to a whole second of the item, or of the
+  part it lands in, and a Subsonic client's offset into a book in parts
+  to a whole second of the book, so repeats near one spot share an
+  encode, and the first-party web client coalesces a run of seeks into
+  one reload at the last target.
+- **A gapless timeline has no progressive form.** A Subsonic client plays
+  a book in parts as one song, so WaxDeck joins the parts' MP3 encodes
+  end to end. Each part is its own encode: its encoder priming at the
+  head and its last partial frame of padding at the tail stay in the
+  joined stream, a few tens of milliseconds a seam, so the client's clock
+  runs ahead of the book by that much for every part it crosses, and
+  each part needs a live slot of the engine's own at its seam. Wanted:
+  a timeline (`tl=`) served progressively on `/stream`, MP3 at least: one
+  encoder over the members, gapless at every seam, holding one live slot
+  for the whole run. Shipped workaround: the per-part encodes joined
+  frame by frame, the trailing frames that are padding alone dropped,
+  and the engine's overload at a seam waited out a few times.
+- **The HLS playlist writer is internal.** `internal/hls` writes the
+  master and media playlists the server answers, so a host that renders a
+  presentation itself through the exported segmenter (WaxDeck's
+  conformance fixtures render one item's presentation for the players to
+  play offline) cannot write them the same way. Wanted: the writer
+  exported (`Master` and `Media`, or a `SegmentPlan` method that writes
+  the media playlist). Shipped workaround: `fixtures/presentation.go`
+  writes both in the engine's form, and its test pins their shape.
 
 ## WaxLabel
 

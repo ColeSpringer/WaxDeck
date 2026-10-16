@@ -1,8 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
+import 'package:waxdeck_player/waxdeck_player.dart'
+    show AudioEnginePort, EngineProcessingState;
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../artwork/artwork_providers.dart';
@@ -194,7 +197,10 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
     final skips = ref.watch(skipIntervalsProvider);
 
     return _EngineTransport(
-      builder: (context, playing) => DeckBar(
+      // Playback's word rather than the session's: a start in flight has
+      // no session yet, and reads as the load it is.
+      reopening: playback.opening,
+      builder: (context, playing, buffering) => DeckBar(
         now: NowPlayingData(
           // An entry that has not resolved yet is still what is
           // playing: the bar names it as soon as it can and never
@@ -211,6 +217,7 @@ class _PlayingDeckBarState extends ConsumerState<_PlayingDeckBar> {
               session?.mediaDuration ??
               Duration(milliseconds: item?.durationMs ?? 0),
           playing: playing,
+          buffering: buffering,
           starred: starred,
           shuffled: modes.$1,
           repeat: switch (modes.$2) {
@@ -331,7 +338,7 @@ class _RadioDeckBar extends ConsumerWidget {
       ref.watch(radioNowPlayingArtProvider),
     );
     return _EngineTransport(
-      builder: (context, playing) => DeckBar(
+      builder: (context, playing, buffering) => DeckBar(
         ids: _ids,
         now: NowPlayingData(
           title: station.name,
@@ -347,6 +354,8 @@ class _RadioDeckBar extends ConsumerWidget {
           // would offer "Play" during the wait and stop the stream when
           // it was pressed.
           playing: (playing || playback.starting) && !blocked,
+          // A station is a stream that is either arriving or not.
+          buffering: playback.starting || buffering,
           songSaved: playback.nowPlayingSaved,
           volume: volume,
         ),
@@ -517,21 +526,91 @@ class _OfferDeckBar extends ConsumerWidget {
 /// and both faces of the bar want the same answer to "is sound coming
 /// out". A pause is a rebuild of the bar and nothing above it, which is
 /// the budget the deck bar is held to.
-class _EngineTransport extends ConsumerWidget {
-  const _EngineTransport({required this.builder});
+class _EngineTransport extends ConsumerStatefulWidget {
+  const _EngineTransport({required this.builder, this.reopening});
 
-  final Widget Function(BuildContext context, bool playing) builder;
+  /// [buffering] is a wait for media while playback means to run: a slow
+  /// first byte, a stream reopened where it stood.
+  final Widget Function(BuildContext context, bool playing, bool buffering)
+  builder;
+
+  /// The session reopening its item to play it (see
+  /// [PlaybackSession.reopening]): the engine stands stopped for the load,
+  /// and the transport reads as playing and waiting.
+  final ValueListenable<bool>? reopening;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final engine = ref.watch(audioEngineProvider);
-    return StreamBuilder<bool>(
-      stream: engine.playingStream,
-      initialData: engine.playing,
-      builder: (context, snapshot) =>
-          builder(context, snapshot.data ?? engine.playing),
-    );
+  ConsumerState<_EngineTransport> createState() => _EngineTransportState();
+}
+
+class _EngineTransportState extends ConsumerState<_EngineTransport> {
+  /// How long a wait goes on before it is drawn: most loads and seeks land
+  /// sooner, and a ring for each would flash on every track change.
+  static const _drawnAfter = Duration(milliseconds: 400);
+
+  late final AudioEnginePort _engine;
+  StreamSubscription<EngineProcessingState>? _states;
+  Timer? _waiting;
+  bool _buffering = false;
+
+  bool get _reopening => widget.reopening?.value ?? false;
+
+  @override
+  void initState() {
+    super.initState();
+    _engine = ref.read(audioEngineProvider);
+    _states = _engine.processingStateStream.listen((_) => _sync());
+    widget.reopening?.addListener(_onReopening);
+    _sync();
   }
+
+  @override
+  void didUpdateWidget(_EngineTransport old) {
+    super.didUpdateWidget(old);
+    if (old.reopening == widget.reopening) return;
+    old.reopening?.removeListener(_onReopening);
+    widget.reopening?.addListener(_onReopening);
+    _sync();
+  }
+
+  void _onReopening() {
+    if (!mounted) return;
+    setState(() {});
+    _sync();
+  }
+
+  void _sync() {
+    if (_engine.processingState == EngineProcessingState.loading ||
+        _reopening) {
+      _waiting ??= Timer(_drawnAfter, () {
+        _waiting = null;
+        if (mounted) setState(() => _buffering = true);
+      });
+      return;
+    }
+    _waiting?.cancel();
+    _waiting = null;
+    if (_buffering) setState(() => _buffering = false);
+  }
+
+  @override
+  void dispose() {
+    _waiting?.cancel();
+    widget.reopening?.removeListener(_onReopening);
+    unawaited(_states?.cancel());
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => StreamBuilder<bool>(
+    stream: _engine.playingStream,
+    initialData: _engine.playing,
+    builder: (context, playing) => widget.builder(
+      context,
+      (playing.data ?? _engine.playing) || _reopening,
+      _buffering,
+    ),
+  );
 }
 
 /// The item's context menu: what the bar's overflow opens, and what a

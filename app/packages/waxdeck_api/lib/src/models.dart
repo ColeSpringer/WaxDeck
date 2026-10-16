@@ -72,11 +72,22 @@ class WaxDeckApiException implements Exception {
   /// change the server refused must not wait to be refused again.
   bool get unreachable => statusCode == null || statusCode == 503;
 
-  /// Whether the server said no: a 4xx, which no retry changes.
+  /// Whether the server said no: a 4xx in its own words, which no retry
+  /// changes. A 4xx without them is something in front of the server
+  /// answering (a proxy with no route for the path, a server too old to
+  /// have it), which says nothing about what the next ask gets.
   bool get isRefusal {
     final status = statusCode;
-    return status != null && status >= 400 && status < 500;
+    return status != null && status >= 400 && status < 500 && !_unworded;
   }
+
+  /// Whether the server said the thing asked for is not there: its own
+  /// `not-found`, however it arrived. A bare 404 is not one.
+  bool get isNotFound => code == 'not-found';
+
+  /// An answer that carried no error of the server's, which this package
+  /// reports as `transport` with the status it came with.
+  bool get _unworded => code == 'transport';
 
   @override
   String toString() => 'WaxDeckApiException($code, $statusCode): $message';
@@ -150,7 +161,11 @@ enum DiscoveryList {
   neverPlayed('never-played'),
 
   /// Starred or well rated and not heard in six months.
-  rediscover('rediscover');
+  rediscover('rediscover'),
+
+  /// Part way through, most recently progressed first: spoken word from
+  /// its first saved position, a track once a play of it has counted.
+  inProgress('in-progress');
 
   const DiscoveryList(this.wireName);
 
@@ -810,6 +825,7 @@ class PlayInfo {
     this.appliedBitrateKbps,
     this.spanStartMs,
     this.spanEndMs,
+    this.startOffsetMs = 0,
   });
 
   final String pid;
@@ -821,8 +837,11 @@ class PlayInfo {
 
   final String mimeType;
 
-  /// Duration of the served stream: for a multi-file audiobook this is
-  /// the resolved part's duration, not the book total.
+  /// The length of what the client plays: the resolved part for a
+  /// multi-file audiobook (the book total is on the item and the book
+  /// detail), the item's own window for a carved track, and the whole
+  /// item or part for a stream cut at a position ([startOffsetMs]), not
+  /// the cut audio's remainder.
   final int durationMs;
   final bool seekable;
 
@@ -857,6 +876,12 @@ class PlayInfo {
   /// clips to [spanStartMs, spanEndMs). Null when the server cuts.
   final int? spanStartMs;
   final int? spanEndMs;
+
+  /// Where in the item (in the part, for a multi-file book) the served
+  /// audio begins, when the server cut a stream that cannot be
+  /// range-seeked at the requested position; zero otherwise. The audio's
+  /// own clock starts at zero, so this is added to the player's position.
+  final int startOffsetMs;
 }
 
 /// One member's place on a minted [QueueTimeline].

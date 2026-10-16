@@ -239,9 +239,73 @@ void main() {
       fireHlsError(status: 429);
 
       await expectLater(loading, throwsA(isA<MediaLoadException>()));
-      expect(codes, <String>['transcode-limited']);
+      expect(
+        codes,
+        isEmpty,
+        reason:
+            'nothing played, so nothing paused: the refusal rides on the '
+            'failed load, and the caller plays one track at a time',
+      );
+      final hls = globalContext['__waxdeckHls'] as JSObject;
+      expect(
+        hls.getProperty<JSBoolean?>('stopped'.toJS)?.toDart,
+        isTrue,
+        reason: 'hls.js does not go on retrying at a full server',
+      );
     },
   );
+
+  test('a rendering gone at load is the way to it, not the file', () async {
+    // A lapsed token or files that moved: a fresh mint cures it, and the
+    // track behind it is fine.
+    setStubStalled(true);
+    forgetHlsPlayer();
+    addTearDown(() => setStubStalled(false));
+    final loading = engine.loadTimeline(media());
+    await waitFor(hlsPlayerExists, what: 'the player to be constructed');
+    fireHlsError(status: 410);
+
+    await expectLater(
+      loading,
+      throwsA(
+        isA<MediaLoadException>()
+            .having((e) => e.fault, 'fault', MediaFault.transport)
+            .having((e) => e.refusal?.stale, 'stale', isTrue),
+      ),
+    );
+  });
+
+  test('a load refused at its first fetch carries the refusal', () async {
+    setStubStalled(true);
+    forgetHlsPlayer();
+    addTearDown(() => setStubStalled(false));
+    final loading = engine.loadTimeline(media());
+    await waitFor(hlsPlayerExists, what: 'the player to be constructed');
+    fireHlsError(status: 429);
+
+    await expectLater(
+      loading,
+      throwsA(
+        isA<MediaLoadException>().having(
+          (e) => e.refusal?.code,
+          'refusal',
+          'transcode-limited',
+        ),
+      ),
+    );
+  });
+
+  test('what is buffered is read off the element, never past the '
+      'member', () async {
+    await engine.loadTimeline(media());
+    // The stub attaches three seconds the element holds whole; the member
+    // playing is the first second of them.
+    await waitFor(
+      () => engine.bufferedPosition == const Duration(seconds: 1),
+      what: 'the member to be held',
+    );
+    expect(engine.position, Duration.zero);
+  });
 
   test('a media error during a load is recovered in place, once', () async {
     // The buffer hiccuping under load says nothing about the file. hls.js
@@ -402,6 +466,32 @@ void main() {
 
     expect(codes, <String>['transcode-limited']);
     expect(lost, 0, reason: 're-minting does not get past a session cap');
+  });
+
+  test('a refusal stops loading, and the next play asks for a fresh '
+      'stream', () async {
+    final codes = <String>[];
+    final r = engine.timelineRefused.listen(codes.add);
+    final losses = <bool>[];
+    final l = engine.timelineLost.listen(losses.add);
+    addTearDown(() async {
+      await r.cancel();
+      await l.cancel();
+    });
+
+    await engine.loadTimeline(media());
+    grantPlayback(element);
+    fireHlsError(status: 429);
+    await waitFor(() => codes.isNotEmpty, what: 'the refusal to be published');
+    // hls.js would otherwise keep retrying the fragment at a full server.
+    final hls = globalContext['__waxdeckHls'] as JSObject;
+    expect(hls.getProperty<JSBoolean?>('stopped'.toJS)?.toDart, isTrue);
+
+    // The slot is gone, so a play cannot resume this stream: it is
+    // reported lost, which is what has the caller mint a fresh one.
+    await engine.play();
+    await waitFor(() => losses.isNotEmpty, what: 'the play to ask again');
+    expect(losses, <bool>[true]);
   });
 
   test(

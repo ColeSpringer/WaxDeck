@@ -29,7 +29,8 @@ Future<void> main() async {
   // semantics must be live from the first frame, not gated on a screen
   // reader announcing itself.
   SemanticsBinding.instance.ensureSemantics();
-  // Points just_audio at mpv on desktop; no-op on web and mobile.
+  // Points just_audio at mpv on desktop and bounds its player release on the
+  // web; no-op on mobile.
   ensureAudioEngineInitialized();
   // Before the downloader subscribes to connectivity; Linux only.
   installTolerantConnectivity();

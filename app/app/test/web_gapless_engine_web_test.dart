@@ -87,6 +87,27 @@ void main() {
     expect(element.paused, isTrue);
   });
 
+  test('a half switch never reads idle', () async {
+    // The half being silenced passes through idle on its way out, and
+    // audio_service reads idle as the service stopping.
+    await engine.load('/media/stream?pid=tr-1&mt=t');
+    await engine.play();
+    final seen = <EngineProcessingState>[];
+    final sub = engine.processingStateStream.listen(seen.add);
+    addTearDown(sub.cancel);
+
+    await engine.loadTimeline(media());
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(seen, isNot(contains(EngineProcessingState.idle)));
+    expect(engine.processingState, EngineProcessingState.ready);
+
+    seen.clear();
+    await engine.load('/media/stream?pid=tr-2&mt=t');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    expect(seen, isNot(contains(EngineProcessingState.idle)));
+    expect(engine.processingState, EngineProcessingState.ready);
+  });
+
   test('a member is only reported while a timeline is playing', () async {
     await engine.loadTimeline(media(), member: 2);
     expect(engine.currentMember, 2);

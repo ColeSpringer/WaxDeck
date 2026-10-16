@@ -75,6 +75,17 @@ class ArtistScreen extends ConsumerWidget {
     // arrived without it.
     final artist = label ?? ref.watch(entityCardProvider(pid)).value?.title;
     final name = artist ?? l10n.musicArtistUnknownName;
+    // The listing answers an empty page for any key, so an empty one says
+    // nothing about whether the artist is there; their card does, and the
+    // page waits for it rather than drawing an empty artist.
+    final unproven = state.hasValue && !state.hasError && items.isEmpty
+        ? unprovenEntityFace(
+            context,
+            ref.watch(entityCardProvider(pid)),
+            errorTitle: l10n.musicArtistLoadError,
+            onRetry: () => ref.invalidate(entityCardProvider(pid)),
+          )
+        : null;
 
     return WaxScaffold(
       title: name,
@@ -83,31 +94,11 @@ class ArtistScreen extends ConsumerWidget {
           context.leave(fallback: WaxRoute.musicIndex(MusicDimension.artists)),
       actions: const <Widget>[SearchAction()],
       slivers: <Widget>[
-        SliverToBoxAdapter(
-          child: _Header(
-            pid: pid,
-            name: name,
-            sourceName: artist ?? '',
-            items: items,
-            state: state.value,
-          ),
-        ),
-        AsyncSliverFace<MusicItemsState>(
-          state: state,
-          skeletonFills: true,
-          errorTitle: l10n.musicArtistLoadError,
-          onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
-          isEmpty: (_) => items.isEmpty,
-          empty: (context, _) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: EmptyState(
-              title: l10n.musicArtistEmptyTitle,
-              message: l10n.musicArtistEmptyMessage,
-              glyph: WaxIcons.artists,
-            ),
-          ),
-          builder: (context, _) => SliverToBoxAdapter(
-            child: _Body(
+        if (unproven != null)
+          unproven
+        else ...<Widget>[
+          SliverToBoxAdapter(
+            child: _Header(
               pid: pid,
               name: name,
               sourceName: artist ?? '',
@@ -115,7 +106,31 @@ class ArtistScreen extends ConsumerWidget {
               state: state.value,
             ),
           ),
-        ),
+          AsyncSliverFace<MusicItemsState>(
+            state: state,
+            skeletonFills: true,
+            errorTitle: l10n.musicArtistLoadError,
+            onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
+            isEmpty: (_) => items.isEmpty,
+            empty: (context, _) => SliverFillRemaining(
+              hasScrollBody: false,
+              child: EmptyState(
+                title: l10n.musicArtistEmptyTitle,
+                message: l10n.musicArtistEmptyMessage,
+                glyph: WaxIcons.artists,
+              ),
+            ),
+            builder: (context, _) => SliverToBoxAdapter(
+              child: _Body(
+                pid: pid,
+                name: name,
+                sourceName: artist ?? '',
+                items: items,
+                state: state.value,
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }

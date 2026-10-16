@@ -18,6 +18,17 @@ void main() {
     }
   });
 
+  test('a 4xx the server did not word keeps the ladder', () {
+    // A proxy's page or an older server's router: not the server saying
+    // no, so not final either.
+    const proxied = WaxDeckApiException(
+      code: 'transport',
+      message: '404 page not found',
+      statusCode: 404,
+    );
+    expect(retryUnlessRefused(0, proxied), isNotNull);
+  });
+
   test('anything else keeps the default ladder, cap included', () {
     // A supplied policy replaces Riverpod's default rather than wrapping
     // it, so the cap only holds because this asks for it: without it an

@@ -49,10 +49,13 @@ func TestAJobResultLandsInTheModeItsCallerNames(t *testing.T) {
 func TestPermanentJobErrClassifiesEveryCode(t *testing.T) {
 	t.Parallel()
 	permanent := map[waxerr.Code]bool{
-		waxerr.CodeInvalidRequest:     true,
-		waxerr.CodeUnauthorized:       true,
-		waxerr.CodeSignatureInvalid:   true,
-		waxerr.CodeSignatureExpired:   true,
+		waxerr.CodeInvalidRequest: true,
+		// The engine refusing this server's credentials is the server
+		// misconfigured, which a fixed configuration cures for the
+		// same input.
+		waxerr.CodeUnauthorized:       false,
+		waxerr.CodeSignatureInvalid:   false,
+		waxerr.CodeSignatureExpired:   false,
 		waxerr.CodeSourceChanged:      true,
 		waxerr.CodeNotFound:           true,
 		waxerr.CodeUnsupportedFormat:  true,

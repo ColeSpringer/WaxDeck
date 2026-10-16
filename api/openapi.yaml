@@ -94,7 +94,9 @@ info:
       `forbidden`, `not-found`, `conflict`, `internal`, `rate-limited` (too
       many attempts; retry later), `stream-stale` (a minted media URL no longer
       matches the file on disk, a metadata-only retag included since the
-      pin is byte identity; re-request the info endpoint that minted it), `catalog-maintenance`
+      pin is byte identity, or names one item's HLS rendering at a lossy
+      rate above the account's bitrate ceiling as it is now; re-request
+      the info endpoint that minted it), `catalog-maintenance`
       (the catalog is temporarily handed to a maintenance operation; retry
       shortly), `catalog-busy` (another job holds the catalog's shared
       file-mutation scope, so this file-moving request cannot start; unlike
@@ -177,7 +179,11 @@ info:
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
       server origin, the same origin that serves this API and the web UI.
       They live outside `/api/v1` and are not declared as operations here:
-      `/media/stream` (the streaming engine's output), `/media/download`
+      `/media/stream` (the streaming engine's output), `/media/hls` (its
+      HLS presentations: a queue's timeline, or one item's stream for a
+      caller that plays HLS; every playlist and segment URL in one
+      carries the presentation's token and an opaque reference, nothing
+      about the files), `/media/download`
       (original bytes, ranged), `/media/enclosure` (a podcast episode's
       feed enclosure, relayed), `/media/radio/{pid}` (a station
       stream, relayed), `/media/art` (an item's artwork, the same
@@ -188,17 +194,25 @@ info:
       string rather than by session or bearer credential, so bare `<audio>`
       elements, cast devices, and DLNA renderers that cannot send headers
       can fetch them. A media token binds one user to one subject, which
-      is an item pid everywhere but the probe: that one binds `probe`,
-      which is not a pid and which no item can be named by, so a probe
-      token opens the probe and nothing in the library. A token also
+      is an item pid everywhere but the probe, a radio station and a
+      queue's timeline: the probe's binds `probe`, which is not a pid and
+      which no item can be named by, so a probe token opens the probe and
+      nothing in the library, a station's binds the station's pid, and a
+      timeline's binds the timeline. A token also
       binds the route it was minted for and, on `/media/stream`, the
       stream parameters the server chose, so it opens no other route and
       a URL with those parameters edited, added or dropped answers
-      `unauthenticated` (a seek's `t` stays free). Every fetch re-checks
-      the account (gone or disabled), the session or app password that
-      minted the URL (signed out or revoked), and the account's right to
-      the item (a narrowed library grant or a new content rule answers
-      `not-found`, a withdrawn download permission `forbidden`). Expiry
+      `unauthenticated`, save the server's own cut of a stream that
+      cannot be range-seeked (see `PlayInfo.startOffsetMs`); on
+      `/media/hls` it binds the queue, or the one item rendering, it was
+      minted for, so it opens no other queue's or item's playlists and
+      segments. Every fetch
+      re-checks the account (gone or disabled), the session or app
+      password that minted the URL (signed out or revoked), and the
+      account's right to the item (a narrowed library grant or a new
+      content rule answers
+      `not-found`, a withdrawn download permission `forbidden`; a
+      timeline ends instead, as `createQueueTimeline` says). Expiry
       and these checks gate new opens, Range requests included, rather
       than cutting a stream already running.
       `/media/enclosure` takes only that pid and token, never a target
@@ -3252,6 +3266,11 @@ paths:
             items the dimension is absent from, such as `[Non-Album]`);
             `kind` and custom tag dimensions have no unknown bucket and
             reject an empty key. Ignored without `facet`.
+
+            A key that names nothing the caller can see (an artist merged
+            into another, an album out of the caller's sight) drills an
+            empty page rather than failing: whether an entity is there is
+            what its own read answers.
           schema:
             type: string
         - name: cursor
@@ -3292,8 +3311,8 @@ paths:
       description: >
         Keyset-paginated discovery lists over the whole library: newest,
         recently added, most played, recently played, random, starred,
-        alphabetical, never played, and rediscover. Play-derived lists
-        reflect the calling user's own listening state.
+        alphabetical, never played, rediscover, and in progress.
+        Play-derived lists reflect the calling user's own listening state.
 
         Most lists span every media type. `newest` does not: it orders by
         release year, which a podcast episode has not got, so it covers
@@ -3343,7 +3362,9 @@ paths:
             The bucket to scope to, as returned in the enumeration's
             `key`. Send it empty to select the dimension's unknown bucket;
             `kind` and custom tag dimensions have no unknown bucket and
-            reject an empty key. Ignored without `facet`.
+            reject an empty key. Ignored without `facet`. A key that names
+            nothing the caller can see scopes the list to an empty page,
+            as it drills one on `/library/items`.
           schema:
             type: string
         - name: seed
@@ -6337,11 +6358,12 @@ paths:
         containing that position, and read `partIndex`, `partCount`, and
         `partStartMs` from the response; when playback crosses the end of
         a part, re-request play-info with the new book-timeline position.
-        The response's `durationMs` is always the duration of what the
-        client plays: the resolved part for multi-file books, and the
-        item's own window, never the backing file, for span-carved
-        direct playback; the book total
-        lives on the item summary and the book detail. Positions reported
+        The response's `durationMs` is always the length of what the
+        client plays: the resolved part for multi-file books, the item's
+        own window, never the backing file, for span-carved direct
+        playback, and the whole item or part for a stream cut at
+        `positionMs` (see `startOffsetMs`); the book total lives on the
+        item summary and the book detail. Positions reported
         to play-state for multi-file books are always book-timeline
         milliseconds (`partStartMs` plus the in-part position). A podcast
         episode whose audio has not been fetched to the server resolves by
@@ -6363,9 +6385,13 @@ paths:
         - name: positionMs
           in: query
           description: >
-            Book-timeline position in milliseconds; selects which part of
-            a multi-file audiobook to resolve. Omitting it resolves the
-            first part. Ignored for single-file items.
+            Position on the item's timeline in milliseconds (the book
+            timeline for a multi-file audiobook). Selects which part of a
+            multi-file audiobook to resolve; omitting it resolves the
+            first part. When the minted stream cannot be range-seeked
+            (`seekable: false`), the server also cuts it to begin at this
+            position and reports where in `startOffsetMs`. A seekable
+            stream is not cut: the client seeks it itself.
           schema:
             type: integer
             format: int64
@@ -6390,11 +6416,14 @@ paths:
           description: >
             Cap the stream's bitrate, in kilobits per second. A lossy
             source already at or below the cap streams unchanged;
-            anything else is re-encoded down to it, which turns off
-            sample-exact seeking and gapless preloading and counts
+            anything else is re-encoded down to it: a live encode,
+            positioned through `positionMs` rather than by range
+            requests (for a caller that sets `hls`, an HLS presentation
+            the player seeks itself), with no gapless preloading, counted
             against the transcode session limits like any other
-            transcode. The cap only narrows what the token authorizes:
-            the server clamps it to the caller's own transcode ceiling,
+            transcode. The cap
+            only narrows what the token authorizes: the server clamps it
+            to the caller's own transcode ceiling,
             and `appliedBitrateKbps` reports the outcome. Honored only
             when the streaming engine is running; a server without one
             serves originals directly and ignores the cap. Omitted,
@@ -6404,6 +6433,31 @@ paths:
             type: integer
             minimum: 32
             maximum: 320
+        - name: hls
+          in: query
+          description: >
+            The caller plays HLS. A stream the server would otherwise
+            serve as a live encode (a bitrate cap, voice boost, a track
+            carved from a larger file) is then that item's own HLS
+            presentation, wherever the streaming engine renders one:
+            `seekable` is true, `mimeType` is an HLS playlist type, and
+            the player seeks it itself, so `positionMs` cuts nothing
+            (it still selects a multi-file audiobook's part) and
+            `startOffsetMs` is absent. `expiresAt` lies the item's (or
+            part's) length plus a margin away, at least half an hour,
+            as a timeline's does. Every fetch of its playlists and
+            segments re-checks the item as a stream fetch does. The
+            first fetch takes the listener's transcode slot, the one
+            their gapless timelines hold (one a listener, however many
+            renderings), which goes back once every rendering they hold
+            has gone unfetched for a minute and is taken again by the
+            next fetch; a fetch over the limits answers
+            `transcode-limited`. A stream served as the file is, and one
+            the engine cannot render this way (a server whose engine
+            renders no HLS among them), is minted as if this were
+            absent.
+          schema:
+            type: boolean
       responses:
         "200":
           description: Stream resolution for the item.
@@ -7416,8 +7470,10 @@ paths:
         after which re-requesting answers 201 immediately. A rendering
         counts against the concurrent transcode limits like a stream
         does: one slot a listener, however many timelines they hold
-        live at once, taken at the mint and given back once every one
-        of them has gone unfetched for a minute - so a mint over the
+        live at once (and the HLS streams `getPlayInfo` serves them
+        share it), taken at the mint unless they hold it already and
+        given back once every one of those has gone unfetched for a
+        minute - so a mint over the
         cap answers `transcode-limited` before anything plays, and a
         fetch resuming a listen whose slot was released can answer it
         too. A client that stops playing releases the rendering it
@@ -16305,8 +16361,8 @@ components:
       type: string
       description: >
         Discovery lists for browsing. `most-played`, `recently-played`,
-        `starred`, `never-played`, and `rediscover` reflect the calling
-        user's own listening state.
+        `starred`, `never-played`, `rediscover`, and `in-progress` reflect
+        the calling user's own listening state.
 
         `never-played` is what the caller has never counted a play of, and
         `rediscover` is what they starred or rated at least 80 and have not
@@ -16319,7 +16375,16 @@ components:
         listener would recognize: there is no play stamp to sort a
         never-played item by, and sorting the other by how stale it is
         would put the most forgotten thing first every time the shelf is
-        drawn. The other seven keep the orders their names describe.
+        drawn. The others keep the orders their names describe.
+
+        `in-progress` is what the caller is part way through: a saved
+        position on something not finished, most recently progressed
+        first. An episode or an audiobook is on it from its first saved
+        position, whether or not a play has counted. A track is on it
+        only once a play of it has counted, the membership
+        `recently-played` has: a position is saved for a track skipped a
+        few seconds in as for any other, and that is not something to
+        carry on with.
       enum:
         - newest
         - recently-added
@@ -16330,6 +16395,7 @@ components:
         - alphabetical
         - never-played
         - rediscover
+        - in-progress
 
     BrowseDimension:
       type: string
@@ -19603,14 +19669,17 @@ components:
             Origin-relative, media-token-authenticated stream URL. Short TTL;
             re-request play-info on expiry or a `stream-stale` error. Which
             endpoint it names follows how the item resolves: `/media/stream`
-            through the streaming engine, `/media/download` on a server
+            through the streaming engine (`/media/hls` when that is an
+            HLS presentation, see `hls`), `/media/download` on a server
             running without it, and `/media/enclosure` for a podcast episode
             served by enclosure passthrough. Clients play the url they are
             given and do not parse it.
           example: /media/stream?pid=tr-01JZX5N8QW3F4V9T2B7KD3M9R6&mt=abc123
         mimeType:
           type: string
-          description: MIME type the stream will be served as.
+          description: >
+            MIME type the stream will be served as;
+            `application/vnd.apple.mpegurl` for an HLS presentation.
           example: audio/flac
         durationMs:
           type: integer
@@ -19620,11 +19689,32 @@ components:
         seekable:
           type: boolean
           description: >
-            Whether the stream supports sample-exact seeking. Best effort
-            for an unfetched podcast episode served by enclosure
-            passthrough: the relay forwards ranges, but whether the
-            podcast host honours them is unknown until the first upstream
-            request, so a client should degrade rather than assume.
+            Whether a client can seek anywhere in the stream: it answers
+            byte-range requests, or it is an HLS presentation (see
+            `hls`), whose player fetches the segment a seek lands in.
+            False for a live encode (a bitrate cap, voice boost, a track
+            carved from a larger file): such a stream is positioned by
+            requesting play-info again with `positionMs`, never by
+            seeking the media past what it has buffered. Best effort for
+            an unfetched podcast episode served
+            by enclosure passthrough: the relay forwards ranges, but
+            whether the podcast host honours them is unknown until the
+            first upstream request, so a client should degrade rather
+            than assume.
+        startOffsetMs:
+          type: integer
+          format: int64
+          description: >
+            Milliseconds into the resolved item (into the resolved part,
+            for a multi-file audiobook) at which the served audio begins.
+            Present only when the server cut a non-seekable stream at the
+            requested `positionMs`: the whole second at or before that
+            position within the item or part, or its last whole second
+            when the position lies past its end. The served audio's own
+            timeline starts at zero, so a client adds this to the
+            player's position and seeks the rest of the way itself;
+            `durationMs` stays the length of the whole item or part.
+          example: 90000
         expiresAt:
           type: string
           format: date-time

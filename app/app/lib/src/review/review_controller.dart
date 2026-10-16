@@ -306,9 +306,12 @@ class ReviewEntryController extends AsyncNotifier<ReviewEntryDetail> {
   }
 }
 
+/// A refusal is final: an entry decided and filed away answers 404, and
+/// retrying that would hold the pane on its skeleton for the backoff.
 final reviewEntryProvider = AsyncNotifierProvider.autoDispose
     .family<ReviewEntryController, ReviewEntryDetail, String>(
       ReviewEntryController.new,
+      retry: retryUnlessRefused,
     );
 
 // The catalog libraries and their matching modes moved to

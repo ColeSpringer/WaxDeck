@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import '../l10n/l10n.dart';
+import 'async_box_face.dart';
 import 'async_face.dart';
 
 /// The one face a hub's main sliver wears: rows, an empty state, a
@@ -37,6 +38,8 @@ class AsyncSliverFace<T> extends StatelessWidget {
   /// [BuildContextL10n.explain].
   final String errorTitle;
 
+  /// What the failure card's Try again runs. Not offered where the thing
+  /// is gone (see [AsyncFaceFailed.gone]).
   final VoidCallback onRetry;
 
   final SkeletonShape skeleton;
@@ -63,13 +66,12 @@ class AsyncSliverFace<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (resolveAsyncFace(state, isEmpty: isEmpty)) {
-      AsyncFaceFailed(:final error, :final retrying) => SliverFillRemaining(
+      final AsyncFaceFailed<T> failed => SliverFillRemaining(
         hasScrollBody: false,
-        child: ErrorState(
+        child: AsyncFailureCard(
+          failed: failed,
           title: errorTitle,
-          message: context.explain(error),
           onRetry: onRetry,
-          retrying: retrying,
         ),
       ),
       AsyncFaceEmpty(:final value) => empty!(context, value),
@@ -83,4 +85,39 @@ class AsyncSliverFace<T> extends StatelessWidget {
       ),
     };
   }
+}
+
+/// What a page over a listing that answers empty for any key draws while
+/// that listing is empty and [read], the entity's own, has not said the
+/// entity is there: the wait, the read's failure, or that it is gone. A
+/// read that answered nothing is that last answer, as final as a refusal:
+/// the entity reads drop what they cannot answer for (unknown, merged
+/// away, out of the caller's sight). Null once the read has found it,
+/// when the page draws itself, an empty listing and all.
+Widget? unprovenEntityFace<T extends Object>(
+  BuildContext context,
+  AsyncValue<T?> read, {
+  required String errorTitle,
+  required VoidCallback onRetry,
+}) {
+  if (read.value != null) return null;
+  return switch (resolveAsyncFace(read)) {
+    final AsyncFaceFailed<T?> failed => SliverFillRemaining(
+      hasScrollBody: false,
+      child: AsyncFailureCard(
+        failed: failed,
+        title: errorTitle,
+        onRetry: onRetry,
+      ),
+    ),
+    // Answered, with nothing: a null value is no first load.
+    _ when read.hasValue => SliverFillRemaining(
+      hasScrollBody: false,
+      child: ErrorState(title: errorTitle, message: context.l10n.errorNotFound),
+    ),
+    _ => const SliverFillRemaining(
+      hasScrollBody: false,
+      child: SkeletonShapes(shape: SkeletonShape.list),
+    ),
+  };
 }

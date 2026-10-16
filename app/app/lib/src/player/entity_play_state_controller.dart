@@ -66,4 +66,5 @@ class EntityPlayStateController
 final entityPlayStateControllerProvider = AsyncNotifierProvider.autoDispose
     .family<EntityPlayStateController, EntityPlayState, String>(
       EntityPlayStateController.new,
+      retry: retryUnlessRefused,
     );

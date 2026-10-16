@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
+import '../recency_map.dart';
 import 'artwork_providers.dart';
 
 /// How wide the artwork is decoded before its colour is read.
@@ -234,8 +235,8 @@ class ArtworkPaletteCache {
   /// nothing.
   WaxPalette? recall(String artUrl) {
     if (!_entries.containsKey(artUrl)) return null;
-    final palette = _entries.remove(artUrl);
-    _entries[artUrl] = palette;
+    final palette = _entries[artUrl];
+    _entries.putNewest(artUrl, palette, capacity: _capacity);
     return palette;
   }
 
@@ -246,11 +247,8 @@ class ArtworkPaletteCache {
   /// same reason [recall] says to.
   WaxPalette? peek(String artUrl) => _entries[artUrl];
 
-  void remember(String artUrl, WaxPalette? palette) {
-    _entries.remove(artUrl);
-    _entries[artUrl] = palette;
-    if (_entries.length > _capacity) _entries.remove(_entries.keys.first);
-  }
+  void remember(String artUrl, WaxPalette? palette) =>
+      _entries.putNewest(artUrl, palette, capacity: _capacity);
 
   /// Forgets one cover, for when its bytes are replaced under the same
   /// URL: the artwork editors evict the image, and the colour read off

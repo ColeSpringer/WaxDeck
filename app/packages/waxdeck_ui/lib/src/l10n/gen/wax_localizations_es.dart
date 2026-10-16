@@ -119,6 +119,9 @@ class WaxLocalizationsEs extends WaxLocalizations {
   String get controlsUnstar => 'Quitar de favoritos';
 
   @override
+  String get deckBarBuffering => 'Cargando';
+
+  @override
   String get deckBarCast => 'Reproducir en otro dispositivo';
 
   @override

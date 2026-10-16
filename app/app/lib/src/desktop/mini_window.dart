@@ -206,14 +206,14 @@ class _MiniWindowSurfaceState extends ConsumerState<_MiniWindowSurface> {
     final station = ref.watch(radioPlaybackProvider);
     final now = ref.watch(nowPlayingProvider);
     _follow(now.session);
-    final engine = ref.watch(audioEngineProvider);
     final item = now.item;
 
+    final playback = ref.read(nowPlayingProvider.notifier);
     return StreamBuilder<bool>(
-      stream: engine.playingStream,
-      initialData: engine.playing,
+      stream: playback.meansToPlayStream,
+      initialData: playback.meansToPlay,
       builder: (context, snapshot) {
-        final playing = snapshot.data ?? engine.playing;
+        final playing = snapshot.data ?? playback.meansToPlay;
         final live = station.station != null;
         // Same mapping as the deck bar and the face: a station playing a
         // matched song shows the song here too.

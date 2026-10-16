@@ -13,8 +13,10 @@ enum HlsErrorKind {
   /// render was let go, the files moved. Mint again.
   gone,
 
-  /// This browser cannot play this rendering - a codec question, which
-  /// no retry answers and no other rendering of the same run will.
+  /// This rendering will not play here - a codec this browser lacks, or
+  /// the server refusing to make audio of it (415, 422, as the stream
+  /// probe reads them too) - which no retry answers and no other
+  /// rendering of the same run will.
   unplayable,
 
   /// The browser's media pipeline hiccuped: a buffer that would not
@@ -52,6 +54,7 @@ HlsErrorKind hlsErrorKind({
   if (status == 401 || status == 404 || status == 410) {
     return HlsErrorKind.gone;
   }
+  if (status == 415 || status == 422) return HlsErrorKind.unplayable;
   if (type == 'mediaError') {
     return _unplayableDetails.contains(details)
         ? HlsErrorKind.unplayable

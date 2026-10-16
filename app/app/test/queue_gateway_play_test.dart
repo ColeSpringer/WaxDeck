@@ -67,6 +67,49 @@ void main() {
     return playback;
   }
 
+  test('a seek from outside lands on the book\'s own timeline', () async {
+    // The lock screen shows the whole book, so its scrubber speaks book
+    // milliseconds; the engine holds one part. Through the session, a
+    // seek three quarters along opens the part that holds it.
+    const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
+    final repo = FakeRepository(
+      items: const [
+        ItemSummary(
+          pid: bookPid,
+          mediaType: MediaType.audiobook,
+          title: 'There And Back Again',
+          durationMs: 120000,
+        ),
+      ],
+    )..books[bookPid] = testBook(bookPid, durationMs: 120000, partCount: 2);
+    final engine = FakeEngine(mediaDuration: const Duration(minutes: 1));
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        audioEngineProvider.overrideWithValue(engine),
+      ],
+    );
+    addTearDown(container.dispose);
+    final playback = container.read(nowPlayingProvider.notifier);
+    container.read(queueControllerProvider.notifier).playNow([
+      bookPid,
+    ], source: const QueueSource(kind: QueueSourceKind.book, label: 'Book'));
+    await pumpEventQueue();
+    await playback.settled;
+    expect(engine.loadedUrl, contains('part=0'));
+
+    await container
+        .read(queueGatewayProvider)
+        .seek(const Duration(seconds: 90));
+    await pumpEventQueue();
+
+    expect(engine.loadedUrl, contains('part=1'));
+    expect(engine.position, const Duration(seconds: 30));
+    expect(playback.liveSession?.displayPosition, const Duration(seconds: 90));
+    container.read(queueControllerProvider.notifier).clear();
+    await pumpEventQueue();
+  });
+
   test(
     'a start that failed on something else is reported, not swallowed',
     () async {
@@ -175,6 +218,20 @@ void main() {
       expect(h.container.read(radioPlaybackProvider).station, isNull);
     });
 
+    test('a pause on an OS surface keeps the station for its play', () async {
+      // The lock screen's own play is what resumes it: let go of, the
+      // station would be gone and that play would start whatever the
+      // queue still holds.
+      final h = await tuned();
+
+      await h.container.read(queueGatewayProvider).pauseInPlace();
+
+      expect(h.engine.playing, isFalse);
+      expect(h.container.read(radioPlaybackProvider).station?.pid, stationPid);
+      expect(await h.container.read(queueGatewayProvider).play(), isTrue);
+      expect(h.engine.playing, isTrue);
+    });
+
     test('a stop lets the station go', () async {
       final h = await tuned();
 
@@ -184,10 +241,9 @@ void main() {
       expect(h.container.read(radioPlaybackProvider).station, isNull);
     });
 
-    test('with no station tuned both stay the engine\'s', () async {
-      // The item case, unchanged and deliberately so: a session reads a
-      // pause off the engine's own transition, so one from a lock screen
-      // and one from a phone call count alike.
+    test('with no station tuned a pause is the item\'s', () async {
+      // The item case: through playback, which pauses the session and
+      // leaves the queue standing.
       final h = build();
       PlayerHarness(h.container).play([testItem(pid)]);
       await pumpEventQueue();

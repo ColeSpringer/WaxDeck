@@ -55,6 +55,10 @@ void main() {
         discoveryListToGen(DiscoveryList.alphabetical),
         gen.DiscoveryList.alphabetical,
       );
+      expect(
+        discoveryListToGen(DiscoveryList.inProgress),
+        gen.DiscoveryList.inProgress,
+      );
     });
   });
 
@@ -430,6 +434,25 @@ void main() {
       expect(part.partCount, 3);
       expect(part.partStartMs, 60000);
       expect(part.voiceBoost, isTrue);
+    });
+
+    test('play-info carries where a cut stream begins, zero when uncut', () {
+      gen.PlayInfo info(void Function(gen.PlayInfoBuilder) extra) =>
+          gen.PlayInfo((b) {
+            b
+              ..pid = 'tr-01JZX5N8QW3F4V9T2B7KDEXAMPLE'
+              ..url = '/media/stream?pid=tr-x&mt=abc&t=90'
+              ..mimeType = 'audio/ogg'
+              ..durationMs = 214000
+              ..seekable = false
+              ..expiresAt = DateTime.utc(2026, 10, 15, 12);
+            extra(b);
+          });
+      expect(playInfoFromGen(info((_) {})).startOffsetMs, 0);
+      expect(
+        playInfoFromGen(info((b) => b.startOffsetMs = 90000)).startOffsetMs,
+        90000,
+      );
     });
 
     test('episode summaries carry over with resolved art and defaults', () {

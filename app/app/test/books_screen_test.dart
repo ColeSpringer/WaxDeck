@@ -155,6 +155,171 @@ void main() {
     );
   });
 
+  testWidgets('reads past a first page the listing emptied', (tester) async {
+    // Rows dropped after the page is cut, which the listing contract
+    // allows: a whole first page of them reads as no books at all.
+    final hidden = <ItemSummary>[
+      for (var i = 0; i < BooksController.pageSize; i++)
+        _book(_volume(i), title: 'Volume $i'),
+    ];
+    final repo = FakeRepository(
+      items: <ItemSummary>[
+        ...hidden,
+        _book(_hobbit, title: 'There And Back Again', author: 'B. Baggins'),
+      ],
+    )..hiddenFromListings.addAll(hidden.map((book) => book.pid));
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No audiobooks yet'), findsNothing);
+    expect(_byId(SemanticsIds.book(_hobbit)), findsOneWidget);
+  });
+
+  testWidgets('reads on past more hidden pages than a probe would', (
+    tester,
+  ) async {
+    // Six pages of rows this caller is not shown are no proof the hub is
+    // empty: the listing goes on, so the hub reads on rather than say
+    // there are no audiobooks.
+    final hidden = <ItemSummary>[
+      for (var i = 0; i < 6 * BooksController.pageSize; i++)
+        _book(_volume(i), title: 'Volume $i'),
+    ];
+    final repo = FakeRepository(
+      items: <ItemSummary>[
+        ...hidden,
+        _book(_hobbit, title: 'There And Back Again', author: 'B. Baggins'),
+      ],
+    )..hiddenFromListings.addAll(hidden.map((book) => book.pid));
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No audiobooks yet'), findsNothing);
+    expect(_byId(SemanticsIds.book(_hobbit)), findsOneWidget);
+  });
+
+  test('loading more reads past later pages the listing emptied, however '
+      'many', () async {
+    // The grid asks for more as it scrolls; a page that came back empty
+    // adds nothing to scroll, so nothing would ever ask again. Seven
+    // empty pages, past any budget a probe keeps.
+    final shown = <ItemSummary>[
+      for (var i = 0; i < BooksController.pageSize; i++)
+        _book(_volume(i), title: 'Volume $i'),
+    ];
+    final hidden = <ItemSummary>[
+      for (var i = 0; i < 7 * BooksController.pageSize; i++)
+        _book(_volume(BooksController.pageSize + i), title: 'Hidden $i'),
+    ];
+    final repo = FakeRepository(
+      items: <ItemSummary>[
+        ...shown,
+        ...hidden,
+        _book(_hobbit, title: 'There And Back Again'),
+      ],
+    )..hiddenFromListings.addAll(hidden.map((book) => book.pid));
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+
+    final opened = await container.read(booksProvider.future);
+    expect(opened.books, hasLength(BooksController.pageSize));
+    expect(opened.hasMore, isTrue);
+
+    await container.read(booksProvider.notifier).loadMore();
+    final more = container.read(booksProvider).value!;
+    expect(more.books.last.pid, _hobbit);
+    expect(more.hasMore, isFalse);
+  });
+
+  test('a short first page is shown as it is, its cursor kept', () {
+    // Read on to a quota, a page failing further in threw away the books
+    // in hand, and a run of short pages walked the listing. The hub asks
+    // for more as it needs, a grid too short to scroll included.
+    const first = 'bk-01JZX5N8QW3F4V9T2B7KDFIRST1';
+    final hidden = <ItemSummary>[
+      for (var i = 0; i < BooksController.pageSize - 1; i++)
+        _book(_volume(i), title: 'Volume $i'),
+    ];
+    final repo = FakeRepository(
+      items: <ItemSummary>[
+        _book(first, title: 'Another Book'),
+        ...hidden,
+        _book(_hobbit, title: 'There And Back Again'),
+      ],
+    )..hiddenFromListings.addAll(hidden.map((book) => book.pid));
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+
+    return container.read(booksProvider.future).then((opened) {
+      expect(opened.books.map((b) => b.pid), <String>[first]);
+      expect(opened.hasMore, isTrue);
+      expect(repo.listItemsCalls, hasLength(1));
+    });
+  });
+
+  testWidgets('a hub too short to scroll pages on by itself', (tester) async {
+    final hidden = <ItemSummary>[
+      for (var i = 0; i < BooksController.pageSize - 1; i++)
+        _book(_volume(i), title: 'Volume $i'),
+    ];
+    final repo = FakeRepository(
+      items: <ItemSummary>[
+        _book('bk-01JZX5N8QW3F4V9T2B7KDFIRST1', title: 'Another Book'),
+        ...hidden,
+        _book(_hobbit, title: 'There And Back Again'),
+      ],
+    )..hiddenFromListings.addAll(hidden.map((book) => book.pid));
+    await tester.pumpWidget(_host(repo));
+    await tester.pumpAndSettle();
+
+    expect(_byId(SemanticsIds.book(_hobbit)), findsOneWidget);
+  });
+
+  test('a rebuilt hub ends the walk its old build started', () async {
+    // Pages the listing emptied, one after another: the build a sign-in
+    // swap or a refresh replaced went on asking for every one of them.
+    final hidden = <ItemSummary>[
+      for (var i = 0; i < 6 * BooksController.pageSize; i++)
+        _book(_volume(i), title: 'Volume $i'),
+    ];
+    final repo = FakeRepository(
+      items: <ItemSummary>[
+        ...hidden,
+        _book(_hobbit, title: 'There And Back Again'),
+      ],
+    )..hiddenFromListings.addAll(hidden.map((book) => book.pid));
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+    final gate = Completer<void>();
+    repo.listItemsGate = gate;
+    final keep = container.listen(booksProvider, (_, _) {});
+    addTearDown(keep.close);
+    await pumpEventQueue();
+    expect(repo.listItemsCalls, hasLength(1));
+
+    // The rebuild's own walk reads past the hidden pages too, so only the
+    // count of reads that started from the head says which walk asked.
+    container.invalidate(booksProvider);
+    await pumpEventQueue();
+    repo.listItemsGate = null;
+    gate.complete();
+    await container.read(booksProvider.future);
+
+    final fromHead = repo.listItemsCalls.where((c) => c.cursor == null);
+    expect(fromHead, hasLength(2));
+    expect(
+      repo.listItemsCalls,
+      hasLength(1 + 7),
+      reason: 'the replaced walk stops; the new one reads to the end',
+    );
+  });
+
   testWidgets('an empty library says how books arrive', (tester) async {
     await tester.pumpWidget(_host(FakeRepository()));
     await tester.pumpAndSettle();

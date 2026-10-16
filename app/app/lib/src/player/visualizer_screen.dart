@@ -190,8 +190,8 @@ class _VisualizerState extends ConsumerState<_Visualizer> {
       onPointerDown: (_) => _arm(),
       onPointerMove: (_) => _arm(),
       child: StreamBuilder<bool>(
-        stream: widget.session.engine.playingStream,
-        initialData: widget.session.engine.playing,
+        stream: widget.session.meansToPlayStream,
+        initialData: widget.session.meansToPlay,
         builder: (context, snapshot) {
           final playing = snapshot.data ?? false;
           return Column(

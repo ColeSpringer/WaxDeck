@@ -8,6 +8,7 @@
 package jukebox
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -73,6 +74,10 @@ type driver struct {
 	index   int
 	playing bool
 	paused  bool
+	// looping says a play loop runs for the current load. A load made
+	// while paused (a seek, a transfer, a reload) starts none, so the play
+	// after it has one to start rather than only a pause to lift.
+	looping bool
 	volume  float64
 	posMS   int64
 	gen     int
@@ -93,16 +98,21 @@ func (d *driver) Load(ctx context.Context, items []connect.MediaItem, index int,
 	d.posMS = positionMS
 	d.playing = play
 	d.paused = !play
+	d.looping = play
 	d.gen++
 	gen := d.gen
 	runCtx, cancel := context.WithCancel(context.Background())
 	d.cancel = cancel
 	d.mu.Unlock()
-	if play {
-		d.group.GoOnce(runCtx, fmt.Sprintf("jukebox-play-%d", gen), func(c context.Context) error {
-			d.playLoop(c, gen)
-			return nil
-		})
+	if play && !d.group.GoOnce(runCtx, fmt.Sprintf("jukebox-play-%d", gen), func(c context.Context) error {
+		d.playLoop(c, gen)
+		return nil
+	}) {
+		d.mu.Lock()
+		if d.gen == gen {
+			d.looping = false
+		}
+		d.mu.Unlock()
 	}
 	return nil
 }
@@ -110,6 +120,13 @@ func (d *driver) Load(ctx context.Context, items []connect.MediaItem, index int,
 // playLoop walks the queue from the current index, one item per
 // player process.
 func (d *driver) playLoop(ctx context.Context, gen int) {
+	defer func() {
+		d.mu.Lock()
+		if d.gen == gen {
+			d.looping = false
+		}
+		d.mu.Unlock()
+	}()
 	for {
 		d.mu.Lock()
 		if d.gen != gen || d.closed || d.index >= len(d.items) {
@@ -165,26 +182,11 @@ func (d *driver) playLoop(ctx context.Context, gen int) {
 // playOne streams one item into one player process, scaling volume
 // and reporting position from consumed bytes.
 func (d *driver) playOne(ctx context.Context, item connect.MediaItem, startMS int64, index int) error {
-	u := item.URL
-	if startMS > 0 {
-		sep := "?"
-		if strings.Contains(u, "?") {
-			sep = "&"
-		}
-		u += sep + "t=" + fmt.Sprintf("%.3f", float64(startMS)/1000)
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	body, err := openAudio(ctx, item.URL, startMS)
 	if err != nil {
-		return fmt.Errorf("jukebox: %w", err)
+		return err
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("jukebox: fetching audio: %w", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
-		return fmt.Errorf("jukebox: audio fetch answered %d", resp.StatusCode)
-	}
+	defer body.Close()
 
 	cmd := exec.CommandContext(ctx, d.cfg.Command[0], d.cfg.Command[1:]...)
 	stdin, err := cmd.StdinPipe()
@@ -195,7 +197,7 @@ func (d *driver) playOne(ctx context.Context, item connect.MediaItem, startMS in
 		return fmt.Errorf("jukebox: starting %s: %w", d.cfg.Command[0], err)
 	}
 
-	err = d.pump(ctx, resp.Body, stdin, startMS, index)
+	err = d.pump(ctx, body, stdin, startMS, index)
 	stdin.Close()
 	waitErr := cmd.Wait()
 	if err != nil {
@@ -207,18 +209,137 @@ func (d *driver) playOne(ctx context.Context, item connect.MediaItem, startMS in
 	return nil
 }
 
+// openAudio fetches an item's WAV from startMS. The engine cuts a stream
+// it renders (t=). An original served as it is, a WAV file that needs no
+// engine, is refused a cut, and it is byte-addressable anyway, so that
+// start is a range request past its header.
+func openAudio(ctx context.Context, u string, startMS int64) (io.ReadCloser, error) {
+	if startMS > 0 {
+		sep := "?"
+		if strings.Contains(u, "?") {
+			sep = "&"
+		}
+		resp, err := getAudio(ctx, u+sep+"t="+fmt.Sprintf("%.3f", float64(startMS)/1000), "")
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusBadRequest {
+			return audioBody(resp)
+		}
+		resp.Body.Close()
+	}
+	resp, err := getAudio(ctx, u, "")
+	if err != nil {
+		return nil, err
+	}
+	body, err := audioBody(resp)
+	if err != nil || startMS == 0 {
+		return body, err
+	}
+	return seekInto(ctx, u, body, startMS)
+}
+
+// seekInto positions a whole WAV at startMS: the header off the head of
+// the file, then its frames from that point on, fetched by range so the
+// audio before the start is never read.
+func seekInto(ctx context.Context, u string, head io.ReadCloser, startMS int64) (io.ReadCloser, error) {
+	header, f, err := readWAVHeader(head)
+	head.Close()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := getAudio(ctx, u, fmt.Sprintf("bytes=%d-", int64(len(header))+frameOffset(f, startMS)))
+	if err != nil {
+		return nil, err
+	}
+	switch resp.StatusCode {
+	case http.StatusPartialContent:
+		return withHeader(header, resp.Body), nil
+	case http.StatusRequestedRangeNotSatisfiable:
+		// A start past the end leaves nothing to play, which the pump
+		// reads as the item ending.
+		resp.Body.Close()
+		return withHeader(header, http.NoBody), nil
+	}
+	// A server that ignored the range sent the whole file again.
+	body, err := audioBody(resp)
+	if err != nil {
+		return nil, err
+	}
+	return skipInto(body, header, f, startMS)
+}
+
+// skipInto positions a whole WAV, whose header and format are in hand, at
+// startMS by reading past the header and the audio before it.
+func skipInto(body io.ReadCloser, header []byte, f wavFormat, startMS int64) (io.ReadCloser, error) {
+	// Past the end there is nothing left to play, as above.
+	if _, err := io.CopyN(io.Discard, body, int64(len(header))+frameOffset(f, startMS)); err != nil && err != io.EOF {
+		body.Close()
+		return nil, fmt.Errorf("jukebox: reading to %d ms: %w", startMS, err)
+	}
+	return withHeader(header, body), nil
+}
+
+// frameOffset is where startMS falls in a WAV's data, on a frame boundary.
+func frameOffset(f wavFormat, startMS int64) int64 {
+	off := startMS * int64(f.byteRate) / 1000
+	if f.blockAlign > 0 {
+		off -= off % int64(f.blockAlign)
+	}
+	return off
+}
+
+// withHeader replays a WAV's header ahead of frames read from body.
+func withHeader(header []byte, body io.ReadCloser) io.ReadCloser {
+	return struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(header), body), body}
+}
+
+// getAudio issues one audio fetch, of a byte range when rng is set.
+func getAudio(ctx context.Context, u, rng string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("jukebox: %w", err)
+	}
+	if rng != "" {
+		req.Header.Set("Range", rng)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("jukebox: fetching audio: %w", err)
+	}
+	return resp, nil
+}
+
+// audioBody answers a fetch's audio, or why it carries none.
+func audioBody(resp *http.Response) (io.ReadCloser, error) {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		resp.Body.Close()
+		return nil, fmt.Errorf("jukebox: audio fetch answered %d", resp.StatusCode)
+	}
+	return resp.Body, nil
+}
+
 // pump copies WAV from src to the player, scaling 16-bit samples by
 // the current volume, honoring pause, and emitting position events.
 func (d *driver) pump(ctx context.Context, src io.Reader, dst io.Writer, startMS int64, index int) error {
-	header, byteRate, bits, err := readWAVHeader(src)
+	header, f, err := readWAVHeader(src)
 	if err != nil {
 		return err
 	}
+	byteRate, bits := f.byteRate, f.bits
 	if _, err := dst.Write(header); err != nil {
 		return fmt.Errorf("jukebox: writing header: %w", err)
 	}
 
 	buf := make([]byte, 32*1024)
+	// held is a trailing odd byte kept back, at the head of buf, for the
+	// read that completes its sample: a body arrives in reads of any
+	// length, and scaling a run that starts mid-sample scales every sample
+	// after it across its neighbour's bytes.
+	held := 0
 	var consumed int64
 	lastEvent := time.Time{}
 	for {
@@ -237,15 +358,24 @@ func (d *driver) pump(ctx context.Context, src io.Reader, dst io.Writer, startMS
 			}
 			continue
 		}
-		n, readErr := src.Read(buf)
-		if n > 0 {
-			chunk := buf[:n]
+		n, readErr := src.Read(buf[held:])
+		chunk := buf[:held+n]
+		// Whole samples go; a byte over waits for its pair, unless the
+		// stream ended, when it goes as it is.
+		whole := len(chunk) &^ 1
+		if readErr != nil {
+			whole = len(chunk)
+		}
+		if whole > 0 {
 			if vol < 0.999 && bits == 16 {
-				scalePCM16(chunk, vol)
+				scalePCM16(chunk[:whole], vol)
 			}
-			if _, err := dst.Write(chunk); err != nil {
+			if _, err := dst.Write(chunk[:whole]); err != nil {
 				return fmt.Errorf("jukebox: writing audio: %w", err)
 			}
+		}
+		held = copy(buf, chunk[whole:])
+		if n > 0 {
 			consumed += int64(n)
 			if byteRate > 0 {
 				pos := startMS + consumed*1000/int64(byteRate)
@@ -273,39 +403,50 @@ func (d *driver) pump(ctx context.Context, src io.Reader, dst io.Writer, startMS
 // allocation.
 const maxHeaderChunk = 1 << 20
 
+// wavFormat is what the jukebox reads off a WAV's fmt chunk.
+type wavFormat struct {
+	byteRate   uint32
+	blockAlign uint16
+	bits       uint16
+}
+
 // readWAVHeader consumes RIFF chunks up to the data chunk and returns
-// the raw header bytes, the byte rate, and the sample bit width.
-func readWAVHeader(r io.Reader) (header []byte, byteRate uint32, bits uint16, err error) {
+// the raw header bytes and the format they declare.
+func readWAVHeader(r io.Reader) (header []byte, f wavFormat, err error) {
 	head := make([]byte, 12)
 	if _, err := io.ReadFull(r, head); err != nil {
-		return nil, 0, 0, fmt.Errorf("jukebox: reading wav preamble: %w", err)
+		return nil, wavFormat{}, fmt.Errorf("jukebox: reading wav preamble: %w", err)
 	}
 	if string(head[0:4]) != "RIFF" || string(head[8:12]) != "WAVE" {
-		return nil, 0, 0, fmt.Errorf("jukebox: the stream is not wav")
+		return nil, wavFormat{}, fmt.Errorf("jukebox: the stream is not wav")
 	}
 	out := append([]byte(nil), head...)
 	for {
 		ch := make([]byte, 8)
 		if _, err := io.ReadFull(r, ch); err != nil {
-			return nil, 0, 0, fmt.Errorf("jukebox: reading wav chunk: %w", err)
+			return nil, wavFormat{}, fmt.Errorf("jukebox: reading wav chunk: %w", err)
 		}
 		out = append(out, ch...)
 		id := string(ch[0:4])
 		size := binary.LittleEndian.Uint32(ch[4:8])
 		if id == "data" {
-			return out, byteRate, bits, nil
+			return out, f, nil
 		}
 		if size > maxHeaderChunk {
-			return nil, 0, 0, fmt.Errorf("jukebox: wav %s chunk of %d bytes is not a header", id, size)
+			return nil, wavFormat{}, fmt.Errorf("jukebox: wav %s chunk of %d bytes is not a header", id, size)
 		}
-		body := make([]byte, size)
+		// An odd-sized chunk is followed by a pad byte its size does not
+		// count. It stays in the header, whose length is where the frames
+		// begin.
+		body := make([]byte, size+size%2)
 		if _, err := io.ReadFull(r, body); err != nil {
-			return nil, 0, 0, fmt.Errorf("jukebox: reading wav %s chunk: %w", id, err)
+			return nil, wavFormat{}, fmt.Errorf("jukebox: reading wav %s chunk: %w", id, err)
 		}
 		out = append(out, body...)
 		if id == "fmt " && size >= 16 {
-			byteRate = binary.LittleEndian.Uint32(body[8:12])
-			bits = binary.LittleEndian.Uint16(body[14:16])
+			f.byteRate = binary.LittleEndian.Uint32(body[8:12])
+			f.blockAlign = binary.LittleEndian.Uint16(body[12:14])
+			f.bits = binary.LittleEndian.Uint16(body[14:16])
 		}
 	}
 }
@@ -339,19 +480,17 @@ func (d *driver) emit(ev connect.DriverEvent) {
 
 func (d *driver) Play(ctx context.Context) error {
 	d.mu.Lock()
-	wasPaused := d.paused
 	d.paused = false
-	playing := d.playing
+	looping := d.looping
 	items := d.items
 	index := d.index
 	posMS := d.posMS
-	gen := d.gen
 	d.mu.Unlock()
-	if !playing && !wasPaused && len(items) > 0 && index < len(items) {
-		// Loaded without autoplay: start the loop now.
+	if !looping && index < len(items) {
+		// Loaded with no loop running (without autoplay, stopped, or paused
+		// when a seek or a reload landed): start one where the load left it.
 		return d.Load(ctx, items, index, posMS, true)
 	}
-	_ = gen
 	d.emit(connect.DriverEvent{At: time.Now(), Playing: true, Index: index, PositionMS: posMS})
 	return nil
 }
@@ -372,6 +511,8 @@ func (d *driver) Stop(context.Context) error {
 	}
 	d.playing = false
 	d.paused = false
+	// Its loop is on its way out, so a play right after starts another.
+	d.looping = false
 	index, pos := d.index, d.posMS
 	d.mu.Unlock()
 	d.emit(connect.DriverEvent{At: time.Now(), Playing: false, Index: index, PositionMS: pos})
@@ -386,8 +527,7 @@ func (d *driver) SeekTo(ctx context.Context, positionMS int64) error {
 	if len(items) == 0 {
 		return fmt.Errorf("jukebox: nothing loaded")
 	}
-	// A seek restarts the fetch at the target offset; the stream
-	// engine's time parameter does the cutting.
+	// A seek restarts the fetch at the target offset (see openAudio).
 	return d.Load(ctx, items, index, positionMS, playing)
 }
 

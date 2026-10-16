@@ -10,7 +10,11 @@ import 'output_volume.dart';
 
 /// What the sleep timer is currently doing.
 class SleepTimerState {
-  const SleepTimerState({this.remaining, this.endOfChapterEndMs});
+  const SleepTimerState({
+    this.remaining,
+    this.endOfChapterEndMs,
+    this.endOfChapterPid,
+  });
 
   /// Time left on a countdown timer; null when no countdown runs.
   final Duration? remaining;
@@ -18,6 +22,9 @@ class SleepTimerState {
   /// Book-timeline millisecond where end-of-chapter mode pauses; null
   /// when end-of-chapter mode is off.
   final int? endOfChapterEndMs;
+
+  /// The item the boundary was armed on, when the caller named it.
+  final String? endOfChapterPid;
 
   bool get active => remaining != null || endOfChapterEndMs != null;
 
@@ -28,17 +35,15 @@ class SleepTimerState {
   }
 }
 
-/// Wall clock behind the countdown, injectable so tests can drive it
-/// in step with their fake timers.
-final sleepClockProvider = Provider<DateTime Function()>((_) => DateTime.now);
-
-/// The sleep timer: counts down wall time (or watches for a chapter
-/// boundary) and pauses the engine when it fires.
+/// The sleep timer: counts down wall time and pauses when it fires, or
+/// arms a chapter boundary for the playback session to stop at.
 ///
-/// The countdown fades out; end-of-chapter mode does not, deliberately.
-/// [onPosition] fires once the position has *crossed* the boundary, so a
-/// ramp there would fade the next chapter, and pre-arming one would fade
-/// the end of the chapter the listener stayed awake for.
+/// The countdown fades out; end-of-chapter mode does not, deliberately: a
+/// fade before the boundary would fade the end of the chapter the listener
+/// stayed awake for. The session carries the stop out itself, because a
+/// boundary at the end of a file races the file's own end and only the
+/// session sees both; this holds the boundary and hears when it is spent
+/// ([chapterReached]).
 class SleepTimerController extends Notifier<SleepTimerState> {
   /// Read once and held: this notifier drops its control from its own
   /// disposal, where reading a provider is not allowed. Nothing here
@@ -89,7 +94,7 @@ class SleepTimerController extends Notifier<SleepTimerState> {
 
   /// Starts (or restarts) a countdown of [minutes].
   void startMinutes(int minutes) => _countDownTo(
-    ref.read(sleepClockProvider)().add(Duration(minutes: minutes)),
+    ref.read(wallClockProvider)().add(Duration(minutes: minutes)),
   );
 
   /// Buys another [extension] on a running timer.
@@ -106,7 +111,7 @@ class SleepTimerController extends Notifier<SleepTimerState> {
   /// chapter ends wants more time, not the following chapter.
   void extend() {
     if (!state.active) return;
-    final now = ref.read(sleepClockProvider)();
+    final now = ref.read(wallClockProvider)();
     final standing = _deadline;
     final from = standing != null && standing.isAfter(now) ? standing : now;
     _countDownTo(from.add(extension));
@@ -121,7 +126,7 @@ class SleepTimerController extends Notifier<SleepTimerState> {
     // and a stretched tick cadence must not stretch the countdown.
     // The first tick after a wake-up snaps remaining back to truth,
     // or fires immediately when the deadline passed while asleep.
-    final now = ref.read(sleepClockProvider);
+    final now = ref.read(wallClockProvider);
     _deadline = deadline;
     state = SleepTimerState(remaining: deadline.difference(now()));
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -151,23 +156,26 @@ class SleepTimerController extends Notifier<SleepTimerState> {
     );
   }
 
-  /// Arms end-of-chapter mode: pause when the book position crosses
-  /// [chapterEndMs]. Books only; the caller supplies the boundary.
-  void startEndOfChapter(int chapterEndMs) {
+  /// Arms end-of-chapter mode: playback stops at [chapterEndMs] on the
+  /// book timeline of [pid]. Books only; the caller supplies the
+  /// boundary.
+  void startEndOfChapter(int chapterEndMs, {String? pid}) {
     _tick?.cancel();
     _tick = null;
     _deadline = null;
     _generation++;
     _showExtend(true);
-    state = SleepTimerState(endOfChapterEndMs: chapterEndMs);
+    state = SleepTimerState(
+      endOfChapterEndMs: chapterEndMs,
+      endOfChapterPid: pid,
+    );
   }
 
-  /// Position feed for end-of-chapter mode; the playback layer calls
-  /// this with display-timeline positions.
-  void onPosition(Duration position) {
-    final endMs = state.endOfChapterEndMs;
-    if (endMs == null) return;
-    if (position.inMilliseconds >= endMs) _fire();
+  /// The session stopped at the armed boundary, or playback moved past
+  /// it: end-of-chapter mode is spent.
+  void chapterReached() {
+    if (state.endOfChapterEndMs == null) return;
+    cancel();
   }
 
   /// Drops end-of-chapter mode, leaving a countdown running.
@@ -176,9 +184,11 @@ class SleepTimerController extends Notifier<SleepTimerState> {
   /// means nothing on the next one: playback calls this when the item
   /// changes, or a chapter end of 42 minutes would pause a three minute
   /// track that never had a chapter. A countdown is wall clock and
-  /// belongs to the listener, not to any item, so it stays.
-  void clearEndOfChapter() {
+  /// belongs to the listener, not to any item, so it stays. One armed on
+  /// [keepFor] stays too: that is the same item starting again.
+  void clearEndOfChapter({String? keepFor}) {
     if (state.endOfChapterEndMs == null) return;
+    if (keepFor != null && state.endOfChapterPid == keepFor) return;
     _showExtend(false);
     state = const SleepTimerState();
   }
@@ -190,11 +200,6 @@ class SleepTimerController extends Notifier<SleepTimerState> {
     _generation++;
     _showExtend(false);
     state = const SleepTimerState();
-  }
-
-  void _fire() {
-    cancel();
-    unawaited(_silence());
   }
 
   /// An item pauses, a station is let go of. Through the gateway

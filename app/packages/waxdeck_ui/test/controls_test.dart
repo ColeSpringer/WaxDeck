@@ -311,5 +311,35 @@ void main() {
       );
       expect(tester.hasRunningAnimations, isFalse);
     });
+
+    testWidgets('a ring can be drawn thinner than its size suggests', (
+      tester,
+    ) async {
+      Future<RenderObject> arcsOf(double? thickness) async {
+        await _pump(tester, WaxSpinner(size: 40, thickness: thickness));
+        return tester.renderObject(
+          find.descendant(
+            of: find.byType(WaxSpinner),
+            matching: find.byType(CustomPaint),
+          ),
+        );
+      }
+
+      // An eighth of the box unless told otherwise, so the ring grows with
+      // the glyph it stands in for.
+      expect(
+        await arcsOf(null),
+        paints
+          ..arc(rect: const Rect.fromLTWH(2.5, 2.5, 35, 35), strokeWidth: 5)
+          ..arc(rect: const Rect.fromLTWH(2.5, 2.5, 35, 35), strokeWidth: 5),
+      );
+      // A hairline still keeps its outer edge on the box.
+      expect(
+        await arcsOf(2),
+        paints
+          ..arc(rect: const Rect.fromLTWH(1, 1, 38, 38), strokeWidth: 2)
+          ..arc(rect: const Rect.fromLTWH(1, 1, 38, 38), strokeWidth: 2),
+      );
+    });
   });
 }

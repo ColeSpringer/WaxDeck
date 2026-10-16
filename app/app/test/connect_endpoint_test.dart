@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/connect/connect_bus.dart';
@@ -469,6 +471,25 @@ void main() {
     );
     expect(h.engine.playing, isFalse);
     expect(h.container.read(autoplayBlockedProvider), isTrue);
+  });
+
+  test('a stream reopening where it stood is reported as playing', () async {
+    // A dropped connection is recovered by a fresh mint and a reload that
+    // means to play; the engine reads stopped for it, and a mirror that
+    // followed the engine alone would show every other device a pause.
+    final h = _build();
+    await h.container.playback.playPids([pidA], source: _album);
+    await pumpEventQueue();
+    h.engine.advance(const Duration(seconds: 10));
+    final gate = Completer<void>();
+    h.engine.loadGate = gate;
+    h.engine.failPlayback();
+    await pumpEventQueue();
+    expect(_ofType(h.sent, 'session-report').last['playing'], isTrue);
+    gate.complete();
+    await pumpEventQueue();
+    expect(h.engine.playing, isTrue);
+    expect(_ofType(h.sent, 'session-report').last['playing'], isTrue);
   });
 
   test('stop ends the queue and the reports with it', () async {

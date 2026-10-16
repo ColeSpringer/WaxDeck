@@ -53,6 +53,7 @@ class TimelineFeeder {
     required this.maxBitrateKbps,
     required this.resolve,
     this.onStatus,
+    this.onRefusal,
     this.remintDelay = const Duration(milliseconds: 750),
     this.measuringDelay = const Duration(seconds: 3),
   });
@@ -79,6 +80,12 @@ class TimelineFeeder {
   /// Told what to say about gapless on this device: null when it is
   /// working, a reason when it is not.
   final void Function(String? reason)? onStatus;
+
+  /// The server's cap turned a rendering down: at the mint, where the
+  /// queue plays one track at a time instead ([midStream] false), or
+  /// partway through, where playback stopped. Told as it happens, not
+  /// per track, so the listener hears it once.
+  final void Function(String code, {required bool midStream})? onRefusal;
 
   /// How long a queue edit settles before a replacement is minted. A
   /// drag across a queue screen is many edits, and each one would
@@ -379,7 +386,25 @@ class TimelineFeeder {
   /// A refusal met mid-stream. Nothing to fall back to - the ordinary
   /// path sits under the same limit - so the reason is published and
   /// the stream stays where it stopped.
-  void onRefused(String code) => _say(code);
+  void onRefused(String code) {
+    onRefusal?.call(code, midStream: true);
+    _say(code);
+  }
+
+  /// A rendering refused at its first fetch, before anything played.
+  /// The start falls to the ordinary path, as a refusal at the mint has
+  /// it do, so the server's cap is said the way that one is.
+  void onLoadRefused(StreamRefusal refusal) {
+    final code = refusal.code;
+    if (refusal.status == 429 && code != null) _busy(code);
+  }
+
+  /// The queue plays one track at a time because the server's transcode
+  /// limit turned a rendering down. Said once, not per track.
+  void _busy(String code) {
+    if (_reason != code) onRefusal?.call(code, midStream: false);
+    _say(code);
+  }
 
   /// Drops everything. The engine is stopped by whoever called this.
   void clear() {
@@ -632,7 +657,7 @@ class TimelineFeeder {
         // it is about how busy the server is, not about this queue -
         // but said, because a switch that is on and doing nothing has
         // to explain itself. The next mint that lands clears it.
-        _say(e.code);
+        _busy(e.code);
       default:
         // A queue this server cannot render as one stream (409), a bad
         // crossfade (400): the ordinary path plays it and a different

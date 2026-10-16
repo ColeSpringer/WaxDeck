@@ -1,5 +1,7 @@
 import { test, expect } from './fixtures';
+import { App, clickUntilRequested } from './driver';
 import { SemanticsIds } from './semantics-ids';
+import { MediaTraffic } from './support/media';
 
 // The entity screens and the queue surface over the real stack: an
 // artist bucket opening the artist rather than a filtered list, an
@@ -206,4 +208,73 @@ test('a set of up-next rows can be picked, moved, and dropped', async ({
   await app.queue.escape();
   await expect(app.queue.selectBoxes()).toHaveCount(0);
   await expect(app.queue.screen()).toBeVisible();
+});
+
+/// The fixture album, by its own location, played from the top with its
+/// first track held mid-fetch: Alpha loads and then waits on the rest of
+/// its stream, so it never runs out on its own and the queue moves only
+/// when a test moves it. From the top whatever a run before left: a
+/// resume point would have the player seek into the held stream.
+async function playAlbumHoldingAlpha(app: App, traffic: MediaTraffic): Promise<string> {
+  const { pid } = await app.seed.item('Alpha Song');
+  await app.seed.setPosition(pid, 0);
+  const held = await traffic.holdContinuation(pid);
+  await app.music.playAlbumOf(pid);
+  await expect
+    .poll(() => held() !== undefined, { message: 'Alpha should load and wait on its stream' })
+    .toBe(true);
+  return pid;
+}
+
+test('the browser media session names the track Next moved to', async ({ app, page }) => {
+  const traffic = await MediaTraffic.watch(app.page);
+  await playAlbumHoldingAlpha(app, traffic);
+  const { pid: bravo } = await app.seed.item('Bravo Song');
+
+  // What the OS's own controls show. The first track was always named;
+  // it was every one after it that came up blank.
+  const named = () => page.evaluate(() => navigator.mediaSession.metadata?.title ?? null);
+  await expect.poll(named).toBe('Alpha Song');
+
+  await clickUntilRequested(page, app.player.deckNext(), (req) =>
+    req.url().includes(`/items/${bravo}/play-info`),
+  );
+  await expect
+    .poll(named, { message: 'the media session should name the track Next moved to' })
+    .toBe('Bravo Song');
+});
+
+test('the launch offer puts the queue back and plays it', async ({ app }) => {
+  const traffic = await MediaTraffic.watch(app.page);
+  const alpha = await playAlbumHoldingAlpha(app, traffic);
+  await app.player.pauseDocked();
+
+  // The paused queue is this account's live session on the server, and a
+  // reload ends it into the history a web launch offers back.
+  await expect
+    .poll(async () => (await app.api.tryGet('/player/sessions'))?.sessions?.length ?? 0, {
+      message: 'the server should hold the queue as a session',
+    })
+    .toBeGreaterThan(0);
+  await app.nav.reload(app.player.offerResume());
+
+  // Resume does what it says: the queue comes back playing. Measured from
+  // where the restored element first stands, since its resume seek alone
+  // puts it past the start.
+  await app.player.acceptOffer();
+  let restoredAt = 0;
+  await expect
+    .poll(
+      async () => {
+        const at = await traffic.position(alpha);
+        if (at !== null) restoredAt = at;
+        return at !== null;
+      },
+      { message: 'the restored queue should load Alpha' },
+    )
+    .toBe(true);
+  await expect(app.player.deckToggle()).toHaveAccessibleName(/Pause/i);
+  await expect
+    .poll(() => traffic.furthest(alpha), { message: 'the restored queue should play' })
+    .toBeGreaterThan(restoredAt + 0.25);
 });

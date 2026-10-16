@@ -114,6 +114,17 @@ class AlbumScreen extends ConsumerWidget {
     List<ItemSummary> tracks,
     AlbumFacts facts,
   ) {
+    // The listing answers an empty page for any key, so an empty one says
+    // nothing about whether the album is there; the album's own read does,
+    // and the page waits for it rather than drawing an empty album.
+    final unproven = state.hasValue && !state.hasError && tracks.isEmpty
+        ? unprovenEntityFace(
+            context,
+            ref.watch(albumDetailProvider(pid)),
+            errorTitle: context.l10n.musicAlbumLoadError,
+            onRetry: () => ref.invalidate(albumDetailProvider(pid)),
+          )
+        : null;
     return WaxScaffold(
       title: facts.title,
       largeTitle: false,
@@ -124,33 +135,37 @@ class AlbumScreen extends ConsumerWidget {
           context.leave(fallback: WaxRoute.musicIndex(MusicDimension.albums)),
       actions: const <Widget>[SearchAction()],
       slivers: <Widget>[
-        SliverToBoxAdapter(
-          child: _Header(pid: pid, facts: facts, tracks: tracks),
-        ),
-        AsyncSliverFace<MusicItemsState>(
-          state: state,
-          skeletonFills: true,
-          errorTitle: context.l10n.musicAlbumLoadError,
-          onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
-          isEmpty: (_) => tracks.isEmpty,
-          empty: (context, _) => SliverFillRemaining(
-            hasScrollBody: false,
-            child: EmptyState(
-              title: context.l10n.musicAlbumEmptyTitle,
-              message: context.l10n.musicAlbumEmptyMessage,
-              glyph: WaxIcons.albums,
+        if (unproven != null)
+          unproven
+        else ...<Widget>[
+          SliverToBoxAdapter(
+            child: _Header(pid: pid, facts: facts, tracks: tracks),
+          ),
+          AsyncSliverFace<MusicItemsState>(
+            state: state,
+            skeletonFills: true,
+            errorTitle: context.l10n.musicAlbumLoadError,
+            onRetry: () => ref.invalidate(musicItemsProvider(_listing)),
+            isEmpty: (_) => tracks.isEmpty,
+            empty: (context, _) => SliverFillRemaining(
+              hasScrollBody: false,
+              child: EmptyState(
+                title: context.l10n.musicAlbumEmptyTitle,
+                message: context.l10n.musicAlbumEmptyMessage,
+                glyph: WaxIcons.albums,
+              ),
+            ),
+            builder: (context, _) => _TrackList(
+              tracks: tracks,
+              albumArtist: facts.artist,
+              albumPid: pid,
+              albumTitle: facts.title,
             ),
           ),
-          builder: (context, _) => _TrackList(
-            tracks: tracks,
-            albumArtist: facts.artist,
-            albumPid: pid,
-            albumTitle: facts.title,
-          ),
-        ),
-        if (tracks.isNotEmpty)
-          SliverToBoxAdapter(child: _ReleaseDetail(track: tracks.first)),
-        SliverToBoxAdapter(child: _AlbumIdentity(pid: pid)),
+          if (tracks.isNotEmpty)
+            SliverToBoxAdapter(child: _ReleaseDetail(track: tracks.first)),
+          SliverToBoxAdapter(child: _AlbumIdentity(pid: pid)),
+        ],
       ],
     );
   }

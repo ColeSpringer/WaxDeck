@@ -1021,14 +1021,21 @@ func (l *Library) SetBookChapters(ctx context.Context, uc *UserCtx, apiPID strin
 	if err := validateChapterList(chapters); err != nil {
 		return EditOutcomeDTO{}, err
 	}
-	// Book-timeline offsets go straight to the facade, which resolves each
-	// chapter to the part that backs it and stores per-part file offsets.
+	// Book-timeline offsets go to the facade, which resolves each chapter
+	// to the part that backs it and stores per-part file offsets. An edit
+	// arrives on the timeline the marks were read on (bookMarks), the
+	// parts' own, so catalogMarks maps it onto the catalog's first.
 	stored := make([]model.Chapter, 0, len(chapters))
 	for i, ch := range chapters {
 		stored = append(stored, model.Chapter{
 			Position: i, Title: ch.Title, StartMS: ch.StartMS, EndMS: ch.EndMS,
 		})
 	}
+	bd, err := l.lib.Book(ctx, it.PID)
+	if err != nil {
+		return EditOutcomeDTO{}, classify(err)
+	}
+	stored = catalogMarks(bd, stored)
 	if err := l.lib.SetChapters(ctx, it.PID, stored, model.LockOf(lock), force); err != nil {
 		return EditOutcomeDTO{}, classify(err)
 	}
@@ -2535,7 +2542,10 @@ func (l *Library) ItemMetadataFor(ctx context.Context, uc *UserCtx, apiPID strin
 
 // fillBookMetadata overlays the book-only detail fields and chapters;
 // a detail read failure leaves the base view standing rather than
-// failing the whole metadata read.
+// failing the whole metadata read. The chapters are on the timeline the
+// parts play on, as the book detail serves them and as SetBookChapters
+// reads an edit: the catalog's own, saved back, would move every mark
+// after a part whose marks outrun its audio, once per save.
 func (l *Library) fillBookMetadata(ctx context.Context, it *model.ItemView, out *ItemMetadataDTO) {
 	bd, err := l.lib.Book(ctx, it.PID)
 	if err != nil {
@@ -2551,11 +2561,7 @@ func (l *Library) fillBookMetadata(ctx context.Context, it *model.ItemView, out 
 	set("publisher", bd.Publisher)
 	set("edition", bd.Edition)
 	set("description", bd.Description)
-	for i, ch := range bd.Chapters {
-		out.Chapters = append(out.Chapters, ChapterMark{
-			Index: i, Title: ch.Title, StartMS: ch.StartMS, EndMS: ch.EndMS,
-		})
-	}
+	out.Chapters, _ = bookMarks(bd)
 }
 
 // editorScalarFields builds the kind's scalar field map from the item

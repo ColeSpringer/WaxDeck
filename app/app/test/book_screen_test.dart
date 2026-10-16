@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
@@ -43,6 +45,16 @@ Future<void> _tap(WidgetTester tester, String id) async {
   await tester.pumpAndSettle();
 }
 
+/// A server the book read never reaches.
+class _UnreachableBooks extends FakeRepository {
+  @override
+  Future<BookDetail> getBook(String pid) async =>
+      throw const WaxDeckApiException(
+        code: 'transport',
+        message: 'connection refused',
+      );
+}
+
 Finder _byId(String id) => find.byWidgetPredicate(
   (widget) => widget is Semantics && widget.properties.identifier == id,
 );
@@ -61,6 +73,49 @@ void main() {
           .timeout(const Duration(seconds: 2)),
       throwsA(isA<WaxDeckApiException>()),
     );
+  });
+
+  group('a book that cannot be shown', () {
+    testWidgets('one that does not exist says so at once, with no retry', (
+      tester,
+    ) async {
+      // A pid that stopped being a book answers 404 every time. The
+      // backoff ladder held this screen on a skeleton for half a minute
+      // and then offered to ask again.
+      await tester.pumpWidget(_host(FakeRepository(), FakeEngine()));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Could not load this book'), findsOneWidget);
+      expect(find.text('That is not here any more.'), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+      expect(find.byType(SkeletonShapes), findsNothing);
+    });
+
+    testWidgets('a slow read shows the skeleton, not an error', (tester) async {
+      final repo = _repo()..getBookGate = Completer<void>();
+      await tester.pumpWidget(_host(repo, FakeEngine()));
+      await tester.pump();
+
+      expect(find.byType(SkeletonShapes), findsOneWidget);
+      expect(find.byType(ErrorState), findsNothing);
+      repo.getBookGate!.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('An Unexpected Party'), findsOneWidget);
+    });
+
+    testWidgets('a transport failure offers Try again', (tester) async {
+      // Unlike a refusal, a dropped connection is worth asking again.
+      await tester.pumpWidget(_host(_UnreachableBooks(), FakeEngine()));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Could not load this book'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.byType(SkeletonShapes), findsNothing);
+      // Riverpod keeps asking on its own; the scope going away ends it.
+      await tester.pumpWidget(const SizedBox());
+    });
   });
 
   testWidgets('renders the header, the people, and the chapters', (

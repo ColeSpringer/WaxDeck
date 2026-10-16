@@ -17,6 +17,7 @@ enum ShellChannel {
   devices,
   downloads,
   episodes,
+  gapless,
   instantMix,
   itemDelete,
   itemDetach,
@@ -52,7 +53,8 @@ class ShellMessage {
     this.actionSemanticsId,
     this.channel,
     this.persist = false,
-  }) : build = ((_) => text);
+  }) : build = ((_) => text),
+       actionLabelOf = null;
 
   /// A message whose words are chosen where they are drawn rather than
   /// where they are raised.
@@ -65,18 +67,24 @@ class ShellMessage {
   /// shell is being built in.
   ShellMessage.localized(
     this.build, {
-    this.actionLabel,
+    this.actionLabelOf,
     this.onAction,
     this.actionSemanticsId,
     this.channel,
-  }) : persist = false;
+  }) : actionLabel = null,
+       persist = false;
 
   /// The words, as a function of the locale drawing them. A message
   /// whose text was fixed where it was raised is one of these too, over
   /// a locale it ignores.
   final String Function(AppLocalizations l10n) build;
 
+  /// The action's label, worded where the message was raised.
   final String? actionLabel;
+
+  /// The action's label chosen where it is drawn, for a caller with no
+  /// locale to word it in (see [ShellMessage.localized]).
+  final String Function(AppLocalizations l10n)? actionLabelOf;
   final VoidCallback? onAction;
   final String? actionSemanticsId;
 
@@ -95,6 +103,10 @@ class ShellMessage {
 
   /// The words to draw, in the locale the shell has.
   String resolve(AppLocalizations l10n) => build(l10n);
+
+  /// The action's label in that locale, when there is an action.
+  String? actionLabelIn(AppLocalizations l10n) =>
+      actionLabelOf?.call(l10n) ?? actionLabel;
 }
 
 /// The shell's transient-message channel.
@@ -130,14 +142,14 @@ class ShellMessenger extends Notifier<ShellMessage?> {
   /// caller with no `BuildContext` to read one from.
   void showLocalized(
     String Function(AppLocalizations l10n) build, {
-    String? actionLabel,
+    String Function(AppLocalizations l10n)? actionLabelOf,
     VoidCallback? onAction,
     String? actionSemanticsId,
     ShellChannel? channel,
   }) {
     state = ShellMessage.localized(
       build,
-      actionLabel: actionLabel,
+      actionLabelOf: actionLabelOf,
       onAction: onAction,
       actionSemanticsId: actionSemanticsId,
       channel: channel,
@@ -250,7 +262,7 @@ class _ShellMessageHostState extends ConsumerState<ShellMessageHost> {
     if (_waiting.isEmpty) return;
     final next = _waiting.removeAt(0);
     final action = next.onAction;
-    final label = next.actionLabel;
+    final label = next.actionLabelIn(context.l10n);
     // An offer read aloud needs the time to reach its button.
     final persist =
         action != null &&

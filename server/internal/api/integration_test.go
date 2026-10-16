@@ -68,7 +68,12 @@ type harness struct {
 	lanBase string
 	backups *service.Backups
 	group   *supervise.Group
-	flowReq struct{ apiKey, format, dynamics, gain, bitrate string } // captured by the fake sidecar
+	flowReq struct{ apiKey, format, dynamics, gain, bitrate, cut string } // captured by the fake sidecar
+	// flowLog is every /stream request the fake sidecar took, in order.
+	// engineMP3 makes it answer an mp3 request with a real encode of the
+	// source, where it otherwise serves the file as it is.
+	flowLog   requestLog
+	engineMP3 atomic.Bool
 }
 
 // skipWithoutUnwritablePaths skips a test that makes a path unwritable to
@@ -370,14 +375,31 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 			for k, v := range req.Params {
 				q.Set(k, v)
 			}
+			if req.Path == "/hls/master.m3u8" && req.Params["src"] != "" {
+				// A one-source master is its descriptor, as the real
+				// daemon signs it.
+				q = url.Values{"v": {fakeItemDescriptor(req.Params)}}
+			}
 			q.Set("sig", "fakesig")
 			json.NewEncoder(w).Encode(map[string]any{
 				"schemaVersion": 1, "url": req.Path + "?" + q.Encode(),
 				"exp": time.Now().Add(time.Hour).Unix(),
 			})
+		case "/hls/media.m3u8":
+			v := r.URL.Query().Get("v")
+			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+			fmt.Fprintf(w, "#EXTM3U\n#EXT-X-MAP:URI=\"init.mp4?v=%s&sig=init\"\n#EXTINF:2.0,\nseg/0.m4s?v=%s&sig=seg0\n#EXT-X-ENDLIST\n", v, v)
+		case "/hls/init.mp4", "/hls/seg/0.m4s":
+			w.Header().Set("Content-Type", "audio/mp4")
+			io.WriteString(w, "fmp4")
 		case "/hls/master.m3u8":
 			if r.URL.Query().Get("sig") == "" {
 				http.Error(w, "unsigned", http.StatusUnauthorized)
+				return
+			}
+			if v := r.URL.Query().Get("v"); v != "" {
+				w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
+				fmt.Fprint(w, "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=96000\nmedia.m3u8?v="+v+"&sig=child\n")
 				return
 			}
 			w.Header().Set("Content-Type", "application/vnd.apple.mpegurl")
@@ -398,18 +420,25 @@ func newFakeFlowBridge(t *testing.T, ctx context.Context, h *harness, cfg servic
 				"spans":[{"fromSample":0,"toSample":66150,"fromSeconds":0,"toSeconds":1.5},
 					{"fromSample":176400,"toSample":220500,"fromSeconds":4,"toSeconds":5}]}`)
 		case "/stream":
+			h.flowLog.add(r.Method, r.URL.Query())
 			h.flowReq.apiKey = r.Header.Get("X-API-Key")
 			h.flowReq.format = r.URL.Query().Get("format")
 			h.flowReq.dynamics = r.URL.Query().Get("dynamics")
 			h.flowReq.gain = r.URL.Query().Get("gain")
 			h.flowReq.bitrate = r.URL.Query().Get("bitrate")
+			h.flowReq.cut = r.URL.Query().Get("t")
 			src := r.URL.Query().Get("src")
 			if r.URL.Query().Get("id") == "" {
 				http.Error(w, "missing id", http.StatusBadRequest)
 				return
 			}
 			if rel, ok := strings.CutPrefix(src, "lib/"); ok {
-				http.ServeFile(w, r, filepath.Join(h.library, filepath.FromSlash(rel)))
+				path := filepath.Join(h.library, filepath.FromSlash(rel))
+				if h.engineMP3.Load() && r.URL.Query().Get("format") == "mp3" {
+					encodeMP3(w, r, path)
+					return
+				}
+				http.ServeFile(w, r, path)
 				return
 			}
 			if rel, ok := strings.CutPrefix(src, "podcasts/"); ok && cfg.PodcastDir != "" {

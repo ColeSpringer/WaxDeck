@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { SemanticsIds } from './semantics-ids';
+import { emptyFirstPages } from './support/listings';
 
 // The landing surface over the real stack: shelves drawn from the
 // discovery lists, the account menu in the top app bar rather than in the
@@ -20,6 +21,55 @@ test('home draws its shelves off the collection lists', async ({ app }) => {
   // shelves are slivers, so an off-screen one is not built at all and
   // has no element to scroll to.
   await app.home.revealShelf('sealed');
+});
+
+// A second fixture feed, whose episodes ("AAA Before Everything", "AAA
+// First In Line") sort before every track in the library.
+const EARLY_FEED = 'http://127.0.0.1:4421/early/feed.xml';
+
+test('home draws its shelves while another account follows a show that sorts first', async ({
+  app,
+  otherAccount,
+}) => {
+  // Somebody else follows it. Listings used to cut their first page from
+  // the whole catalog and only then drop what this account may not see,
+  // so the episodes that sort first came back to it as an empty page with
+  // a cursor, which home read as an empty library. Two halves keep that
+  // from happening again, and each is pinned here.
+  const follower = await otherAccount('early');
+  const show = await app.seed.as(follower.token).subscribePodcast(EARLY_FEED);
+  const hidden = new Set((await app.seed.as(follower.token).episodes(show)).map((e) => e.pid));
+
+  // The server's: a listing is scoped to what this account may see before
+  // its page is cut, so the episodes that sort first take no room on it.
+  // A page of one, in title order, is one row this account can see.
+  for (const first of [
+    await app.api.get('/library/items', { query: { limit: 1 } }),
+    await app.api.get('/library/browse', { query: { list: 'alphabetical', limit: 1 } }),
+  ]) {
+    expect(first.items, 'a page of one should hold a row this account can see').toHaveLength(1);
+    expect(hidden.has(first.items[0].pid), 'not an episode of a show it does not follow').toBe(
+      false,
+    );
+  }
+
+  // The app's: a page may still come back short, even empty, with a
+  // cursor - the contract's rule everywhere - and home reads on past it.
+  // Its first reads, the library probe and the recent shelf, are answered
+  // the way the old server answered this account.
+  await emptyFirstPages(
+    app.page,
+    (url) =>
+      !url.searchParams.has('mediaType') &&
+      (url.pathname.endsWith('/library/items') ||
+        (url.pathname.endsWith('/library/browse') &&
+          url.searchParams.get('list') === 'recently-added')),
+  );
+
+  // This account follows nothing, and its home is the library's.
+  await app.nav.enter('home');
+  await expect(app.home.shelf('recent')).toBeVisible();
+  await expect(app.home.text('Nothing here yet')).toHaveCount(0);
 });
 
 test('a shelf chevron pages the row instead of playing what is under it', async ({
@@ -132,17 +182,31 @@ test('an album pinned from its own screen turns up on home', async ({
   await expect(app.home.shelf('pinned')).toBeHidden();
 });
 
+test('continue listening holds a book part way through with no play counted', async ({
+  app,
+}) => {
+  // Spoken word joins the shelf from its first saved position, where a
+  // track waits for a counted play: a chapter is seldom finished in one
+  // sitting, and a listen that stops short counts none. Seeded rather than
+  // played, so no listen is reported at all.
+  const book = await app.seed.book('The Chaptered Fixture');
+  await app.seed.setPosition(book.pid, 2000);
+
+  await app.nav.enter('home');
+  await app.home.revealShelf('continue');
+  await expect(app.home.card('continue', book.pid)).toBeVisible();
+});
+
 test("a shelf card's menu reaches the album and the editor door", async ({
   app,
 }) => {
   // The continue shelf draws from this account's own play state, so its
   // contents are owned pids alone - deterministic under parallel
   // workers, where the library-wide shelves shuffle as other accounts
-  // upload. Recently-played is fed by real listens (a direct
-  // played-flag edit deliberately never stamps last_played_at), so a
-  // listen past the music threshold is reported and the track then
-  // left mid-way: heard before, in progress now, which is exactly what
-  // the shelf keeps.
+  // upload. A track joins it once a play of it has counted, which only a
+  // real listen does (a direct played-flag edit deliberately never stamps
+  // last_played_at), so a listen past the music threshold is reported and
+  // the track then left mid-way: heard before, in progress now.
   const { pid } = await app.seed.item('Bravo Song');
   await app.api.post('/listens', {
     data: {

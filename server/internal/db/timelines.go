@@ -5,18 +5,19 @@ import (
 	"fmt"
 )
 
-// TimelineStash is one minted gapless timeline: the key a client
-// presents on the HLS surface (the sidecar's digest and the rendering
-// asked of it, since one queue can be live in two formats at once), the
-// signed upstream master URL the proxy reconstructs from it, and the
-// instant both stop being useful (the media token minted alongside
-// expires with the row).
+// TimelineStash is one minted HLS rendering, a gapless timeline or one
+// item's stream: the key a client presents on the HLS surface (for a
+// timeline the sidecar's digest and the rendering asked of it, since one
+// queue can be live in two formats at once; for an item a digest of its
+// rendering under an `it/` prefix), the signed upstream master URL the
+// proxy reconstructs from it, and the instant both stop being useful
+// (the media token minted alongside expires with the row).
 //
 // SignedMaster is a bearer credential, so persisting it widens where one
 // lives, and that is a deliberate trade rather than an oversight. What
-// it grants: the master playlist for one timeline, from the sidecar
-// directly, until ExpiresAtNS (the queue's duration plus fifteen
-// minutes, at least thirty). Who can spend it: only a caller who can
+// it grants: the master playlist for one rendering, from the sidecar
+// directly, until ExpiresAtNS (its duration plus fifteen minutes, at
+// least thirty). Who can spend it: only a caller who can
 // already reach the sidecar's internal address, which never faces
 // clients. Against what a reader of this file already holds: the
 // sidecar API key, which the server reads from its own environment and

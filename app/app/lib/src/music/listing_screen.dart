@@ -60,10 +60,22 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
   /// This screen's own precacher, released with the screen.
   final ArtworkPrecacher _precacher = ArtworkPrecacher();
 
+  final ScrollController _scroll = ScrollController();
+
   @override
   void dispose() {
     _precacher.dispose();
+    _scroll.dispose();
     super.dispose();
+  }
+
+  /// A list that does not reach past the viewport cannot scroll, so it
+  /// never asks for more as it scrolls: asked here, once it is laid out.
+  void _fillViewport() {
+    if (!mounted || !_scroll.hasClients) return;
+    final position = _scroll.position;
+    if (position.maxScrollExtent > position.minScrollExtent) return;
+    ref.read(musicItemsProvider(_listing).notifier).loadMore();
   }
 
   /// What to call this list when nothing handed it a name.
@@ -278,6 +290,9 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
     final state = ref.watch(musicItemsProvider(_listing));
     final dimension = widget.dimension;
     final items = state.value?.items ?? const <ItemSummary>[];
+    if (state.value case MusicItemsState(hasMore: true, loadingMore: false)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewport());
+    }
     // Watched here and nowhere else. Only for an artist bucket that is
     // one: the absent-value bucket travels as a sentinel, and resolving
     // that as a pid is a request for something that cannot exist.
@@ -297,9 +312,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
         // horizontal scroller inside the page sits at pixel zero of a
         // short extent, which reads as "near the end" of the page.
         if (metrics.axis != Axis.vertical) return false;
-        if (metrics.pixels >= metrics.maxScrollExtent - 600) {
-          ref.read(musicItemsProvider(_listing).notifier).loadMore();
-        }
+        _pageNearEnd(metrics);
         if (notification is ScrollEndNotification) {
           warmArtworkAhead(
             context: context,
@@ -315,6 +328,7 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
       child: WaxScaffold(
         title: _title(items),
         largeTitle: false,
+        controller: _scroll,
         // Pops what is beneath, which is the screen this was opened
         // from: an artist's own screen for their full track list, the
         // dimension's index for a bucket. The fallback covers a
@@ -349,6 +363,16 @@ class _MusicListingScreenState extends ConsumerState<MusicListingScreen> {
         ],
       ),
     );
+  }
+
+  /// Asks for the next page once [metrics] reach near the end of a
+  /// vertical scroll: a horizontal scroller inside the page sits at pixel
+  /// zero of a short extent, which would read as the end of the page.
+  void _pageNearEnd(ScrollMetrics metrics) {
+    if (metrics.axis != Axis.vertical) return;
+    if (metrics.pixels >= metrics.maxScrollExtent - 600) {
+      ref.read(musicItemsProvider(_listing).notifier).loadMore();
+    }
   }
 
   Widget _list(MusicItemsState state) {

@@ -79,6 +79,22 @@ export class Music extends Surface {
     );
   }
 
+  /// Open the album a track belongs to by the album's own location, cold:
+  /// where a listing sorts it is not a contract, and a page load is what
+  /// a per-device setting has to survive. Settles on the header's verbs.
+  async openAlbumOf(pid: string): Promise<void> {
+    const { albumPid } = await this.ctx.api.get('/items/{pid}', { path: { pid } });
+    expect(albumPid, `${pid} should belong to an album`).toBeTruthy();
+    await this.ctx.page.goto(`/music/albums/${encodeURIComponent(albumPid!)}`);
+    await this.entityPlay().waitFor({ timeout: T.nav });
+  }
+
+  /// [openAlbumOf], played from the top: docked, as [playEntity] leaves it.
+  async playAlbumOf(pid: string): Promise<void> {
+    await this.openAlbumOf(pid);
+    await this.playEntity('play');
+  }
+
   /// Play one row of an opened bucket, which queues what it belongs to.
   /// Settles on the deck bar, so with something already playing the
   /// click is skipped - a repeat play needs its own signal.

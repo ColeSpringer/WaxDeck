@@ -47,6 +47,11 @@ class SyncStatus {
   bool get online => connection == SyncConnection.connected;
 }
 
+/// One per-user playback state that moved: an item's, with the [state]
+/// the mirror stored for it, or an artist's or album's, whose star or
+/// rating lives on the server alone ([state] null).
+typedef PlayStateChange = ({String pid, PlayState? state});
+
 /// The delta-sync engine: mirrors the catalog and the user's own play
 /// states into the local database, follows the server's WebSocket
 /// invalidations, queues mutations while offline, and replays them with
@@ -72,7 +77,7 @@ class SyncEngine {
 
   final _status = StreamController<SyncStatus>.broadcast();
   final _catalogChanged = StreamController<void>.broadcast();
-  final _playStateChanged = StreamController<String>.broadcast();
+  final _playStateChanged = StreamController<PlayStateChange>.broadcast();
   final _serverEvents = StreamController<ServerSyncEvent>.broadcast();
 
   SyncStatus _current = const SyncStatus(connection: SyncConnection.offline);
@@ -94,10 +99,10 @@ class SyncEngine {
   /// are for invalidating server-backed views).
   Stream<void> get catalogChanged => _catalogChanged.stream;
 
-  /// Pids whose per-user playback state moved: an item's own state, or
-  /// an artist or album whose star or rating changed. Consumers treat it
-  /// as an invalidation signal, not a payload.
-  Stream<String> get playStateChanged => _playStateChanged.stream;
+  /// Per-user playback states that moved: an item's own, announced with
+  /// the state the mirror now holds, or an artist's or album's star or
+  /// rating, which the mirror does not keep (its state is null).
+  Stream<PlayStateChange> get playStateChanged => _playStateChanged.stream;
 
   /// Every server-state change this engine pulled *while running*, as it
   /// arrived.
@@ -557,8 +562,9 @@ class SyncEngine {
         for (final ev in page.events) {
           if (_caughtUp) _serverEvents.add(ev);
           if (ev.kind == 'play-state' && ev.playState != null) {
-            await _storePlayState(ev.playState!);
-            _playStateChanged.add(ev.playState!.pid);
+            final state = ev.playState!;
+            await _storePlayState(state);
+            _playStateChanged.add((pid: state.pid, state: state));
           } else if (ev.kind == 'bookmarks' &&
               ev.pid != null &&
               ev.bookmarks != null) {
@@ -570,7 +576,7 @@ class SyncEngine {
             // is nothing to mirror (entity state is a live read, and the
             // mirror is item-scoped), so it only announces the pid to
             // refetch.
-            _playStateChanged.add(ev.pid!);
+            _playStateChanged.add((pid: ev.pid!, state: null));
           }
           // Every other kind reaches the app through [serverEvents]; the
           // mirror keeps play states and bookmarks only.
@@ -609,7 +615,7 @@ class SyncEngine {
       final states = await repository.listPlayStates(batch);
       for (final st in states) {
         await _storePlayState(st);
-        _playStateChanged.add(st.pid);
+        _playStateChanged.add((pid: st.pid, state: st));
       }
     }
     if (owner != null) {

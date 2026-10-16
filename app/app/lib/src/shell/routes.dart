@@ -183,9 +183,8 @@ abstract final class WaxRoute {
   static const settingParam = 'setting';
 
   /// What this build is and what it is talking to. A location like any
-  /// other section: a stranger opening it gets the page, which is the
-  /// question 8.3 asks. Declared ahead of the `:section` pattern in the
-  /// table so the literal wins over it.
+  /// other section: a stranger opening it gets the page. Declared ahead
+  /// of the `:section` pattern in the table so the literal wins over it.
   static const settingsAbout = '$settings/about';
 
   /// What the app caught and nobody saw. Beneath About because that is

@@ -18,6 +18,8 @@ class _$PlayInfo extends PlayInfo {
   @override
   final bool seekable;
   @override
+  final int? startOffsetMs;
+  @override
   final DateTime expiresAt;
   @override
   final int? partIndex;
@@ -43,6 +45,7 @@ class _$PlayInfo extends PlayInfo {
     required this.mimeType,
     required this.durationMs,
     required this.seekable,
+    this.startOffsetMs,
     required this.expiresAt,
     this.partIndex,
     this.partCount,
@@ -68,6 +71,7 @@ class _$PlayInfo extends PlayInfo {
         mimeType == other.mimeType &&
         durationMs == other.durationMs &&
         seekable == other.seekable &&
+        startOffsetMs == other.startOffsetMs &&
         expiresAt == other.expiresAt &&
         partIndex == other.partIndex &&
         partCount == other.partCount &&
@@ -86,6 +90,7 @@ class _$PlayInfo extends PlayInfo {
     _$hash = $jc(_$hash, mimeType.hashCode);
     _$hash = $jc(_$hash, durationMs.hashCode);
     _$hash = $jc(_$hash, seekable.hashCode);
+    _$hash = $jc(_$hash, startOffsetMs.hashCode);
     _$hash = $jc(_$hash, expiresAt.hashCode);
     _$hash = $jc(_$hash, partIndex.hashCode);
     _$hash = $jc(_$hash, partCount.hashCode);
@@ -106,6 +111,7 @@ class _$PlayInfo extends PlayInfo {
           ..add('mimeType', mimeType)
           ..add('durationMs', durationMs)
           ..add('seekable', seekable)
+          ..add('startOffsetMs', startOffsetMs)
           ..add('expiresAt', expiresAt)
           ..add('partIndex', partIndex)
           ..add('partCount', partCount)
@@ -140,6 +146,11 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
   bool? _seekable;
   bool? get seekable => _$this._seekable;
   set seekable(bool? seekable) => _$this._seekable = seekable;
+
+  int? _startOffsetMs;
+  int? get startOffsetMs => _$this._startOffsetMs;
+  set startOffsetMs(int? startOffsetMs) =>
+      _$this._startOffsetMs = startOffsetMs;
 
   DateTime? _expiresAt;
   DateTime? get expiresAt => _$this._expiresAt;
@@ -186,6 +197,7 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
       _mimeType = $v.mimeType;
       _durationMs = $v.durationMs;
       _seekable = $v.seekable;
+      _startOffsetMs = $v.startOffsetMs;
       _expiresAt = $v.expiresAt;
       _partIndex = $v.partIndex;
       _partCount = $v.partCount;
@@ -233,6 +245,7 @@ class PlayInfoBuilder implements Builder<PlayInfo, PlayInfoBuilder> {
             r'PlayInfo',
             'seekable',
           ),
+          startOffsetMs: startOffsetMs,
           expiresAt: BuiltValueNullFieldError.checkNotNull(
             expiresAt,
             r'PlayInfo',

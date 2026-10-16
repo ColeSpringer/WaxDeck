@@ -188,6 +188,91 @@ func GeneratePodcastFeed(dir string, feed FeedSpec, baseURL string) (string, err
 	return feedPath, nil
 }
 
+// EarlyFeedDir is the directory EarlyPodcastFeed is written to and served
+// from: GeneratePodcastFeed names every feed document feed.xml, so a
+// second feed needs a directory of its own.
+const EarlyFeedDir = "early"
+
+// EarlyPodcastFeed is a second preset feed whose episode titles sort
+// before every other fixture title, so a listing in title order opens on
+// its episodes: the shape that once handed an account not following the
+// show an empty first page. Its episodes are named apart from the default
+// feed's, which gives each its own tone, so no catalog folds two of them
+// into one item.
+func EarlyPodcastFeed(baseURL string) FeedSpec {
+	show := presetShow{
+		title:  "The Early Feed",
+		host:   "Early Host",
+		newest: time.Date(2026, 2, 1, 9, 30, 0, 0, time.UTC),
+		lead:   500 * time.Millisecond,
+		trail:  500 * time.Millisecond,
+	}
+	const desc = "An episode that sorts first."
+	return show.feed(baseURL, "Two tiny episodes whose titles sort before everything else.",
+		show.episode(0, "AAA Before Everything", "wd-early-ep-001", desc, 2*time.Second),
+		show.episode(1, "AAA First In Line", "wd-early-ep-002", desc, 3*time.Second),
+	)
+}
+
+// GeneratePresetFeeds writes both preset feeds under dir: the default one
+// at its root and EarlyPodcastFeed in EarlyFeedDir, each with enclosure
+// URLs under its own directory at baseURL. It returns both feed.xml paths.
+func GeneratePresetFeeds(dir, baseURL string) ([]string, error) {
+	base := strings.TrimRight(baseURL, "/")
+	feedPath, err := GeneratePodcastFeed(dir, DefaultPodcastFeed(base), base)
+	if err != nil {
+		return nil, err
+	}
+	earlyBase := base + "/" + EarlyFeedDir
+	earlyPath, err := GeneratePodcastFeed(filepath.Join(dir, EarlyFeedDir), EarlyPodcastFeed(earlyBase), earlyBase)
+	if err != nil {
+		return nil, err
+	}
+	return []string{feedPath, earlyPath}, nil
+}
+
+// presetShow is what every episode of one preset feed shares: each is an
+// MP3 of a tone between two silences, tagged as the show's, and published
+// a day before the one listed above it.
+type presetShow struct {
+	title, host string
+	newest      time.Time
+	lead, trail time.Duration
+}
+
+// episode is the show's nth episode counting back from the newest.
+func (s presetShow) episode(n int, title, guid, desc string, tone time.Duration) EpisodeSpec {
+	return EpisodeSpec{
+		Title: title,
+		GUID:  guid,
+		Spec: Spec{
+			Name:         guid,
+			Codec:        CodecMP3,
+			Duration:     tone,
+			LeadSilence:  s.lead,
+			TrailSilence: s.trail,
+			Tags: map[string]string{
+				"TITLE":  title,
+				"ARTIST": s.host,
+				"ALBUM":  s.title,
+			},
+		},
+		PubDate:     s.newest.AddDate(0, 0, -n),
+		Description: desc,
+	}
+}
+
+// feed is the show's feed of episodes, linked to baseURL.
+func (s presetShow) feed(baseURL, description string, episodes ...EpisodeSpec) FeedSpec {
+	return FeedSpec{
+		Title:       s.title,
+		Author:      s.host,
+		Description: description,
+		Link:        strings.TrimRight(baseURL, "/"),
+		Episodes:    episodes,
+	}
+}
+
 // defaultFeedTranscript is episode one's WebVTT transcript: three timed
 // cues, enough for a client to prove it fetched and parsed the document.
 const defaultFeedTranscript = `WEBVTT
@@ -211,39 +296,19 @@ const defaultFeedChapters = `{"version":"1.2.0","chapters":[{"startTime":0,"titl
 // chapters. baseURL becomes the channel link; the enclosure URLs come from
 // the baseURL passed to GeneratePodcastFeed.
 func DefaultPodcastFeed(baseURL string) FeedSpec {
-	base := time.Date(2026, 1, 15, 9, 30, 0, 0, time.UTC)
-	episode := func(n int, title, guid, desc string, tone time.Duration) EpisodeSpec {
-		return EpisodeSpec{
-			Title: title,
-			GUID:  guid,
-			Spec: Spec{
-				Name:         guid,
-				Codec:        CodecMP3,
-				Duration:     tone,
-				LeadSilence:  1500 * time.Millisecond,
-				TrailSilence: time.Second,
-				Tags: map[string]string{
-					"TITLE":  title,
-					"ARTIST": "Fixture Host",
-					"ALBUM":  "The Fixture Feed",
-				},
-			},
-			PubDate:     base.AddDate(0, 0, -n),
-			Description: desc,
-		}
+	show := presetShow{
+		title:  "The Fixture Feed",
+		host:   "Fixture Host",
+		newest: time.Date(2026, 1, 15, 9, 30, 0, 0, time.UTC),
+		lead:   1500 * time.Millisecond,
+		trail:  time.Second,
 	}
-	ep1 := episode(0, "Getting Waxy", "wd-fixture-ep-001", "The pilot episode.", 3*time.Second)
+	ep1 := show.episode(0, "Getting Waxy", "wd-fixture-ep-001", "The pilot episode.", 3*time.Second)
 	ep1.TranscriptVTT = defaultFeedTranscript
 	ep1.ChaptersJSON = defaultFeedChapters
-	return FeedSpec{
-		Title:       "The Fixture Feed",
-		Author:      "Fixture Host",
-		Description: "Three tiny synthesized episodes for WaxDeck tests.",
-		Link:        strings.TrimRight(baseURL, "/"),
-		Episodes: []EpisodeSpec{
-			ep1,
-			episode(1, "Second Pressing", "wd-fixture-ep-002", "The difficult second episode.", 4*time.Second),
-			episode(2, "Deep Grooves", "wd-fixture-ep-003", "The one that found its stride.", 5*time.Second),
-		},
-	}
+	return show.feed(baseURL, "Three tiny synthesized episodes for WaxDeck tests.",
+		ep1,
+		show.episode(1, "Second Pressing", "wd-fixture-ep-002", "The difficult second episode.", 4*time.Second),
+		show.episode(2, "Deep Grooves", "wd-fixture-ep-003", "The one that found its stride.", 5*time.Second),
+	)
 }

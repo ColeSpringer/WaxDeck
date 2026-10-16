@@ -1,10 +1,12 @@
 package auth
 
 import (
+	"crypto/cipher"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
+	"hash"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,8 +19,12 @@ import (
 // fetch checks every one; whether the account may still have it is
 // re-checked by the fetch's own authorization, on every request.
 type MediaTokens struct {
-	key []byte
-	ttl time.Duration
+	key   []byte
+	ttl   time.Duration
+	query *AADSealer
+	// nonce keys the nonce a sealed query is enciphered under, apart from
+	// the key that enciphers it (SealQuery).
+	nonce []byte
 }
 
 // DefaultMediaTokenTTL bounds how long a minted stream URL stays
@@ -82,7 +88,73 @@ func NewMediaTokens(secret []byte, ttl time.Duration) *MediaTokens {
 	}
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte("waxdeck-media-token-v2"))
-	return &MediaTokens{key: mac.Sum(nil), ttl: ttl}
+	key := mac.Sum(nil)
+	query, err := NewAADSealer(key, "waxdeck-media-query-v1")
+	if err != nil {
+		// AES-256 takes any 32-byte key, which an HMAC-SHA256 always is.
+		panic(err)
+	}
+	nonce := hmac.New(sha256.New, key)
+	nonce.Write([]byte("waxdeck-media-query-nonce-v1"))
+	return &MediaTokens{key: key, ttl: ttl, query: query, nonce: nonce.Sum(nil)}
+}
+
+// SealQuery hides a query a media URL has to carry from the listener the
+// URL is handed to, bound to the token beside it: the HLS proxy's child
+// URLs name the engine's signed queries, file paths and identities among
+// them. Only OpenQuery with the same token reads it back.
+//
+// The same query beside the same token seals the same every time, so a
+// playlist fetched again lists the same URIs: the nonce is drawn from the
+// two under a key of its own (a synthetic nonce), and equal inputs are all
+// one sealed form shows of another. Distinct inputs take distinct nonces
+// but for a collision of 96-bit digests.
+func (m *MediaTokens) SealQuery(token, query string) string {
+	return string(m.QuerySealer(token).Append(nil, []byte(query)))
+}
+
+// QuerySealer seals queries beside one token as SealQuery does, for a
+// caller sealing many of them, a playlist's children: the token's share
+// of the work is done once, and its buffers serve every query. Not safe
+// for concurrent use.
+type QuerySealer struct {
+	aead cipher.AEAD
+	// mac is keyed by the token's own nonce key.
+	mac   hash.Hash
+	token []byte
+	sum   [sha256.Size]byte
+	out   []byte
+}
+
+// QuerySealer starts sealing beside token.
+func (m *MediaTokens) QuerySealer(token string) *QuerySealer {
+	key := hmac.New(sha256.New, m.nonce)
+	key.Write([]byte(token))
+	return &QuerySealer{aead: m.query.aead, mac: hmac.New(sha256.New, key.Sum(nil)), token: []byte(token)}
+}
+
+// Append appends query sealed, base64url, to dst: the nonce, the query
+// enciphered and the tag.
+func (s *QuerySealer) Append(dst, query []byte) []byte {
+	s.mac.Reset()
+	s.mac.Write(query)
+	nonce := s.mac.Sum(s.sum[:0])[:s.aead.NonceSize()]
+	s.out = s.aead.Seal(append(s.out[:0], nonce...), nonce, query, s.token)
+	return base64.RawURLEncoding.AppendEncode(dst, s.out)
+}
+
+// OpenQuery answers the query SealQuery sealed beside token. Anything
+// else - another token, another key, an edit - is ErrBadToken.
+func (m *MediaTokens) OpenQuery(token, sealed string) (string, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(sealed)
+	if err != nil {
+		return "", ErrBadToken
+	}
+	query, err := m.query.Open([]byte(token), raw)
+	if err != nil {
+		return "", ErrBadToken
+	}
+	return string(query), nil
 }
 
 // MintFor mints a token for the claims (Exp is set here). Long-running

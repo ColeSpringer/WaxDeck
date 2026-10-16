@@ -90,10 +90,7 @@ test('a music queue plays as one stream and crosses inside it', async ({ app, pa
 
   // The codec-mixed album, by its own location rather than where it sorts.
   // A page load, which the stored switch has to survive.
-  const { albumPid } = await app.api.get('/items/{pid}', { path: { pid } });
-  expect(albumPid, 'Alpha Song should belong to the Fixture Album').toBeTruthy();
-  await app.nav.open(`/music/albums/${encodeURIComponent(albumPid!)}`, app.music.entityPlay());
-  await app.music.playEntity('play');
+  await app.music.playAlbumOf(pid);
 
   // One mint for the whole run, carrying what this browser can actually
   // decode. Never aac first: Playwright's Chromium ships without the

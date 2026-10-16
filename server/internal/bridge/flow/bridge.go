@@ -5,10 +5,14 @@
 package flow
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -205,6 +209,10 @@ type PlayInfo struct {
 	// (the request clamped to the caller's ceiling); zero when the cap
 	// did not re-encode the stream.
 	AppliedBitrateKbps int
+	// StartOffsetMS is where in the item (the part, for a multi-file
+	// book) the served audio begins; positive only when the mint cut a
+	// stream that cannot be range-seeked.
+	StartOffsetMS int64
 }
 
 // PlayOptions select a part of a multi-file item and request DSP.
@@ -244,6 +252,20 @@ type PlayOptions struct {
 	// that asks for a cap in mp3 and is handed Ogg gets silence with
 	// nothing to explain it, which is what this exists to prevent.
 	CapFormat string
+	// StartMS asks for the stream to begin this far into the item (the
+	// part). Only a stream that cannot be range-seeked is cut, at the
+	// whole second at or before it; a seekable one is the client's to
+	// seek.
+	StartMS int64
+	// CutOriginal lets StartMS cut an original that would otherwise play
+	// directly, for a client that can only ask for an offset (Subsonic's
+	// timeOffset). The cut is a real encode, admitted like any other.
+	CutOriginal bool
+	// HLS says the caller plays HLS. A stream the engine would encode is
+	// then minted as that one item's HLS presentation, which the player
+	// seeks itself, wherever the sidecar renders one; StartMS cuts
+	// nothing there.
+	HLS bool
 }
 
 // forceFormats is the closed set of client-visible format hints. The
@@ -282,11 +304,13 @@ func (b *Bridge) PlayInfoFor(ctx context.Context, user, apiItemPID string, opts 
 // the item and the book for every one of them.
 //
 // The source must be the one apiItemPID and opts.FilePID resolve to.
-// Nothing here re-checks that, because the fetch side does: the URL
-// carries the pid and the part, and /media/stream resolves both again
-// against the token before it serves a byte.
+// Nothing here re-checks that for a stream, because the fetch side does:
+// the URL carries the pid and the part, and /media/stream resolves both
+// again against the token before it serves a byte. An HLS rendering
+// pins the source it was minted from, so only a caller holding what its
+// own resolution just answered asks for one.
 func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string, src Source, opts PlayOptions) (PlayInfo, error) {
-	_, boost := VoiceBoostParams(src, b.caps, opts.VoiceBoost)
+	gainDB, boost := VoiceBoostParams(src, b.caps, opts.VoiceBoost)
 	shape := ShapeFor(src, b.caps, boost)
 	force := opts.ForceFormat
 	advertise := ""
@@ -327,6 +351,19 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 		// device's sink is one the strict renderers refuse.
 		shape.MimeType = advertise
 	}
+	// The cut is clamped into the item, since the engine reads one past
+	// the end as an empty stream, and floored to whole seconds: each
+	// distinct cut is a separate encode of the whole remainder in the
+	// engine, so repeats near one spot share one.
+	cutSecs := int64(0)
+	if opts.StartMS > 0 {
+		start := opts.StartMS
+		if src.DurationMS > 0 {
+			start = min(start, src.DurationMS-1)
+		}
+		cutSecs = start / 1000
+	}
+	wantsCut := opts.CutOriginal && cutSecs > 0
 	// A bitrate cap resolves at mint time like voice boost: clamped to
 	// the caller's own transcode ceiling, then applied only when the
 	// source does not already satisfy it. A capped account's engine
@@ -336,10 +373,11 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 	// the file itself and is left alone. Device endpoints never pass a
 	// cap: a capped account's device answer above is already lossy (WAV
 	// aside, the last resort of a renderer that plays nothing else), and
-	// the fetch holds that encode to the ceiling.
+	// the fetch holds that encode to the ceiling. A cut of an original is
+	// an encode too, so it reads the ceiling as well.
 	capKbps := 0
 	ceiling := 0
-	if b.gate != nil && !forced && (opts.MaxBitrateKbps > 0 || !shape.Seekable) {
+	if b.gate != nil && !forced && (opts.MaxBitrateKbps > 0 || !shape.Seekable || wantsCut) {
 		ceiling = b.gate.MaxBitrateKbps(ctx, user)
 	}
 	want := opts.MaxBitrateKbps
@@ -373,6 +411,16 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 			capKbps = 0
 		}
 	}
+	// A player that seeks HLS itself gets the encode as one item's HLS
+	// presentation rather than a live stream it could only move inside
+	// by minting a cut; failing that, the live stream as ever.
+	if opts.HLS && !forced && !opts.CutOriginal && !shape.Seekable {
+		if format := hlsFormatFor(shape, b.caps); format != "" {
+			if info, ok := b.itemRenderingFor(ctx, user, apiItemPID, src, opts, format, capKbps, gainDB, boost); ok {
+				return info, nil
+			}
+		}
+	}
 	params := url.Values{}
 	if opts.FilePID != "" {
 		params.Set("f", opts.FilePID)
@@ -383,12 +431,32 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 	if forced {
 		params.Set("fmt", force)
 	}
-	if capKbps > 0 {
-		// The capped encode rides the same closed format hint the device
-		// paths use, plus the cap itself; both are bound into the token,
-		// and the fetch clamps a lossy encode to the live ceiling.
+	// An original is the client's to seek, so a cut never touches one,
+	// unless the caller can ask for nothing but an offset. Then what is
+	// still a direct play after the cap is encoded as a cap at its own
+	// bitrate would encode it, lossless kept lossless: a lossy encode at
+	// the original's own rate, or the top of the range where it has none.
+	br, encode := capKbps, capKbps > 0
+	if wantsCut && shape.Seekable && !forced {
+		shape, encode, br = originalCutShape(src, b.caps), true, 0
+		if lossyBitrateFormats[shape.Format] {
+			br = MaxStreamBitrateKbps
+			if !lossless(src.Codec) && src.BitrateKbps > 0 {
+				br = min(max(src.BitrateKbps, MinStreamBitrateKbps), MaxStreamBitrateKbps)
+			}
+		}
+	}
+	if encode {
+		// An encode the mint chose rides the same closed format hint the
+		// device paths use, marked as one (enc): a format naming what the
+		// file holds is otherwise a copy of it. The rate rides beside it
+		// where it has one. All of it is bound into the token, and the
+		// fetch holds a lossy encode to the live ceiling.
 		params.Set("fmt", shape.Format)
-		params.Set("br", strconv.Itoa(capKbps))
+		params.Set("enc", "1")
+		if br > 0 {
+			params.Set("br", strconv.Itoa(br))
+		}
 	}
 	shapeKey := streamShape(params)
 	token, exp := b.tokens.MintFor(auth.MediaClaims{
@@ -398,6 +466,13 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 	if shapeKey != "" {
 		streamURL += "&" + shapeKey
 	}
+	var offset int64
+	if cutSecs > 0 && !shape.Seekable {
+		// Outside the token on purpose: moving the cut costs the client
+		// what minting again would.
+		streamURL += "&t=" + strconv.FormatInt(cutSecs, 10)
+		offset = cutSecs * 1000
+	}
 	return PlayInfo{
 		URL:                streamURL,
 		MimeType:           shape.MimeType,
@@ -406,16 +481,37 @@ func (b *Bridge) PlayInfoForSource(ctx context.Context, user, apiItemPID string,
 		ExpiresAt:          exp,
 		VoiceBoost:         boost,
 		AppliedBitrateKbps: capKbps,
+		StartOffsetMS:      offset,
 	}, nil
 }
 
+// originalCutShape is the encode an original takes when it has to be cut
+// rather than played as it is: what a cap at its own bitrate would pick,
+// except that lossless stays lossless. A lossy source keeps its codec
+// where the engine writes it under a format hint, else Opus or the MP3
+// floor.
+func originalCutShape(src Source, caps *client.Caps) Shape {
+	pick := encodeShape
+	if lossless(src.Codec) && hasOutput(caps, "flac") {
+		return pick("flac")
+	}
+	if own := strings.ToLower(src.Codec); lossyBitrateFormats[own] && forceFormats[own] != "" && hasOutput(caps, own) {
+		return pick(own)
+	}
+	if hasOutput(caps, "opus") {
+		return pick("opus")
+	}
+	return pick("mp3")
+}
+
 // streamShape is the canonical form of the stream parameters a token
-// binds: the four the mint chooses, sorted and escaped, so a URL with
-// any of them edited, added or dropped no longer matches its token. A
-// seek (t) and a Range stay free.
+// binds: the ones the mint chooses (join only for a book played as one
+// stream), sorted and escaped, so a URL with any of them edited, added
+// or dropped no longer matches its token. A seek (t) and a Range stay
+// free.
 func streamShape(q url.Values) string {
 	v := url.Values{}
-	for _, k := range []string{"f", "vb", "fmt", "br"} {
+	for _, k := range []string{"f", "vb", "fmt", "br", "enc", "join"} {
 		if x := q.Get(k); x != "" {
 			v.Set(k, x)
 		}
@@ -628,6 +724,10 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	if !b.authorize(r.Context(), w, claims) {
 		return
 	}
+	if q.Get("join") != "" {
+		b.serveJoined(w, r, claims.User, pid, q)
+		return
+	}
 	user := claims.User
 	src, err := b.resolver.StreamSource(r.Context(), pid, q.Get("f"))
 	if err != nil {
@@ -655,13 +755,14 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 		// "not virtual and not boosted", and either of those means the
 		// source is not what would be served.
 		//
-		// A cap on the URL is what says this hint is not that hint: the
-		// mint pairs br= with the format it chose for a real encode, and
-		// on a source that happens to already be in that format the
-		// name alone is indistinguishable. Reading it as a copy served
-		// the original bytes at the source's own bitrate, uncharged,
-		// while the client had been told a smaller number.
-		copyOfSource := shape.Seekable && q.Get("br") == "" && SameAsSource(src, f)
+		// The mint's encode marker (enc) is what says this hint is not
+		// that hint: it marks a format the mint chose for a real encode (a
+		// cap, a cut of an original), and on a source that happens to
+		// already be in that format the name alone is indistinguishable.
+		// Reading it as a copy served the original bytes at the source's
+		// own bitrate, uncharged, while the client had been told a
+		// smaller number.
+		copyOfSource := shape.Seekable && q.Get("enc") == "" && SameAsSource(src, f)
 		if known && hasOutput(b.caps, f) && !copyOfSource {
 			shape.Format = f
 			// Clear Seekable so this stream routes through the admission control
@@ -672,6 +773,13 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 			// which a forced format is not.
 			shape.Seekable = false
 		}
+	}
+	// Checked once the shape is final and before admission, so a cut that
+	// is refused takes no slot.
+	cut, _, err := streamCut(q.Get("t"), shape, src.DurationMS)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid-request", err.Error())
+		return
 	}
 	// Session limits apply only when the stream engages the engine;
 	// a seekable shape is a passthrough of the original bytes.
@@ -692,33 +800,16 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 		params.Set("dynamics", "voice")
 		params.Set("gain", strconv.FormatFloat(gainDB, 'f', 1, 64))
 	}
-	// Time-based seek for non-direct paths: clients pass t= through the
-	// tokenized URL and the bridge forwards it.
-	if t := q.Get("t"); t != "" {
-		params.Set("t", t)
+	if cut != "" {
+		params.Set("t", cut)
 	}
-	// The bitrate a lossy encode is bounded to: the smaller of the URL's
-	// own cap (the mint's choice, bound into the token, so an edited br
-	// never got this far) and the account's live ceiling, which may have
-	// dropped since the mint. Only for shapes that engage the engine: a
-	// seekable shape is a passthrough of the original bytes, and
-	// honoring br there would hand out an un-admitted transcode of a
+	// The bitrate a lossy encode is bounded to. Only for shapes that engage
+	// the engine: a seekable shape is a passthrough of the original bytes,
+	// and honoring br there would hand out an un-admitted transcode of a
 	// stream that was never charged as one - which is also why a direct
 	// play reads no ceiling at all.
 	if !shape.Seekable && lossyBitrateFormats[shape.Format] {
-		bitrate := 0
-		if br, err := strconv.Atoi(q.Get("br")); err == nil &&
-			br >= MinStreamBitrateKbps && br <= MaxStreamBitrateKbps {
-			bitrate = br
-		}
-		ceiling := 0
-		if b.gate != nil {
-			ceiling = b.gate.MaxBitrateKbps(r.Context(), user)
-		}
-		if ceiling > 0 && (bitrate == 0 || ceiling < bitrate) {
-			bitrate = ceiling
-		}
-		if bitrate > 0 {
+		if bitrate := b.heldBitrate(r.Context(), user, q.Get("br")); bitrate > 0 {
 			params.Set("bitrate", strconv.Itoa(bitrate))
 		}
 	}
@@ -726,6 +817,58 @@ func (b *Bridge) ServeStream(w http.ResponseWriter, r *http.Request) {
 	// Stash the upstream query for the Rewrite hook.
 	r = r.WithContext(context.WithValue(r.Context(), upstreamQueryKey{}, params.Encode()))
 	b.proxy.ServeHTTP(w, r)
+}
+
+// heldBitrate is the bitrate a lossy encode is held to: the smaller of the
+// URL's own (raw, the mint's choice, bound into the token, so an edited br
+// never got this far) and the account's live ceiling, which may have
+// dropped since the mint. Zero leaves the engine its own rate.
+func (b *Bridge) heldBitrate(ctx context.Context, user, raw string) int {
+	bitrate := 0
+	if br, err := strconv.Atoi(raw); err == nil && br >= MinStreamBitrateKbps && br <= MaxStreamBitrateKbps {
+		bitrate = br
+	}
+	if b.gate != nil {
+		if ceiling := b.gate.MaxBitrateKbps(ctx, user); ceiling > 0 && (bitrate == 0 || ceiling < bitrate) {
+			bitrate = ceiling
+		}
+	}
+	return bitrate
+}
+
+// maxCutSeconds is the furthest cut the engine accepts.
+const maxCutSeconds = 1e9
+
+// streamCut validates a fetch's t, the seconds into the item at which the
+// engine starts the stream, and answers the spelling to forward (empty for
+// no cut) and the milliseconds it cuts. A cut is the engine's to make, so t
+// rides only a shape that already engages it: on a direct play it would
+// turn the original into an unadmitted decode. At or past the end clamps
+// to the item's last millisecond, as the mint does, since the engine reads
+// the end itself as an empty stream, which a player takes for the item
+// ending.
+func streamCut(raw string, shape Shape, durationMS int64) (string, int64, error) {
+	if raw == "" {
+		return "", 0, nil
+	}
+	if shape.Seekable {
+		return "", 0, errors.New("t applies only to a stream the engine cuts; seek this one with a range request")
+	}
+	secs, err := strconv.ParseFloat(raw, 64)
+	if err != nil || math.IsNaN(secs) || math.IsInf(secs, 0) || secs < 0 {
+		return "", 0, errors.New("t must be a finite, non-negative number of seconds")
+	}
+	limit := maxCutSeconds
+	if durationMS > 0 {
+		limit = float64(durationMS-1) / 1000
+	}
+	// Whole milliseconds, one spelling per cut: each spelling is its own
+	// encode in the engine.
+	ms := math.Round(min(secs, limit) * 1000)
+	if ms == 0 {
+		return "", 0, nil
+	}
+	return strconv.FormatFloat(ms/1000, 'f', -1, 64), int64(ms), nil
 }
 
 // ServeShareStream streams one item for an anonymous share listener.
@@ -759,9 +902,9 @@ func (b *Bridge) ServeShareStream(w http.ResponseWriter, r *http.Request, apiIte
 	params.Set("format", shape.Format)
 	params.Set("id", fmt.Sprintf("%d-%d", src.Size, src.MTimeNS))
 	setWindow(params, src)
-	if b.gate != nil && !shape.Seekable && lossyBitrateFormats[shape.Format] {
-		if cap := b.gate.MaxBitrateKbps(r.Context(), ownerUserID); cap > 0 {
-			params.Set("bitrate", strconv.Itoa(cap))
+	if !shape.Seekable && lossyBitrateFormats[shape.Format] {
+		if bitrate := b.heldBitrate(r.Context(), ownerUserID, ""); bitrate > 0 {
+			params.Set("bitrate", strconv.Itoa(bitrate))
 		}
 	}
 	r = r.WithContext(context.WithValue(r.Context(), upstreamQueryKey{}, params.Encode()))
@@ -840,23 +983,123 @@ func (b *Bridge) rewrite(pr *httputil.ProxyRequest) {
 	pr.Out.Header.Set("X-API-Key", b.apiKey)
 }
 
-// modifyResponse rewrites the sidecar's 410 source-changed into the
-// API's structured stream-stale error, the signal clients re-request
-// play-info on.
+// modifyResponse answers every refusal of the engine's in the API's own
+// envelope (engineRefusal): 410 source-changed is stream-stale, the signal
+// to re-request play-info, 503 overloaded is transcode-limited, so a
+// client has one busy code whichever limit was reached, and the engine's
+// body, which names the file it could not open, never passes. Every
+// request through here carries this server's key, so a refused one is
+// logged: only an administrator can fix it.
 func (b *Bridge) modifyResponse(resp *http.Response) error {
-	if resp.StatusCode != http.StatusGone {
+	if resp.StatusCode < http.StatusBadRequest {
 		return nil
 	}
+	if keyRefused(resp) {
+		b.log.Error("the streaming engine refused this server's API key: --flow-api-key (WAXDECK_FLOW_API_KEY) must be one the engine accepts (WAXFLOW_API_KEYS)",
+			"status", resp.StatusCode)
+	}
+	engine := resp.Header
+	status, code, message := engineRefusal(resp, true)
+	replaceWithError(resp, status, code, message)
+	refusalHeaders(resp.Header, engine, status)
+	return nil
+}
+
+// engineRefusal is what the API answers for a refusal of the engine's, in
+// place of the engine's own body, which names the file it could not open
+// and speaks the engine's codes. The status a player acts on stays, save
+// three. A credential refused is the URL's to renew, as a lapsed token
+// is, where the engine judged the signature the URL carries (an HLS
+// child); where it judged this server's key, the server is misconfigured,
+// which no fresh URL cures, so it answers as the engine out of reach does
+// (keyRefused). And a busy engine is the busy code a stream answers where
+// item is set (a stream, or one item's rendering). A timeline's stays a
+// 503, which hls.js retries and the web player does not read as the
+// session cap.
+func engineRefusal(resp *http.Response, item bool) (status int, code, message string) {
+	status, code, message = resp.StatusCode, "internal", "the streaming engine could not serve this; retry shortly"
+	busy := sidecarBusy(resp)
+	switch {
+	case busy && item:
+		return http.StatusTooManyRequests, "transcode-limited", "the streaming engine is busy; retry shortly"
+	case busy:
+		message = "the streaming engine is busy; retry shortly"
+	case status == http.StatusGone:
+		code, message = "stream-stale", "the stream no longer matches the file on disk; re-request it"
+	case keyRefused(resp):
+		return http.StatusBadGateway, "internal", "the streaming engine refused this server's credentials"
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		return http.StatusUnauthorized, "unauthenticated", "this stream URL is no longer valid; re-request it"
+	case status == http.StatusNotFound:
+		code, message = "not-found", "this stream is no longer available; re-request it"
+	case status == http.StatusRequestedRangeNotSatisfiable:
+		code, message = "invalid-request", "the range is outside the stream"
+	case status < http.StatusInternalServerError:
+		code, message = "invalid-request", "the streaming engine would not take this request"
+	}
+	return status, code, message
+}
+
+// refusalHeaders carries what an engine refusal says beside its body into
+// the API's answer: when to come back, and a range refusal's length.
+func refusalHeaders(dst, engine http.Header, status int) {
+	if v := engine.Get("Retry-After"); v != "" && (status == http.StatusTooManyRequests || status == http.StatusServiceUnavailable) {
+		dst.Set("Retry-After", v)
+	}
+	if v := engine.Get("Content-Range"); v != "" && status == http.StatusRequestedRangeNotSatisfiable {
+		dst.Set("Content-Range", v)
+	}
+}
+
+// replaceWithError swaps a proxied response for an API error envelope.
+func replaceWithError(resp *http.Response, status int, code, message string) {
 	if resp.Body != nil {
 		resp.Body.Close()
 	}
-	body := `{"code":"stream-stale","message":"the stream no longer matches the file on disk; re-request play-info"}` + "\n"
+	body := fmt.Sprintf(`{"code":%q,"message":%q}`+"\n", code, message)
+	resp.StatusCode = status
+	resp.Status = fmt.Sprintf("%d %s", status, http.StatusText(status))
 	resp.ContentLength = int64(len(body))
 	resp.Header = http.Header{}
 	resp.Header.Set("Content-Type", "application/json")
 	resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
 	resp.Body = io.NopCloser(strings.NewReader(body))
-	return nil
+}
+
+// keyRefused reports whether resp is the engine refusing the API key this
+// server presented: a credential refused on a request that carried the
+// key, since the engine passes any request whose key it holds whatever
+// else the URL says.
+func keyRefused(resp *http.Response) bool {
+	return (resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden) &&
+		resp.Request != nil && resp.Request.Header.Get("X-API-Key") != ""
+}
+
+// sidecarBusy reports whether resp is the engine refusing for want of a
+// live slot: its own 503 overloaded.
+func sidecarBusy(resp *http.Response) bool {
+	return resp.StatusCode == http.StatusServiceUnavailable && sidecarCode(resp) == "overloaded"
+}
+
+// sidecarCode reads the code out of a sidecar error envelope and leaves
+// the body readable whole, for a refusal that passes through as it is.
+func sidecarCode(resp *http.Response) string {
+	if resp.Body == nil {
+		return ""
+	}
+	orig := resp.Body
+	head, _ := io.ReadAll(io.LimitReader(orig, 64<<10))
+	resp.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(head), orig), orig}
+	var e struct {
+		Code string `json:"code"`
+	}
+	if json.Unmarshal(head, &e) != nil {
+		return ""
+	}
+	return e.Code
 }
 
 func writeJSONError(w http.ResponseWriter, status int, code, message string) {

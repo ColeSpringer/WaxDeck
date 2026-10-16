@@ -1,7 +1,11 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:just_audio/just_audio.dart' show PlayerException;
 import 'package:waxdeck_player/waxdeck_player.dart';
+
+import 'scripted_platform.dart';
 
 /// The one decision a failed load feeds: skip past the item, or stand on
 /// the retry pane. Reading it wrong in one direction costs a press, and
@@ -83,6 +87,184 @@ void main() {
     });
   });
 
+  group('on the web', () {
+    // A `MediaError.code`, read with the browser's table on the VM.
+    PlayerException element(int code) => PlayerException(code, 'media', 0);
+
+    ProbeAnswer refused(int status, String code) => ProbeAnswer(
+      StreamProbe.unreachable,
+      StreamRefusal(status: status, code: code),
+    );
+
+    test('a decode error is the file, without asking anybody', () async {
+      expect(mediaFaultOf(element(3), isWeb: true), MediaFault.source);
+      var asked = false;
+      final read = await probedMediaFailureOf(
+        element(3),
+        '/media/stream?mt=a',
+        isWeb: true,
+        ask: (_, {segmentAt}) async {
+          asked = true;
+          return ProbeAnswer.unreachable;
+        },
+      );
+      expect(read.fault, MediaFault.source);
+      expect(asked, isFalse);
+    });
+
+    test('a failed first fetch is asked about, never assumed the file', () {
+      // Code 4 is the HTML spec's answer for any first fetch that did not
+      // produce media: a 401, a 429, a 502, a browser that is offline.
+      expect(mediaFaultOf(element(4), isWeb: true), MediaFault.transport);
+    });
+
+    test(
+      'a URL that serves bytes the browser cannot decode is the file',
+      () async {
+        final read = await probedMediaFailureOf(
+          element(4),
+          '/media/stream?mt=a',
+          isWeb: true,
+          ask: answering(const ProbeAnswer(StreamProbe.answered)),
+        );
+        expect(read.fault, MediaFault.source);
+        expect(read.refusal, isNull);
+      },
+    );
+
+    test('a first fetch nothing answered is the transport', () async {
+      final read = await probedMediaFailureOf(
+        element(4),
+        '/media/stream?mt=a',
+        isWeb: true,
+        ask: answering(const ProbeAnswer(StreamProbe.unreachable)),
+      );
+      expect(read.fault, MediaFault.transport);
+    });
+
+    test('the transcode cap is a refusal, never the file', () async {
+      final read = await probedMediaFailureOf(
+        element(4),
+        '/media/stream?mt=a',
+        isWeb: true,
+        ask: answering(refused(429, 'transcode-limited')),
+      );
+      expect(read.fault, MediaFault.transport);
+      expect(read.refusal?.code, 'transcode-limited');
+    });
+
+    test('the engine being away is a refusal too', () async {
+      final read = await probedMediaFailureOf(
+        element(4),
+        '/media/stream?mt=a',
+        isWeb: true,
+        ask: answering(refused(502, 'internal')),
+      );
+      expect(read.fault, MediaFault.transport);
+      expect(read.refusal?.engineDown, isTrue);
+    });
+
+    test('a network error whose URL still answers is the transport', () async {
+      // The element said network. A URL that answers afterwards is a
+      // connection that dropped and came back, not a file to step past.
+      final read = await probedMediaFailureOf(
+        element(2),
+        '/media/stream?mt=a',
+        isWeb: true,
+        ask: answering(const ProbeAnswer(StreamProbe.answered)),
+      );
+      expect(read.fault, MediaFault.transport);
+    });
+
+    test(
+      'a network error the server explains as the file is the file',
+      () async {
+        final read = await probedMediaFailureOf(
+          element(2),
+          '/media/stream?mt=a',
+          isWeb: true,
+          ask: answering(const ProbeAnswer(StreamProbe.unplayable)),
+        );
+        expect(read.fault, MediaFault.source);
+      },
+    );
+
+    test('a network error met by an expired token says so', () async {
+      final read = await probedMediaFailureOf(
+        element(2),
+        '/media/stream?mt=a',
+        isWeb: true,
+        ask: answering(refused(401, 'unauthenticated')),
+      );
+      expect(read.fault, MediaFault.transport);
+      expect(read.refusal?.stale, isTrue);
+    });
+  });
+
+  group('mid-play', () {
+    // What fails partway through is far more often the way to a file than
+    // a file that decoded until then, so an answering URL is no evidence
+    // against it - whatever code the platform gave.
+    setUp(() => debugDefaultTargetPlatformOverride = TargetPlatform.android);
+
+    test('a renderer failure is weighed like any other', () async {
+      // TYPE_RENDERER covers an audio sink that went away as much as a
+      // decoder that would not take the stream.
+      final read = await probedMediaFailureOf(
+        PlayerException(1, 'AudioTrack write failed', null),
+        'http://x/a.flac',
+        ask: answering(const ProbeAnswer(StreamProbe.answered)),
+        isWeb: false,
+        midPlay: true,
+      );
+      expect(read.fault, MediaFault.transport);
+    });
+
+    test('a decode error in the browser is weighed the same way', () async {
+      final read = await probedMediaFailureOf(
+        PlayerException(3, 'decode', 0),
+        '/media/stream?mt=a',
+        ask: answering(const ProbeAnswer(StreamProbe.answered)),
+        isWeb: true,
+        midPlay: true,
+      );
+      expect(read.fault, MediaFault.transport);
+    });
+
+    test('the server calling the file unplayable is still the file', () async {
+      final read = await probedMediaFailureOf(
+        PlayerException(1, 'AudioTrack write failed', null),
+        'http://x/a.flac',
+        ask: answering(const ProbeAnswer(StreamProbe.unplayable)),
+        isWeb: false,
+        midPlay: true,
+      );
+      expect(read.fault, MediaFault.source);
+    });
+
+    test('a downloaded file that stops decoding is the file', () async {
+      // Nothing stands between the player and a file on disk, so one
+      // that is there and will not decode is the bytes.
+      final dir = Directory.systemTemp.createTempSync('media_fault');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File('${dir.path}/a.flac')..writeAsBytesSync(const [0]);
+      final read = await probedMediaFailureOf(
+        PlayerException(0, 'Source error', null),
+        file.uri.toString(),
+        isWeb: false,
+        midPlay: true,
+      );
+      expect(read.fault, MediaFault.source);
+      final gone = await probedMediaFailureOf(
+        PlayerException(0, 'Source error', null),
+        '${dir.uri}absent.flac',
+        isWeb: false,
+        midPlay: true,
+      );
+      expect(gone.fault, MediaFault.transport);
+    });
+  });
+
   group('the stream probe', () {
     // Android is where the table has no verdict to give, so it is
     // where the probe's gate matters most.
@@ -94,13 +276,56 @@ void main() {
     test(
       'a URL that answers turns an unexplained failure into the file',
       () async {
+        final read = await probedMediaFailureOf(
+          sourceError(),
+          'http://x/a.mp3',
+          ask: answering(const ProbeAnswer(StreamProbe.answered)),
+        );
+        expect(read.fault, MediaFault.source);
+      },
+    );
+
+    test(
+      'an HLS presentation that answers says nothing against the file',
+      () async {
+        // A presentation fails at its segments (an engine with no slot
+        // free, a worker that failed), and the one holding where it
+        // failed is what is asked: an answer there is no evidence against
+        // the file, while the server calling it unplayable is.
+        const master = 'http://x/media/hls/master.m3u8?it=k&mt=t';
+        final asked = <Duration?>[];
+        StreamAsk finding(StreamProbe found) => (_, {segmentAt}) async {
+          asked.add(segmentAt);
+          return ProbeAnswer(found);
+        };
+        final answered = await probedMediaFailureOf(
+          sourceError(),
+          master,
+          ask: finding(StreamProbe.answered),
+          isWeb: false,
+          presentation: true,
+          at: const Duration(seconds: 9),
+        );
+        expect(answered.fault, MediaFault.transport);
+        final unplayable = await probedMediaFailureOf(
+          sourceError(),
+          master,
+          ask: finding(StreamProbe.unplayable),
+          isWeb: false,
+          presentation: true,
+          at: const Duration(seconds: 9),
+        );
+        expect(unplayable.fault, MediaFault.source);
+        // A hair past where it stopped: that is where the segment it
+        // could not fetch begins.
         expect(
-          await probedMediaFaultOf(
-            sourceError(),
-            'http://x/a.mp3',
-            probe: (_) async => StreamProbe.answered,
+          asked,
+          everyElement(
+            allOf(
+              greaterThan(const Duration(seconds: 9)),
+              lessThan(const Duration(seconds: 10)),
+            ),
           ),
-          MediaFault.source,
         );
       },
     );
@@ -111,42 +336,36 @@ void main() {
       // verdict twice. Standing on the retry pane here offers a press
       // that cannot come out differently, and stops a queue that has
       // nothing wrong with the rest of it.
-      expect(
-        await probedMediaFaultOf(
-          sourceError(),
-          'http://x/a.flac',
-          probe: (_) async => StreamProbe.unplayable,
-        ),
-        MediaFault.source,
+      final read = await probedMediaFailureOf(
+        sourceError(),
+        'http://x/a.flac',
+        ask: answering(const ProbeAnswer(StreamProbe.unplayable)),
       );
+      expect(read.fault, MediaFault.source);
     });
 
     test('a URL that reaches nothing leaves transport standing', () async {
-      expect(
-        await probedMediaFaultOf(
-          sourceError(),
-          'http://x/a.mp3',
-          probe: (_) async => StreamProbe.unreachable,
-        ),
-        MediaFault.transport,
+      final read = await probedMediaFailureOf(
+        sourceError(),
+        'http://x/a.mp3',
+        ask: answering(ProbeAnswer.unreachable),
       );
+      expect(read.fault, MediaFault.transport);
     });
 
     test('a verdict from the table is never second-guessed', () async {
       // TYPE_RENDERER already says the file; a probe could only unsay
       // it, and it must not be spent at all.
       var asked = false;
-      expect(
-        await probedMediaFaultOf(
-          PlayerException(1, 'Decoder init failed', null),
-          'http://x/a.mp3',
-          probe: (_) async {
-            asked = true;
-            return StreamProbe.unreachable;
-          },
-        ),
-        MediaFault.source,
+      final read = await probedMediaFailureOf(
+        PlayerException(1, 'Decoder init failed', null),
+        'http://x/a.mp3',
+        ask: (_, {segmentAt}) async {
+          asked = true;
+          return ProbeAnswer.unreachable;
+        },
       );
+      expect(read.fault, MediaFault.source);
       expect(asked, isFalse);
     });
 
@@ -155,29 +374,40 @@ void main() {
       // failure from anywhere else says nothing about the media, and a
       // URL that answers must not turn it into a skip.
       var asked = false;
-      expect(
-        await probedMediaFaultOf(
-          StateError('not the player'),
-          'http://x/a.mp3',
-          probe: (_) async {
-            asked = true;
-            return StreamProbe.answered;
-          },
-        ),
-        MediaFault.transport,
+      final read = await probedMediaFailureOf(
+        StateError('not the player'),
+        'http://x/a.mp3',
+        ask: (_, {segmentAt}) async {
+          asked = true;
+          return const ProbeAnswer(StreamProbe.answered);
+        },
       );
+      expect(read.fault, MediaFault.transport);
       expect(asked, isFalse);
     });
 
-    test('a probe that breaks leaves transport standing', () async {
-      expect(
-        await probedMediaFaultOf(
-          sourceError(),
-          'http://x/a.mp3',
-          probe: (_) => throw StateError('probe broke'),
+    test('a refusal the probe read rides along with the fault', () async {
+      final read = await probedMediaFailureOf(
+        sourceError(),
+        'http://x/a.mp3',
+        ask: answering(
+          const ProbeAnswer(
+            StreamProbe.unreachable,
+            StreamRefusal(status: 429, code: 'transcode-limited'),
+          ),
         ),
-        MediaFault.transport,
       );
+      expect(read.fault, MediaFault.transport);
+      expect(read.refusal?.code, 'transcode-limited');
+    });
+
+    test('a probe that breaks leaves transport standing', () async {
+      final read = await probedMediaFailureOf(
+        sourceError(),
+        'http://x/a.mp3',
+        ask: (_, {segmentAt}) => throw StateError('probe broke'),
+      );
+      expect(read.fault, MediaFault.transport);
     });
   });
 }

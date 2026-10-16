@@ -275,6 +275,14 @@ class FakeRepository implements WaxDeckRepository {
   /// The maxBitrateKbps each [getPlayInfo] call carried, in order.
   final List<int?> playInfoMaxBitrates = [];
 
+  /// The hls each [getPlayInfo] call carried, in order.
+  final List<bool?> playInfoHls = [];
+
+  /// Whether a call that says it plays HLS is handed a re-encode as the
+  /// item's own HLS presentation; false answers it as a server whose
+  /// engine renders no HLS does.
+  bool rendersHls = true;
+
   /// Show pids [getPodcast] was asked for, in order.
   final List<String> getPodcastCalls = [];
   final List<String> importedOpml = [];
@@ -476,6 +484,21 @@ class FakeRepository implements WaxDeckRepository {
   Completer<void>? listUploadsGate;
   Completer<void>? listToolTasksGate;
 
+  /// Pids every listing drops after it has cut the page, with the cursor
+  /// still counting them: what the server does with rows the caller's
+  /// content settings refuse, which the listing contract allows. A page
+  /// can come back short, or empty, and still carry a cursor.
+  final Set<String> hiddenFromListings = {};
+
+  /// Every [listItems] call, browse fallthroughs included, in call order.
+  final List<({MediaType? mediaType, String? cursor, int? limit})>
+  listItemsCalls = [];
+
+  List<ItemSummary> _visible(List<ItemSummary> items) => <ItemSummary>[
+    for (final item in items)
+      if (!hiddenFromListings.contains(item.pid)) item,
+  ];
+
   @override
   Future<ItemPage> listItems({
     MediaType? mediaType,
@@ -484,6 +507,7 @@ class FakeRepository implements WaxDeckRepository {
     String? cursor,
     int? limit,
   }) async {
+    listItemsCalls.add((mediaType: mediaType, cursor: cursor, limit: limit));
     final error = listError;
     if (error != null) throw error;
     await listItemsGate?.future;
@@ -504,7 +528,7 @@ class FakeRepository implements WaxDeckRepository {
     final pageSize = limit ?? 100;
     final end = (start + pageSize).clamp(0, filtered.length);
     return ItemPage(
-      items: filtered.sublist(start.clamp(0, filtered.length), end),
+      items: _visible(filtered.sublist(start.clamp(0, filtered.length), end)),
       nextCursor: end < filtered.length ? '$end' : null,
     );
   }
@@ -584,6 +608,12 @@ class FakeRepository implements WaxDeckRepository {
   /// can be held loading while a test looks at what it draws meanwhile.
   Completer<void>? browseGate;
 
+  /// A discovery list scripted page by page, answered by cursor index: a
+  /// null cursor reads the first page, `'1'` the second. Each page keeps
+  /// the cursor it was written with, so a list can answer two empty pages
+  /// that continue and then a full one. Ahead of [browseLists].
+  final Map<DiscoveryList, List<ItemPage>> browsePages = {};
+
   @override
   Future<ItemPage> browse(
     DiscoveryList list, {
@@ -605,18 +635,25 @@ class FakeRepository implements WaxDeckRepository {
         message: 'cursor was issued for another scope',
       );
     }
+    if (browsePages[list] case final pages?) {
+      final page = pages[cursor == null ? 0 : int.parse(cursor)];
+      return ItemPage(items: _visible(page.items), nextCursor: page.nextCursor);
+    }
     if (list == DiscoveryList.recentlyPlayed &&
         !browseLists.containsKey(list)) {
       final item = recentlyPlayed;
       return ItemPage(items: item == null ? const [] : [item]);
     }
+    if (list == DiscoveryList.inProgress && !browseLists.containsKey(list)) {
+      return _page(_inProgress(mediaType), cursor: cursor, limit: limit);
+    }
     final scripted = browseLists[list];
     if (scripted != null) {
       return ItemPage(
-        items: <ItemSummary>[
+        items: _visible(<ItemSummary>[
           for (final item in scripted)
             if (mediaType == null || item.mediaType == mediaType) item,
-        ],
+        ]),
       );
     }
     final page = await listItems(
@@ -632,6 +669,43 @@ class FakeRepository implements WaxDeckRepository {
       items: page.items,
       nextCursor: page.nextCursor,
       seed: seed ?? randomSeed,
+    );
+  }
+
+  /// The in-progress list as the server keeps it, read off this fake's
+  /// play states: a saved position on something unfinished, a track only
+  /// once a play of it has counted, most recently progressed first. A
+  /// state with no stamp sorts after those with one.
+  List<ItemSummary> _inProgress(MediaType? mediaType) {
+    bool held(ItemSummary item) =>
+        (mediaType == null || item.mediaType == mediaType) &&
+        (playPositions[item.pid] ?? 0) > 0 &&
+        !finishedPids.contains(item.pid) &&
+        (item.mediaType != MediaType.music ||
+            playStateLastPlayedAt.containsKey(item.pid));
+    final stamped =
+        <ItemSummary>[
+          for (final item in libraryItems)
+            if (held(item) && playStateUpdatedAt.containsKey(item.pid)) item,
+        ]..sort(
+          (a, b) =>
+              playStateUpdatedAt[b.pid]!.compareTo(playStateUpdatedAt[a.pid]!),
+        );
+    return <ItemSummary>[
+      ...stamped,
+      for (final item in libraryItems)
+        if (held(item) && !playStateUpdatedAt.containsKey(item.pid)) item,
+    ];
+  }
+
+  /// One page of [items] at [cursor], the index-cursor shape every
+  /// listing here answers with.
+  ItemPage _page(List<ItemSummary> items, {String? cursor, int? limit}) {
+    final start = cursor == null ? 0 : int.parse(cursor);
+    final end = (start + (limit ?? 100)).clamp(0, items.length);
+    return ItemPage(
+      items: _visible(items.sublist(start.clamp(0, items.length), end)),
+      nextCursor: end < items.length ? '$end' : null,
     );
   }
 
@@ -782,18 +856,58 @@ class FakeRepository implements WaxDeckRepository {
   final Map<String, String> itemDetailMbid = {};
   final Map<String, String> itemDetailIsrc = {};
 
+  /// The clock a minted play-info's expiry is counted from; the wall
+  /// clock when null.
+  DateTime Function()? playInfoClock;
+
+  /// How long a minted play-info's token is good for.
+  Duration playInfoLifetime = const Duration(minutes: 5);
+
+  /// Numbers each mint's token (`mt=1`, `mt=2`, ...) rather than reusing
+  /// one, so a re-mint shows up as a different URL.
+  bool numberMints = false;
+  int _mints = 0;
+
+  /// Failures for the next [getPlayInfo] calls, first one first; a null
+  /// entry lets that call answer.
+  final List<Object?> playInfoFailures = [];
+
+  String _token() => numberMints ? '${++_mints}' : 'test-token';
+
+  DateTime _mintExpiry() =>
+      (playInfoClock?.call() ?? DateTime.now()).toUtc().add(playInfoLifetime);
+
   @override
   Future<PlayInfo> getPlayInfo(
     String pid, {
     int? positionMs,
     bool? voiceBoost,
     int? maxBitrateKbps,
+    bool? hls,
   }) async {
     final error = playInfoError;
     if (error != null) throw error;
     playInfoCalls.add((pid: pid, positionMs: positionMs));
     playInfoMaxBitrates.add(maxBitrateKbps);
+    playInfoHls.add(hls);
     await playInfoGate?.future;
+    if (playInfoFailures.isNotEmpty) {
+      final failure = playInfoFailures.removeAt(0);
+      if (failure != null) throw failure;
+    }
+    // A re-encode for a caller that plays HLS is the item's own HLS
+    // presentation: seekable, and never cut.
+    final presents = hls == true && rendersHls;
+    // What the server does with a position on a stream it cannot range:
+    // cuts it there, floored to the second, and says where.
+    ({String query, int offsetMs}) cutAt(int? atMs, {required bool seekable}) {
+      if (seekable || atMs == null || atMs < 1000) {
+        return (query: '', offsetMs: 0);
+      }
+      final seconds = atMs ~/ 1000;
+      return (query: '&t=$seconds', offsetMs: seconds * 1000);
+    }
+
     final episode = _findEpisode(pid);
     // Enclosure passthrough: an unfetched episode still
     // resolves, relayed from the feed's own host, and the conflict is
@@ -812,33 +926,66 @@ class FakeRepository implements WaxDeckRepository {
       for (final p in parts) {
         if ((positionMs ?? 0) >= p.startMs) part = p;
       }
+      final boostedBook = voiceBoostPids.contains(pid);
+      final encodedBook = boostedBook || transcodedPids.contains(pid);
+      final seekableBook = !encodedBook || presents;
+      final inPart = (positionMs ?? 0) - part.startMs;
+      // The server's own clamp: into the part when it has a length, and
+      // never before its start.
+      final bookCut = cutAt(
+        part.durationMs > 0
+            ? inPart.clamp(0, part.durationMs - 1)
+            : (inPart < 0 ? 0 : inPart),
+        seekable: seekableBook,
+      );
       return PlayInfo(
         pid: pid,
-        url: '/media/stream?pid=$pid&part=${part.index}&mt=test-token',
-        mimeType: 'audio/mp4',
+        url: encodedBook && presents
+            ? '/media/hls/master.m3u8?it=$pid-${part.index}&mt=${_token()}'
+            : '/media/stream?pid=$pid&part=${part.index}&mt=${_token()}'
+                  '${bookCut.query}',
+        mimeType: encodedBook && presents
+            ? 'application/vnd.apple.mpegurl'
+            : 'audio/mp4',
         durationMs: part.durationMs,
-        seekable: true,
-        expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+        seekable: seekableBook,
+        voiceBoost: boostedBook,
+        expiresAt: _mintExpiry(),
         partIndex: part.index,
         partCount: parts.length,
         partStartMs: part.startMs,
+        startOffsetMs: bookCut.offsetMs,
       );
     }
     final span = playInfoSpans[pid];
     final boosted = voiceBoostPids.contains(pid);
+    // The server clears seekable for anything it encodes live, voice boost
+    // included, so that flag is how a client that asked for no HLS tells
+    // a transcode from a passthrough.
+    final encoded = boosted || transcodedPids.contains(pid);
+    final seekable = !encoded || presents;
+    final durationMs = episode?.durationMs ?? 214000;
+    // As the server does: clamped into the item when it has a length, cut
+    // where asked when a feed gave it none.
+    final cut = cutAt(
+      durationMs > 0 ? positionMs?.clamp(0, durationMs - 1) : positionMs,
+      seekable: seekable,
+    );
     return PlayInfo(
       pid: pid,
-      url: '/media/stream?pid=$pid&mt=test-token',
-      mimeType: 'audio/flac',
-      durationMs: episode?.durationMs ?? 214000,
-      // The server clears seekable for anything it cuts, voice boost
-      // included, so that flag is how a client tells a transcode from a
-      // passthrough.
-      seekable: !boosted && !transcodedPids.contains(pid),
+      url: encoded && presents
+          ? '/media/hls/master.m3u8?it=$pid&mt=${_token()}'
+          : '/media/stream?pid=$pid&mt=${_token()}${cut.query}',
+      mimeType: encoded && presents
+          ? 'application/vnd.apple.mpegurl'
+          : 'audio/flac',
+      durationMs: durationMs,
+      seekable: seekable,
       voiceBoost: boosted,
-      expiresAt: DateTime.now().toUtc().add(const Duration(minutes: 5)),
+      expiresAt: _mintExpiry(),
       spanStartMs: span?.startMs,
       spanEndMs: span?.endMs,
+      startOffsetMs: cut.offsetMs,
     );
   }
 
@@ -985,12 +1132,21 @@ class FakeRepository implements WaxDeckRepository {
   /// write up mid-flight and act around it.
   Completer<void>? putPlayStateGate;
 
+  /// Holds for the next checkpoints, one per call, first one first; a
+  /// null entry lets that call through. A write lands (and is recorded)
+  /// when its hold completes, so a slow write can be made to land late.
+  final List<Completer<void>?> putPlayStateHolds = [];
+
   @override
   Future<void> putPlayState(
     String pid,
     int positionMs, {
     DateTime? recordedAt,
   }) async {
+    final hold = putPlayStateHolds.isEmpty
+        ? null
+        : putPlayStateHolds.removeAt(0);
+    await hold?.future;
     await putPlayStateGate?.future;
     final error = putPlayStateError;
     if (error != null) throw error;
@@ -6313,6 +6469,9 @@ class FakeRepository implements WaxDeckRepository {
     basis: MixBasis.metadata,
   );
   InstantMix instantMixResult = const InstantMix(basis: MixBasis.metadata);
+
+  /// Holds [createInstantMix] open until the test completes it.
+  Completer<void>? instantMixGate;
   SonicPath sonicPathResult = const SonicPath(complete: false);
 
   final List<({String pid, int? limit})> similarTracksCalls = [];
@@ -6353,6 +6512,7 @@ class FakeRepository implements WaxDeckRepository {
       size: size,
       excludePids: List.of(excludePids),
     ));
+    await instantMixGate?.future;
     final error = discoveryError;
     if (error != null) throw error;
     return instantMixResult;

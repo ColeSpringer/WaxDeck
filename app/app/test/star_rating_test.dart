@@ -1,9 +1,14 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/player/item_star_rating_row.dart';
+import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/shell/shell_messages.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'player_host.dart';
 
 void main() {
@@ -126,5 +131,33 @@ void main() {
       'Could not save that change',
     );
     await harness.endPlayback(tester);
+  });
+
+  testWidgets('an item the server cannot find is no change that did not '
+      'stick', (tester) async {
+    // The read failing is nothing the user did: the row stays disabled,
+    // and a save that failed is the one thing its message is for.
+    final repo = FakeRepository()
+      ..getPlayStateError = const WaxDeckApiException(
+        code: 'not-found',
+        message: 'no such item',
+        statusCode: 404,
+      );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [repositoryProvider.overrideWithValue(repo)],
+        child: localizedHost(const Scaffold(body: ItemStarRatingRow(pid: pid))),
+      ),
+    );
+    // Past every retry the read is given.
+    await tester.pump(const Duration(minutes: 2));
+    await tester.pumpAndSettle();
+
+    expect(
+      ProviderScope.containerOf(
+        tester.element(find.byType(ItemStarRatingRow)),
+      ).read(shellMessengerProvider),
+      isNull,
+    );
   });
 }

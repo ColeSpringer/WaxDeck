@@ -15,9 +15,9 @@ import (
 func main() {
 	out := flag.String("out", "", "output directory (required)")
 	preset := flag.String("preset", "default",
-		"spec preset: default (the codec/container matrix), demo (a titled album), conformance (the engine-suite tone), upload (the manual-upload album), upload-folder (the folder-pick album), upload-workbench (the release-workbench album), saf-probe (the Android tree-picker probe folder), cover (an exotic cover image to set by hand), podcast (the default feed), book (the audiobook fixtures), loose-book (an audiobook as plain MP3s), misfiled-book (another, for a library to catalog as music), all")
+		"spec preset: default (the codec/container matrix), demo (a titled album), conformance (the engine-suite tone), long (a ten-second lossless track on its own album), upload (the manual-upload album), upload-folder (the folder-pick album), upload-workbench (the release-workbench album), saf-probe (the Android tree-picker probe folder), cover (an exotic cover image to set by hand), podcast (the preset feeds), book (the audiobook fixtures), loose-book (an audiobook as plain MP3s), misfiled-book (another, for a library to catalog as music), all")
 	baseURL := flag.String("base-url", "http://127.0.0.1:4421",
-		"base URL podcast enclosure links point at (the podcast preset; 'all' includes the feed only when this flag is set explicitly)")
+		"base URL podcast enclosure links point at (the podcast preset; 'all' includes the feeds only when this flag is set explicitly)")
 	flag.Parse()
 	if *out == "" {
 		fmt.Fprintln(os.Stderr, "fixturegen: -out is required")
@@ -46,6 +46,8 @@ func run(out, preset, baseURL string, baseURLSet bool) error {
 		specs = fixtures.DemoLibrary()
 	case "conformance":
 		specs = fixtures.ConformanceMedia()
+	case "long":
+		specs = fixtures.LongTrack()
 	case "upload":
 		specs = fixtures.UploadSources()
 	case "cover":
@@ -85,12 +87,23 @@ func run(out, preset, baseURL string, baseURLSet bool) error {
 	if err != nil {
 		return err
 	}
+	if preset == "conformance" {
+		// The engine suite's HLS group plays the tone as the server
+		// renders one item for a player that plays HLS.
+		masters, err := fixtures.GenerateConformancePresentations(out)
+		for _, m := range masters {
+			fmt.Println(m)
+		}
+		if err != nil {
+			return err
+		}
+	}
 	if preset == "all" {
 		if err := generateBooks(out); err != nil {
 			return err
 		}
-		// The feed's enclosure URLs need a real base, so 'all' only
-		// includes it when the caller said where it will be served.
+		// The feeds' enclosure URLs need a real base, so 'all' only
+		// includes them when the caller said where they will be served.
 		if baseURLSet {
 			if err := generatePodcast(out, baseURL); err != nil {
 				return err
@@ -126,12 +139,11 @@ func generateSafProbe(out string) error {
 }
 
 func generatePodcast(out, baseURL string) error {
-	feedPath, err := fixtures.GeneratePodcastFeed(out, fixtures.DefaultPodcastFeed(baseURL), baseURL)
-	if err != nil {
-		return err
+	feeds, err := fixtures.GeneratePresetFeeds(out, baseURL)
+	for _, p := range feeds {
+		fmt.Println(p)
 	}
-	fmt.Println(feedPath)
-	return nil
+	return err
 }
 
 func generateBooks(out string) error {

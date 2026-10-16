@@ -1,6 +1,7 @@
 /// The WaxDeck-owned audio engine contract.
 library;
 
+import 'stream_probe/verdict.dart';
 import 'timeline/timeline_media.dart';
 
 /// Coarse lifecycle of the loaded media.
@@ -41,23 +42,80 @@ enum MediaFault {
   transport,
 }
 
+/// Media that did not play, as far as a caller acts on it: which half is
+/// at fault, what the plugin said, and the server's own words when they
+/// could be read.
+///
+/// What a load that threw ([MediaLoadException]) and media that failed
+/// after it loaded ([MediaFailure]) have in common, so a caller surfaces
+/// either one, and weighs another attempt at either, the same way.
+abstract interface class MediaTrouble {
+  MediaFault get fault;
+
+  /// What the plugin threw, kept for the log. Never matched on above
+  /// this line - that is what [fault] is for.
+  Object get cause;
+
+  /// The server's own refusal, when one could be read: an expired token,
+  /// the transcode cap, the streaming engine away. Always a
+  /// [MediaFault.transport]: the server answered, so the file is not
+  /// what failed, and its words are what a caller acts on.
+  StreamRefusal? get refusal;
+}
+
 /// A [AudioEnginePort.load] that did not produce playable media.
 ///
 /// The type an engine throws out of `load`, and the only one: an engine
 /// that cannot classify a failure says [MediaFault.transport], because
 /// the cost of reading a bad file as a bad connection is one retry and
 /// the cost of the reverse is a queue skipped past on a flaky network.
-class MediaLoadException implements Exception {
-  const MediaLoadException(this.fault, this.cause);
+class MediaLoadException implements Exception, MediaTrouble {
+  const MediaLoadException(this.fault, this.cause, {this.refusal});
 
+  @override
   final MediaFault fault;
 
-  /// What the plugin threw, kept for the log. Never matched on above
-  /// this line - that is what [fault] is for.
+  @override
   final Object cause;
 
   @override
-  String toString() => 'MediaLoadException(${fault.name}): $cause';
+  final StreamRefusal? refusal;
+
+  @override
+  String toString() =>
+      'MediaLoadException(${fault.name}): $cause'
+      '${refusal == null ? '' : ' $refusal'}';
+}
+
+/// Media that had loaded failed afterwards (see
+/// [AudioEnginePort.mediaFailed]).
+class MediaFailure implements MediaTrouble {
+  const MediaFailure(
+    this.fault,
+    this.cause, {
+    required this.wasPlaying,
+    this.refusal,
+  });
+
+  @override
+  final MediaFault fault;
+
+  @override
+  final Object cause;
+
+  /// Whether it was playing when it failed, or the intent a pause or a
+  /// play made while the failure was being worked out left: the one thing
+  /// a recovery cannot read back, since the engine has stopped by the
+  /// time anyone is told.
+  final bool wasPlaying;
+
+  @override
+  final StreamRefusal? refusal;
+
+  @override
+  String toString() =>
+      'MediaFailure(${fault.name}, wasPlaying: $wasPlaying): $cause'
+      '${refusal == null ? '' : ' $refusal'}';
 }
 
 /// Small, honest facade over whatever audio plugin actually plays sound.
@@ -145,6 +203,11 @@ abstract interface class AudioEnginePort {
   /// A play after the item ended starts it again from the top, which on
   /// some platforms is a fresh load of the same media. A replay that
   /// cannot load throws [MediaLoadException], as [load] does.
+  ///
+  /// A play while a failure of the loaded media is still being worked out
+  /// (before [mediaFailed] says it) starts nothing: the media has failed,
+  /// and the play is the intent the failure carries
+  /// ([MediaFailure.wasPlaying]) to whoever recovers it.
   Future<void> play();
 
   /// Pauses playback, keeping the position.
@@ -191,6 +254,39 @@ abstract interface class AudioEnginePort {
   /// (queue-ended). An item ending into a preloaded one fires
   /// [itemBoundary] instead, never this.
   Stream<void> get completed;
+
+  /// Fires when media that had loaded fails afterwards: a dropped
+  /// connection, a media token that lapsed before the next range request,
+  /// a file that stops decoding part way. A failed [load] throws instead
+  /// and never fires this, and neither does a loaded timeline, whose
+  /// failures arrive as `TimelineAudioEngine.timelineLost` and
+  /// `TimelineAudioEngine.timelineRefused`, which carry what its recovery
+  /// needs.
+  ///
+  /// The engine has stopped by the time this fires, so [playing] reads
+  /// false and [MediaFailure.wasPlaying] carries the intent, the way
+  /// `TimelineAudioEngine.timelineLost` does. An engine may take a moment
+  /// to say what failed (asking the server why): meanwhile it reads
+  /// [EngineProcessingState.loading], never idle, and a [stop], a [load]
+  /// or [dispose] in that moment lets the media go with nothing said
+  /// about it.
+  Stream<MediaFailure> get mediaFailed;
+
+  /// How far the loaded media is buffered, on the same timeline as
+  /// [position]. Never past [duration]. A stream that cannot be
+  /// range-seeked can only move inside this without a reload.
+  Duration get bufferedPosition;
+
+  /// Whether a seek inside what has arrived of a stream that answers no
+  /// range requests lands where it was asked. A browser's media element
+  /// does; ExoPlayer restarts such a stream from its head. Where this is
+  /// false a caller moves on such a stream only by asking for a new one.
+  bool get seeksWithinUnrangedStream;
+
+  /// Whether [load] plays an HLS presentation (a URL whose path ends in
+  /// `.m3u8`) and seeks it anywhere, so a caller can ask the server for
+  /// one in place of a stream it could only move inside by asking again.
+  bool get playsHls;
 
   /// Fires when the platform refused to start playback, carrying
   /// whatever reason it gave.

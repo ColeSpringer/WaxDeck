@@ -265,9 +265,26 @@ void main() {
     });
 
     testWidgets('an album with nothing in it says so', (tester) async {
-      await _pump(tester, const AlbumScreen(pid: 'al-1'), FakeRepository());
+      // The album is there; the caller can see none of its tracks.
+      final repository = FakeRepository()
+        ..albums['al-1'] = const AlbumDetail(pid: 'al-1', title: 'Gullwing');
+      await _pump(tester, const AlbumScreen(pid: 'al-1'), repository);
 
       expect(find.text('Nothing in this album'), findsOneWidget);
+    });
+
+    testWidgets('an album that does not exist is not drawn as an empty album', (
+      tester,
+    ) async {
+      // Its track listing answers an empty page for any key, so a page
+      // built from the listing alone is a fake one.
+      await _pump(tester, const AlbumScreen(pid: 'al-gone'), FakeRepository());
+
+      expect(find.text('Nothing in this album'), findsNothing);
+      expect(find.text('Could not load this album'), findsOneWidget);
+      expect(find.text('That is not here any more.'), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+      expect(_byId(SemanticsIds.entityPlay), findsNothing);
     });
 
     testWidgets('the release identity is drawn where the entity has one', (
@@ -718,6 +735,19 @@ void main() {
       expect(repository.resolvedEntityPids, contains(equals(<String>['ar-1'])));
       expect(find.text('Dom Kennedy'), findsWidgets);
       expect(find.textContaining('feat. Ty Dolla'), findsNothing);
+    });
+
+    testWidgets('an artist that does not exist is not drawn as an empty '
+        'artist', (tester) async {
+      // The listing answers an empty page for any key, and the entity
+      // read drops a pid it cannot answer for.
+      await _pump(tester, const ArtistScreen(pid: 'ar-gone'), FakeRepository());
+
+      expect(find.text('Nothing by this artist'), findsNothing);
+      expect(find.text('Could not load this artist'), findsOneWidget);
+      expect(find.text('That is not here any more.'), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+      expect(_byId(SemanticsIds.entityPlay), findsNothing);
     });
 
     testWidgets('an artist with no card falls back to the placeholder', (

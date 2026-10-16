@@ -50,6 +50,7 @@ class ConnectEndpointController {
   Timer? _reportTimer;
   Timer? _queueSettle;
   StreamSubscription<bool>? _playingSub;
+  ValueListenable<bool>? _opening;
   bool _lastPlaying = false;
   bool _disposed = false;
 
@@ -122,28 +123,35 @@ class ConnectEndpointController {
   }
 
   void _watchEngine() {
-    _playingSub ??= engine.playingStream.listen((playing) {
-      // The subscription lives for the controller's lifetime, but it
-      // only acts while some playback is attached: after a detach the
-      // engine may keep flipping (radio, another surface) and neither
-      // reports nor the heartbeat should follow it.
-      if (queue.snapshot() == null) {
-        _stopReporting(sessionOver: !queue.hasQueue);
-        return;
-      }
-      if (playing != _lastPlaying) {
-        _lastPlaying = playing;
-        _report();
-      }
-      _scheduleHeartbeat();
-    });
+    _playingSub ??= engine.playingStream.listen((_) => _onTransport());
+    // What the app means, beside what the engine does: a load of its own
+    // reads stopped at the engine, and the mirror shows the intent.
+    _opening ??= queue.opening..addListener(_onTransport);
+    _scheduleHeartbeat();
+  }
+
+  void _onTransport() {
+    // The subscription lives for the controller's lifetime, but it only
+    // acts while some playback is attached: after a detach the engine
+    // may keep flipping (radio, another surface) and neither reports nor
+    // the heartbeat should follow it.
+    if (_disposed) return;
+    if (queue.snapshot() == null) {
+      _stopReporting(sessionOver: !queue.hasQueue);
+      return;
+    }
+    final playing = queue.playing;
+    if (playing != _lastPlaying) {
+      _lastPlaying = playing;
+      _report();
+    }
     _scheduleHeartbeat();
   }
 
   void _scheduleHeartbeat() {
     _reportTimer?.cancel();
     _reportTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-      if (engine.playing) _report();
+      if (queue.playing) _report();
     });
   }
 
@@ -192,7 +200,7 @@ class ConnectEndpointController {
     if (withQueue) _queueVersion++;
     _reported = snapshot;
     bus.sessionReport(
-      playing: engine.playing,
+      playing: queue.playing,
       positionMs: snapshot.positionMs,
       index: snapshot.index,
       rate: engine.speed,
@@ -425,12 +433,7 @@ class ConnectEndpointController {
           .toList(growable: false);
 
   Future<void> _activeSeek(Duration position) async {
-    final session = queue.session;
-    if (session == null) {
-      await engine.seek(position);
-      return;
-    }
-    if (!await session.seek(position)) {
+    if (!await queue.seek(position)) {
       // The session announced the failure and is being let go; an ok
       // here would tell the remote its seek worked while this device
       // stands an error pane where the transport was.
@@ -485,6 +488,7 @@ class ConnectEndpointController {
     _stopReporting();
     _queueSettle?.cancel();
     _playingSub?.cancel();
+    _opening?.removeListener(_onTransport);
     endpointId.dispose();
   }
 }

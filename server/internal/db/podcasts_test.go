@@ -106,6 +106,19 @@ func TestSubscriptionRoundTrip(t *testing.T) {
 	if len(shows) != 1 || shows[0] != sub.ShowPID {
 		t.Fatalf("subscribed shows = %v", shows)
 	}
+	// One user's follows, by show alone, in show order.
+	if err := d.UpsertSubscription(ctx, Subscription{
+		UserID: "us-b", ShowPID: "01JZX5N8QW3F4V9T2B7KDSHOW00", CreatedAtNS: 400, UpdatedAtNS: 400,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	followed, err := d.SubscribedShowPIDsByUser(ctx, "us-b")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(followed) != 2 || followed[0] != "01JZX5N8QW3F4V9T2B7KDSHOW00" || followed[1] != sub.ShowPID {
+		t.Fatalf("us-b follows %v, want SHOW00 then %s", followed, sub.ShowPID)
+	}
 
 	existed, err := d.DeleteSubscription(ctx, "us-a", sub.ShowPID)
 	if err != nil || !existed {

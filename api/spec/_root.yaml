@@ -95,7 +95,9 @@ info:
       `forbidden`, `not-found`, `conflict`, `internal`, `rate-limited` (too
       many attempts; retry later), `stream-stale` (a minted media URL no longer
       matches the file on disk, a metadata-only retag included since the
-      pin is byte identity; re-request the info endpoint that minted it), `catalog-maintenance`
+      pin is byte identity, or names one item's HLS rendering at a lossy
+      rate above the account's bitrate ceiling as it is now; re-request
+      the info endpoint that minted it), `catalog-maintenance`
       (the catalog is temporarily handed to a maintenance operation; retry
       shortly), `catalog-busy` (another job holds the catalog's shared
       file-mutation scope, so this file-moving request cannot start; unlike
@@ -178,7 +180,11 @@ info:
     - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
       server origin, the same origin that serves this API and the web UI.
       They live outside `/api/v1` and are not declared as operations here:
-      `/media/stream` (the streaming engine's output), `/media/download`
+      `/media/stream` (the streaming engine's output), `/media/hls` (its
+      HLS presentations: a queue's timeline, or one item's stream for a
+      caller that plays HLS; every playlist and segment URL in one
+      carries the presentation's token and an opaque reference, nothing
+      about the files), `/media/download`
       (original bytes, ranged), `/media/enclosure` (a podcast episode's
       feed enclosure, relayed), `/media/radio/{pid}` (a station
       stream, relayed), `/media/art` (an item's artwork, the same
@@ -189,17 +195,25 @@ info:
       string rather than by session or bearer credential, so bare `<audio>`
       elements, cast devices, and DLNA renderers that cannot send headers
       can fetch them. A media token binds one user to one subject, which
-      is an item pid everywhere but the probe: that one binds `probe`,
-      which is not a pid and which no item can be named by, so a probe
-      token opens the probe and nothing in the library. A token also
+      is an item pid everywhere but the probe, a radio station and a
+      queue's timeline: the probe's binds `probe`, which is not a pid and
+      which no item can be named by, so a probe token opens the probe and
+      nothing in the library, a station's binds the station's pid, and a
+      timeline's binds the timeline. A token also
       binds the route it was minted for and, on `/media/stream`, the
       stream parameters the server chose, so it opens no other route and
       a URL with those parameters edited, added or dropped answers
-      `unauthenticated` (a seek's `t` stays free). Every fetch re-checks
-      the account (gone or disabled), the session or app password that
-      minted the URL (signed out or revoked), and the account's right to
-      the item (a narrowed library grant or a new content rule answers
-      `not-found`, a withdrawn download permission `forbidden`). Expiry
+      `unauthenticated`, save the server's own cut of a stream that
+      cannot be range-seeked (see `PlayInfo.startOffsetMs`); on
+      `/media/hls` it binds the queue, or the one item rendering, it was
+      minted for, so it opens no other queue's or item's playlists and
+      segments. Every fetch
+      re-checks the account (gone or disabled), the session or app
+      password that minted the URL (signed out or revoked), and the
+      account's right to the item (a narrowed library grant or a new
+      content rule answers
+      `not-found`, a withdrawn download permission `forbidden`; a
+      timeline ends instead, as `createQueueTimeline` says). Expiry
       and these checks gate new opens, Range requests included, rather
       than cutting a stream already running.
       `/media/enclosure` takes only that pid and token, never a target

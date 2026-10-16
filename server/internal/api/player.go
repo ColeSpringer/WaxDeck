@@ -262,18 +262,21 @@ func (r *ConnectResolver) Timeline(ctx context.Context, userID string, entries [
 	}
 	members := make([]flow.TimelineMember, 0, len(entries))
 	for _, e := range entries {
-		if err := r.Svc.VisibleItem(ctx, uc, e.PID); err != nil {
+		book, err := r.Svc.VisibleBook(ctx, uc, e.PID)
+		if err != nil {
 			if service.KindOf(err) == service.KindNotFound {
 				return nil, nil
 			}
 			return nil, err
 		}
-		parts, err := r.Svc.BookParts(ctx, e.PID)
-		if err != nil {
-			return nil, err
-		}
-		if len(parts) > 0 {
-			return nil, nil
+		if book {
+			parts, err := r.Svc.BookParts(ctx, e.PID)
+			if err != nil {
+				return nil, err
+			}
+			if len(parts) > 0 {
+				return nil, nil
+			}
 		}
 		src, err := r.Svc.StreamSource(ctx, e.PID, "")
 		if err != nil {
@@ -782,7 +785,7 @@ func (s *Server) ReleaseQueueTimeline(ctx context.Context, req ReleaseQueueTimel
 	if err != nil {
 		return nil, err
 	}
-	id := strings.TrimPrefix(req.Pid, "tl-")
+	id := strings.TrimPrefix(req.Pid, flow.TimelinePIDPrefix)
 	if s.bridge == nil || !s.bridge.ReleaseTimeline(p.User.ID, id) {
 		return ReleaseQueueTimeline404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no live timeline with pid "+req.Pid))}, nil
 	}

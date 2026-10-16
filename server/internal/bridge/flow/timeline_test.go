@@ -1,19 +1,24 @@
 package flow
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
@@ -498,8 +503,8 @@ func TestServeHLSRewritesPlaylistsAndProxiesSegments(t *testing.T) {
 		t.Fatalf("master status %d: %s", rec.Code, rec.Body.String())
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "media.m3u8?v="+fakeChildV+"&sig=child1&mt=") {
-		t.Fatalf("child URI not stamped: %s", body)
+	if !strings.Contains(body, "\nmedia.m3u8?c=") || !strings.Contains(body, "&mt=") || strings.Contains(body, fakeChildV) {
+		t.Fatalf("child URI not sealed under the token: %s", body)
 	}
 
 	// Extract the media playlist URI and fetch it through the proxy.
@@ -514,11 +519,11 @@ func TestServeHLSRewritesPlaylistsAndProxiesSegments(t *testing.T) {
 		t.Fatalf("media status %d: %s", rec.Code, rec.Body.String())
 	}
 	mediaBody := rec.Body.String()
-	if !strings.Contains(mediaBody, "seg/0.m4s?v="+fakeChildV+"&sig=seg0&mt=") {
-		t.Fatalf("segment URI not stamped: %s", mediaBody)
+	if !strings.Contains(mediaBody, "\nseg/0.m4s?c=") || strings.Contains(mediaBody, fakeChildV) {
+		t.Fatalf("segment URI not sealed: %s", mediaBody)
 	}
-	if !strings.Contains(mediaBody, `URI="init.mp4?v=`+fakeChildV+`&sig=init1&mt=`) {
-		t.Fatalf("map URI not stamped: %s", mediaBody)
+	if !strings.Contains(mediaBody, `URI="init.mp4?c=`) {
+		t.Fatalf("map URI not sealed: %s", mediaBody)
 	}
 
 	// Segment fetches pass the upstream signature through, minus the
@@ -580,13 +585,27 @@ func TestHLSChildFetchesAreBoundToTheirTimeline(t *testing.T) {
 		b.ServeHLS(rec, httptest.NewRequest(http.MethodGet, u, nil))
 		return rec.Code
 	}
-	if got := get("/media/hls/seg/0.m4s?v=" + fakeChildV + "&sig=seg0&mt=" + url.QueryEscape(mt)); got != http.StatusOK {
+	// A child as this server hands it out: the engine's query sealed
+	// beside a token.
+	sealed := func(path, query, token string) string {
+		return "/media/hls/" + path + "?c=" + b.tokens.SealQuery(token, query) + "&mt=" + url.QueryEscape(token)
+	}
+	if got := get(sealed("seg/0.m4s", "v="+fakeChildV+"&sig=seg0", mt)); got != http.StatusOK {
 		t.Fatalf("its own segment = %d, want 200", got)
 	}
+	other, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}, TimelineOptions{Formats: []string{"flac"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherMT := mustQuery(t, other.URL).Get("mt")
 	for name, u := range map[string]string{
-		"another timeline's segment": "/media/hls/seg/0.m4s?v=" + childDescriptor("digest999") + "&sig=seg0&mt=" + url.QueryEscape(mt),
-		"a segment naming none":      "/media/hls/seg/0.m4s?sig=seg0&mt=" + url.QueryEscape(mt),
-		"a garbled descriptor":       "/media/hls/media.m3u8?v=%%%&sig=child1&mt=" + url.QueryEscape(mt),
+		"another timeline's segment":          sealed("seg/0.m4s", "v="+childDescriptor("digest999")+"&sig=seg0", mt),
+		"a segment naming none":               sealed("seg/0.m4s", "sig=seg0", mt),
+		"a garbled descriptor":                sealed("media.m3u8", "v=%%%&sig=child1", mt),
+		"a child sealed beside another token": strings.Replace(sealed("seg/0.m4s", "v="+fakeChildV+"&sig=seg0", otherMT), url.QueryEscape(otherMT), url.QueryEscape(mt), 1),
+		"the engine's query in the clear":     "/media/hls/seg/0.m4s?v=" + fakeChildV + "&sig=seg0&mt=" + url.QueryEscape(mt),
+		"an edited seal":                      "/media/hls/seg/0.m4s?c=AAAA&mt=" + url.QueryEscape(mt),
 	} {
 		if got := get(u); got != http.StatusUnauthorized {
 			t.Errorf("%s = %d, want 401", name, got)
@@ -652,8 +671,8 @@ func TestTimelineStashSurvivesRestart(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("master through the restarted bridge: status %d: %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), "media.m3u8?v="+fakeChildV+"&sig=child1&mt=") {
-		t.Fatalf("child URI not stamped: %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "\nmedia.m3u8?c=") || strings.Contains(rec.Body.String(), fakeChildV) {
+		t.Fatalf("child URI not sealed: %s", rec.Body.String())
 	}
 
 	// The id came back with the row, so a pid a client minted before the
@@ -726,15 +745,24 @@ func TestRewritePlaylist(t *testing.T) {
 		"#EXTINF:4.0,\n" +
 		"seg/0.m4s?v=1\n" +
 		"bare.m4s\n"
-	out := string(rewritePlaylist([]byte(in), "TOK"))
+	seal := func(dst, query []byte) []byte {
+		return append(append(dst, "sealed-"...), bytes.ReplaceAll(query, []byte("="), []byte("~"))...)
+	}
+	var out strings.Builder
+	if err := rewritePlaylist(&out, strings.NewReader(in), "TOK", seal); err != nil {
+		t.Fatal(err)
+	}
 	for _, want := range []string{
-		`URI="init.mp4?v=1&mt=TOK"`,
-		"seg/0.m4s?v=1&mt=TOK",
-		"bare.m4s?mt=TOK",
+		`URI="init.mp4?c=sealed-v~1&mt=TOK"`,
+		"\nseg/0.m4s?c=sealed-v~1&mt=TOK\n",
+		"\nbare.m4s?mt=TOK\n",
 	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("missing %q in %s", want, out)
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("missing %q in %s", want, out.String())
 		}
+	}
+	if err := rewritePlaylist(io.Discard, iotest.ErrReader(errors.New("connection reset")), "TOK", seal); err == nil {
+		t.Fatal("a source that broke off read as a whole playlist")
 	}
 }
 
@@ -762,7 +790,7 @@ func TestTimelineForCarriesCrossfadeAndGain(t *testing.T) {
 		}
 		b.tl.mu.Lock()
 		defer b.tl.mu.Unlock()
-		st, ok := b.tl.stash[timelineKey("digest123", renderKey("aac", gain, opts.CrossfadeSeconds))]
+		st, ok := b.tl.stash[timelineKey("digest123", renderKey("aac", gain, opts.CrossfadeSeconds, 0))]
 		if !ok {
 			t.Fatalf("nothing stashed for the minted rendering (%+v)", b.tl.stash)
 		}
@@ -795,7 +823,7 @@ func TestTimelineForCarriesCrossfadeAndGain(t *testing.T) {
 		t.Fatal("unexpected job")
 	}
 	b.tl.mu.Lock()
-	st := b.tl.stash[timelineKey("digest123", renderKey("aac", "off", 0))]
+	st := b.tl.stash[timelineKey("digest123", renderKey("aac", "off", 0, 0))]
 	b.tl.mu.Unlock()
 	if !strings.Contains(st.signedMaster, "gain=off") {
 		t.Fatalf("unmeasured queue levelled anyway: %s", st.signedMaster)
@@ -952,6 +980,41 @@ func TestTimelineFormatHonoursTheBitrateCeiling(t *testing.T) {
 	}
 	if res.Format != "aac" {
 		t.Fatalf("format %q, want the lossy one a ceiling leaves", res.Format)
+	}
+}
+
+// A ceiling holds a rendered queue to its rate as it holds a track's
+// encode: the lossy rendering a ceiling leaves is signed at the ceiling
+// rather than at the engine's own rate, and each ceiling is a rendering of
+// its own, so two accounts under two ceilings never share one.
+func TestTimelineIsHeldToTheBitrateCeiling(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	members := []TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}
+	mint := func(ceiling int) (signed string, rk string) {
+		t.Helper()
+		b.SetTranscodeGate(&fakeGate{ceiling: ceiling})
+		res, err := b.TimelineFor(context.Background(), "us-alice", members, TimelineOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		rk = mustQuery(t, res.URL).Get("rk")
+		b.tl.mu.Lock()
+		defer b.tl.mu.Unlock()
+		return b.tl.stash[timelineKey("digest123", rk)].signedMaster, rk
+	}
+	var keys []string
+	for _, c := range []struct {
+		ceiling int
+		want    string
+	}{{0, ""}, {96, "96"}, {128, "128"}, {9999, "320"}} {
+		signed, rk := mint(c.ceiling)
+		if got := mustQuery(t, signed).Get("bitrate"); got != c.want {
+			t.Errorf("a ceiling of %d signed bitrate %q, want %q: %s", c.ceiling, got, c.want, signed)
+		}
+		if slices.Contains(keys, rk) {
+			t.Errorf("a ceiling of %d shares the rendering %q", c.ceiling, rk)
+		}
+		keys = append(keys, rk)
 	}
 }
 
@@ -1139,6 +1202,92 @@ func TestFailedMintWithNothingLiveGivesTheSlotBack(t *testing.T) {
 	}
 }
 
+// A failed mint gives its fresh slot back beside a rendering its listener
+// was on long ago: only one minted or fetched since the slot was taken
+// rides it. An item rendering stays listed under its listener from its
+// mint, so presence alone would hold a failed mint's slot for minutes.
+func TestFailedMintBesideAnOldRenderingGivesTheSlotBack(t *testing.T) {
+	b, path := newTimelineBridge(t)
+	gate := &fakeGate{}
+	b.SetTranscodeGate(gate)
+	if _, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}}, TimelineOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	ageTimelines(b, 2*timelineIdle)
+	b.SweepTimelineSlots()
+	if gate.held != 0 {
+		t.Fatalf("held %d after a quiet spell, want the slot back", gate.held)
+	}
+	_, err := b.TimelineFor(context.Background(), "us-alice",
+		[]TimelineMember{{PID: "tr-two", Src: Source{Path: filepath.Join(t.TempDir(), "elsewhere.flac"), DurationMS: 1000}}},
+		TimelineOptions{})
+	if !errors.Is(err, ErrTimelineUnrenderable) {
+		t.Fatalf("mint error %v, want the unrenderable refusal", err)
+	}
+	if gate.held != 0 {
+		t.Fatalf("held %d after a failed mint beside a rendering quiet for minutes, want the slot back", gate.held)
+	}
+}
+
+// perAccountGate holds each account to one slot, safe across goroutines;
+// an admission takes a moment, as a gate that reads the database does.
+type perAccountGate struct {
+	mu       sync.Mutex
+	held     map[string]int
+	acquired int
+}
+
+func (g *perAccountGate) Acquire(_ context.Context, user string, _ TranscodeKind) (func(), error) {
+	g.mu.Lock()
+	if g.held[user] > 0 {
+		g.mu.Unlock()
+		return nil, ErrTranscodeLimited
+	}
+	g.held[user]++
+	g.acquired++
+	g.mu.Unlock()
+	time.Sleep(50 * time.Millisecond)
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			g.mu.Lock()
+			g.held[user]--
+			g.mu.Unlock()
+		})
+	}, nil
+}
+
+func (g *perAccountGate) MaxBitrateKbps(context.Context, string) int { return 0 }
+
+func (g *perAccountGate) AuthorizeMedia(context.Context, auth.MediaClaims) error { return nil }
+
+// Two first fetches of one listener at once (a playlist and a fragment, a
+// mint beside a fetch) under a per-account cap of one: the slot one takes
+// is the other's too, never a refusal of a listener who holds it.
+func TestConcurrentFirstHoldsShareTheSlot(t *testing.T) {
+	b, _ := newTimelineBridge(t)
+	gate := &perAccountGate{held: map[string]int{}}
+	b.SetTranscodeGate(gate)
+	var wg sync.WaitGroup
+	fresh, errs := make([]bool, 2), make([]error, 2)
+	for i := range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			fresh[i], errs[i] = b.holdTimelineSlot(context.Background(), "us-alice", TranscodeStream)
+		}()
+	}
+	wg.Wait()
+	if errs[0] != nil || errs[1] != nil || fresh[0] == fresh[1] {
+		t.Fatalf("holds answered (%v, %v), fresh (%v, %v); want both held, one of them taking the slot",
+			errs[0], errs[1], fresh[0], fresh[1])
+	}
+	if gate.acquired != 1 {
+		t.Fatalf("the gate admitted %d, want the one slot", gate.acquired)
+	}
+}
+
 // A damaged member is the queue's problem, not the server being unwell.
 func TestTimelineDamagedMemberIsUnrenderable(t *testing.T) {
 	inner := timelineSidecarMux(t)
@@ -1170,6 +1319,51 @@ func TestTimelineDamagedMemberIsUnrenderable(t *testing.T) {
 		TimelineOptions{})
 	if !errors.Is(err, ErrTimelineUnrenderable) {
 		t.Fatalf("mint error %v, want the unrenderable refusal", err)
+	}
+}
+
+// The engine refusing this server's key is the server misconfigured, not
+// a queue it cannot render: the mint fails as the server being unwell,
+// which a caller does not read as "stop asking for this queue".
+func TestATimelineMintWhoseKeyIsRefusedIsTheServersTrouble(t *testing.T) {
+	inner := timelineSidecarMux(t)
+	for name, refusal := range map[string]struct {
+		status int
+		body   string
+	}{
+		"a key it does not hold":   {http.StatusUnauthorized, `{"error":"missing or invalid API key","code":"unauthorized"}`},
+		"a credential it rejected": {http.StatusForbidden, `{"error":"signature expired","code":"signature-expired"}`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/hls/timeline" {
+					http.Error(w, refusal.body, refusal.status)
+					return
+				}
+				inner.ServeHTTP(w, r)
+			}))
+			t.Cleanup(srv.Close)
+			dir := t.TempDir()
+			path := filepath.Join(dir, "one.flac")
+			if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			b, err := New(context.Background(), Config{
+				BaseURL: srv.URL,
+				APIKey:  "key",
+				Roots:   []Root{{Name: "lib", Path: dir}},
+				Tokens:  auth.NewMediaTokens([]byte("test-secret"), 0),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = b.TimelineFor(context.Background(), "us-alice",
+				[]TimelineMember{{PID: "tr-one", Src: Source{Path: path, DurationMS: 60000}}},
+				TimelineOptions{})
+			if err == nil || errors.Is(err, ErrTimelineUnrenderable) {
+				t.Fatalf("mint error %v, want the server's own failure", err)
+			}
+		})
 	}
 }
 

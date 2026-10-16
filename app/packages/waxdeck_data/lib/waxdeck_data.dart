@@ -12,6 +12,7 @@ export 'src/downloads_io.dart'
     if (dart.library.js_interop) 'src/downloads_stub.dart';
 export 'src/downloads_port.dart';
 export 'src/events_channel.dart';
+export 'src/media_url_life.dart';
 export 'src/mirror_pages.dart';
 export 'src/open_io.dart' if (dart.library.js_interop) 'src/open_stub.dart';
 export 'src/queue_store.dart';

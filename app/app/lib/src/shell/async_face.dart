@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 
 /// Which face an [AsyncValue] wears, decided in the one order every face
 /// shares: a failure, then the value held - empty or not - then the wait.
@@ -26,6 +27,13 @@ final class AsyncFaceFailed<T> extends AsyncFace<T> {
 
   final Object error;
   final bool retrying;
+
+  /// The thing asked for is not there, which every later ask answers the
+  /// same way: the face says so and offers no retry.
+  bool get gone => switch (error) {
+    WaxDeckApiException(isNotFound: true) => true,
+    _ => false,
+  };
 }
 
 /// A value the caller's own predicate called empty.

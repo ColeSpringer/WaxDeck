@@ -589,9 +589,8 @@ void main() {
       await harness.endPlayback(tester);
     });
 
-    testWidgets('a chapter jump the server refuses surfaces the failure', (
-      tester,
-    ) async {
+    testWidgets('a chapter jump the server cannot answer is said, and the '
+        'part playing plays on', (tester) async {
       final repo = FakeRepository()
         ..books[_bookPid] = testBook(
           _bookPid,
@@ -612,25 +611,32 @@ void main() {
       expect(engine.loadedUrl, contains('part=0'));
 
       // The server goes away, then the listener taps a chapter in the
-      // other part. The jump used to rethrow into an unawaited call
-      // site and die unseen: a dead tap, with the book playing on as if
-      // nothing had been asked.
-      repo.playInfoError = const WaxDeckApiException(
+      // other part. The jump once rethrew into an unawaited call site and
+      // died unseen, a dead tap; then it stood the error pane over a part
+      // that had never stopped playing. The part plays on, and the jump
+      // that could not be had is said.
+      const unreachable = WaxDeckApiException(
         code: 'transport',
         message: 'network unreachable',
       );
+      repo.playInfoError = unreachable;
       await tester.tap(
         find.bySemanticsIdentifier(SemanticsIds.playerChapter(1)),
       );
       await tester.pumpAndSettle();
 
-      expect(find.byKey(const Key('player-error')), findsOneWidget);
-      expect(harness.container.read(nowPlayingProvider).session, isNull);
-      expect(engine.playing, isFalse);
+      expect(find.byKey(const Key('player-error')), findsNothing);
+      expect(harness.container.read(nowPlayingProvider).session, isNotNull);
+      expect(engine.playing, isTrue);
+      expect(engine.loadedUrl, contains('part=0'));
+      expect(
+        shellMessageText(raisedMessage(tester)),
+        startsWith("Couldn't jump there."),
+      );
+      await harness.endPlayback(tester);
       // The final checkpoint reads on the loaded part's timeline, not
       // shifted onto the part that refused to resolve.
       expect(repo.putPlayStateCalls.last.positionMs, lessThan(1800000));
-      await harness.endPlayback(tester);
     });
 
     testWidgets('carries the bookmark button, and the sheet is its own', (

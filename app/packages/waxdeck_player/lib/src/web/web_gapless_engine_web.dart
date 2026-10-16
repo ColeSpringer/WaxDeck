@@ -48,6 +48,16 @@ class WebGaplessEngine implements TimelineAudioEngine {
     return StreamGroup.merge<T>(<Stream<T>>[standard, timeline]);
   }
 
+  /// Set while the sound moves from one half to the other. The half being
+  /// silenced passes through idle on its way out, and audio_service reads a
+  /// move into idle as the service stopping (on the web it clears the
+  /// browser's media session), so the composite reads loading for the
+  /// whole move, as a load does on either half.
+  bool _switching = false;
+
+  /// Fires as a move ends, so the state's listeners hear what it ended in.
+  final _moves = StreamController<void>.broadcast();
+
   late final Stream<Duration> _positions = _merged<Duration>(
     (e) => e.positionStream,
   );
@@ -55,13 +65,33 @@ class WebGaplessEngine implements TimelineAudioEngine {
     (e) => e.durationStream,
   );
   late final Stream<bool> _playings = _merged<bool>((e) => e.playingStream);
+
+  /// Each listener is told the state it starts in and every move after,
+  /// read off the composite rather than the half that moved, so a half
+  /// switch never shows the idle the outgoing half passes through.
   late final Stream<EngineProcessingState> _processingStates =
-      _merged<EngineProcessingState>((e) => e.processingStateStream);
+      Stream<EngineProcessingState>.multi((listener) {
+        listener.add(processingState);
+        final subscriptions = <StreamSubscription<Object?>>[
+          _merged<EngineProcessingState>(
+            (e) => e.processingStateStream,
+          ).listen((_) => listener.add(processingState)),
+          _moves.stream.listen(
+            (_) => listener.add(processingState),
+            onDone: listener.close,
+          ),
+        ];
+        listener.onCancel = () =>
+            Future.wait<void>([for (final s in subscriptions) s.cancel()]);
+      }, isBroadcast: true).distinct();
   late final Stream<void> _completions = _merged<void>((e) => e.completed);
   late final Stream<Object> _refusals = _merged<Object>(
     (e) => e.playbackRefused,
   );
   late final Stream<void> _boundaries = _merged<void>((e) => e.itemBoundary);
+  late final Stream<MediaFailure> _failures = _merged<MediaFailure>(
+    (e) => e.mediaFailed,
+  );
   late final Stream<double> _speeds = _merged<double>((e) => e.speedStream);
   late final Stream<double> _volumes = _merged<double>((e) => e.volumeStream);
 
@@ -84,20 +114,26 @@ class WebGaplessEngine implements TimelineAudioEngine {
     Duration? clipStart,
     Duration? clipEnd,
   }) async {
-    if (_onTimeline) {
-      // Silenced and released before the other half opens anything:
-      // two elements playing at once is the failure this ordering
-      // exists to prevent.
-      await _timeline.stop();
-      _onTimeline = false;
+    final moving = _onTimeline;
+    if (moving) _switching = true;
+    try {
+      if (moving) {
+        // Silenced and released before the other half opens anything:
+        // two elements playing at once is the failure this ordering
+        // exists to prevent.
+        await _timeline.stop();
+        _onTimeline = false;
+      }
+      await _standard.load(
+        url,
+        mimeType: mimeType,
+        initialPosition: initialPosition,
+        clipStart: clipStart,
+        clipEnd: clipEnd,
+      );
+    } finally {
+      if (moving) _moved();
     }
-    await _standard.load(
-      url,
-      mimeType: mimeType,
-      initialPosition: initialPosition,
-      clipStart: clipStart,
-      clipEnd: clipEnd,
-    );
   }
 
   @override
@@ -107,25 +143,34 @@ class WebGaplessEngine implements TimelineAudioEngine {
     Duration? position,
     bool play = false,
   }) async {
-    if (!_onTimeline) {
-      await _standard.stop();
-    }
-    // Carried across rather than reset: a listener who set the level
-    // before the queue went gapless does not expect it to change.
-    await _timeline.setVolume(_standard.volume);
-    await _timeline.setSpeed(_standard.speed);
-    _onTimeline = true;
+    final moving = !_onTimeline;
+    if (moving) _switching = true;
     try {
-      await _timeline.loadTimeline(
-        media,
-        member: member,
-        position: position,
-        play: play,
-      );
-    } on Object {
-      _onTimeline = false;
-      rethrow;
+      if (moving) await _standard.stop();
+      // Carried across rather than reset: a listener who set the level
+      // before the queue went gapless does not expect it to change.
+      await _timeline.setVolume(_standard.volume);
+      await _timeline.setSpeed(_standard.speed);
+      _onTimeline = true;
+      try {
+        await _timeline.loadTimeline(
+          media,
+          member: member,
+          position: position,
+          play: play,
+        );
+      } on Object {
+        _onTimeline = false;
+        rethrow;
+      }
+    } finally {
+      if (moving) _moved();
     }
+  }
+
+  void _moved() {
+    _switching = false;
+    if (!_moves.isClosed) _moves.add(null);
   }
 
   /// Refused rather than forwarded while the standard half has the
@@ -206,6 +251,7 @@ class WebGaplessEngine implements TimelineAudioEngine {
   Future<void> dispose() async {
     await _timeline.dispose();
     await _standard.dispose();
+    await _moves.close();
   }
 
   @override
@@ -218,6 +264,16 @@ class WebGaplessEngine implements TimelineAudioEngine {
   Duration? get duration => _active.duration;
 
   @override
+  Duration get bufferedPosition => _active.bufferedPosition;
+
+  @override
+  bool get seeksWithinUnrangedStream => _standard.seeksWithinUnrangedStream;
+
+  /// A single item loads through the browser's element, which plays no HLS.
+  @override
+  bool get playsHls => false;
+
+  @override
   Stream<Duration?> get durationStream => _durations;
 
   @override
@@ -227,7 +283,12 @@ class WebGaplessEngine implements TimelineAudioEngine {
   Stream<bool> get playingStream => _playings;
 
   @override
-  EngineProcessingState get processingState => _active.processingState;
+  EngineProcessingState get processingState {
+    final state = _active.processingState;
+    return _switching && state == EngineProcessingState.idle
+        ? EngineProcessingState.loading
+        : state;
+  }
 
   @override
   Stream<EngineProcessingState> get processingStateStream => _processingStates;
@@ -237,6 +298,9 @@ class WebGaplessEngine implements TimelineAudioEngine {
 
   @override
   Stream<Object> get playbackRefused => _refusals;
+
+  @override
+  Stream<MediaFailure> get mediaFailed => _failures;
 
   @override
   Stream<void> get itemBoundary => _boundaries;

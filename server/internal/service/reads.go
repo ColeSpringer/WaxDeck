@@ -54,12 +54,25 @@ func applyItemFilter(b *query.Builder, filter ItemFilter) (*query.Builder, []str
 	return b, append(scope, canonical, filter.FacetKey), nil
 }
 
+// listingQuery narrows base by the filter and to what a listing may
+// offer this caller. subs is the caller's follow set: read here, once,
+// for the query, which pageDTO then checks the page's rows against, and
+// not read at all where the filter leaves episodes out.
+func (l *Library) listingQuery(ctx context.Context, uc *UserCtx, base *query.Builder, filter ItemFilter, subs *subscriptionFilter) (*query.Builder, []string, error) {
+	b, scope, err := applyItemFilter(base, filter)
+	if err != nil {
+		return nil, nil, err
+	}
+	episodes := (scope[0] == "" || scope[0] == "podcast") && !facetNoEpisodes[scope[1]]
+	return b.WhereNode(l.listingNarrow(ctx, uc, subs, episodes)), scope, nil
+}
+
 // Items pages the whole library (optionally one media type, optionally
 // one browse-dimension bucket) in stable (title, pid) order for the
 // acting user. The cursor is WaxBin's token inside a scope envelope.
 func (l *Library) Items(ctx context.Context, uc *UserCtx, filter ItemFilter, cursor string, limit int) (Page, error) {
-	b, scope, err := applyItemFilter(
-		visibleItems().WhereNode(l.contentRuleNode(ctx, uc)).OrderBy("title", false), filter)
+	subs := l.newSubscriptionFilter(uc)
+	b, scope, err := l.listingQuery(ctx, uc, visibleItems().OrderBy("title", false), filter, subs)
 	if err != nil {
 		return Page{}, err
 	}
@@ -72,7 +85,7 @@ func (l *Library) Items(ctx context.Context, uc *UserCtx, filter ItemFilter, cur
 	if err != nil {
 		return Page{}, classify(err)
 	}
-	return l.pageDTO(ctx, uc, page, key), nil
+	return l.pageDTO(ctx, uc, subs, page, key), nil
 }
 
 // browseLists maps API discovery-list names onto WaxBin's. The names
@@ -85,6 +98,23 @@ var browseLists = map[string]read.DiscoveryList{
 	"random":          read.ListRandom,
 	"starred":         read.ListStarred,
 	"alphabetical":    read.ListAlphabetical,
+	"in-progress":     read.ListInProgress,
+}
+
+// browseNarrowing is the clause a catalog list carries where the API
+// defines its membership more tightly than the catalog does.
+var browseNarrowing = map[string]func() query.Node{
+	// The catalog holds every unfinished item with a saved position, and
+	// the player saves one for a track skipped a few seconds in as for
+	// any other. A track is part way through once a play of it has
+	// counted, which is recently-played's own membership; spoken word is
+	// from its first saved position, counted or not.
+	"in-progress": func() query.Node {
+		return query.Or{Nodes: []query.Node{
+			query.Cond{Field: "kind", Op: query.OpIsNot, Value: string(model.KindTrack)},
+			query.Cond{Field: "last_played", Op: query.OpIsPresent},
+		}}
+	},
 }
 
 // rediscoverAfter is how long an item has to have gone unplayed to count
@@ -136,7 +166,8 @@ var collectionLists = map[string]func() query.Node{
 // comes back full. It is the same filter the bucket's own listing uses,
 // so a count, the list it opens, and a shuffle over it cannot disagree.
 func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter ItemFilter, seed int64, cursor string, limit int) (Page, error) {
-	b, scope, err := applyItemFilter(visibleItems().WhereNode(l.contentRuleNode(ctx, uc)), filter)
+	subs := l.newSubscriptionFilter(uc)
+	b, scope, err := l.listingQuery(ctx, uc, visibleItems(), filter, subs)
 	if err != nil {
 		return Page{}, err
 	}
@@ -153,7 +184,7 @@ func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter I
 		if err != nil {
 			return Page{}, classify(err)
 		}
-		return l.pageDTO(ctx, uc, page, key), nil
+		return l.pageDTO(ctx, uc, subs, page, key), nil
 	}
 	dl, ok := browseLists[list]
 	if !ok {
@@ -162,12 +193,16 @@ func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter I
 	if err := browseScopeKindError(dl, list, filter, scope[1], scope[2]); err != nil {
 		return Page{}, err
 	}
-	// Unconditionally: the state predicate is
-	// always there now, so there is no longer an unfiltered case to
-	// short-circuit. The catalog validates UserPID whenever it compiles a
-	// query, so every list resolves the acting user where only a filtered
-	// one used to. Nothing an ItemFilter can name is a per-user field, so
-	// the join it guards is still never built; the lookup is validation.
+	if narrow, ok := browseNarrowing[list]; ok {
+		b = b.WhereNode(narrow())
+	}
+	// Unconditionally: the state predicate is always there now, so there
+	// is no longer an unfiltered case to short-circuit. The catalog
+	// validates UserPID whenever it compiles a query, so every list
+	// resolves the acting user where only a filtered one used to. Nothing
+	// an ItemFilter can name is a per-user field, but a list's narrowing
+	// can be (in-progress reads last_played), and then the per-user join
+	// is built on this user; elsewhere the lookup is validation.
 	opts := read.BrowseOptions{
 		UserPID: model.PID(uc.CatalogPID),
 		Seed:    seed,
@@ -179,7 +214,7 @@ func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter I
 	if err != nil {
 		return Page{}, classify(err)
 	}
-	return l.pageDTO(ctx, uc, page, key), nil
+	return l.pageDTO(ctx, uc, subs, page, key), nil
 }
 
 // browseScopeKindError refuses a browse whose filter names a kind the
@@ -296,17 +331,17 @@ func decodeScopedCursor(cursor, scope string) (string, error) {
 // visible libraries and podcast episodes of shows the caller does not
 // subscribe to (subscriptions are per-user views; unsubscribing removes
 // a show's episodes from your listings while the catalog keeps
-// everything). Restricted callers may get short pages that still carry
-// a cursor; the contract documents that.
+// everything), and items the advisory check refuses. Short pages that
+// still carry a cursor stay legal; the contract documents that.
 //
-// Tag rules are not applied here, deliberately: both callers conjoin
-// contentRuleNode into the query, so a restricted caller's page comes
-// back full rather than short, and pays no ItemTags read per row. What
-// stays is the advisory check, which is per-item by nature. A third
-// caller has to carry the node too, or it will list what the rules
-// hide.
-func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, p *read.Page, scope string) Page {
-	subs := l.newSubscriptionFilter(uc)
+// Both callers build their query through listingQuery, which carries
+// all of it - grants, follows, tag rules and the advisory flags - so a
+// page comes back full rather than short or empty, and the tag rules
+// cost no ItemTags read per row. The checks here are a second line,
+// which in the ordinary case drops nothing, and subs is the follow set
+// the query was built from. A third caller has to build its query the
+// same way, or it will list what the checks hide.
+func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, p *read.Page, scope string) Page {
 	out := Page{Items: make([]ItemSummary, 0, len(p.Items))}
 	for _, it := range p.Items {
 		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {

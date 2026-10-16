@@ -46,7 +46,7 @@ class _HubTile {
   );
 }
 
-/// The ways in, in the order 6.3 lists them. A dimension's tile takes
+/// The ways in, in the order the hub offers them. A dimension's tile takes
 /// everything from the dimension, so a renamed segment cannot leave
 /// tiles pointing at locations the table no longer declares.
 List<_HubTile> _tiles(AppLocalizations l10n) => <_HubTile>[
@@ -111,7 +111,7 @@ class MusicHubScreen extends ConsumerWidget {
       ],
       slivers: <Widget>[
         // Compact browses through a tile grid, two to a row. Anything
-        // wider gets the slim chip row 6.3 asks for, so the content
+        // wider gets a slim chip row instead, so the content
         // shelves lead the page instead of a wall of navigation.
         if (sizeClass.isCompact)
           SliverPadding(

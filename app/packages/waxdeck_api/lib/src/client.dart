@@ -196,18 +196,24 @@ abstract interface class WaxDeckRepository {
   Future<ItemDetail> getItem(String pid);
 
   /// `GET /items/{pid}/play-info`: short-TTL stream resolution. The returned
-  /// URL is already resolved against the client base URL. For multi-file
-  /// audiobooks [positionMs] (book-timeline milliseconds) selects the part
-  /// containing that position; [voiceBoost] requests server-side loudness
-  /// normalization, overriding the caller's stored setting when present.
+  /// URL is already resolved against the client base URL. [positionMs] is
+  /// on the item's timeline (the book timeline for a multi-file audiobook,
+  /// where it selects the part holding it); a stream that cannot be
+  /// range-seeked is cut to begin there, reported as
+  /// [PlayInfo.startOffsetMs], while a seekable one is left for the player
+  /// to seek. [voiceBoost] requests server-side loudness normalization,
+  /// overriding the caller's stored setting when present.
   /// [maxBitrateKbps] caps the stream's bitrate (32-320): a lossy source
   /// already inside the cap streams unchanged, anything else re-encodes
-  /// down to it and reports the applied cap on the result.
+  /// down to it and reports the applied cap on the result. [hls] says the
+  /// player plays HLS: a re-encode then comes back as the item's own HLS
+  /// presentation, seekable, where the server renders one.
   Future<PlayInfo> getPlayInfo(
     String pid, {
     int? positionMs,
     bool? voiceBoost,
     int? maxBitrateKbps,
+    bool? hls,
   });
 
   /// `POST /player/timeline`: mints one gapless HLS stream over a whole
@@ -2370,12 +2376,14 @@ class WaxDeckClient implements WaxDeckRepository {
     int? positionMs,
     bool? voiceBoost,
     int? maxBitrateKbps,
+    bool? hls,
   }) => _guard(() async {
     final response = await _gen.getPlaybackApi().getPlayInfo(
       pid: pid,
       positionMs: positionMs,
       voiceBoost: voiceBoost,
       maxBitrateKbps: maxBitrateKbps,
+      hls: hls,
     );
     return playInfoFromGen(_require(response.data), baseUrl: _baseUrl);
   });

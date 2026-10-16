@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 
 import '../admin/admin_providers.dart';
@@ -32,7 +33,20 @@ import '../uploads/uploads_controller.dart';
 import 'live_invalidations.dart';
 import 'refresh_pacing.dart';
 import 'server_event_bus.dart';
+import 'streamed_play_states.dart';
 import 'sync_providers.dart';
+
+/// How close together two catalog passes may come. A running scan
+/// reports a change about once a second, and every shelf an open home
+/// holds is a catalog read; the first change after a quiet spell still
+/// lands at once.
+const kCatalogRefreshWindow = Duration(seconds: 5);
+
+/// The same for the user stream. Longer than the pacer's default because
+/// this client's own writes come back on it (a star, a rating, a mark)
+/// and nothing on a report says whose write it was, so the window holds
+/// for every report; the first after a quiet spell still lands at once.
+const kUserRefreshWindow = Duration(seconds: 5);
 
 /// Binds the sync machinery to the authenticated subtree: watched by the
 /// signed-in UI, disposed on sign-out. Native starts the engine and
@@ -67,8 +81,8 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     providers: [
       // The home shelves are all catalog reads: what was added, what is
       // sealed, what is worth going back to. A scan lands on every one
-      // of them at once.
-      ...homeShelfProviders,
+      // of them at once. The probe is not here; see [_reprobeWhileEmpty].
+      ...homeCatalogShelfProviders,
       // The music hub's shelves are the same reads scoped to one medium.
       ...musicShelfProviders,
       booksProvider,
@@ -112,10 +126,12 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     firstBuilds: firstBuilds,
     providers: [
       // The shelves that are per-user selections: what the caller
-      // played, starred, rated, or has never opened. A checkpoint
-      // anywhere - this device or another - is what makes them stale.
-      // The catalog-only ones are not here; a checkpoint says nothing
-      // about what the library gained.
+      // played, starred, rated, or has never opened. A play-state change
+      // anywhere - this device or another - is what makes them stale; a
+      // checkpoint that only moves a position is not, and moves the
+      // rings instead (`onPlayState` below). The catalog-only ones are
+      // not here; a checkpoint says nothing about what the library
+      // gained.
       ...homeUserShelfProviders,
       ...musicUserShelfProviders,
       prefsControllerProvider,
@@ -123,13 +139,14 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       // membership change also reshapes the caller's own catalog view
       // (episodes scope to subscriptions), so the grid refetches too.
       // The unplayed count on each row and both hub shelves are read
-      // against the caller's positions, so a checkpoint anywhere (this
-      // device or another) is what makes them stale.
+      // against the caller's positions, so a play-state change anywhere
+      // (this device or another) is what makes them stale.
       subscriptionsProvider,
       upNextEpisodesProvider,
       latestEpisodesProvider,
-      // Playlist rows ride the user stream, and play-state changes (a
-      // star, a rating) can shift a user-state smart rule's evaluation.
+      // Playlist rows ride the user stream, and a play-state change
+      // other than a position can shift a user-state smart rule's
+      // evaluation.
       playlistsProvider,
       // Review, upload, and tool-task markers ride the user stream; the
       // curation screens refetch their lists and open details, and
@@ -142,14 +159,35 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     ],
     families: [
       playStateControllerProvider,
-      // Entity stars and ratings ride the same user stream, as the
-      // entity-state marker kind.
+      // Entity stars and ratings have a marker and a fan-out of their
+      // own below; a full pass still covers them, for the walks that
+      // cannot say by kind what changed (a native re-mint).
       entityPlayStateControllerProvider,
       podcastDetailProvider,
       playProgressProvider,
       playlistDetailProvider,
       reviewEntryProvider,
     ],
+  );
+
+  // An artist's or album's star or rating moved. The marker names no
+  // item, so nothing else the user stream feeds has changed.
+  final entityFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    families: [entityPlayStateControllerProvider],
+  );
+
+  // A report that moves only a position still reorders what is ordered
+  // by progress: the podcast hub's Up next is the episodes most recently
+  // progressed first. Home's resume shelf is ordered so too, and reorders
+  // itself from the report without a read. No playlist rule reads a
+  // position, and an open unseeded random list would reshuffle on every
+  // re-read.
+  final positionFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    providers: [upNextEpisodesProvider],
   );
 
   // The catalog's job and health news have fan-outs of their own: a
@@ -173,21 +211,73 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     firstBuilds: firstBuilds,
     providers: [toolTasksProvider],
   );
-  // A library added, restored or flagged anywhere, the CLI included.
+  // A library added, restored or flagged anywhere, the CLI included. Home's
+  // probe rides it: a library coming or going can change its answer
+  // either way.
   final librariesFanOut = InvalidationFanOut(
     container: ref.container,
     firstBuilds: firstBuilds,
-    providers: [librariesProvider, libraryCountsProvider],
+    providers: [
+      librariesProvider,
+      libraryCountsProvider,
+      libraryHasAnythingProvider,
+    ],
+  );
+  // Home's probe is out of the catalog fan-out, where it was one of the
+  // reads every pass of a scan cost an open home. A first scan or upload
+  // ends the first-run state, though, and its first pass is the first
+  // sign, so while the probe reads empty every pass asks it; and a
+  // library can empty under a probe that said it held something (a scan
+  // that finds its files gone, a delete made on another device), so once
+  // a run of catalog changes goes quiet it is asked again: once a run,
+  // not once a pass.
+  final probeFanOut = InvalidationFanOut(
+    container: ref.container,
+    firstBuilds: firstBuilds,
+    providers: [libraryHasAnythingProvider],
+  );
+  final probeOnceQuiet = QuietRefresh(
+    fanOut: probeFanOut.sweep,
+    retry: probeFanOut.retry,
+    quiet: kCatalogRefreshWindow,
   );
 
   // Both transports hand their hints to the same pacers: the fan-out
   // is what a hint costs, and running it on every one of them is what
   // starved a screen still on its first build.
+  final container = ref.container;
   final catalog = PacedRefresh(
-    fanOut: catalogFanOut.sweep,
-    retry: catalogFanOut.retry,
+    fanOut: () {
+      final applied = catalogFanOut.sweep();
+      if (!_probeReadsEmpty(container)) return applied;
+      return probeFanOut.sweep() && applied;
+    },
+    retry: () {
+      final applied = catalogFanOut.retry();
+      return probeFanOut.retry() && applied;
+    },
+    window: kCatalogRefreshWindow,
   );
-  final user = PacedRefresh(fanOut: userFanOut.sweep, retry: userFanOut.retry);
+  final user = PacedRefresh(
+    fanOut: userFanOut.sweep,
+    retry: userFanOut.retry,
+    window: kUserRefreshWindow,
+  );
+  final entities = PacedRefresh(
+    fanOut: entityFanOut.sweep,
+    retry: entityFanOut.retry,
+    window: kUserRefreshWindow,
+  );
+  final positions = PacedRefresh(
+    fanOut: positionFanOut.sweep,
+    retry: positionFanOut.retry,
+    window: kUserRefreshWindow,
+  );
+  void catalogHint() {
+    catalog.hint();
+    probeOnceQuiet.hint();
+  }
+
   final jobs = PacedRefresh(fanOut: jobsFanOut.sweep, retry: jobsFanOut.retry);
   final health = PacedRefresh(
     fanOut: healthFanOut.sweep,
@@ -214,14 +304,57 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   );
 
   ref.onDispose(() {
-    catalog.dispose();
-    user.dispose();
-    jobs.dispose();
-    health.dispose();
-    tasks.dispose();
-    libraries.dispose();
-    radio.dispose();
+    for (final pacer in <PacedRefresh>[
+      catalog,
+      user,
+      entities,
+      positions,
+      jobs,
+      health,
+      tasks,
+      libraries,
+      radio,
+    ]) {
+      pacer.dispose();
+    }
+    probeOnceQuiet.dispose();
   });
+
+  // A walk that lost its place, or a catch-up that may have lost changes,
+  // cannot say by kind what changed.
+  void everyStateTopic() {
+    user.hint();
+    entities.hint();
+    jobs.hint();
+    health.hint();
+    libraries.hint();
+  }
+
+  // Held for the session: what the stream last said about each item is
+  // what the next report is measured against.
+  ref.listen(streamedPlayStatesProvider, (_, _) {});
+  // The report is the state, so every progress window holding the item
+  // takes it at once, whatever else it moved. One that moved more than
+  // the position is news for the user surfaces; one that moved only the
+  // position reorders only what is ordered by progress.
+  void onPlayState(PlayState state) {
+    final moved = container
+        .read(streamedPlayStatesProvider.notifier)
+        .record(state);
+    _echoReport(container, state);
+    if (moved) {
+      // The item's own controller draws what moved (a star, a rating, a
+      // count), so it is read again now rather than at the end of the
+      // user pass's window: another device's edit shows in about a
+      // second. Only this item, and only a report that moved more than a
+      // position.
+      final item = playStateControllerProvider(state.pid);
+      if (container.exists(item)) container.invalidate(item);
+      user.hint();
+    } else {
+      positions.hint();
+    }
+  }
 
   final engine = ref.watch(syncEngineProvider);
   // Every server event this session observes, by kind, from whichever
@@ -240,18 +373,20 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
         libraries.hint();
       case 'play-state' || 'entity-state' || 'bookmarks' when engine != null:
         break;
+      case 'play-state':
+        if (event.playState case final state?) {
+          onPlayState(state);
+        } else {
+          user.hint();
+        }
+      case 'entity-state':
+        entities.hint();
       default:
         user.hint();
     }
   });
   ref.onDispose(eventSub.cancel);
-  // A walk that lost its place cannot say by kind what changed.
-  final resetSub = bus.resets.listen((_) {
-    user.hint();
-    jobs.hint();
-    health.hint();
-    libraries.hint();
-  });
+  final resetSub = bus.resets.listen((_) => everyStateTopic());
   ref.onDispose(resetSub.cancel);
   final connect = ref.watch(connectBinderProvider);
   // What makes the radio invalidation addressed rather than broadcast:
@@ -267,8 +402,17 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
   }, fireImmediately: true);
   final tick = ref.read(userStreamTickProvider.notifier);
   if (engine != null) {
-    final catalogSub = engine.catalogChanged.listen((_) => catalog.hint());
-    final stateSub = engine.playStateChanged.listen((_) => user.hint());
+    final catalogSub = engine.catalogChanged.listen((_) => catalogHint());
+    // The mirror has stored the state by the time it says so, and says
+    // it with the state. An artist or album marker stores nothing, entity
+    // state being a live read.
+    final stateSub = engine.playStateChanged.listen((change) {
+      if (change.state case final state?) {
+        onPlayState(state);
+      } else {
+        entities.hint();
+      }
+    });
     // An item whose audio the server cannot give back takes its download
     // and its pinned artwork with it. Of the tombstones only `removed`
     // reaches this stream: trash tombstones the mirror row as well and
@@ -330,7 +474,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
         baseUrl: ref.watch(serverBaseUrlProvider),
         token: () => repository.authToken,
       ),
-      onCatalog: catalog.hint,
+      onCatalog: catalogHint,
       // An invalidation frame carries no detail, so the tick walks the
       // user stream, and the walk's events reach the fan-outs above by
       // kind. A catch-up may have lost changes the walk cannot report,
@@ -342,10 +486,7 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
       // into a container that swallows it.
       onUser: tick.bump,
       onUserCatchUp: () {
-        user.hint();
-        jobs.hint();
-        health.hint();
-        libraries.hint();
+        everyStateTopic();
         tick.bump();
       },
     );
@@ -374,3 +515,21 @@ final syncBinderProvider = Provider.autoDispose<void>((ref) {
     });
   }
 });
+
+/// Whether home's probe last said the library is empty, which opens it
+/// to every catalog pass.
+bool _probeReadsEmpty(ProviderContainer container) =>
+    container.exists(libraryHasAnythingProvider) &&
+    container.read(libraryHasAnythingProvider).value == false;
+
+/// Puts a reported state into every live progress window holding the
+/// item, without a read: the report is the state.
+///
+/// The item's own play-state controller is left to the user pass: it
+/// draws stars and counts, and folds them over its pending writes, which
+/// a value set from outside would skip.
+void _echoReport(ProviderContainer container, PlayState state) {
+  for (final window in container.read(liveProgressWindowsProvider).toList()) {
+    window.apply(state);
+  }
+}

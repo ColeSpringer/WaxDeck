@@ -925,19 +925,10 @@ func (l *Library) tagVerdicts(ctx context.Context, uc *UserCtx, items []*model.I
 // It tracks memberVisible clause for clause, which is the invariant that
 // keeps a count and its listing from disagreeing. A static list carries
 // no rule, so keepArchived is never set and the state predicate always
-// applies; the library grants are the allow-list form viewVisible asks
-// for per item; episodes pass only for a subscriber of their show; and
-// the content rules are contentRuleNode plus the advisory flags, which
+// applies; the grants and the episode rule are callerScopeNode; and the
+// content rules are contentRuleNode plus the advisory flags, which
 // contentRuleNode leaves to the per-item pass (both read 0 off a
 // non-episode).
-//
-// The two empty cases both fail closed on purpose, matching the per-item
-// filter. No grants compiles to `1=0` and counts nothing. No
-// subscriptions makes the second arm of the Or `1=0`, leaving "anything
-// that is not an episode" - which is what allowsEpisode answers for an
-// empty set. A subscription read that fails is the same answer for the
-// same reason, logged rather than propagated so a podcast outage costs a
-// music playlist its episodes rather than its whole count.
 func (l *Library) staticMemberNarrow(ctx context.Context, uc *UserCtx) query.Node {
 	return query.And{Nodes: []query.Node{
 		query.Cond{Field: "state", Op: query.OpIsNot, Value: string(model.StateArchived)},
@@ -949,6 +940,34 @@ func (l *Library) staticMemberNarrow(ctx context.Context, uc *UserCtx) query.Nod
 // caller may be offered whatever the item's state, for a query that
 // decides state itself.
 func (l *Library) readerNarrow(ctx context.Context, uc *UserCtx) query.Node {
+	return l.listingNarrow(ctx, uc, l.newSubscriptionFilter(uc), true)
+}
+
+// listingNarrow is readerNarrow reading the follow set through subs, so a
+// listing that checks its page's rows against the same filter afterwards
+// reads the set once. Without episodes the follow arm, and its read, are
+// dropped, for a query that already leaves episodes out.
+func (l *Library) listingNarrow(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, episodes bool) query.Node {
+	return query.And{Nodes: append([]query.Node{l.callerScopeNode(ctx, uc, subs, episodes)}, l.contentNarrow(ctx, uc)...)}
+}
+
+// callerScopeNode is what a listing may offer this caller, as a query
+// node: the libraries granted (the allow-list form viewVisible asks for
+// per item), unless the caller sees every library, and episodes only of
+// shows the caller follows, read through subs. Pushed into a listing's
+// query, a page comes back full where filtering after the cut left it
+// short or empty. Without episodes the follow arm is left off: the query
+// it joins already holds none, so the arm would cost a read to say
+// nothing.
+//
+// The two empty cases both fail closed on purpose, matching the per-item
+// filters. No grants compiles to `1=0` and offers nothing. No
+// subscriptions makes the second arm of the Or `1=0`, leaving "anything
+// that is not an episode" - which is what allowsEpisode answers for an
+// empty set. A subscription read that fails is the same answer for the
+// same reason, logged rather than propagated so a podcast outage costs a
+// listing its episodes rather than the listing.
+func (l *Library) callerScopeNode(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, episodes bool) query.Node {
 	var nodes []query.Node
 	if !uc.AllLibraries {
 		libs := make([]string, 0, len(uc.Libraries))
@@ -958,21 +977,21 @@ func (l *Library) readerNarrow(ctx context.Context, uc *UserCtx) query.Node {
 		sort.Strings(libs)
 		nodes = append(nodes, inSet("library", libs))
 	}
-	set, err := l.subscribedShowSet(ctx, uc)
-	if err != nil {
-		l.log.Warn("loading subscription set for a playlist count", "user", uc.ID, "err", err)
-		set = nil
+	if !episodes {
+		return query.And{Nodes: nodes}
 	}
-	shows := make([]string, 0, len(set))
-	for show := range set {
-		shows = append(shows, show)
+	subs.ensure(ctx, l)
+	shows := make([]string, 0, len(subs.set))
+	if !subs.failed {
+		for show := range subs.set {
+			shows = append(shows, show)
+		}
+		sort.Strings(shows)
 	}
-	sort.Strings(shows)
 	nodes = append(nodes, query.Or{Nodes: []query.Node{
 		query.Cond{Field: "kind", Op: query.OpIsNot, Value: string(model.KindEpisode)},
 		inSet("podcast_pid", shows),
 	}})
-	nodes = append(nodes, l.contentNarrow(ctx, uc)...)
 	return query.And{Nodes: nodes}
 }
 

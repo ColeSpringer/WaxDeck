@@ -31,6 +31,8 @@ class AsyncBoxFace<T> extends StatelessWidget {
   /// [BuildContextL10n.explain].
   final String errorTitle;
 
+  /// What the failure card's Try again runs. Not offered where the thing
+  /// is gone (see [AsyncFaceFailed.gone]).
   final VoidCallback onRetry;
 
   final SkeletonShape skeleton;
@@ -44,15 +46,38 @@ class AsyncBoxFace<T> extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return switch (resolveAsyncFace(state, isEmpty: isEmpty)) {
-      AsyncFaceFailed(:final error, :final retrying) => ErrorState(
+      final AsyncFaceFailed<T> failed => AsyncFailureCard(
+        failed: failed,
         title: errorTitle,
-        message: context.explain(error),
         onRetry: onRetry,
-        retrying: retrying,
       ),
       AsyncFaceEmpty(:final value) => empty!(context, value),
       AsyncFaceLoaded(:final value) => builder(context, value),
       AsyncFaceWaiting() => SkeletonShapes(shape: skeleton),
     };
   }
+}
+
+/// The failure card both faces draw, so what it offers is decided in one
+/// place: no Try again where the thing is gone (see
+/// [AsyncFaceFailed.gone]).
+class AsyncFailureCard extends StatelessWidget {
+  const AsyncFailureCard({
+    required this.failed,
+    required this.title,
+    required this.onRetry,
+    super.key,
+  });
+
+  final AsyncFaceFailed<Object?> failed;
+  final String title;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => ErrorState(
+    title: title,
+    message: context.explain(failed.error),
+    onRetry: failed.gone ? null : onRetry,
+    retrying: failed.retrying,
+  );
 }

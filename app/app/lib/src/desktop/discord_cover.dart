@@ -1,5 +1,7 @@
 import 'package:waxdeck_api/waxdeck_api.dart';
 
+import '../recency_map.dart';
+
 /// Album covers for presence, from the Cover Art Archive: an album's
 /// release id, then the archive's front image for it. A cover found is
 /// remembered, a miss for a day, and a release id across retries.
@@ -94,10 +96,6 @@ class DiscordCoverResolver {
 
   /// Sets [key] as the newest entry, dropping the oldest past what is
   /// remembered: a lookup that keeps failing never reaches [_covers].
-  static void _remember<V>(Map<String, V> map, String key, V value) {
-    map
-      ..remove(key)
-      ..[key] = value;
-    if (map.length > _remembered) map.remove(map.keys.first);
-  }
+  static void _remember<V>(Map<String, V> map, String key, V value) =>
+      map.putNewest(key, value, capacity: _remembered);
 }

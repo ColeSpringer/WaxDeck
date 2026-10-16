@@ -423,7 +423,7 @@ func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (B
 	// cursor for a difference the caller never made, and the contract
 	// says to send back the seed the first page answered with.
 	seed := derefInt64(req.Params.Seed)
-	if req.Params.List == Random && req.Params.Seed == nil && req.Params.Cursor == nil {
+	if req.Params.List == DiscoveryListRandom && req.Params.Seed == nil && req.Params.Cursor == nil {
 		seed = rand.Int64()
 	}
 	uc, _, err := s.requireUserCtx(ctx)
@@ -439,7 +439,7 @@ func (s *Server) BrowseList(ctx context.Context, req BrowseListRequestObject) (B
 		return nil, err
 	}
 	out := pageJSON(page)
-	if req.Params.List == Random {
+	if req.Params.List == DiscoveryListRandom {
 		out.Seed = &seed
 	}
 	return BrowseList200JSONResponse(out), nil
@@ -943,8 +943,10 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 		return nil, err
 	}
 	// Visibility gates the mint: an item outside the caller's libraries
-	// must not yield a stream URL.
-	if err := s.svc.VisibleItem(ctx, uc, req.Pid); err != nil {
+	// must not yield a stream URL. The same read says whether the item is
+	// a book, the one kind that can lay out in parts.
+	book, err := s.svc.VisibleBook(ctx, uc, req.Pid)
+	if err != nil {
 		if service.KindOf(err) == service.KindNotFound {
 			return GetPlayInfo404JSONResponse{NotFoundJSONResponse(errObj("not-found", "no item with pid "+req.Pid))}, nil
 		}
@@ -957,9 +959,11 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	if req.Params.PositionMs != nil {
 		positionMS = *req.Params.PositionMs
 	}
-	part, err := s.svc.ResolvePlayPart(ctx, uc, req.Pid, positionMS)
-	if err != nil {
-		return nil, err
+	var part service.PlayPart
+	if book {
+		if part, err = s.svc.ResolvePlayPart(ctx, uc, req.Pid, positionMS); err != nil {
+			return nil, err
+		}
 	}
 
 	maxKbps := 0
@@ -1030,11 +1034,17 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 		boost = s.svc.EffectiveVoiceBoost(ctx, uc, req.Pid)
 	}
 
+	// The position also cuts a stream that cannot be range-seeked, from
+	// inside the resolved part; the bridge clamps it to the part's end. A
+	// caller that plays HLS is handed such a stream as a presentation it
+	// seeks itself instead, where the engine renders one.
 	info, err := s.bridge.PlayInfoFor(ctx, uc.ID, req.Pid, flow.PlayOptions{
 		Cred:           sessionCred(p),
 		FilePID:        part.FilePID,
 		VoiceBoost:     boost,
 		MaxBitrateKbps: maxKbps,
+		StartMS:        max(positionMS-part.StartMS, 0),
+		HLS:            derefBool(req.Params.Hls),
 	})
 	if err != nil {
 		if out, ok := s.enclosurePlayInfo(ctx, uc.ID, sessionCred(p), req.Pid, err); ok {
@@ -1062,6 +1072,9 @@ func (s *Server) GetPlayInfo(ctx context.Context, req GetPlayInfoRequestObject) 
 	}
 	if info.AppliedBitrateKbps > 0 {
 		out.AppliedBitrateKbps = &info.AppliedBitrateKbps
+	}
+	if info.StartOffsetMS > 0 {
+		out.StartOffsetMs = &info.StartOffsetMS
 	}
 	if part.MultiPart {
 		out.PartIndex = &part.Index

@@ -34,6 +34,13 @@ const SONIC_SWEEP = 120_000;
 export class Seed {
   constructor(private readonly api: Api) {}
 
+  /// The same preconditions, set as another account: for a spec whose
+  /// subject is what one listener's state does to somebody else's view,
+  /// where a second browser would only be a slower way to make one call.
+  as(token: string): Seed {
+    return new Seed(this.api.as(token));
+  }
+
   /// Subscribe to a feed and answer the show's pid, once the server has
   /// really taken it. Polled rather than read off the create response
   /// because a subscription lands its episodes asynchronously.

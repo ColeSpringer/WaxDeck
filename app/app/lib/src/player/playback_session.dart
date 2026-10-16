@@ -5,6 +5,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_data/waxdeck_data.dart';
 import 'package:waxdeck_player/waxdeck_player.dart';
 
+import 'listen_outbox.dart';
 import 'smart_rewind.dart';
 
 /// One member of a minted timeline: the stream and which item of it
@@ -24,6 +25,48 @@ class TimelineSlot {
   /// what a finished listen is credited with.
   int get durationMs => media.memberDurationMs(member);
 }
+
+/// How an item came to be over, for the layer that moves the queue.
+enum SessionEnd {
+  /// It played out, or reached its outro cutoff.
+  played,
+
+  /// A play pressed on an end an armed stop was holding: whatever follows
+  /// it plays, and with nothing following, the item again.
+  heldEndPlayed,
+}
+
+/// How the item rests at its end, when it does.
+enum _AtEnd {
+  /// It does not.
+  none,
+
+  /// At its end, the engine perhaps a few milliseconds short of it: a play
+  /// starts it over, as one after its own end does.
+  rests,
+
+  /// The last part ended at an armed stop: the item is over, and the end
+  /// that would have moved the queue on is held for the next play.
+  held,
+}
+
+/// How a move reached its target.
+enum _Moved {
+  /// A seek inside the loaded media.
+  seeked,
+
+  /// A load of the session's own, which ended playing or paused as asked.
+  reloaded,
+
+  /// It did not get there.
+  not,
+}
+
+/// A failure a session could not get past, whether playback meant to be
+/// running when it struck (what decides whether it may start again by
+/// itself once the server is back), and where on the display timeline the
+/// item stood, which a retry picks up from.
+typedef SessionFailure = ({Object error, bool meantToPlay, int atMs});
 
 /// Drives one item's playback through the engine port and owns the server
 /// bookkeeping around it: resume on open, position checkpoints, and listen
@@ -56,6 +99,7 @@ class PlaybackSession {
     this.smartRewind = SmartRewind.off,
     this.maxBitrateKbps,
     this.timeline,
+    this.listenOutbox,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
@@ -74,6 +118,10 @@ class PlaybackSession {
 
   /// Downloaded originals, for playback when the server is unreachable.
   final DownloadManagerPort? downloads;
+
+  /// Where a listen that could not be reported waits, when this platform
+  /// runs no [sync] engine to queue it in.
+  final ListenOutbox? listenOutbox;
   final Duration checkpointInterval;
 
   /// Overrides the saved resume position (book resume, chapter start).
@@ -140,6 +188,7 @@ class PlaybackSession {
   StreamSubscription<Duration>? _positionSub;
   StreamSubscription<bool>? _playingSub;
   StreamSubscription<void>? _completedSub;
+  StreamSubscription<MediaFailure>? _failureSub;
   Timer? _checkpointTimer;
   Timer? _skipMapRetry;
 
@@ -166,7 +215,6 @@ class PlaybackSession {
   /// [_skippedAtSessionStart] is.
   int _speedSavedAtSessionStart = 0;
   bool _finished = false;
-  ListenSession? _pendingRetry;
   bool _disposed = false;
 
   // Item-scoped playback config, fetched on start and tolerated missing.
@@ -201,6 +249,99 @@ class PlaybackSession {
   /// is the previous item's, or zero.
   bool _loaded = false;
 
+  /// The play-info the loaded media was minted from. Null for a timeline
+  /// member and a downloaded file, which nothing here can mint again.
+  PlayInfo? _info;
+
+  /// When the loaded stream reads stale on this device's clock, fixed as
+  /// it loads (see [_hold]).
+  DateTime? _staleAt;
+
+  /// Whether the loaded stream's token has lapsed (or is about to), so a
+  /// play from here would meet a refusal.
+  bool get _streamStale {
+    final staleAt = _staleAt;
+    return _info != null && staleAt != null && !_clock().isBefore(staleAt);
+  }
+
+  /// A load of this session's own is under way: the first one, a reload
+  /// where it stands, a move into another part, the stop at a part's end.
+  /// A press made meanwhile changes what it ends with ([_resumeWanted])
+  /// and a seek where it lands ([_pendingSeekMs]), so nothing starts a
+  /// second load beside it: the engine fails an overtaken load, and a
+  /// session that minted again for that failure fought itself.
+  bool _busy = false;
+
+  /// Whether the load under way ends playing.
+  bool _resumeWanted = false;
+
+  /// Effects only a fresh mint carries changed while a load was under
+  /// way: it mints once more before it lets go.
+  bool _remint = false;
+
+  /// Settles with whether the load under way landed, which is what a seek
+  /// folded into it answers.
+  Completer<bool>? _landed;
+
+  /// How the item rests at its end, when it does.
+  _AtEnd _atEnd = _AtEnd.none;
+
+  /// The newest seek made while a load was under way, applied once it
+  /// lands. Only the newest: a cut is a whole encode of the rest of the
+  /// item, so the targets in between are never worth loading.
+  int? _pendingSeekMs;
+
+  /// Where the served audio begins on the loaded media's own timeline,
+  /// when the server cut a stream that answers no ranges; zero otherwise.
+  /// The engine's clock starts at the cut, so this is added back to every
+  /// position it reports.
+  int _cutMs = 0;
+
+  /// How far past what a cut stream has buffered a seek may still go
+  /// without a reload: the media keeps arriving while the seek waits.
+  static const _bufferSlackMs = 2000;
+
+  /// Display-timeline position where playback rests on its own (the
+  /// sleep timer's end of chapter); null when nothing is armed.
+  int? _stopAtMs;
+
+  /// A stop at the end of the loaded media is under way: the media's own
+  /// end, arriving meanwhile, belongs to that stop and is no roll-over.
+  bool _stopping = false;
+
+  /// How near the end of the loaded media a boundary counts as that end.
+  static const _stopSlackMs = 250;
+
+  /// Engine loads in flight. A load stops the outgoing media first, and
+  /// the pause that publishes must not checkpoint: the engine's position
+  /// is already the new media's while the timeline state is still the old.
+  int _loading = 0;
+
+  /// Loads begun under this session, ever: whether a failure came before
+  /// the outgoing media was stopped or after.
+  int _loadsBegun = 0;
+
+  /// Where on the display timeline the load under way lands, which is the
+  /// place to show and to record for a session let go meanwhile.
+  int? _loadTarget;
+
+  /// Where the item stood before a load that failed: the engine stopped
+  /// the outgoing media first and now reads the incoming media's start,
+  /// against a timeline that never moved. Cleared by a load that works.
+  int? _stoodBeforeFailedLoad;
+
+  /// Where the item stood when this session said it failed: what its
+  /// release records, whatever the engine reads by then.
+  int? _failedAtMs;
+
+  /// Recoveries since playback last proved itself, and where the last one
+  /// reloaded. A stream that fails again before it has played on for
+  /// [_provenMs] spends the budget; one that keeps failing is said.
+  int _recoveries = 0;
+  int? _recoveredAtMs;
+  static const _recoveryBudget = 2;
+  static const _provenMs = 5000;
+
   /// Where this item ended, when it ended on its own terms (an outro
   /// cutoff). The final checkpoint uses it instead of the engine's
   /// position, which stopped short of it by design.
@@ -225,6 +366,34 @@ class PlaybackSession {
   /// stream rather than changing anything locally.
   final ValueNotifier<bool> voiceBoost = ValueNotifier(false);
 
+  /// A load of this session's own is opening the item to play it: the
+  /// engine stands stopped for the load, and the transport still means to
+  /// play.
+  final ValueNotifier<bool> reopening = ValueNotifier(false);
+
+  void _markReopening() {
+    if (!_disposed) reopening.value = _busy && _resumeWanted;
+  }
+
+  /// Whether a play/pause control reads as playing: the engine, or a load
+  /// under way that means to play ([reopening]). What every transport
+  /// draws and what [toggle] reverses, so a press means what it shows.
+  bool get meansToPlay => engine.playing || reopening.value;
+
+  /// [meansToPlay] as it changes; one stream per session, so a widget
+  /// that reads it on every build keeps its subscription.
+  late final Stream<bool> meansToPlayStream = Stream<bool>.multi((out) {
+    void emit() => out.add(meansToPlay);
+    final playing = engine.playingStream.listen((_) => emit());
+    final listening = !_disposed;
+    if (listening) reopening.addListener(emit);
+    // Not awaited, for the reason [_shutdown] gives.
+    out.onCancel = () {
+      unawaited(playing.cancel());
+      if (listening) reopening.removeListener(emit);
+    };
+  }, isBroadcast: true).distinct();
+
   /// Milliseconds of silence skipped so far, for the trim chip's badge.
   ///
   /// Trimming only, which is what the control it feeds is about. The
@@ -247,17 +416,43 @@ class PlaybackSession {
     _speedSavedMs += (heard * (1 - 1 / rate)).round();
   }
 
-  final StreamController<void> _sessionCompleted =
-      StreamController<void>.broadcast();
+  final StreamController<SessionEnd> _sessionCompleted =
+      StreamController<SessionEnd>.broadcast();
 
   /// Fires once when this item is truly over: the last part of a book
-  /// ran out, or an episode reached its outro cutoff. Rolling from one
-  /// part of a book to the next is internal and never fires here, so the
-  /// queue above cannot mistake a part boundary for the end of an item.
-  Stream<void> get sessionCompleted => _sessionCompleted.stream;
+  /// ran out, or an episode reached its outro cutoff, or a play released
+  /// an end an armed stop held. Rolling from one part of a book to the
+  /// next is internal and never fires here, so the queue above cannot
+  /// mistake a part boundary for the end of an item.
+  Stream<SessionEnd> get sessionCompleted => _sessionCompleted.stream;
 
-  final StreamController<Object> _sessionFailed =
-      StreamController<Object>.broadcast();
+  final StreamController<void> _stopReached =
+      StreamController<void>.broadcast();
+
+  /// Fires when the stop [stopAt] armed is spent: playback reached it and
+  /// rests there, or a seek moved past it.
+  Stream<void> get stopReached => _stopReached.stream;
+
+  /// Arms a stop at [displayMs] on the display timeline, or disarms it
+  /// with null. Playback pauses there and parks on it, so a resume starts
+  /// what follows at its head. Owned here rather than by whoever armed it,
+  /// because a boundary at the end of a file races the file's own end,
+  /// and only the session sees both.
+  void stopAt(int? displayMs) {
+    _stopAtMs = displayMs;
+    // Armed after playback passed it (a sheet left open across a chapter
+    // end): spent now rather than parked on behind the listener.
+    if (displayMs != null &&
+        _loaded &&
+        !_busy &&
+        displayMs < displayPosition.inMilliseconds) {
+      _stopAtMs = null;
+      _announceStopReached();
+    }
+  }
+
+  final StreamController<SessionFailure> _sessionFailed =
+      StreamController<SessionFailure>.broadcast();
 
   /// Fires when the session cannot do what its item needs mid-flight: a
   /// book part that would not load, a cross-part jump the server
@@ -266,7 +461,16 @@ class PlaybackSession {
   /// rethrow would be an unhandled async error and a dead tap; this is
   /// where those failures land instead, for the layer above to surface
   /// the way it surfaces a failed start.
-  Stream<Object> get sessionFailed => _sessionFailed.stream;
+  Stream<SessionFailure> get sessionFailed => _sessionFailed.stream;
+
+  final StreamController<Object> _moveFailed =
+      StreamController<Object>.broadcast();
+
+  /// Fires when a seek could not be had and playback went on as it was:
+  /// nothing to let go of, only something to say. An effect that could
+  /// not reopen the stream says nothing, since its stored setting is
+  /// applied by the next load anyway.
+  Stream<Object> get moveFailed => _moveFailed.stream;
 
   /// The book detail behind an audiobook session (chapters, parts), when
   /// it could be fetched.
@@ -292,18 +496,63 @@ class PlaybackSession {
       final total = _book?.durationMs ?? item.durationMs;
       if (total > 0) return Duration(milliseconds: total);
     }
+    // A cut stream's own clock covers only what is left of the item.
+    if (_cutMs > 0) return Duration(milliseconds: _loadedDurationMs);
     return engine.duration ?? Duration(milliseconds: _loadedDurationMs);
   }
 
-  /// Current position on the display timeline (book timeline for books).
-  Duration get displayPosition => _display(engine.position);
+  /// Current position on the display timeline (book timeline for books),
+  /// or, while a load of this session's own is under way, where it is
+  /// taking the listener: the engine reads the media being replaced, or
+  /// already the new media against the old timeline.
+  Duration get displayPosition => _shown(engine.position);
 
-  /// Position updates on the display timeline.
-  Stream<Duration> get displayPositionStream =>
-      engine.positionStream.map(_display);
+  Duration _shown(Duration enginePosition) {
+    final target = _pendingSeekMs ?? _loadTarget;
+    if (_busy && target != null) return Duration(milliseconds: target);
+    return _display(enginePosition);
+  }
 
-  Duration _display(Duration enginePosition) =>
-      Duration(milliseconds: _partStartMs + enginePosition.inMilliseconds);
+  /// Position updates on the display timeline, and one more each time the
+  /// timeline itself moves under the engine (another part, another cut):
+  /// the element reports the new media's position before its load
+  /// answers, read against the old timeline, and a paused one says
+  /// nothing after.
+  Stream<Duration> get displayPositionStream => Stream<Duration>.multi((out) {
+    final positions = engine.positionStream.listen(
+      (position) => out.add(_shown(position)),
+      onError: out.addError,
+    );
+    final moves = _timelineMoved.stream.listen((_) => out.add(displayPosition));
+    // Not awaited, for the reason [_shutdown] gives.
+    out.onCancel = () {
+      unawaited(positions.cancel());
+      unawaited(moves.cancel());
+    };
+  });
+
+  final StreamController<void> _timelineMoved =
+      StreamController<void>.broadcast();
+
+  void _announceTimelineMoved() {
+    if (!_timelineMoved.isClosed) _timelineMoved.add(null);
+  }
+
+  final StreamController<void> _mediaLoaded =
+      StreamController<void>.broadcast();
+
+  /// Fires each time this session puts media into the engine, the first
+  /// load and every one after it: whatever the engine had prepared to
+  /// follow the item went with what was replaced.
+  Stream<void> get mediaLoaded => _mediaLoaded.stream;
+
+  void _announceMediaLoaded() {
+    if (!_mediaLoaded.isClosed) _mediaLoaded.add(null);
+  }
+
+  Duration _display(Duration enginePosition) => Duration(
+    milliseconds: _partStartMs + _cutMs + enginePosition.inMilliseconds,
+  );
 
   /// Fetches item config, play-info, and saved state, loads the stream at
   /// the resume position, and starts playing. When the server is
@@ -313,8 +562,19 @@ class PlaybackSession {
   /// [autoplay] false loads and stops there, for a queue put back at
   /// launch: the item stands at its checkpoint until someone presses
   /// play.
-  Future<void> start({bool autoplay = true}) async {
+  Future<void> start({bool autoplay = true}) {
     _engineOwners[engine] = this;
+    // The first load is one under way like any other: a press made while
+    // it resolves decides how it lands, and a seek waits for it.
+    return _underway(
+      initialPositionMs ?? 0,
+      resume: autoplay,
+      load: () => _open(autoplay: autoplay),
+    );
+  }
+
+  /// [start]'s reads and its load, which [_underway] lands as asked.
+  Future<void> _open({required bool autoplay}) async {
     // The three reads are independent and go out together. Config feeds
     // the rate, trim, and intro/outro, all applied after the load; play
     // state feeds only the resume point; play-info needs neither. Run in
@@ -359,8 +619,7 @@ class PlaybackSession {
                 stateFailure = e;
               }),
         if (!_isBook && timeline == null)
-          repository
-              .getPlayInfo(item.pid, maxBitrateKbps: maxBitrateKbps)
+          _mint(0)
               .then<void>((v) {
                 playInfo = v;
               })
@@ -400,7 +659,9 @@ class PlaybackSession {
         }
       }
       if (_isBook) {
-        await _loadPartFor(_bookStart(resumeMs), autoplay: false);
+        final at = _startAt(resumeMs);
+        _loadTarget = at;
+        await _loadPartFor(at);
       } else {
         // A timeline member needs nothing resolved: the URL is minted,
         // the duration is the member's own, and the stream is
@@ -421,7 +682,6 @@ class PlaybackSession {
                     seekable: true,
                     expiresAt: slot.media.expiresAt,
                   ))!;
-        _loadedDurationMs = info.durationMs;
         _applyOutroCutoff(info.durationMs);
         // The same guard against a checkpoint the media outgrew: a
         // position at or past the end is not a place to start, however
@@ -429,24 +689,22 @@ class PlaybackSession {
         // a finished flag that never landed).
         if (info.durationMs > 0 && resumeMs >= info.durationMs) resumeMs = 0;
         resumeMs = _applyIntroSkip(resumeMs);
-        final resumeAt = resumeMs > 0 ? Duration(milliseconds: resumeMs) : null;
+        _loadTarget = resumeMs;
         if (slot != null) {
-          await _loadTimelineMedia(slot, resumeAt);
-        } else {
-          // A span means the URL carries the whole backing file (direct
-          // playback of a carved track); the engine clips to the window
-          // and every position stays track-relative.
-          await _loadMedia(
-            info.url,
-            mimeType: info.mimeType,
-            initialPosition: resumeAt,
-            clipStart: info.spanStartMs == null
-                ? null
-                : Duration(milliseconds: info.spanStartMs!),
-            clipEnd: info.spanEndMs == null
-                ? null
-                : Duration(milliseconds: info.spanEndMs!),
+          await _loadTimelineMedia(
+            slot,
+            resumeMs > 0 ? Duration(milliseconds: resumeMs) : null,
           );
+          if (_disposed) return;
+          _moveTimeline(durationMs: slot.durationMs);
+        } else {
+          final at = resumeMs;
+          // The mint above could not know the resume point (it went out
+          // beside the play-state read), and a stream that answers no
+          // ranges cannot be seeked to it: minted again, cut there.
+          final minted = !info.seekable && at > 0 ? await _mint(at) : info;
+          if (_disposed) return;
+          await _loadStream(minted, at);
         }
         if (trimEnabled.value) unawaited(_loadSkipMap());
       }
@@ -477,34 +735,13 @@ class PlaybackSession {
       // file this always loaded.
       if (_isBook && local.sequenced) {
         _localParts = local;
-        await _loadPartFor(_bookStart(resumeMs), autoplay: false);
+        final at = _startAt(resumeMs);
+        _loadTarget = at;
+        await _loadPartFor(at);
       } else {
         if (!_isBook) resumeMs = _applyIntroSkip(resumeMs);
-        final resumeAt = resumeMs > 0 ? Duration(milliseconds: resumeMs) : null;
-        // A carved item's file duration is the whole rip's, and the engine
-        // is about to be clipped to the window: the loaded media is the
-        // item's own length.
-        final span = local.spanStartMs != null && (local.spanEndMs ?? 0) > 0
-            ? local.spanEndMs! - local.spanStartMs!
-            : null;
-        _loadedDurationMs =
-            span ?? local.parts.first.durationMs ?? item.durationMs;
-        // Downloaded originals carry the same window; clipping here is
-        // what makes an offline carved track play as itself instead of
-        // the whole rip.
-        await _loadMedia(
-          Uri.file(local.parts.first.path).toString(),
-          initialPosition: resumeAt,
-          clipStart: local.spanStartMs == null
-              ? null
-              : Duration(milliseconds: local.spanStartMs!),
-          // The server closes open-ended windows now; the zero guard
-          // covers download records stored before it did (an open clip
-          // end plays to the file's end, which is what those meant).
-          clipEnd: local.spanEndMs == null || local.spanEndMs! <= 0
-              ? null
-              : Duration(milliseconds: local.spanEndMs!),
-        );
+        _loadTarget = resumeMs;
+        await _loadLocalFile(local, resumeMs);
       }
     }
     if (_disposed) return;
@@ -520,14 +757,6 @@ class PlaybackSession {
     _lastPosition = engine.position;
     _loaded = true;
     _watchEngine();
-    if (autoplay) {
-      await engine.play();
-    } else if (engine.playing) {
-      // A load-paused start can land over live playback (a session
-      // restored while something plays): the source swap alone does not
-      // stop the transport, and put-it-back-paused means exactly that.
-      await engine.pause();
-    }
   }
 
   /// Takes over media the engine is already playing: this item was
@@ -545,7 +774,13 @@ class PlaybackSession {
     if (_disposed) return;
     await engine.setSpeed(_configuredSpeed());
     if (_disposed) return;
-    _loadedDurationMs = info.durationMs;
+    // A timeline member's info is the rendering's, which the feeder keeps
+    // and nothing here can mint again.
+    _moveTimeline(
+      info: timeline == null ? info : null,
+      cutMs: info.startOffsetMs,
+      durationMs: info.durationMs,
+    );
     _applyOutroCutoff(info.durationMs);
     _lastPosition = engine.position;
     _loaded = true;
@@ -561,6 +796,7 @@ class PlaybackSession {
     _positionSub = engine.positionStream.listen(_onPosition);
     _playingSub = engine.playingStream.listen(_onPlayingChanged);
     _completedSub = engine.completed.listen((_) => _onCompleted());
+    _failureSub = engine.mediaFailed.listen(_onMediaFailed);
   }
 
   /// The in-flight (or finished) config load, so a write that arrives
@@ -606,6 +842,9 @@ class PlaybackSession {
     Duration? clipStart,
     Duration? clipEnd,
   }) async {
+    final standing = _standingMs();
+    _loading++;
+    _loadsBegun++;
     try {
       await engine.load(
         url,
@@ -614,11 +853,180 @@ class PlaybackSession {
         clipStart: clipStart,
         clipEnd: clipEnd,
       );
+      _stoodBeforeFailedLoad = null;
+      _announceMediaLoaded();
     } on MediaLoadException {
+      _stoodBeforeFailedLoad = standing;
       rethrow;
     } on Object catch (error) {
+      _stoodBeforeFailedLoad = standing;
       throw MediaLoadException(MediaFault.transport, error);
+    } finally {
+      _loading--;
     }
+  }
+
+  /// Loads a minted stream at display position [atMs].
+  ///
+  /// A refusal a fresh mint cures (an expired token, the streaming engine
+  /// away) is minted once more and loaded again; a second failure is not
+  /// tried a third time. Whatever the server refused comes out as its own
+  /// API error, so the layer above words it and never reads it as the
+  /// file.
+  Future<void> _loadStream(PlayInfo info, int atMs) async {
+    try {
+      await _loadInfo(info, atMs);
+      return;
+    } on MediaLoadException catch (error) {
+      if (_disposed || !_worthAnotherMint(error)) throw _surfaced(error);
+    }
+    final fresh = await _mint(atMs);
+    if (_disposed) return;
+    try {
+      await _loadInfo(fresh, atMs);
+    } on MediaLoadException catch (again) {
+      throw _surfaced(again);
+    }
+  }
+
+  /// One load of [info] at display position [atMs]. A span means the URL
+  /// carries the whole backing file (direct playback of a carved track);
+  /// the engine clips to the window and every position stays
+  /// track-relative.
+  ///
+  /// A cut stream begins at [PlayInfo.startOffsetMs], at most a second
+  /// before [atMs]; the rest is a seek inside media already arriving.
+  Future<void> _loadInfo(PlayInfo info, int atMs) async {
+    final cut = info.startOffsetMs;
+    final lengthMs = info.durationMs - cut;
+    var inMediaMs = atMs - (info.partStartMs ?? 0) - cut;
+    // Web answers "no supported source" for a source begun at or past its
+    // end: a target there plays the last second, and ends the way a seek
+    // to the end of a single file does. Only where the length is the
+    // audio's own, a cut's or a book part's: an episode's may be its
+    // feed's word, short of the audio.
+    final measured = !info.seekable || info.partIndex != null;
+    if (measured && lengthMs > 0 && inMediaMs >= lengthMs) {
+      inMediaMs = lengthMs > 1000 ? lengthMs - 1000 : 0;
+    }
+    await _loadMedia(
+      info.url,
+      mimeType: info.mimeType,
+      initialPosition: inMediaMs > 0 ? Duration(milliseconds: inMediaMs) : null,
+      clipStart: info.spanStartMs == null
+          ? null
+          : Duration(milliseconds: info.spanStartMs!),
+      clipEnd: info.spanEndMs == null
+          ? null
+          : Duration(milliseconds: info.spanEndMs!),
+    );
+    // The timeline state moves in one step, once the media is in the
+    // engine (see [_loadPartFor] for why after and not before).
+    _moveTimeline(
+      info: info,
+      cutMs: cut,
+      durationMs: info.durationMs,
+      partIndex: info.partIndex,
+      partCount: info.partCount,
+      partStartMs: info.partStartMs ?? 0,
+    );
+  }
+
+  /// Points the display timeline at what the engine now holds, in one
+  /// step: the stream it was minted from ([info]; none for a timeline
+  /// member or a downloaded file, which nothing here can mint again),
+  /// where a cut stream begins, the loaded media's length, and where a
+  /// part sits in its book.
+  void _moveTimeline({
+    PlayInfo? info,
+    int cutMs = 0,
+    required int durationMs,
+    int? partIndex,
+    int? partCount,
+    int partStartMs = 0,
+  }) {
+    if (info == null) {
+      _info = null;
+      _staleAt = null;
+    } else {
+      _hold(info);
+    }
+    _cutMs = cutMs;
+    _loadedDurationMs = durationMs;
+    _partIndex = partIndex;
+    _partCount = partCount;
+    _partStartMs = partStartMs;
+    _announceTimelineMoved();
+  }
+
+  /// Makes [info] the loaded media's, its staleness read on this device's
+  /// clock the way the downloads read theirs: a play that lands on an
+  /// expired URL is a failure the listener hears.
+  void _hold(PlayInfo info) {
+    _info = info;
+    _staleAt = mediaUrlStaleAt(info.expiresAt, now: _clock());
+  }
+
+  /// Mints for display position [atMs], and again for whatever arrived
+  /// while that mint was out (the newest seek, a change of effects): a cut
+  /// is a whole encode of the rest of the item, so the targets in between
+  /// are never loaded. Answers the play-info and the target it is for.
+  Future<(PlayInfo, int)> _mintNewest(int atMs) async {
+    var at = atMs;
+    var info = await _mint(at);
+    while (!_disposed && (_pendingSeekMs != null || _remint)) {
+      at = _pendingSeekMs ?? at;
+      _loadTarget = at;
+      _pendingSeekMs = null;
+      _remint = false;
+      info = await _mint(at);
+    }
+    return (info, at);
+  }
+
+  /// Play-info for this item at display position [atMs]: the part holding
+  /// it for a book, and for a stream the server cannot range, a stream cut
+  /// to begin there.
+  Future<PlayInfo> _mint(int atMs) => repository.getPlayInfo(
+    item.pid,
+    positionMs: _isBook ? atMs : (atMs > 0 ? atMs : null),
+    maxBitrateKbps: maxBitrateKbps,
+    hls: _hls,
+  );
+
+  /// Asked on every mint where the engine plays HLS: a re-encode then
+  /// comes back as one presentation it seeks itself, seekable, so nothing
+  /// here cuts it and trimming jumps. Unasked elsewhere.
+  bool? get _hls => engine.playsHls ? true : null;
+
+  /// Whether another mint could make [error] go away: a refusal that says
+  /// so, or a failure the server never explained. Not one the load
+  /// deadline already waited out, which would only double the wait.
+  static bool _worthAnotherMint(MediaLoadException error) {
+    final refusal = error.refusal;
+    if (refusal != null) return _curedByMint(refusal);
+    return error.fault == MediaFault.transport &&
+        error.cause is! TimeoutException;
+  }
+
+  /// Whether minting again cures [refusal]: a token that lapsed, the
+  /// streaming engine away.
+  static bool _curedByMint(StreamRefusal refusal) =>
+      refusal.stale || refusal.engineDown;
+
+  /// A failure carrying the server's refusal, as the API error it is.
+  /// One with no envelope (a proxy's page, a bare status) reads as the
+  /// API client reads any such answer: the network, with its status.
+  static Object _surfaced(MediaTrouble error) {
+    final refusal = error.refusal;
+    if (refusal == null) return error;
+    final code = refusal.code ?? 'transport';
+    return WaxDeckApiException(
+      code: code,
+      message: refusal.message ?? code,
+      statusCode: refusal.status,
+      params: refusal.params,
+    );
   }
 
   /// The timeline half of [_loadMedia], holding the same promise. Never
@@ -639,6 +1047,7 @@ class PlaybackSession {
         member: slot.member,
         position: at ?? Duration.zero,
       );
+      _announceMediaLoaded();
     } on MediaLoadException {
       rethrow;
     } on Object catch (error) {
@@ -657,14 +1066,28 @@ class PlaybackSession {
   /// point always reads false: silencing the stream is part of losing
   /// it, so what the listener had asked for only survives in the loss
   /// itself.
-  Future<void> reloadTimeline(TimelineSlot slot, {required bool resume}) async {
+  ///
+  /// Spends the same budget a stream's recoveries do: a timeline lost
+  /// again before playback proved itself is not re-minted for ever
+  /// ([mayRecover]).
+  Future<void> reloadTimeline(TimelineSlot slot, {required bool resume}) {
     final at = displayPosition;
-    await _loadTimelineMedia(slot, at);
-    if (_disposed) return;
-    _loadedDurationMs = slot.durationMs;
-    _lastPosition = engine.position;
-    if (resume) await engine.play();
+    _recoveries++;
+    _recoveredAtMs = at.inMilliseconds;
+    return _underway(
+      at.inMilliseconds,
+      resume: resume,
+      load: () async {
+        await _loadTimelineMedia(slot, at);
+        if (_disposed) return;
+        _moveTimeline(durationMs: slot.durationMs);
+      },
+    );
   }
+
+  /// Whether a stream lost again may be reloaded again: not once reloads
+  /// have kept failing before playback proved itself.
+  bool get mayRecover => _recoveries < _recoveryBudget;
 
   /// Fetches the per-show or per-book playback config; playback works
   /// without it, so any failure just leaves the defaults in place.
@@ -724,48 +1147,69 @@ class PlaybackSession {
     if (cutoff > 0) _outroCutoffMs = cutoff;
   }
 
-  /// Resolves and loads the part containing book-timeline [bookMs]
-  /// (single-file items resolve to the whole file with partStartMs 0).
-  ///
-  /// The fallback to downloaded parts is here rather than at the call
-  /// sites, so every crossing gets it: a seek, a chapter tap, the deck
-  /// bar's skip, replay, and the roll off a part's end. Three of those do
-  /// not await, so an escape would be an unhandled async error.
-  ///
-  /// Rethrows for parts that cannot be placed on a timeline, which is
-  /// [start]'s own offline branch to answer: it has the mirror position.
-  /// Where a book starts: a position at or past its end is not a place
-  /// to start, the guard the single-file path keeps. Here and not in
-  /// [_loadPartFor], whose rollover past the last part lands on the end.
-  int _bookStart(int ms) {
-    final length = _book?.durationMs ?? item.durationMs;
+  /// Where a play from display [ms] starts: a position at or past the end
+  /// the transport draws ([mediaDuration]) is not a place to start, so the
+  /// top. Not in [_loadPartFor], whose rollover past the last part lands
+  /// on the end.
+  int _startAt(int ms) {
+    final length = _knownLengthMs;
     return length > 0 && ms >= length ? 0 : ms;
   }
 
-  Future<void> _loadPartFor(int bookMs, {required bool autoplay}) async {
+  /// The length [mediaDuration] draws, from what this session knows itself
+  /// before its first load lands: until then the engine's length is
+  /// whatever played last. Zero where nothing says.
+  int get _knownLengthMs => _loaded
+      ? mediaDuration.inMilliseconds
+      : (_isBook ? _book?.durationMs ?? item.durationMs : _loadedDurationMs);
+
+  /// Resolves and loads the part containing book-timeline [bookMs]
+  /// (single-file items resolve to the whole file with partStartMs 0).
+  /// [newest] folds in what arrives while the mint is out, for a load
+  /// under way (see [_mintNewest]). Never plays: whatever runs it says
+  /// how it lands.
+  ///
+  /// The fallback to downloaded parts is here rather than at the call
+  /// sites, so every crossing gets it: a seek, a chapter tap, the deck
+  /// bar's skip, replay, and the roll off a part's end.
+  ///
+  /// Rethrows for parts that cannot be placed on a timeline, which is
+  /// [start]'s own offline branch to answer: it has the mirror position.
+  Future<void> _loadPartFor(int bookMs, {bool newest = false}) async {
     final held = _localParts;
     if (held != null) {
-      await _loadLocalPartFor(held, bookMs, autoplay: autoplay);
+      await _loadLocalPartFor(held, bookMs);
       return;
     }
-    final PlayInfo info;
+    final (PlayInfo, int) minted;
     try {
-      info = await repository.getPlayInfo(
-        item.pid,
-        positionMs: bookMs,
-        maxBitrateKbps: maxBitrateKbps,
-      );
+      minted = newest
+          ? await _mintNewest(bookMs)
+          : (await _mint(bookMs), bookMs);
     } on WaxDeckApiException catch (e) {
       final local = await _localFallback(e);
       if (_disposed) return;
-      if (local == null || !local.sequenced) rethrow;
-      _localParts = local;
-      await _loadLocalPartFor(local, bookMs, autoplay: autoplay);
-      return;
+      // The newest target the failed mint was folding in.
+      final target = _pendingSeekMs ?? _loadTarget ?? bookMs;
+      _pendingSeekMs = null;
+      if (local != null && local.sequenced) {
+        _localParts = local;
+        await _loadLocalPartFor(local, target);
+        return;
+      }
+      // A book that is one file plays that file wherever it stands.
+      if (local != null && local.parts.length == 1) {
+        await _loadLocalFile(local, target);
+        return;
+      }
+      rethrow;
     }
     // Let go while the part was resolving: loading it now would put this
     // book over whatever took the engine.
     if (_disposed) return;
+    // The first load has no map yet, whatever part it names (a book in
+    // one file names none, which reads the same as the part before it).
+    final samePart = _loadsBegun > 0 && minted.$1.partIndex == _partIndex;
     // The timeline state moves only once the part's media is in the
     // engine. Written before the load, every checkpoint fired inside it
     // - and the load's own stop publishes a pause, whose checkpoint is
@@ -775,26 +1219,17 @@ class PlaybackSession {
     // media cannot disagree whichever way the load went. The skip-map
     // state rides with them: cleared against the old part, a refused
     // load would leave trimming silently dead for a part still playing.
-    final partStartMs = info.partStartMs ?? 0;
-    final inPartMs = bookMs - partStartMs;
-    await _loadMedia(
-      info.url,
-      mimeType: info.mimeType,
-      initialPosition: inPartMs > 0 ? Duration(milliseconds: inPartMs) : null,
-    );
-    // Let go while the part was loading: the play below would start the
-    // engine on whatever a newer session has since loaded into it.
+    await _loadStream(minted.$1, minted.$2);
     if (_disposed) return;
-    _loadedDurationMs = info.durationMs;
-    _partIndex = info.partIndex;
-    _partCount = info.partCount;
-    _partStartMs = partStartMs;
-    _skipSpans = const [];
+    // The jump cursor is per load; the map is per part, so the same part
+    // loaded again (a reopen for effects, a recovery) keeps the one it has.
     _lastJumpedSpan = -1;
-    _skipMapRetried = false;
+    if (!samePart) {
+      _skipSpans = const [];
+      _skipMapRetried = false;
+      if (trimEnabled.value) unawaited(_loadSkipMap());
+    }
     _lastPosition = engine.position;
-    if (trimEnabled.value) unawaited(_loadSkipMap());
-    if (autoplay) await engine.play();
   }
 
   /// The same resolution against the download store: which downloaded
@@ -807,11 +1242,7 @@ class PlaybackSession {
   /// one - behave offline exactly as it does online. No skip map is
   /// fetched: trimming needs a server, and this branch is the one that
   /// has none.
-  Future<void> _loadLocalPartFor(
-    LocalPlayback local,
-    int bookMs, {
-    required bool autoplay,
-  }) async {
+  Future<void> _loadLocalPartFor(LocalPlayback local, int bookMs) async {
     final at = local.partAt(bookMs);
     final inPartMs = bookMs - at.startMs;
     // State follows the media, the same ordering as the online path and
@@ -824,14 +1255,47 @@ class PlaybackSession {
       initialPosition: inPartMs > 0 ? Duration(milliseconds: inPartMs) : null,
     );
     if (_disposed) return;
-    _loadedDurationMs = at.part.durationMs ?? 0;
-    _partIndex = at.index;
-    _partCount = local.parts.length;
-    _partStartMs = at.startMs;
+    _moveTimeline(
+      durationMs: at.part.durationMs ?? 0,
+      partIndex: at.index,
+      partCount: local.parts.length,
+      partStartMs: at.startMs,
+    );
     _skipSpans = const [];
     _lastJumpedSpan = -1;
     _lastPosition = engine.position;
-    if (autoplay) await engine.play();
+  }
+
+  /// Loads the one file of [local] at display position [atMs]: a track,
+  /// an episode, a book that is one file, or the first file of a book
+  /// whose stored parts cannot be placed on its timeline.
+  Future<void> _loadLocalFile(LocalPlayback local, int atMs) async {
+    // A carved item's file duration is the whole rip's, and the engine
+    // is about to be clipped to the window: the loaded media is the
+    // item's own length.
+    final span = local.spanStartMs != null && (local.spanEndMs ?? 0) > 0
+        ? local.spanEndMs! - local.spanStartMs!
+        : null;
+    // Downloaded originals carry the same window; clipping here is what
+    // makes an offline carved track play as itself instead of the whole
+    // rip.
+    await _loadMedia(
+      Uri.file(local.parts.first.path).toString(),
+      initialPosition: atMs > 0 ? Duration(milliseconds: atMs) : null,
+      clipStart: local.spanStartMs == null
+          ? null
+          : Duration(milliseconds: local.spanStartMs!),
+      // The server closes open-ended windows now; the zero guard covers
+      // download records stored before it did (an open clip end plays to
+      // the file's end, which is what those meant).
+      clipEnd: local.spanEndMs == null || local.spanEndMs! <= 0
+          ? null
+          : Duration(milliseconds: local.spanEndMs!),
+    );
+    if (_disposed) return;
+    _moveTimeline(
+      durationMs: span ?? local.parts.first.durationMs ?? item.durationMs,
+    );
   }
 
   /// The downloaded original, but only for failures that smell like
@@ -855,25 +1319,72 @@ class PlaybackSession {
   /// It also rewinds a book to its first part rather than to the top of
   /// the part it ended on, which the engine alone cannot do.
   ///
-  /// The pause half needs no such routing: it is already stamped from
-  /// the engine's own transition, in [_onPlayingChanged], exactly so
-  /// that a pause from the lock screen or an interruption counts the
-  /// same as one from a button here.
+  /// A pause is stamped from the engine's own transition, in
+  /// [_onPlayingChanged], so that an interruption the platform made counts
+  /// the same as a press; a press still comes through [pause], which is
+  /// what folds it into a load under way.
+  ///
+  /// A stream whose token has lapsed (a long pause outlives one) is minted
+  /// again and reloaded where the listener stands, rather than handed to
+  /// an engine that would only meet the refusal.
   Future<void> play() async {
+    if (_busy) {
+      _resumeWanted = true;
+      _markReopening();
+      return;
+    }
     if (engine.playing) return;
-    if (engine.processingState == EngineProcessingState.completed) {
+    if (_atEnd == _AtEnd.held) {
+      // The end that would have moved the queue on under a sleeper.
+      _atEnd = _AtEnd.rests;
+      _announceCompleted(SessionEnd.heldEndPlayed);
+      return;
+    }
+    if (_atEnd == _AtEnd.rests ||
+        engine.processingState == EngineProcessingState.completed) {
       await replay();
+      return;
+    }
+    if (_streamStale) {
+      // The rewind a long break earns is applied to the reload, so the
+      // play that follows it does not seek a second time.
+      final since = _pausedAt ?? _restedSince;
+      _pausedAt = null;
+      _restedSince = null;
+      final at = _startAt(
+        _rewound(displayPosition.inMilliseconds, since: since),
+      );
+      await _recover(at, resume: true);
       return;
     }
     await engine.play();
   }
 
-  Future<void> toggle() async {
-    if (engine.playing) {
-      await engine.pause();
-      return;
+  /// A press of the one play/pause control: it reverses what the control
+  /// shows ([meansToPlay]), a load under way included.
+  Future<void> toggle() => meansToPlay ? pause() : play();
+
+  /// Pauses, folding into a load under way so it does not start what the
+  /// listener stopped.
+  Future<void> pause() async {
+    if (_busy) {
+      _resumeWanted = false;
+      _markReopening();
     }
-    await play();
+    await engine.pause();
+  }
+
+  /// Stops for a stop raised outside the app (a lock screen, a routed
+  /// command): the media is let go and the item stays where it stood. A
+  /// load under way lands paused instead, since stopping the engine under
+  /// it would only fail the load.
+  Future<void> stop() async {
+    if (_busy) {
+      _resumeWanted = false;
+      _markReopening();
+      if (_loading > 0) return;
+    }
+    await engine.stop();
   }
 
   /// Steps back a little when the play that just started followed a
@@ -927,33 +1438,113 @@ class PlaybackSession {
   /// tap. The answer is for the caller that speaks for someone else (a
   /// routed Connect command): a session being torn down must not be
   /// acked to the remote as a seek that worked.
+  ///
+  /// A stream the server cuts (it answers no ranges) is seeked only
+  /// inside what it has buffered; anywhere else is minted again, cut at
+  /// the target. Seeks made while a reload is in flight fold into it.
+  /// Every seek that lands is checkpointed, so a paused scrub followed by
+  /// a closed tab keeps the place it chose.
   Future<bool> seek(Duration position) async {
     // A session that has let go must not move an engine a newer one is
     // driving. The same rule the shutdown follows for `stop`, and it
     // belongs here too: a surface built with this session can outlive
     // it - a sheet holding the track it was opened over, a routed
     // command in flight - and the answer for those is that the seek did
-    // not land, not that somebody else's item jumped.
-    if (_disposed) return false;
-    final targetMs = position.inMilliseconds;
-    final withinPart =
-        _partIndex == null ||
-        (targetMs >= _partStartMs &&
-            targetMs <= _partStartMs + _loadedDurationMs);
-    if (withinPart) {
-      await engine.seek(Duration(milliseconds: targetMs - _partStartMs));
-      return true;
+    // not land, not that somebody else's item jumped. Nor one that was
+    // never started: there is no load for it to wait on. One made while
+    // the first load is under way waits for it, below: the engine still
+    // holds the item before it, and is no place to move.
+    if (_disposed || !_loaded && !_busy) return false;
+    _atEnd = _AtEnd.none;
+    // The end an outro cutoff recorded belonged to the play that reached
+    // it; one moved back from there is listening again.
+    _endedAt = null;
+    var targetMs = position.inMilliseconds < 0 ? 0 : position.inMilliseconds;
+    final cutoff = _outroCutoffMs;
+    if (cutoff != null && targetMs - _partStartMs < cutoff) _outroFired = false;
+    // Past the end is the end (a skip near it, from here or the lock
+    // screen): a part loaded beyond its own end fails on web. The end the
+    // transport draws, which for an uncut stream is the audio's own: a
+    // feed's declared length can fall short of it.
+    final length = _knownLengthMs;
+    if (length > 0 && targetMs > length) targetMs = length;
+    final stop = _stopAtMs;
+    if (stop != null && targetMs >= stop) {
+      // Jumping past the boundary is not reaching it: spent, no pause.
+      _stopAtMs = null;
+      _announceStopReached();
     }
-    try {
-      await _loadPartFor(targetMs, autoplay: engine.playing);
-      return true;
-    } on Object catch (error) {
-      // The failure lands on the error surface: the layer above lets
-      // the session go and stands the same pane a failed start gets,
-      // with the checkpoint at the position the jump left.
-      _announceFailed(error);
-      return false;
+    if (_busy) {
+      _pendingSeekMs = targetMs;
+      return _landed!.future;
     }
+    return await _moveTo(targetMs, resume: engine.playing) != _Moved.not;
+  }
+
+  /// Moves to [targetMs] on the display timeline: a seek inside the
+  /// loaded media, or a load of its own where a seek cannot reach
+  /// (another part, a cut stream past what it holds), ending as [resume]
+  /// says. A move that lands is checkpointed, so a paused scrub followed
+  /// by a closed tab keeps the place it chose.
+  ///
+  /// [keep] is a move away from media still worth hearing (see
+  /// [_reloadKeeping]); a replay's is from an end, with nothing to keep,
+  /// so a failure there is said.
+  Future<_Moved> _moveTo(
+    int targetMs, {
+    required bool resume,
+    bool keep = true,
+  }) async {
+    if (_withinPart(targetMs) && !_needsCut(targetMs)) {
+      await engine.seek(_inMedia(targetMs));
+      if (_disposed) return _Moved.not;
+      unawaited(_checkpoint());
+      return _Moved.seeked;
+    }
+    final landed = keep
+        ? await _reloadKeeping(atMs: targetMs, resume: resume, say: true)
+        : await _recover(targetMs, resume: resume);
+    if (!landed) return _Moved.not;
+    unawaited(_checkpoint());
+    return _Moved.reloaded;
+  }
+
+  /// Whether [targetMs] lies in the loaded part. Half-open, as the server
+  /// resolves parts: the first millisecond of the next part belongs to
+  /// it, except at the very end of the book.
+  bool _withinPart(int targetMs) {
+    if (_partIndex == null) return true;
+    final partEnd = _partStartMs + _loadedDurationMs;
+    return targetMs >= _partStartMs &&
+        (targetMs < partEnd || !_hasNextPart && targetMs <= partEnd);
+  }
+
+  /// Whether the loaded part has another after it.
+  bool get _hasNextPart {
+    final index = _partIndex;
+    final count = _partCount;
+    return index != null && count != null && index < count - 1;
+  }
+
+  /// Display position [displayMs] on the loaded media's own clock.
+  Duration _inMedia(int displayMs) =>
+      Duration(milliseconds: displayMs - _partStartMs - _cutMs);
+
+  /// Whether the loaded stream answers no ranges on an engine that
+  /// restarts such a stream at any seek.
+  bool get _cantSeekHere =>
+      _info?.seekable == false && !engine.seeksWithinUnrangedStream;
+
+  /// Whether [targetMs] (display timeline) is out of the loaded media's
+  /// reach by seeking: a cut stream answers no ranges, so it reaches only
+  /// what it has buffered, and never back before where it was cut.
+  bool _needsCut(int targetMs) {
+    final info = _info;
+    if (info == null || info.seekable) return false;
+    if (!engine.seeksWithinUnrangedStream) return true;
+    final inMedia = _inMedia(targetMs).inMilliseconds;
+    return inMedia < 0 ||
+        inMedia > engine.bufferedPosition.inMilliseconds + _bufferSlackMs;
   }
 
   /// Sets the playback speed now and, for episodes and books, persists it
@@ -1021,15 +1612,10 @@ class PlaybackSession {
       voiceBoost.value = !on;
       return false;
     }
-    if (_disposed || _localParts != null) return true;
-    try {
-      await _reopenForEffects();
-    } on Object {
-      // Best effort, and broader than an API failure on purpose: the
-      // reopen crosses the engine too, and a platform that refuses the
-      // media must not take playback down with it. The stored setting
-      // stands and the next load applies it.
-    }
+    // A mint that fails leaves the old media playing, and the stored
+    // setting is applied by the next load; a load that began and failed
+    // has stopped the old media, so that is said, as a seek's is.
+    if (!_disposed) await _reopenForEffects();
     return true;
   }
 
@@ -1073,40 +1659,200 @@ class PlaybackSession {
   }
 
   /// Reopens the loaded media where it stands, for a change only a
-  /// freshly minted stream can carry.
+  /// freshly minted stream can carry. A downloaded file or a timeline
+  /// member has nothing to mint, so the stored setting waits for the next
+  /// online play. A load under way mints once more instead, so its target
+  /// and its intent to play stand.
   Future<void> _reopenForEffects() async {
-    var at = displayPosition.inMilliseconds;
-    final playing = engine.playing;
-    if (_isBook) {
-      await _loadPartFor(at, autoplay: playing);
+    if (_busy) {
+      _remint = true;
       return;
     }
-    final info = await repository.getPlayInfo(
-      item.pid,
-      maxBitrateKbps: maxBitrateKbps,
+    if (_info == null) return;
+    await _reloadKeeping(
+      atMs: _startAt(displayPosition.inMilliseconds),
+      resume: engine.playing,
     );
+  }
+
+  /// Runs [load] as this session's load under way (see [_busy]), meaning
+  /// to land at display position [atMs] and to end playing when [resume]
+  /// says so. A press made meanwhile changes what it ends with, and a seek
+  /// made meanwhile lands as soon as it does. Throws what [load] threw,
+  /// leaving nothing folded into it behind.
+  Future<void> _underway(
+    int atMs, {
+    required bool resume,
+    required Future<void> Function() load,
+  }) async {
+    final landed = Completer<bool>();
+    _landed = landed;
+    _busy = true;
+    _resumeWanted = resume;
+    _loadTarget = atMs;
+    _markReopening();
+    try {
+      await load();
+    } on Object {
+      // A seek folded into a load that failed did not land, and the next
+      // load must not carry it.
+      _pendingSeekMs = null;
+      _remint = false;
+      landed.complete(false);
+      rethrow;
+    } finally {
+      _busy = false;
+      _loadTarget = null;
+      _markReopening();
+    }
+    var arrived = false;
+    try {
+      if (_disposed) return;
+      _lastPosition = engine.position;
+      if (_resumeWanted) {
+        await play();
+      } else if (engine.playing) {
+        // Landed over live playback that was asked to stay paused (a
+        // queue put back while something plays): the source swap alone
+        // does not stop the transport.
+        await engine.pause();
+      }
+      // A seek that arrived after the last mint lands now; effects
+      // changed meanwhile reopen it once more (a seek that reloads has
+      // minted them already).
+      final pending = _pendingSeekMs;
+      _pendingSeekMs = null;
+      arrived = pending == null || await seek(Duration(milliseconds: pending));
+    } finally {
+      landed.complete(arrived);
+    }
+    if (_remint && !_disposed) await _reopenForEffects();
+  }
+
+  /// Mints this item again and loads it at display position [atMs], as a
+  /// load under way. Keeps the listen session and its accounting: the
+  /// item never changed, only the stream it plays from.
+  ///
+  /// Throws what the load threw, the server's refusals as API errors.
+  Future<void> _reload({required int atMs, required bool resume}) => _underway(
+    atMs,
+    resume: resume,
+    load: () async {
+      var at = atMs;
+      do {
+        _remint = false;
+        await _loadAt(at);
+        if (_disposed) return;
+        // Effects changed while the media loaded: minted again where
+        // it now stands.
+        at = _display(engine.position).inMilliseconds;
+        _loadTarget = at;
+      } while (_remint);
+    },
+  );
+
+  /// One mint and load inside a load under way, at display position
+  /// [atMs] or the newest target a seek made meanwhile: the part holding
+  /// it for a book; the item otherwise, or the copy downloaded to this
+  /// device when the server is out of reach.
+  Future<void> _loadAt(int atMs) async {
+    if (_isBook) {
+      await _loadPartFor(atMs, newest: true);
+      return;
+    }
+    final (PlayInfo, int) minted;
+    try {
+      minted = await _mintNewest(atMs);
+    } on WaxDeckApiException catch (e) {
+      final local = await _localFallback(e);
+      if (_disposed) return;
+      if (local == null) rethrow;
+      final target = _pendingSeekMs ?? _loadTarget ?? atMs;
+      _pendingSeekMs = null;
+      await _loadLocalFile(local, target);
+      return;
+    }
     if (_disposed) return;
-    // The same guard the first load carries: web answers "no supported
-    // source" for a source it is asked to begin at or past the end, and
-    // an episode toggled at its own end is exactly where this lands.
-    if (info.durationMs > 0 && at >= info.durationMs) at = 0;
-    await _loadMedia(
-      info.url,
-      mimeType: info.mimeType,
-      initialPosition: at > 0 ? Duration(milliseconds: at) : null,
-      clipStart: info.spanStartMs == null
-          ? null
-          : Duration(milliseconds: info.spanStartMs!),
-      clipEnd: info.spanEndMs == null
-          ? null
-          : Duration(milliseconds: info.spanEndMs!),
-    );
-    if (_disposed) return;
-    // After the load, like the part paths: a reopen that threw keeps
-    // the state of the media the engine still describes.
-    _loadedDurationMs = info.durationMs;
-    _lastPosition = engine.position;
-    if (playing) await engine.play();
+    await _loadStream(minted.$1, minted.$2);
+  }
+
+  /// A load of its own the listener asked for (a move, an effect). One
+  /// whose mint failed before any load began left the media it was
+  /// replacing as it was, so that is kept, set as the presses made
+  /// meanwhile ask, and it answers false, said on [moveFailed] when [say]
+  /// asks; one that failed after a load began has nothing left to keep
+  /// and is said on [sessionFailed].
+  Future<bool> _reloadKeeping({
+    required int atMs,
+    required bool resume,
+    bool say = false,
+  }) async {
+    final loadsBefore = _loadsBegun;
+    try {
+      await _reload(atMs: atMs, resume: resume);
+      return !_disposed;
+    } on Object catch (error) {
+      if (_disposed) return false;
+      if (_loadsBegun != loadsBefore) {
+        _announceFailed(error, meantToPlay: _resumeWanted);
+        return false;
+      }
+      if (_resumeWanted &&
+          !engine.playing &&
+          engine.processingState != EngineProcessingState.completed) {
+        await engine.play();
+      } else if (!_resumeWanted && engine.playing) {
+        await engine.pause();
+      }
+      if (say && !_moveFailed.isClosed) _moveFailed.add(error);
+      return false;
+    }
+  }
+
+  /// Media that had loaded failed afterwards (a token that lapsed before
+  /// the next range request, a dropped connection, the engine away).
+  ///
+  /// Recovered by minting again and reloading where the listener stood,
+  /// when another mint can help: a stale or engine-down refusal, or a
+  /// failure nobody explained. The server's other refusals (the transcode
+  /// cap) and the file itself failing are said instead, never retried.
+  /// A timeline member and a downloaded file have nothing to mint.
+  void _onMediaFailed(MediaFailure failure) {
+    if (_disposed || !_loaded || _busy) return;
+    if (!identical(_engineOwners[engine], this)) return;
+    // The engine may have dropped its position with the media; the last
+    // one it reported is the floor, for a reload and for a failure said.
+    final now = _display(engine.position).inMilliseconds;
+    final last = _display(_lastPosition).inMilliseconds;
+    final at = now > last ? now : last;
+    final refusal = failure.refusal;
+    final curable = refusal != null
+        ? _curedByMint(refusal)
+        : failure.fault == MediaFault.transport || _streamStale;
+    if (_info == null || !curable || _recoveries >= _recoveryBudget) {
+      _announceFailed(
+        _surfaced(failure),
+        meantToPlay: failure.wasPlaying,
+        atMs: at,
+      );
+      return;
+    }
+    _recoveries++;
+    _recoveredAtMs = at;
+    unawaited(_recover(at, resume: failure.wasPlaying));
+  }
+
+  /// Reloads at [atMs], where the listener stood, for a failure or a
+  /// token that lapsed, and says the failure from there when that does
+  /// not work. Answers whether it landed.
+  Future<bool> _recover(int atMs, {required bool resume}) async {
+    try {
+      await _reload(atMs: atMs, resume: resume);
+      return !_disposed;
+    } on Object catch (error) {
+      _announceFailed(error, meantToPlay: _resumeWanted, atMs: atMs);
+      return false;
+    }
   }
 
   /// Fetches the skip map for the loaded file. Pending maps get exactly
@@ -1151,6 +1897,7 @@ class PlaybackSession {
   /// [sessionFailed] rather than thrown, for the reason [seek] gives:
   /// the transport's toggle and repeat-one both reach here unawaited.
   Future<void> replay({bool play = true}) async {
+    _atEnd = _AtEnd.none;
     _outroFired = false;
     _lastJumpedSpan = -1;
     _finished = false;
@@ -1158,14 +1905,32 @@ class PlaybackSession {
     // standing, the next checkpoint would write the item's end rather
     // than where this play actually stopped.
     _endedAt = null;
+    if (_disposed || !_loaded) return;
+    if (_busy) {
+      // Joins the load under way: it lands at the top, as asked.
+      _pendingSeekMs = 0;
+      _resumeWanted = play;
+      _markReopening();
+      return;
+    }
+    // A stream whose token lapsed while the item sat at its end (a long
+    // episode played out, repeat-one for a quarter hour) is minted again:
+    // opening the held URL once more would only meet the refusal.
+    if (_streamStale) {
+      await _recover(0, resume: play);
+      return;
+    }
     // Through the display timeline, so a book on repeat-one goes back to
     // its first part rather than to the top of the part it ended on. A
-    // jump that failed is already on [sessionFailed].
-    if (!await seek(Duration.zero) || !play) return;
+    // move that failed is already on [sessionFailed], and one that loaded
+    // ended playing or paused as asked.
+    if (await _moveTo(0, resume: play, keep: false) != _Moved.seeked || !play) {
+      return;
+    }
     try {
       await engine.play();
     } on MediaLoadException catch (error) {
-      _announceFailed(error);
+      _announceFailed(error, meantToPlay: true);
     }
   }
 
@@ -1175,21 +1940,34 @@ class PlaybackSession {
   /// by the time the shutdown's awaits run a newer session may have
   /// loaded different media into it. The checkpoint must record where
   /// THIS item was, and stop() must not cut off the newer session.
-  Future<void> dispose() => _shutdown(
-    at: _endedAt ?? engine.position,
-    finished: _finished,
-    stopEngine: true,
-  );
+  Future<void> dispose() =>
+      _shutdown(atMs: _exitMs(), finished: _finished, stopEngine: true);
 
   /// Lets go of the engine without stopping it, for a hand-over to
   /// something that drives it directly (live radio). The item is
   /// checkpointed where it stands and its listen reported as unfinished;
   /// what plays next is the caller's business.
-  Future<void> handOver() => _shutdown(
-    at: _endedAt ?? engine.position,
-    finished: _finished,
-    stopEngine: false,
-  );
+  Future<void> handOver() =>
+      _shutdown(atMs: _exitMs(), finished: _finished, stopEngine: false);
+
+  /// Where this item stands for a final checkpoint, read synchronously:
+  /// where it stood when it said it failed, else the target of a load
+  /// under way (the engine reads the media being replaced, or the new
+  /// media against the old timeline), else [_standingMs].
+  int _exitMs() {
+    final failed = _failedAtMs;
+    if (failed != null) return failed;
+    final target = _pendingSeekMs ?? _loadTarget;
+    if (_busy && target != null) return target;
+    return _standingMs();
+  }
+
+  /// Where the item stands with no load under way: where it stood before
+  /// a load that failed (the engine reads the incoming media's start
+  /// then), else the end an outro recorded, else the engine.
+  int _standingMs() =>
+      _stoodBeforeFailedLoad ??
+      _display(_endedAt ?? engine.position).inMilliseconds;
 
   /// Finalizes this item because the engine walked out of it and into
   /// the item preloaded behind it. The checkpoint lands at this item's
@@ -1197,9 +1975,9 @@ class PlaybackSession {
   /// to the next item, and the listen report says finished. The stream
   /// is left running: the next item's session adopts it.
   Future<void> finishAtBoundary() => _shutdown(
-    at: Duration(
-      milliseconds: _loadedDurationMs > 0 ? _loadedDurationMs : item.durationMs,
-    ),
+    atMs:
+        _partStartMs +
+        (_loadedDurationMs > 0 ? _loadedDurationMs : item.durationMs),
     finished: true,
     stopEngine: false,
   );
@@ -1231,7 +2009,7 @@ class PlaybackSession {
     // real end, so reading the engine here would put the resume point
     // back before the cutoff and fire it again next time - the loop the
     // held end exists to break.
-    final positionMs = _display(_endedAt ?? engine.position).inMilliseconds;
+    final positionMs = _exitMs();
     if (!ending) return (positionMs: positionMs, listen: null);
     final sessionId = _sessionId;
     final startedAt = _startedAt;
@@ -1257,7 +2035,7 @@ class PlaybackSession {
   }
 
   Future<void> _shutdown({
-    required Duration at,
+    required int atMs,
     required bool finished,
     required bool stopEngine,
   }) async {
@@ -1271,33 +2049,59 @@ class PlaybackSession {
     unawaited(_positionSub?.cancel());
     unawaited(_playingSub?.cancel());
     unawaited(_completedSub?.cancel());
+    unawaited(_failureSub?.cancel());
+    unawaited(_stopReached.close());
+    unawaited(_timelineMoved.close());
+    unawaited(_mediaLoaded.close());
     unawaited(_sessionCompleted.close());
     unawaited(_sessionFailed.close());
+    unawaited(_moveFailed.close());
+    // Silenced before the writes below, which can wait out a dead
+    // network: a cleared queue or an app swiped away goes quiet now, not
+    // once the server answers. Ownership is read before any await, for
+    // the reason [dispose] gives.
+    final owned = identical(_engineOwners[engine], this);
+    if (owned) _engineOwners[engine] = null;
+    Object? stopFailure;
+    StackTrace? stopStack;
+    if (owned && stopEngine) {
+      try {
+        await engine.stop();
+      } on Object catch (error, stack) {
+        stopFailure = error;
+        stopStack = stack;
+      }
+    }
     // A start that never got as far as loading has nothing to record,
     // and the engine's position belongs to whatever played before it:
     // writing that as this item's resume point would lose the
     // listener's place on a failure they can retry.
-    if (_loaded) await _checkpoint(at: at);
+    if (_loaded) await _checkpointMs(atMs);
     await _reportSession(finished: finished);
-    await _flushRetry();
     trimEnabled.dispose();
     voiceBoost.dispose();
     hoursSavedMs.dispose();
-    if (identical(_engineOwners[engine], this)) {
-      _engineOwners[engine] = null;
-      if (stopEngine) await engine.stop();
-    }
+    reopening.dispose();
+    // The writes still landed; the stop that failed is the caller's to hear.
+    if (stopFailure != null) Error.throwWithStackTrace(stopFailure, stopStack!);
   }
 
   void _onPosition(Duration position) {
     if (_disposed) return;
     final delta = position - _lastPosition;
     _lastPosition = position;
+    if (_reachedStop(position, delta)) return;
     if (!engine.playing) return;
     if (delta > Duration.zero && delta <= maxCountedStep) {
       _ensureSession();
       _msPlayed += delta.inMilliseconds;
       _countSpeedSaving(delta.inMilliseconds);
+    }
+    final recoveredAt = _recoveredAtMs;
+    if (recoveredAt != null &&
+        _display(position).inMilliseconds - recoveredAt >= _provenMs) {
+      _recoveries = 0;
+      _recoveredAtMs = null;
     }
     _maybeTrimJump(position);
     _maybeOutroStop(position);
@@ -1306,15 +2110,21 @@ class PlaybackSession {
   /// Entering a mapped silence span jumps forward to its end. Jumps only
   /// ever go forward and each span fires at most once per load, so a
   /// stubborn backend that lands short of the target cannot loop.
+  ///
+  /// Spans are in the file's own time; a cut stream's clock starts at the
+  /// cut, so both sides are read in file time.
   void _maybeTrimJump(Duration position) {
     if (!trimEnabled.value || _skipSpans.isEmpty) return;
-    final ms = position.inMilliseconds;
+    // A jump would restart such a stream at its head, and a cut per
+    // silence is a fresh encode of the rest each time.
+    if (_cantSeekHere) return;
+    final ms = _cutMs + position.inMilliseconds;
     for (var i = _lastJumpedSpan + 1; i < _skipSpans.length; i++) {
       final span = _skipSpans[i];
       if (ms >= span.startMs - trimWindowMs && ms < span.endMs) {
         _lastJumpedSpan = i;
         hoursSavedMs.value += span.endMs - ms;
-        unawaited(engine.seek(Duration(milliseconds: span.endMs)));
+        unawaited(engine.seek(Duration(milliseconds: span.endMs - _cutMs)));
         return;
       }
     }
@@ -1325,7 +2135,8 @@ class PlaybackSession {
   void _maybeOutroStop(Duration position) {
     final cutoff = _outroCutoffMs;
     if (cutoff == null || _outroFired) return;
-    if (position.inMilliseconds < cutoff) return;
+    final fileMs = _cutMs + position.inMilliseconds;
+    if (fileMs < cutoff) return;
     _outroFired = true;
     _finished = true;
     unawaited(engine.pause());
@@ -1333,13 +2144,12 @@ class PlaybackSession {
     // Held as well as written: the engine is paused at the cutoff, so a
     // final checkpoint taken from it would put the resume point back
     // before the outro and fire this again on the next play.
-    final endMs = _loadedDurationMs > 0
-        ? _loadedDurationMs
-        : position.inMilliseconds;
-    _endedAt = Duration(milliseconds: endMs);
+    final endMs = _loadedDurationMs > 0 ? _loadedDurationMs : fileMs;
+    // On the engine's clock, which [_display] reads back through the cut.
+    _endedAt = Duration(milliseconds: endMs - _cutMs);
     unawaited(_checkpoint(at: _endedAt!));
     unawaited(_reportSession(finished: true));
-    _announceCompleted();
+    _announceCompleted(SessionEnd.played);
   }
 
   void _onPlayingChanged(bool playing) {
@@ -1348,10 +2158,9 @@ class PlaybackSession {
       _rewindForBreak();
       _ensureSession();
       _checkpointTimer?.cancel();
-      _checkpointTimer = Timer.periodic(
-        checkpointInterval,
-        (_) => _checkpoint(),
-      );
+      _checkpointTimer = Timer.periodic(checkpointInterval, (_) {
+        if (_loading == 0) unawaited(_checkpoint());
+      });
     } else {
       // Stamped from the engine's own transition rather than from the
       // control that caused it: a pause arrives from the lock screen,
@@ -1361,15 +2170,44 @@ class PlaybackSession {
       _pausedAt ??= _clock();
       _checkpointTimer?.cancel();
       _checkpointTimer = null;
-      unawaited(_checkpoint());
+      // Paused from outside while a load under way waits on its mint (an
+      // interruption the platform made): it must not start it again. Only
+      // media still standing ready stops that way. The stop that comes
+      // with an end or a failure arrives after it, when the end has
+      // already begun a load (the roll into a book's next part), and is
+      // no listener stopping.
+      if (_busy &&
+          _loading == 0 &&
+          engine.processingState == EngineProcessingState.ready) {
+        _resumeWanted = false;
+        _markReopening();
+      }
+      // The stop a load starts with is not the listener stopping: the
+      // engine already reads the new media while the state is the old.
+      if (_loading == 0) unawaited(_checkpoint());
     }
   }
 
   void _onCompleted() {
     if (_disposed) return;
-    final index = _partIndex;
-    final count = _partCount;
-    if (index != null && count != null && index < count - 1) {
+    // About media no longer loaded: a newer load took the engine first.
+    if (engine.processingState != EngineProcessingState.completed) return;
+    // Already somebody's: a stop at the end under way, a load replacing
+    // the media, an end held for the next play or rested on.
+    if (_stopping || _busy || _atEnd != _AtEnd.none) return;
+    final stop = _stopAtMs;
+    if (stop != null &&
+        (stop <= _partStartMs + _loadedDurationMs + _stopSlackMs ||
+            !_hasNextPart)) {
+      // The boundary is this media's end, and the end arrived before any
+      // position crossed it: the end is the boundary. On the last part a
+      // boundary still armed is the end too, since a chapter can be
+      // marked past where the audio stops.
+      _stopAtMs = null;
+      unawaited(_stopHere(stop));
+      return;
+    }
+    if (_hasNextPart) {
       // The book has more parts: roll into the next one seamlessly.
       unawaited(_advanceToNextPart());
       return;
@@ -1377,40 +2215,113 @@ class PlaybackSession {
     _finished = true;
     unawaited(_checkpoint());
     unawaited(_reportSession(finished: true));
-    _announceCompleted();
+    _announceCompleted(SessionEnd.played);
   }
 
   Future<void> _advanceToNextPart() async {
-    try {
-      // Falls back to the downloaded parts itself where there are any:
-      // a server that went away mid-book does not end a book somebody
-      // downloaded, which is the whole point of downloading one.
-      await _loadPartFor(_partStartMs + _loadedDurationMs, autoplay: true);
-    } on Object catch (error) {
-      // Nothing to carry on from: the server refused the next part with
-      // nothing local behind it, or the part's media would not open.
-      // Broader than the API type on purpose - an engine failure used
-      // to escape this unawaited zone as an unhandled async error, and
-      // the book stopped dead with no error state and the session still
-      // installed. The failure lands on the error surface instead; the
-      // release that answers it flushes the checkpoint at the boundary
-      // this play actually reached and reports the listen unfinished,
-      // which is what it is.
-      _announceFailed(error);
+    // Falls back to the downloaded parts itself where there are any: a
+    // server that went away mid-book does not end a book somebody
+    // downloaded, which is the whole point of downloading one. A part
+    // that cannot be had lands on the error surface instead, from the
+    // boundary this play actually reached, and the release that answers
+    // it reports the listen unfinished, which is what it is.
+    final partEnd = _partStartMs + _loadedDurationMs;
+    if (await _recover(partEnd, resume: true)) {
+      // The load's own pause wrote nothing; this is where the book is.
+      unawaited(_checkpoint());
     }
+  }
+
+  /// Whether [position] reached the armed stop by moving forward into it:
+  /// playing at any speed, or a trim jump over the silence a chapter ends
+  /// in. A listener's jump past it never arrives here, since [seek]
+  /// disarms it first; a move backwards across it only spends it.
+  ///
+  /// Read off the step, not off `playing`: the tick that crosses a
+  /// boundary at the end of the media arrives as the media ends, when the
+  /// engine already reads stopped.
+  bool _reachedStop(Duration position, Duration delta) {
+    final stop = _stopAtMs;
+    // A load in flight reports the new media's position against the old
+    // media's timeline, which can read as anywhere; and while a load of
+    // the session's own is under way the media still playing is the one
+    // being replaced, whose crossing says nothing of where the new one
+    // lands.
+    if (stop == null || _loading > 0 || _busy) return false;
+    if (_display(position).inMilliseconds < stop) return false;
+    _stopAtMs = null;
+    // Reached only by a step that began short of it. One already behind
+    // where the step began (a move backwards, a boundary armed after
+    // playback passed it) is spent where it stands.
+    final crossed = _display(position - delta).inMilliseconds < stop;
+    if (crossed) {
+      unawaited(_stopHere(stop));
+    } else {
+      _announceStopReached();
+    }
+    return crossed;
+  }
+
+  /// Rests at [stopMs]: pauses and parks on the boundary, so a resume
+  /// starts what follows at its head. A boundary at the end of the loaded
+  /// media is that end: a book's next part is loaded paused, and the last
+  /// part finishes without the queue moving on under a sleeper. A load
+  /// under way while it does, so a press made meanwhile is how it ends.
+  Future<void> _stopHere(int stopMs) async {
+    _stopping = true;
+    final mediaEnd = _partStartMs + _loadedDurationMs;
+    final at = stopMs < mediaEnd ? stopMs : mediaEnd;
+    try {
+      await _underway(
+        at,
+        resume: false,
+        load: () async {
+          await engine.pause();
+          if (_disposed) return;
+          if (stopMs < mediaEnd - _stopSlackMs) {
+            // The pause lands up to a tick late; parked back where the
+            // engine can seek, left there where it would restart the
+            // stream.
+            if (!_cantSeekHere) await engine.seek(_inMedia(stopMs));
+          } else if (_hasNextPart) {
+            await _loadAt(mediaEnd);
+          } else {
+            _finished = true;
+            _atEnd = _AtEnd.held;
+            unawaited(_reportSession(finished: true));
+          }
+        },
+      );
+      if (!_disposed) unawaited(_checkpoint());
+    } on Object catch (error) {
+      _announceFailed(error, meantToPlay: _resumeWanted, atMs: at);
+    } finally {
+      _stopping = false;
+      _announceStopReached();
+    }
+  }
+
+  void _announceStopReached() {
+    if (!_stopReached.isClosed) _stopReached.add(null);
   }
 
   /// Tells the layer above that this item is over. Reported after the
   /// checkpoint and the listen report are on their way, so whatever
   /// advances the queue cannot outrun this item's own accounting.
-  void _announceCompleted() {
-    if (!_sessionCompleted.isClosed) _sessionCompleted.add(null);
+  void _announceCompleted(SessionEnd end) {
+    if (!_sessionCompleted.isClosed) _sessionCompleted.add(end);
   }
 
   /// Tells the layer above this session could not do what its item
-  /// needed and should be let go, with [error] as the reason to show.
-  void _announceFailed(Object error) {
-    if (!_sessionFailed.isClosed) _sessionFailed.add(error);
+  /// needed and should be let go, with [error] as the reason to show and
+  /// whether playback [meantToPlay] when it struck.
+  /// [atMs] is where the item stood, when the caller knows better than
+  /// the engine does by now.
+  void _announceFailed(Object error, {required bool meantToPlay, int? atMs}) {
+    if (_sessionFailed.isClosed) return;
+    final at = atMs ?? _exitMs();
+    _failedAtMs = at;
+    _sessionFailed.add((error: error, meantToPlay: meantToPlay, atMs: at));
   }
 
   /// Mints the idempotency ID the first time playback makes progress and
@@ -1424,13 +2335,57 @@ class PlaybackSession {
     _speedSavedAtSessionStart = _speedSavedMs;
   }
 
+  /// The position waiting behind the checkpoint write in flight, and who
+  /// is waiting on it. One write at a time, so a slow write of an older
+  /// position can never land after a newer one and leave the server
+  /// behind the listener; one waiting, the newest, since a stalled
+  /// network would otherwise queue a write per tick and hold every exit
+  /// behind all of them.
+  int? _queuedCheckpointMs;
+  Completer<void>? _queuedCheckpoint;
+  bool _writingCheckpoint = false;
+
   /// Checkpoints [at] (engine timeline; defaults to the live position),
   /// reported to the server on the display timeline: books checkpoint
-  /// book-timeline positions.
-  Future<void> _checkpoint({Duration? at}) async {
-    final position = _display(at ?? engine.position);
+  /// book-timeline positions. The position is read now, the write waits
+  /// its turn.
+  Future<void> _checkpoint({Duration? at}) =>
+      _checkpointMs(_display(at ?? engine.position).inMilliseconds);
+
+  /// [_checkpoint] at a display-timeline position already read. Settles
+  /// once that position, or a newer one queued behind it, is written.
+  Future<void> _checkpointMs(int positionMs) {
+    final waiting = _queuedCheckpoint ??= Completer<void>()..future.ignore();
+    _queuedCheckpointMs = positionMs;
+    if (!_writingCheckpoint) unawaited(_drainCheckpoints());
+    return waiting.future;
+  }
+
+  Future<void> _drainCheckpoints() async {
+    _writingCheckpoint = true;
     try {
-      await repository.putPlayState(item.pid, position.inMilliseconds);
+      while (true) {
+        final positionMs = _queuedCheckpointMs;
+        final waiting = _queuedCheckpoint;
+        if (positionMs == null || waiting == null) return;
+        _queuedCheckpointMs = null;
+        _queuedCheckpoint = null;
+        try {
+          await _writeCheckpoint(positionMs);
+          waiting.complete();
+        } on Object catch (error, stack) {
+          debugPrint('checkpoint failed: $error');
+          waiting.completeError(error, stack);
+        }
+      }
+    } finally {
+      _writingCheckpoint = false;
+    }
+  }
+
+  Future<void> _writeCheckpoint(int positionMs) async {
+    try {
+      await repository.putPlayState(item.pid, positionMs);
     } on WaxDeckApiException {
       // ANY failure queues, deliberately broader than the reachability
       // gate elsewhere: queued checkpoints replay with recordedAt and
@@ -1438,7 +2393,7 @@ class PlaybackSession {
       // and a transient auth failure would otherwise silently lose the
       // position. Without an engine (web), best effort stands and the
       // next checkpoint catches up.
-      await sync?.queueCheckpoint(item.pid, position.inMilliseconds);
+      await sync?.queueCheckpoint(item.pid, positionMs);
     }
   }
 
@@ -1466,9 +2421,10 @@ class PlaybackSession {
     return (trimmed > 0 ? trimmed : 0) + (faster > 0 ? faster : 0);
   }
 
-  /// Reports the open session once. On network failure the session is kept
-  /// and retried on dispose; the server deduplicates on the session ID, so
-  /// the retry can never double-count.
+  /// Reports the open session once. One that does not reach the server
+  /// waits in the sync engine's queue, or where there is none in the
+  /// listen outbox, until it does; the server deduplicates on the session
+  /// ID, so a report sent twice never counts twice.
   Future<void> _reportSession({required bool finished}) async {
     final sessionId = _sessionId;
     final startedAt = _startedAt;
@@ -1489,25 +2445,18 @@ class PlaybackSession {
     _finished = false;
     try {
       await repository.reportListens([session]);
-    } on WaxDeckApiException {
+      // The server is answering: whatever an earlier report left behind
+      // goes now.
+      unawaited(listenOutbox?.flush(repository));
+    } on WaxDeckApiException catch (error) {
       final engine = sync;
       if (engine != null) {
         await engine.queueListen(session);
-      } else {
-        _pendingRetry = session;
+      } else if (!error.isRefusal) {
+        // A refusal is the server's answer (a session signed out mid-flight
+        // answers 401), not a report waiting for the server to come back.
+        listenOutbox?.keep(session);
       }
-    }
-  }
-
-  Future<void> _flushRetry() async {
-    final retry = _pendingRetry;
-    if (retry == null) return;
-    _pendingRetry = null;
-    try {
-      await repository.reportListens([retry]);
-    } on WaxDeckApiException {
-      // Web only (native queues instead of retrying): gone for good
-      // once the session ends.
     }
   }
 }

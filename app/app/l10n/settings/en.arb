@@ -1392,7 +1392,7 @@
   "@settingsStreamQualityAuto": {
     "description": "Streaming quality option: no cap, the original plays directly whenever the server can manage it."
   },
-  "settingsStreamQualityHelp": "Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and instant seeking, applies from the next track, and never affects downloads",
+  "settingsStreamQualityHelp": "Auto streams the original whenever possible. A cap re-encodes to fit - High 320 kbps, Normal 192, Low 128 - which turns off gapless playback and makes seeking take a moment, applies from the next track, and never affects downloads",
   "@settingsStreamQualityHelp": {
     "description": "The line under the streaming quality settings, naming the trade a cap makes so it arrives as a known one."
   },

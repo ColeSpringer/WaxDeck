@@ -15,19 +15,22 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 /// reported finished before it started. Routing is the fix, and this is
 /// what holds it in place.
 ///
-/// Stop has the mirror problem, and pause deliberately does not: a
-/// pause is a gap the session reads off the engine's own transition,
-/// while a stop is an end, and live radio keeps a tuned station in
-/// state beside the engine that nothing else lets go of.
+/// Pause and stop have the mirror problem: a load of the app's own may
+/// be under way (a stream reopened where it stood), which the engine
+/// reads as stopped, so a press at the engine would do nothing and the
+/// load would start what it stopped; and live radio keeps a tuned station
+/// in state beside the engine that nothing else lets go of.
 void main() {
   Future<WaxDeckAudioHandler> handlerFor(
     FakeEngine engine, {
     Future<void> Function()? onPlay,
+    Future<void> Function()? onPause,
     Future<void> Function()? onStop,
   }) async => WaxDeckAudioHandler(
     engine: engine,
     onPlayFromMediaId: (_) async {},
     onPlay: onPlay,
+    onPause: onPause,
     onStop: onStop,
     controlLabels: _english,
   );
@@ -60,27 +63,37 @@ void main() {
     expect(engine.playing, isTrue);
   });
 
-  test('a pause stays the engine, routed or not', () async {
-    final engine = FakeEngine(mediaDuration: const Duration(seconds: 10));
-    addTearDown(engine.dispose);
-    await engine.load('/stream');
-    final handler = await handlerFor(
-      engine,
-      onPlay: () async {},
-      onStop: () async {},
-    );
-    await engine.play();
+  test(
+    'a pause from an OS surface goes to the app when one is wired',
+    () async {
+      final engine = FakeEngine(mediaDuration: const Duration(seconds: 10));
+      addTearDown(engine.dispose);
+      await engine.load('/stream');
+      var routed = 0;
+      final handler = await handlerFor(engine, onPause: () async => routed++);
+      await engine.play();
 
-    await handler.pause();
+      await handler.pause();
 
-    expect(
-      engine.playing,
-      isFalse,
-      reason:
-          'a pause is a gap the session reads off the engine itself, so it '
-          'needs no seam even when a stop has one',
-    );
-  });
+      expect(routed, 1);
+      expect(engine.playing, isTrue, reason: 'the app callback drives it');
+    },
+  );
+
+  test(
+    'a pause falls through to the engine with nothing to route to',
+    () async {
+      final engine = FakeEngine(mediaDuration: const Duration(seconds: 10));
+      addTearDown(engine.dispose);
+      await engine.load('/stream');
+      final handler = await handlerFor(engine);
+      await engine.play();
+
+      await handler.pause();
+
+      expect(engine.playing, isFalse);
+    },
+  );
 
   test('a stop from an OS surface goes to the app when one is wired', () async {
     final engine = FakeEngine(mediaDuration: const Duration(seconds: 10));

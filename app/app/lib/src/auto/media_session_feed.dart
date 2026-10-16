@@ -302,6 +302,18 @@ final mediaSessionFeedProvider = Provider.autoDispose<MediaSessionFeed>((ref) {
   // mounts - a restored one accepted before this built - would go unnamed
   // until its next track.
   publish();
+  // A load of the app's own reads stopped at the engine, so the surfaces
+  // are told it means to play.
+  // Held rather than read in the disposal, where reading is not allowed.
+  final media = ref.watch(mediaSessionProvider);
+  final opening = ref.read(nowPlayingProvider.notifier).opening;
+  void sayOpening() => media.publishOpening(opening.value);
+  opening.addListener(sayOpening);
+  sayOpening();
+  ref.onDispose(() {
+    opening.removeListener(sayOpening);
+    media.publishOpening(false);
+  });
   ref.onDispose(feed.dispose);
   return feed;
 });

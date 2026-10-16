@@ -51,6 +51,13 @@ class FakeEngineHarness extends AudioEngineHarness {
   @override
   Future<void> loseTimeline(AudioEnginePort engine) async =>
       (engine as FakeEngine).loseTimeline();
+
+  @override
+  bool get canFailPlayback => true;
+
+  @override
+  Future<void> failPlayback(AudioEnginePort engine) async =>
+      (engine as FakeEngine).failPlayback();
 }
 
 void main() {

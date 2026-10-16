@@ -257,8 +257,8 @@ class StatFigure extends StatelessWidget {
         key: Key(keyName),
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          // Mono, which is what 6.12 asks for and what keeps a row of
-          // figures from shifting sideways as they tick over.
+          // Mono, which keeps a row of figures from shifting sideways as
+          // they tick over.
           Text(
             value,
             style: WaxType.titleEntity.copyWith(

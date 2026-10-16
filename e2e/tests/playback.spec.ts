@@ -91,3 +91,44 @@ test('signing out ends new opens of a minted stream URL', async ({ app, anonApi 
   await asPhone.post('/auth/logout');
   expect((await anonApi.raw.minted(playInfo.url)).status()).toBe(401);
 });
+
+// A stream the server re-encodes answers no range requests, so it is
+// positioned where it is minted: play-info cuts it at the position asked
+// for and says where the served audio begins. An original answers ranges
+// and the client seeks it itself, so a cut on its URL is refused.
+test('a capped stream is positioned through play-info, and an original refuses a cut', async ({
+  app,
+}) => {
+  // A single-file book: long enough to start three seconds in, and lossy
+  // at a rate the cap has to re-encode.
+  const { pid } = await app.seed.book('The Chaptered Fixture');
+
+  const capped = await app.api.get('/items/{pid}/play-info', {
+    path: { pid },
+    query: { maxBitrateKbps: 96, positionMs: 3000 },
+  });
+  expect(capped.seekable).toBe(false);
+  expect(capped.startOffsetMs).toBe(3000);
+  const cut = await app.api.raw.minted(capped.url);
+  expect(cut.status()).toBe(200);
+  const cutBytes = (await cut.body()).byteLength;
+  expect(cutBytes).toBeGreaterThan(1000);
+
+  // And the audio served really starts there: the same cap from the top
+  // runs longer by about the three seconds the cut skipped (96 kbit/s is
+  // some 12 KB a second; half that is margin enough).
+  const whole = await app.api.get('/items/{pid}/play-info', {
+    path: { pid },
+    query: { maxBitrateKbps: 96 },
+  });
+  expect(whole.startOffsetMs ?? 0).toBe(0);
+  const fromTop = await app.api.raw.minted(whole.url);
+  expect(fromTop.status()).toBe(200);
+  expect((await fromTop.body()).byteLength - cutBytes).toBeGreaterThan(18_000);
+
+  const original = await app.api.get('/items/{pid}/play-info', { path: { pid } });
+  expect(original.seekable).toBe(true);
+  const refused = await app.api.raw.minted(`${original.url}&t=3`);
+  expect(refused.status()).toBe(400);
+  expect((await refused.json()).code).toBe('invalid-request');
+});

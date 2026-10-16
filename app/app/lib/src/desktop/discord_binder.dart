@@ -302,7 +302,13 @@ final discordPresenceProvider = Provider.autoDispose<DiscordPresenceBinder>((
     // An entry still resolving keeps what is shown until it has a name.
     if (now.loading && now.item == null) return;
     binder.show(
-      presenceOf(now, playing: ref.read(audioEngineProvider).playing),
+      // What the app means: a stream reopening where it stood reads
+      // stopped at the engine for the load, and the presence coalesces
+      // for long enough to show a pause nobody pressed.
+      presenceOf(
+        now,
+        playing: ref.read(nowPlayingProvider.notifier).meansToPlay,
+      ),
       albumPid: now.item?.albumPid,
     );
   }
@@ -312,12 +318,17 @@ final discordPresenceProvider = Provider.autoDispose<DiscordPresenceBinder>((
   ref.listen(discordCoversEnabledProvider, (_, _) => binder.covers = covers());
   ref.listen(radioPlaybackProvider, (_, _) => publish());
   // The engine is not a provider, and pause is the other half of what
-  // presence follows.
+  // presence follows; a load of the app's own is the rest of it.
   final transport = ref
       .read(audioEngineProvider)
       .playingStream
       .listen((_) => publish());
-  ref.onDispose(() => unawaited(transport.cancel()));
+  final opening = ref.read(nowPlayingProvider.notifier).opening
+    ..addListener(publish);
+  ref.onDispose(() {
+    unawaited(transport.cancel());
+    opening.removeListener(publish);
+  });
   ref.listen(nowPlayingProvider, (_, _) => publish());
   configure();
   publish();

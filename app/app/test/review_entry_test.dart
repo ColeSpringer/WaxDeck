@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/review/review_controller.dart';
 import 'package:waxdeck/src/review/review_entry_screen.dart';
 import 'package:waxdeck/src/review/review_screen.dart';
 import 'package:waxdeck/src/shell/routes.dart';
@@ -142,6 +143,54 @@ double _diffOverflow(WidgetTester tester) => tester
     .maxScrollExtent;
 
 void main() {
+  group('an entry that cannot be shown', () {
+    test('one that is gone settles at once', () async {
+      final container = ProviderContainer(
+        overrides: [repositoryProvider.overrideWithValue(FakeRepository())],
+      );
+      addTearDown(container.dispose);
+      final entry = reviewEntryProvider('rv-gone');
+      final sub = container.listen(entry, (_, _) {});
+      addTearDown(sub.close);
+
+      await expectLater(
+        container.read(entry.future).timeout(const Duration(seconds: 2)),
+        throwsA(isA<WaxDeckApiException>()),
+      );
+    });
+
+    testWidgets('one that does not exist says so at once, with no retry', (
+      tester,
+    ) async {
+      // A decided entry can be gone by the time a link to it is opened,
+      // and it answers 404 on every ask after that.
+      await tester.pumpWidget(_host(FakeRepository(), 'rv-gone'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Could not load the entry'), findsOneWidget);
+      expect(find.text('That is not here any more.'), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+      expect(find.byType(SkeletonShapes), findsNothing);
+    });
+
+    testWidgets('a transport failure offers Try again', (tester) async {
+      final repo = _repoWith(_detail())
+        ..reviewError = const WaxDeckApiException(
+          code: 'transport',
+          message: 'connection refused',
+        );
+      await tester.pumpWidget(_host(repo, 'rv-1'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Could not load the entry'), findsOneWidget);
+      expect(find.text('Try again'), findsOneWidget);
+      // Riverpod keeps asking on its own; the scope going away ends it.
+      await tester.pumpWidget(const SizedBox());
+    });
+  });
+
   group('the pane', () {
     testWidgets('holds its diff table at the width it declares', (
       tester,

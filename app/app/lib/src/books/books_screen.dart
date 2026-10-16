@@ -45,6 +45,13 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
     super.dispose();
   }
 
+  void _fillViewport() {
+    if (!mounted || !_scroll.hasClients) return;
+    final position = _scroll.position;
+    if (position.maxScrollExtent > position.minScrollExtent) return;
+    ref.read(booksProvider.notifier).loadMore();
+  }
+
   void _maybeLoadMore() {
     if (!_scroll.hasClients) return;
     final position = _scroll.position;
@@ -73,6 +80,13 @@ class _BooksScreenState extends ConsumerState<BooksScreen> {
     final narrowed = shown.length < loaded.length;
     final more = state.value?.hasMore ?? false;
     final loadingMore = state.value?.loadingMore ?? false;
+    // A grid that does not reach past the viewport cannot scroll, so it
+    // never moves the scroll listener: asked here, once it is laid out.
+    // Not while the chips narrow it, where a filter that matches little
+    // would page the whole listing in; that view keeps its own button.
+    if (more && !loadingMore && !narrowed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _fillViewport());
+    }
 
     return WaxScaffold(
       title: l10n.booksTitle,

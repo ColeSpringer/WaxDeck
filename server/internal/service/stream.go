@@ -95,6 +95,7 @@ func (l *Library) StreamSource(ctx context.Context, apiItemPID, filePID string) 
 // (timeline leveling) is rare enough to ask for it by hash rather than
 // to make the whole library pay a second query per play.
 func (l *Library) attachFile(ctx context.Context, src *flow.Source, f *model.File) {
+	src.Codec, src.Container = fileFormat(f, src.Codec, src.Container)
 	src.Size = f.Size
 	src.MTimeNS = f.MTimeNS
 	src.EssenceHash = f.EssenceHash
@@ -102,6 +103,16 @@ func (l *Library) attachFile(ctx context.Context, src *flow.Source, f *model.Fil
 	if src.SpokenWord && f.EssenceHash != "" {
 		l.fillLoudness(ctx, src)
 	}
+}
+
+// fileFormat answers a file's own codec and container where the scan read
+// them, else the item's (codec, container): a book in parts is one item
+// whatever its files are, and the item carries its primary file's.
+func fileFormat(f *model.File, codec, container string) (string, string) {
+	if f.Codec != "" {
+		return f.Codec, f.Container
+	}
+	return codec, container
 }
 
 // FillLoudness attaches the stored measurements for a source's essence,
@@ -181,6 +192,164 @@ func playParts(bd *model.BookDetail) []PlayPart {
 	return out
 }
 
+// bookTimeline maps a book between two timelines. Its parts play end to
+// end, each as long as its measured audio: play-info, the players, the
+// waveform and every stored position use that one. The catalog's runs a
+// part as long as its chapter marks when they outrun its audio (CHAP
+// frames or a chapter track ending past it), so its marks and its length
+// sit off the first by every such part before them. Projected onto the
+// parts' own timeline, a mark is held to its part's audio: every mark is
+// a position there is audio at, and the book ends where its last part
+// does.
+type bookTimeline struct {
+	parts []model.BookPart
+	// starts is each part's start where it plays; catalog its start on the
+	// catalog's timeline, which a chapter edit is written on.
+	starts, catalog []int64
+	index           map[model.PID]int
+	// end is where the last part's audio ends.
+	end int64
+}
+
+// timelineOf lays bd out on both timelines, false where a part's audio
+// has no measured length to lay it by. The catalog's part starts are read
+// off the marks themselves (a mark's book offset less its offset into its
+// file), and where a part has none, from the part before it: its audio,
+// or its marks where they run longer, as the catalog lays it.
+func timelineOf(bd *model.BookDetail) (bookTimeline, bool) {
+	n := len(bd.Files)
+	if n == 0 {
+		return bookTimeline{}, false
+	}
+	tl := bookTimeline{parts: bd.Files, starts: make([]int64, n), catalog: make([]int64, n), index: make(map[model.PID]int, n)}
+	for i, f := range bd.Files {
+		tl.index[f.FilePID] = i
+	}
+	anchored := make([]bool, n)
+	extent := make([]int64, n)
+	for _, ch := range bd.Chapters {
+		i, ok := tl.index[ch.FilePID]
+		if !ok {
+			continue
+		}
+		if !anchored[i] {
+			tl.catalog[i], anchored[i] = ch.StartMS-ch.FileStartMS, true
+		}
+		extent[i] = max(extent[i], ch.FileStartMS, ch.FileEndMS)
+	}
+	var at, cat int64
+	for i, f := range bd.Files {
+		if f.DurationMS <= 0 {
+			return bookTimeline{}, false
+		}
+		if anchored[i] {
+			cat = tl.catalog[i]
+		}
+		tl.starts[i], tl.catalog[i] = at, cat
+		at += f.DurationMS
+		cat += max(f.DurationMS, extent[i])
+	}
+	tl.end = at
+	return tl, true
+}
+
+// at is fileMS into part i, held to its audio, on the parts' own timeline.
+func (tl bookTimeline) at(i int, fileMS int64) int64 {
+	return tl.starts[i] + min(max(fileMS, 0), tl.parts[i].DurationMS)
+}
+
+// catalogAt maps pos on the parts' own timeline onto the catalog's: the
+// same offset into the same part. An end belongs to the part it closes,
+// so one at a part's end stays that part's.
+func (tl bookTimeline) catalogAt(pos int64, end bool) int64 {
+	i := len(tl.parts) - 1
+	for k := range tl.parts {
+		limit := tl.starts[k] + tl.parts[k].DurationMS
+		if pos < limit || (end && pos == limit) {
+			i = k
+			break
+		}
+	}
+	return tl.catalog[i] + pos - tl.starts[i]
+}
+
+// bookMarks answers a book's chapter marks and its length on the timeline
+// its parts play on (bookTimeline); the catalog's own where its parts
+// cannot be laid out by their audio.
+func bookMarks(bd *model.BookDetail) ([]ChapterMark, int64) {
+	var out []ChapterMark
+	if len(bd.Chapters) > 0 {
+		out = make([]ChapterMark, len(bd.Chapters))
+	}
+	tl, ok := timelineOf(bd)
+	if !ok {
+		for i, ch := range bd.Chapters {
+			out[i] = ChapterMark{Index: i, Title: ch.Title, StartMS: ch.StartMS, EndMS: ch.EndMS}
+		}
+		return out, bd.TotalDurationMS
+	}
+	for i, ch := range bd.Chapters {
+		out[i] = ChapterMark{Index: i, Title: ch.Title, StartMS: ch.StartMS}
+		p, known := tl.index[ch.FilePID]
+		if !known {
+			continue
+		}
+		out[i].StartMS = tl.at(p, ch.FileStartMS)
+		if ch.FileEndMS > 0 {
+			out[i].EndMS = tl.at(p, ch.FileEndMS)
+		}
+	}
+	// An open end runs to the next mark, the last to the end of the audio,
+	// as the catalog fills them on its own timeline.
+	for i := range out {
+		switch {
+		case out[i].EndMS != 0:
+		case i+1 < len(out):
+			out[i].EndMS = out[i+1].StartMS
+		default:
+			out[i].EndMS = tl.end
+		}
+	}
+	return out, tl.end
+}
+
+// chapterAt answers the mark a position falls in, marks in timeline
+// order: the last to start at or before it, so a position in a gap
+// between two marks is in the one before the gap, as the player names it
+// while it plays there, and one before the first mark is in the first.
+// Nil for a book without marks.
+func chapterAt(marks []ChapterMark, positionMS int64) *ChapterMark {
+	if len(marks) == 0 {
+		return nil
+	}
+	at := &marks[0]
+	for i := range marks {
+		if marks[i].StartMS <= positionMS {
+			at = &marks[i]
+		}
+	}
+	return at
+}
+
+// catalogMarks maps a chapter edit made on the timeline a book's parts
+// play on onto the catalog's, which the catalog splits it across the
+// parts by; as it is where the parts cannot be laid out by their audio.
+func catalogMarks(bd *model.BookDetail, marks []model.Chapter) []model.Chapter {
+	tl, ok := timelineOf(bd)
+	if !ok {
+		return marks
+	}
+	out := make([]model.Chapter, len(marks))
+	for i, ch := range marks {
+		out[i] = ch
+		out[i].StartMS = tl.catalogAt(ch.StartMS, false)
+		if ch.EndMS != 0 {
+			out[i].EndMS = tl.catalogAt(ch.EndMS, true)
+		}
+	}
+	return out
+}
+
 // BookParts is the whole part layout of a multi-file book, in reading
 // order, for callers that load every part at once - a device endpoint
 // fetches its own URLs and steps through them itself.
@@ -249,8 +418,8 @@ func (l *Library) BookPieces(ctx context.Context, uc *UserCtx, apiItemPID string
 		if err != nil {
 			return nil, classify(err)
 		}
-		// The item's codec and container, as StreamSource reads them:
-		// a book is catalogued as one item however many files carry it.
+		// The item's codec and container until the file's own replace
+		// them, as StreamSource reads them.
 		src := flow.Source{
 			Codec:      it.Codec,
 			Container:  it.Container,
@@ -264,6 +433,78 @@ func (l *Library) BookPieces(ctx context.Context, uc *UserCtx, apiItemPID string
 	return out, nil
 }
 
+// The bridge plays a book in parts as one stream through this.
+var _ flow.PartsResolver = (*Library)(nil)
+
+// StreamParts lays out a multi-file book for the engine's joined stream:
+// every part in reading order, its source, and the rate and channel count
+// the stream's one envelope is chosen from. The item is read once and each
+// file once, as BookPieces reads them, and no loudness is read: a joined
+// stream is not voice-boosted. Nil for anything that is not a book in
+// parts.
+func (l *Library) StreamParts(ctx context.Context, apiItemPID string) ([]flow.Part, error) {
+	parts, err := l.BookParts(ctx, apiItemPID)
+	if err != nil || len(parts) == 0 {
+		return nil, err
+	}
+	it, err := l.getItem(ctx, apiItemPID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]flow.Part, 0, len(parts))
+	for _, part := range parts {
+		f, err := l.fileByPID(ctx, model.PID(part.FilePID))
+		if err != nil {
+			return nil, err
+		}
+		// The file's own codec: whether a part is lossless sets the
+		// stream's rate.
+		codec, container := fileFormat(f, it.Codec, it.Container)
+		out = append(out, flow.Part{
+			FilePID: part.FilePID,
+			Src: flow.Source{
+				Path:        string(f.Path),
+				Size:        f.Size,
+				MTimeNS:     f.MTimeNS,
+				Codec:       codec,
+				Container:   container,
+				BitrateKbps: f.Bitrate,
+				DurationMS:  part.DurationMS,
+				SpokenWord:  true,
+				EssenceHash: f.EssenceHash,
+			},
+			Rate:     f.SampleRate,
+			Channels: f.Channels,
+		})
+	}
+	return out, nil
+}
+
+// JoinKey and JoinShape are the query flag of a book's MP3 parts joined
+// as they are, and the media-token shape that binds it. The key is one
+// /media/stream never binds, so a token for this join fits no URL of the
+// engine's joined stream, whose shape binds join, nor that one this.
+const (
+	JoinKey   = "mp3join"
+	JoinShape = JoinKey + "=1"
+)
+
+// JoinableMP3 reports whether a book's parts join into one stream with no
+// encode: every part an MP3 file, all at one rate and one channel count,
+// since a player sets its decoder up once per stream.
+func JoinableMP3(parts []flow.Part) bool {
+	if len(parts) < 2 {
+		return false
+	}
+	for _, p := range parts {
+		if !flow.SameAsSource(p.Src, "mp3") || p.Rate <= 0 || p.Channels <= 0 ||
+			p.Rate != parts[0].Rate || p.Channels != parts[0].Channels {
+			return false
+		}
+	}
+	return true
+}
+
 // ResolvePlayPart maps a book-timeline position to the backing part.
 // Single-file items (and every non-book) resolve to a zero PlayPart
 // with MultiPart false.
@@ -272,17 +513,22 @@ func (l *Library) ResolvePlayPart(ctx context.Context, uc *UserCtx, apiItemPID s
 	if err != nil {
 		return PlayPart{}, err
 	}
+	return PlayPartAt(parts, positionMS), nil
+}
+
+// PlayPartAt answers the part of a laid-out book whose half-open window
+// holds a book-timeline position, the last for anything at or past the
+// end, and the zero PlayPart for a layout of nothing.
+func PlayPartAt(parts []PlayPart, positionMS int64) PlayPart {
 	if len(parts) == 0 {
-		return PlayPart{}, nil
+		return PlayPart{}
 	}
-	// The part whose half-open window holds the position; anything at
-	// or past the end resolves to the last part.
 	for _, part := range parts {
 		if positionMS < part.StartMS+part.DurationMS {
-			return part, nil
+			return part
 		}
 	}
-	return parts[len(parts)-1], nil
+	return parts[len(parts)-1]
 }
 
 // DirectPlayResolution is direct playback of original bytes, the

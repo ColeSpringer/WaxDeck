@@ -2,7 +2,7 @@
 ///
 /// The same assertions run against any engine through an
 /// [AudioEngineHarness]: the deterministic fake in this package's own
-/// tests, and the real desktop engine in the app's integration tests.
+/// tests, and the real engines in the app's integration tests.
 library;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -67,6 +67,35 @@ abstract class AudioEngineHarness {
   /// an aged-out mint does. Only called when [timeline] is non-null.
   Future<void> loseTimeline(AudioEnginePort engine) async {}
 
+  /// Whether [failPlayback] can make loaded media fail. Selects the
+  /// failure group, like [timeline] selects the timeline one.
+  bool get canFailPlayback => false;
+
+  /// The media the failure group plays, which [failPlayback] must be able
+  /// to cut. A real engine playing a local file has nothing to cut, so a
+  /// real harness serves its own; fresh per call, since a cut is for good.
+  /// Only called when [canFailPlayback] is true.
+  Future<String> failableMedia() async => mediaUrl;
+
+  /// Makes the media from [failableMedia] fail mid-play, the way a dropped
+  /// connection does. Only called when [canFailPlayback] is true.
+  Future<void> failPlayback(AudioEnginePort engine) async {}
+
+  /// The formats [presentation] serves, the engine's own names; empty for
+  /// a harness that serves none. Non-empty selects the presentation group,
+  /// like [canFailPlayback] selects the failure one.
+  List<String> get presentationFormats => const [];
+
+  /// The media behind [mediaUrl] as an HLS presentation in [format], the
+  /// way the server renders one item for a player that plays HLS, served
+  /// fresh per call. With [refuseFrom], every segment from that index on
+  /// is refused the way a busy server refuses a listen it had let go of:
+  /// a 429 carrying the server's `transcode-limited` envelope, while both
+  /// playlists still answer. Only called with a format from
+  /// [presentationFormats].
+  Future<String> presentation(String format, {int? refuseFrom}) async =>
+      mediaUrl;
+
   Future<void> disposeEngine(AudioEnginePort engine) => engine.dispose();
 }
 
@@ -84,6 +113,25 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
           '$what should be within ${harness.tolerance} '
           'of $expected, was $actual',
     );
+  }
+
+  /// Plays [engine] on until [done], or for 20 seconds, then one beat
+  /// more for anything that follows to show.
+  ///
+  /// The fake answers on the spot. A real engine hears of a dropped
+  /// connection only when a reconnect is refused, and ExoPlayer only once
+  /// its retries are spent and its buffer has played out, seconds later.
+  /// The cap stays inside a test's own 30 seconds, so a miss reads as the
+  /// event not arriving rather than as a timeout.
+  Future<void> advanceUntil(
+    AudioEnginePort engine,
+    bool Function() done,
+  ) async {
+    final waited = Stopwatch()..start();
+    while (!done() && waited.elapsed < const Duration(seconds: 20)) {
+      await harness.advance(engine, Duration.zero);
+    }
+    await harness.advance(engine, Duration.zero);
   }
 
   group('$name conformance', () {
@@ -272,6 +320,19 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
       // Only the clock moving says the sound is running again.
       await harness.advance(engine, quarter);
       expectNear(engine.position, quarter, 'the replay is really running');
+    });
+
+    test('bufferedPosition never exceeds the duration', () async {
+      await engine.load(harness.mediaUrl);
+      await engine.play();
+      await harness.advance(engine, quarter);
+      final duration = engine.duration;
+      expect(duration, isNotNull);
+      expect(
+        engine.bufferedPosition,
+        lessThanOrEqualTo(duration! + harness.tolerance),
+      );
+      expect(engine.bufferedPosition, greaterThanOrEqualTo(Duration.zero));
     });
 
     test('stop clears playing and returns to idle', () async {
@@ -623,6 +684,159 @@ void runAudioEngineConformance(String name, AudioEngineHarness harness) {
       await c.cancel();
     });
   });
+
+  if (harness.canFailPlayback) {
+    // Media that loaded and then failed: the load had answered, so the
+    // failure has nowhere to go but this stream, and a transport that went
+    // on reading playing over it is the silence this exists to end.
+    group('$name a failure after load', () {
+      late AudioEnginePort engine;
+
+      setUp(() async {
+        engine = await harness.createEngine();
+      });
+
+      tearDown(() => harness.disposeEngine(engine));
+
+      // The beat after the first failure is for a second one to show.
+      Future<void> untilFailed(List<MediaFailure> failures) =>
+          advanceUntil(engine, () => failures.isNotEmpty);
+
+      test('is announced once, with the play intent', () async {
+        final failures = <MediaFailure>[];
+        final sub = engine.mediaFailed.listen(failures.add);
+        await engine.load(await harness.failableMedia());
+        await engine.play();
+        await harness.advance(engine, quarter);
+        expect(engine.playing, isTrue, reason: 'precondition: it was playing');
+        await harness.failPlayback(engine);
+        await untilFailed(failures);
+
+        expect(failures, hasLength(1));
+        expect(failures.single.wasPlaying, isTrue);
+        expect(
+          failures.single.fault,
+          MediaFault.transport,
+          reason: 'a dropped connection is the way to the media, not the media',
+        );
+        expect(engine.playing, isFalse, reason: 'nothing is playing now');
+        await sub.cancel();
+      });
+
+      test('a later load works', () async {
+        final failures = <MediaFailure>[];
+        final sub = engine.mediaFailed.listen(failures.add);
+        await engine.load(await harness.failableMedia());
+        await engine.play();
+        await harness.failPlayback(engine);
+        await untilFailed(failures);
+        expect(failures, isNotEmpty, reason: 'precondition: it failed');
+        // The media that was cut stays cut; the later load is of the one
+        // every other group plays.
+        await engine.load(harness.mediaUrl);
+        await engine.play();
+        await harness.advance(engine, quarter);
+
+        expect(engine.playing, isTrue);
+        expect(engine.processingState, EngineProcessingState.ready);
+        await sub.cancel();
+      });
+    });
+  }
+
+  final formats = harness.presentationFormats;
+  if (formats.isNotEmpty) {
+    // What the native apps play every capped, voice-boosted or carved
+    // stream as: one item's HLS presentation, which the engine positions
+    // itself. Opus is what a cap or a boost renders to, FLAC what a track
+    // carved from a lossless rip does.
+    group('$name an HLS presentation', () {
+      late AudioEnginePort engine;
+
+      setUp(() async {
+        engine = await harness.createEngine();
+      });
+
+      tearDown(() => harness.disposeEngine(engine));
+
+      for (final format in formats) {
+        test('in $format loads at an initial position, its length the '
+            'playlist\'s', () async {
+          await engine.load(
+            await harness.presentation(format),
+            initialPosition: quarter,
+          );
+          expect(engine.processingState, EngineProcessingState.ready);
+          expect(engine.duration, isNotNull);
+          expectNear(engine.duration!, harness.mediaDuration, 'duration');
+          expectNear(engine.position, quarter, 'initial position');
+        });
+
+        test('in $format seeks into a later segment and plays on', () async {
+          await engine.load(await harness.presentation(format));
+          await engine.play();
+          await harness.advance(engine, const Duration(seconds: 1));
+          await engine.seek(threeQuarters);
+          // Settled, as the other seeks are: a position tick from before
+          // the seek can land while the platform is still answering it.
+          await harness.advance(engine, Duration.zero);
+          final from = engine.position;
+          expect(
+            (from - threeQuarters).inMilliseconds,
+            inInclusiveRange(
+              -harness.tolerance.inMilliseconds,
+              harness.tolerance.inMilliseconds * 2,
+            ),
+            reason: 'position after the seek, $from',
+          );
+          await harness.advance(engine, const Duration(milliseconds: 500));
+          expect(engine.playing, isTrue);
+          expect(engine.position, greaterThan(from), reason: 'it plays on');
+        });
+
+        test('in $format ends with completed at its length', () async {
+          await engine.load(await harness.presentation(format));
+          await engine.play();
+          final done = engine.completed.first;
+          await harness.advance(
+            engine,
+            harness.mediaDuration + const Duration(seconds: 1),
+          );
+          await done.timeout(const Duration(seconds: 5));
+          expect(engine.processingState, EngineProcessingState.completed);
+          expect(engine.playing, isFalse);
+        });
+      }
+
+      // ExoPlayer retries a refused segment and then fails; mpv's demuxer
+      // steps over it, plays what it had and ends. Either way the listener
+      // has to hear that the stream stopped short, never that it ended:
+      // an end marks an episode finished and rolls a book on.
+      test('segments refused mid-listen fail it rather than end it', () async {
+        final failures = <MediaFailure>[];
+        var ended = false;
+        final f = engine.mediaFailed.listen(failures.add);
+        final c = engine.completed.listen((_) => ended = true);
+        await engine.load(
+          await harness.presentation(formats.first, refuseFrom: 2),
+        );
+        await engine.play();
+        await advanceUntil(engine, () => failures.isNotEmpty || ended);
+
+        expect(ended, isFalse, reason: 'it stopped short of its end');
+        expect(failures, isNotEmpty, reason: 'and said so');
+        expect(failures.first.fault, MediaFault.transport);
+        expect(
+          failures.first.refusal?.code,
+          'transcode-limited',
+          reason: 'the refusal is read off the segment it met',
+        );
+        expect(engine.playing, isFalse);
+        await f.cancel();
+        await c.cancel();
+      });
+    });
+  }
 
   final timeline = harness.timeline;
   if (timeline == null) return;

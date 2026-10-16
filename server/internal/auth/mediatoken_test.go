@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
@@ -128,4 +129,90 @@ func v1Token(secret, user, pid string) string {
 	mac.Write([]byte(payload))
 	enc := base64.RawURLEncoding
 	return enc.EncodeToString([]byte(payload)) + "." + enc.EncodeToString(mac.Sum(nil))
+}
+
+// A query sealed beside a token opens with that token alone: another
+// token, another server's key, or an edited value opens nothing, and the
+// sealed form shows nothing of what it carries.
+func TestSealedQueryOpensOnlyBesideItsToken(t *testing.T) {
+	m := NewMediaTokens([]byte(testMediaSecret), time.Minute)
+	token, _ := m.MintFor(streamClaims(), 0)
+	other, _ := m.MintFor(MediaClaims{User: "us-2", Purpose: PurposeHLS, PID: "tr-2"}, 0)
+	const descriptor = "eyJzcmMiOiJsaWIvQXJ0aXN0L0FsYnVtLzAxLmZsYWMifQ"
+	query := "v=" + descriptor + "&sig=abc"
+	sealed := m.SealQuery(token, query)
+	// Read by its structure, not by short words: the sealed form is random
+	// base64, where any three letters turn up now and then. It is a nonce,
+	// the query enciphered, and the tag, and no longer than that, so nothing
+	// rides beside the ciphertext; and the query is in it in neither form.
+	raw, err := base64.RawURLEncoding.DecodeString(sealed)
+	if err != nil {
+		t.Fatalf("sealed %q is not base64url: %v", sealed, err)
+	}
+	if want := 12 + len(query) + 16; len(raw) != want {
+		t.Fatalf("sealed %d bytes, want %d: a nonce, the query enciphered and the tag", len(raw), want)
+	}
+	if strings.Contains(string(raw), query) || strings.Contains(string(raw), descriptor) || strings.Contains(sealed, descriptor) {
+		t.Fatalf("sealed %q shows what it carries", sealed)
+	}
+	if got, err := m.OpenQuery(token, sealed); err != nil || got != query {
+		t.Fatalf("open = %q, %v; want the query back", got, err)
+	}
+	elsewhere := NewMediaTokens([]byte("another-secret-another-secret-12"), time.Minute)
+	edited := []byte(sealed)
+	edited[len(edited)/2] ^= 1
+	for name, open := range map[string]func() (string, error){
+		"another token":   func() (string, error) { return m.OpenQuery(other, sealed) },
+		"another server":  func() (string, error) { return elsewhere.OpenQuery(token, sealed) },
+		"an edited value": func() (string, error) { return m.OpenQuery(token, string(edited)) },
+		"not base64":      func() (string, error) { return m.OpenQuery(token, "%%%") },
+		"nothing":         func() (string, error) { return m.OpenQuery(token, "") },
+	} {
+		if got, err := open(); err == nil {
+			t.Errorf("%s opened as %q", name, got)
+		}
+	}
+}
+
+// One query sealed beside one token seals the same every time, so a
+// playlist fetched again lists the same URIs; beside another token, or
+// another query, it seals otherwise, under a nonce of its own.
+func TestASealedQuerySealsTheSameEveryTime(t *testing.T) {
+	m := NewMediaTokens([]byte(testMediaSecret), time.Minute)
+	token, _ := m.MintFor(streamClaims(), 0)
+	other, _ := m.MintFor(MediaClaims{User: "us-2", Purpose: PurposeHLS, PID: "tr-2"}, 0)
+	const query = "v=eyJzcmMiOiJsaWIvQXJ0aXN0L0FsYnVtLzAxLmZsYWMifQ&sig=abc"
+	seal := func(token, query string) []byte {
+		t.Helper()
+		raw, err := base64.RawURLEncoding.DecodeString(m.SealQuery(token, query))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return raw
+	}
+	first := seal(token, query)
+	if again := seal(token, query); !bytes.Equal(again, first) {
+		t.Fatalf("one query beside one token sealed %x, then %x", first, again)
+	}
+	for name, sealed := range map[string][]byte{
+		"another token": seal(other, query),
+		"another query": seal(token, query+"d"),
+	} {
+		if bytes.Equal(sealed[:12], first[:12]) {
+			t.Errorf("%s sealed under the same nonce", name)
+		}
+	}
+	// A playlist's worth through one sealer, its buffers reused, seals
+	// each as SealQuery does and opens back to each.
+	s := m.QuerySealer(token)
+	var buf []byte
+	for _, q := range []string{query, "v=x&sig=" + strings.Repeat("long", 100), "", query} {
+		buf = s.Append(buf[:0], []byte(q))
+		if string(buf) != m.SealQuery(token, q) {
+			t.Errorf("%q sealed %q in a run, %q alone", q, buf, m.SealQuery(token, q))
+		}
+		if got, err := m.OpenQuery(token, string(buf)); err != nil || got != q {
+			t.Errorf("%q opened as %q, %v", q, got, err)
+		}
+	}
 }

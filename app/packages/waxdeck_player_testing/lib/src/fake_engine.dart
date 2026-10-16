@@ -15,6 +15,30 @@ class FakeEngine implements TimelineAudioEngine {
   /// Last URL passed to [load], for assertions.
   String? loadedUrl;
 
+  /// Every URL [load] was called with, in order, the ones that failed
+  /// included: a re-mint shows up here as a second, different URL.
+  final List<String> loadedUrls = <String>[];
+
+  /// Every position [seek] was called with, in order.
+  final List<Duration> seekCalls = <Duration>[];
+
+  /// How many times [play] was called, refused or not.
+  int playCalls = 0;
+
+  /// How far the loaded media is buffered; null reads as all of it. A test
+  /// sets it to stand in for a live stream that has only reached so far.
+  Duration? buffered;
+
+  /// What [seeksWithinUnrangedStream] answers: true is a browser, false
+  /// stands in for Android.
+  @override
+  bool seeksWithinUnrangedStream = true;
+
+  /// What [playsHls] answers. False, the browser's answer, unless a test
+  /// stands in for Android or the desktops.
+  @override
+  bool playsHls = false;
+
   /// The clip window the last [load] carried, when any.
   Duration? loadedClipStart;
   Duration? loadedClipEnd;
@@ -82,6 +106,10 @@ class FakeEngine implements TimelineAudioEngine {
   /// instructions to a caller, and only one of them may walk a queue.
   MediaFault loadFault = MediaFault.source;
 
+  /// The server's refusal a failed [load] carries, as the probe would have
+  /// read it; null for a failure the server never explained.
+  StreamRefusal? loadRefusal;
+
   /// Fails the next [setVolume] the way a platform that will not take the
   /// write fails: it throws and the gain does not move. Cleared as it
   /// fires.
@@ -111,6 +139,11 @@ class FakeEngine implements TimelineAudioEngine {
   /// been.
   Completer<void>? pauseGate;
 
+  /// Holds the next [play] open until the test completes it, after the
+  /// playing flag has risen, so a caller can be caught still inside one.
+  /// One-shot, like [loadGate].
+  Completer<void>? playGate;
+
   final _positions = StreamController<Duration>.broadcast();
   final _durations = StreamController<Duration?>.broadcast();
   final _playings = StreamController<bool>.broadcast();
@@ -118,6 +151,7 @@ class FakeEngine implements TimelineAudioEngine {
   final _completions = StreamController<void>.broadcast();
   final _boundaries = StreamController<void>.broadcast();
   final _refusals = StreamController<Object>.broadcast();
+  final _failures = StreamController<MediaFailure>.broadcast();
   final _speeds = StreamController<double>.broadcast();
   final _volumes = StreamController<double>.broadcast();
 
@@ -167,6 +201,54 @@ class FakeEngine implements TimelineAudioEngine {
   Stream<Object> get playbackRefused => _refusals.stream;
 
   @override
+  Stream<MediaFailure> get mediaFailed => _failures.stream;
+
+  @override
+  Duration get bufferedPosition {
+    final length = _duration ?? Duration.zero;
+    final held = buffered ?? length;
+    return held > length ? length : held;
+  }
+
+  /// Stands the loaded media still while it waits for data (a slow
+  /// network mid-play), or lets it go on: loading while [on], ready after.
+  /// The play intent is untouched, as a real engine's is.
+  void buffer({bool on = true}) {
+    if (loadedUrl == null) return;
+    _setState(on ? EngineProcessingState.loading : EngineProcessingState.ready);
+  }
+
+  /// Fails the loaded media the way a dropped connection or an expired
+  /// token does mid-play: the engine stops (`playing` false, idle) and
+  /// [mediaFailed] says whether it was playing, carrying [refusal] when
+  /// the server explained itself. Does nothing with nothing loaded.
+  ///
+  /// [dropPosition] stands in for a platform that forgets where the media
+  /// stood once it has failed: the position reads zero afterwards, with no
+  /// report of the change.
+  void failPlayback({
+    MediaFault fault = MediaFault.transport,
+    StreamRefusal? refusal,
+    bool dropPosition = false,
+  }) {
+    if (loadedUrl == null) return;
+    final wasPlaying = playing;
+    _setPlaying(false);
+    _setState(EngineProcessingState.idle);
+    if (dropPosition) _position = Duration.zero;
+    if (!_failures.isClosed) {
+      _failures.add(
+        MediaFailure(
+          fault,
+          const PlaybackDropped(),
+          wasPlaying: wasPlaying,
+          refusal: refusal,
+        ),
+      );
+    }
+  }
+
+  @override
   double get speed => _speed;
 
   @override
@@ -208,13 +290,25 @@ class FakeEngine implements TimelineAudioEngine {
     Duration? clipStart,
     Duration? clipEnd,
   }) async {
+    loadedUrls.add(url);
+    final generation = ++_loadGeneration;
     if (failNextLoad || failEveryLoad) {
       failNextLoad = false;
+      // As the real engines do: the outgoing media is stopped before the
+      // incoming one is tried, and what reads afterwards is the incoming
+      // media's requested start on a player holding nothing.
+      _setPlaying(false);
+      _setPosition(initialPosition ?? Duration.zero);
+      _setState(EngineProcessingState.idle);
       // Through the port's own type, because that is the port's own
       // promise: a caller reads the fault to decide whether to skip
       // past the item or offer a retry, and a fake that threw something
       // untyped would exercise the fallback rather than the decision.
-      throw MediaLoadException(loadFault, const MediaWillNotOpen());
+      throw MediaLoadException(
+        loadFault,
+        const MediaWillNotOpen(),
+        refusal: loadRefusal,
+      );
     }
     // The real facade stops the transport before replacing sources (the
     // web platform's per-playlist player cache makes the stop
@@ -242,7 +336,16 @@ class FakeEngine implements TimelineAudioEngine {
     final gate = loadGate;
     loadGate = null;
     if (gate != null) await gate.future;
+    // A load or a stop that came after this one took the player from it,
+    // and just_audio says so by failing the older load.
+    if (generation != _loadGeneration) {
+      throw MediaLoadException(MediaFault.transport, const LoadInterrupted());
+    }
   }
+
+  /// Bumped by every [load] and [stop]: a load whose number is no longer
+  /// the newest was interrupted.
+  int _loadGeneration = 0;
 
   /// Whether this fake keeps a preload window. True by default, which
   /// is the engine the app is written against; a test sets it false to
@@ -312,7 +415,11 @@ class FakeEngine implements TimelineAudioEngine {
   }) async {
     if (failNextLoad || failEveryLoad) {
       failNextLoad = false;
-      throw MediaLoadException(loadFault, const MediaWillNotOpen());
+      throw MediaLoadException(
+        loadFault,
+        const MediaWillNotOpen(),
+        refusal: loadRefusal,
+      );
     }
     final same = loadedTimeline?.url == media.url;
     if (!same) {
@@ -397,9 +504,7 @@ class FakeEngine implements TimelineAudioEngine {
         // Off the end of the whole timeline: the queue ended.
         _timelineAbsMs = seam;
         _setPosition(Duration(milliseconds: media.memberDurationMs(last)));
-        _setPlaying(false);
-        _setState(EngineProcessingState.completed);
-        if (!_completions.isClosed) _completions.add(null);
+        _end();
         return;
       }
       remaining = target - seam;
@@ -426,6 +531,7 @@ class FakeEngine implements TimelineAudioEngine {
 
   @override
   Future<void> play() async {
+    playCalls++;
     if (refuseNextPlay) {
       // The refusal is announced rather than thrown, which is the port's
       // contract: it lands after the request has been dispatched, so
@@ -444,6 +550,9 @@ class FakeEngine implements TimelineAudioEngine {
       _setState(EngineProcessingState.ready);
     }
     _setPlaying(true);
+    final gate = playGate;
+    playGate = null;
+    if (gate != null) await gate.future;
   }
 
   @override
@@ -454,6 +563,7 @@ class FakeEngine implements TimelineAudioEngine {
 
   @override
   Future<void> seek(Duration position) async {
+    seekCalls.add(position);
     final max = _duration ?? position;
     final at = position < Duration.zero
         ? Duration.zero
@@ -471,6 +581,7 @@ class FakeEngine implements TimelineAudioEngine {
       failNextStop = false;
       throw const MediaWillNotRelease();
     }
+    _loadGeneration++;
     _setPlaying(false);
     _setState(EngineProcessingState.idle);
     // Stopping releases the media, and the window and the timeline with
@@ -495,6 +606,7 @@ class FakeEngine implements TimelineAudioEngine {
     unawaited(_completions.close());
     unawaited(_boundaries.close());
     unawaited(_refusals.close());
+    unawaited(_failures.close());
     unawaited(_speeds.close());
     unawaited(_volumes.close());
     unawaited(_timelineLosses.close());
@@ -509,7 +621,15 @@ class FakeEngine implements TimelineAudioEngine {
   /// media rolls into the preloaded item when there is one, firing
   /// [itemBoundary]; with nothing preloaded it fires [completed] and
   /// leaves the engine in the completed state with playback stopped.
-  void advance(Duration amount) {
+  ///
+  /// [coarse] stands in for a platform whose last position report falls
+  /// short of the end: the position stops a millisecond before it and the
+  /// media ends with no report at the end itself. A real engine clamps its
+  /// position to the media's length and reports on a tick, so a boundary
+  /// placed exactly at the end is crossed in the same instant the media
+  /// ends, and either can arrive first; this is the order where the end
+  /// wins.
+  void advance(Duration amount, {bool coarse = false}) {
     if (!_playing || _state != EngineProcessingState.ready) return;
     if (loadedTimeline != null) {
       _advanceTimeline(amount);
@@ -524,10 +644,8 @@ class FakeEngine implements TimelineAudioEngine {
         return;
       }
       if (preloadedUrl == null) {
-        _setPosition(end);
-        _setPlaying(false);
-        _setState(EngineProcessingState.completed);
-        if (!_completions.isClosed) _completions.add(null);
+        _setPosition(coarse ? end - const Duration(milliseconds: 1) : end);
+        _end();
         return;
       }
       // Sample-adjacent: the media time that ran past the end of the
@@ -537,6 +655,26 @@ class FakeEngine implements TimelineAudioEngine {
       remaining = target - end;
       _crossBoundary();
     }
+  }
+
+  /// Announces the end of the loaded media once more, with nothing moving:
+  /// a platform whose end lands after whatever the position that reached
+  /// it set off, in an order a test can place.
+  void announceEnd() {
+    if (loadedUrl == null) return;
+    _end();
+  }
+
+  /// The media ran out. The end is told before the stop, the order
+  /// just_audio reports them in (the end rides its playback events, the
+  /// stop its player state, a hop later); the getters read stopped at
+  /// once.
+  void _end() {
+    final wasPlaying = _playing;
+    _playing = false;
+    _setState(EngineProcessingState.completed);
+    if (!_completions.isClosed) _completions.add(null);
+    if (wasPlaying && !_playings.isClosed) _playings.add(false);
   }
 
   /// Makes the preloaded item the loaded one, as the engine walking into
@@ -595,6 +733,24 @@ class MediaWillNotOpen implements Exception {
 
   @override
   String toString() => 'the media would not open';
+}
+
+/// What a [FakeEngine.load] overtaken by a newer load or a stop throws
+/// inside its [MediaLoadException], as just_audio interrupts one.
+class LoadInterrupted implements Exception {
+  const LoadInterrupted();
+
+  @override
+  String toString() => 'the load was interrupted';
+}
+
+/// What [FakeEngine.failPlayback] reports as the cause. Public for the
+/// same reason as [MediaWillNotOpen].
+class PlaybackDropped implements Exception {
+  const PlaybackDropped();
+
+  @override
+  String toString() => 'the media stopped playing';
 }
 
 /// What [FakeEngine.failNextSetVolume] throws. Public for the same

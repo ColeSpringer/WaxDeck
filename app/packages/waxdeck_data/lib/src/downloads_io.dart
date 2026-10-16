@@ -8,6 +8,7 @@ import 'package:waxdeck_api/waxdeck_api.dart';
 
 import 'database.dart';
 import 'downloads_port.dart';
+import 'media_url_life.dart';
 import 'mirror_pages.dart';
 import 'transfer_engine.dart';
 import 'transfer_engine_io.dart'
@@ -305,16 +306,9 @@ class BackgroundDownloadManager implements DownloadManagerPort {
     await _describe(item);
   }
 
-  /// When [info]'s URLs stop working on this device's clock: the lifetime
-  /// the server gave them, a minute early. A clock skewed past that gets
-  /// ten minutes, and a 401 tells the rest.
-  DateTime _staleAt(DownloadInfo info, DateTime received) {
-    final life =
-        info.expiresAt.difference(received) - const Duration(minutes: 1);
-    return received.add(
-      life > Duration.zero ? life : const Duration(minutes: 10),
-    );
-  }
+  /// When [info]'s URLs stop working on this device's clock.
+  DateTime _staleAt(DownloadInfo info, DateTime received) =>
+      mediaUrlStaleAt(info.expiresAt, now: received);
 
   bool _fresh(DateTime? staleAt) =>
       staleAt != null && clock().isBefore(staleAt);

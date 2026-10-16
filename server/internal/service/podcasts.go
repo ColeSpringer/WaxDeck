@@ -1017,13 +1017,13 @@ func (l *Library) RemoveEpisodeDownload(ctx context.Context, uc *UserCtx, apiEpi
 // pids). Subscriptions are per-user views, so this set is what scopes
 // episodes in listings, browse, search, and catalog sync.
 func (l *Library) subscribedShowSet(ctx context.Context, uc *UserCtx) (map[string]bool, error) {
-	rows, err := l.db.SubscriptionsByUser(ctx, uc.ID)
+	shows, err := l.db.SubscribedShowPIDsByUser(ctx, uc.ID)
 	if err != nil {
 		return nil, err
 	}
-	set := make(map[string]bool, len(rows))
-	for _, row := range rows {
-		set[row.ShowPID] = true
+	set := make(map[string]bool, len(shows))
+	for _, show := range shows {
+		set[show] = true
 	}
 	return set, nil
 }
@@ -1254,14 +1254,15 @@ func (f SubscribedEpisodeFilter) Valid() bool {
 //
 // The show set rides one `in` predicate, which seeks the same index `is`
 // does at every arity including one, so a thousand-feed importer costs
-// what ten do. An empty set compiles to `1=0` - the right answer for a
-// caller with no subscriptions, and the reason this needs no guard above
-// it. showPIDs is sorted so one caller's scope compiles to a stable
-// string, which keeps a cursor issued under it meaningful.
+// what ten do; past the engine's cap on one set it is chunked (inSet). An
+// empty set compiles to `1=0` - the right answer for a caller with no
+// subscriptions, and the reason this needs no guard above it. showPIDs is
+// sorted so one caller's scope compiles to a stable string, which keeps a
+// cursor issued under it meaningful.
 func subscribedEpisodeScope(uc *UserCtx, showPIDs []string) *query.Builder {
 	q := visibleItems().
 		Where("kind", query.OpIs, string(model.KindEpisode)).
-		WhereValues("podcast_pid", query.OpIn, query.Values(showPIDs)...)
+		WhereNode(inSet("podcast_pid", showPIDs))
 	if !uc.Explicit {
 		q = q.Where("explicit", query.OpIs, 0).
 			Where("podcast_explicit", query.OpIs, 0)

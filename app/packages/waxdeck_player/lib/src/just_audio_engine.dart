@@ -30,26 +30,25 @@ import 'stream_probe/stream_probe.dart';
 /// that would separate them left on the far side of the plugin's
 /// channel. The `TYPE_RENDERER` row below is from ExoPlayer's contract
 /// rather than from that run, which produced no such code. The Apple
-/// rows are unmeasured too. [probedMediaFaultOf] is the second step
+/// rows are unmeasured too. [probedMediaFailureOf] is the second step
 /// that covers the difference: where this table has no verdict, it
 /// asks the network for one.
 ///
-/// Desktop is not in this table at all: mpv through media_kit does not
-/// report a failed load, it simply never finishes one, so nothing
-/// reaches here to be classified. What ends that wait is the engine's
-/// own load deadline, and what classifies the result is the probe
-/// below - alone, rather than as a refinement of a code.
+/// Desktop has no row. mpv through media_kit does not fail a load, it
+/// simply never finishes one, so the engine's own load deadline ends
+/// that wait and the probe below classifies it alone. What mpv does
+/// report is media that had loaded failing afterwards, which reads as
+/// transport like any code without a row.
 @visibleForTesting
-MediaFault mediaFaultOf(Object failure) {
+MediaFault mediaFaultOf(Object failure, {bool isWeb = kIsWeb}) {
   if (failure is! PlayerException) return MediaFault.transport;
-  // `MediaError.code`: 3 is MEDIA_ERR_DECODE and 4 is
-  // MEDIA_ERR_SRC_NOT_SUPPORTED, which are the element saying it cannot
-  // make sound out of these bytes. 1 (aborted) and 2 (network) are not
-  // the file.
-  if (kIsWeb) {
-    return failure.code == 3 || failure.code == 4
-        ? MediaFault.source
-        : MediaFault.transport;
+  // `MediaError.code`: 3 is MEDIA_ERR_DECODE, the element saying it cannot
+  // make sound out of these bytes. 4 (MEDIA_ERR_SRC_NOT_SUPPORTED) is no
+  // such evidence: the HTML spec raises it for any first fetch that
+  // produced no media, a 401 or a 429 as much as a codec, so the probe
+  // decides it. 1 (aborted) and 2 (network) are not the file.
+  if (isWeb) {
+    return failure.code == 3 ? MediaFault.source : MediaFault.transport;
   }
   return switch (defaultTargetPlatform) {
     // `ExoPlaybackException.type`: 1 is TYPE_RENDERER, a decoder that
@@ -69,52 +68,94 @@ MediaFault mediaFaultOf(Object failure) {
 /// `AVErrorFileFormatNotRecognized` and `AVErrorFailedToParse`.
 const Set<int> _appleFormatErrors = <int>{-11828, -11829};
 
-/// [mediaFaultOf], then one question the platform cannot refuse to
-/// answer: when the code carried no verdict, what does the URL say
-/// about itself?
+/// A failure of [url], weighed against one question the platform cannot
+/// refuse to answer: what does the URL say about itself?
 ///
-/// On Android every load failure arrives as `TYPE_SOURCE` with a
-/// constant string (measured; see [mediaFaultOf]), so the code alone
-/// left a bad rip standing on the retry pane. The probe separates the
-/// halves from outside the plugin. A URL that answers a ranged GET has
-/// nothing wrong with its server, its network, or its token, so what
-/// refused was the bytes - [MediaFault.source]. A URL that answers 415
-/// says the same thing from the other side: our own endpoint would not
-/// make audio out of that file either ([StreamProbe.unplayable]), which
-/// is a verdict about the media and not about the way to it. WaxDeck's
-/// stream URLs are HMAC-signed and replayable (`auth/mediatoken.go`),
-/// so the request consumes nothing, and it is spent only on a load that
-/// has already failed.
+/// The one place a failure is blamed, whenever it struck. At [midPlay],
+/// media that had loaded failed afterwards; [abandoned] is a load the
+/// deadline gave up on, which the platform never reported; neither is a
+/// load the platform failed itself.
 ///
-/// Refinement runs one way. A probe that reaches nothing proves
-/// nothing new - the transport verdict it would confirm is already the
-/// answer - so an unreachable URL and a probe that breaks both leave
-/// [MediaFault.transport] standing, and a [MediaFault.source] from the
-/// table is never second-guessed. Only a `PlayerException` is probed:
-/// the player refusing for a reason it will not name is the ambiguity
-/// this resolves, and a failure from anywhere else says nothing about
-/// the media. The residual risk is a connection that dropped and came
-/// back within the probe's window, which reads as the file and skips
-/// one good track; the reverse mistake walks the queue, which is why
-/// the default stays transport.
+/// A load the platform failed is first read by [mediaFaultOf]: its source
+/// verdict stands unasked, and a failure that is not the player's own
+/// says nothing about the media and is the transport. Otherwise the probe
+/// decides. On Android every load failure arrives as `TYPE_SOURCE` with a
+/// constant string (measured; see [mediaFaultOf]), so the code alone left
+/// a bad rip standing on the retry pane; the probe separates the halves
+/// from outside the plugin. WaxDeck's stream URLs are HMAC-signed and
+/// replayable (`auth/mediatoken.go`), so asking consumes nothing, and it
+/// is spent only on media that has already failed.
+///
+/// The server's refusal (an expired token, the transcode cap, the engine
+/// away) is never the file: the server answered and said why, and that
+/// reason is what the caller acts on. A server calling the file unplayable
+/// is the file wherever it struck. Between them, a URL that answers is
+/// the file only where an answer is evidence: a load that failed on bytes
+/// the player was handed. It is not where the element itself said network
+/// (the web's codes 1 and 2), where the web's load ran out of time (the
+/// element names a file it cannot decode), for an HLS presentation (its
+/// segments are where it fails, and the server's verdicts are read off the
+/// segment the player needed at [at]), or mid-play: what fails partway
+/// through is far
+/// more often the way to a file than a file that decoded until then,
+/// whatever code the platform gave - save a file on disk, where no way
+/// stands between the player and the bytes. The residual risk is a
+/// connection that dropped and came back within the probe's window,
+/// which reads as the file and skips one good track; the reverse mistake
+/// walks the queue, which is why the default stays transport.
 @visibleForTesting
-Future<MediaFault> probedMediaFaultOf(
+Future<({MediaFault fault, StreamRefusal? refusal})> probedMediaFailureOf(
   Object failure,
   String url, {
-  Future<StreamProbe> Function(String url) probe = probeStream,
+  StreamAsk ask = askStream,
+  bool isWeb = kIsWeb,
+  bool midPlay = false,
+  bool abandoned = false,
+  bool presentation = false,
+  Duration at = Duration.zero,
 }) async {
-  final fault = mediaFaultOf(failure);
-  if (fault != MediaFault.transport || failure is! PlayerException) {
-    return fault;
+  if (!midPlay && !abandoned) {
+    if (failure is! PlayerException) {
+      return (fault: MediaFault.transport, refusal: null);
+    }
+    final fault = mediaFaultOf(failure, isWeb: isWeb);
+    if (fault == MediaFault.source) return (fault: fault, refusal: null);
   }
+  ProbeAnswer answer;
   try {
-    return (await probe(url)).blamesMedia ? MediaFault.source : fault;
+    answer = await ask(
+      url,
+      segmentAt: presentation ? at + _segmentLookAhead : null,
+    );
   } on Object {
     // The port promises MediaLoadException and nothing else; a probe
     // that broke does not get to break that.
-    return fault;
+    answer = ProbeAnswer.unreachable;
   }
+  final refusal = answer.refusal;
+  if (refusal != null) return (fault: MediaFault.transport, refusal: refusal);
+  final local = Uri.tryParse(url)?.isScheme('file') ?? false;
+  final strict =
+      presentation ||
+      (midPlay ? !local : isWeb && (abandoned || _saidNetwork(failure)));
+  return (
+    fault: answer.verdict.blames(strict: strict)
+        ? MediaFault.source
+        : MediaFault.transport,
+    refusal: null,
+  );
 }
+
+/// How far past [probedMediaFailureOf]'s position the segment a
+/// presentation needed is looked for. Where playback stopped is where the
+/// segment it could not fetch begins, give or take a frame, so the one
+/// holding a moment later is that segment rather than the one before.
+const Duration _segmentLookAhead = Duration(milliseconds: 250);
+
+/// `MediaError.code` 1 (aborted) and 2 (network): the element saying the
+/// fetch failed, not the file.
+bool _saidNetwork(Object failure) =>
+    failure is PlayerException && (failure.code == 1 || failure.code == 2);
 
 /// How long a load may take before the engine stops waiting for it.
 ///
@@ -122,14 +163,16 @@ Future<MediaFault> probedMediaFaultOf(
 /// never reports a failed load, so without this the session sits on the
 /// last face forever. Generous, because everything under it is a real
 /// load that deserves to finish - a cold NAS, a large file over a slow
-/// link. The cost of that generosity is at the far end: a slow but
-/// legitimate load whose URL still answers is classified as the media
-/// and auto-skipped rather than paned. "Answers" is a status line -
-/// `probeStream` reads one and hangs up - so a host that returns
-/// headers promptly and then stalls the body reads as the media every
-/// time. Taken knowingly, because it is the same verdict Android
-/// already gives garbage bytes on disk, and the skip surface names
-/// what happened.
+/// link. The cost of that generosity is at the far end: off the web, a
+/// slow but legitimate load whose URL still answers is classified as the
+/// media and auto-skipped rather than paned (the web, where the element
+/// names an undecodable file itself, keeps it on the pane, and so does
+/// an HLS presentation, which only the server calling it unplayable puts
+/// on the file). "Answers" is a status line - `askStream` reads one and
+/// hangs up - so a host that returns headers promptly and then stalls the
+/// body reads as the media every time. Taken knowingly, because it is the
+/// same verdict Android already gives garbage bytes on disk, and the skip
+/// surface names what happened.
 ///
 /// Window edits and a replay's seek and reload are held to it too.
 const Duration _defaultLoadDeadline = Duration(seconds: 15);
@@ -145,7 +188,8 @@ const Duration _defaultStopGrace = Duration(seconds: 2);
 ///
 /// One facade drives every platform: the bundled just_audio backends on
 /// mobile and web, and mpv via the media_kit bridge on desktop (see the
-/// bootstrap helper). This class is the only place just_audio types appear.
+/// bootstrap helper). This class is the only place just_audio types appear,
+/// save the platform bound the web bootstrap installs.
 ///
 /// Gapless playback is a sliding two-item window over just_audio's audio
 /// source list: the item playing, plus the one [preloadNext] put behind
@@ -157,28 +201,62 @@ class JustAudioEngine implements AudioEnginePort {
   JustAudioEngine() : this.withPlayer(AudioPlayer());
 
   /// The seams the load deadline is tested through: a player that can
-  /// be made to hang, a probe that answers without a network, and a
-  /// deadline short enough to wait out. Nothing but a test builds an
-  /// engine this way.
+  /// be made to hang, a probe that answers without a network, a deadline
+  /// short enough to wait out, and whether it behaves as the web's.
+  /// Nothing but a test builds an engine this way.
   @visibleForTesting
   JustAudioEngine.withPlayer(
     this._player, {
     this._loadDeadline = _defaultLoadDeadline,
     this._stopGrace = _defaultStopGrace,
-    this._probe = probeStream,
+    this._ask = askStream,
+    this._isWeb = kIsWeb,
   }) {
     _indexSub = _player.currentIndexStream.listen(_onIndexChanged);
     _durationSub = _player.durationStream.listen(_rememberDuration);
+    _eventSub = _player.playbackEventStream.listen(
+      _onPlaybackEvent,
+      onError: (Object _) {},
+    );
   }
 
   final AudioPlayer _player;
+  final bool _isWeb;
   final Duration _loadDeadline;
   final Duration _stopGrace;
-  final Future<StreamProbe> Function(String url) _probe;
+  final StreamAsk _ask;
   final _boundaries = StreamController<void>.broadcast();
   final _refusals = StreamController<Object>.broadcast();
+  final _failures = StreamController<MediaFailure>.broadcast();
+  final _completions = StreamController<void>.broadcast();
+
+  /// What the port reports the state as, each time it may have moved: the
+  /// platform's events, and the engine's own turns the platform never
+  /// sees (a load answering, a failure announced). See [_emitState].
+  final _states = StreamController<EngineProcessingState>.broadcast();
   late final StreamSubscription<int?> _indexSub;
   late final StreamSubscription<Duration?> _durationSub;
+  late final StreamSubscription<PlaybackEvent> _eventSub;
+
+  /// The platform's last playback event, read when the next one says the
+  /// item ended or failed: see [_onPlaybackEvent].
+  PlaybackEvent? _lastEvent;
+
+  /// Where an HLS presentation had got to when the platform called it
+  /// over well short of its playlist length, which is a failure and not
+  /// an end, and where it resumes from; null otherwise. Cleared by
+  /// whatever moves the item on.
+  Duration? _endedShort;
+
+  /// A failure of the loaded media that is still being probed before it
+  /// is announced; null when none is. Let go with the media, so a stop, a
+  /// load or disposal drops the announcement (see [_announce]).
+  _PendingFailure? _pending;
+
+  /// An end the platform raised while a load or a replay had not
+  /// answered: the loaded media's only if that attempt leaves media
+  /// loaded and the platform still reads ended (see [_settled]).
+  ({PlaybackEvent previous, PlaybackEvent event})? _heldEnd;
 
   /// Window edits run one at a time. Crossing a boundary schedules the
   /// drop of the item just consumed at the same moment the caller is
@@ -198,9 +276,24 @@ class JustAudioEngine implements AudioEnginePort {
     specification: const ZoneSpecification(handleUncaughtError: _dropEcho),
   );
 
-  /// A load was issued and has not succeeded. Its start may still hold the
-  /// platform, so the next load stops first even while the player reads idle.
+  /// A load or a replay was issued and has not succeeded. Its start may
+  /// still hold the platform, so the next load stops first even while the
+  /// player reads idle; and what the platform reports meanwhile is either
+  /// the attempt's to report by throwing, or about media that never
+  /// loaded.
   bool _unsettled = false;
+
+  /// Bumped by every attempt to put media on the platform: a load, and a
+  /// replay, which is a load in all but name.
+  int _attempt = 0;
+
+  /// The attempt that has not answered yet, or null. The stop a load
+  /// starts with takes the platform through idle, and audio_service reads
+  /// a move into idle as the service stopping (on the web it clears the
+  /// browser's media session), so an attempt reads as loading from its
+  /// stop to its answer. Only the newest attempt counts: one a newer
+  /// attempt superseded no longer speaks for the platform.
+  int? _settling;
 
   /// Platform calls the engine stopped waiting for that have not answered
   /// yet: window edits, loads, a replay's calls, stops. See [_stillOut].
@@ -242,10 +335,12 @@ class JustAudioEngine implements AudioEnginePort {
     // next load, which is just_audio's own contract.
     final source = _sourceFor(url, clipStart, clipEnd);
     final generation = ++_generation;
+    final attempt = _attempting();
     _loadedSource = source;
     _preloadedSource = null;
     _preloadedLength = null;
     _heldDuration = _windowLength(clipStart, clipEnd);
+    final at = _presentationAt(source, initialPosition ?? Duration.zero);
     try {
       // A hard stop before every replacement, and not an optimisation:
       // just_audio funnels setAudioSources through one internal playlist
@@ -291,17 +386,24 @@ class JustAudioEngine implements AudioEnginePort {
         _stillOut(answer);
         throw _Abandoned(timeout, behindAnother: behind);
       }
-      if (generation == _generation) _unsettled = false;
+      if (attempt == _attempt) _unsettled = false;
     } on _Abandoned catch (abandoned) {
+      final read = await _abandonedFault(abandoned, source, generation, at);
       throw MediaLoadException(
-        await _abandonedFault(abandoned, url, generation),
+        read.fault,
         abandoned.timeout,
+        refusal: read.refusal,
       );
     } on Object catch (failure) {
-      throw MediaLoadException(
-        await probedMediaFaultOf(failure, url, probe: _probe),
+      final read = await probedMediaFailureOf(
         failure,
+        url,
+        ask: _ask,
+        isWeb: _isWeb,
+        presentation: _isPresentation(source),
+        at: at,
       );
+      throw MediaLoadException(read.fault, failure, refusal: read.refusal);
     } finally {
       // An edit already in flight when this load started can put its
       // source into the list the load just built: both go through the
@@ -312,28 +414,57 @@ class JustAudioEngine implements AudioEnginePort {
       // A load that threw owns the window just as much as one that did
       // not, so the trim rides the failure path too.
       _repairWindow();
+      _settled(attempt);
     }
+  }
+
+  /// Starts an attempt to put media on the platform, a load or a replay:
+  /// whatever the media before it was doing - failing, ending - is no
+  /// longer anyone's to report.
+  int _attempting() {
+    final attempt = ++_attempt;
+    _settling = attempt;
+    _pending = null;
+    _heldEnd = null;
+    _endedShort = null;
+    _emitState();
+    return attempt;
+  }
+
+  /// [attempt] has answered, either way. An end the platform raised while
+  /// it was out is the loaded media's only if the attempt left media
+  /// loaded and the platform still reads ended; one superseded by a newer
+  /// attempt leaves that attempt to answer.
+  void _settled(int attempt) {
+    if (_settling != attempt) return;
+    _settling = null;
+    final held = _heldEnd;
+    _heldEnd = null;
+    if (held != null &&
+        !_unsettled &&
+        _player.processingState == ProcessingState.completed) {
+      _ended(held.previous, held.event);
+    }
+    _emitState();
   }
 
   /// What a load the deadline cut short was: the failure the platform
   /// never reported.
   ///
-  /// [probedMediaFaultOf] would take its own early exit here - the probe
-  /// is spent only on a `PlayerException`, because everywhere else a
-  /// failure from outside the plugin says nothing about the media. Here
-  /// it says everything: a deadline is the only report the desktop
-  /// gives, so the probe is the whole classification rather than a
-  /// refinement of one. A URL that answers a ranged GET while the
-  /// player could not finish with it is the media's fault, and so is
-  /// one that answers 415 - mpv giving up on a file the server would
-  /// not serve as audio is the same file twice. A URL that answers
-  /// neither is the transport's, and so is a load that waited behind a
-  /// call the platform never answered: it never reached the platform,
-  /// and a probe that answers would blame a file nobody tried.
-  Future<MediaFault> _abandonedFault(
+  /// The probe is the whole classification here rather than a refinement
+  /// of one: a deadline is the only report the desktop gives. A URL that
+  /// answers while the player could not finish with it is the media's
+  /// fault, and so is one the server will not serve as audio - mpv giving
+  /// up on a file the server would not decode is the same file twice. A
+  /// load that waited behind a call the platform never answered is the
+  /// transport unasked: it never reached the platform, and a probe that
+  /// answers would blame a file nobody tried. See [probedMediaFailureOf]
+  /// for where an answering URL says nothing.
+  Future<({MediaFault fault, StreamRefusal? refusal})> _abandonedFault(
     _Abandoned abandoned,
-    String url,
+    AudioSource source,
     int generation,
+    Duration at,
   ) async {
     // Abandoned, not cancelled: just_audio has no cancel, so the source
     // stays attached until something replaces it, and on the mpv bridge
@@ -355,15 +486,18 @@ class JustAudioEngine implements AudioEnginePort {
         // load; the fault below is still the honest answer.
       }
     }
-    if (abandoned.behindAnother) return MediaFault.transport;
-    try {
-      return (await _probe(url)).blamesMedia
-          ? MediaFault.source
-          : MediaFault.transport;
-    } on Object {
-      // The port promises MediaLoadException and nothing else.
-      return MediaFault.transport;
+    if (abandoned.behindAnother) {
+      return (fault: MediaFault.transport, refusal: null);
     }
+    return probedMediaFailureOf(
+      abandoned.timeout,
+      _urlOf(source),
+      ask: _ask,
+      isWeb: _isWeb,
+      abandoned: true,
+      presentation: _isPresentation(source),
+      at: at,
+    );
   }
 
   /// No window on the web, where one was never worth having.
@@ -386,8 +520,20 @@ class JustAudioEngine implements AudioEnginePort {
   /// this window: `WebGaplessEngine` puts a whole queue on one
   /// server-rendered stream and crosses members inside it, where a
   /// boundary is a position passing a number rather than a media swap.
+  ///
+  /// Nor behind an HLS presentation on the desktops: mpv steps over a
+  /// segment it cannot fetch into the entry behind, which reads as a
+  /// crossing and never as the early end it is. ExoPlayer fails such a
+  /// segment instead, so Android keeps its gapless crossing.
   @override
-  bool get canPreload => !kIsWeb;
+  bool get canPreload =>
+      !_isWeb &&
+      (defaultTargetPlatform == TargetPlatform.android || !_holdsPresentation);
+
+  bool get _holdsPresentation {
+    final source = _loadedSource;
+    return source != null && _isPresentation(source);
+  }
 
   @override
   Future<void> preloadNext(
@@ -672,6 +818,14 @@ class JustAudioEngine implements AudioEnginePort {
 
   @override
   Future<void> play() async {
+    final pending = _pending;
+    if (pending != null) {
+      // Media whose failure is still being worked out is not started
+      // again under its announcement: the play is the intent the
+      // announcement carries, and whoever recovers the media starts it.
+      pending.wantsPlay = true;
+      return;
+    }
     // A play that follows the end of the item starts it again, which is
     // the port's contract and what every play button on every surface
     // means once `playing` has gone false.
@@ -697,16 +851,26 @@ class JustAudioEngine implements AudioEnginePort {
     // only where the state machine offered no other door.
     //
     // That makes the replay a load on the platform that declines to
-    // finish them, so it is bounded and fails like one. Its fault is read
-    // off the failure alone, with no probe: a replay is of an item already
-    // underway, which a failure puts on the error pane and never skips,
-    // so there is no verdict for a probe to decide.
+    // finish them, so it is bounded, attempted like one (a failure that
+    // lands after it threw is its own, and an end raised before it
+    // answered is held), and fails like one. Its fault is read off the
+    // failure alone, with no probe: the item played to its end a moment
+    // ago, so only a platform naming the file moves the verdict off
+    // transport.
     if (_player.processingState == ProcessingState.completed) {
+      // An item that ended short failed rather than ended: it resumes
+      // where it had got to.
+      final from = _endedShort ?? Duration.zero;
+      final attempt = _attempting();
+      _unsettled = true;
       final bool ours;
       try {
-        ours = await _replay();
+        ours = await _replay(from);
+        if (ours && attempt == _attempt) _unsettled = false;
       } on Object catch (failure) {
-        throw MediaLoadException(mediaFaultOf(failure), failure);
+        throw MediaLoadException(mediaFaultOf(failure, isWeb: _isWeb), failure);
+      } finally {
+        _settled(attempt);
       }
       // A load took the player over mid-replay: whether its item starts
       // is its caller's to say.
@@ -723,19 +887,20 @@ class JustAudioEngine implements AudioEnginePort {
     unawaited(_run(_player.play).catchError(_refused));
   }
 
-  /// Takes a completed item back to its top, reloading it where the
-  /// platform will not leave the completed state otherwise (see [play]).
+  /// Takes a completed item back to [from], its top unless it ended
+  /// short, reloading it where the platform will not leave the completed
+  /// state otherwise (see [play]).
   ///
   /// False when a load took the player over meanwhile. Checked after every
   /// wait, since past one the seek would move the new item and the reload
   /// would interrupt its load.
-  Future<bool> _replay() async {
+  Future<bool> _replay(Duration from) async {
     final generation = _generation;
     await _within(_run(_player.pause), _stopGrace);
     if (generation != _generation) return false;
     // The load deadline, not the stop grace: Android answers a seek only
     // once the player is ready again, so the seek carries the buffering.
-    await _within(_run(() => _player.seek(Duration.zero)), _loadDeadline);
+    await _within(_run(() => _player.seek(from)), _loadDeadline);
     var cleared = true;
     try {
       await _player.processingStateStream
@@ -754,7 +919,13 @@ class JustAudioEngine implements AudioEnginePort {
     _preloadedLength = null;
     _preloadEpoch++;
     await _within(
-      _run(() => _player.setAudioSources([source], initialIndex: 0)),
+      _run(
+        () => _player.setAudioSources(
+          [source],
+          initialIndex: 0,
+          initialPosition: from,
+        ),
+      ),
       _loadDeadline,
     );
     _repairWindow();
@@ -789,6 +960,203 @@ class JustAudioEngine implements AudioEnginePort {
     parent.handleUncaughtError(zone, error, stack);
   }
 
+  /// Everything the platform reports, read in one place and in order: a
+  /// failure or an end is weighed before the state it leaves is shown, so
+  /// no reader is told idle or completed about media that failed.
+  ///
+  /// just_audio derives its error stream from these same events, so the
+  /// error is read off the event that carries it, as that stream would
+  /// (a repeat of the error the last event carried is the same error).
+  void _onPlaybackEvent(PlaybackEvent event) {
+    final previous = _lastEvent;
+    _lastEvent = event;
+    if (_disposed) return;
+    final code = event.errorCode;
+    if (code != null &&
+        (previous?.errorCode != code ||
+            previous?.errorMessage != event.errorMessage ||
+            previous?.currentIndex != event.currentIndex)) {
+      _onFailed(
+        PlayerException(code, event.errorMessage, event.currentIndex),
+        _failedAt(previous, event),
+      );
+    } else if (event.processingState == ProcessingState.completed) {
+      if (previous != null &&
+          previous.processingState != ProcessingState.completed) {
+        _onEnded(previous, event);
+      }
+    } else if (event.processingState != ProcessingState.idle) {
+      // Moving again, so an early end no longer stands for the position.
+      _endedShort = null;
+    }
+    _emitState();
+  }
+
+  /// Media that had loaded failing afterwards, as the platform reports it.
+  ///
+  /// Ignored while a load or a replay is unsettled: those report their own
+  /// failure by throwing, and the platform's echo of the same failure can
+  /// land on either side of the throw. A failed attempt leaves
+  /// [_unsettled] set until the next one succeeds, which is exactly the
+  /// window in which nothing is loaded to fail afterwards. One failure of
+  /// the same media is enough.
+  ///
+  /// An error arrives with the platform idle, and just_audio releases the
+  /// platform player on any move into idle, so the media has stopped
+  /// whatever the error was (the mpv bridge reports a frame it could not
+  /// decode the same way): it is a failure to recover from every time.
+  void _onFailed(PlayerException error, Duration at) {
+    if (_unsettled || _pending != null) return;
+    final source = _loadedSource;
+    if (source == null) return;
+    final pending = _pending = _PendingFailure(wantsPlay: playing);
+    // just_audio keeps its playing flag raised over a failed element, as it
+    // does over a refused start, so the flag is put back first.
+    unawaited(_run(_player.pause).catchError((Object _) {}));
+    unawaited(_announce(pending, error, source, at));
+  }
+
+  /// Where playback stood when it failed: as far as the platform had
+  /// played or read, the latter being where a fetch it could not make
+  /// stopped it.
+  static Duration _failedAt(PlaybackEvent? previous, PlaybackEvent event) {
+    var at = Duration.zero;
+    for (final position in [
+      event.updatePosition,
+      event.bufferedPosition,
+      ?previous?.updatePosition,
+      ?previous?.bufferedPosition,
+    ]) {
+      if (position > at) at = position;
+    }
+    return at;
+  }
+
+  /// The platform calling the loaded item over. Held while a load or a
+  /// replay has not answered (see [_settled]), and nobody's once one failed
+  /// or a failure is being worked out.
+  void _onEnded(PlaybackEvent previous, PlaybackEvent event) {
+    if (_settling != null) {
+      _heldEnd = (previous: previous, event: event);
+      return;
+    }
+    if (_unsettled || _pending != null) return;
+    _ended(previous, event);
+  }
+
+  /// An end of the loaded media: the queue-ended the port announces, or,
+  /// for an HLS presentation the platform calls over well short of its
+  /// length, a failure. mpv hands HLS to libavformat, which steps over a
+  /// segment it cannot fetch (a refused one, an engine with no slot free)
+  /// rather than failing, plays what it had and ends, so a refusal
+  /// mid-listen reads as the item ending early: reported finished, a book
+  /// rolled into its next part. A presentation's length is its playlist's,
+  /// exact, so ending well short of it is a failure; a progressive
+  /// stream's length is an estimate and is left alone.
+  ///
+  /// Where it got to is the end's own position where the platform keeps
+  /// one (ExoPlayer), else the last one reported, run on to the end (the
+  /// mpv bridge zeroes it as it completes).
+  void _ended(PlaybackEvent previous, PlaybackEvent event) {
+    final source = _loadedSource;
+    final length = duration;
+    if (source != null && length != null && _isPresentation(source)) {
+      var reached = previous.updatePosition;
+      if (previous.processingState == ProcessingState.ready &&
+          _player.playing) {
+        reached +=
+            event.updateTime.difference(previous.updateTime) * _player.speed;
+      }
+      // What it had read, not only what was heard: mpv ends as its decoder
+      // runs dry, while the output still drains, so its last position is
+      // behind the end by the speed times the output's delay. Its buffered
+      // position is where reading stopped, the end after a whole read and
+      // short of it after stepped-over segments.
+      for (final at in [event.updatePosition, previous.bufferedPosition]) {
+        if (at > reached) reached = at;
+      }
+      if (length - reached > _presentationEndSlack) {
+        _endedShort = reached;
+        final pending = _pending = _PendingFailure(wantsPlay: true);
+        // Paused, as a failed element is, so a seek made before the
+        // recovery moves where it resumes rather than starting it.
+        unawaited(_run(_player.pause).catchError((Object _) {}));
+        unawaited(
+          _announce(pending, _EndedShort(reached, length), source, reached),
+        );
+        return;
+      }
+    }
+    if (!_completions.isClosed) _completions.add(null);
+  }
+
+  /// Announces the failure [pending] stands for, once the probe has said
+  /// what it can, at [at] into [source].
+  ///
+  /// The probe can take its whole deadline, and the listener can act
+  /// meanwhile. A stop, a load or disposal lets the media go, and with it
+  /// the announcement: nothing is said about media the engine no longer
+  /// holds. A pause or a play changes only the intent it carries. A seek
+  /// leaves it standing - the media is still failed (just_audio's seek on
+  /// a released player moves its idle position and fetches nothing) - and
+  /// moves where the recovery picks up, which reads the position then.
+  Future<void> _announce(
+    _PendingFailure pending,
+    Object cause,
+    AudioSource source,
+    Duration at,
+  ) async {
+    final read = await probedMediaFailureOf(
+      cause,
+      _urlOf(source),
+      ask: _ask,
+      isWeb: _isWeb,
+      midPlay: true,
+      presentation: _isPresentation(source),
+      at: _presentationAt(source, at),
+    );
+    if (!identical(_pending, pending) || _failures.isClosed) return;
+    _pending = null;
+    // The failure before the idle it leaves: whoever recovers the media
+    // hears of it before anything reads nothing as loaded.
+    _failures.add(
+      MediaFailure(
+        read.fault,
+        cause,
+        wasPlaying: pending.wantsPlay,
+        refusal: read.refusal,
+      ),
+    );
+    _emitState();
+  }
+
+  /// Tells the state's listeners what it reads now; repeats are theirs to
+  /// drop (see [processingStateStream]).
+  void _emitState() {
+    if (!_states.isClosed) _states.add(processingState);
+  }
+
+  /// Whether [source] is an HLS presentation: what just_audio built from
+  /// the URL, which is how the platform was asked to read it.
+  static bool _isPresentation(AudioSource source) => switch (source) {
+    ClippingAudioSource(:final child) => child is HlsAudioSource,
+    _ => source is HlsAudioSource,
+  };
+
+  /// [at] into [source] as a position in the media it was carved from,
+  /// which is what a presentation's playlist counts in.
+  static Duration _presentationAt(AudioSource source, Duration at) =>
+      switch (source) {
+        ClippingAudioSource(:final start?) => at + start,
+        _ => at,
+      };
+
+  static String _urlOf(AudioSource source) => switch (source) {
+    ClippingAudioSource(:final child) => child.uri.toString(),
+    UriAudioSource(:final uri) => uri.toString(),
+    _ => '',
+  };
+
   /// The platform turned the request down (a browser's autoplay policy).
   ///
   /// just_audio raises its playing flag before it asks the platform and
@@ -814,13 +1182,26 @@ class JustAudioEngine implements AudioEnginePort {
   }
 
   @override
-  Future<void> pause() => _run(_player.pause);
+  Future<void> pause() {
+    _pending?.wantsPlay = false;
+    return _run(_player.pause);
+  }
 
   @override
-  Future<void> seek(Duration position) => _run(() => _player.seek(position));
+  Future<void> seek(Duration position) {
+    // An item that ended short stays failed rather than ended, and the
+    // seek moves where it resumes.
+    if (_endedShort != null) _endedShort = position;
+    return _run(() => _player.seek(position));
+  }
 
   @override
   Future<void> stop() async {
+    // What was failing, or had ended short, is let go with the media.
+    _pending = null;
+    _heldEnd = null;
+    _endedShort = null;
+    _emitState();
     await _run(_player.stop);
     // Stopping releases the media, and the window with it: playing again
     // resumes the item that was loaded and ends there, rather than
@@ -838,21 +1219,43 @@ class JustAudioEngine implements AudioEnginePort {
     // Edits already queued belong to a player that is about to go away;
     // the flag is what stops them running against it.
     _disposed = true;
+    _pending = null;
     await _indexSub.cancel();
     await _durationSub.cancel();
+    await _eventSub.cancel();
     await _boundaries.close();
     await _refusals.close();
+    await _failures.close();
+    await _completions.close();
+    await _states.close();
     await _run(_player.dispose);
   }
 
   @override
-  Duration get position => _player.position;
+  Duration get position => _endedShort ?? _player.position;
 
   @override
-  Stream<Duration> get positionStream => _player.positionStream;
+  Stream<Duration> get positionStream =>
+      _player.positionStream.map((position) => _endedShort ?? position);
 
   @override
   Duration? get duration => _player.duration ?? _heldDuration;
+
+  /// Measured on the web only: ExoPlayer's progressive source restarts an
+  /// unseekable stream at its head, and mpv is unmeasured.
+  @override
+  bool get seeksWithinUnrangedStream => _isWeb;
+
+  /// ExoPlayer and mpv both play HLS; just_audio_web's element does not.
+  @override
+  bool get playsHls => !_isWeb;
+
+  @override
+  Duration get bufferedPosition {
+    final buffered = _player.bufferedPosition;
+    final length = duration;
+    return length != null && buffered > length ? length : buffered;
+  }
 
   @override
   Stream<Duration?> get durationStream => _player.durationStream
@@ -872,25 +1275,61 @@ class JustAudioEngine implements AudioEnginePort {
       .distinct();
 
   @override
-  EngineProcessingState get processingState => _map(_player.processingState);
+  EngineProcessingState get processingState => _shown(_player.processingState);
 
+  /// Built once, like every stream here: a getter that merged afresh would
+  /// resubscribe for every reader on every rebuild. One instance, listened
+  /// to as often as anyone likes (a composite keeps the one it picked);
+  /// each listener holds its own subscription, is told the state it
+  /// starts in as the platform's own stream tells it, and is done when
+  /// the engine is.
   @override
-  Stream<EngineProcessingState> get processingStateStream =>
-      _player.processingStateStream.map(_map).distinct();
+  late final Stream<EngineProcessingState> processingStateStream =
+      Stream<EngineProcessingState>.multi((listener) {
+        listener.add(processingState);
+        final states = _states.stream.listen(
+          listener.add,
+          onError: listener.addError,
+          onDone: listener.close,
+        );
+        listener.onCancel = states.cancel;
+      }, isBroadcast: true).distinct();
+
+  /// The platform's state as the port reports it: loading while a failure
+  /// is still being worked out (audio_service reads idle as the service
+  /// stopping, and the media is not let go until it is announced) and for
+  /// the whole of an attempt that has not answered, whose end is held
+  /// until it does (see [_settling]); idle after one that failed, and for
+  /// an item that ended short, where nothing is loaded whatever the
+  /// platform last said.
+  EngineProcessingState _shown(ProcessingState state) {
+    if (_pending != null) return EngineProcessingState.loading;
+    if (_settling != null) {
+      return state == ProcessingState.idle || state == ProcessingState.completed
+          ? EngineProcessingState.loading
+          : _map(state);
+    }
+    if (_unsettled) return EngineProcessingState.idle;
+    if (state == ProcessingState.completed && _endedShort != null) {
+      return EngineProcessingState.idle;
+    }
+    return _map(state);
+  }
 
   // just_audio reports completion for the source list, not for each item
   // in it, so this is already queue-ended: an item ending into the
   // preloaded one moves the index and leaves the state ready.
   @override
-  Stream<void> get completed => _player.processingStateStream.where(
-    (state) => state == ProcessingState.completed,
-  );
+  Stream<void> get completed => _completions.stream;
 
   @override
   Stream<void> get itemBoundary => _boundaries.stream;
 
   @override
   Stream<Object> get playbackRefused => _refusals.stream;
+
+  @override
+  Stream<MediaFailure> get mediaFailed => _failures.stream;
 
   @override
   Future<void> setSpeed(double speed) => _run(() => _player.setSpeed(speed));
@@ -920,6 +1359,32 @@ class JustAudioEngine implements AudioEnginePort {
       ProcessingState.completed => EngineProcessingState.completed,
     };
   }
+}
+
+/// How far short of its playlist length an HLS presentation may end and
+/// still have ended. Its length is exact and what a natural end had read
+/// lands within a frame of it; the least a stepped-over refusal loses is a
+/// segment, four seconds at the engine's default.
+const Duration _presentationEndSlack = Duration(seconds: 2);
+
+/// A failure of the loaded media waiting on its probe to be announced.
+class _PendingFailure {
+  _PendingFailure({required this.wantsPlay});
+
+  /// The play intent the announcement carries: whether it was playing
+  /// when it failed, moved by a pause or a play made since.
+  bool wantsPlay;
+}
+
+/// An HLS presentation the platform called over at [reached] of [length].
+class _EndedShort implements Exception {
+  const _EndedShort(this.reached, this.length);
+
+  final Duration reached;
+  final Duration length;
+
+  @override
+  String toString() => 'presentation ended at $reached of $length';
 }
 
 /// A load the deadline gave up on, and whether a call the engine had

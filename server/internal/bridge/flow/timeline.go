@@ -5,13 +5,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +36,10 @@ import (
 // timelineInlineWait bounds how long a mint absorbs upstream member
 // measurement before answering with a job instead.
 const timelineInlineWait = 15 * time.Second
+
+// TimelinePIDPrefix opens a gapless rendering's pid on the API and in its
+// media token; one item's rendering is named by its item instead.
+const TimelinePIDPrefix = "tl-"
 
 // ErrTimelineUnrenderable is the refusal of a queue rather than a fault
 // of the server's: every member resolved and was visible, and the
@@ -105,10 +108,11 @@ type TimelineResult struct {
 }
 
 // stashedTimeline lets the HLS proxy reconstruct the signed upstream
-// master URL for a timeline key. Persisted through TimelineStore when
-// one is configured, so a restart does not turn every live timeline URL
-// into a not-found; without a store it is memory only and a restart
-// costs one re-mint per live timeline.
+// master URL for a rendering's key: a timeline's, or one item's
+// (itemKey). Persisted through TimelineStore when one is configured, so
+// a restart does not turn every live URL into a not-found; without a
+// store it is memory only and a restart costs one re-mint per live
+// rendering.
 type stashedTimeline struct {
 	// id names this row on the client-facing surface, so a client can
 	// release the rendering it stopped playing. The stash key holds a
@@ -157,9 +161,14 @@ func timelineKey(digest, render string) string { return digest + "/" + render }
 
 // renderKey names one rendering's encoder settings. Readable rather
 // than hashed: it rides the client's URL, and a support answer about a
-// timeline is easier when the URL says which one it is.
-func renderKey(format, gain string, crossfadeSeconds float64) string {
-	return format + "~" + gain + "~" + trimFloat(crossfadeSeconds)
+// timeline is easier when the URL says which one it is. A rate rides only
+// where a ceiling set one.
+func renderKey(format, gain string, crossfadeSeconds float64, bitrate int) string {
+	key := format + "~" + gain + "~" + trimFloat(crossfadeSeconds)
+	if bitrate > 0 {
+		key += "~" + strconv.Itoa(bitrate)
+	}
+	return key
 }
 
 // TimelineStore persists the stash across restarts. *db.DB implements
@@ -205,6 +214,11 @@ type timelineState struct {
 	// the progressive fallback under the same cap - and stall the music
 	// at the seam the edit was made in.
 	slots map[string]timelineSlot // user -> the slot they hold
+	// acquiring marks a listener whose slot is being asked of the gate,
+	// closed when the answer lands. Two first fetches of one listener at
+	// once would otherwise both ask, and under a per-user cap of one the
+	// second is refused for the slot the first is about to hold.
+	acquiring map[string]chan struct{}
 }
 
 // timelineSlot is one listener's held transcode slot. `taken` is what
@@ -228,11 +242,12 @@ func (ts *timelineState) forget(key string) {
 func (b *Bridge) timelines() *timelineState {
 	b.tlOnce.Do(func() {
 		b.tl = &timelineState{
-			stash:   make(map[string]stashedTimeline),
-			ids:     make(map[string]string),
-			jobs:    make(map[string]timelineJob),
-			minting: make(map[string]int),
-			slots:   make(map[string]timelineSlot),
+			stash:     make(map[string]stashedTimeline),
+			ids:       make(map[string]string),
+			jobs:      make(map[string]timelineJob),
+			minting:   make(map[string]int),
+			slots:     make(map[string]timelineSlot),
+			acquiring: make(map[string]chan struct{}),
 		}
 	})
 	return b.tl
@@ -317,7 +332,7 @@ func (b *Bridge) TimelineMemberWindowsSupported() bool {
 // engine can produce, the default ladder decides: AAC casts everywhere
 // (the default receiver's safest codec), lossless FLAC when AAC is
 // absent, then whatever the build offers.
-func (b *Bridge) timelineFormat(ctx context.Context, user string, prefs []string) string {
+func (b *Bridge) timelineFormat(prefs []string, ceiling int) string {
 	formats := b.caps.Delivery.HLSFormats
 	// A bitrate ceiling is a ceiling however the queue is delivered.
 	// The progressive path applies the account's, so a listener who
@@ -327,7 +342,7 @@ func (b *Bridge) timelineFormat(ctx context.Context, user string, prefs []string
 	// for. Dropped from the caller's preferences too, since those are
 	// what wins: a browser asking for FLAC first is saying what it can
 	// decode, not what it is allowed.
-	if b.gate != nil && b.gate.MaxBitrateKbps(ctx, user) > 0 {
+	if ceiling > 0 {
 		if lossy := withoutLossless(formats); len(lossy) > 0 {
 			formats = lossy
 			prefs = withoutLossless(prefs)
@@ -367,60 +382,77 @@ func withoutLossless(formats []string) []string {
 
 // holdTimelineSlot reserves the listener's timeline slot when they hold
 // none. `fresh` says whether this call is the one that took it, which is
-// what a failed mint has to give back.
-func (b *Bridge) holdTimelineSlot(ctx context.Context, user string) (fresh bool, err error) {
+// what a failed mint has to give back. One item's rendering rides the
+// same slot; kind only says which took it. A listener's asks of the gate
+// go one at a time: one in flight is waited out, and its slot is this
+// call's too.
+func (b *Bridge) holdTimelineSlot(ctx context.Context, user string, kind TranscodeKind) (fresh bool, err error) {
 	if b.gate == nil {
 		return false, nil
 	}
 	ts := b.timelines()
-	ts.mu.Lock()
-	_, held := ts.slots[user]
-	ts.mu.Unlock()
-	if held {
-		return false, nil
+	for {
+		ts.mu.Lock()
+		if _, held := ts.slots[user]; held {
+			ts.mu.Unlock()
+			return false, nil
+		}
+		asking, busy := ts.acquiring[user]
+		if !busy {
+			ts.acquiring[user] = make(chan struct{})
+		}
+		ts.mu.Unlock()
+		if !busy {
+			break
+		}
+		select {
+		case <-asking:
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
 	}
 	// Outside the lock: the gate reads the database to decide, and a
 	// stalled read must not hold every other listener's timeline
-	// bookkeeping behind it.
-	release, err := b.gate.Acquire(ctx, user, TranscodeTimeline)
-	if err != nil {
-		return false, err
-	}
-	ts.mu.Lock()
-	if _, raced := ts.slots[user]; raced {
+	// bookkeeping behind it. The ask is settled however it ends, so a
+	// listener's next one never waits on it for good.
+	var release func()
+	defer func() {
+		ts.mu.Lock()
+		close(ts.acquiring[user])
+		delete(ts.acquiring, user)
+		if fresh {
+			ts.slots[user] = timelineSlot{release: release, taken: time.Now()}
+		}
 		ts.mu.Unlock()
-		release()
-		return false, nil
-	}
-	ts.slots[user] = timelineSlot{release: release, taken: time.Now()}
-	ts.mu.Unlock()
-	return true, nil
+	}()
+	release, err = b.gate.Acquire(ctx, user, kind)
+	return err == nil, err
 }
 
 // dropTimelineSlot gives a listener's slot back, for a mint that took
 // one and then failed.
 //
-// Kept when they have a live rendering, which is what makes a failed
-// mint safe to concurrently run beside a good one: two mints for one
-// listener share the slot the first took, and an unconditional drop
-// then let the failure hand back the slot the success is riding - a
-// timeline streaming outside the cap and outside what the admin console
-// reports.
+// Kept when a rendering of theirs has been minted or fetched since the
+// slot was taken, which is what makes a failed mint safe to concurrently
+// run beside a good one: two mints for one listener share the slot the
+// first took, and an unconditional drop then let the failure hand back
+// the slot the success is riding - a timeline streaming outside the cap
+// and outside what the admin console reports. A rendering listed under
+// them from before the slot (an item rendering stays listed from its
+// mint, a queue played an hour ago) rides nothing of this one's.
 func (b *Bridge) dropTimelineSlot(user string) {
-	// A rendering they are on at all, not only one they are fetching:
-	// the mint that failed is the one holding this slot, so a slot taken
-	// moments ago is exactly what has to go back here.
-	b.dropTimelineSlotUnless(user, func(st stashedTimeline, _ time.Time) bool {
-		_, on := st.listeners[user]
-		return on
+	b.dropTimelineSlotUnless(user, func(st stashedTimeline, _, taken time.Time) bool {
+		at, on := st.listeners[user]
+		return on && !at.Before(taken)
 	})
 }
 
 // dropTimelineSlotUnless gives a listener's slot back unless one of
-// their live renderings still holds it, which `holds` decides. A failed
-// mint keeps the slot for any rendering they are on at all; a release
-// keeps it only for one they are still fetching, because a rendering
-// paused an hour ago is not holding the server's capacity.
+// their live renderings still holds it, which `holds` decides from the
+// rendering, the time, and when the slot was taken. A failed mint keeps
+// the slot for a rendering they have been on since it was taken; a
+// release keeps it only for one they are still fetching, because a
+// rendering paused an hour ago is not holding the server's capacity.
 //
 // A mint of theirs still assembling a rendering keeps it either way,
 // because that is the window where the stash says nothing about them.
@@ -435,29 +467,24 @@ func (b *Bridge) dropTimelineSlot(user string) {
 // the sweep. The sweep guards the same window with the slot's own age;
 // a re-mint reuses the slot it finds rather than taking a fresh one, so
 // age says nothing here and the mint in flight has to say it itself.
-func (b *Bridge) dropTimelineSlotUnless(user string, holds func(stashedTimeline, time.Time) bool) {
+func (b *Bridge) dropTimelineSlotUnless(user string, holds func(st stashedTimeline, now, taken time.Time) bool) {
 	now := time.Now()
 	ts := b.timelines()
 	ts.mu.Lock()
+	slot, ok := ts.slots[user]
+	if !ok || ts.minting[user] > 0 {
+		ts.mu.Unlock()
+		return
+	}
 	for _, st := range ts.stash {
-		if now.After(st.expires) {
-			continue
-		}
-		if holds(st, now) {
+		if !now.After(st.expires) && holds(st, now, slot.taken) {
 			ts.mu.Unlock()
 			return
 		}
 	}
-	if ts.minting[user] > 0 {
-		ts.mu.Unlock()
-		return
-	}
-	slot, ok := ts.slots[user]
 	delete(ts.slots, user)
 	ts.mu.Unlock()
-	if ok {
-		slot.release()
-	}
+	slot.release()
 }
 
 // ReleaseTimeline drops a listener from one rendering and gives their
@@ -494,7 +521,7 @@ func (b *Bridge) ReleaseTimeline(user, id string) bool {
 	delete(st.listeners, user)
 	ts.stash[key] = st
 	ts.mu.Unlock()
-	b.dropTimelineSlotUnless(user, func(st stashedTimeline, now time.Time) bool {
+	b.dropTimelineSlotUnless(user, func(st stashedTimeline, now, _ time.Time) bool {
 		return st.listening(user, now)
 	})
 	return true
@@ -585,7 +612,7 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 	// before the server spends anything on them, exactly as a
 	// progressive stream refuses before it opens.
 	var err error
-	fresh, err = b.holdTimelineSlot(ctx, user)
+	fresh, err = b.holdTimelineSlot(ctx, user, TranscodeTimeline)
 	if err != nil {
 		return nil, err
 	}
@@ -627,11 +654,18 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 		return &TimelineResult{JobPID: pid}, nil
 	}
 
-	format := b.timelineFormat(ctx, user, opts.Formats)
-	ttl := time.Duration(totalMS)*time.Millisecond + 15*time.Minute
-	if ttl < 30*time.Minute {
-		ttl = 30 * time.Minute
+	ceiling := 0
+	if b.gate != nil {
+		ceiling = b.gate.MaxBitrateKbps(ctx, user)
 	}
+	format := b.timelineFormat(opts.Formats, ceiling)
+	// The ceiling holds the rendering to its rate, as it holds a track's
+	// encode; the engine's own rate could be above it.
+	bitrate := 0
+	if ceiling > 0 && lossyBitrateFormats[format] {
+		bitrate = min(max(ceiling, MinStreamBitrateKbps), MaxStreamBitrateKbps)
+	}
+	ttl := renderingTTL(totalMS)
 	// Timelines refuse tag-driven gain modes upstream (many sources, one
 	// stream), so the gain is always explicit: a number the queue's own
 	// stored measurements produced, or off.
@@ -651,6 +685,9 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 		// boundaries describe a different presentation.
 		params["crossfadeSeconds"] = trimFloat(opts.CrossfadeSeconds)
 	}
+	if bitrate > 0 {
+		params["bitrate"] = strconv.Itoa(bitrate)
+	}
 	signed, err := b.client.Sign(ctx, client.SignRequest{
 		Path:       "/hls/master.m3u8",
 		Params:     params,
@@ -660,54 +697,19 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 		return nil, fmt.Errorf("flow: signing timeline master: %w", err)
 	}
 
-	render := renderKey(format, gain, opts.CrossfadeSeconds)
+	render := renderKey(format, gain, opts.CrossfadeSeconds, bitrate)
 	key := timelineKey(tl.Tl, render)
 	token, exp := b.tokens.MintFor(auth.MediaClaims{
-		User: user, Cred: opts.Cred, Purpose: auth.PurposeHLS, PID: "tl-" + key,
+		User: user, Cred: opts.Cred, Purpose: auth.PurposeHLS, PID: TimelinePIDPrefix + key,
 	}, ttl)
-	now := time.Now()
-	ts.mu.Lock()
-	// Merged rather than replaced: another listener may already be on
-	// this rendering, and dropping their last fetch would take their
-	// slot back mid-track.
-	held := ts.stash[key]
-	if held.listeners == nil {
-		held.listeners = map[string]time.Time{}
-	}
-	if held.id == "" {
-		held.id = ulid.Make().String()
-	}
-	ts.ids[held.id] = key
-	held.signedMaster = signed.URL
-	held.expires = exp
-	// A rendering nobody has fetched yet is not idle: the player is
-	// about to ask for it, and a sweep in between would take the slot
-	// back a second before the first fragment.
-	held.listeners[user] = now
-	ts.stash[key] = held
-	id := held.id
+	id := b.stashRendering(ctx, user, key, signed.URL, exp)
 	minted = true
-	for k, st := range ts.stash {
-		if now.After(st.expires) {
-			ts.forget(k)
-		}
-	}
-	ts.mu.Unlock()
-	if b.tlStore != nil {
-		// A failed write degrades to the memory-only behavior this stash
-		// had before it was persisted: the URL works until the next
-		// restart, which then costs one re-mint.
-		row := db.TimelineStash{Key: key, ID: id, SignedMaster: signed.URL, ExpiresAtNS: exp.UnixNano()}
-		if err := b.tlStore.PutTimelineStash(ctx, row, now.UnixNano()); err != nil {
-			b.log.Warn("persisting a minted timeline", "timeline", key, "err", err)
-		}
-	}
 
 	out := &TimelineResult{
-		PID: "tl-" + id,
+		PID: TimelinePIDPrefix + id,
 		URL: "/media/hls/master.m3u8?tl=" + url.QueryEscape(tl.Tl) +
 			"&rk=" + url.QueryEscape(render) + "&mt=" + url.QueryEscape(token),
-		MimeType:         "application/vnd.apple.mpegurl",
+		MimeType:         hlsMimeType,
 		DurationMS:       int64(tl.DurationSeconds * 1000),
 		ExpiresAt:        exp,
 		EnvelopeRate:     tl.EnvelopeRate,
@@ -726,6 +728,56 @@ func (b *Bridge) TimelineFor(ctx context.Context, user string, members []Timelin
 		})
 	}
 	return out, nil
+}
+
+// renderingTTL is how long an HLS rendering's token and signature live:
+// the content's length plus margin, so a listen never expires mid-way.
+func renderingTTL(durationMS int64) time.Duration {
+	return max(time.Duration(durationMS)*time.Millisecond+15*time.Minute, 30*time.Minute)
+}
+
+// stashRendering records a signed master under key, user listening as
+// of now, drops the rows that expired, and persists the row when a store
+// is configured. It answers the row's id.
+func (b *Bridge) stashRendering(ctx context.Context, user, key, signedMaster string, exp time.Time) string {
+	ts := b.timelines()
+	now := time.Now()
+	ts.mu.Lock()
+	// Merged rather than replaced: another listener may already be on
+	// this rendering, and dropping their last fetch would take their
+	// slot back mid-track.
+	held := ts.stash[key]
+	if held.listeners == nil {
+		held.listeners = map[string]time.Time{}
+	}
+	if held.id == "" {
+		held.id = ulid.Make().String()
+	}
+	ts.ids[held.id] = key
+	held.signedMaster = signedMaster
+	held.expires = exp
+	// A rendering nobody has fetched yet is not idle: the player is
+	// about to ask for it, and a sweep in between would take the slot
+	// back a second before the first fragment.
+	held.listeners[user] = now
+	ts.stash[key] = held
+	id := held.id
+	for k, st := range ts.stash {
+		if now.After(st.expires) {
+			ts.forget(k)
+		}
+	}
+	ts.mu.Unlock()
+	if b.tlStore != nil {
+		// A failed write degrades to the memory-only behavior this stash
+		// had before it was persisted: the URL works until the next
+		// restart, which then costs one re-mint.
+		row := db.TimelineStash{Key: key, ID: id, SignedMaster: signedMaster, ExpiresAtNS: exp.UnixNano()}
+		if err := b.tlStore.PutTimelineStash(ctx, row, now.UnixNano()); err != nil {
+			b.log.Warn("persisting a minted rendering", "rendering", key, "err", err)
+		}
+	}
+	return id
 }
 
 // mintTimeline creates the timeline, absorbing short measurement jobs
@@ -812,43 +864,90 @@ func (b *Bridge) TimelineJob(ctx context.Context, user, jobPID string) (state st
 	}
 }
 
-// ServeHLS proxies the sidecar's HLS surface under media tokens. The
-// mt parameter must verify and bind a timeline pid; everything else in
-// the URL is what the upstream-signed playlists themselves carry, so
-// authorization for the actual bytes is the upstream signature, and
-// the proxy attaches no API key here.
+// ServeHLS proxies the sidecar's HLS surface under media tokens: a
+// queue's timeline, or one item's rendering. The mt parameter must
+// verify and bind what the URL names, a timeline pid or an item and its
+// rendering; everything else in the URL is what the upstream-signed
+// playlists themselves carry, so authorization for the actual bytes is
+// the upstream signature, and the proxy attaches no API key here.
 func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	token := q.Get("mt")
-	claims, err := b.tokens.Verify(token, auth.MediaWant{Purposes: []string{auth.PurposeHLS}, AnyPID: true})
-	if err != nil || !strings.HasPrefix(claims.PID, "tl-") {
+	master := strings.HasSuffix(r.URL.Path, "/master.m3u8")
+	stashedMaster := master && (q.Get("tl") != "" || q.Get("it") != "")
+	// A child (variant playlist, init, segment) carries the engine's own
+	// signed query sealed beside the token it was handed out under, so
+	// the listener never reads it and it opens under no other token.
+	var child string
+	if !stashedMaster {
+		var err error
+		if child, err = b.tokens.OpenQuery(token, q.Get("c")); err != nil {
+			writeJSONError(w, http.StatusUnauthorized, "unauthenticated", "invalid or expired media token")
+			return
+		}
+	}
+	childQuery, _ := url.ParseQuery(child)
+	desc, _ := decodeDescriptor(childQuery.Get("v"))
+	// An item's rendering is named by the master URL, and by a child's own
+	// descriptor; the token has to have been minted for that one. Whether
+	// the fetch is one item's or a queue's is decided here, once.
+	rendering := desc.rendering()
+	if stashedMaster {
+		rendering = q.Get("it")
+	}
+	item := rendering != ""
+	want := auth.MediaWant{Purposes: []string{auth.PurposeHLS}, AnyPID: true}
+	if item {
+		want.Shape = itemShape(rendering)
+	}
+	claims, err := b.tokens.Verify(token, want)
+	// A rendering's token names its item and never a timeline, whose pid
+	// the per-fetch check would pass without asking about any item.
+	if err != nil || item == strings.HasPrefix(claims.PID, TimelinePIDPrefix) {
 		writeJSONError(w, http.StatusUnauthorized, "unauthenticated", "invalid or expired media token")
 		return
 	}
 	// Master and every child fetch alike, so a timeline stops with its
-	// account and with the reach it was minted under.
+	// account and with the reach it was minted under, and a rendering
+	// with its account, its session and the account's right to the item.
 	if !b.authorize(r.Context(), w, claims) {
 		return
 	}
 	user, pid := claims.User, claims.PID
-	// Every fetch of this timeline, master and fragment alike, says the
+	key, what := strings.TrimPrefix(pid, TimelinePIDPrefix), "timeline"
+	if item {
+		key, what = itemKey(rendering), "stream"
+		// The account's ceiling is read again at every fetch, as a stream's
+		// is, and before a slot is taken: a rendering it no longer allows
+		// is stale, which a player re-mints on, under the ceiling as it
+		// is now.
+		enc := desc
+		if stashedMaster {
+			enc = b.stashedDescriptor(key)
+		}
+		if b.ceilingDropped(r.Context(), user, enc) {
+			writeJSONError(w, http.StatusGone, "stream-stale",
+				"the account's bitrate ceiling is now below this stream's; re-request it")
+			return
+		}
+	}
+	// Every fetch of this rendering, master and fragment alike, says the
 	// listener is still listening - and takes their slot again when a
 	// quiet spell gave it back. hls.js never re-fetches the master, so
 	// a resumed listen re-acquires on a fragment, which is why a refusal
 	// here is one the player has to be able to explain rather than
 	// recover from.
-	if !b.touchTimeline(r.Context(), w, user, strings.TrimPrefix(pid, "tl-")) {
+	if !b.touchTimeline(r.Context(), w, user, key, item) {
 		return
 	}
 
-	var upstreamURL, stashed string
-	if strings.HasSuffix(r.URL.Path, "/master.m3u8") && q.Get("tl") != "" {
-		// The master fetch names the digest and the rendering; the
-		// stashed signed URL is where the format, gain and crossfade the
-		// mint chose actually live. A URL with no rendering on it is one
-		// this server never minted, and misses the stash like any other.
-		key := timelineKey(q.Get("tl"), q.Get("rk"))
-		if pid != "tl-"+key {
+	var upstreamURL string
+	if stashedMaster {
+		// The master fetch names the rendering; the stashed signed URL is
+		// where the format, gain and crossfade the mint chose actually
+		// live. A URL with no rendering on it is one this server never
+		// minted, and misses the stash like any other.
+		if !item && pid != TimelinePIDPrefix+timelineKey(q.Get("tl"), q.Get("rk")) {
 			writeJSONError(w, http.StatusUnauthorized, "unauthenticated", "token does not match this timeline")
 			return
 		}
@@ -857,26 +956,23 @@ func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 		st, ok := ts.stash[key]
 		ts.mu.Unlock()
 		if !ok {
-			writeJSONError(w, http.StatusNotFound, "not-found", "this timeline URL is no longer live; re-request it")
+			writeJSONError(w, http.StatusNotFound, "not-found", "this "+what+" URL is no longer live; re-request it")
 			return
 		}
 		upstreamURL = st.signedMaster
-		stashed = key
 	} else {
-		// Child fetches (variant playlists, init, segments) carry the
-		// upstream-signed query verbatim plus our mt, which we strip.
-		// The signature binds a child to its own timeline, not to this
-		// token, so the token has to name the timeline the child does:
-		// otherwise a live token for one queue carries another queue's
-		// saved child URLs for as long as their signatures last.
-		digest, _, _ := strings.Cut(strings.TrimPrefix(pid, "tl-"), "/")
-		if childTimeline(q.Get("v")) != digest {
+		// The engine's signature binds a child to its own timeline, not
+		// to this token, so the token has to name the timeline the child
+		// does as well as having sealed it: a timeline's descriptor names
+		// its digest. A rendering's child was held to its token by its
+		// own descriptor before the token was read.
+		digest, _, _ := strings.Cut(key, "/")
+		if !item && desc.Tl != digest {
 			writeJSONError(w, http.StatusUnauthorized, "unauthenticated", "token does not match this timeline")
 			return
 		}
-		q.Del("mt")
 		rel := strings.TrimPrefix(r.URL.Path, "/media/hls")
-		upstreamURL = "/hls" + rel + "?" + q.Encode()
+		upstreamURL = "/hls" + rel + "?" + child
 	}
 
 	upstream, err := url.Parse(upstreamURL)
@@ -916,15 +1012,19 @@ func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 	// was regenerated answers -- it is auto-generated into its data dir,
 	// so recreating that volume alone rotates it under an otherwise
 	// untouched stash.
-	if stashed != "" && deadTimelineStatus(resp.StatusCode) {
-		b.forgetTimeline(r.Context(), stashed)
+	if stashedMaster && deadTimelineStatus(resp.StatusCode) {
+		b.forgetTimeline(r.Context(), key)
 		if resp.StatusCode != http.StatusGone {
-			writeJSONError(w, http.StatusNotFound, "not-found", "this timeline URL is no longer live; re-request it")
+			writeJSONError(w, http.StatusNotFound, "not-found", "this "+what+" URL is no longer live; re-request it")
 			return
 		}
 	}
 	if resp.StatusCode == http.StatusGone {
-		writeJSONError(w, http.StatusGone, "stream-stale", "the timeline no longer matches the files on disk; re-request it")
+		writeJSONError(w, http.StatusGone, "stream-stale", "the "+what+" no longer matches the files on disk; re-request it")
+		return
+	}
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusPartialContent {
+		refuseAsTheAPI(w, resp, item)
 		return
 	}
 
@@ -941,7 +1041,7 @@ func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add(k, v)
 		}
 	}
-	if !isPlaylist || resp.StatusCode != http.StatusOK {
+	if !isPlaylist {
 		w.WriteHeader(resp.StatusCode)
 		io.Copy(w, resp.Body)
 		return
@@ -949,33 +1049,27 @@ func (b *Bridge) ServeHLS(w http.ResponseWriter, r *http.Request) {
 
 	// Playlist bodies get every URI stamped with the same media token
 	// this fetch presented, so the player's child requests stay
-	// authorized at this origin.
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "internal", "reading upstream playlist")
-		return
+	// authorized at this origin. Streamed a line at a time, whatever the
+	// length: a long single-file book lists tens of thousands of segments.
+	w.WriteHeader(http.StatusOK)
+	if err := rewritePlaylist(w, resp.Body, token, b.tokens.QuerySealer(token).Append); err != nil {
+		// Part of it is out already, and a well-formed end would read as
+		// all of it, which a player then waits on for segments that never
+		// come: the answer is torn down instead.
+		if r.Context().Err() == nil {
+			b.log.Warn("hls playlist broke off", "path", r.URL.Path, "err", err)
+		}
+		panic(http.ErrAbortHandler)
 	}
-	rewritten := rewritePlaylist(body, token)
-	w.Header().Set("Content-Length", fmt.Sprint(len(rewritten)))
-	w.WriteHeader(resp.StatusCode)
-	w.Write(rewritten)
 }
 
-// childTimeline answers the timeline digest a sidecar child URL names:
-// its v parameter is the variant's descriptor, base64url JSON the URL's
-// signature covers, which carries the digest. Empty when it names none.
-func childTimeline(v string) string {
-	raw, err := base64.RawURLEncoding.DecodeString(v)
-	if err != nil {
-		return ""
-	}
-	var d struct {
-		Tl string `json:"tl"`
-	}
-	if json.Unmarshal(raw, &d) != nil {
-		return ""
-	}
-	return d.Tl
+// refuseAsTheAPI answers a child the engine would not serve in the API's
+// envelope (engineRefusal), never the engine's own body. item says the
+// child is one item's rendering rather than a timeline's.
+func refuseAsTheAPI(w http.ResponseWriter, resp *http.Response, item bool) {
+	status, code, message := engineRefusal(resp, item)
+	refusalHeaders(w.Header(), resp.Header, status)
+	writeJSONError(w, status, code, message)
 }
 
 // touchTimeline marks a rendering as being listened to and makes sure
@@ -987,7 +1081,7 @@ func childTimeline(v string) string {
 // listeners' live mints a minute at a time - and answered "transcode
 // limited", which a client is told not to recover from, where what the
 // request actually needed was the not-found that says re-request.
-func (b *Bridge) touchTimeline(ctx context.Context, w http.ResponseWriter, user, key string) bool {
+func (b *Bridge) touchTimeline(ctx context.Context, w http.ResponseWriter, user, key string, item bool) bool {
 	now := time.Now()
 	ts := b.timelines()
 	ts.mu.Lock()
@@ -1007,7 +1101,11 @@ func (b *Bridge) touchTimeline(ctx context.Context, w http.ResponseWriter, user,
 	if !live || held {
 		return true
 	}
-	if _, err := b.holdTimelineSlot(ctx, user); err != nil {
+	kind := TranscodeTimeline
+	if item {
+		kind = TranscodeStream
+	}
+	if _, err := b.holdTimelineSlot(ctx, user, kind); err != nil {
 		writeJSONError(w, http.StatusTooManyRequests, "transcode-limited",
 			"the server's transcode session limit is reached; retry when a stream ends")
 		return false
@@ -1015,42 +1113,62 @@ func (b *Bridge) touchTimeline(ctx context.Context, w http.ResponseWriter, user,
 	return true
 }
 
-// rewritePlaylist appends the media token to every URI in an m3u8
-// document: plain URI lines and URI="..." attributes on tag lines.
-func rewritePlaylist(body []byte, token string) []byte {
-	var out bytes.Buffer
-	sc := bufio.NewScanner(bytes.NewReader(body))
-	sc.Buffer(make([]byte, 0, 64*1024), 8<<20)
-	for sc.Scan() {
-		line := sc.Text()
-		switch {
-		case strings.HasPrefix(line, "#") && strings.Contains(line, `URI="`):
-			start := strings.Index(line, `URI="`) + len(`URI="`)
-			end := strings.Index(line[start:], `"`)
-			if end < 0 {
-				out.WriteString(line)
-			} else {
-				uri := line[start : start+end]
-				out.WriteString(line[:start])
-				out.WriteString(appendToken(uri, token))
-				out.WriteString(line[start+end:])
-			}
-		case line == "" || strings.HasPrefix(line, "#"):
-			out.WriteString(line)
-		default:
-			out.WriteString(appendToken(line, token))
+// rewritePlaylist copies an m3u8 document from src to dst, pointing
+// every URI in it (plain URI lines and URI="..." attributes on tag lines)
+// back at this origin under the media token: the engine's own query,
+// which names the source file, rides sealed beside the token (seal
+// appends it), so the listener reads nothing of it. A line at a time, so
+// a playlist of any length goes through whole or not at all, and each
+// URI built in one buffer: a long single-file book lists tens of
+// thousands of them.
+func rewritePlaylist(dst io.Writer, src io.Reader, token string, seal func(dst, query []byte) []byte) error {
+	out := bufio.NewWriter(dst)
+	sc := bufio.NewScanner(src)
+	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	mt := "mt=" + url.QueryEscape(token)
+	var uri []byte
+	// child is one child's URI as the listener gets it: its path, the
+	// sealed query as c, and the token.
+	child := func(raw []byte) []byte {
+		path, query, _ := bytes.Cut(raw, []byte("?"))
+		uri = append(uri[:0], path...)
+		if len(query) == 0 {
+			uri = append(append(uri, '?'), mt...)
+			return uri
 		}
-		out.WriteByte('\n')
+		uri = seal(append(uri, "?c="...), query)
+		uri = append(append(uri, '&'), mt...)
+		return uri
 	}
-	return out.Bytes()
-}
-
-func appendToken(uri, token string) string {
-	sep := "?"
-	if strings.Contains(uri, "?") {
-		sep = "&"
+	for sc.Scan() {
+		line := sc.Bytes()
+		switch {
+		case len(line) > 0 && line[0] == '#':
+			start := bytes.Index(line, []byte(`URI="`))
+			end := -1
+			if start >= 0 {
+				start += len(`URI="`)
+				end = bytes.IndexByte(line[start:], '"')
+			}
+			if end < 0 {
+				out.Write(line)
+				break
+			}
+			out.Write(line[:start])
+			out.Write(child(line[start : start+end]))
+			out.Write(line[start+end:])
+		case len(line) == 0:
+		default:
+			out.Write(child(line))
+		}
+		if err := out.WriteByte('\n'); err != nil {
+			return err
+		}
 	}
-	return uri + sep + "mt=" + url.QueryEscape(token)
+	if err := sc.Err(); err != nil {
+		return err
+	}
+	return out.Flush()
 }
 
 // hopByHopHeaders never cross a proxy boundary (RFC 9110 section

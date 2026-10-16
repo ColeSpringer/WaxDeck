@@ -1,12 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
+import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
+import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_actions.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck/src/sync/server_event_bus.dart';
+import 'package:waxdeck/src/sync/streamed_play_states.dart';
+import 'package:waxdeck/src/sync/sync_binder.dart';
 import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
@@ -190,6 +194,113 @@ void main() {
     await tester.tap(find.text('Check for new episodes'));
     await tester.pumpAndSettle();
     expect(repo.refreshPodcastCalls, <String>['pc-A']);
+  });
+
+  testWidgets('a position the stream reports moves an Up next ring at once '
+      'and re-reads only its order', (tester) async {
+    // A player checkpoints every few seconds, and each report used to
+    // refetch every shelf the user stream feeds to move this one ring.
+    // Up next is ordered by progress, so it alone is read again.
+    final bus = ServerEventBus();
+    addTearDown(bus.dispose);
+    final repo = FakeRepository()
+      ..sessionState = const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(id: 'us-1', username: 'listener'),
+      )
+      ..addSubscription(testShow('pc-A', title: 'Alpha Show'))
+      ..episodesByShow['pc-A'] = <EpisodeSummary>[
+        testEpisode('tr-half', showPid: 'pc-A', title: 'Half Heard'),
+      ]
+      ..playPositions['tr-half'] = 60000;
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+          credentialStoreProvider.overrideWithValue(InMemoryCredentialStore()),
+          serverEventBusProvider.overrideWithValue(bus),
+        ],
+        child: routedHost(const PodcastsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final binder = ProviderScope.containerOf(
+      tester.element(find.byType(PodcastsScreen)),
+    ).listen(syncBinderProvider, (_, _) {});
+    addTearDown(binder.close);
+    ServerSyncEvent report(int positionMs, int minute) => ServerSyncEvent(
+      kind: 'play-state',
+      pid: 'tr-half',
+      playState: PlayState(
+        pid: 'tr-half',
+        positionMs: positionMs,
+        played: false,
+        finished: false,
+        playCount: 0,
+        starred: false,
+        updatedAt: DateTime.utc(2026, 10, 1, 12, minute),
+      ),
+    );
+    // A first sighting can change what a shelf holds; its window is
+    // waited out.
+    bus.add(report(60000, 1));
+    await tester.pump(const Duration(seconds: 6));
+    await tester.pumpAndSettle();
+    final reads = repo.subscribedEpisodeCalls.length;
+
+    bus.add(report(107000, 2));
+    await tester.pump();
+    await tester.pump();
+
+    double? ring() => tester
+        .widgetList<MediaCard>(find.byType(MediaCard))
+        .firstWhere(
+          (card) =>
+              card.data.semanticsId == SemanticsIds.episodeContinue('tr-half'),
+        )
+        .data
+        .progress;
+    expect(ring(), closeTo(0.5, 0.001));
+    await tester.pump(const Duration(seconds: 6));
+    expect(ring(), closeTo(0.5, 0.001));
+    expect(repo.subscribedEpisodeCalls.sublist(reads), <SubscribedEpisodes>[
+      SubscribedEpisodes.inProgress,
+    ], reason: 'Up next for its order, and not the latest episodes');
+  });
+
+  testWidgets('a report for an episode not on Up next does not rebuild it', (
+    tester,
+  ) async {
+    final repo = FakeRepository()
+      ..addSubscription(testShow('pc-A', title: 'Alpha Show'))
+      ..episodesByShow['pc-A'] = <EpisodeSummary>[
+        testEpisode('tr-half', showPid: 'pc-A', title: 'Half Heard'),
+      ]
+      ..playPositions['tr-half'] = 60000;
+    await _pump(tester, repo);
+    final shelf = tester.element(
+      find.byWidgetPredicate(
+        (widget) => widget.runtimeType.toString() == '_UpNextShelf',
+      ),
+    );
+    ProviderScope.containerOf(shelf)
+        .read(streamedPlayStatesProvider.notifier)
+        .record(
+          PlayState(
+            pid: 'tr-elsewhere',
+            positionMs: 1000,
+            played: false,
+            finished: false,
+            playCount: 0,
+            starred: false,
+            updatedAt: DateTime.utc(2026, 10, 1),
+          ),
+        );
+    expect(shelf.dirty, isFalse);
   });
 
   testWidgets('an Up next card opens the item menu', (tester) async {

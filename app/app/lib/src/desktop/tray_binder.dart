@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../l10n/off_tree.dart';
 import '../player/now_playing_controller.dart';
-import '../providers.dart';
 import '../queue/queue_controller.dart';
 import '../queue/queue_persistence.dart';
 import '../radio/radio_controller.dart';
@@ -120,7 +119,7 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
     final now = ref.read(nowPlayingProvider);
     final copy = ref.read(offTreeL10nProvider);
     return TrayFace(
-      playing: ref.read(audioEngineProvider).playing,
+      playing: ref.read(nowPlayingProvider.notifier).meansToPlay,
       title:
           station?.name ??
           now.item?.title ??
@@ -181,11 +180,13 @@ final trayBinderProvider = Provider.autoDispose<TrayBinder>((ref) {
   ref.listen(nowPlayingProvider, (_, _) => publish());
   ref.listen(queueControllerProvider, (_, _) => publish());
   ref.listen(offTreeL10nProvider, (_, _) => publish());
-  // The engine is not a provider, so its transport is followed directly:
-  // a pause has to change the glyph, and nothing above emits for one.
+  // The engine is not a provider, so the transport is followed directly:
+  // a pause has to change the glyph, and so does a load that means to
+  // play (a reload, a start with no session yet), which the deck draws
+  // as playing.
   final playing = ref
-      .read(audioEngineProvider)
-      .playingStream
+      .read(nowPlayingProvider.notifier)
+      .meansToPlayStream
       .listen((_) => publish());
   publish();
   ref.onDispose(() {
