@@ -1,8 +1,8 @@
 // The interactive half of the compatibility surface: playlists, stars
-// and ratings, scrobbling, bookmark parity over spoken-word resume,
-// and the internet radio library. Everything still flows through the
-// service layer, so ownership, visibility, and scrobble queueing apply
-// exactly as they do for first-party traffic.
+// and ratings, scrobbling, bookmarks, and the internet radio library.
+// Everything still flows through the service layer, so ownership,
+// visibility, and scrobble queueing apply exactly as they do for
+// first-party traffic.
 package subsonic
 
 import (
@@ -117,7 +117,8 @@ func (h *Handler) playlistTotals(ctx context.Context, uc *service.UserCtx, scope
 		return held.songs, held.seconds, nil
 	}
 
-	entries, err := h.playlistEntries(ctx, uc, pl.PID)
+	counted, fell := h.watchReads(ctx)
+	entries, err := h.playlistEntries(counted, uc, pl.PID)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -130,6 +131,9 @@ func (h *Handler) playlistTotals(ctx context.Context, uc *service.UserCtx, scope
 		at:          now,
 		songs:       len(entries),
 		seconds:     int(durMS / 1000),
+	}
+	if fell() {
+		return fresh.songs, fresh.seconds, nil
 	}
 
 	h.totalsMu.Lock()
@@ -146,6 +150,10 @@ func (h *Handler) playlistTotals(ctx context.Context, uc *service.UserCtx, scope
 
 func (h *Handler) getPlaylist(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
 	id := r.Form.Get("id")
+	if id == "" {
+		h.fail(w, r, 10, "missing id")
+		return
+	}
 	pl, err := h.svc.PlaylistByPID(r.Context(), uc, id)
 	if err != nil {
 		h.failFromService(w, r, err, "no such playlist")
@@ -325,6 +333,10 @@ func (h *Handler) updatePlaylist(w http.ResponseWriter, r *http.Request, uc *ser
 }
 
 func (h *Handler) deletePlaylist(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
+	if r.Form.Get("id") == "" {
+		h.fail(w, r, 10, "missing id")
+		return
+	}
 	if err := h.svc.DeletePlaylist(r.Context(), uc, r.Form.Get("id")); err != nil {
 		h.failFromService(w, r, err, "no such playlist")
 		return
@@ -483,7 +495,10 @@ func (h *Handler) setRating(w http.ResponseWriter, r *http.Request, uc *service.
 }
 
 // starredSongs walks the caller's starred items into Subsonic children.
+// Under a music folder only that folder's tracks are listed, which leaves
+// out the books and episodes a folder never holds.
 func (h *Handler) starredSongs(r *http.Request, uc *service.UserCtx, idx *index) ([]child, error) {
+	inFolder := idx.folder != ""
 	var out []child
 	cursor := ""
 	for {
@@ -492,6 +507,9 @@ func (h *Handler) starredSongs(r *http.Request, uc *service.UserCtx, idx *index)
 			return nil, err
 		}
 		for _, it := range page.Items {
+			if inFolder && idx.trackByPID[it.PID] == nil {
+				continue
+			}
 			out = append(out, h.entryChild(idx, it))
 		}
 		if page.Next == "" {
@@ -513,8 +531,8 @@ func (h *Handler) starredSongs(r *http.Request, uc *service.UserCtx, idx *index)
 // The star itself is intact and shows on the first-party surface; what
 // the compatibility surface cannot list is an artist it does not
 // model.
-func (h *Handler) starredGroups(r *http.Request, uc *service.UserCtx, idx *index) ([]*artist, []*album, error) {
-	res, err := h.svc.StarredEntities(r.Context(), uc)
+func (h *Handler) starredGroups(ctx context.Context, uc *service.UserCtx, idx *index) ([]*artist, []*album, error) {
+	res, err := h.svc.StarredEntities(ctx, uc)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -534,9 +552,8 @@ func (h *Handler) starredGroups(r *http.Request, uc *service.UserCtx, idx *index
 }
 
 func (h *Handler) getStarred2(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	idx, err := h.index(r.Context(), uc)
-	if err != nil {
-		h.fail(w, r, 0, "reading the library failed")
+	idx, ok := h.scopedIndex(w, r, uc)
+	if !ok {
 		return
 	}
 	songs, err := h.starredSongs(r, uc, idx)
@@ -544,7 +561,7 @@ func (h *Handler) getStarred2(w http.ResponseWriter, r *http.Request, uc *servic
 		h.failFromService(w, r, err, "listing starred items failed")
 		return
 	}
-	artists, albums, err := h.starredGroups(r, uc, idx)
+	artists, albums, err := h.starredGroups(r.Context(), uc, idx)
 	if err != nil {
 		h.failFromService(w, r, err, "listing starred entities failed")
 		return
@@ -579,7 +596,9 @@ func (h *Handler) scrobble(w http.ResponseWriter, r *http.Request, uc *service.U
 		return
 	}
 	times := r.Form["time"]
+	client := r.Form.Get("c")
 	sessions := make([]service.ListenSession, 0, len(ids))
+	untimed := map[string]int{}
 	for i, id := range ids {
 		// The duration alone: a detail read would resolve and discard a
 		// full-size cover per submitted id, and an offline queue
@@ -589,32 +608,24 @@ func (h *Handler) scrobble(w http.ResponseWriter, r *http.Request, uc *service.U
 			h.failFromService(w, r, err, "no such song")
 			return
 		}
-		started := time.Now()
-		timed := false
+		now := time.Now()
+		started, timed := now, false
 		if i < len(times) {
-			if ms, err := strconv.ParseInt(times[i], 10, 64); err == nil && ms > 0 {
-				// Milliseconds is what the protocol says, and clients
-				// have sent seconds and microseconds instead; a device
-				// with a badly set clock sends a real number that is
-				// simply wrong. One outside the window the ingest keeps
-				// is read as untimed rather than passed on: the ingest
-				// refuses it per session, and this adapter's answer to
-				// any refusal is to fail the whole submission - which a
-				// client's offline queue reads as retryable and replays
-				// forever, re-sending every id beside it.
-				at := time.UnixMilli(ms)
-				if !at.Before(subsonicOldestScrobble) && !at.After(time.Now().Add(subsonicClockSkew)) {
-					started = at
-					timed = true
-				}
+			if at, ok := scrobbleTime(times[i], now); ok {
+				started, timed = at, true
 			}
 		}
+		sessionID := timedScrobbleID(uc.ID, id, started)
+		if !timed {
+			sessionID = untimedScrobbleID(uc.ID, client, id, untimed[id], now, durationMS)
+			untimed[id]++
+		}
 		s := service.ListenSession{
-			SessionID: scrobbleSessionID(uc.ID, id, started, timed),
+			SessionID: sessionID,
 			PID:       id,
 			StartedAt: started.UTC(),
 			MsPlayed:  durationMS,
-			Client:    r.Form.Get("c"),
+			Client:    client,
 			Source:    "live",
 		}
 		// A submission asserts the client played the item; when the
@@ -639,54 +650,92 @@ func (h *Handler) scrobble(w http.ResponseWriter, r *http.Request, uc *service.U
 
 var (
 	// subsonicOldestScrobble and subsonicClockSkew bound a submitted
-	// scrobble time to what the ingest will keep, so a value outside it
+	// scrobble time to what a play can have been, so a value outside it
 	// costs one play's timestamp rather than the whole submission.
-	subsonicOldestScrobble = time.Unix(0, 0)
+	subsonicOldestScrobble = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
 	subsonicClockSkew      = 24 * time.Hour
 )
 
-// scrobbleSessionID derives the listen's idempotency id. A timed
-// submission hashes deterministically, so an offline queue replaying
-// the same scrobble twice dedupes; an untimed one is unique by nature.
-func scrobbleSessionID(userID, itemPID string, started time.Time, timed bool) string {
-	stamp := started.UnixMilli()
-	if !timed {
-		stamp = time.Now().UnixNano()
+// scrobbleTime reads a submitted time. Milliseconds is what the protocol
+// says, and clients send seconds, microseconds and nanoseconds instead;
+// the magnitude tells them apart, since no two units' plausible values
+// overlap. A device with a badly set clock sends a real number that is
+// simply wrong, so the result must also fall between 2000 and a day
+// ahead, else the play is untimed rather than refused: the ingest
+// refuses a time outside what it keeps per session, and this adapter's
+// answer to any refusal is to fail the whole submission, which a
+// client's offline queue reads as retryable and replays forever,
+// re-sending every id beside it.
+func scrobbleTime(raw string, now time.Time) (time.Time, bool) {
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || v <= 0 {
+		return time.Time{}, false
 	}
-	sum := md5.Sum(fmt.Appendf(nil, "%s|%s|%d", userID, itemPID, stamp))
+	var at time.Time
+	switch {
+	case v < 1e11:
+		at = time.Unix(v, 0)
+	case v < 1e14:
+		at = time.UnixMilli(v)
+	case v < 1e17:
+		at = time.UnixMicro(v)
+	default:
+		at = time.Unix(0, v)
+	}
+	if at.Before(subsonicOldestScrobble) || at.After(now.Add(subsonicClockSkew)) {
+		return time.Time{}, false
+	}
+	return at.UTC(), true
+}
+
+// timedScrobbleID derives a timed listen's idempotency id from when it
+// played, so an offline queue replaying the same scrobble dedupes.
+func timedScrobbleID(userID, itemPID string, started time.Time) string {
+	sum := md5.Sum(fmt.Appendf(nil, "%s|%s|%d", userID, itemPID, started.UnixMilli()))
 	return "subsonic-" + hex.EncodeToString(sum[:])
 }
 
-// --- bookmarks (spoken-word resume parity) -----------------------------------
+// untimedScrobbleID derives an untimed listen's id from the window it
+// arrived in, the item's length held to ten seconds to ten minutes, and
+// which of the submission's untimed entries for the item it is (nth from
+// 0): a listener cannot finish one item twice faster than it plays, so a
+// client retrying a submission it timed out on records each of its plays
+// once, while one submission naming an item twice records two. A retry
+// that straddles a window's edge records again, the accepted residue.
+func untimedScrobbleID(userID, client, itemPID string, nth int, now time.Time, durationMS int64) string {
+	window := min(max(time.Duration(durationMS)*time.Millisecond, 10*time.Second), 10*time.Minute)
+	sum := md5.Sum(fmt.Appendf(nil, "untimed|%s|%s|%s|%d|%d", userID, client, itemPID, nth, now.Truncate(window).UnixNano()))
+	return "subsonic-" + hex.EncodeToString(sum[:])
+}
 
-// Bookmark endpoints map onto book and episode resume positions, which
-// is how the clients that call them use them. getBookmarks lists the
-// caller's in-progress spoken-word items; createBookmark writes a
-// position; deleteBookmark clears it.
+// --- bookmarks ---------------------------------------------------------------
 
-func (h *Handler) getBookmarks(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
+// Bookmarks hold for every kind of item. A book's or an episode's is its
+// resume position, the one the WaxDeck apps resume from, so the clients
+// that keep audiobook and podcast progress in bookmarks and the apps
+// agree; any other item's is its own and leaves the item's resume
+// position alone. The comment is kept either way.
+
+func (h *Handler) getBookmarks(w http.ResponseWriter, r *http.Request, uc *service.UserCtx, username string) {
 	idx, err := h.index(r.Context(), uc)
 	if err != nil {
 		h.fail(w, r, 0, "reading the library failed")
 		return
 	}
-	items, err := h.svc.RecentlyPositionedItems(r.Context(), uc, 200)
+	saved, err := h.svc.SubsonicBookmarks(r.Context(), uc)
 	if err != nil {
 		h.failFromService(w, r, err, "listing bookmarks failed")
 		return
 	}
-	out := &bookmarks{}
-	for _, it := range items {
-		st, err := h.svc.PlayState(r.Context(), uc, it.PID)
-		if err != nil || st.PositionMS <= 0 {
-			continue
-		}
+	out := &bookmarks{Bookmarks: make([]bookmark, 0, len(saved))}
+	for _, b := range saved {
 		out.Bookmarks = append(out.Bookmarks, bookmark{
-			Position: st.PositionMS,
-			Username: r.Form.Get("u"),
-			Created:  st.UpdatedAt.UTC().Format(time.RFC3339),
-			Changed:  st.UpdatedAt.UTC().Format(time.RFC3339),
-			Entry:    h.entryChild(idx, it),
+			Position: b.PositionMS,
+			Username: username,
+			Comment:  b.Comment,
+			Created:  b.CreatedAt.UTC().Format(time.RFC3339),
+			Changed:  b.ChangedAt.UTC().Format(time.RFC3339),
+			Entry:    h.entryChild(idx, b.Item),
 		})
 	}
 	h.ok(w, r, envelope{Bookmarks: out})
@@ -699,7 +748,7 @@ func (h *Handler) createBookmark(w http.ResponseWriter, r *http.Request, uc *ser
 		h.fail(w, r, 10, "missing or malformed id or position")
 		return
 	}
-	if _, err := h.svc.Checkpoint(r.Context(), uc, id, pos, nil); err != nil {
+	if err := h.svc.SaveSubsonicBookmark(r.Context(), uc, id, pos, r.Form.Get("comment")); err != nil {
 		h.failFromService(w, r, err, "no such item")
 		return
 	}
@@ -712,7 +761,7 @@ func (h *Handler) deleteBookmark(w http.ResponseWriter, r *http.Request, uc *ser
 		h.fail(w, r, 10, "missing id")
 		return
 	}
-	if _, err := h.svc.Checkpoint(r.Context(), uc, id, 0, nil); err != nil {
+	if err := h.svc.DeleteSubsonicBookmark(r.Context(), uc, id); err != nil {
 		h.failFromService(w, r, err, "no such item")
 		return
 	}
@@ -752,6 +801,10 @@ func (h *Handler) createInternetRadioStation(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *Handler) updateInternetRadioStation(w http.ResponseWriter, r *http.Request) {
+	if r.Form.Get("id") == "" {
+		h.fail(w, r, 10, "missing id")
+		return
+	}
 	_, err := h.svc.UpdateRadioStation(r.Context(), r.Form.Get("id"), service.RadioStationEdit{
 		Name:        r.Form.Get("name"),
 		StreamURL:   r.Form.Get("streamUrl"),
@@ -765,6 +818,10 @@ func (h *Handler) updateInternetRadioStation(w http.ResponseWriter, r *http.Requ
 }
 
 func (h *Handler) deleteInternetRadioStation(w http.ResponseWriter, r *http.Request) {
+	if r.Form.Get("id") == "" {
+		h.fail(w, r, 10, "missing id")
+		return
+	}
 	if err := h.svc.DeleteRadioStation(r.Context(), r.Form.Get("id")); err != nil {
 		h.failFromService(w, r, err, "no such station")
 		return

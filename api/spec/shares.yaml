@@ -69,8 +69,16 @@ paths:
         offers the original file and requires the caller's own
         download permission. Episodes of private feeds (feeds with
         credentials) refuse with `forbidden`: a capability URL must
-        not leak paid content. Anonymous playback through the link is
-        billed against the caller's transcode and bandwidth limits.
+        not leak paid content, and a list's episodes of such feeds are
+        left out of it. An episode the server has not fetched still
+        plays through the link, relayed from the show's own host (the
+        visitor's address never reaches it), and offers no download;
+        one whose feed names no audio the relay serves (a YouTube
+        show's never does) refuses with `conflict` until the server has
+        fetched its audio, which one whose feed names none at all never
+        has.
+        Anonymous playback through the link is billed against the
+        caller's transcode, relay and bandwidth limits.
       tags: [shares]
       requestBody:
         required: true
@@ -93,6 +101,17 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "409":
+          description: >
+            The episode has no audio a visitor could play through the
+            link (code `conflict`): the server has not fetched it, and
+            its feed names none the relay serves. Once the server has
+            fetched its audio a link can be made; an episode whose feed
+            names no audio at all has none to fetch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 

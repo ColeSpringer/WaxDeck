@@ -32,9 +32,12 @@ enum ShareExpiry {
 /// The full URL a share link is copied as. The server resolves share
 /// URLs against the client base, which is empty on web builds (the URL
 /// stays origin-relative there); the page origin completes those.
-String shareAbsoluteUrl(WidgetRef ref, String url) {
+String shareAbsoluteUrl(WidgetRef ref, String url) =>
+    shareUrlOn(ref.read(serverBaseUrlProvider), url);
+
+/// [shareAbsoluteUrl] against a client [base] already read.
+String shareUrlOn(String base, String url) {
   if (url.startsWith('http://') || url.startsWith('https://')) return url;
-  final base = ref.read(serverBaseUrlProvider);
   if (base.isEmpty) return Uri.base.resolve(url).toString();
   return '$base$url';
 }
@@ -83,14 +86,16 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
   Future<void> _create() async {
     if (_busy) return;
     setState(() => _busy = true);
+    // Everything taken off this State is taken here, before the request:
+    // the dialog can be dismissed while the link is minted, and the link
+    // is copied and its listings told either way. The container outlives
+    // this State; `ref` and `context` do not.
     final navigator = Navigator.of(context);
+    final route = ModalRoute.of(context);
     final l10n = context.l10n;
-    // The container rather than `ref`: the link is minted whether or not
-    // this dialog is still on screen when the server answers, and the
-    // list it joined has to hear about it either way. `ref` is dead the
-    // moment this State is disposed; the container is not.
     final container = ProviderScope.containerOf(context, listen: false);
     final messenger = container.read(shellMessengerProvider.notifier);
+    final base = container.read(serverBaseUrlProvider);
     try {
       final share = await container
           .read(repositoryProvider)
@@ -100,21 +105,25 @@ class _ShareLinkDialogState extends ConsumerState<ShareLinkDialog> {
             allowDownload: _allowDownload,
             positionMs: _startAtPosition ? widget.positionMs : null,
           );
-      await Clipboard.setData(
-        ClipboardData(text: shareAbsoluteUrl(ref, share.url)),
-      );
+      await Clipboard.setData(ClipboardData(text: shareUrlOn(base, share.url)));
       // The lists this link just joined, so a shares screen left open
       // behind the dialog is not a list missing its newest row - and
       // the console's oversight listing, which holds this row too.
       invalidateShareListings(container);
-      // Dismissed while the link was being minted: the link exists and
-      // is on the clipboard, but popping again would take the screen
-      // underneath with it.
-      if (!mounted) return;
-      navigator.pop();
+      // Dismissed while the link was being minted, or on its way out: popping
+      // again would take the screen underneath with it.
+      if (route?.isCurrent ?? false) navigator.pop();
       messenger.show(l10n.sharingLinkCopied, channel: ShellChannel.shares);
     } on WaxDeckApiException catch (e) {
-      messenger.show(explainError(l10n, e), channel: ShellChannel.shares);
+      // The one conflict a link meets is an episode nobody could hear
+      // through it, which the generic sentence would misread as
+      // something having changed underneath.
+      messenger.show(
+        e.code == 'conflict'
+            ? l10n.podcastNoAudioToShare
+            : explainError(l10n, e),
+        channel: ShellChannel.shares,
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }

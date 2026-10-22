@@ -952,7 +952,7 @@ func (l *Library) listingNarrow(ctx context.Context, uc *UserCtx, subs *subscrip
 }
 
 // callerScopeNode is what a listing may offer this caller, as a query
-// node: the libraries granted (the allow-list form viewVisible asks for
+// node: the libraries granted (grantNode, the form viewVisible asks for
 // per item), unless the caller sees every library, and episodes only of
 // shows the caller follows, read through subs. Pushed into a listing's
 // query, a page comes back full where filtering after the cut left it
@@ -969,13 +969,8 @@ func (l *Library) listingNarrow(ctx context.Context, uc *UserCtx, subs *subscrip
 // listing its episodes rather than the listing.
 func (l *Library) callerScopeNode(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, episodes bool) query.Node {
 	var nodes []query.Node
-	if !uc.AllLibraries {
-		libs := make([]string, 0, len(uc.Libraries))
-		for lib := range uc.Libraries {
-			libs = append(libs, lib)
-		}
-		sort.Strings(libs)
-		nodes = append(nodes, inSet("library", libs))
+	if grants := l.grantNode(ctx, uc); grants != nil {
+		nodes = append(nodes, grants)
 	}
 	if !episodes {
 		return query.And{Nodes: nodes}
@@ -1517,7 +1512,7 @@ func (l *Library) ReplacePlaylistItems(ctx context.Context, uc *UserCtx, apiPlay
 		if archived(it) {
 			return &Error{Kind: KindConflict, Msg: "the playlist holds members that are in the trash; a replace would drop them permanently"}
 		}
-		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
+		if !uc.AllLibraries && !l.viewVisible(ctx, uc, it) {
 			return &Error{Kind: KindConflict, Msg: "the playlist holds members outside your current library visibility; a replace would drop them"}
 		}
 		if !subs.allowsItem(ctx, l, it) {

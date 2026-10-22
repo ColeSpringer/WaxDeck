@@ -23,6 +23,18 @@ If your feeds live on your own LAN (a private podcast host), set
 `WAXDECK_ALLOW_PRIVATE_FEED_HOSTS=true`; by default WaxDeck refuses to
 fetch feeds or enclosures from private addresses.
 
+Podcasts live in a library of their own, the podcast library, and an
+account limited to chosen libraries sees and follows podcasts only when
+it is granted that one; it then hears every episode, fetched or not.
+The server creates the podcast library when it fetches its first
+episode, so on a new server subscribe and fetch one episode as an
+administrator before granting it. An account whose grant is taken away
+lists no subscriptions and changes none, in the apps and in every
+podcast or Subsonic client; its subscriptions are kept, and come back
+with the grant. Meanwhile they bring no new-episode or disabled-feed
+notice, download nothing automatically and have no say in how many
+downloads a show keeps.
+
 ## Subscriptions are per user
 
 Shows and episode files are cataloged once and shared; who follows what
@@ -44,20 +56,23 @@ slot back to the feed.
 
 ## Episodes live on the server
 
-An episode streams once its audio is on the server. Fetch one on
-demand (the fetch button, or `POST /api/v1/episodes/{pid}/fetch`) or
-turn on automatic download for the subscription. The scheduled feed
-refresh (default every 30 minutes, `WAXDECK_FEED_REFRESH_MINUTES`)
-picks up new episodes and tells every subscriber once, whether or not
-they download automatically; a fetch you asked for tells you when its
-audio is on the server, however many others asked for it too, and
-whether or not it was already on its way. A feed that keeps failing is
-suspended from the
-schedule and reactivates on a successful manual refresh. Only the feed's
-own failures count: its host not answering, an answer that is not a
-feed, or the YouTube source's error. A refresh this server cuts short
-(a catalog error or maintenance, YouTube switched off, a restart)
-leaves the count where it was.
+A feed's episode plays at once, relayed from the show's own host when
+the feed names its audio. Fetching it puts the audio on the server,
+which is what silence trimming, voice boost, the skip map and chapters
+read from the file need; a YouTube episode plays only after a fetch.
+Fetch one on demand (the fetch button, or
+`POST /api/v1/episodes/{pid}/fetch`) or turn on automatic download for
+the subscription. The scheduled feed refresh (default every 30 minutes,
+`WAXDECK_FEED_REFRESH_MINUTES`) picks up new episodes and tells every
+subscriber once, whether or not they download automatically; a fetch
+you asked for tells you when its audio is on the server, however many
+others asked for it too, and whether or not it was already on its way.
+A feed that keeps failing is suspended from the schedule and
+reactivates on a successful manual refresh. Only the feed's own
+failures count: its host not answering, an answer that is not a feed,
+or the YouTube source's error. A refresh this server cuts short (a
+catalog error or maintenance, YouTube switched off, a restart) leaves
+the count where it was.
 
 The fetch has an inverse: any subscriber can remove a downloaded
 episode (`DELETE /api/v1/episodes/{pid}/fetch`). The audio moves to
@@ -123,8 +138,11 @@ and a reclaimed episode can always be fetched again.
 
 The effective policy for a show is the most generous union across its
 subscribers: if anyone keeps everything, everything stays; otherwise
-the largest N wins. Episodes starred by any subscriber or sitting in
-someone's play queue are kept regardless, and a file someone is
+the largest N wins. Episodes starred by any subscriber or sitting in a
+subscriber's play queue are kept regardless, as is an episode a
+subscriber asked the server for (fetched then, or already there),
+until they finish it after asking or stop following the show, for as
+long as they can see the podcast library; and a file someone is
 actively listening to is never reclaimed under them. Automatic
 download follows the same N: a new episode dated behind that many
 downloads (an older one a feed adds late, or a YouTube stream that
@@ -134,18 +152,35 @@ to be reclaimed.
 ## Private feeds
 
 Subscribe with a username and password for feeds behind basic auth.
-Credentials are stored encrypted and never returned by any API. A
-credentialed show (or any show a subscriber marks private) becomes
-private permanently: its feed URL disappears from every API response
-and every OPML export, because tokenized feed URLs are themselves
-secrets. Privacy hides the URL, not the show: any user who can see the
-podcast library can browse and play it.
+Credentials are stored encrypted and never returned by any API. You are
+shown, and your export names, the address you subscribed a show by,
+never one another account used; someone who does not follow the show is
+shown the address the server holds it under. A credentialed show, one
+subscribed by an address that carries a login or a token (user info, or
+a query parameter such as `token`, `key` or `auth`), and any show a
+subscriber marks private become private permanently: no one who does not
+follow them is shown an address for them, because tokenized feed URLs
+are themselves secrets; to follow one, subscribe by the address you were
+given. The address you subscribed by stays yours, a login in it
+included: you, your podcast apps and your own export are given it, since
+an app needs it to sync a feed that carries its login. Privacy hides the
+URL, not the show: any user who can see the podcast library can browse
+it and play the episodes the server has fetched. What a private show's
+address or login pays for is its subscribers' alone: an episode the
+server has not fetched streams from the show's host, and every episode's
+transcript and chapters are read from the feed, for them and no one
+else, with the login sent to the feed's own host and nowhere else.
+Chapters the server stored when it fetched an episode are shown to
+anyone who can see that episode. Fetching an episode to the server sends
+the login to the host the feed names for its audio, so audio on another
+host that wants the login plays once fetched.
 
 ## OPML
 
-Export your subscriptions (private shows excluded) or import a
-document from another app; folder outlines round-trip. In the API:
-`GET /api/v1/podcasts/opml` and `POST /api/v1/podcasts/opml`.
+Export your subscriptions (each feed under the address you subscribed
+it by, private shows included; a stored login is never written) or
+import a document from another app; folder outlines round-trip. In the
+API: `GET /api/v1/podcasts/opml` and `POST /api/v1/podcasts/opml`.
 
 ## Third-party podcast apps (gpodder)
 
@@ -157,19 +192,108 @@ subscriptions and episode positions directly:
 2. Point the app at your WaxDeck base URL with your username and the
    app password.
 
-Subscription changes and play positions sync both ways; positions run
-through the same per-medium reconciliation as first-party clients.
+Your subscriptions are one list for the whole account, and every device
+reads all of it. A device's full-list upload (the Simple API `PUT`, such
+as gPodder desktop's *Replace list on server*) replaces that device's
+own contribution: it adds what the device lists and removes only what no
+other device and no WaxDeck app still holds, so a new device uploading
+an empty list removes nothing, and neither does a list naming a feed
+that cannot be fetched yet, until that feed lands or is given up. An
+incremental remove, which is what AntennaPod sends when you unsubscribe
+there, unsubscribes the whole account, and so does unsubscribing in
+WaxDeck; a change that adds a show's new address and removes its old one
+moves the app to the new one and keeps the show.
+
+Each app is told a show by the address it knows it by: the one it last
+sent or was sent, else the one you last subscribed by, never one another
+account subscribed by, so a paid feed's personal link stays yours. An
+app's own spelling of a show you follow stays that app's, and an app
+that left a show, or was told you left it, lets go of the address it
+knew, so if you follow the show again by another address it is told that
+one. An app may name a show by any of those addresses, in any spelling
+(`http` or `https`, a trailing slash), with no fetch. YouTube channels
+you follow are not synced to podcast apps.
+
+A feed a device adds that cannot be fetched right now, because its host
+is down or answers an error, is tried again at growing intervals for a
+week and joins the list when it lands, held for every device that asked
+for it; until then no device sees it, and unsubscribing from the show,
+in a podcast app or in WaxDeck, withdraws every device's ask for it,
+including one that turns out to be the show only once fetched. While
+your account cannot see the podcast library a waiting feed is not tried;
+it lands once the grant is back, or is given up when its week runs out.
+On a server with podcasts turned off (`-podcast-dir=""`) every add is
+refused and nothing waits. An address that is not an http or https URL
+naming a host is dropped as it arrives: the app is told to drop it on an
+incremental upload, and nothing is said in your notifications. A feed
+that cannot work as given (not a feed at all, a host that refuses or has
+nothing at the address, an address on a local network this server does
+not fetch from) is refused: the app is told to drop it (on an
+incremental upload; a full-list upload has no answer to carry that), and
+your WaxDeck notifications say why, as they do when a week of tries runs
+out. A feed given up after its week is refused, not tried or parked
+again, when an app asks for it in the month that follows, so a list
+naming it still lets go of what it no longer names. A notification names
+a feed by its host, never by its address. Each feed is said once a month
+for each device that asks for it, whether or not you keep the
+notification; for an upload naming many such feeds, the first few not
+yet said are named and the rest counted, so each later sync names a few
+more. A feed added while 200 others wait for another try is refused the
+same way.
+
+Play positions sync both ways and run through the same per-medium
+reconciliation as first-party clients. Positions made in the WaxDeck
+apps, and episodes marked played there, reach gpodder clients as `play`
+actions from a device named `waxdeck`, for episodes whose length is
+known: a play action without one is no position to a podcast app. The
+server holds a show's episode links as fetched by the address of whoever
+subscribed last; when that is another account's address and the show is
+private, an episode is named by its guid and by its link without the
+link's query or login, which carry that account's token. An
+uploaded action this server cannot keep (a time it cannot read, or one
+before 2000 or more than a day ahead, a field longer than it stores or
+of the wrong type, a start, position or length on an action other than
+`play`, a play's start or length without its position, a negative
+position or one past thirty days or past the length the action gives) is
+skipped and the rest of the upload stored. An action sent with no time
+is stored at the time it arrives, and one sent again with its time is
+kept once. Asked for the latest action of each episode, the episodes
+download answers the one with the latest time, whoever uploaded last.
+
+One upload names at most 2000 feeds (a full list, or a change's adds and
+removes together) or 10,000 episode actions; a larger one is refused as
+too large (HTTP 413) and changes nothing.
+
+An account keeps up to 50 devices. A new device past that takes the
+place of the one seen least recently, preferring one with no feeds of
+its own; the removed device's feeds stay followed (or waiting for
+another try), and your WaxDeck notifications say which device went when
+it had any (by name for the first three in a day, then once that more
+are going).
+
 A login's session cookie lasts up to two weeks and ends sooner when the
-app password that opened it is revoked, the app logs out, or the
-account is disabled or signed out everywhere; a password change leaves
-it alone, as it leaves the app password. One app password holds at
-most 20 logins, and a 21st ends the oldest, so give each device its own
-app password rather than sharing one between apps that log in often.
-The app then signs in again with its app password on its own.
-The test suite replays AntennaPod's actual sync sequence (login,
-device registration, subscription diff, episode actions with its
-timestamp format) against a live server on every run, so a regression
-there fails CI rather than a user's sync.
+app password that opened it is revoked, the app logs out, or the account
+is disabled or signed out everywhere; a password change leaves it alone,
+as it leaves the app password. One app password holds at most 20 logins,
+and a 21st ends the oldest, one whose cookie never came back first, so
+give each device its own app password rather than sharing one between
+apps that log in often. The app then signs in again with its app
+password on its own. A request signed with the app password itself is
+answered such a cookie too, so an app that keeps cookies signs in once;
+such a session renews itself once past half its two weeks while the app
+keeps using it, and one app password holds 20 of these apart from its
+logins, those whose cookies never came back going first.
+
+The test suite replays both apps' syncs as their own code sends them,
+against a live server on every run, so a regression there fails CI
+rather than a user's sync: AntennaPod's (a login whose cookie carries
+the rest, device registration, subscription changes and episode actions
+in its timestamp format, a sign-out, and a sign-in again after a revoked
+app password), and gPodder desktop's through its mygpoclient library
+(credentials sent only when challenged, the device list and
+registration, subscription pulls and changes, its replace-list upload,
+and episode-action downloads and uploads, with the answers that library
+requires).
 
 ## YouTube channels as shows
 
@@ -179,6 +303,11 @@ appear as episodes and fetch as audio, stamped with their source URL
 and acquisition date. The optional WaxSeal sidecar (compose profile
 `youtube`) unlocks the full-quality path. SponsorBlock segment cutting
 is available opt-in via `WAXDECK_YOUTUBE_SPONSORBLOCK`.
+
+A YouTube episode plays once the server has fetched it. What the
+channel lists is a video page rather than audio, so unlike a feed's
+episode it does not stream before that, and the app marks it
+**No audio to stream** until it is fetched.
 
 A premiere or a stream that is still live when the channel is checked
 cannot be downloaded yet, so the server remembers it and looks again on
@@ -203,7 +332,8 @@ End of chapter stops playback at the head of the next chapter, so
 pressing play picks up there, at any speed and whether or not the
 chapter ends where a file does. At the end of the last chapter the book
 simply stops: nothing queued after it starts under a sleeper. Seeking
-past the chapter end lets the timer go.
+past the chapter end lets the timer go. A podcast episode whose feed
+publishes chapters offers the same mode, ending at those marks.
 
 Bookmarks are places you mark on purpose, with an optional note, up to
 200 a book. They work offline on the native apps: a mark made with no

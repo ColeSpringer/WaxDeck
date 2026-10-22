@@ -14,6 +14,7 @@ export interface paths {
         /**
          * List libraries
          * @description The catalog's libraries, for granting per-library visibility. Administrators only. Unpaginated: libraries are a handful of roots, not a collection that grows with content.
+         *     The podcast library (`media` is `podcast`) is listed once the server has fetched its first episode, which is when it is created. Granting it grants podcasts: every show and every episode, fetched or not.
          *     `itemCount` is opt-in through `counts`, because it is the one field here that costs anything: the catalog has no library dimension, so counting a root means matching every item's path against it. Callers that want the names and pids - a permission editor, a matching-mode menu - should leave it off.
          */
         get: operations["listLibraries"];
@@ -1517,7 +1518,7 @@ export interface paths {
         /**
          * Browse a discovery list
          * @description Keyset-paginated discovery lists over the whole library: newest, recently added, most played, recently played, random, starred, alphabetical, never played, rediscover, and in progress. Play-derived lists reflect the calling user's own listening state.
-         *     Most lists span every media type. `newest` does not: it orders by release year, which a podcast episode has not got, so it covers music and audiobooks only. Pairing it with `mediaType=podcast`, or drilling its `kind` dimension to `episode`, is `invalid-request` rather than an empty page that would read as "your library holds none". Episodes ordered by publication date live on `/podcasts/episodes`.
+         *     Most lists span every media type; `newest` and `recently-added` do not. `newest` orders by release year, which a podcast episode has not got, so it covers music and audiobooks only. Pairing it with `mediaType=podcast`, or drilling its `kind` dimension to `episode`, is `invalid-request` rather than an empty page that would read as "your library holds none". `recently-added` without a `mediaType` covers music and audiobooks only, so a show's feed landing its backlog does not take the first page; naming `mediaType=podcast`, or drilling its `kind` dimension to `episode`, lists the episodes. Episodes ordered by publication date live on `/podcasts/episodes`.
          */
         get: operations["browseList"];
         put?: never;
@@ -2369,7 +2370,7 @@ export interface paths {
          * List the notification event catalog
          * @description Every notification event this server can emit, with its scope: `server` events describe server operations and deliver to server-scope targets (plus admin-owned personal targets that opted in), `user` events concern one user and deliver to that user's personal targets. Clients build the per-target event checklist from this catalog; a target's `enabledEvents` must name events from it. The reserved `test` event never appears here: per-target tests are requested through the target's test endpoint and bypass event selection.
          *
-         *     The current catalog is `signup-requested`, `backup-completed`, `backup-failed`, `catalog-reset`, `episode-arrived`, `episode-downloaded`, `feed-disabled`, `review-ready`, `import-completed`, `playlist-synced`, `job-finished`, `job-failed`, and `health-fix-finished`. The last three reach the administrator who started the work: a catalog job (a scan, an analysis, an enrichment or organize run, emptying the trash) finished or failed, or a health fix finished. Work the server started on its own schedule notifies nobody. `catalog-reset` says the server built a new catalog because the old one's schema was another release's; its body counts the libraries added from the console, which the audit log names.
+         *     The current catalog is `signup-requested`, `backup-completed`, `backup-failed`, `catalog-reset`, `episode-arrived`, `episode-downloaded`, `feed-disabled`, `subscription-failed`, `gpodder-device-removed`, `review-ready`, `import-completed`, `playlist-synced`, `job-finished`, `job-failed`, and `health-fix-finished`. The last three reach the administrator who started the work: a catalog job (a scan, an analysis, an enrichment or organize run, emptying the trash) finished or failed, or a health fix finished. Work the server started on its own schedule notifies nobody. `catalog-reset` says the server built a new catalog because the old one's schema was another release's; its body counts the libraries added from the console, which the audit log names. `subscription-failed` says a podcast app syncing over gpodder asked for a feed that will not subscribe, or that still could not be fetched after a week of tries, or asked to change the subscriptions of an account that may not follow or manage podcasts; one sync names at most five feeds the inbox has not named in the last thirty days and counts the rest in one more, and an account's refusal is said once in thirty days for each device. `gpodder-device-removed` says a new podcast app device took the slot of the least recently seen of the account's fifty, and that what it kept followed stays followed; a day's first three name the device, and one more says others went.
          */
         get: operations["listNotificationEvents"];
         put?: never;
@@ -2746,7 +2747,7 @@ export interface paths {
         };
         /**
          * Resolve a playable stream for an item
-         * @description Returns everything a client needs to start playback: a short-TTL, origin-relative stream URL (media-token authenticated, so it is playable by bare `<audio>` elements, cast devices, and DLNA renderers that cannot send headers), the served format, and expiry. Clients re-request play-info when a stream URL expires or the server signals `stream-stale`. On a server running without the streaming engine, the url serves the item's original file bytes directly (ranged, no transcoding, in whatever format the file is in) through the same endpoint downloads use, inline and with the byte-identity pin; expiry is enforced per request, so an in-flight fetch completes but a later range request after `expiresAt` answers `unauthenticated` and the client re-requests play-info. The url dies with the session that asked for it. A capped account's transcoded stream is never wider than its ceiling, whether or not the request carries `maxBitrateKbps` (an original played directly is the file itself), and the stream parameters are part of the url's credential. An item carved out of a larger file additionally carries `spanStartMs`/`spanEndMs` and the client plays only that window; a client that does not implement the window MUST treat a span-bearing response as unplayable rather than play the served audio whole. A multi-file audiobook resolves one part per call: pass `positionMs` (book-timeline milliseconds) to get the part containing that position, and read `partIndex`, `partCount`, and `partStartMs` from the response; when playback crosses the end of a part, re-request play-info with the new book-timeline position. The response's `durationMs` is always the length of what the client plays: the resolved part for multi-file books, the item's own window, never the backing file, for span-carved direct playback, and the whole item or part for a stream cut at `positionMs` (see `startOffsetMs`); the book total lives on the item summary and the book detail. Positions reported to play-state for multi-file books are always book-timeline milliseconds (`partStartMs` plus the in-part position). A podcast episode whose audio has not been fetched to the server resolves by enclosure passthrough: the url points at `/media/enclosure`, which relays the feed's own enclosure through this origin (a proxy, not a redirect, so the listener's address never reaches the podcast host and the web build can play it). Ranges pass both ways, so scrubbing works when the host honours them. Passthrough audio is not analyzed, so the skip map stays `unavailable` and neither silence trim nor voice boost applies until the episode is fetched, and `seekable` is best effort for passthrough: whether the host honours ranges is unknown until the first upstream request. The episode still reports `downloaded: false`, and fetching it is still what makes it play from local bytes with analysis. Only an episode whose feed named no enclosure at all answers `conflict`.
+         * @description Returns everything a client needs to start playback: a short-TTL, origin-relative stream URL (media-token authenticated, so it is playable by bare `<audio>` elements, cast devices, and DLNA renderers that cannot send headers), the served format, and expiry. Clients re-request play-info when a stream URL expires or the server signals `stream-stale`. On a server running without the streaming engine, the url serves the item's original file bytes directly (ranged, no transcoding, in whatever format the file is in) through the same endpoint downloads use, inline and with the byte-identity pin; expiry is enforced per request, so an in-flight fetch completes but a later range request after `expiresAt` answers `unauthenticated` and the client re-requests play-info. The url dies with the session that asked for it. A capped account's transcoded stream is never wider than its ceiling, whether or not the request carries `maxBitrateKbps` (an original played directly is the file itself), and the stream parameters are part of the url's credential. An item carved out of a larger file additionally carries `spanStartMs`/`spanEndMs` and the client plays only that window; a client that does not implement the window MUST treat a span-bearing response as unplayable rather than play the served audio whole. A multi-file audiobook resolves one part per call: pass `positionMs` (book-timeline milliseconds) to get the part containing that position, and read `partIndex`, `partCount`, and `partStartMs` from the response; when playback crosses the end of a part, re-request play-info with the new book-timeline position. The response's `durationMs` is always the length of what the client plays: the resolved part for multi-file books, the item's own window, never the backing file, for span-carved direct playback, and the whole item or part for a stream cut at `positionMs` (see `startOffsetMs`); the book total lives on the item summary and the book detail. Positions reported to play-state for multi-file books are always book-timeline milliseconds (`partStartMs` plus the in-part position). A podcast episode whose audio has not been fetched to the server resolves by enclosure passthrough: the url points at `/media/enclosure`, which relays the feed's own enclosure through this origin (a proxy, not a redirect, so the listener's address never reaches the podcast host and the web build can play it). Ranges pass both ways, so scrubbing works when the host honours them. Passthrough audio is not analyzed, so the skip map stays `unavailable` and neither silence trim nor voice boost applies until the episode is fetched, and `seekable` is best effort for passthrough: whether the host honours ranges is unknown until the first upstream request. The relay serves only audio and video, never a playlist or a stream manifest: a host answering with a page, a document, a picture or a playlist is refused with `feed-unreachable`, and every relayed response carries `X-Content-Type-Options: nosniff`. The episode still reports `downloaded: false`, and fetching it is still what makes it play from local bytes with analysis. An episode whose feed named no enclosure at all answers `conflict`, as does one whose feed calls its enclosure a playlist or a stream manifest, and an episode of a YouTube show, whose enclosure is a watch page rather than audio, answers `conflict` until the server has fetched it.
          */
         get: operations["getPlayInfo"];
         put?: never;
@@ -3712,7 +3713,9 @@ export interface paths {
         put?: never;
         /**
          * Subscribe to a podcast
-         * @description Subscribes the calling user to a show. The show is cataloged globally on first subscription (fetching and parsing the feed, or resolving a YouTube channel or playlist through the acquisition bridge when `sourceType` is `youtube`); later subscribers attach to the existing show without refetching. Subscribing to a show the caller already follows returns the existing subscription with its settings unchanged (200 instead of 201), except that supplied credentials always replace the show's stored credentials: re-subscribing with new credentials is the rotation path. Credentials are stored once per show (the last supplied set wins, whoever supplied it), apply to feed and enclosure fetches, and are sealed at rest and never returned by any endpoint. Supplying credentials marks the show private (a global, sticky property; see the show schema).
+         * @description Subscribes the calling user to a show. The show is cataloged globally on first subscription (fetching and parsing the feed, or resolving a YouTube channel or playlist through the acquisition bridge when `sourceType` is `youtube`); later subscribers attach to the existing show without refetching. Subscribing to a show the caller already follows returns the existing subscription with its settings unchanged (200 instead of 201), except that supplied credentials always replace the show's stored credentials: re-subscribing with new credentials is the rotation path. Credentials are stored once per show (the last supplied set wins, whoever supplied it), apply to feed and enclosure fetches, and are sealed at rest and never returned by any endpoint. Supplying credentials, or subscribing by an address that carries user info or a query parameter named like a credential, marks the show private (a global, sticky property; see the show schema). An account that may not manage podcasts, or cannot see the podcast library, is refused with `forbidden`. A server whose podcasts are turned off answers every subscribe with `feature-unavailable`, its `params.feature` `podcasts`.
+         *
+         *     An address the server will not take is refused with `invalid-request`, its message a sentence saying why and its `params.reason` naming it: `not-a-feed` (the address answered with something that is not a podcast feed), `too-large` (the feed is over the 16 MiB a feed may be), or `blocked-address` (the address is on a private or local network, which this server does not fetch from). A feed host that fails answers `feed-unreachable` with the reason: `host-refused` (401, 403 or another refusal, which can mean the feed needs credentials), `host-missing` (404 or 410), `host-error` (a server error, a request to come back later, or a redirect loop), or `unreachable` (no connection, or no answer in time).
          */
         post: operations["subscribePodcast"];
         delete?: never;
@@ -3730,13 +3733,13 @@ export interface paths {
         };
         /**
          * Export the caller's subscriptions as OPML
-         * @description OPML 2.0 document of the calling user's subscriptions, with folder assignments rendered as nested outlines. Private shows (see the show schema's sticky privacy rule) are omitted entirely, for every exporting user: private feed URLs are secrets and never leave the server in an export.
+         * @description OPML 2.0 document of the calling user's subscriptions, with folder assignments rendered as nested outlines and each show's title cut to its first 1000 characters. Each feed is named by the address the caller subscribed it by, a private show's included (see the show schema); a stored login is never written.
          */
         get: operations["exportOpml"];
         put?: never;
         /**
          * Import subscriptions from OPML
-         * @description Subscribes the calling user to every feed in the document, honoring folder outlines (nested outline titles become the subscription's folder path). Feeds that fail to fetch are reported per entry and do not fail the import. Already-followed feeds are left unchanged.
+         * @description Subscribes the calling user to every feed in the document, honoring folder outlines: nested outline titles become the subscription's folder path, normalized as a subscribe's `folder` is and cut to the longest run of whole segments that fits a folder's bounds (16 segments, 512 characters), so no feed fails over its folder. Feeds that fail to subscribe are reported per entry and do not fail the import: an entry's `error` is the sentence a subscribe would answer with, and its `reason` names a feed-side failure the way a subscribe's `params.reason` does. Already-followed feeds are left unchanged. The subscribes keep running for up to 30 minutes after the caller stops waiting. An account that may not manage podcasts is refused with `forbidden` before the document is parsed, and a server whose podcasts are turned off answers any import with `feature-unavailable`, its `params.feature` `podcasts`. A request body over 4 MiB, a document that is not OPML, and one naming more than 1000 feeds are refused whole with `invalid-request`.
          */
         post: operations["importOpml"];
         delete?: never;
@@ -3844,7 +3847,7 @@ export interface paths {
         put?: never;
         /**
          * Refresh a show's feed now
-         * @description Fetches the show's feed immediately (conditional GET; a feed that reports no change is cheap) and reports how many new episodes appeared. Subscribers only: refresh failures carry upstream detail, and a private feed's detail belongs to its subscribers. Refreshes are coalesced server-side: a show synced within the last minute answers from that sync instead of refetching. A repeatedly failing feed is auto-disabled from scheduled refresh; a successful manual refresh re-enables it.
+         * @description Fetches the show's feed immediately (conditional GET; a feed that reports no change is cheap) and reports how many new episodes appeared. Subscribers only. A feed that fails answers `feed-unreachable` with `params.reason` saying why, from the reasons a subscribe uses, all of them under this code here. Refreshes are coalesced server-side: a show synced within the last minute answers from that sync instead of refetching. A repeatedly failing feed is auto-disabled from scheduled refresh; a successful manual refresh re-enables it.
          */
         post: operations["refreshPodcast"];
         delete?: never;
@@ -3903,13 +3906,13 @@ export interface paths {
         };
         /**
          * Get an episode's transcript
-         * @description The episode's transcript as time-coded cues for display and tap-line-to-seek. Fetched from the feed's transcript pointer on first request and cached; the first call may take a moment. 404 only when the episode announces no transcript; a pointer that exists but cannot be fetched or parsed answers `feed-unreachable`, so clients retry later instead of caching a false absence.
+         * @description The episode's transcript as time-coded cues for display and tap-line-to-seek. Fetched from the feed's transcript pointer on first request and cached; the first call may take a moment. 404 only when the episode announces no transcript; a pointer that exists but cannot be fetched or parsed answers `feed-unreachable`, so clients retry later instead of caching a false absence. Its `params.reason` says why, from the reasons a subscribe uses, all of them under this code here: the address came from the feed, not from the caller. A failure is remembered for a few minutes, and asking again meanwhile answers the same reason without fetching. A private show (see `PodcastShow`) has its transcript read for its subscribers only, as its audio is relayed; anyone else is refused with `forbidden`.
          */
         get: operations["getEpisodeTranscript"];
         put?: never;
         /**
          * Capture an episode's transcript for search
-         * @description Fetches the episode's announced transcript and indexes its text so the episode turns up in transcript search, without downloading the audio. This covers an episode a listener streams but never downloads; a downloaded episode already indexes its transcript, and an already-indexed one is a no-op success. 404 when the episode announces no transcript; a pointer that exists but cannot be fetched or parsed answers `feed-unreachable`, so clients retry later instead of recording a false absence. Distinct from the time-coded cue transcript the read endpoint serves for display: this indexes search text only.
+         * @description Fetches the episode's announced transcript and indexes its text so the episode turns up in transcript search, without downloading the audio. This covers an episode a listener streams but never downloads; a downloaded episode already indexes its transcript, and an already-indexed one is a no-op success. The transcript is read as the read endpoint reads it: under the same size cap, with the same remembered failure, and for a private show, for its subscribers only, anyone else being refused with `forbidden`. 404 when the episode announces no transcript; a pointer that exists but cannot be fetched or holds no text answers `feed-unreachable` with `params.reason` saying why, as the read endpoint does, so clients retry later instead of recording a false absence. Distinct from the time-coded cue transcript the read endpoint serves for display: this indexes search text only.
          */
         post: operations["captureEpisodeTranscript"];
         delete?: never;
@@ -3929,12 +3932,12 @@ export interface paths {
         put?: never;
         /**
          * Fetch an episode's audio to the server
-         * @description Queues a server-side download of the episode's enclosure into the library. The caller must be subscribed to the episode's show. The episode's item flips from remote to present when the fetch completes, which reaches clients as a catalog invalidation; a failed fetch surfaces as `fetchState: failed` with `fetchError` on the episode summary. Queuing an episode that is already downloaded or already queued is a no-op success; queuing a previously failed one retries it.
+         * @description Queues a server-side download of the episode's enclosure into the library. The caller must be subscribed to the episode's show. The episode's item flips from remote to present when the fetch completes, which reaches clients as a catalog invalidation; a failed fetch surfaces as `fetchState: failed` with `fetchError` on the episode summary. Queuing an episode that is already downloaded or already queued succeeds without fetching it again; queuing a previously failed one retries it. Retention keeps the file for the caller, fetched now or already on the server, until they finish the episode after asking for it or stop following the show, while they can see the podcast library. An episode whose enclosure is a playlist or a stream manifest, by its feed's word or by what its host answered the relay, has no audio to fetch and answers `not-found`.
          */
         post: operations["fetchEpisode"];
         /**
          * Remove an episode's fetched audio from the server
-         * @description The inverse of the fetch: deletes the episode's downloaded audio and returns the episode to its not-fetched state, which reaches clients as a catalog invalidation. The episode itself is untouched - it stays in the show's listing, stays counted, keeps every user's playback state, streams by enclosure passthrough, and can be fetched again at any time. Only the local bytes go, and they are not recoverable from the trash: an unfetched episode's audio is re-fetchable from its source, which is what makes deleting it the right answer rather than archiving it (an archived episode disappeared from the hub's count while the show's listing still held it). The caller must be subscribed to the show (the file is shared; any subscriber may reclaim the space). Removing an episode that is not fetched is a no-op success that also cancels a queued fetch, and an episode someone is listening to right now answers `conflict` (retry when playback stops).
+         * @description The inverse of the fetch: deletes the episode's downloaded audio and returns the episode to its not-fetched state, which reaches clients as a catalog invalidation. The episode itself is untouched - it stays in the show's listing, stays counted, keeps every user's playback state, streams by enclosure passthrough unless it belongs to a YouTube show, and can be fetched again at any time. Only the local bytes go, and they are not recoverable from the trash: an unfetched episode's audio is re-fetchable from its source, which is what makes deleting it the right answer rather than archiving it (an archived episode disappeared from the hub's count while the show's listing still held it). The caller must be subscribed to the show (the file is shared; any subscriber may reclaim the space). Removing an episode that is not fetched is a no-op success that also cancels a queued fetch, and an episode someone is listening to right now answers `conflict` (retry when playback stops).
          */
         delete: operations["removeEpisodeDownload"];
         options?: never;
@@ -4003,7 +4006,7 @@ export interface paths {
         };
         /**
          * Resolve a playable station stream
-         * @description Mints a short-lived tokenized URL for the station's stream, proxied through this server's origin (so web clients are never blocked by the station's missing CORS headers and mixed content never arises). The proxy passes ICY station metadata headers through (never icy-metaint: the in-stream metadata it announces is consumed by the proxy, so clients receive clean audio and read the current title from nowPlaying here instead) and serves the stream as a live, unseekable body. Re-request when playback is restarted; the token has a bounded lifetime but an already-open stream is never cut by token expiry.
+         * @description Mints a short-lived tokenized URL for the station's stream, proxied through this server's origin (so web clients are never blocked by the station's missing CORS headers and mixed content never arises). The proxy passes ICY station metadata headers through (never icy-metaint: the in-stream metadata it announces is consumed by the proxy, so clients receive clean audio and read the current title from nowPlaying here instead) and serves the stream as a live, unseekable body. The proxy serves only audio and video. A station whose address answers a PLS or M3U playlist is served the first stream the playlist names, followed one playlist deep and judged by the same address guard; the station keeps the address it was given. A station answering an HLS manifest, a page, a document or a picture is refused with `service-unreachable`, a stream that names no type is served as `application/octet-stream`, and every answer carries `X-Content-Type-Options: nosniff` and a sandboxing `Content-Security-Policy`. Re-request when playback is restarted; the token has a bounded lifetime but an already-open stream is never cut by token expiry.
          */
         get: operations["getRadioPlayInfo"];
         put?: never;
@@ -4343,7 +4346,7 @@ export interface paths {
         get: operations["getLibraryMatching"];
         /**
          * Set a library's matching behavior
-         * @description `auto` lets confident matches apply themselves and queues the rest for review (the default), `review` queues everything (no auto-apply), and `off` never matches the library's content (as-is libraries: already-curated collections the engine must not touch). Under `auto`, one-file units still queue unless `singlesAutoApply` is on. The body replaces the whole object. Administrators only.
+         * @description `auto` lets confident matches apply themselves and queues the rest for review (the default), `review` queues everything (no auto-apply), and `off` never matches the library's content (as-is libraries: already-curated collections the engine must not touch). Under `auto`, one-file units still queue unless `singlesAutoApply` is on. The body replaces the whole object. A podcast library takes no matching behavior, its episodes coming from their feeds, and is refused with `invalid-request`. Administrators only.
          */
         put: operations["setLibraryMatching"];
         post?: never;
@@ -4472,7 +4475,7 @@ export interface paths {
         put?: never;
         /**
          * Create a share link
-         * @description Creates a public share link for a track, album, book, or episode the caller can see, or a playlist the caller owns. An album share opens the album's tracks in order. Playlists require ownership because the public page serves the owner's member view for the link's whole life: another user's shared playlist is theirs to publish, not the viewer's, and their later edits or a flip back to private must not leak through a link they cannot revoke. An album needs at least one track the caller can hear. The link is a capability URL: anyone holding it can open the landing page and listen until it expires or is revoked, to what its owner can see when it is opened. A list serves only the members the owner can still see, and the link answers not-found while the owner is disabled or once the target is out of the owner's reach (a library grant withdrawn, a content setting that denies it); it resumes when that changes back. Episodes accept `positionMs` for copy-link-at-timestamp. `allowDownload` additionally offers the original file and requires the caller's own download permission. Episodes of private feeds (feeds with credentials) refuse with `forbidden`: a capability URL must not leak paid content. Anonymous playback through the link is billed against the caller's transcode and bandwidth limits.
+         * @description Creates a public share link for a track, album, book, or episode the caller can see, or a playlist the caller owns. An album share opens the album's tracks in order. Playlists require ownership because the public page serves the owner's member view for the link's whole life: another user's shared playlist is theirs to publish, not the viewer's, and their later edits or a flip back to private must not leak through a link they cannot revoke. An album needs at least one track the caller can hear. The link is a capability URL: anyone holding it can open the landing page and listen until it expires or is revoked, to what its owner can see when it is opened. A list serves only the members the owner can still see, and the link answers not-found while the owner is disabled or once the target is out of the owner's reach (a library grant withdrawn, a content setting that denies it); it resumes when that changes back. Episodes accept `positionMs` for copy-link-at-timestamp. `allowDownload` additionally offers the original file and requires the caller's own download permission. Episodes of private feeds (feeds with credentials) refuse with `forbidden`: a capability URL must not leak paid content, and a list's episodes of such feeds are left out of it. An episode the server has not fetched still plays through the link, relayed from the show's own host (the visitor's address never reaches it), and offers no download; one whose feed names no audio the relay serves (a YouTube show's never does) refuses with `conflict` until the server has fetched its audio, which one whose feed names none at all never has. Anonymous playback through the link is billed against the caller's transcode, relay and bandwidth limits.
          */
         post: operations["createShare"];
         delete?: never;
@@ -5430,7 +5433,7 @@ export interface components {
             pid: string;
             mediaType: components["schemas"]["MediaType"];
             /**
-             * @description Display title.
+             * @description Display title. An episode's, which its feed gives, is cut to its first 1000 characters, and so is the show title it carries in `artist` and `album`.
              * @example Prancing Pony Blues
              */
             title: string;
@@ -7537,7 +7540,7 @@ export interface components {
             bitrate?: number;
             /**
              * Format: date-time
-             * @description When the item entered the library: when its primary file, or a copy of it the caller can see found before that, was found.
+             * @description When the item entered the library: when its primary file, or a copy of it the caller can see found before that, was found. An episode's is when its show's feed first listed it here, whether or not its audio has been fetched.
              */
             addedAt?: string;
             /**
@@ -8533,7 +8536,7 @@ export interface components {
             /** @description The server's own detail line. */
             body: string;
             /**
-             * @description What the row is about, when the event names something: the show for `feed-disabled` and `episode-arrived`, the episode for `episode-downloaded`, the playlist for `playlist-synced`, the review entry (`rv-`) for `import-completed`, the catalog job (`jb-`) for `job-finished` and `job-failed`, and the job or the tool task (`tk-`) that ran the fix for `health-fix-finished`. Absent for events that are about the server rather than an item.
+             * @description What the row is about, when the event names something: the show for `feed-disabled` and `episode-arrived`, the episode for `episode-downloaded`, the playlist for `playlist-synced`, the review entry (`rv-`) for `import-completed`, the catalog job (`jb-`) for `job-finished` and `job-failed`, and the job or the tool task (`tk-`) that ran the fix for `health-fix-finished`. Absent for events that are about the server rather than an item, for `subscription-failed`, whose feed never became a show, and for `gpodder-device-removed`.
              * @example pc-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             targetPid?: string;
@@ -9038,7 +9041,7 @@ export interface components {
              */
             url: string;
             /**
-             * @description MIME type the stream will be served as; `application/vnd.apple.mpegurl` for an HLS presentation.
+             * @description MIME type the stream will be served as; `application/vnd.apple.mpegurl` for an HLS presentation. For enclosure passthrough it is the type the feed declared when that names one audio or video format, never a playlist, or is `application/ogg`, `application/mpeg` or `application/mp4`, else `audio/mpeg`; the relay answers with the podcast host's own type when that passes the same rule.
              * @example audio/flac
              */
             mimeType: string;
@@ -9992,20 +9995,20 @@ export interface components {
             /** @description The unmatched entry paths, in document order. */
             unmatchedPaths?: string[];
         };
-        /** @description One globally cataloged show. Show privacy is a global, sticky property: a show becomes private when it is first subscribed with credentials or when any subscriber ever marks their subscription private, and it never becomes public again. For a private show, `feedUrl` is omitted from every response for every user, and the show is excluded from every user's OPML export: tokenized feed URLs and credentials are secrets. Privacy protects the URL and credentials only, never the show's existence or content, which any user with visibility into the podcast library can browse and play. */
+        /** @description One globally cataloged show. A caller who follows the show is given, in `feedUrl` and its OPML export, the address it subscribed by, never one another account subscribed by; anyone else is given the catalog's address. Show privacy is a global, sticky property: a show becomes private when anyone subscribes to it with credentials, or by an address that carries user info or a query parameter named, in any case, `auth`, `token`, `key`, `secret`, `sig`, `signature`, `password`, `pass`, `apikey`, `api_key` or `access_token`, or when any subscriber ever marks their subscription private, and it never becomes public again. A private show's `feedUrl` is omitted for anyone who does not follow it: tokenized feed URLs and credentials are secrets. Privacy protects the URL and credentials, never the show's existence or content, which any user with visibility into the podcast library can browse, and play once the server has fetched it. What spends the feed's address or credentials is for the show's subscribers only: an episode the server has not fetched is relayed for them alone, and every episode's transcript and chapters documents are read from the feed for them alone. Chapters the server stored when it fetched an episode are served to anyone who sees that episode. */
         PodcastShow: {
             /**
              * @description Show PID.
              * @example pc-01JZX5N8QW3F4V9T2B7KD3M9R6
              */
             pid: string;
-            /** @description Show title. */
+            /** @description Show title, cut to its first 1000 characters. */
             title: string;
             /** @description Show author or channel name. */
             author?: string;
             /** @description Show description as sanitized HTML (server-side allowlist; safe to render directly). */
             descriptionHtml?: string;
-            /** @description The feed URL. Omitted for private feeds. */
+            /** @description For a caller who follows the show, the address it subscribed by; for anyone else the catalog's address, omitted for a private show. */
             feedUrl?: string;
             /** @description The show's website, when the feed declares one. */
             link?: string;
@@ -10047,9 +10050,9 @@ export interface components {
             /** @description Fetch new episodes to the server automatically as the feed publishes them. `autoDownloadFilter` narrows which ones. A new episode dated behind as many downloads as the show's retention keeps is left unfetched, since retention would remove it again. */
             autoDownload?: boolean;
             autoDownloadFilter?: components["schemas"]["EpisodeFilter"];
-            /** @description Folder path for organizing subscriptions, as segments joined by `/` (round-trips through OPML outline nesting). */
+            /** @description Folder path for organizing subscriptions, as segments joined by `/` (round-trips through OPML outline nesting). Each segment is trimmed and empty ones are dropped before the path is stored; a path of more than 16 segments, or still longer than 512 characters, is refused with `invalid-request`. */
             folder?: string;
-            /** @description Mark the show private (see the show schema: privacy is global and sticky, hiding the feed URL everywhere and keeping the show out of every OPML export). Set automatically when subscribing with credentials. Setting this back to false does not un-private a show. */
+            /** @description Mark the show private (see the show schema: privacy is global and sticky, hiding the feed URL from everyone who does not follow the show). Set automatically when subscribing with credentials or by an address that carries one. Setting this back to false does not un-private a show. */
             private?: boolean;
             /**
              * Format: double
@@ -10122,7 +10125,7 @@ export interface components {
              * @description Basic-auth password for a private feed. Stored sealed at rest; never returned by any endpoint.
              */
             password?: string;
-            /** @description Initial folder path for the subscription. */
+            /** @description Initial folder path for the subscription, normalized and bounded as the settings' `folder` is. */
             folder?: string;
         };
         /** @description Outcome of a feed refresh. */
@@ -10143,8 +10146,10 @@ export interface components {
             title?: string;
             /** @description The subscribed show's PID, when the feed resolved. */
             pid?: string;
-            /** @description Why this feed failed to subscribe, when it did. */
+            /** @description Why this feed failed to subscribe, when it did: a sentence for a person. */
             error?: string;
+            /** @description The feed-side failure's reason, when the failure was one: `not-a-feed`, `too-large`, `blocked-address`, `host-refused`, `host-missing`, `host-error` or `unreachable`, as a subscribe's `params.reason` names them. New values may appear. */
+            reason?: string;
         };
         /** @description Per-feed outcomes of an OPML import. */
         OpmlImportResult: {
@@ -10179,8 +10184,8 @@ export interface components {
             /** @description Whether a transcript is available. */
             hasTranscript?: boolean;
             /**
-             * @description Whether the feed named audio this server could relay for this episode: an enclosure URL, over http or https. True with `downloaded` false is the passthrough case, where the episode plays relayed from the feed's own host.
-             *     False means the episode cannot play at all, and play-info answers `conflict`, so a client offering a play affordance should read this rather than assume an undownloaded episode is playable. True is a fact about the feed rather than a promise to the caller: a show whose feed needs credentials relays only for its own subscribers, so play-info may still answer `conflict` for someone reading an episode of a show they do not subscribe to. Treat it as the signal to offer play, not as a guarantee play succeeds.
+             * @description Whether the feed named audio this server could relay for this episode: an enclosure URL, over http or https, that the feed does not call a playlist or a stream manifest. True with `downloaded` false is the passthrough case, where the episode plays relayed from the feed's own host. Never true for an episode of a YouTube show: its enclosure is a watch page, not audio, so it plays once the server has fetched it.
+             *     False with `downloaded` false means the episode cannot play until the server fetches it, and play-info answers `conflict`, so a client offering a play affordance should read this rather than assume an undownloaded episode is playable. True is a fact about the feed rather than a promise to the caller: a private show (see `PodcastShow`) relays only for its own subscribers, so play-info may still answer `conflict` for someone reading an episode of a show they do not subscribe to. Treat it as the signal to offer play, not as a guarantee play succeeds.
              */
             hasEnclosure?: boolean;
         };
@@ -11284,7 +11289,7 @@ export interface components {
         /** @description One change to server-side state visible to the calling user (their own state, plus other users' shared playlists), with the current value hydrated fresh. `kind` is a string, not a closed enum, so new kinds can appear; clients must skip events whose `kind` they do not recognize. Hydrated `playlist` payloads omit a smart playlist's computed `itemCount`, like list pages. */
         ServerSyncEvent: {
             /**
-             * @description What changed: `play-state` (`pid`, `playState`), `prefs`, or `subscription` (`pid`, the show; `subscription` absent once the caller unsubscribed); `book-settings` (`pid`, `bookSettings`);
+             * @description What changed: `play-state` (`pid`, `playState`), `prefs`, or `subscription` (`pid`, the show; `subscription` absent once the caller unsubscribed, and while the caller cannot see the podcast library, which a change to what the caller may see announces for every show it follows); `book-settings` (`pid`, `bookSettings`);
              *
              *     `bookmarks` (`pid`, the book, and `bookmarks`, its whole current list: a mark missing from it was deleted); or `playlist` (`pid`; `playlist` absent when deleted or replaced under a new pid).
              *
@@ -11437,6 +11442,11 @@ export interface components {
              */
             keepOriginals: boolean;
         };
+        /**
+         * @description What an uploaded or acquired file becomes: `music` is cataloged as a track and `audiobook` as a book. Podcasts are not uploaded; they are added by subscribing to a feed, and any other value answers `invalid-request`.
+         * @enum {string}
+         */
+        UploadMediaType: "music" | "audiobook";
         /** @description A new upload session. */
         UploadCreate: {
             /** @description The file's name (base name only; any path is rejected). The extension picks the accepted-format check. */
@@ -11446,7 +11456,7 @@ export interface components {
              * @description Total file size in bytes. The maximum is the largest single file WaxDeck accepts - 16 GiB, clear of even a long hi-res or DSD single-file release - and a session declaring more answers `invalid-request` rather than opening. What is actually accepted is still bounded by the caller's quota and by the room on the server's staging volume.
              */
             sizeBytes: number;
-            mediaType: components["schemas"]["MediaType"];
+            mediaType: components["schemas"]["UploadMediaType"];
             /** @description The library this upload belongs to, from `GET /uploads/targets`. It selects the library whose matching mode and singles auto-apply setting govern the import, and whose read-only state gates it; it does not choose where the file is placed, which is the catalog's own routing by media type into a managed root. Omitted, the entry belongs to no named library and per-library settings fall back to the one library that could hold its media, staying off where that is ambiguous. */
             libraryPid?: string;
             /** @description Lowercase hex SHA-256 of the file, for the up-front exact duplicate warning and the completion integrity check. */
@@ -11523,7 +11533,7 @@ export interface components {
         /** @description A new upload batch. */
         UploadBatchCreate: {
             grouping: components["schemas"]["UploadGrouping"];
-            mediaType: components["schemas"]["MediaType"];
+            mediaType: components["schemas"]["UploadMediaType"];
             /** @description The library every member belongs to; see `UploadCreate` for what naming one selects. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). */
             libraryPid?: string;
             /** @description Whether the batch's files are identified against MusicBrainz. Absent means the account's own default (`identifyOptOut` in preferences); see `UploadCreate` for why there is no schema default, and for what declining does. Decided once here and applied to every entry the batch opens, so a member's own value is ignored. */
@@ -11610,7 +11620,7 @@ export interface components {
         AcquisitionRequest: {
             /** @description The source URL: a single video, a playlist, or a channel the acquisition bridge understands. */
             url: string;
-            mediaType: components["schemas"]["MediaType"];
+            mediaType: components["schemas"]["UploadMediaType"];
             /** @description The library this acquisition belongs to, from `GET /uploads/targets`; see `UploadCreate` for what naming one selects. */
             libraryPid?: string;
             format?: components["schemas"]["AcquisitionFormat"];
@@ -12124,7 +12134,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description An upstream feed could not be fetched or parsed (code `feed-unreachable`): its server answered an error, timed out, or returned something that is not a feed. The message carries the upstream detail, except that for private shows it never includes the feed URL or credentials (upstream error text routinely embeds the request URL, and for a tokenized feed that URL is the secret). */
+        /** @description An upstream feed could not be fetched or parsed (code `feed-unreachable`): its server refused the request, had nothing at the address, answered an error, could not be reached, or returned something that is not a feed. The message is one sentence saying which and `params.reason` names it; neither carries the feed's URL or anything its host said. */
         FeedUnreachable: {
             headers: {
                 [name: string]: unknown;
@@ -16593,7 +16603,7 @@ export interface operations {
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
             404: components["responses"]["NotFound"];
-            /** @description The item cannot stream (code `conflict`): a podcast episode whose audio has not been fetched to the server and whose feed named no enclosure to relay. An unfetched episode that does have an enclosure answers 200 with a passthrough url instead. */
+            /** @description The item cannot stream (code `conflict`): a podcast episode whose audio has not been fetched to the server and whose feed named no enclosure to relay, an unfetched episode of a YouTube show, or an unfetched episode of a private show (see `PodcastShow`) the caller does not subscribe to. An unfetched episode that does have an enclosure to relay answers 200 with a passthrough url instead. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -18151,7 +18161,16 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
-            501: components["responses"]["SourceUnavailable"];
+            403: components["responses"]["Forbidden"];
+            /** @description The subscribe needs something this server is not running: `source-unavailable` for a YouTube subscription on a server without the YouTube bridge, `feature-unavailable` (with `params.feature` `podcasts`) on a server whose podcasts are turned off. Retrying it unchanged will not help; the server has to be configured and restarted. */
+            501: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             502: components["responses"]["FeedUnreachable"];
             503: components["responses"]["CatalogMaintenance"];
         };
@@ -18202,6 +18221,8 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
+            501: components["responses"]["FeatureUnavailable"];
             503: components["responses"]["CatalogMaintenance"];
         };
     };
@@ -18285,7 +18306,7 @@ export interface operations {
             };
             400: components["responses"]["InvalidRequest"];
             401: components["responses"]["Unauthenticated"];
-            /** @description The caller is not subscribed to this show (code `not-found`); settings exist only on subscriptions. */
+            /** @description The caller is not subscribed to this show, or cannot see it (code `not-found`); settings exist only on subscriptions. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -18479,6 +18500,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             502: components["responses"]["FeedUnreachable"];
             503: components["responses"]["CatalogMaintenance"];
@@ -18504,6 +18526,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthenticated"];
+            403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             502: components["responses"]["FeedUnreachable"];
             503: components["responses"]["CatalogMaintenance"];
@@ -19535,6 +19558,15 @@ export interface operations {
             401: components["responses"]["Unauthenticated"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
+            /** @description The episode has no audio a visitor could play through the link (code `conflict`): the server has not fetched it, and its feed names none the relay serves. Once the server has fetched its audio a link can be made; an episode whose feed names no audio at all has none to fetch. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             503: components["responses"]["CatalogMaintenance"];
         };
     };

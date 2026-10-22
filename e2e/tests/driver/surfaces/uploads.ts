@@ -34,6 +34,19 @@ export class Uploads extends Surface {
     return this.ctx.page.locator(sem(SemanticsIds.uploadMediaConfirm));
   }
 
+  /// Open the medium chooser on that same dialog, the click and the menu
+  /// it opens as one retried unit: the dialog has only just opened.
+  async openMediaType(): Promise<void> {
+    const chooser = this.ctx.page.locator(sem(SemanticsIds.uploadMediaType));
+    await chooser.waitFor({ timeout: T.nav });
+    await clickThrough(chooser, this.mediaTypeOption('music'));
+  }
+
+  /// One row of the medium chooser, once it is open.
+  mediaTypeOption(type: string): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.uploadMediaTypeOption(type)));
+  }
+
   /// The per-submission identification switch on that same dialog.
   identify(): Locator {
     return this.ctx.page.locator(sem(SemanticsIds.uploadIdentify));

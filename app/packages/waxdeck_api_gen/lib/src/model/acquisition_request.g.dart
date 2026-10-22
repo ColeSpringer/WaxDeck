@@ -10,7 +10,7 @@ class _$AcquisitionRequest extends AcquisitionRequest {
   @override
   final String url;
   @override
-  final MediaType mediaType;
+  final UploadMediaType mediaType;
   @override
   final String? libraryPid;
   @override
@@ -81,9 +81,9 @@ class AcquisitionRequestBuilder
   String? get url => _$this._url;
   set url(String? url) => _$this._url = url;
 
-  MediaType? _mediaType;
-  MediaType? get mediaType => _$this._mediaType;
-  set mediaType(MediaType? mediaType) => _$this._mediaType = mediaType;
+  UploadMediaType? _mediaType;
+  UploadMediaType? get mediaType => _$this._mediaType;
+  set mediaType(UploadMediaType? mediaType) => _$this._mediaType = mediaType;
 
   String? _libraryPid;
   String? get libraryPid => _$this._libraryPid;

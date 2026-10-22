@@ -450,6 +450,15 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   schemas:
+    UploadMediaType:
+      type: string
+      description: >
+        What an uploaded or acquired file becomes: `music` is cataloged
+        as a track and `audiobook` as a book. Podcasts are not uploaded;
+        they are added by subscribing to a feed, and any other value
+        answers `invalid-request`.
+      enum: [music, audiobook]
+
     UploadCreate:
       type: object
       description: A new upload session.
@@ -475,7 +484,7 @@ components:
             actually accepted is still bounded by the caller's quota
             and by the room on the server's staging volume.
         mediaType:
-          $ref: "#/components/schemas/MediaType"
+          $ref: "#/components/schemas/UploadMediaType"
         libraryPid:
           type: string
           description: >
@@ -623,7 +632,7 @@ components:
         grouping:
           $ref: "#/components/schemas/UploadGrouping"
         mediaType:
-          $ref: "#/components/schemas/MediaType"
+          $ref: "#/components/schemas/UploadMediaType"
         libraryPid:
           type: string
           description: >
@@ -796,7 +805,7 @@ components:
             The source URL: a single video, a playlist, or a channel
             the acquisition bridge understands.
         mediaType:
-          $ref: "#/components/schemas/MediaType"
+          $ref: "#/components/schemas/UploadMediaType"
         libraryPid:
           type: string
           description: >

@@ -15,27 +15,47 @@ import (
 // the feed-level fields an aggregator reads. TranscriptVTT and
 // ChaptersJSON are optional; when set, the sidecar documents are written
 // next to the audio and the feed advertises them via the podcast
-// namespace.
+// namespace. DeclaredDuration, when set, is the length the feed claims in
+// place of the audio's own, as a feed whose host inserts ads can.
 type EpisodeSpec struct {
-	Title         string
-	GUID          string
-	Spec          Spec
-	PubDate       time.Time
-	Description   string
-	TranscriptVTT string
-	ChaptersJSON  string
+	Title            string
+	GUID             string
+	Spec             Spec
+	PubDate          time.Time
+	Description      string
+	TranscriptVTT    string
+	ChaptersJSON     string
+	DeclaredDuration time.Duration
+}
+
+// PersonSpec is one <podcast:person> credit. Role and Href are written
+// only when set.
+type PersonSpec struct {
+	Name string
+	Role string
+	Href string
 }
 
 // FeedSpec describes one podcast feed: channel fields plus its episodes.
 // Link is the channel's home URL; empty falls back to the base URL the
-// feed is generated against.
+// feed is generated against. Persons are the show's credits.
+// LegacyNamespace declares the Podcasting 2.0 namespace at the address it
+// lived at before podcastindex.org, which some feeds still do.
 type FeedSpec struct {
-	Title       string
-	Author      string
-	Description string
-	Link        string
-	Episodes    []EpisodeSpec
+	Title           string
+	Author          string
+	Description     string
+	Link            string
+	Persons         []PersonSpec
+	LegacyNamespace bool
+	Episodes        []EpisodeSpec
 }
+
+const (
+	podcastNS = "https://podcastindex.org/namespace/1.0"
+	// legacyPodcastNS is the Podcasting 2.0 namespace's GitHub address.
+	legacyPodcastNS = "https://github.com/Podcastindex-org/podcast-namespace/blob/main/docs/1.0.md"
+)
 
 // enclosureMIME maps a fixture container to the MIME type a feed
 // enclosure declares for it.
@@ -55,16 +75,23 @@ var enclosureMIME = map[Container]string{
 // reader parsing the feed back.
 
 type rssDoc struct {
-	XMLName      xml.Name  `xml:"rss"`
-	Version      string    `xml:"version,attr"`
-	ITunesNS     string    `xml:"xmlns:itunes,attr"`
-	PodcastNS    string    `xml:"xmlns:podcast,attr"`
-	ChannelTitle string    `xml:"channel>title"`
-	ChannelLink  string    `xml:"channel>link"`
-	ChannelDesc  string    `xml:"channel>description"`
-	Author       string    `xml:"channel>itunes:author"`
-	PodcastGUID  string    `xml:"channel>podcast:guid"`
-	Items        []rssItem `xml:"channel>item"`
+	XMLName      xml.Name    `xml:"rss"`
+	Version      string      `xml:"version,attr"`
+	ITunesNS     string      `xml:"xmlns:itunes,attr"`
+	PodcastNS    string      `xml:"xmlns:podcast,attr"`
+	ChannelTitle string      `xml:"channel>title"`
+	ChannelLink  string      `xml:"channel>link"`
+	ChannelDesc  string      `xml:"channel>description"`
+	Author       string      `xml:"channel>itunes:author"`
+	PodcastGUID  string      `xml:"channel>podcast:guid"`
+	Persons      []rssPerson `xml:"channel>podcast:person"`
+	Items        []rssItem   `xml:"channel>item"`
+}
+
+type rssPerson struct {
+	Name string `xml:",chardata"`
+	Role string `xml:"role,attr,omitempty"`
+	Href string `xml:"href,attr,omitempty"`
 }
 
 type rssItem struct {
@@ -116,7 +143,7 @@ func GeneratePodcastFeed(dir string, feed FeedSpec, baseURL string) (string, err
 	doc := rssDoc{
 		Version:      "2.0",
 		ITunesNS:     "http://www.itunes.com/dtds/podcast-1.0.dtd",
-		PodcastNS:    "https://podcastindex.org/namespace/1.0",
+		PodcastNS:    podcastNS,
 		ChannelTitle: feed.Title,
 		ChannelLink:  feed.Link,
 		ChannelDesc:  feed.Description,
@@ -125,6 +152,12 @@ func GeneratePodcastFeed(dir string, feed FeedSpec, baseURL string) (string, err
 	}
 	if doc.ChannelLink == "" {
 		doc.ChannelLink = base
+	}
+	if feed.LegacyNamespace {
+		doc.PodcastNS = legacyPodcastNS
+	}
+	for _, p := range feed.Persons {
+		doc.Persons = append(doc.Persons, rssPerson(p))
 	}
 
 	for _, ep := range feed.Episodes {
@@ -146,7 +179,10 @@ func GeneratePodcastFeed(dir string, feed FeedSpec, baseURL string) (string, err
 		if !ok {
 			return "", fmt.Errorf("fixtures: episode %q: no enclosure MIME type for container %q", ep.GUID, s.Container)
 		}
-		total := s.LeadSilence + s.Duration + s.TrailSilence
+		declared := s.LeadSilence + s.Duration + s.TrailSilence
+		if ep.DeclaredDuration > 0 {
+			declared = ep.DeclaredDuration
+		}
 		item := rssItem{
 			Title:       ep.Title,
 			GUID:        rssGUID{IsPermaLink: "false", Value: ep.GUID},
@@ -157,7 +193,7 @@ func GeneratePodcastFeed(dir string, feed FeedSpec, baseURL string) (string, err
 				Type:   mime,
 				Length: info.Size(),
 			},
-			Duration: fmt.Sprintf("%d", int64(total/time.Second)),
+			Duration: fmt.Sprintf("%d", int64(declared/time.Second)),
 		}
 
 		if ep.TranscriptVTT != "" {
@@ -214,9 +250,36 @@ func EarlyPodcastFeed(baseURL string) FeedSpec {
 	)
 }
 
-// GeneratePresetFeeds writes both preset feeds under dir: the default one
-// at its root and EarlyPodcastFeed in EarlyFeedDir, each with enclosure
-// URLs under its own directory at baseURL. It returns both feed.xml paths.
+// RelayFeedDir is the directory RelayPodcastFeed is written to and served
+// from.
+const RelayFeedDir = "relayed"
+
+// relayFeedChapters is the relay feed's episode's Podcasting 2.0 chapters
+// document.
+const relayFeedChapters = `{"version":"1.2.0","chapters":[{"startTime":0,"title":"Cold open"},{"startTime":2,"title":"Running over"}]}`
+
+// RelayPodcastFeed is a third preset feed, of one chaptered episode whose
+// feed declares 3 s for its 5.5 s of audio, past the start of its last
+// chapter: a server reading the feed ends that chapter at the declared 3 s.
+// No test fetches it, so it is only ever streamed from the feed.
+func RelayPodcastFeed(baseURL string) FeedSpec {
+	show := presetShow{
+		title:  "The Overrun Feed",
+		host:   "Overrun Host",
+		newest: time.Date(2026, 1, 20, 9, 30, 0, 0, time.UTC),
+		lead:   1500 * time.Millisecond,
+		trail:  time.Second,
+	}
+	ep := show.episode(0, "Running Over", "wd-relay-ep-001", "The one that runs past its billing.", 3*time.Second)
+	ep.ChaptersJSON = relayFeedChapters
+	ep.DeclaredDuration = 3 * time.Second
+	return show.feed(baseURL, "One episode that runs longer than its feed says.", ep)
+}
+
+// GeneratePresetFeeds writes the three preset feeds under dir: the default
+// one at its root, EarlyPodcastFeed in EarlyFeedDir and RelayPodcastFeed in
+// RelayFeedDir, each with enclosure URLs under its own directory at
+// baseURL. It returns their feed.xml paths in that order.
 func GeneratePresetFeeds(dir, baseURL string) ([]string, error) {
 	base := strings.TrimRight(baseURL, "/")
 	feedPath, err := GeneratePodcastFeed(dir, DefaultPodcastFeed(base), base)
@@ -228,7 +291,12 @@ func GeneratePresetFeeds(dir, baseURL string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []string{feedPath, earlyPath}, nil
+	relayBase := base + "/" + RelayFeedDir
+	relayPath, err := GeneratePodcastFeed(filepath.Join(dir, RelayFeedDir), RelayPodcastFeed(relayBase), relayBase)
+	if err != nil {
+		return nil, err
+	}
+	return []string{feedPath, earlyPath, relayPath}, nil
 }
 
 // presetShow is what every episode of one preset feed shares: each is an
@@ -291,10 +359,12 @@ That is all for today.
 const defaultFeedChapters = `{"version":"1.2.0","chapters":[{"startTime":0,"title":"Intro"},{"startTime":2,"title":"Body"}]}`
 
 // DefaultPodcastFeed is the preset feed the end-to-end harness serves:
-// three MP3 episodes of silence-padded tones of distinct lengths, on fixed
+// four MP3 episodes of silence-padded tones of distinct lengths, on fixed
 // descending dates so goldens stay stable, the first with a transcript and
-// chapters. baseURL becomes the channel link; the enclosure URLs come from
-// the baseURL passed to GeneratePodcastFeed.
+// chapters. The oldest is never fetched by any test, so one test can rely
+// on an episode the server has never held. baseURL becomes the channel
+// link; the enclosure URLs come from the baseURL passed to
+// GeneratePodcastFeed.
 func DefaultPodcastFeed(baseURL string) FeedSpec {
 	show := presetShow{
 		title:  "The Fixture Feed",
@@ -306,9 +376,10 @@ func DefaultPodcastFeed(baseURL string) FeedSpec {
 	ep1 := show.episode(0, "Getting Waxy", "wd-fixture-ep-001", "The pilot episode.", 3*time.Second)
 	ep1.TranscriptVTT = defaultFeedTranscript
 	ep1.ChaptersJSON = defaultFeedChapters
-	return show.feed(baseURL, "Three tiny synthesized episodes for WaxDeck tests.",
+	return show.feed(baseURL, "Four tiny synthesized episodes for WaxDeck tests.",
 		ep1,
 		show.episode(1, "Second Pressing", "wd-fixture-ep-002", "The difficult second episode.", 4*time.Second),
 		show.episode(2, "Deep Grooves", "wd-fixture-ep-003", "The one that found its stride.", 5*time.Second),
+		show.episode(3, "Liner Notes", "wd-fixture-ep-004", "The one nobody has fetched.", 2*time.Second),
 	)
 }

@@ -15,9 +15,9 @@ package service
 //
 // Caching is narrow on purpose. Only the unfiltered enumeration, only
 // per dimension and order, only for full-visibility callers, keyed on
-// the catalog feed position - the same restriction TrackFacts applies,
-// for the same reason: Facet takes a user pid and a query, so a
-// restricted caller's answer is not a function of the tail alone. A
+// the catalog content position - the same restriction and key TrackFacts
+// applies, for the same reason: Facet takes a user pid and a query, so a
+// restricted caller's answer is not a function of the position alone. A
 // restricted caller's enumeration is computed live every time.
 //
 // Bucket counts carry the caller's granted libraries and their tag
@@ -232,12 +232,13 @@ type FacetPage struct {
 // facetCache holds the full-visibility enumerations, keyed by dimension
 // and order within one generation of the inputs they were computed from.
 //
-// The generation is the pair (catalog feed position, genre vocabulary
+// The generation is the pair (catalog content position, genre vocabulary
 // version), because a bucket list is a function of both: the catalog
 // supplies the buckets and counts, and WaxDeck's vocabulary supplies the
-// genre labels. Keying on the feed position alone would leave a
-// vocabulary edit invisible to the cache, since such an edit writes no
-// catalog state and so never moves the feed.
+// genre labels. Keying on the catalog alone would leave a vocabulary edit
+// invisible to the cache, since such an edit writes no catalog state. The
+// content position rather than the feed's, because no dimension counts a
+// user's state, and a play anywhere moves the feed.
 type facetCache struct {
 	mu          sync.Mutex
 	gen         facetGeneration
@@ -257,6 +258,13 @@ type facetCacheKey struct {
 type facetGeneration struct {
 	tail  int64
 	vocab int64
+}
+
+// dominates reports whether g is at or past o in both inputs. Two
+// generations read at different moments either order this way or are
+// incomparable, and an incomparable pair is no ground to replace either.
+func (g facetGeneration) dominates(o facetGeneration) bool {
+	return g.tail >= o.tail && g.vocab >= o.vocab
 }
 
 // FacetQuery is one request for a dimension's buckets. A struct because
@@ -430,7 +438,7 @@ func facetSeekPrefix(buckets []FacetBucket, prefix string) int {
 // facetBuckets computes (or serves from cache) a dimension's whole
 // bucket list for the caller, in the requested order.
 func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension string, group read.GroupBy, order FacetSort, scope facetScope, scoped query.Query) ([]FacetBucket, error) {
-	gen := l.facetGeneration()
+	gen := l.facetGeneration(ctx)
 	// A scoped enumeration takes part in the cache in neither direction.
 	// Not read, because the cached entry is the whole library's and
 	// answering it here would hand an artist page every album there is.
@@ -480,9 +488,14 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 	// what actually collapses them, by moving items onto one row.
 	var norm *genre.Normalizer
 	if dimension == facetDimensionGenre {
-		if norm, err = l.genreNormalizer(ctx); err != nil {
+		if err = l.fallbackFault("genre vocabulary"); err == nil {
+			norm, err = l.genreNormalizer(ctx)
+		}
+		if err != nil {
+			// Shown to this caller, never kept for the next one.
 			l.log.Warn("facets: genre vocabulary unavailable; showing stored labels", "err", err)
-			norm = nil
+			noteDegraded(ctx)
+			norm, cacheable = nil, false
 		}
 	}
 	out := make([]FacetBucket, 0, len(res.Buckets))
@@ -513,7 +526,7 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 		// never reach.
 		return out, nil
 	}
-	l.publishFacetBuckets(gen, dimension, order, out)
+	l.publishFacetBuckets(ctx, gen, dimension, order, out)
 
 	// Both orders come out of the one aggregation. The catalog call is the
 	// expensive half and the answers differ only in arrangement, so
@@ -525,13 +538,13 @@ func (l *Library) facetBuckets(ctx context.Context, uc *UserCtx, dimension strin
 	}
 	alternate := append([]FacetBucket(nil), out...)
 	sortFacetBuckets(alternate, other)
-	l.publishFacetBuckets(gen, dimension, other, alternate)
+	l.publishFacetBuckets(ctx, gen, dimension, other, alternate)
 	return out, nil
 }
 
 // facetGeneration reads the inputs a cached enumeration is valid for.
-func (l *Library) facetGeneration() facetGeneration {
-	return facetGeneration{tail: l.CatalogTailSeq(), vocab: l.genres.version.Load()}
+func (l *Library) facetGeneration(ctx context.Context) facetGeneration {
+	return facetGeneration{tail: l.CatalogContentSeq(ctx), vocab: l.genres.version.Load()}
 }
 
 // publishFacetBuckets stores an enumeration under the generation it was
@@ -547,11 +560,17 @@ func (l *Library) facetGeneration() facetGeneration {
 // invalidated it is exactly the kind of change that moves nothing else.
 // A result from an older generation is dropped for the mirror-image
 // reason: letting it land would roll the cache back and evict a newer
-// dimension's entry, turning every later read into a miss.
-func (l *Library) publishFacetBuckets(gen facetGeneration, dimension string, order FacetSort, buckets []FacetBucket) {
+// dimension's entry, turning every later read into a miss. The current
+// generation is read before the lock, which holds no catalog read, and
+// under it only a generation dominating the held one is installed, so a
+// publisher holding an older one cannot land after a newer publish.
+func (l *Library) publishFacetBuckets(ctx context.Context, gen facetGeneration, dimension string, order FacetSort, buckets []FacetBucket) {
+	if l.facetGeneration(ctx) != gen {
+		return
+	}
 	l.facets.mu.Lock()
 	defer l.facets.mu.Unlock()
-	if l.facetGeneration() != gen {
+	if l.facets.byDimension != nil && !gen.dominates(l.facets.gen) {
 		return
 	}
 	if l.facets.gen != gen || l.facets.byDimension == nil {
@@ -728,21 +747,10 @@ func (l *Library) scopedTo(ctx context.Context, uc *UserCtx, b *query.Builder) *
 	// read higher than the list it opened, and an "Appears on" card could
 	// open onto nothing.
 	b = b.WhereNode(l.contentRuleNode(ctx, uc))
-	if uc.AllLibraries {
-		return b
+	if grants := l.grantNode(ctx, uc); grants != nil {
+		b = b.WhereNode(grants)
 	}
-	libs := make([]string, 0, len(uc.Libraries))
-	for lib := range uc.Libraries {
-		libs = append(libs, lib)
-	}
-	// Sorted so the compiled SQL is stable across map iteration orders.
-	sort.Strings(libs)
-	// An allow-list, so `in`: it seeks the index and an empty grant
-	// compiles to `1=0`. Deliberately not `notIn` over the complement -
-	// that is an anti-join scanning the catalog, and it keeps fileless
-	// items, which belong to no library. Chunked, since the engine takes
-	// at most 500 values in one membership test.
-	return b.WhereNode(inSet("library", libs))
+	return b
 }
 
 // facetScopeQuery is facetScopeBuilder narrowed by an optional scope

@@ -31,6 +31,7 @@ type env struct {
 	ctx    context.Context
 	ts     *httptest.Server
 	svc    *service.Library
+	store  *db.DB
 	uc     *service.UserCtx
 	secret string // the minted app password
 	apID   string // its API id
@@ -38,6 +39,12 @@ type env struct {
 }
 
 func newEnv(t *testing.T) *env {
+	t.Helper()
+	return newEnvWith(t, nil)
+}
+
+// newEnvWith is newEnv with the service configuration adjusted.
+func newEnvWith(t *testing.T, mutate func(*service.Config)) *env {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -52,7 +59,7 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	group := supervise.NewGroup(log)
-	svc, err := service.Open(ctx, service.Config{
+	cfg := service.Config{
 		DataDir: dataDir,
 		Roots:   []service.Root{{Name: "lib", Path: t.TempDir()}},
 		Sealer:  sealer,
@@ -63,7 +70,11 @@ func newEnv(t *testing.T) *env {
 		PodcastRootName:       "podcasts",
 		AllowPrivateFeedHosts: true,
 		Logger:                log,
-	}, store, group)
+	}
+	if mutate != nil {
+		mutate(&cfg)
+	}
+	svc, err := service.Open(ctx, cfg, store, group)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,26 +100,46 @@ func newEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 
-	ts := httptest.NewServer(New(svc, false, log))
+	ts := httptest.NewServer(New(svc, false, cfg.Logger))
 	t.Cleanup(ts.Close)
 
 	return &env{
-		t: t, ctx: ctx, ts: ts, svc: svc, uc: uc,
+		t: t, ctx: ctx, ts: ts, svc: svc, store: store, uc: uc,
 		secret: ap.Secret, apID: ap.ID, feed: newFeedServer(t),
 	}
 }
 
 // newFeedServer serves a minimal well-formed two-episode RSS feed and
-// small fake enclosure bytes from one httptest server.
+// small fake enclosure bytes from one httptest server, and two more
+// one-episode shows at /feed2.xml and /feed3.xml, each its own show.
 func newFeedServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	var ts *httptest.Server
 	mux := http.NewServeMux()
 	audio := []byte("fake-mp3-bytes-for-tests")
-	for _, name := range []string{"/ep1.mp3", "/ep2.mp3"} {
+	for _, name := range []string{"/ep1.mp3", "/ep2.mp3", "/show2.mp3", "/show3.mp3"} {
 		mux.HandleFunc(name, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "audio/mpeg")
 			w.Write(audio)
+		})
+	}
+	for _, n := range []int{2, 3} {
+		mux.HandleFunc(fmt.Sprintf("/feed%d.xml", n), func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/rss+xml")
+			fmt.Fprintf(w, `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>Test Show %d</title>
+    <description>Another synthesized test feed</description>
+    <item>
+      <title>Show %d Pilot</title>
+      <guid>test-show-%d-ep-1</guid>
+      <enclosure url="%s/show%d.mp3" type="audio/mpeg" length="%d"/>
+      <itunes:duration>600</itunes:duration>
+      <pubDate>Wed, 07 Jan 2026 09:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>`, n, n, n, ts.URL, n, len(audio))
 		})
 	}
 	mux.HandleFunc("/feed.xml", func(w http.ResponseWriter, r *http.Request) {
@@ -140,6 +171,14 @@ func newFeedServer(t *testing.T) *httptest.Server {
 }
 
 func (e *env) feedURL() string { return e.feed.URL + "/feed.xml" }
+
+// feedURLOf is the nth fixture show's feed, the first being feedURL.
+func (e *env) feedURLOf(n int) string {
+	if n == 1 {
+		return e.feedURL()
+	}
+	return fmt.Sprintf("%s/feed%d.xml", e.feed.URL, n)
+}
 
 // call sends one request, with Basic app-password auth when basic is
 // set, and returns the response and its drained body.
@@ -318,8 +357,10 @@ func TestSubscriptionDiffUpload(t *testing.T) {
 	if err := json.Unmarshal(raw, &ack); err != nil {
 		t.Fatalf("upload ack: %v (body %s)", err, raw)
 	}
-	if ack.Timestamp <= 0 {
-		t.Fatalf("upload timestamp = %d, want positive", ack.Timestamp)
+	// A client keeps the answer as the since of its next delta, so a
+	// device that has read nothing yet is answered from the start.
+	if ack.Timestamp != 0 {
+		t.Fatalf("upload timestamp = %d, want 0 for a device that has read nothing", ack.Timestamp)
 	}
 	if !strings.Contains(string(raw), "update_urls") || len(ack.UpdateURLs) != 0 {
 		t.Fatalf("update_urls = %v (body %s), want present and empty", ack.UpdateURLs, raw)
@@ -364,6 +405,12 @@ func TestSubscriptionDiffUpload(t *testing.T) {
 	}
 	if !contains(delta.Add, feed) || len(delta.Remove) != 0 || delta.Timestamp <= 0 {
 		t.Fatalf("delta = %+v, want add [%s]", delta, feed)
+	}
+	// Once it has read, an upload answers where its read left it.
+	resp, raw = e.call("POST", "/api/2/subscriptions/alice/phone.json", `{"add":[],"remove":[]}`, true)
+	mustStatus(t, resp, raw, 200)
+	if err := json.Unmarshal(raw, &ack); err != nil || ack.Timestamp != delta.Timestamp {
+		t.Fatalf("an upload after the read answered %s (%v), want its read's %d", raw, err, delta.Timestamp)
 	}
 }
 
@@ -411,8 +458,8 @@ func TestFullListUpload(t *testing.T) {
 		t.Fatalf("after empty PUT list = %v, want empty", urls)
 	}
 
-	// The change log collapses per URL: the latest state since zero is
-	// the remove, so the add never resurfaces.
+	// The change log keeps a show's latest change: since zero that is the
+	// remove, so the add never resurfaces.
 	resp, raw = e.call("GET", "/api/2/subscriptions/alice/laptop.json?since=0", "", true)
 	mustStatus(t, resp, raw, 200)
 	var delta struct {
@@ -433,10 +480,10 @@ func TestEpisodeActions(t *testing.T) {
 	episode := e.feed.URL + "/ep1.mp3"
 	e.subscribe("phone")
 
-	// An invalid entry rejects the whole request.
+	// An entry that names no action is skipped, and stores nothing.
 	resp, raw := e.call("POST", "/api/2/episodes/alice.json",
 		fmt.Sprintf(`[{"podcast":%q,"episode":%q}]`, feed, episode), true)
-	mustStatus(t, resp, raw, 400)
+	mustStatus(t, resp, raw, 200)
 
 	// One play action, mixed case, with position and total.
 	resp, raw = e.call("POST", "/api/2/episodes/alice.json", fmt.Sprintf(
@@ -758,6 +805,25 @@ func TestUsernameMatchIsCaseInsensitive(t *testing.T) {
 	c := e.login("Alice", e.secret)
 	if got := e.withCookie(c, "GET", "/api/2/devices/alice.json", ""); got != 200 {
 		t.Errorf("a cookie from Alice's login on alice's path = %d, want 200", got)
+	}
+	for _, c := range []struct {
+		path string
+		want int
+	}{
+		{"/api/2/devices/ALICE.json", 200},
+		// Another account's path stays refused whatever its case.
+		{"/api/2/devices/BOB.json", 401},
+	} {
+		req, _ := http.NewRequest("GET", e.ts.URL+c.path, nil)
+		req.SetBasicAuth("alice", e.secret)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != c.want {
+			t.Errorf("Basic alice on %s = %d, want %d", c.path, resp.StatusCode, c.want)
+		}
 	}
 }
 

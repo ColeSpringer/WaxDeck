@@ -437,3 +437,32 @@ func TestAlbumHiddenOutsideTheGrant(t *testing.T) {
 		t.Fatalf("an album outside the grant should be not-found, got %v", err)
 	}
 }
+
+// A pinned book in the trash draws no card for anyone, and is not named
+// departed: emptying the trash is not the only way out of it.
+func TestEntityCardsDropABookInTheTrash(t *testing.T) {
+	t.Parallel()
+	ctx, svc, uc := newCatalogFixtureWith(t, catalogFixtureOptions{extra: func(t *testing.T, dir string) {
+		if _, err := fixtures.GenerateBook(dir); err != nil {
+			t.Fatal(err)
+		}
+	}})
+	books, err := svc.Items(ctx, uc, ItemFilter{MediaType: "audiobook"}, "", 10)
+	if err != nil || len(books.Items) != 1 {
+		t.Fatalf("books = %+v (%v), want the fixture book", books.Items, err)
+	}
+	book := books.Items[0].PID
+	if cards, _, err := svc.EntityCards(ctx, uc, []string{book}); err != nil || len(cards) != 1 {
+		t.Fatalf("cards before the trash = %+v (%v), want the book's", cards, err)
+	}
+	if _, err := svc.DeleteItems(ctx, uc, []string{book}, "trash", false); err != nil {
+		t.Fatal(err)
+	}
+	cards, gone, err := svc.EntityCards(ctx, uc, []string{book})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cards) != 0 || len(gone) != 0 {
+		t.Fatalf("a book in the trash = cards %+v, departed %v; want neither", cards, gone)
+	}
+}

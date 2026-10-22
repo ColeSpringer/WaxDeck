@@ -236,15 +236,16 @@ func TestSubsonicAuthAndStubs(t *testing.T) {
 		t.Fatalf("login-password env = %+v", env)
 	}
 
-	// Plain-password auth is refused with the token-auth code.
+	// Plain-password auth is refused as a mechanism this server does not
+	// support.
 	resp, err := http.Get(h.ts.URL + "/rest/ping?u=admin&p=" + secret + "&f=json")
 	if err != nil {
 		t.Fatal(err)
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if !strings.Contains(string(body), `"code":41`) {
-		t.Fatalf("p= auth = %s, want code 41", body)
+	if !strings.Contains(string(body), `"code":42`) {
+		t.Fatalf("p= auth = %s, want code 42", body)
 	}
 
 	// Scrobble is implemented: an unknown item answers the protocol's

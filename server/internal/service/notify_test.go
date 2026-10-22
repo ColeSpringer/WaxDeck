@@ -171,6 +171,8 @@ func TestNotificationLinks(t *testing.T) {
 		{"import-completed", "", "https://wax.example.com/review"},
 		{"feed-disabled", "pc-1", "https://wax.example.com/podcasts/pc-1"},
 		{"feed-disabled", "", "https://wax.example.com/podcasts"},
+		{"subscription-failed", "", "https://wax.example.com/podcasts"},
+		{"gpodder-device-removed", "", "https://wax.example.com/podcasts"},
 		{"episode-downloaded", "ep-1", "https://wax.example.com/episodes/ep-1"},
 		{"playlist-synced", "pl-1", "https://wax.example.com/playlists/pl-1"},
 		{notifyTestEvent, "", ""},

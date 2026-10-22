@@ -49,6 +49,14 @@
   "@notifFeedDisabledTitle": {
     "description": "Switch label for the `feed-disabled` notification."
   },
+  "notifGpodderDeviceRemovedHelp": "A new podcast app device took the place of the least recently seen one; what it kept followed stays followed.",
+  "@notifGpodderDeviceRemovedHelp": {
+    "description": "What the `gpodder-device-removed` notification is about, drawn under its switch: an account keeps fifty gpodder devices, and a new one past that removes the least recently seen."
+  },
+  "notifGpodderDeviceRemovedTitle": "Podcast app removed",
+  "@notifGpodderDeviceRemovedTitle": {
+    "description": "Switch label for the `gpodder-device-removed` notification, and the heading of its inbox row."
+  },
   "notifHealthFixFinishedHelp": "A library health fix you started finished.",
   "@notifHealthFixFinishedHelp": {
     "description": "What the health-fix-finished notification is about, in a delivery target's event checklist."
@@ -104,5 +112,13 @@
   "notifSignupRequestedTitle": "Account request",
   "@notifSignupRequestedTitle": {
     "description": "Switch label for the `signup-requested` notification."
+  },
+  "notifSubscriptionFailedHelp": "A podcast app syncing over gpodder asked to add a feed that could not be subscribed, or to change subscriptions this account may not change.",
+  "@notifSubscriptionFailedHelp": {
+    "description": "What the `subscription-failed` notification is about, drawn under its switch."
+  },
+  "notifSubscriptionFailedTitle": "Podcast subscriptions not changed",
+  "@notifSubscriptionFailedTitle": {
+    "description": "Switch label for the `subscription-failed` notification, and the heading of its inbox row: a subscription change a gpodder client asked for was not made, a feed that did not subscribe or any change from an account that may not change its subscriptions."
   }
 }

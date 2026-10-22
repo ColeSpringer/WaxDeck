@@ -19,8 +19,8 @@ class SleepTimerState {
   /// Time left on a countdown timer; null when no countdown runs.
   final Duration? remaining;
 
-  /// Book-timeline millisecond where end-of-chapter mode pauses; null
-  /// when end-of-chapter mode is off.
+  /// Millisecond on the item's timeline where end-of-chapter mode
+  /// pauses; null when end-of-chapter mode is off.
   final int? endOfChapterEndMs;
 
   /// The item the boundary was armed on, when the caller named it.
@@ -157,8 +157,8 @@ class SleepTimerController extends Notifier<SleepTimerState> {
   }
 
   /// Arms end-of-chapter mode: playback stops at [chapterEndMs] on the
-  /// book timeline of [pid]. Books only; the caller supplies the
-  /// boundary.
+  /// timeline of [pid]. Books and chaptered episodes; the caller
+  /// supplies the boundary.
   void startEndOfChapter(int chapterEndMs, {String? pid}) {
     _tick?.cancel();
     _tick = null;

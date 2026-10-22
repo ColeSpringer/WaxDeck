@@ -1,9 +1,8 @@
 // Package subsonic is the OpenSubsonic compatibility surface: ID3 and
 // folder-emulated browsing, search, cover art, streaming, playlists,
-// stars and ratings, scrobbling, bookmark parity over spoken-word
-// resume, read-only podcasts, and the internet radio library, so
-// mature third-party clients work against WaxDeck while the
-// first-party clients mature.
+// stars and ratings, scrobbling, bookmarks, read-only podcasts, and
+// the internet radio library, so mature third-party clients work
+// against WaxDeck while the first-party clients mature.
 // It sits on the service layer like any first-party handler; user
 // mapping, visibility, media-token minting, and the scrobble outbox
 // apply identically.
@@ -23,12 +22,12 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
-	"maps"
 	"math"
-	"math/rand/v2"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,6 +36,7 @@ import (
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
+	"github.com/colespringer/waxdeck/server/internal/connect"
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 	"github.com/colespringer/waxdeck/server/internal/httpcache"
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -71,7 +71,7 @@ type Handler struct {
 	version string
 	log     *slog.Logger
 
-	// The grouped index, cached against the catalog feed position
+	// The grouped index, cached against the catalog content position
 	// (polling clients browse far more often than the catalog
 	// changes). Read-only once built, so an entry is shared across
 	// requests. idxShared is the full-visibility view; idxScoped holds
@@ -88,6 +88,25 @@ type Handler struct {
 	// up.
 	totalsMu sync.Mutex
 	totals   map[playlistTotalKey]playlistTotal
+
+	// sessions is the connect subsystem getNowPlaying reads; nil when
+	// none was handed over.
+	sessions SessionSource
+
+	// pages stands in for the service's music lists in tests: the list,
+	// and the music folder it is read for, empty for the whole catalog.
+	pages func(uc *service.UserCtx, list, folder string) pageSource
+	// watch stands in for service.WatchDegraded in tests.
+	watch func(context.Context) (context.Context, func() bool)
+}
+
+// watchReads opens a watcher on the reads made under the context it
+// returns: a build that saw a read fall back is served, never kept.
+func (h *Handler) watchReads(ctx context.Context) (context.Context, func() bool) {
+	if h.watch != nil {
+		return h.watch(ctx)
+	}
+	return service.WatchDegraded(ctx)
 }
 
 // playlistTotalKey scopes a total to who asked: membership is filtered
@@ -99,9 +118,9 @@ type playlistTotalKey struct {
 }
 
 // playlistTotal is one computed answer, valid until the playlist is
-// edited or playlistTotalsTTL passes. A TTL rather than the catalog feed
-// position, which is wrong both ways: a play-state write moves no
-// catalog change, and one scan invalidates every entry at once.
+// edited or playlistTotalsTTL passes. A TTL rather than the catalog
+// content position, which is wrong both ways: a play-state write moves
+// no content, and one scan invalidates every entry at once.
 type playlistTotal struct {
 	updatedAtNS int64
 	at          time.Time
@@ -122,6 +141,17 @@ const playlistTotalsCap = 4096
 // cannot cut.
 func New(svc *service.Library, bridge *flow.Bridge, media *auth.MediaTokens, version string, log *slog.Logger) *Handler {
 	return &Handler{svc: svc, bridge: bridge, media: media, version: version, log: log}
+}
+
+// SessionSource is the slice of the connect subsystem getNowPlaying reads.
+type SessionSource interface {
+	Sessions(userID string) []connect.Session
+}
+
+// WithSessions has getNowPlaying answer from src, and returns h.
+func (h *Handler) WithSessions(src SessionSource) *Handler {
+	h.sessions = src
+	return h
 }
 
 // ServeHTTP dispatches one /rest/ request: authenticate, route, render.
@@ -145,6 +175,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, 0, "resolving user failed")
 		return
 	}
+	r = withCaller(r, uc)
 
 	switch view {
 	case "ping":
@@ -155,8 +186,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.getUser(w, r, u, uc)
 	case "getOpenSubsonicExtensions":
 		h.getOpenSubsonicExtensions(w, r)
+	case "tokenInfo":
+		h.ok(w, r, envelope{TokenInfo: &tokenInfo{Username: u.Username}})
 	case "getMusicFolders":
-		h.getMusicFolders(w, r)
+		h.getMusicFolders(w, r, uc)
 	case "getIndexes":
 		h.getIndexes(w, r, uc)
 	case "getMusicDirectory":
@@ -184,7 +217,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "getArtistInfo2":
 		h.getArtistInfo2(w, r)
 	case "getTopSongs":
-		h.getTopSongs(w, r)
+		h.getTopSongs(w, r, uc)
 	case "getSimilarSongs":
 		h.getSimilarSongs(w, r, uc, "similarSongs")
 	case "getSimilarSongs2":
@@ -230,7 +263,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "scrobble":
 		h.scrobble(w, r, uc)
 	case "getBookmarks":
-		h.getBookmarks(w, r, uc)
+		h.getBookmarks(w, r, uc, u.Username)
 	case "createBookmark":
 		h.createBookmark(w, r, uc)
 	case "deleteBookmark":
@@ -244,13 +277,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case "deleteInternetRadioStation":
 		h.deleteInternetRadioStation(w, r)
 	case "getNowPlaying":
-		// Live session tracking arrives with the connect subsystem;
-		// an empty list beats an error for the clients that poll it.
-		h.ok(w, r, envelope{NowPlaying: &nowPlaying{}})
+		h.getNowPlaying(w, r, uc)
 	case "jukeboxControl":
-		h.fail(w, r, 0, "jukebox mode is not available on this server yet")
+		h.fail(w, r, 0, "jukebox mode is not available on this server")
 	case "savePlayQueue", "getPlayQueue":
-		h.fail(w, r, 0, "play queue sync is not available on this server yet")
+		h.fail(w, r, 0, "play queue sync is not available on this server")
 	default:
 		// Everything else is an explicit stub, never a 500.
 		h.fail(w, r, 0, "not implemented by this server")
@@ -265,20 +296,27 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // answer identically so the surface confirms no account's existence.
 // authenticate answers the account and the app password it presented.
 func (h *Handler) authenticate(r *http.Request) (*wdb.User, string, int, string) {
+	username := r.Form.Get("u")
+	token := r.Form.Get("t")
+	salt := r.Form.Get("s")
+	password := r.Form.Get("p")
 	if key := r.Form.Get("apiKey"); key != "" {
+		if username != "" || token != "" || salt != "" || password != "" {
+			return nil, "", 43, "an API key cannot be combined with other credentials"
+		}
 		u, id, err := h.svc.VerifyAppPasswordKey(r.Context(), key)
 		if err != nil || u == nil {
 			return nil, "", 44, "invalid API key"
 		}
 		return u, id, 0, ""
 	}
-	username := r.Form.Get("u")
-	token := r.Form.Get("t")
-	salt := r.Form.Get("s")
-	if username == "" || token == "" || salt == "" {
-		if r.Form.Get("p") != "" {
-			return nil, "", 41, "password authentication is not supported; use token authentication with an app password"
+	if password != "" {
+		if token != "" || salt != "" {
+			return nil, "", 43, "a password cannot be combined with a token"
 		}
+		return nil, "", 42, "password authentication is not supported; use token authentication with an app password"
+	}
+	if username == "" || token == "" || salt == "" {
 		return nil, "", 10, "missing authentication parameters"
 	}
 	u, id, err := h.svc.VerifyAppPasswordToken(r.Context(), username, token, salt)
@@ -339,36 +377,24 @@ func (h *Handler) getUser(w http.ResponseWriter, r *http.Request, u *wdb.User, u
 		DownloadRole: tc.Download,
 		UploadRole:   tc.UploadEnabled,
 		PlaylistRole: true,
-		PodcastRole:  tc.ManagePodcasts,
 		StreamRole:   true,
-		ShareRole:    tc.SharedOutputs,
 		// Nothing behind these: there are no comments, jukeboxControl
-		// refuses, and the transcoder serves audio only.
+		// refuses, the transcoder serves audio only, and this surface has
+		// no share verbs and no podcast management, so a client must not
+		// draw those controls.
 		CommentRole:         false,
 		JukeboxRole:         false,
 		VideoConversionRole: false,
+		PodcastRole:         false,
+		ShareRole:           false,
 	}})
 }
 
 // --- browse ------------------------------------------------------------------
 
-func (h *Handler) getMusicFolders(w http.ResponseWriter, r *http.Request) {
-	libs, err := h.svc.Libraries(r.Context())
-	if err != nil {
-		h.fail(w, r, 0, "listing libraries failed")
-		return
-	}
-	out := &musicFolders{}
-	for i, lib := range libs {
-		out.Folders = append(out.Folders, musicFolder{ID: i + 1, Name: lib.Name})
-	}
-	h.ok(w, r, envelope{MusicFolders: out})
-}
-
 func (h *Handler) getArtists(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	idx, err := h.index(r.Context(), uc)
-	if err != nil {
-		h.fail(w, r, 0, "reading the library failed")
+	idx, ok := h.scopedIndex(w, r, uc)
+	if !ok {
 		return
 	}
 	out := &artistsID3{IgnoredArticles: ""}
@@ -431,78 +457,141 @@ func (h *Handler) getAlbum(w http.ResponseWriter, r *http.Request, uc *service.U
 }
 
 func (h *Handler) getAlbumList2(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	idx, err := h.index(r.Context(), uc)
+	idx, ok := h.scopedIndex(w, r, uc)
+	if !ok {
+		return
+	}
+	albums, marks, ref, err := h.albumList(r.Context(), r, uc, idx)
+	if ref != nil {
+		h.fail(w, r, ref.code, ref.msg)
+		return
+	}
 	if err != nil {
-		h.fail(w, r, 0, "reading the library failed")
+		h.failFromService(w, r, err, "listing albums failed")
 		return
 	}
 	out := &albumList2{}
-	for _, al := range h.pagedAlbums(r, idx) {
+	for _, al := range albums {
 		out.Albums = append(out.Albums, al.id3())
 	}
-	h.ok(w, r, envelope{AlbumList2: out})
-}
-
-// pagedAlbums applies the album-list type, size, and offset shared by
-// both list flavors (getAlbumList2 renders ID3 shapes, getAlbumList
-// directory children).
-func (h *Handler) pagedAlbums(r *http.Request, idx *index) []*album {
-	size := formInt(r, "size", 10)
-	if size < 1 {
-		size = 10
-	}
-	if size > 500 {
-		size = 500
-	}
-	offset := formInt(r, "offset", 0)
-	if offset < 0 {
-		offset = 0
-	}
-
-	albums := make([]*album, len(idx.albums))
-	copy(albums, idx.albums)
-	switch r.Form.Get("type") {
-	case "random":
-		rand.Shuffle(len(albums), func(i, j int) { albums[i], albums[j] = albums[j], albums[i] })
-	case "byYear":
-		sort.SliceStable(albums, func(i, j int) bool { return albums[i].year < albums[j].year })
-	case "byGenre":
-		g := r.Form.Get("genre")
-		kept := albums[:0]
-		for _, al := range albums {
-			if al.genre == g {
-				kept = append(kept, al)
-			}
-		}
-		albums = kept
-	default:
-		// alphabeticalByName is the shape everything else falls back to:
-		// played-derived lists need per-user history this surface does
-		// not serve yet, and an ordered list beats an error for a
-		// read-only browse.
-	}
-	var out []*album
-	for i := offset; i < len(albums) && len(out) < size; i++ {
-		out = append(out, albums[i])
-	}
-	return out
+	h.ok(w, r, envelope{AlbumList2: out, entityMarks: marks})
 }
 
 func (h *Handler) getSong(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
 	id := r.Form.Get("id")
+	if id == "" {
+		h.fail(w, r, 10, "missing id")
+		return
+	}
+	// An episode's streamId is its own pid, so a client resolving one
+	// asks for it here.
+	if strings.HasPrefix(id, service.PrefixEpisode+"-") {
+		ep, showExplicit, err := h.svc.EpisodeSummaryFor(r.Context(), uc, id)
+		if err != nil {
+			h.failFromService(w, r, err, "no such song")
+			return
+		}
+		song := episodeShape(ep, service.PodcastShow{PID: ep.ShowPID, Explicit: showExplicit}).child
+		h.ok(w, r, envelope{Song: &song})
+		return
+	}
 	idx, err := h.index(r.Context(), uc)
 	if err != nil {
 		h.fail(w, r, 0, "reading the library failed")
 		return
 	}
-	tr := idx.trackByPID[id]
-	if tr == nil {
+	if tr := idx.trackByPID[id]; tr != nil {
+		song := songChild(*tr, idx.albumForTrack(*tr))
+		h.ok(w, r, envelope{Song: &song})
+		return
+	}
+	// A book is a song entry wherever the surface hands one out (starred
+	// lists, playlists, bookmarks), so it resolves here too.
+	items, err := h.svc.SubsonicItems(r.Context(), uc, []string{id})
+	if err != nil {
+		h.failFromService(w, r, err, "no such song")
+		return
+	}
+	it, ok := items[id]
+	if !ok {
 		h.fail(w, r, 70, "no such song")
 		return
 	}
-	al := idx.albumForTrack(*tr)
-	song := songChild(*tr, al)
+	song := h.entryChild(idx, it)
 	h.ok(w, r, envelope{Song: &song})
+}
+
+// getNowPlaying answers the playback sessions the caller can see, each
+// the item it is on, with who plays it, the device it plays on, and how
+// many minutes ago the session last moved; a paused one only for ten
+// minutes after it last moved. An item the caller may not be offered is
+// left out, a housemate's on a shared device included.
+func (h *Handler) getNowPlaying(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
+	out := &nowPlaying{}
+	var sessions []connect.Session
+	if h.sessions != nil {
+		sessions = h.sessions.Sessions(uc.ID)
+	}
+	now := time.Now()
+	on := nowPlayingSessions(sessions, now)
+	pids := make([]string, len(on))
+	for i, s := range on {
+		pids[i] = s.Entries[s.Index].PID
+	}
+	if len(on) > 0 {
+		idx, err := h.index(r.Context(), uc)
+		if err != nil {
+			h.fail(w, r, 0, "reading the library failed")
+			return
+		}
+		items, err := h.svc.SubsonicItems(r.Context(), uc, pids)
+		if err != nil {
+			h.failFromService(w, r, err, "reading what is playing failed")
+			return
+		}
+		for _, s := range on {
+			it, ok := items[s.Entries[s.Index].PID]
+			if !ok {
+				continue
+			}
+			out.Entries = append(out.Entries, nowPlayingEntry{
+				child:      h.entryChild(idx, it),
+				Username:   s.OwnerName,
+				MinutesAgo: max(0, int(now.Sub(s.UpdatedAt).Minutes())),
+				PlayerID:   playerID(s.EndpointID),
+				PlayerName: s.EndpointName,
+			})
+		}
+	}
+	h.ok(w, r, envelope{NowPlaying: out})
+}
+
+// pausedNowPlaying is how long after its last report a paused session
+// still lists as now playing: one parked in an open tab or on a speaker
+// lives for days.
+const pausedNowPlaying = 10 * time.Minute
+
+// nowPlayingSessions picks the sessions getNowPlaying lists: live ones on
+// an entry of their queue, playing or paused within pausedNowPlaying.
+func nowPlayingSessions(sessions []connect.Session, now time.Time) []connect.Session {
+	var on []connect.Session
+	for _, s := range sessions {
+		if s.Ended || s.Index < 0 || s.Index >= len(s.Entries) {
+			continue
+		}
+		if s.Playing || now.Sub(s.UpdatedAt) <= pausedNowPlaying {
+			on = append(on, s)
+		}
+	}
+	return on
+}
+
+// playerID is the protocol's integer player id for a device: stable for
+// the device, and never negative.
+func playerID(endpointID string) int {
+	sum := fnv.New32a()
+	sum.Write([]byte(endpointID))
+	return int(sum.Sum32() & math.MaxInt32)
 }
 
 func (h *Handler) getGenres(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
@@ -525,6 +614,11 @@ func (h *Handler) getGenres(w http.ResponseWriter, r *http.Request, uc *service.
 		}
 		g.SongCount++
 	}
+	for _, al := range idx.albums {
+		for _, name := range al.genres {
+			counts[name].AlbumCount++
+		}
+	}
 	sort.Strings(order)
 	out := &genres{}
 	for _, name := range order {
@@ -538,18 +632,18 @@ func (h *Handler) search3(w http.ResponseWriter, r *http.Request, uc *service.Us
 	// Clients send empty or `""` probes to enumerate; answer over the
 	// index instead of erroring.
 	q = strings.Trim(q, `"`)
-	idx, err := h.index(r.Context(), uc)
-	if err != nil {
-		h.fail(w, r, 0, "reading the library failed")
+	idx, ok := h.scopedIndex(w, r, uc)
+	if !ok {
 		return
 	}
 	match := func(s string) bool {
 		return q == "" || strings.Contains(strings.ToLower(s), strings.ToLower(q))
 	}
 	out := &searchResult3{}
-	artistCount := formInt(r, "artistCount", 20)
-	albumCount := formInt(r, "albumCount", 20)
-	songCount := formInt(r, "songCount", 20)
+	// Clamped as the other lists are, except that zero asks for none: a
+	// client counting songs asks for no artists and no albums beside them.
+	count := func(name string) int { return min(max(formInt(r, name, 20), 0), 500) }
+	artistCount, albumCount, songCount := count("artistCount"), count("albumCount"), count("songCount")
 	// The offsets are how a client walks a result set larger than one
 	// page, and clients lean on them harder than "page 2" suggests:
 	// Feishin discovers how many tracks a server holds by asking for
@@ -601,6 +695,10 @@ func (h *Handler) search3(w http.ResponseWriter, r *http.Request, uc *service.Us
 
 func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
 	id := r.Form.Get("id")
+	if id == "" {
+		h.fail(w, r, 10, "missing id")
+		return
+	}
 	pid := id
 	// Artist and album ids resolve through a member item, whose art
 	// chain falls back to album and artist artwork. An entity pid could
@@ -624,7 +722,7 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 			tracks = a.albums[0].tracks
 		}
 		if len(tracks) == 0 {
-			h.fail(w, r, 70, "no such cover")
+			h.failStatus(w, r, http.StatusNotFound, 70, "no such cover")
 			return
 		}
 		pid = tracks[0].PID
@@ -641,7 +739,14 @@ func (h *Handler) getCoverArt(w http.ResponseWriter, r *http.Request, uc *servic
 	// Subsonic has no artwork-slot concept; it always serves the front cover.
 	blob, err := h.svc.Art(r.Context(), uc, pid, "", size)
 	if err != nil {
-		h.fail(w, r, 70, "no such cover")
+		// A cover that is not there is a 404 an image element can see;
+		// a read that failed for another reason says so as the protocol
+		// does.
+		if service.KindOf(err) == service.KindNotFound {
+			h.failStatus(w, r, http.StatusNotFound, 70, "no such cover")
+			return
+		}
+		h.failFromService(w, r, err, "no such cover")
 		return
 	}
 	// The same validator the first-party art endpoint mints: the source
@@ -747,20 +852,26 @@ func (h *Handler) stream(w http.ResponseWriter, r *http.Request, uc *service.Use
 	// A bitrate cap and a start offset are the stream parameters this
 	// surface honours; the mint clamps both.
 	//
-	// `format` is read only alongside the cap, and only as the encode's
-	// target. `raw` is the protocol's own "do not transcode", so it
-	// beats the cap outright; anything else is what the client says it
-	// decodes, and a cap that landed in another container would be
-	// silence on a client that asked for the best quality it could
-	// play. A format on its own still changes nothing: without a cap
-	// there is no encode to aim.
+	// `format` is read only as a capped encode's target. `raw` is the
+	// protocol's own "do not transcode", so it beats the cap outright;
+	// anything else is what the client says it decodes, and a cap that
+	// landed in another container would be silence on a client that
+	// asked for the best quality it could play. A client that names no
+	// format gets MP3, the one lossy format every client decodes. A
+	// format on its own still changes nothing: without a cap, the
+	// client's or the account's, there is no encode to aim.
 	opts := flow.PlayOptions{Cred: credOf(r)}
+	if format != "raw" {
+		opts.CapFormat = format
+		if format == "" {
+			opts.CapFormat = "mp3"
+		}
+	}
 	if br := formInt(r, "maxBitRate", 0); br > 0 && format != "raw" {
 		// Passed on as asked: the protocol has no way to refuse a number
 		// and clients send whatever their setting says, so the mint's own
 		// clamp is what makes it a bitrate the engine can speak.
 		opts.MaxBitrateKbps = br
-		opts.CapFormat = format
 	}
 	// An offset is the only way this protocol positions a stream, so it
 	// cuts an original too (which plays directly otherwise); raw is the
@@ -913,10 +1024,18 @@ type album struct {
 	artistID string
 	name     string
 	year     int
+	// genre is the one most of the tracks carry; genres is every one any
+	// of them does, which is what a genre list matches on.
 	genre    string
+	genres   []string
 	durMS    int64
 	explicit bool
 	tracks   []track
+}
+
+// hasGenre reports whether any of the album's tracks carries g.
+func (al *album) hasGenre(g string) bool {
+	return slices.Contains(al.genres, g)
 }
 
 type artist struct {
@@ -927,6 +1046,25 @@ type artist struct {
 }
 
 type index struct {
+	// tail is the catalog position the index was built at, and facts the
+	// entity facts it was built with, which a folder's index is cut from.
+	// folder is the library a cut holds, empty for a caller's whole index.
+	tail   int64
+	facts  map[string]service.EntityFacts
+	folder string
+
+	// What is derived from the index once it is built: the folder cuts,
+	// the newest list folded as far as anyone has asked, the albums in
+	// artist order, and each caller's folds of their own played lists.
+	cutsMu       sync.Mutex
+	cuts         map[string]*index
+	newestMu     sync.Mutex
+	newest       fold
+	byArtistOnce sync.Once
+	byArtist     []*album
+	playedMu     sync.Mutex
+	played       map[string]*playedFolds
+
 	tracks     []track
 	artists    []*artist
 	albums     []*album
@@ -983,7 +1121,8 @@ func (idx *index) albumForTrack(tr track) *album {
 // the catalog. That makes this a memory cap rather than a hit rate:
 // four is chosen against the resident cost, not against how many
 // accounts are browsing, and every restricted account sharing one grant
-// set shares one entry.
+// set shares one entry. An entry browsed by music folder also holds its
+// folder cuts, together up to one more copy of its tracks.
 const idxScopedCap = 4
 
 // indexScope identifies the visibility an index was built for: empty
@@ -994,11 +1133,11 @@ const idxScopedCap = 4
 // length-prefixed so no rule value can fake a boundary.
 //
 // The key must name every per-caller input of the sweep it fronts:
-// sweepTrackFacts filters on itemVisible (uc.Libraries) and conjoins
-// the caller's tag rules (contentRuleNode). A third input added there
-// has to be added here in the same change, or one account reads
-// another's index. The service-level trackFacts cache shares the
-// assumption, gated on the same rule-free predicate.
+// sweepTrackFacts filters on viewVisible (the row's library against
+// uc.Libraries) and conjoins the caller's tag rules (contentRuleNode). A
+// third input added there has to be added here in the same change, or
+// one account reads another's index. The service-level trackFacts cache
+// shares the assumption, gated on the same rule-free predicate.
 func indexScope(uc *service.UserCtx) string {
 	scope := ""
 	if !uc.AllLibraries {
@@ -1035,33 +1174,37 @@ func contentRuleScope(uc *service.UserCtx) string {
 }
 
 // index returns the grouped view over the service's track sweep,
-// cached against the catalog feed position for every caller. A
+// cached against the catalog content position for every caller. A
 // restricted caller's entry is keyed on their grants as well, which
 // keeps visibility exact - the sweep it caches is already filtered -
 // while letting a client that pages hard read one build instead of one
 // per page.
 func (h *Handler) index(ctx context.Context, uc *service.UserCtx) (*index, error) {
-	tail := h.svc.CatalogTailSeq()
+	tail := h.svc.CatalogContentSeq(ctx)
 	scope := indexScope(uc)
 	if idx := h.cachedIndex(tail, scope); idx != nil {
 		return idx, nil
 	}
-	rows, err := h.svc.TrackFacts(ctx, uc)
+	build, fell := h.watchReads(ctx)
+	rows, err := h.svc.TrackFacts(build, uc)
 	if err != nil {
 		return nil, err
 	}
-	names, err := h.entityNames(ctx, rows)
+	facts, err := h.entityFacts(build, rows)
 	if err != nil {
 		return nil, err
 	}
-	idx := buildIndex(rows, names)
+	idx := buildIndex(rows, facts)
+	idx.tail = tail
 	// The catalog position is re-read rather than trusted: a sweep takes
 	// time, and during a scan the tail moves throughout it. A build that
 	// finished against a position the catalog has already left can never
 	// be served - readers match on the current tail - and caching it
 	// would stamp the whole cache with a stale generation and throw away
-	// every entry built since.
-	if h.svc.CatalogTailSeq() == tail {
+	// every entry built since. A build a read fell back under (a content
+	// rule compiled to match-nothing, the advisory flags lost) is this
+	// request's alone.
+	if !fell() && h.svc.CatalogContentSeq(ctx) == tail {
 		h.cacheIndex(tail, scope, idx)
 	}
 	return idx, nil
@@ -1115,42 +1258,32 @@ func (h *Handler) cacheIndex(tail int64, scope string, idx *index) {
 	h.idxScoped[scope] = idx
 }
 
-// entityNames resolves the catalog's display name for every artist and
-// album entity the sweep references, keyed by API pid. Once a group is
-// keyed on identity its label can no longer come from whichever member
-// row the sweep reached first: two tracks of one album with differently
-// spelled tags would otherwise name the group nondeterministically, in
-// a cached index. Two batched lookups per build, one per kind.
-func (h *Handler) entityNames(ctx context.Context, rows []track) (map[string]string, error) {
-	var artistPIDs, albumPIDs []string
+// entityFacts resolves the catalog's display name for every artist and
+// album entity the sweep references, and each album's year, keyed by API
+// pid. Once a group is keyed on identity its label can no longer come
+// from whichever member row the sweep reached first: two tracks of one
+// album with differently spelled tags would otherwise name the group
+// nondeterministically, in a cached index. One batched lookup per kind.
+func (h *Handler) entityFacts(ctx context.Context, rows []track) (map[string]service.EntityFacts, error) {
 	seen := make(map[string]bool, len(rows))
-	collect := func(pid string, into *[]string) {
-		if pid == "" || seen[pid] {
-			return
-		}
-		seen[pid] = true
-		*into = append(*into, pid)
-	}
+	var pids []string
 	for _, tr := range rows {
-		collect(tr.AlbumArtistPID, &artistPIDs)
-		collect(tr.AlbumPID, &albumPIDs)
-	}
-	names := make(map[string]string, len(artistPIDs)+len(albumPIDs))
-	for _, pids := range [][]string{artistPIDs, albumPIDs} {
-		if len(pids) == 0 {
-			continue
+		for _, pid := range []string{tr.AlbumArtistPID, tr.AlbumPID} {
+			if pid != "" && !seen[pid] {
+				seen[pid] = true
+				pids = append(pids, pid)
+			}
 		}
-		batch, err := h.svc.EntityNames(ctx, pids)
-		if err != nil {
-			return nil, err
-		}
-		maps.Copy(names, batch)
 	}
-	return names, nil
+	if len(pids) == 0 {
+		return nil, nil
+	}
+	return h.svc.EntityFacts(ctx, pids)
 }
 
-func buildIndex(rows []track, names map[string]string) *index {
+func buildIndex(rows []track, facts map[string]service.EntityFacts) *index {
 	idx := &index{
+		facts:        facts,
 		tracks:       rows,
 		artistByID:   make(map[string]*artist),
 		albumByID:    make(map[string]*album),
@@ -1168,7 +1301,7 @@ func buildIndex(rows []track, names map[string]string) *index {
 	for i := range rows {
 		tr := rows[i]
 		idx.trackByPID[tr.PID] = &rows[i]
-		artistName, albumName := groupNames(tr, names)
+		artistName, albumName := groupNames(tr, facts)
 
 		artistID := tr.AlbumArtistPID
 		if artistID == "" {
@@ -1199,12 +1332,6 @@ func buildIndex(rows []track, names map[string]string) *index {
 		idx.albumByTrack[tr.PID] = al
 		al.tracks = append(al.tracks, tr)
 		al.durMS += tr.DurationMS
-		if al.year == 0 {
-			al.year = tr.Year
-		}
-		if al.genre == "" {
-			al.genre = tr.Genre
-		}
 		if tr.Explicit {
 			al.explicit = true
 		}
@@ -1253,6 +1380,7 @@ func buildIndex(rows []track, names map[string]string) *index {
 			}
 			return ti.Title < tj.Title
 		})
+		al.year, al.genre, al.genres = albumYearAndGenres(al, facts)
 	}
 	// The legacy id maps, filled in sorted order so a display-name
 	// collision resolves the same way on every build.
@@ -1267,6 +1395,37 @@ func buildIndex(rows []track, names map[string]string) *index {
 		}
 	}
 	return idx
+}
+
+// albumYearAndGenres derives an album's year and genres from all of its
+// tracks, in album order: the catalog's year where it holds the album,
+// its rule over the tracks' years otherwise, and as the genre the one
+// most tracks carry, the earliest of a tie.
+func albumYearAndGenres(al *album, facts map[string]service.EntityFacts) (int, string, []string) {
+	years := make([]int, 0, len(al.tracks))
+	counts := map[string]int{}
+	var genres []string
+	for _, tr := range al.tracks {
+		years = append(years, tr.Year)
+		if tr.Genre == "" {
+			continue
+		}
+		if counts[tr.Genre] == 0 {
+			genres = append(genres, tr.Genre)
+		}
+		counts[tr.Genre]++
+	}
+	year := service.AlbumYear(years)
+	if f, ok := facts[al.pid]; ok && al.pid != "" {
+		year = f.Year
+	}
+	top := ""
+	for _, g := range genres {
+		if counts[g] > counts[top] {
+			top = g
+		}
+	}
+	return year, top, genres
 }
 
 // foldLess orders case-insensitively, falling back to byte order so
@@ -1290,16 +1449,16 @@ const (
 // groupNames returns the names a track groups under: the catalog's
 // canonical entity name where the track carries an entity handle, its
 // own tags otherwise, empty tags folded into the unknown buckets.
-func groupNames(tr track, names map[string]string) (artistName, albumName string) {
+func groupNames(tr track, facts map[string]service.EntityFacts) (artistName, albumName string) {
 	artistName = tr.AlbumArtist
-	if n := names[tr.AlbumArtistPID]; n != "" {
+	if n := facts[tr.AlbumArtistPID].Name; n != "" {
 		artistName = n
 	}
 	if artistName == "" {
 		artistName = unknownArtist
 	}
 	albumName = tr.Album
-	if n := names[tr.AlbumPID]; n != "" {
+	if n := facts[tr.AlbumPID].Name; n != "" {
 		albumName = n
 	}
 	if albumName == "" {

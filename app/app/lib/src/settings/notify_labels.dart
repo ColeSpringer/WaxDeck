@@ -32,6 +32,7 @@ String? _title(AppLocalizations l, String token) => switch (token) {
   'episode-arrived' => l.notifEpisodeArrivedTitle,
   'episode-downloaded' => l.notifEpisodeDownloadedTitle,
   'feed-disabled' => l.notifFeedDisabledTitle,
+  'gpodder-device-removed' => l.notifGpodderDeviceRemovedTitle,
   'health-fix-finished' => l.notifHealthFixFinishedTitle,
   'import-completed' => l.notifImportCompletedTitle,
   'job-failed' => l.notifJobFailedTitle,
@@ -39,6 +40,7 @@ String? _title(AppLocalizations l, String token) => switch (token) {
   'playlist-synced' => l.notifPlaylistSyncedTitle,
   'review-ready' => l.notifReviewReadyTitle,
   'signup-requested' => l.notifSignupRequestedTitle,
+  'subscription-failed' => l.notifSubscriptionFailedTitle,
   _ => null,
 };
 
@@ -49,6 +51,7 @@ String? _help(AppLocalizations l, String token) => switch (token) {
   'episode-arrived' => l.notifEpisodeArrivedHelp,
   'episode-downloaded' => l.notifEpisodeDownloadedHelp,
   'feed-disabled' => l.notifFeedDisabledHelp,
+  'gpodder-device-removed' => l.notifGpodderDeviceRemovedHelp,
   'health-fix-finished' => l.notifHealthFixFinishedHelp,
   'import-completed' => l.notifImportCompletedHelp,
   'job-failed' => l.notifJobFailedHelp,
@@ -56,5 +59,6 @@ String? _help(AppLocalizations l, String token) => switch (token) {
   'playlist-synced' => l.notifPlaylistSyncedHelp,
   'review-ready' => l.notifReviewReadyHelp,
   'signup-requested' => l.notifSignupRequestedHelp,
+  'subscription-failed' => l.notifSubscriptionFailedHelp,
   _ => null,
 };

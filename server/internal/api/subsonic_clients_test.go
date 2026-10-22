@@ -103,7 +103,7 @@ func clientPostOK(t *testing.T, h *harness, secret, client, view string, form ur
 }
 
 // jmap and jlist navigate the decoded JSON; a missing list reads as
-// empty (the renderer emits null for empty slices).
+// empty.
 func jmap(v any) map[string]any {
 	m, _ := v.(map[string]any)
 	return m
@@ -114,9 +114,22 @@ func jlist(v any) []any {
 	return l
 }
 
+// addLaterAlbum scans in one more album after the demo one, so "most
+// recently added" and "alphabetically first" name different albums.
+func addLaterAlbum(t *testing.T, h *harness) {
+	t.Helper()
+	if _, err := fixtures.Generate(h.library,
+		albumListSpec("zebra1", "Zebra One", "Zebra Band", "Zebra Arrivals", "2025", "Pop"),
+	); err != nil {
+		t.Fatal(err)
+	}
+	h.rescanAndWait(t)
+}
+
 func TestSubsonicClientDSub(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
+	addLaterAlbum(t, h)
 	secret := newSubsonicSecret(t, h)
 	const c = "DSub"
 
@@ -177,10 +190,11 @@ func TestSubsonicClientDSub(t *testing.T) {
 		t.Fatalf("songID = %q", songID)
 	}
 
-	// The home screen lists and secondary tabs.
+	// The home screen lists and secondary tabs. "Recently added" leads
+	// with the album scanned last, not the alphabetical first.
 	env = mustOK(t, h, secret, c, "getAlbumList.view", "&type=newest&size=20")
-	if len(jlist(jmap(env["albumList"])["album"])) == 0 {
-		t.Fatal("getAlbumList answered no albums")
+	if albums := jlist(jmap(env["albumList"])["album"]); len(albums) != 2 || jmap(albums[0])["title"] != "Zebra Arrivals" {
+		t.Fatalf("getAlbumList newest = %v, want Zebra Arrivals first", albums)
 	}
 	env = mustOK(t, h, secret, c, "getRandomSongs.view", "&size=20")
 	if len(jlist(jmap(env["randomSongs"])["song"])) == 0 {
@@ -190,6 +204,7 @@ func TestSubsonicClientDSub(t *testing.T) {
 	mustOK(t, h, secret, c, "getPlaylists.view", "")
 	mustOK(t, h, secret, c, "getPodcasts.view", "")
 	mustOK(t, h, secret, c, "getBookmarks.view", "")
+	mustOK(t, h, secret, c, "getNowPlaying.view", "")
 
 	// Play: now-playing update, stream, timed submission.
 	mustOK(t, h, secret, c, "scrobble.view", "&id="+songID+"&submission=false")
@@ -382,9 +397,78 @@ func TestSubsonicClientFeishin(t *testing.T) {
 	streamAndAssertBytes(t, h, "/rest/stream.view?apiKey="+secret+"&id="+songID)
 }
 
+// TestSubsonicClientFeishinHomeRows replays Feishin's home screen: one
+// album list per row, POSTed the way it ships every request, then the
+// album page and the tracks index it opens. Each row leads with the album
+// the seeded history says it should, which an alphabetical answer to
+// every type (what the surface once gave) cannot do.
+func TestSubsonicClientFeishinHomeRows(t *testing.T) {
+	t.Parallel()
+	h, secret := albumListHarness(t)
+	st := seedAlbumListState(t, h, secret)
+	const c = "Feishin"
+
+	row := func(form url.Values) []any {
+		t.Helper()
+		form.Set("offset", "0")
+		form.Set("size", "15")
+		return jlist(jmap(clientPostOK(t, h, secret, c, "getAlbumList2", form)["albumList2"])["album"])
+	}
+	for _, tc := range []struct {
+		name  string
+		form  url.Values
+		first string
+	}{
+		{"Recently played", url.Values{"type": {"recent"}}, "New Record"},
+		// Added last, released longest ago: the two rows must disagree.
+		{"Recently added", url.Values{"type": {"newest"}}, "Zenith Record"},
+		{"Recently released", url.Values{"type": {"byYear"}, "fromYear": {fmt.Sprint(time.Now().Year())}, "toYear": {"0"}}, "New Record"},
+		// The most plays in all, not the most played track (Mid One).
+		{"Most played", url.Values{"type": {"frequent"}}, "Old Record"},
+	} {
+		albums := row(tc.form)
+		if len(albums) == 0 || jmap(albums[0])["name"] != tc.first {
+			t.Errorf("%s = %v, want %s first", tc.name, albums, tc.first)
+		}
+	}
+	if albums := row(url.Values{"type": {"random"}}); len(albums) != 5 {
+		t.Errorf("Explore (random) = %d albums, want all 5", len(albums))
+	}
+
+	// The album page draws the heart and the stars from the album itself.
+	env := clientPostOK(t, h, secret, c, "getAlbum", url.Values{"id": {st.id("Old Record")}})
+	if a := jmap(env["album"]); a["starred"] == nil {
+		t.Errorf("getAlbum Old Record = %v, want its star", a)
+	}
+	env = clientPostOK(t, h, secret, c, "getAlbum", url.Values{"id": {st.id("Mid Record")}})
+	if a := jmap(env["album"]); a["userRating"] != float64(4) {
+		t.Errorf("getAlbum Mid Record = %v, want rating 4", a)
+	}
+	env = clientPostOK(t, h, secret, c, "getArtists", url.Values{})
+	if len(jlist(jmap(env["artists"])["index"])) == 0 {
+		t.Error("getArtists answered no index")
+	}
+	env = clientPostOK(t, h, secret, c, "search3", url.Values{
+		"query": {""}, "songCount": {"100"}, "songOffset": {"0"}, "albumCount": {"0"}, "artistCount": {"0"},
+	})
+	starredSongs := 0
+	for _, s := range jlist(jmap(env["searchResult3"])["song"]) {
+		if m := jmap(s); m["starred"] != nil {
+			starredSongs++
+			if m["id"] != st.songs["New Two"] {
+				t.Errorf("tracks index stars %v, want New Two alone", m["title"])
+			}
+		}
+	}
+	if starredSongs != 1 {
+		t.Errorf("tracks index carries %d starred songs, want New Two", starredSongs)
+	}
+}
+
 func TestSubsonicClientSymfonium(t *testing.T) {
 	t.Parallel()
 	h := newHarness(t)
+	addLaterAlbum(t, h)
 	secret := newSubsonicSecret(t, h)
 	const c = "Symfonium"
 
@@ -435,7 +519,30 @@ func TestSubsonicClientSymfonium(t *testing.T) {
 			artistID, _ = jmap(a)["id"].(string)
 		}
 	}
-	mustOK(t, h, secret, c, "getAlbumList2", "&type=newest&size=500")
+	env = mustOK(t, h, secret, c, "getAlbumList2", "&type=newest&size=500")
+	if albums := jlist(jmap(env["albumList2"])["album"]); len(albums) != 2 || jmap(albums[0])["name"] != "Zebra Arrivals" {
+		t.Fatalf("getAlbumList2 newest = %v, want Zebra Arrivals first", albums)
+	}
+	// The sync walks newest at rising offsets until a page comes back
+	// empty, and takes what it has read as the whole library.
+	crawled := map[string]bool{}
+	for offset := 0; ; offset++ {
+		env = mustOK(t, h, secret, c, "getAlbumList2", fmt.Sprintf("&type=newest&size=1&offset=%d", offset))
+		albums := jlist(jmap(env["albumList2"])["album"])
+		if len(albums) == 0 {
+			break
+		}
+		crawled[fmt.Sprint(jmap(albums[0])["id"])] = true
+		if offset > 10 {
+			t.Fatal("the newest crawl never came back empty")
+		}
+	}
+	env = mustOK(t, h, secret, c, "getAlbumList2", "&type=alphabeticalByName&size=500")
+	for _, a := range jlist(jmap(env["albumList2"])["album"]) {
+		if !crawled[fmt.Sprint(jmap(a)["id"])] {
+			t.Errorf("the newest crawl never reached %v", jmap(a)["name"])
+		}
+	}
 	mustOK(t, h, secret, c, "getStarred2", "")
 	mustOK(t, h, secret, c, "getPlaylists", "")
 	mustOK(t, h, secret, c, "getScanStatus", "")
@@ -614,11 +721,13 @@ func TestSubsonicStreamHonoursMaxBitRate(t *testing.T) {
 		want       string // the br= the redirect must carry
 		wantFormat string // and the format it lands in
 	}{
-		{hint: "&maxBitRate=128", want: "128"},
+		// A client that names no format gets MP3, which every client
+		// decodes.
+		{hint: "&maxBitRate=128", want: "128", wantFormat: "mp3"},
 		// Below the floor no codec speaks; above the ceiling a cap
 		// cannot beat direct play. Neither may reach the mint unclamped.
-		{hint: "&maxBitRate=8", want: "32"},
-		{hint: "&maxBitRate=9999", want: "320"},
+		{hint: "&maxBitRate=8", want: "32", wantFormat: "mp3"},
+		{hint: "&maxBitRate=9999", want: "320", wantFormat: "mp3"},
 		// The request DSub and Symfonium actually send. What a client
 		// pins beside a cap is what it can decode, so the encode lands
 		// there rather than on the ladder's own pick.

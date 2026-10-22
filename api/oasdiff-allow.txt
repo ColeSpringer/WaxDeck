@@ -2,13 +2,8 @@
 # Temporary by construction: this file rides the change that makes the
 # break and is deleted once the base ref contains it.
 #
-# A library's read-only flag rides the library listing now.
-GET /libraries/{pid}/read-only api removed without deprecation
-#
-# A duplicate warning withholds the holder's pid from a caller who cannot
-# see the item it names.
-GET /uploads the response property `uploads/items/duplicate/itemPid` became optional for the status `200`
-POST /uploads the response property `duplicate/itemPid` became optional for the status `201`
-GET /uploads/{uploadId} the response property `duplicate/itemPid` became optional for the status `200`
-POST /uploads/{uploadId}/complete the response property `duplicate/itemPid` became optional for the status `200`
-PUT /uploads/{uploadId}/data the response property `duplicate/itemPid` became optional for the status `200`
+# No upload door takes the podcast label: podcasts are added by
+# subscribing to a feed.
+POST /acquisitions removed the enum value `podcast` of the request property `mediaType`
+POST /uploads removed the enum value `podcast` of the request property `mediaType`
+POST /uploads/batches removed the enum value `podcast` of the request property `mediaType`

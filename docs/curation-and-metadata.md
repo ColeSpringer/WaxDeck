@@ -66,6 +66,7 @@ its warnings.
 
 Per-library matching modes: `auto` (the default), `review` (nothing
 applies itself), and `off` for libraries the engine must never touch.
+The podcast library takes none: its episodes come from their feeds.
 Under `auto`, one-file units still queue for review by default: a lone
 track picking among near-tied releases (the album, its deluxe, every
 compilation carrying the recording) is the kind of wrong-release risk
@@ -88,11 +89,12 @@ entirely.
 
 Users with upload rights (an admin grant, with an optional per-user
 pending upload limit) can push audio from any client: uploads are chunked and
-resumable, carry a required media type label (music, podcast episode,
-audiobook), and stage outside the library until a review decision
-imports them. The label is also what the imported file becomes: an
-audiobook upload is cataloged as a book and a music upload as a track,
-whatever its tags say, and later scans keep that kind. Items a user's own uploads bring into the library stay
+resumable, carry a required media type label (music or audiobook;
+podcasts are added by subscribing to a feed), and stage outside the
+library until a review decision imports them. The label is also what
+the imported file becomes: an audiobook upload is cataloged as a book
+and a music upload as a track, whatever its tags say, and later scans
+keep that kind. Items a user's own uploads bring into the library stay
 editable by that user afterward: the full-depth editor's item-scoped
 operations accept the uploader as well as administrators. The
 identify pipeline runs on every completed upload, so a well-tagged

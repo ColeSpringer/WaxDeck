@@ -604,7 +604,16 @@ class _ShowHeader extends ConsumerWidget {
                 label: l10n.podcastFollow,
                 icon: WaxIcons.add,
                 semanticsId: SemanticsIds.podcastSubscribe,
-                onPressed: () => unawaited(guarded(notifier.subscribe)),
+                // A private show's address is its followers' alone, so it
+                // is followed by the address the listener was given.
+                onPressed: show.feedUrl == null
+                    ? () => ref
+                          .read(shellMessengerProvider.notifier)
+                          .show(
+                            l10n.podcastFollowPrivate,
+                            channel: ShellChannel.podcasts,
+                          )
+                    : () => unawaited(guarded(notifier.subscribe)),
               ),
             if (show.funding != null)
               WaxButton(
@@ -799,10 +808,11 @@ class _EpisodeRow extends ConsumerWidget {
         l10n.podcastQueuedForDownload
       // Said on the row rather than left to the tap: an episode this
       // server holds no bytes for still plays, relayed from the feed's
-      // own host, and the one that cannot play at all is the one whose
-      // feed named no audio.
+      // own host, unless the listing says there is no audio to relay. It
+      // does not say why (no enclosure, a playlist, a YouTube watch
+      // page), so the words hold for every cause.
       else if (!episode.downloaded && !episode.hasEnclosure)
-        l10n.podcastNoAudioInFeed,
+        l10n.podcastNoAudioToStream,
     ];
 
     return MediaListRow(

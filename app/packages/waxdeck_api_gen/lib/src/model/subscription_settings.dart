@@ -15,8 +15,8 @@ part 'subscription_settings.g.dart';
 /// * [retentionKeep] - Keep the newest N downloaded episode files for this user; 0 means keep all. Null (or absent) means the server default, which is keep-all unless the administrator configured otherwise. The effective policy for a show is the most generous union across its subscribers, and removing a file never removes playback history (archive, not delete). 
 /// * [autoDownload] - Fetch new episodes to the server automatically as the feed publishes them. `autoDownloadFilter` narrows which ones. A new episode dated behind as many downloads as the show's retention keeps is left unfetched, since retention would remove it again. 
 /// * [autoDownloadFilter] 
-/// * [folder] - Folder path for organizing subscriptions, as segments joined by `/` (round-trips through OPML outline nesting). 
-/// * [private] - Mark the show private (see the show schema: privacy is global and sticky, hiding the feed URL everywhere and keeping the show out of every OPML export). Set automatically when subscribing with credentials. Setting this back to false does not un-private a show. 
+/// * [folder] - Folder path for organizing subscriptions, as segments joined by `/` (round-trips through OPML outline nesting). Each segment is trimmed and empty ones are dropped before the path is stored; a path of more than 16 segments, or still longer than 512 characters, is refused with `invalid-request`. 
+/// * [private] - Mark the show private (see the show schema: privacy is global and sticky, hiding the feed URL from everyone who does not follow the show). Set automatically when subscribing with credentials or by an address that carries one. Setting this back to false does not un-private a show. 
 /// * [speed] - Playback speed override for this show.
 /// * [trimSilence] - Trim mapped silence spans when playing this show.
 /// * [voiceBoost] - Apply spoken-word loudness normalization for this show.
@@ -35,11 +35,11 @@ abstract class SubscriptionSettings implements Built<SubscriptionSettings, Subsc
   @BuiltValueField(wireName: r'autoDownloadFilter')
   EpisodeFilter? get autoDownloadFilter;
 
-  /// Folder path for organizing subscriptions, as segments joined by `/` (round-trips through OPML outline nesting). 
+  /// Folder path for organizing subscriptions, as segments joined by `/` (round-trips through OPML outline nesting). Each segment is trimmed and empty ones are dropped before the path is stored; a path of more than 16 segments, or still longer than 512 characters, is refused with `invalid-request`. 
   @BuiltValueField(wireName: r'folder')
   String? get folder;
 
-  /// Mark the show private (see the show schema: privacy is global and sticky, hiding the feed URL everywhere and keeping the show out of every OPML export). Set automatically when subscribing with credentials. Setting this back to false does not un-private a show. 
+  /// Mark the show private (see the show schema: privacy is global and sticky, hiding the feed URL from everyone who does not follow the show). Set automatically when subscribing with credentials or by an address that carries one. Setting this back to false does not un-private a show. 
   @BuiltValueField(wireName: r'private')
   bool? get private;
 

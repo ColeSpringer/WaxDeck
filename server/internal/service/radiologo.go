@@ -168,7 +168,7 @@ func (l *Library) declaredIcons(ctx context.Context, page *url.URL) iconLinks {
 	if err != nil {
 		return iconLinks{}
 	}
-	req.Header.Set("User-Agent", "WaxDeck")
+	req.Header.Set("User-Agent", l.UserAgent())
 	req.Header.Set("Accept", "text/html")
 	resp, err := l.radioClient().Do(req)
 	if err != nil {

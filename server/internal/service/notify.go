@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
-	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -47,6 +45,10 @@ var notifyEventCatalog = []NotifyEvent{
 		Description: "An episode you asked for finished downloading."},
 	{Name: "feed-disabled", Scope: NotifyScopeUser,
 		Description: "A subscribed feed kept failing and was disabled."},
+	{Name: "subscription-failed", Scope: NotifyScopeUser,
+		Description: "A podcast app syncing over gpodder asked for a feed that could not be subscribed."},
+	{Name: "gpodder-device-removed", Scope: NotifyScopeUser,
+		Description: "A podcast app's device was removed to make room for a new one; what it kept followed stays followed."},
 	{Name: "review-ready", Scope: NotifyScopeUser,
 		Description: "An upload or acquisition finished identification and waits in the review queue."},
 	{Name: "import-completed", Scope: NotifyScopeUser,
@@ -167,20 +169,11 @@ var guardedNotifyKinds = map[string]bool{
 }
 
 // guardedNotifyClient builds the dial-guarded delivery client once:
-// private addresses refused per connection attempt after DNS
-// resolution (defeats rebinding), unless the server allows LAN
-// notification hosts.
+// private addresses refused unless the server allows LAN notification
+// hosts.
 func (l *Library) guardedNotifyClient() *http.Client {
 	l.notifyGuardedOnce.Do(func() {
-		dialer := &net.Dialer{Timeout: 10 * time.Second}
-		if !l.allowPrivateNotifyHosts {
-			dialer.Control = func(network, address string, _ syscall.RawConn) error {
-				return refusePrivateAddr(address)
-			}
-		}
-		transport := http.DefaultTransport.(*http.Transport).Clone()
-		transport.DialContext = dialer.DialContext
-		l.notifyGuardedHTTP = &http.Client{Transport: transport, Timeout: 15 * time.Second}
+		l.notifyGuardedHTTP = &http.Client{Transport: guardedTransport(l.allowPrivateNotifyHosts), Timeout: 15 * time.Second}
 	})
 	return l.notifyGuardedHTTP
 }
@@ -677,6 +670,8 @@ func (l *Library) notificationLink(event, targetPID string) string {
 		} else {
 			path = "/podcasts/" + targetPID
 		}
+	case "subscription-failed", "gpodder-device-removed":
+		path = "/podcasts"
 	case "episode-arrived":
 		if targetPID == "" {
 			path = "/podcasts"

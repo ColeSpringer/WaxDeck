@@ -21,15 +21,18 @@ import (
 // ItemFilter narrows a library listing. Facet and FacetKey together
 // drill one bucket of a browse dimension (the enumeration answers both
 // values); FacetKey is legitimately empty for a dimension's unknown
-// bucket, so the pair is applied whenever Facet is set.
+// bucket, so the pair is applied whenever Facet is set. Library narrows
+// the listing to one library (lb-...), within the caller's grants as
+// every listing is.
 type ItemFilter struct {
 	MediaType string
 	Facet     string
 	FacetKey  string
+	Library   string
 }
 
-// applyItemFilter narrows an item query by media type and facet bucket,
-// and answers the canonical scope the pair names.
+// applyItemFilter narrows an item query by media type, facet bucket and
+// library, and answers the canonical scope they name.
 func applyItemFilter(b *query.Builder, filter ItemFilter) (*query.Builder, []string, error) {
 	scope := []string{filter.MediaType}
 	if filter.MediaType != "" {
@@ -40,18 +43,28 @@ func applyItemFilter(b *query.Builder, filter ItemFilter) (*query.Builder, []str
 		b = b.Where("kind", query.OpIs, string(kind))
 	}
 	if filter.Facet == "" {
-		return b, append(scope, "", ""), nil
+		scope = append(scope, "", "")
+	} else {
+		// Canonical, not what the caller typed: tag.mood and tag.MOOD are
+		// one dimension and must name one scope.
+		_, canonical, err := facetGroupFor(filter.Facet)
+		if err != nil {
+			return nil, nil, err
+		}
+		if b, err = applyFacetFilter(b, canonical, filter.FacetKey); err != nil {
+			return nil, nil, err
+		}
+		scope = append(scope, canonical, filter.FacetKey)
 	}
-	// Canonical, not what the caller typed: tag.mood and tag.MOOD are
-	// one dimension and must name one scope.
-	_, canonical, err := facetGroupFor(filter.Facet)
-	if err != nil {
-		return nil, nil, err
+	if filter.Library != "" {
+		prefix, lib, ok := parseAPIPID(filter.Library)
+		if !ok || prefix != PrefixLibrary {
+			return nil, nil, errInvalid("unknown library " + filter.Library)
+		}
+		// Named only when set, so a scope minted without it keeps its hash.
+		b, scope = b.Where("library", query.OpIs, string(lib)), append(scope, filter.Library)
 	}
-	if b, err = applyFacetFilter(b, canonical, filter.FacetKey); err != nil {
-		return nil, nil, err
-	}
-	return b, append(scope, canonical, filter.FacetKey), nil
+	return b, scope, nil
 }
 
 // listingQuery narrows base by the filter and to what a listing may
@@ -195,6 +208,14 @@ func (l *Library) Browse(ctx context.Context, uc *UserCtx, list string, filter I
 	}
 	if narrow, ok := browseNarrowing[list]; ok {
 		b = b.WhereNode(narrow())
+	}
+	// Episodes have their own lists, so the unfiltered "recently added" is
+	// music and books: a show's feed lands its whole backlog at the head of
+	// a created-at ordering. Naming podcasts, by medium or by the kind
+	// dimension, still lists them.
+	if list == "recently-added" && filter.MediaType == "" &&
+		(scope[1] != "kind" || scope[2] != string(model.KindEpisode)) {
+		b = b.Where("kind", query.OpIsNot, string(model.KindEpisode))
 	}
 	// Unconditionally: the state predicate is always there now, so there
 	// is no longer an unfiltered case to short-circuit. The catalog
@@ -344,7 +365,7 @@ func decodeScopedCursor(cursor, scope string) (string, error) {
 func (l *Library) pageDTO(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, p *read.Page, scope string) Page {
 	out := Page{Items: make([]ItemSummary, 0, len(p.Items))}
 	for _, it := range p.Items {
-		if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
+		if !l.viewVisible(ctx, uc, it) {
 			continue
 		}
 		if !subs.allowsItem(ctx, l, it) {
@@ -399,6 +420,14 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 		MaxCandidates: searchMaxCandidates,
 		States:        listableStates,
 	}
+	if l.searchCandidates > 0 {
+		opts.MaxCandidates = l.searchCandidates
+	}
+	subs := l.newSubscriptionFilter(uc)
+	// A restricted caller sees an episode by the podcast library rule the
+	// listings hold, wherever its file sits, and is shown only episodes of
+	// shows it follows: one that follows none needs no episode searched.
+	episodes := uc.AllLibraries || (l.podcastsVisible(ctx, uc) && subs.followsAny(ctx, l))
 	// A restricted caller's item hits are filtered by library visibility
 	// below; scoping the FTS pool to the same libraries up front shrinks
 	// the worst-case ranking set and drops fileless items, which fail
@@ -410,10 +439,48 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 		for lib := range uc.Libraries {
 			opts.Libraries = append(opts.Libraries, model.PID(lib))
 		}
+		// Every podcast library, so an episode fetched under an earlier
+		// podcast directory is found as the listings find it.
+		if episodes {
+			podcastLibs, err := l.podcastLibraries(ctx)
+			if err != nil {
+				return SearchResults{}, err
+			}
+			for _, lib := range podcastLibs {
+				if !uc.Libraries[lib] {
+					opts.Libraries = append(opts.Libraries, model.PID(lib))
+				}
+			}
+		}
 	}
 	res, err := l.lib.Search(ctx, q, opts)
 	if err != nil {
 		return SearchResults{}, classify(err)
+	}
+	// Except an unfetched episode, which has no file for a library scope
+	// to reach. A caller who sees the podcast library sees every episode
+	// of the shows it follows, so the unfetched backlog is searched too,
+	// and only it: its episode hits follow the scoped ones, and the
+	// filters below still apply. The answer reads as cut short only for
+	// what the caller is granted, the backlog included.
+	if len(opts.Libraries) > 0 && episodes {
+		backlog := opts
+		backlog.Libraries = nil
+		backlog.States = []model.ItemState{model.StateRemote}
+		more, err := l.lib.Search(ctx, q, backlog)
+		if err != nil {
+			return SearchResults{}, classify(err)
+		}
+		seen := make(map[model.PID]bool, len(res.Episodes))
+		for _, h := range res.Episodes {
+			seen[h.PID] = true
+		}
+		for _, h := range more.Episodes {
+			if !seen[h.PID] {
+				res.Episodes = append(res.Episodes, h)
+			}
+		}
+		res.Truncated = res.Truncated || more.Truncated
 	}
 	// truncate cuts a filtered group to the contract's cap. The catalog
 	// already capped at the same number, so this only ever bites when a
@@ -452,29 +519,35 @@ func (l *Library) Search(ctx context.Context, uc *UserCtx, q string, limit int) 
 		}
 		return truncate(out), nil
 	}
-	subs := l.newSubscriptionFilter(uc)
 	convItem := func(hits []read.SearchHit, prefix string) []SearchHit {
 		out := make([]SearchHit, 0, len(hits))
 		for _, h := range hits {
 			// Every filter here runs after the catalog's per-group cap, and
 			// every one of them bites only a restricted caller: the state
 			// rule that applied to everybody rides the query now.
-			if !uc.AllLibraries && !l.itemVisible(ctx, uc, h.PID) {
-				continue
-			}
-			// Episode hits (title and transcript matches alike) scope to
-			// the caller's subscriptions, like every list surface.
-			if prefix == PrefixEpisode && !subs.allowsEpisodePID(ctx, l, h.PID) {
+			if prefix == PrefixEpisode {
+				// Title and transcript matches alike, by the podcast
+				// library and the caller's subscriptions, as every list
+				// surface decides them.
+				if !episodes || !subs.allowsEpisodePID(ctx, l, h.PID) {
+					continue
+				}
+			} else if !uc.AllLibraries && !l.itemVisible(ctx, uc, h.PID) {
 				continue
 			}
 			if !l.contentAllowsPID(ctx, uc, h.PID) {
 				continue
 			}
+			title, subtitle := h.Title, h.Subtitle
+			if prefix == PrefixEpisode {
+				// The episode's and its show's titles, as its feed gives them.
+				title, subtitle = clipFeedTitle(title), clipFeedTitle(subtitle)
+			}
 			out = append(out, SearchHit{
 				PID:      apiPID(prefix, h.PID),
 				Kind:     h.Kind,
-				Title:    h.Title,
-				Subtitle: h.Subtitle,
+				Title:    title,
+				Subtitle: subtitle,
 			})
 		}
 		return truncate(out)
@@ -570,50 +643,6 @@ func (l *Library) entityVisible(ctx context.Context, uc *UserCtx, prefix string,
 	return vis[pid], nil
 }
 
-// EntityNames resolves the catalog's display name for a batch of API
-// entity pids, keyed by the pid passed in. Every pid must share one
-// prefix (the catalog batches within a kind); unknown or unparseable
-// pids are omitted rather than erroring, so a caller hydrating labels
-// falls back to whatever it already had.
-//
-// This is the compatibility surface's naming primitive: once a group is
-// keyed on an entity rather than on a display string, the label has to
-// come from the entity too.
-func (l *Library) EntityNames(ctx context.Context, apiPIDs []string) (map[string]string, error) {
-	if len(apiPIDs) == 0 {
-		return nil, nil
-	}
-	prefix, _, ok := parseAPIPID(apiPIDs[0])
-	if !ok {
-		return nil, errInvalid("malformed entity pid " + apiPIDs[0])
-	}
-	kind, ok := entityKindForPrefix(prefix)
-	if !ok {
-		return nil, errInvalid("no entity kind for pid " + apiPIDs[0])
-	}
-	pids := make([]model.PID, 0, len(apiPIDs))
-	back := make(map[model.PID]string, len(apiPIDs))
-	for _, api := range apiPIDs {
-		p, pid, ok := parseAPIPID(api)
-		if !ok || p != prefix {
-			continue
-		}
-		pids = append(pids, pid)
-		back[pid] = api
-	}
-	infos, err := l.lib.EntityByPIDs(ctx, kind, pids)
-	if err != nil {
-		return nil, classify(err)
-	}
-	out := make(map[string]string, len(infos))
-	for pid, info := range infos {
-		if info != nil && info.Name != "" {
-			out[back[pid]] = info.Name
-		}
-	}
-	return out, nil
-}
-
 // entityInLibraries reports whether any library holding the entity's
 // members is in the caller's grant. Full-visibility callers never reach
 // this (they see every entity). A nil info (which the facade never
@@ -668,8 +697,8 @@ func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (Ite
 	// library with its primary, or with a copy found before it; a book's
 	// other parts are read for neither. A miss is fine (remote/missing
 	// items).
+	var first int64
 	if refs, err := l.lib.ItemFiles(ctx, it.PID); err == nil {
-		var first int64
 		for _, ref := range refs {
 			alt := ref.Role == fileRoleAlternate
 			if !libraryGranted(uc, ref.LibraryPID) || (!alt && ref.FilePID != it.FilePID) {
@@ -689,9 +718,16 @@ func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (Ite
 				first = seen
 			}
 		}
-		if first > 0 {
-			d.AddedAt = time.Unix(0, first).UTC()
+	}
+	if it.Kind == model.KindEpisode {
+		// The clock the lists sort by: an episode nobody has fetched has
+		// no file to date it, and a fetched one's file is younger than it.
+		if ns := l.episodeAddedNS(ctx, it.PID); ns > 0 {
+			first = ns
 		}
+	}
+	if first > 0 {
+		d.AddedAt = time.Unix(0, first).UTC()
 	}
 	entity := model.ArtTrack
 	if it.Kind == model.KindEpisode {
@@ -699,6 +735,21 @@ func (l *Library) Item(ctx context.Context, uc *UserCtx, apiItemPID string) (Ite
 	}
 	d.ArtSource = l.artSourceForRef(ctx, model.EntityRef{Type: entity, PID: it.PID})
 	return d, nil
+}
+
+// episodeAddedNS is when the lists first saw an episode, in unix
+// nanoseconds, and zero when the catalog does not say. A read that fails
+// is logged, and the caller carries on with the file's clock.
+func (l *Library) episodeAddedNS(ctx context.Context, pid model.PID) int64 {
+	eps, err := l.lib.Podcasts().EpisodesByPIDs(ctx, []model.PID{pid})
+	if err != nil {
+		l.log.Debug("reading an episode's added time", "episode", pid, "err", err)
+		return 0
+	}
+	if len(eps) != 1 {
+		return 0
+	}
+	return eps[0].CreatedAt
 }
 
 // Album returns one album entity's identity: the release facts the
@@ -771,6 +822,15 @@ func (l *Library) Album(ctx context.Context, uc *UserCtx, apiAlbumPID string) (A
 const (
 	ArtNoSniff = "nosniff"
 	ArtCSP     = "default-src 'none'; sandbox; style-src 'unsafe-inline'"
+)
+
+// The same pair for a relayed episode and a share's stream, whichever
+// path serves it. A podcast host's bytes leave under this origin's URL,
+// and the relay's type gate already refuses a page; these keep a
+// browser from rendering one if the gate misses.
+const (
+	MediaNoSniff = "nosniff"
+	MediaCSP     = "default-src 'none'; sandbox"
 )
 
 // artScriptable are the stored formats a browser opens as a document

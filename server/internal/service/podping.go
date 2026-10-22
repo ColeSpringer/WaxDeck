@@ -95,6 +95,11 @@ func (l *Library) NotePodping(ctx context.Context, iri string) {
 	if recent(st.LastAttemptNS, podpingMinInterval) || recent(st.LastSyncedNS, podpingMinInterval) {
 		return
 	}
+	// Judged here rather than when the index is built: a grant change
+	// does not invalidate the index, and only the pinged show is read.
+	if !l.showHeard(ctx, show) {
+		return
+	}
 	if !l.claimPodpingSync(show) {
 		return
 	}

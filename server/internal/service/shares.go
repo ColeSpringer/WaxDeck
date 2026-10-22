@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -47,10 +48,28 @@ type SharePublic struct {
 	Share       ShareInfo
 	Title       string
 	Subtitle    string
-	Items       []ItemSummary // playable members, play order
+	Items       []ItemSummary // members the owner reaches, play order
 	ArtItemPID  string        // API pid whose artwork represents the page
 	OwnerUserID string        // billing identity for transcode gating
+	// Audio says how each member plays, by member pid. A member it does
+	// not name plays no way at all.
+	Audio map[string]ShareAudio
 }
+
+// ShareAudio is how one member of a share plays for its visitors.
+type ShareAudio string
+
+const (
+	// ShareAudioLocal is a file on this server.
+	ShareAudioLocal ShareAudio = "local"
+	// ShareAudioRelay is an episode the server has not fetched whose
+	// feed names audio the enclosure relay serves.
+	ShareAudioRelay ShareAudio = "relay"
+)
+
+// Plays reports whether a visitor can hear the member, which the zero
+// value of a member the share does not name cannot.
+func (a ShareAudio) Plays() bool { return a == ShareAudioLocal || a == ShareAudioRelay }
 
 // shareKindForPrefix maps a target prefix onto the stored kind.
 var shareKindForPrefix = map[string]string{
@@ -157,12 +176,24 @@ func (l *Library) shareTargetTitle(ctx context.Context, uc *UserCtx, kind, targe
 		if err != nil {
 			return "", err
 		}
+		// Fails closed, as resolving the link does: a show that cannot be
+		// read cannot be shown not to be private.
 		show, err := l.getShow(ctx, apiPID(PrefixPodcast, det.Episode.PodcastPID))
-		if err == nil && l.showIsPrivate(ctx, show) {
+		if err != nil {
+			return "", err
+		}
+		if l.showIsPrivate(ctx, show) {
 			return "", &Error{Kind: KindForbidden,
 				Msg: "episodes of private feeds cannot be shared"}
 		}
-		return it.Title, nil
+		// A link nobody could hear through is not minted. One whose
+		// episode later loses its audio (retention reclaims a YouTube
+		// fetch, a feed drops the enclosure) says so on its page.
+		if unfetchedEpisode(it) && !relayableEnclosure(show.SourceType, det.Episode.EnclosureURL, det.Episode.EnclosureType) {
+			return "", &Error{Kind: KindConflict,
+				Msg: "this episode has no audio on the server and its feed names none to relay; fetch it first"}
+		}
+		return clipFeedTitle(it.Title), nil
 	case "album":
 		_, pid, _ := parseAPIPID(targetAPIPID)
 		info, err := l.lib.EntityByPID(ctx, read.EntityAlbum, pid)
@@ -268,7 +299,8 @@ func (l *Library) shareTitleLoose(ctx context.Context, r wdb.Share) (string, err
 	if err != nil || (r.TargetKind == "track" && it.Kind != model.KindTrack) {
 		return "", nil
 	}
-	return it.Title, nil
+	title, _, _ := itemNames(it)
+	return title, nil
 }
 
 // RevokeShare revokes one link; the owner or an administrator may.
@@ -312,20 +344,12 @@ func (l *Library) RevokeShare(ctx context.Context, uc *UserCtx, apiShareID strin
 // still reaches: a disabled owner's links, and a target the owner has
 // lost to a grant or a content rule, answer not-found, and a list serves
 // only the members left. Nothing is cached, so a revocation bites on the
-// next hit.
+// next hit. A catalog away for a hand-off answers maintenance rather
+// than not-found, so a visitor's player retries instead of giving up.
 func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePublic, error) {
-	row, err := l.db.ShareByID(ctx, shareID)
-	if err == wdb.ErrNotFound {
-		return nil, errNotFound("no such share")
-	}
+	row, err := l.liveShareRow(ctx, shareID)
 	if err != nil {
-		return nil, &Error{Kind: KindInternal, Err: err}
-	}
-	if row.Revoked {
-		return nil, errNotFound("no such share")
-	}
-	if !row.ExpiresAt.IsZero() && time.Now().After(row.ExpiresAt) {
-		return nil, errNotFound("no such share")
+		return nil, err
 	}
 	owner, err := l.userCtxByID(ctx, row.UserID)
 	if err != nil {
@@ -345,29 +369,32 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 	// paid content, and a check that cannot be evaluated (a failed
 	// episode or show read) must not quietly wave the request
 	// through either.
+	var episode *model.Episode
 	if row.TargetKind == "episode" {
 		det, err := l.getEpisode(ctx, row.TargetPID)
 		if err != nil {
-			return nil, errNotFound("no such share")
+			return nil, shareMiss(err)
 		}
 		show, err := l.getShow(ctx, apiPID(PrefixPodcast, det.Episode.PodcastPID))
 		if err != nil {
-			return nil, errNotFound("no such share")
+			return nil, shareMiss(err)
 		}
 		if l.showIsPrivate(ctx, show) {
 			return nil, errNotFound("no such share")
 		}
+		episode = det.Episode
 	}
 	// Downloads stop when the owner's own download permission is
 	// withdrawn (the stream still serves, the download link does not).
 	if !owner.Download {
 		pub.Share.AllowDownload = false
 	}
+	var views []*model.ItemView
 	switch row.TargetKind {
 	case "playlist":
 		pl, err := l.sharedPlaylist(ctx, pid)
 		if err != nil {
-			return nil, errNotFound("no such share")
+			return nil, shareMiss(err)
 		}
 		pub.Title = pl.Name
 		pub.Subtitle = "Playlist"
@@ -380,13 +407,11 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 		if held && len(items) == 0 {
 			return nil, errNotFound("no such share")
 		}
-		for _, it := range items {
-			pub.Items = append(pub.Items, summary(it))
-		}
+		views = items
 	case "album":
 		info, err := l.lib.EntityByPID(ctx, read.EntityAlbum, pid)
 		if err != nil {
-			return nil, errNotFound("no such share")
+			return nil, shareMiss(err)
 		}
 		pub.Title = info.Name
 		pub.Subtitle = "Album"
@@ -397,12 +422,13 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 		if len(items) == 0 {
 			return nil, errNotFound("no such share")
 		}
-		for _, it := range items {
-			pub.Items = append(pub.Items, summary(it))
-		}
+		views = items
 	default:
 		it, err := l.lib.Get(ctx, pid)
-		if err != nil || !l.offers(ctx, owner, it) {
+		if err != nil {
+			return nil, shareMiss(err)
+		}
+		if !l.offers(ctx, owner, it) {
 			return nil, errNotFound("no such share")
 		}
 		// A track's link never serves the book its track became: a scan
@@ -411,14 +437,140 @@ func (l *Library) ResolveShare(ctx context.Context, shareID string) (*SharePubli
 		if row.TargetKind == "track" && it.Kind != model.KindTrack {
 			return nil, errNotFound("no such share")
 		}
-		pub.Title = it.Title
-		pub.Subtitle = it.Artist
-		pub.Items = []ItemSummary{summary(it)}
+		pub.Title, pub.Subtitle, _ = itemNames(it)
+		views = []*model.ItemView{it}
+	}
+	for _, it := range views {
+		pub.Items = append(pub.Items, summary(it))
+	}
+	if pub.Audio, err = l.shareAudio(ctx, views, episode); err != nil {
+		return nil, err
 	}
 	if len(pub.Items) > 0 {
 		pub.ArtItemPID = pub.Items[0].PID
 	}
 	return pub, nil
+}
+
+// liveShareRow reads a share that still serves: not-found for one
+// unknown, revoked or expired.
+func (l *Library) liveShareRow(ctx context.Context, shareID string) (*wdb.Share, error) {
+	row, err := l.db.ShareByID(ctx, shareID)
+	if err == wdb.ErrNotFound {
+		return nil, errNotFound("no such share")
+	}
+	if err != nil {
+		return nil, &Error{Kind: KindInternal, Err: err}
+	}
+	if row.Revoked || (!row.ExpiresAt.IsZero() && time.Now().After(row.ExpiresAt)) {
+		return nil, errNotFound("no such share")
+	}
+	return row, nil
+}
+
+// ShareLive is the check a stream already running on a share repeats:
+// not-found once the link is revoked or expired or its owner can no
+// longer sign in, nil while it serves. Two row reads, where resolving the
+// share again reads its whole target.
+func (l *Library) ShareLive(ctx context.Context, shareID string) error {
+	row, err := l.liveShareRow(ctx, shareID)
+	if err != nil {
+		return err
+	}
+	u, err := l.db.UserByID(ctx, row.UserID)
+	if errors.Is(err, wdb.ErrNotFound) || (err == nil && (u.Disabled || u.Pending)) {
+		return errNotFound("no such share")
+	}
+	if err != nil {
+		return &Error{Kind: KindInternal, Err: err}
+	}
+	return nil
+}
+
+// shareMiss is the answer for a share whose target could not be read:
+// not-found, failing closed, except for a catalog away for a hand-off,
+// which is passed on as it is.
+func shareMiss(err error) error {
+	if KindOf(err) == KindMaintenance {
+		return &Error{Kind: KindMaintenance, Err: err}
+	}
+	return errNotFound("no such share")
+}
+
+// shareAudio says how each of a share's members plays: a file on this
+// server plays from it, an episode the server has not fetched relays when
+// its feed names audio the relay serves, and anything else, a trashed
+// member or one whose file is gone, is left out. One catalog read covers
+// the unfetched episodes; known is an episode the resolution already
+// read, which needs none.
+func (l *Library) shareAudio(ctx context.Context, views []*model.ItemView, known *model.Episode) (map[string]ShareAudio, error) {
+	out := make(map[string]ShareAudio, len(views))
+	var unfetched []model.PID
+	for _, it := range views {
+		switch {
+		case archived(it):
+			// Before the episode arm: a trashed episode is not fetched
+			// either, and is no more for playing than a trashed track.
+		case it.State == model.StatePresent:
+			out[itemAPIPID(it)] = ShareAudioLocal
+		case unfetchedEpisode(it):
+			unfetched = append(unfetched, it.PID)
+		}
+	}
+	if len(unfetched) == 0 {
+		return out, nil
+	}
+	eps := []*model.Episode{known}
+	if known == nil || len(unfetched) != 1 || unfetched[0] != known.PID {
+		var err error
+		if eps, err = l.episodesByPIDs(ctx, unfetched); err != nil {
+			return nil, err
+		}
+	}
+	for _, ep := range eps {
+		// The visitor's relay fails closed on a show it cannot read, so
+		// the page does too.
+		if source, ok := l.showSourceType(ctx, ep.PodcastPID); ok && relayableEnclosure(source, ep.EnclosureURL, ep.EnclosureType) {
+			out[apiPID(PrefixEpisode, ep.PID)] = ShareAudioRelay
+		}
+	}
+	return out, nil
+}
+
+// privateEpisodes answers whether a member is an episode of a private
+// show, the rule an episode share is held to: a capability URL must
+// never leak paid content, fetched or not. A show that cannot be read
+// counts as private. Each show is read once per answerer, through
+// readShow so its source is remembered for the audio check that follows,
+// and the sticky private marks are read once for all of them, to be
+// judged by privateShow like any other show's.
+func (l *Library) privateEpisodes() func(context.Context, *model.ItemView) bool {
+	private := map[model.PID]bool{}
+	var marks map[string]string
+	var marksErr error
+	var marksRead bool
+	return func(ctx context.Context, it *model.ItemView) bool {
+		if it.Kind != model.KindEpisode {
+			return false
+		}
+		hidden, known := private[it.PodcastPID]
+		if known {
+			return hidden
+		}
+		hidden = true
+		if pod, err := l.readShow(ctx, it.PodcastPID); err == nil {
+			l.showSources.Store(pod.PID, pod.SourceType)
+			if !marksRead {
+				marksRead = true
+				if marks, marksErr = l.db.SyncStateWithPrefix(ctx, syncKeyShowPrivate); marksErr != nil {
+					l.log.Warn("reading show privacy", "err", marksErr)
+				}
+			}
+			hidden = privateShow(pod, marks[syncKeyShowPrivate+string(pod.PID)], marksErr)
+		}
+		private[it.PodcastPID] = hidden
+		return hidden
+	}
 }
 
 // albumMemberViews resolves the album tracks the owner can see, in disc
@@ -524,7 +676,9 @@ func (l *Library) sharedPlaylist(ctx context.Context, pid model.PID) (*model.Pla
 
 // playlistMemberViews answers a playlist's members in play order as the
 // owner's own listing shows them to the owner (the share publishes that
-// list), capped so a pathological playlist cannot balloon a public page.
+// list), less the episodes of private shows, capped so a pathological
+// playlist cannot balloon a public page. The cap counts what the link
+// serves, so private episodes cannot crowd out the members after them.
 // held reports whether the list holds anything before the filter, so an
 // empty list can be told from one the owner can no longer hear.
 //
@@ -542,12 +696,13 @@ func (l *Library) playlistMemberViews(ctx context.Context, owner *UserCtx, pl *m
 	if err != nil {
 		return nil, false, err
 	}
+	private := l.privateEpisodes()
 	items = make([]*model.ItemView, 0, min(len(members), cap))
 	for _, it := range members {
 		if len(items) == cap {
 			break
 		}
-		if l.memberVisible(ctx, f, it) {
+		if l.memberVisible(ctx, f, it) && !private(ctx, it) {
 			items = append(items, it)
 		}
 	}

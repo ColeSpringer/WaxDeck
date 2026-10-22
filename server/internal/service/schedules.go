@@ -170,11 +170,12 @@ func (l *Library) MarkScheduleRun(ctx context.Context, kind string, runErr error
 }
 
 // RunPrune is the scheduled prune pass: event log, mutation stamps,
-// bookmark tombstones, held YouTube entries, audit log, ended playback
-// sessions, finished tool tasks, and analysis rows that will never come
-// good. Horizons are
-// deliberately server-owned constants; sync consumers whose cursor falls
-// below the surviving event floor get a clean resync by design.
+// gpodder episode actions and subscription removals, bookmark
+// tombstones, held YouTube entries, audit log, ended playback sessions,
+// finished tool tasks, and analysis rows that will never come good.
+// Horizons are deliberately server-owned constants; sync consumers whose
+// cursor falls below the surviving event floor get a clean resync by
+// design.
 func (l *Library) RunPrune(ctx context.Context) error {
 	const (
 		keepEvents     = 100_000
@@ -211,6 +212,21 @@ func (l *Library) RunPrune(ctx context.Context) error {
 	record("play stamps", err)
 	if sn > 0 {
 		l.log.Info("pruned play stamps", "rows", sn)
+	}
+	gn, err := l.db.PruneGpodderActions(ctx, time.Now().Add(-gpodderActionRetention).Unix())
+	record("gpodder actions", err)
+	if gn > 0 {
+		l.log.Info("pruned gpodder actions", "rows", gn)
+	}
+	en, err := l.db.PruneGpodderSubEvents(ctx, time.Now().Add(-gpodderActionRetention).Unix())
+	record("gpodder subscription changes", err)
+	if en > 0 {
+		l.log.Info("pruned gpodder subscription changes", "rows", en)
+	}
+	nn, err := l.db.PruneGpodderNotices(ctx, time.Now().Add(-gpodderNoticeWindow).UnixNano())
+	record("gpodder notices", err)
+	if nn > 0 {
+		l.log.Info("pruned gpodder notices", "rows", nn)
 	}
 	bn, err := l.db.PruneBookmarkTombstones(ctx, time.Now().Add(-tombstoneRetention).UnixNano())
 	record("bookmark tombstones", err)

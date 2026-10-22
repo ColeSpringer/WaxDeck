@@ -17,8 +17,9 @@ const LOGO_HOST = 'http://127.0.0.1:4421';
 
 /// The station library is server-global, so this name is a claim on a
 /// shared row and this spec owns it. Saved songs are per account and
-/// need no such care.
-const STATION = { name: 'E2E Saved FM', stream: `${LOGO_HOST}/wd-fixture-ep-004.mp3` };
+/// need no such care. Nothing plays the station, so its stream is a path
+/// the fixture host serves nothing at, rather than a fixture's audio.
+const STATION = { name: 'E2E Saved FM', stream: `${LOGO_HOST}/e2e-saved-fm.mp3` };
 
 /// A line the parse recognises and one it does not. Both save, which is
 /// the point: an announcement in a shape nothing splits is still what

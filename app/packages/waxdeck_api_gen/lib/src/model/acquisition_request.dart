@@ -4,7 +4,7 @@
 
 // ignore_for_file: unused_element
 import 'package:waxdeck_api_gen/src/model/acquisition_format.dart';
-import 'package:waxdeck_api_gen/src/model/media_type.dart';
+import 'package:waxdeck_api_gen/src/model/upload_media_type.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -25,8 +25,8 @@ abstract class AcquisitionRequest implements Built<AcquisitionRequest, Acquisiti
   String get url;
 
   @BuiltValueField(wireName: r'mediaType')
-  MediaType get mediaType;
-  // enum mediaTypeEnum {  music,  podcast,  audiobook,  };
+  UploadMediaType get mediaType;
+  // enum mediaTypeEnum {  music,  audiobook,  };
 
   /// The library this acquisition belongs to, from `GET /uploads/targets`; see `UploadCreate` for what naming one selects. 
   @BuiltValueField(wireName: r'libraryPid')
@@ -71,7 +71,7 @@ class _$AcquisitionRequestSerializer implements PrimitiveSerializer<AcquisitionR
     yield r'mediaType';
     yield serializers.serialize(
       object.mediaType,
-      specifiedType: const FullType(MediaType),
+      specifiedType: const FullType(UploadMediaType),
     );
     if (object.libraryPid != null) {
       yield r'libraryPid';
@@ -127,8 +127,8 @@ class _$AcquisitionRequestSerializer implements PrimitiveSerializer<AcquisitionR
         case r'mediaType':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(MediaType),
-          ) as MediaType;
+            specifiedType: const FullType(UploadMediaType),
+          ) as UploadMediaType;
           result.mediaType = valueDes;
           break;
         case r'libraryPid':

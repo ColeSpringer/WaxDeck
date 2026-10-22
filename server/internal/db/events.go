@@ -134,6 +134,49 @@ func (d *DB) SyncStateGet(ctx context.Context, key string) (string, error) {
 	return v, nil
 }
 
+// SyncStateWithPrefix reads every sync_state value whose key starts with
+// prefix, by key, in one query served by the primary key.
+func (d *DB) SyncStateWithPrefix(ctx context.Context, prefix string) (map[string]string, error) {
+	out := map[string]string{}
+	if prefix == "" {
+		return out, nil
+	}
+	// The keys from prefix up to the first one past it.
+	q, args := `SELECT key, value FROM sync_state WHERE key >= ?`, []any{prefix}
+	if past := prefixEnd(prefix); past != "" {
+		q, args = q+` AND key < ?`, append(args, past)
+	}
+	rows, err := d.r.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("db: reading sync state %s*: %w", prefix, err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, fmt.Errorf("db: reading sync state %s*: %w", prefix, err)
+		}
+		out[k] = v
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: reading sync state %s*: %w", prefix, err)
+	}
+	return out, nil
+}
+
+// prefixEnd is the smallest string greater than every string that starts
+// with prefix, empty when there is none.
+func prefixEnd(prefix string) string {
+	b := []byte(prefix)
+	for i := len(b) - 1; i >= 0; i-- {
+		if b[i] < 0xff {
+			b[i]++
+			return string(b[:i+1])
+		}
+	}
+	return ""
+}
+
 // SyncStateSet upserts one sync_state value.
 func (d *DB) SyncStateSet(ctx context.Context, key, value string) error {
 	_, err := d.w.ExecContext(ctx, `

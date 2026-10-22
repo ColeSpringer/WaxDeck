@@ -197,14 +197,15 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
       _error = null;
     });
     final navigator = Navigator.of(context);
+    final route = ModalRoute.of(context);
     var popped = false;
     try {
       final refusal = await subscribeToDirectoryEntry(context, ref, entry);
       if (refusal == null) {
-        // Only while this dialog is still up: a subscribe outlives a
-        // dialog dismissed while it was in flight, and popping a
-        // captured navigator then takes whatever is on top instead.
-        if (mounted) {
+        // Only while this dialog is still the top route: a subscribe
+        // outlives a dialog dismissed while it was in flight, or still on
+        // its way out, and popping then takes whatever is under it.
+        if (route?.isCurrent ?? false) {
           navigator.pop();
           popped = true;
         }
@@ -214,9 +215,8 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
     } finally {
       // Every other async path here clears the flag in a finally, and
       // this one is the path that can throw something no caller
-      // converts - a decode failure, a reload rethrown by
-      // `invalidateSelf`. Left set, every control in the dialog reads as
-      // disabled and only Cancel works.
+      // converts, a decode failure. Left set, every control in the
+      // dialog reads as disabled and only Cancel works.
       if (mounted && !popped) setState(() => _busy = false);
     }
   }
@@ -229,12 +229,14 @@ class _SubscribeDialogState extends ConsumerState<SubscribeDialog> {
       _error = null;
     });
     final navigator = Navigator.of(context);
+    final route = ModalRoute.of(context);
     final l10n = context.l10n;
     try {
       await ref
           .read(subscriptionsProvider.notifier)
           .subscribe(url: url, sourceType: _sourceType);
-      if (mounted) navigator.pop();
+      // As for a directory match: not over a dialog on its way out.
+      if (route?.isCurrent ?? false) navigator.pop();
     } on WaxDeckApiException catch (e) {
       // Inline rather than a snackbar, which would render behind this
       // dialog. The URL was just typed, so the server's own words about

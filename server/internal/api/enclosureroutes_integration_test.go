@@ -285,11 +285,9 @@ func TestEnclosureRouteFallsBackWhenTheEndMoves(t *testing.T) {
 // the feed document and the enclosure entry sit behind basic auth, and
 // the enclosure redirects to a second, open host.
 //
-// The shape that makes the route cache a liability rather than a win.
-// A remembered CDN URL cannot carry the show's credentials - it is a
-// different origin, and nothing here proves it is still the party the
-// feed named - so the shortcut would earn a 401 and cost a full walk on
-// top of itself, every range, forever.
+// The shape the route cache declines: the CDN is reached through a
+// request carrying the show's login, which a remembered CDN URL would
+// skip, and the credentials never go to the CDN itself.
 type crossOriginFeed struct {
 	origin          *httptest.Server
 	cdn             *httptest.Server
@@ -371,11 +369,8 @@ func (cf *crossOriginFeed) sawCredentials() bool {
 }
 
 // A credentialed feed whose chain leaves its own origin is the one
-// population the cache must decline to serve. Remembering the CDN URL
-// would mean an unauthenticated shortcut, a 401, and then the walk
-// anyway - two upstream requests per range where there used to be one,
-// against a host whose operator may well rate-limit repeated auth
-// failures.
+// population the cache declines to serve: each range walks the chain
+// from the login at the feed's origin, as it did before the cache.
 func TestEnclosureCrossOriginCredentialsAreNotCached(t *testing.T) {
 	t.Parallel()
 	h := newPodcastHarness(t)

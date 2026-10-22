@@ -316,8 +316,7 @@ func (l *Library) UpdateAccount(ctx context.Context, id string, upd AccountUpdat
 		// snapshot's first page), so nothing read under the old rules
 		// carries the new epochs; the grants are written before it, so
 		// they count even when it fails.
-		l.bumpGrantEpoch(ctx, u.ID)
-		l.bumpReachEpoch(ctx, u.ID)
+		l.reachChanged(ctx, u.ID)
 	}
 	if err != nil {
 		if errors.Is(err, wdb.ErrConflict) {
@@ -469,8 +468,7 @@ func (l *Library) ResolveOidcAccount(ctx context.Context, ident OidcIdentity) (*
 				// out of it is a visibility change, as UpdateAccount
 				// counts it: cursors and timelines from before end.
 				if hasRole(prevRoles, "admin") != hasRole(u.Roles, "admin") {
-					l.bumpGrantEpoch(ctx, u.ID)
-					l.bumpReachEpoch(ctx, u.ID)
+					l.reachChanged(ctx, u.ID)
 				}
 				// The IdP moved this account's roles under whatever
 				// sessions it already has open; they re-read the session

@@ -366,6 +366,8 @@ paths:
         (as-is libraries: already-curated collections the engine must
         not touch). Under `auto`, one-file units still queue unless
         `singlesAutoApply` is on. The body replaces the whole object.
+        A podcast library takes no matching behavior, its episodes coming
+        from their feeds, and is refused with `invalid-request`.
         Administrators only.
       tags: [review]
       requestBody:

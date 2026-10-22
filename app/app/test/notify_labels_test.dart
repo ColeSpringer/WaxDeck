@@ -46,7 +46,7 @@ void main() {
   final catalog = _specCatalog();
 
   test('the spec still names the whole catalog', () {
-    expect(catalog, hasLength(13));
+    expect(catalog, hasLength(15));
   });
 
   for (final MapEntry(key: locale, value: l10n) in <String, AppLocalizations>{
@@ -81,5 +81,33 @@ void main() {
         reason: '$token has no kind, so its row would go nowhere in particular',
       );
     }
+  });
+
+  // The server files a refused add and a refused change, removes
+  // included, under this one event, and its inbox rows are headed by the
+  // kind's title rather than the server's.
+  test('the subscription-failed title and help fit a refused change too', () {
+    final en = AppLocalizationsEn();
+    final es = AppLocalizationsEs();
+    expect(
+      notifyTokenTitle(en, 'subscription-failed', ''),
+      'Podcast subscriptions not changed',
+    );
+    expect(
+      notifyTokenTitle(es, 'subscription-failed', ''),
+      'Suscripciones de podcasts sin modificar',
+    );
+    expect(
+      notifyTokenHelp(en, 'subscription-failed', ''),
+      'A podcast app syncing over gpodder asked to add a feed that could '
+      'not be subscribed, or to change subscriptions this account may not '
+      'change.',
+    );
+    expect(
+      notifyTokenHelp(es, 'subscription-failed', ''),
+      'Una aplicación de podcasts que sincroniza por gpodder pidió añadir '
+      'un feed al que no se ha podido suscribir, o cambiar suscripciones que '
+      'esta cuenta no puede cambiar.',
+    );
   });
 }

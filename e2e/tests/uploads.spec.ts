@@ -104,6 +104,55 @@ test('two picked files group as one album and import through review', async ({ a
     .toEqual(['Paper Lanterns', 'River Static']);
 });
 
+test('the dialog that asks what a file is offers music and audiobook only', async ({
+  app,
+}) => {
+  test.setTimeout(J.long);
+  await app.nav.enter('home');
+  // One file, so the dialog asks only the media type. Nothing is sent
+  // until it is confirmed, and this test never confirms.
+  await app.uploads.pickFiles([uploadSrc('lantern-one.mp3')]);
+  await app.uploads.openMediaType();
+
+  await expect(app.uploads.mediaTypeOption('music')).toBeVisible();
+  await expect(app.uploads.mediaTypeOption('audiobook')).toBeVisible();
+  // Podcasts are added by subscribing to a feed.
+  await expect(app.uploads.mediaTypeOption('podcast')).toHaveCount(0);
+});
+
+test('the server refuses a podcast on every door an upload enters by', async ({ app }) => {
+  // The typed client cannot say `podcast` any more, which is the point;
+  // a client written before that still can.
+  const refused = async (
+    door: string,
+    response: { status(): number; json(): Promise<unknown> },
+  ) => {
+    expect(response.status(), `${door} refuses a podcast`).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: 'invalid-request',
+      message: 'podcasts are added by subscribing to a feed',
+    });
+  };
+  await refused(
+    'a session',
+    await app.api.raw.post('/uploads', {
+      data: { fileName: 'episode.mp3', sizeBytes: 1024, mediaType: 'podcast' } as never,
+    }),
+  );
+  await refused(
+    'a batch',
+    await app.api.raw.post('/uploads/batches', {
+      data: { grouping: 'tracks', mediaType: 'podcast' } as never,
+    }),
+  );
+  await refused(
+    'an acquisition',
+    await app.api.raw.post('/acquisitions', {
+      data: { url: 'https://tube.example/watch?v=one', mediaType: 'podcast' } as never,
+    }),
+  );
+});
+
 test('health reports the format sets and rescan takes the repair pass', async ({
   app,
 }) => {

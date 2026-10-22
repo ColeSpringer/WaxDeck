@@ -1,0 +1,37 @@
+//
+// AUTO-GENERATED FILE, DO NOT MODIFY!
+//
+
+// ignore_for_file: unused_element
+import 'package:built_collection/built_collection.dart';
+import 'package:built_value/built_value.dart';
+import 'package:built_value/serializer.dart';
+
+part 'upload_media_type.g.dart';
+
+/// What an uploaded or acquired file becomes: `music` is cataloged as a track and `audiobook` as a book. Podcasts are not uploaded; they are added by subscribing to a feed, and any other value answers `invalid-request`. 
+class UploadMediaType extends EnumClass {
+
+  @BuiltValueEnumConst(wireName: r'music')
+  static const UploadMediaType music = _$music;
+  @BuiltValueEnumConst(wireName: r'audiobook')
+  static const UploadMediaType audiobook = _$audiobook;
+  @BuiltValueEnumConst(wireName: r'unknown_default_open_api', fallback: true)
+  static const UploadMediaType unknownDefaultOpenApi = _$unknownDefaultOpenApi;
+
+  static Serializer<UploadMediaType> get serializer => _$uploadMediaTypeSerializer;
+
+  const UploadMediaType._(String name): super(name);
+
+  static BuiltSet<UploadMediaType> get values => _$values;
+  static UploadMediaType valueOf(String name) => _$valueOf(name);
+}
+
+/// Optionally, enum_class can generate a mixin to go with your enum for use
+/// with Angular. It exposes your enum constants as getters. So, if you mix it
+/// in to your Dart component class, the values become available to the
+/// corresponding Angular template.
+///
+/// Trigger mixin generation by writing a line like this one next to your enum.
+abstract class UploadMediaTypeMixin = Object with _$UploadMediaTypeMixin;
+

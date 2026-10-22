@@ -197,9 +197,18 @@ void main() {
     await _stop(tester, container);
   });
 
-  testWidgets('an episode whose feed named no audio falls back to fetching', (
+  // Said by a fetch that only queues the download: nothing plays when it
+  // lands.
+  const fetchingSaid =
+      'This episode has no audio to stream until the server fetches it, '
+      'which it is doing now. Play it again once it has downloaded.';
+
+  testWidgets('an episode with no audio to relay falls back to fetching', (
     tester,
   ) async {
+    // No enclosure, one that is not http, or one the feed calls a
+    // playlist or a stream manifest: the listing says only that there is
+    // nothing to relay, so the row's words hold for every one of them.
     final repo = FakeRepository()
       ..addSubscription(testShow(showPid))
       ..episodesByShow[showPid] = <EpisodeSummary>[
@@ -212,7 +221,7 @@ void main() {
       ];
     final container = await _pump(tester, repo);
 
-    expect(find.text('No audio in the feed'), findsOneWidget);
+    expect(find.text('No audio to stream'), findsOneWidget);
     await tester.tap(
       find.bySemanticsIdentifier(SemanticsIds.episode(remotePid)),
     );
@@ -220,10 +229,45 @@ void main() {
 
     expect(repo.fetchEpisodeCalls, <String>[remotePid]);
     expect(container.read(queueControllerProvider).entries, isEmpty);
-    expect(
-      shellMessageText(raisedMessage(tester)),
-      contains('named no audio to stream'),
+    expect(shellMessageText(raisedMessage(tester)), fetchingSaid);
+  });
+
+  testWidgets('a YouTube episode reads the same as any other with nothing '
+      'to relay', (tester) async {
+    // A YouTube show's enclosure is a watch page, which the listing
+    // reports as no audio to relay, like any other cause.
+    final repo = FakeRepository()
+      ..addSubscription(
+        const PodcastShow(
+          pid: showPid,
+          title: 'The Prancing Pony Channel',
+          sourceType: 'youtube',
+        ),
+      )
+      ..episodesByShow[showPid] = <EpisodeSummary>[
+        testEpisode(
+          remotePid,
+          title: 'A Video',
+          downloaded: false,
+          hasEnclosure: false,
+        ),
+        testEpisode(
+          downloadedPid,
+          title: 'A Fetched Video',
+          hasEnclosure: false,
+        ),
+      ];
+    final container = await _pump(tester, repo);
+
+    expect(find.text('No audio to stream'), findsOneWidget);
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.episode(remotePid)),
     );
+    await tester.pumpAndSettle();
+
+    expect(repo.fetchEpisodeCalls, <String>[remotePid]);
+    expect(container.read(queueControllerProvider).entries, isEmpty);
+    expect(shellMessageText(raisedMessage(tester)), fetchingSaid);
   });
 
   testWidgets('the unplayed filter hides what the caller has heard', (
@@ -450,7 +494,7 @@ void main() {
     expect(container.read(queueControllerProvider).entries, isEmpty);
     expect(
       shellMessageText(raisedMessage(tester)),
-      contains('had no audio in the feed'),
+      contains('had no audio to stream yet'),
     );
   });
 
@@ -707,6 +751,26 @@ void main() {
     expect(
       find.bySemanticsIdentifier(SemanticsIds.podcastUnsubscribe),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('following a private show says to follow it by its own '
+      'address', (tester) async {
+    // The server gives a private show's address to its followers alone,
+    // so there is nothing here to follow it by.
+    final repo = FakeRepository()
+      ..shows[showPid] = testShow(showPid, feedUrl: null)
+      ..episodesByShow[showPid] = <EpisodeSummary>[];
+    await _pump(tester, repo);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastSubscribe));
+    await tester.pumpAndSettle();
+
+    expect(repo.subscribeCalls, isEmpty);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'This show is private. Follow it by the address you were given, '
+      'with Add subscription.',
     );
   });
 

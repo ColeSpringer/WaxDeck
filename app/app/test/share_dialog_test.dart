@@ -1,10 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:waxdeck/src/providers.dart';
+import 'package:waxdeck/src/sharing/share_dialog.dart';
+import 'package:waxdeck/src/sharing/shares_controller.dart';
 import 'package:waxdeck/src/shell/semantics_ids.dart';
+import 'package:waxdeck_api/waxdeck_api.dart';
 import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
+import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'player_host.dart';
+import 'routed_host.dart';
 
 const _trackPid = 'tr-01JZX5N8QW3F4V9T2B7KDSHARE1';
 const _showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
@@ -116,5 +126,147 @@ void main() {
     expect(repo.createShareCalls.single.expiresInHours, isNull);
     expect(copied, hasLength(1));
     await harness.endPlayback(tester);
+  });
+
+  testWidgets('an episode with nothing to play through a link says so', (
+    tester,
+  ) async {
+    // The server refuses a link to an episode it has not fetched whose
+    // feed names no audio it relays. The generic conflict sentence
+    // would tell the listener something else changed first.
+    final repo = FakeRepository()
+      ..shareError = const WaxDeckApiException(
+        code: 'conflict',
+        message:
+            'this episode has no audio on the server and its feed names '
+            'none to relay; fetch it first',
+        statusCode: 409,
+      );
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(
+          Builder(
+            builder: (context) => WaxButton(
+              label: 'Share it',
+              onPressed: () => showShareLinkDialog(context, pid: _episodePid),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Share it'));
+    await tester.pumpAndSettle();
+    await tester.tap(_byId(SemanticsIds.shareCreate));
+    await tester.pumpAndSettle();
+
+    expect(repo.createShareCalls.single.pid, _episodePid);
+    expect(
+      shellMessageText(raisedMessage(tester)),
+      'That episode has no audio a link could play: the server has not '
+      'fetched any, and its feed offers none to stream. If the show has '
+      'audio for it, fetch it first.',
+    );
+  });
+
+  testWidgets('a link minted after the dialog was dismissed is still '
+      'copied and listed', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository(items: [testItem(_trackPid)])
+      ..createShareGate = gate;
+    final copied = _captureClipboard(tester);
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+    // A shares screen left open behind the dialog.
+    final listing = container.listen(sharesProvider, (_, _) {});
+    addTearDown(listing.close);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: routedHost(
+          Builder(
+            builder: (context) => WaxButton(
+              label: 'Share it',
+              onPressed: () => showShareLinkDialog(context, pid: _trackPid),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Share it'));
+    await tester.pumpAndSettle();
+    await tester.tap(_byId(SemanticsIds.shareCreate));
+    await tester.pump();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ShareLinkDialog), findsNothing);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    final base = container.read(serverBaseUrlProvider);
+    expect(copied, ['$base/s/FAKESECRET0']);
+    expect(container.read(sharesProvider).value?.shares.map((s) => s.url), [
+      '/s/FAKESECRET0',
+    ]);
+    expect(find.text('Share it'), findsOneWidget);
+    expect(shellMessageText(raisedMessage(tester)), 'Link copied');
+  });
+
+  testWidgets('a link minted while the dialog is closing leaves the page '
+      'under it', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository(items: [testItem(_trackPid)])
+      ..createShareGate = gate;
+    _captureClipboard(tester);
+    final container = ProviderContainer(
+      overrides: [repositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: localizedHost(
+          Builder(
+            builder: (context) => WaxButton(
+              label: 'Open',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => WaxButton(
+                    label: 'Share it',
+                    onPressed: () =>
+                        showShareLinkDialog(context, pid: _trackPid),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Share it'));
+    await tester.pumpAndSettle();
+    await tester.tap(_byId(SemanticsIds.shareCreate));
+    await tester.pump();
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+    // Still on its way out when the server answers.
+    expect(find.byType(ShareLinkDialog), findsOneWidget);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ShareLinkDialog), findsNothing);
+    expect(find.text('Share it'), findsOneWidget);
   });
 }

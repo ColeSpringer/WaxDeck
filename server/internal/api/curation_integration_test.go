@@ -298,12 +298,11 @@ func itoaTest(n int) string {
 	return string(digits)
 }
 
-// TestUploadIdentifyReviewImport is the upload acceptance across all
-// three media types: chunked upload, identify, review decision, and
-// the file entering the library.
+// TestUploadIdentifyReviewImport is the upload acceptance across both
+// media types an upload can carry: chunked upload, identify, review
+// decision, and the file entering the library.
 func TestUploadIdentifyReviewImport(t *testing.T) {
 	t.Parallel()
-	podcasts := t.TempDir()
 	h := newHarnessWith(t, func(cfg *service.Config) {
 		cfg.MatchSource = &cannedSource{releases: []*match.Release{{
 			MBID: "rel-single", ReleaseGroupMBID: "rg-single",
@@ -316,8 +315,6 @@ func TestUploadIdentifyReviewImport(t *testing.T) {
 		for i := range cfg.Roots {
 			cfg.Roots[i].Managed = true
 		}
-		cfg.PodcastDir = podcasts
-		cfg.PodcastRootName = "podcasts"
 	})
 
 	staging := t.TempDir()
@@ -403,29 +400,6 @@ func TestUploadIdentifyReviewImport(t *testing.T) {
 	}
 	if !foundBook {
 		t.Fatal("uploaded audiobook did not enter the library")
-	}
-
-	// Podcast episode: as-is ingest under a manual show.
-	epPaths, err := fixtures.Generate(staging, fixtures.Spec{
-		Name: "field-notes-12", Codec: fixtures.CodecMP3, Duration: 3 * time.Second,
-		Tags: map[string]string{"TITLE": "Field Notes 12", "ARTIST": "Field Notes"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	eup := uploadFile(t, h, h.token, epPaths[0], "podcast", "")
-	if eup.ReviewEntryId == nil {
-		t.Fatalf("episode upload has no review entry: %+v", eup)
-	}
-	drainMatches(t, h)
-	resp = h.postJSON(t, "/api/v1/review/queue/"+*eup.ReviewEntryId+"/decide",
-		map[string]any{"action": "as-is"})
-	if resp.StatusCode != 200 {
-		t.Fatalf("episode as-is status = %d", resp.StatusCode)
-	}
-	eFinal := decode[Upload](t, get(t, h.ts, "/api/v1/uploads/"+eup.Id, h.token))
-	if eFinal.State != "imported" {
-		t.Fatalf("episode upload state = %q, want imported", eFinal.State)
 	}
 
 	// A byte-identical re-upload warns about the duplicate at

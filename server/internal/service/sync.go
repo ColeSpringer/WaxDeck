@@ -686,6 +686,27 @@ func (l *Library) bumpGrantEpoch(ctx context.Context, userID string) {
 	l.bumpEpoch(ctx, syncKeyGrantEpoch+userID)
 }
 
+// reachChanged follows a change to what the account may see: its catalog
+// cursors and its timelines end, and its server stream is told of every
+// show it follows, so each device re-reads the subscription as the new
+// rules have it (absent while the podcast library is out of reach, back
+// once it is not) without a reset, which would drop the account marker
+// the same change sends. It runs whether or not the request that made the
+// change is still there: the grants are written.
+func (l *Library) reachChanged(ctx context.Context, userID string) {
+	ctx = context.WithoutCancel(ctx)
+	l.bumpGrantEpoch(ctx, userID)
+	l.bumpReachEpoch(ctx, userID)
+	shows, err := l.db.SubscribedShowPIDsByUser(ctx, userID)
+	if err != nil {
+		l.log.Warn("listing an account's shows for its stream", "user", userID, "err", err)
+		return
+	}
+	for _, show := range shows {
+		l.emitUserEvent(ctx, userID, eventSubscription, show)
+	}
+}
+
 // --- catalog sync ------------------------------------------------------------
 
 // SyncCatalogSnapshot serves one keyset page of the full mirror. The
@@ -753,11 +774,21 @@ func (l *Library) SyncCatalogSnapshot(ctx context.Context, uc *UserCtx, cursor s
 		return CatalogSnapshotPage{}, classify(err)
 	}
 	subs := l.newSubscriptionFilter(uc)
+	// The query carries no grant, so the rows are sifted first and only
+	// those the caller is sent are hydrated: a caller who cannot see the
+	// podcast library reads no episode for a page of them.
+	visible := make([]*model.ItemView, 0, len(page.Items))
 	for _, it := range page.Items {
-		if !l.viewVisible(ctx, uc, it) {
-			continue
+		if l.viewVisible(ctx, uc, it) {
+			visible = append(visible, it)
 		}
-		entry, ok := l.itemSyncEntry(ctx, uc, subs, nil, it)
+	}
+	eps, err := l.episodeBatchFor(ctx, syncEpisodeViews(visible))
+	if err != nil {
+		return CatalogSnapshotPage{}, err
+	}
+	for _, it := range visible {
+		entry, ok := l.itemSyncEntry(ctx, uc, subs, nil, eps, it)
 		if !ok || entry.Op == syncOpDelete {
 			// A fresh mirror has nothing to tombstone, so an archived
 			// item is simply absent here rather than one delete per
@@ -782,11 +813,11 @@ func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow stri
 	if !l.podcastsVisible(ctx, uc) {
 		return nil, "", nil
 	}
-	set, err := l.subscribedShowSet(ctx, uc)
+	own, err := l.accountFeedURLs(ctx, uc.ID)
 	if err != nil {
-		return nil, "", &Error{Kind: KindInternal, Err: err}
+		return nil, "", err
 	}
-	if len(set) == 0 {
+	if len(own) == 0 {
 		return nil, "", nil
 	}
 	pods, err := l.lib.Podcasts().List(ctx)
@@ -799,7 +830,8 @@ func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow stri
 	var entries []CatalogSyncEntry
 	last := ""
 	for _, pod := range pods {
-		if !set[string(pod.PID)] {
+		url, followed := own[string(pod.PID)]
+		if !followed {
 			continue
 		}
 		if string(pod.PID) <= afterShow {
@@ -808,7 +840,7 @@ func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow stri
 		if len(entries) == limit {
 			return entries, last, nil
 		}
-		show, err := l.showDTO(ctx, uc, pod, false)
+		show, err := l.showDTO(ctx, uc, pod, false, url)
 		if err != nil {
 			return nil, "", err
 		}
@@ -819,20 +851,19 @@ func (l *Library) snapshotShows(ctx context.Context, uc *UserCtx, afterShow stri
 }
 
 // itemSyncEntry builds the mirror entry for one item view, attaching
-// the episode summary for podcast episodes. Episodes of shows the
-// caller does not subscribe to are excluded (ok false): skipping is
-// sound because the only transition that carries a mirrored episode
-// out of the caller's scope is their own unsubscribe, which bumps
-// their grant epoch and forces a clean re-mirror. One episode lookup
-// serves both the membership check and the payload; the generic
-// allowsItem path would fetch it twice per row on the hot sync path.
+// the episode summary for podcast episodes from the page's batch read.
+// Episodes of shows the caller does not subscribe to are excluded (ok
+// false): skipping is sound because the only transition that carries a
+// mirrored episode out of the caller's scope is their own unsubscribe,
+// which bumps their grant epoch and forces a clean re-mirror. The
+// batched episode serves both the membership check and the payload.
 //
 // Both the snapshot and the delta build their entries here, which is why
 // the archived tombstone lives here too. Filtering only the
 // delta would tombstone correctly for a running client and still hand a
 // fresh mirror every trashed item on first sync, shedding them only if
 // some later change happened to touch that pid.
-func (l *Library) itemSyncEntry(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, restorable func() map[string]bool, it *model.ItemView) (CatalogSyncEntry, bool) {
+func (l *Library) itemSyncEntry(ctx context.Context, uc *UserCtx, subs *subscriptionFilter, restorable func() map[string]bool, eps episodeBatch, it *model.ItemView) (CatalogSyncEntry, bool) {
 	if archived(it) {
 		// Archiving emits OpUpdate, not OpDelete (the item survives so a
 		// restore can find it), so a mirror following the change log would
@@ -844,14 +875,26 @@ func (l *Library) itemSyncEntry(ctx context.Context, uc *UserCtx, subs *subscrip
 	s := summary(it)
 	entry := CatalogSyncEntry{Op: syncOpUpsert, PID: s.PID, Item: &s}
 	if it.Kind == model.KindEpisode {
-		det, err := l.lib.Podcasts().Episode(ctx, it.PID)
-		if err != nil || !subs.allowsShow(ctx, l, string(det.Episode.PodcastPID)) {
+		ep := eps.eps[it.PID]
+		if ep == nil || !subs.allowsShow(ctx, l, string(ep.PodcastPID)) {
 			return CatalogSyncEntry{}, false
 		}
-		ep := l.episodeSummary(ctx, det.Episode)
-		entry.Episode = &ep
+		sum := l.episodeSummary(ctx, ep, eps.facts)
+		entry.Episode = &sum
 	}
 	return entry, true
+}
+
+// syncEpisodeViews is the views of a sync page that itemSyncEntry reads
+// an episode for: an archived one is tombstoned without it.
+func syncEpisodeViews(views []*model.ItemView) []*model.ItemView {
+	var out []*model.ItemView
+	for _, it := range views {
+		if it.Kind == model.KindEpisode && !archived(it) {
+			out = append(out, it)
+		}
+	}
+	return out
 }
 
 // SyncCatalogDelta serves the changes after the given cursor, coalesced
@@ -941,6 +984,9 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 	}
 	showsVisible := l.podcastsVisible(ctx, uc)
 	subs := l.newSubscriptionFilter(uc)
+	// The addresses the caller follows its shows by, read for the first
+	// show row the page sends.
+	var own map[string]string
 	// Once for the page, not once per archived row: it decides only
 	// whether a tombstone lets the client reclaim what it downloaded.
 	// Scoped to the archived rows this page actually holds, which on the
@@ -952,6 +998,24 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 		}
 	}
 	restorable := l.restorableItems(ctx, archivedPIDs)
+	// Which rows the caller is sent, decided once: only those are
+	// hydrated, and the loop below tombstones the rest as hidden.
+	views := make([]*model.ItemView, 0, len(byPID))
+	sent := make(map[model.PID]bool, len(byPID))
+	for _, key := range order {
+		v := byPID[key.pid]
+		if key.kind != "item" || v == nil || ops[key] == string(model.OpDelete) || archived(v) {
+			continue
+		}
+		if l.viewVisible(ctx, uc, v) && l.allowedByContent(ctx, uc, v) {
+			sent[v.PID] = true
+			views = append(views, v)
+		}
+	}
+	eps, err := l.episodeBatchFor(ctx, syncEpisodeViews(views))
+	if err != nil {
+		return CatalogDelta{}, err
+	}
 	for _, key := range order {
 		if key.kind == "podcast" {
 			if !showsVisible {
@@ -980,7 +1044,12 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			if !subs.allowsShow(ctx, l, string(pod.PID)) {
 				continue
 			}
-			show, err := l.showDTO(ctx, uc, pod, false)
+			if own == nil {
+				if own, err = l.accountFeedURLs(ctx, uc.ID); err != nil {
+					return CatalogDelta{}, err
+				}
+			}
+			show, err := l.showDTO(ctx, uc, pod, false, own[string(pod.PID)])
 			if err != nil {
 				return CatalogDelta{}, err
 			}
@@ -1012,7 +1081,7 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			out.Entries = append(out.Entries, l.archivedTombstone(it, restorable))
 			continue
 		}
-		if !l.viewVisible(ctx, uc, it) || !l.allowedByContent(ctx, uc, it) {
+		if !sent[pid] {
 			// A change can carry an item out of the caller's sight with
 			// no grant or rule change to bump the epoch (a file re-homed
 			// under an ungranted root keeps its item PID; a retag or an
@@ -1028,7 +1097,7 @@ func (l *Library) SyncCatalogDelta(ctx context.Context, uc *UserCtx, since strin
 			})
 			continue
 		}
-		if entry, ok := l.itemSyncEntry(ctx, uc, subs, restorable, it); ok {
+		if entry, ok := l.itemSyncEntry(ctx, uc, subs, restorable, eps, it); ok {
 			out.Entries = append(out.Entries, entry)
 		}
 	}
@@ -1118,6 +1187,9 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 
 	seenState := make(map[string]bool)
 	seenSub := make(map[string]bool)
+	// Read once, on the first subscription event: an account that cannot
+	// see the podcast library follows nothing here, as on every surface.
+	podcastsKnown, podcasts := false, false
 	seenBook := make(map[string]bool)
 	seenMarks := make(map[string]bool)
 	seenPlaylist := make(map[string]bool)
@@ -1166,9 +1238,16 @@ func (l *Library) SyncServerDelta(ctx context.Context, uc *UserCtx, since string
 			}
 			seenSub[e.ItemPID] = true
 			ev := ServerSyncEvent{Kind: eventSubscription, PID: apiPID(PrefixPodcast, model.PID(e.ItemPID))}
+			if !podcastsKnown {
+				podcastsKnown, podcasts = true, l.podcastsVisible(ctx, uc)
+			}
 			// Hydrate fresh: subscribed carries the current subscription,
 			// unsubscribed carries none (the removal is the payload), and a
 			// missing subscription row is how unsubscribed reads.
+			if !podcasts {
+				out.Events = append(out.Events, ev)
+				continue
+			}
 			if pod, err := l.lib.Podcasts().Get(ctx, model.PID(e.ItemPID)); err == nil {
 				if sub, err := l.subscriptionFor(ctx, uc, pod); err == nil {
 					ev.Subscription = &sub
@@ -1237,7 +1316,7 @@ func (l *Library) hydratePlayState(ctx context.Context, uc *UserCtx, barePID str
 		}
 		return "", PlayState{}, classify(err)
 	}
-	if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
+	if !uc.AllLibraries && !l.viewVisible(ctx, uc, it) {
 		return "", PlayState{}, nil
 	}
 	apiItem := itemAPIPID(it)

@@ -82,13 +82,17 @@ paths:
         alphabetical, never played, rediscover, and in progress.
         Play-derived lists reflect the calling user's own listening state.
 
-        Most lists span every media type. `newest` does not: it orders by
-        release year, which a podcast episode has not got, so it covers
-        music and audiobooks only. Pairing it with `mediaType=podcast`,
-        or drilling its `kind` dimension to `episode`, is
-        `invalid-request` rather than an empty page that would read as
-        "your library holds none". Episodes ordered by publication date
-        live on `/podcasts/episodes`.
+        Most lists span every media type; `newest` and `recently-added`
+        do not. `newest` orders by release year, which a podcast episode
+        has not got, so it covers music and audiobooks only. Pairing it
+        with `mediaType=podcast`, or drilling its `kind` dimension to
+        `episode`, is `invalid-request` rather than an empty page that
+        would read as "your library holds none". `recently-added`
+        without a `mediaType` covers music and audiobooks only, so a
+        show's feed landing its backlog does not take the first page;
+        naming `mediaType=podcast`, or drilling its `kind` dimension to
+        `episode`, lists the episodes. Episodes ordered by publication
+        date live on `/podcasts/episodes`.
       tags: [library]
       parameters:
         - name: list
@@ -1341,7 +1345,8 @@ components:
               description: >
                 When the item entered the library: when its primary file,
                 or a copy of it the caller can see found before that, was
-                found.
+                found. An episode's is when its show's feed first listed
+                it here, whether or not its audio has been fetched.
             copies:
               type: integer
               description: >

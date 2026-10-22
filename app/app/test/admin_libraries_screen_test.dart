@@ -487,6 +487,45 @@ void main() {
     );
   });
 
+  testWidgets('the podcast library offers no matching choice and no rescan', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    repo.libraries.addAll(const <LibraryInfo>[
+      LibraryInfo(
+        pid: 'lb-1',
+        name: 'music',
+        media: 'music',
+        path: '/srv/music',
+      ),
+      LibraryInfo(
+        pid: 'lb-9',
+        name: 'podcasts',
+        media: 'podcast',
+        path: '/srv/podcasts',
+      ),
+    ]);
+    await _pump(tester, _host(_container(repo)));
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMatching('lb-9')),
+      findsNothing,
+      reason: 'episodes come from their feeds, which nothing matches',
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRescan('lb-9')),
+      findsNothing,
+      reason: 'a rescan reads every root but the podcast library',
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryMatching('lb-1')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.libraryRescan('lb-1')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a flag answered after its row left still refreshes', (
     tester,
   ) async {

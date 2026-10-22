@@ -20,16 +20,22 @@ import (
 // The golden suite pins the Subsonic adapter's exact wire output, XML
 // and JSON, over a deterministic fixture setup. Volatile content is
 // normalized before comparison: ULIDs become ULID_n in first-seen
-// order per document, RFC 3339 timestamps become TS, and the
-// serverVersion attribute becomes VERSION. Regenerate the files with
-// UPDATE_GOLDEN=1 go test -run TestSubsonicGolden ./internal/api/.
+// order per document, RFC 3339 timestamps become TS, the serverVersion
+// attribute becomes VERSION, and a file's size and bitrate, which are
+// whatever the fixture encoders wrote and move with a codec bump or the
+// machine's float arithmetic, become SIZE and BR. Regenerate the files
+// with UPDATE_GOLDEN=1 go test -run TestSubsonicGolden ./internal/api/.
 var (
-	goldenULID    = regexp.MustCompile(`[0-9A-HJKMNP-TV-Z]{26}`)
-	goldenTS      = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`)
-	goldenVerXML  = regexp.MustCompile(`serverVersion="[^"]*"`)
-	goldenVerJSON = regexp.MustCompile(`"serverVersion":"[^"]*"`)
-	goldenLMXML   = regexp.MustCompile(`lastModified="\d+"`)
-	goldenLMJSON  = regexp.MustCompile(`"lastModified":\d+`)
+	goldenULID     = regexp.MustCompile(`[0-9A-HJKMNP-TV-Z]{26}`)
+	goldenTS       = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})`)
+	goldenVerXML   = regexp.MustCompile(`serverVersion="[^"]*"`)
+	goldenVerJSON  = regexp.MustCompile(`"serverVersion":"[^"]*"`)
+	goldenLMXML    = regexp.MustCompile(`lastModified="\d+"`)
+	goldenLMJSON   = regexp.MustCompile(`"lastModified":\d+`)
+	goldenSizeXML  = regexp.MustCompile(` size="\d+"`)
+	goldenSizeJSON = regexp.MustCompile(`"size":\d+`)
+	goldenBRXML    = regexp.MustCompile(` bitRate="\d+"`)
+	goldenBRJSON   = regexp.MustCompile(`"bitRate":\d+`)
 )
 
 func normalizeSubsonic(body []byte) []byte {
@@ -38,6 +44,10 @@ func normalizeSubsonic(body []byte) []byte {
 	s = goldenVerJSON.ReplaceAllString(s, `"serverVersion":"VERSION"`)
 	s = goldenLMXML.ReplaceAllString(s, `lastModified="LM"`)
 	s = goldenLMJSON.ReplaceAllString(s, `"lastModified":"LM"`)
+	s = goldenSizeXML.ReplaceAllString(s, ` size="SIZE"`)
+	s = goldenSizeJSON.ReplaceAllString(s, `"size":"SIZE"`)
+	s = goldenBRXML.ReplaceAllString(s, ` bitRate="BR"`)
+	s = goldenBRJSON.ReplaceAllString(s, `"bitRate":"BR"`)
 	seen := map[string]string{}
 	n := 0
 	s = goldenULID.ReplaceAllStringFunc(s, func(m string) string {

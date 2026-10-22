@@ -94,6 +94,8 @@ func (s *Server) CreateShare(ctx context.Context, req CreateShareRequestObject) 
 		return CreateShare400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
 	case service.KindForbidden:
 		return CreateShare403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+	case service.KindConflict:
+		return CreateShare409JSONResponse(errObj("conflict", err.Error())), nil
 	default:
 		return nil, err
 	}
@@ -115,5 +117,6 @@ func (s *Server) RevokeShare(ctx context.Context, req RevokeShareRequestObject) 
 	default:
 		return nil, err
 	}
+	s.shareTransfers.end(barePID(req.ShareId))
 	return RevokeShare204Response{}, nil
 }

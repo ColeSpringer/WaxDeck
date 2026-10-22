@@ -25,7 +25,8 @@ type PodcastDirectoryEntry struct {
 func (l *Library) podcastDirectorySearch() *providers.PodcastDirectory {
 	l.podcastDirectoryOnce.Do(func() {
 		l.podcastDirectory = providers.NewPodcastDirectory(providers.PodcastDirectoryConfig{
-			BaseURL: l.podcastDirectoryBase,
+			BaseURL:   l.podcastDirectoryBase,
+			UserAgent: l.UserAgent(),
 		})
 	})
 	return l.podcastDirectory

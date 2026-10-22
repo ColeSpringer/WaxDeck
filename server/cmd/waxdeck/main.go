@@ -340,20 +340,22 @@ func run() error {
 
 	// The matching engine's candidate source and the server's own
 	// enrichment providers. Key-free providers are always registered;
-	// keyed ones only when configured. All are paced and cached.
+	// keyed ones only when configured. All are paced and cached, and all
+	// name this build.
+	agent := service.UserAgentFor(version)
 	var matchSource *waxproviders.Source
 	if *matchingOn {
 		matchSource = &waxproviders.Source{
-			MB: waxproviders.NewMusicBrainz(waxproviders.MusicBrainzConfig{BaseURL: *mbBase}),
+			MB: waxproviders.NewMusicBrainz(waxproviders.MusicBrainzConfig{BaseURL: *mbBase, UserAgent: agent}),
 			Acoust: waxproviders.NewAcoustID(waxproviders.AcoustIDConfig{
-				APIKey: *acoustidKey,
+				APIKey: *acoustidKey, UserAgent: agent,
 			}),
 		}
 	}
 	// One Deezer client, shared: radio's artwork rung and every
 	// enrichment rung go at api.deezer.com, and more clients would be
 	// that many unpaced callers.
-	deezer := waxproviders.NewDeezer(waxproviders.DeezerConfig{})
+	deezer := waxproviders.NewDeezer(waxproviders.DeezerConfig{UserAgent: agent})
 	// The artist-art switch is applied to the enrichment port itself:
 	// hiding the capability is what takes the artist rung out of the
 	// catalog's walk, since a provider that does not advertise it is
@@ -366,28 +368,28 @@ func run() error {
 	}
 	enrichProviders := []enrich.Provider{
 		hideArtistArt(deezer),
-		waxproviders.NewITunes(waxproviders.ITunesConfig{}),
+		waxproviders.NewITunes(waxproviders.ITunesConfig{UserAgent: agent}),
 	}
 	if *discogsToken != "" {
-		enrichProviders = append(enrichProviders, waxproviders.NewDiscogs(waxproviders.DiscogsConfig{Token: *discogsToken}))
+		enrichProviders = append(enrichProviders, waxproviders.NewDiscogs(waxproviders.DiscogsConfig{Token: *discogsToken, UserAgent: agent}))
 	}
 	// The book ladder, identifier-anchored end first: Audnexus answers
 	// the ASIN outright, Hardcover bridges an ASIN to the ISBN the two
 	// fallbacks key on, and the fallbacks also take a name-gated title
 	// search for books carrying neither identifier's answer yet.
-	enrichProviders = append(enrichProviders, waxproviders.NewAudnexus(waxproviders.AudnexusConfig{}))
+	enrichProviders = append(enrichProviders, waxproviders.NewAudnexus(waxproviders.AudnexusConfig{UserAgent: agent}))
 	if *hardcoverKey != "" {
-		enrichProviders = append(enrichProviders, waxproviders.NewHardcover(waxproviders.HardcoverConfig{Token: *hardcoverKey}))
+		enrichProviders = append(enrichProviders, waxproviders.NewHardcover(waxproviders.HardcoverConfig{Token: *hardcoverKey, UserAgent: agent}))
 	}
 	enrichProviders = append(enrichProviders,
-		waxproviders.NewGoogleBooks(waxproviders.GoogleBooksConfig{APIKey: *googleBooksKey}),
-		waxproviders.NewOpenLibrary(waxproviders.OpenLibraryConfig{}),
+		waxproviders.NewGoogleBooks(waxproviders.GoogleBooksConfig{APIKey: *googleBooksKey, UserAgent: agent}),
+		waxproviders.NewOpenLibrary(waxproviders.OpenLibraryConfig{UserAgent: agent}),
 	)
 	// fanart.tv is registered ahead of the other art providers, so it
 	// leads the default order: it is the only one answering per role.
 	// One client for the same pacing reason as Deezer's.
 	if *fanartKey != "" {
-		fanart := waxproviders.NewFanartTV(waxproviders.FanartTVConfig{APIKey: *fanartKey})
+		fanart := waxproviders.NewFanartTV(waxproviders.FanartTVConfig{APIKey: *fanartKey, UserAgent: agent})
 		enrichProviders = append([]enrich.Provider{hideArtistArt(fanart)}, enrichProviders...)
 	}
 	// Custom providers ride ahead of everything: an operator who wired a
@@ -428,7 +430,7 @@ func run() error {
 		bridged := make([]enrich.Provider, 0, len(bridgePairs))
 		for _, p := range bridgePairs {
 			bridge, err := waxproviders.NewHTTPBridge(ctx, waxproviders.HTTPBridgeConfig{
-				Label: p[0], BaseURL: p[1], Token: authFor[p[0]], Log: log,
+				Label: p[0], BaseURL: p[1], Token: authFor[p[0]], Log: log, UserAgent: agent,
 			})
 			if err != nil {
 				return err
@@ -473,6 +475,7 @@ func run() error {
 		AllowPrivateScrobbleHosts: *allowPrivateScrobble,
 		AllowPrivateNotifyHosts:   *allowPrivateNotify,
 		PublicBase:                *publicBase,
+		Version:                   version,
 		RadioDirectoryBase:        *radioDirBase,
 		PodcastDirectoryBase:      *podcastDirBase,
 		LastfmAPIKey:              *lastfmKey,
@@ -501,7 +504,7 @@ func run() error {
 		// for, not because it is the better first ask.
 		radioArt.Sources = append(radioArt.Sources, waxproviders.RecordingCover{
 			MB:  matchSource.MB,
-			CAA: waxproviders.NewCoverArt(waxproviders.CoverArtConfig{BaseURL: *coverArtBase}),
+			CAA: waxproviders.NewCoverArt(waxproviders.CoverArtConfig{BaseURL: *coverArtBase, UserAgent: agent}),
 		})
 	}
 	svcCfg.RadioArtResolver = radioArt
@@ -867,7 +870,7 @@ func run() error {
 		// Off by default because it is a standing outbound connection to
 		// a third party, and the refresh above stays the floor either way.
 		if *podpingOn {
-			client := podping.New(podping.Config{NodeURL: *podpingNode})
+			client := podping.New(podping.Config{NodeURL: *podpingNode, UserAgent: agent})
 			watcher := podping.NewWatcher(client, log, func(ctx context.Context, ping podping.Ping) {
 				svc.NotePodping(ctx, ping.IRI)
 			})
@@ -1390,12 +1393,11 @@ func run() error {
 	// The read-only OpenSubsonic compatibility surface. App-password
 	// authenticated; third-party clients browse and stream while the
 	// first-party clients mature.
-	mux.Handle("/rest/", httpm.instrument("subsonic", subsonic.New(svc, bridge, media, version, log).ServeHTTP))
+	mux.Handle("/rest/", httpm.instrument("subsonic", subsonic.New(svc, bridge, media, version, log).WithSessions(connectSvc).ServeHTTP))
 	// The gpodder.net-compatible sync surface (AntennaPod and friends):
 	// app passwords over Basic plus its own stored session cookie.
 	gp := gpodder.New(svc, *cookieSec, log)
-	mux.Handle("/api/2/", httpm.instrument("gpodder", gp.ServeHTTP))
-	mux.Handle("/subscriptions/", httpm.instrument("gpodder", gp.ServeHTTP))
+	mountGpodder(ctx, mux, group, httpm.instrument("gpodder", gp.ServeHTTP), svc.RetryPendingGpodder, time.Minute)
 	if bridge != nil {
 		mux.Handle("/media/stream", httpm.instrumentStream("media-stream", bridge.ServeStream))
 		// HLS fetches are many short requests (a playlist, an init
@@ -1462,6 +1464,28 @@ func run() error {
 	group.Wait()
 	log.Info("bye")
 	return nil
+}
+
+// mountGpodder serves the gpodder surface and runs, every interval, the
+// retries of the feeds its devices added that could not be fetched yet.
+// On a server whose podcast directory is off every add is refused, so
+// nothing parks, and a park left from before is refused at its next try.
+func mountGpodder(ctx context.Context, mux *http.ServeMux, group *supervise.Group, h http.Handler,
+	retry func(context.Context), every time.Duration) {
+	mux.Handle("/api/2/", h)
+	mux.Handle("/subscriptions/", h)
+	group.Go(ctx, "gpodder-pending", func(ctx context.Context) error {
+		tick := time.NewTicker(every)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-tick.C:
+				retry(ctx)
+			}
+		}
+	})
 }
 
 // root is one parsed name=path pair.

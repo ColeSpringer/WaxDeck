@@ -203,17 +203,21 @@ export class Player extends Surface {
     await clickThrough(this.offerResume(), this.deckToggle());
   }
 
+  /// The sleep sheet's end-of-chapter row, which only a book or an
+  /// episode with chapters draws.
+  sleepChapterRow(): Locator {
+    return this.ctx.page.locator(sem(SemanticsIds.sleepTimerChapter));
+  }
+
   /// Arm the sleep timer to stop where the current chapter ends, opening
-  /// its sheet on the way; the end-of-chapter row is a book's alone. What
-  /// got armed is in the timer control's name, which is the spec's to
-  /// read. Restored per attempt for the reason [setSpeed] is: the control
-  /// sits on the player's dismissing scaffold.
+  /// its sheet on the way; the row is there for a book or an episode with
+  /// chapters. What got armed is in the timer control's name, which is the
+  /// spec's to read. Restored per attempt for the reason [setSpeed] is:
+  /// the control sits on the player's dismissing scaffold.
   async armEndOfChapter(): Promise<void> {
-    await chooseFromMenu(
-      this.sleepTimer(),
-      this.ctx.page.locator(sem(SemanticsIds.sleepTimerChapter)),
-      { restore: () => this.reopen() },
-    );
+    await chooseFromMenu(this.sleepTimer(), this.sleepChapterRow(), {
+      restore: () => this.reopen(),
+    });
   }
 
   /// The full player's seek bar: a slider whose value is the position

@@ -1489,11 +1489,12 @@ func (l *Library) releaseSourcePlaylistCover(ctx context.Context, pl *model.Play
 	l.refreshPlaylistCover(ctx, pl)
 }
 
-// fetchSyncedCoverImage downloads a source thumbnail. HTTPS only (the
-// URL comes from the provider, not the user, but an image fetch has no
-// business downgrading), bounded, image-typed, and over the hardened
-// outbound client: the URL is third-party data, and a redirect must
-// not walk the sweeper onto a private address the front door refused.
+// fetchSyncedCoverImage downloads a source thumbnail. HTTPS only, at
+// every hop (the URL comes from the provider, not the user, but an image
+// fetch has no business downgrading), bounded, image-typed, and over the
+// hardened outbound client: the URL is third-party data, and a redirect
+// must not walk the sweeper onto a private address the front door
+// refused.
 func (l *Library) fetchSyncedCoverImage(ctx context.Context, rawURL string) ([]byte, string, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil || u.Scheme != "https" {
@@ -1503,7 +1504,22 @@ func (l *Library) fetchSyncedCoverImage(ctx context.Context, rawURL string) ([]b
 	if err != nil {
 		return nil, "", err
 	}
-	resp, err := l.transcriptClient().Do(req)
+	req.Header.Set("User-Agent", l.UserAgent())
+	client := *l.transcriptClient()
+	capped := client.CheckRedirect
+	client.CheckRedirect = func(next *http.Request, via []*http.Request) error {
+		if next.URL.Scheme != "https" {
+			return errors.New("cover redirect leaves https")
+		}
+		if capped != nil {
+			return capped(next, via)
+		}
+		if len(via) >= 10 {
+			return errors.New("stopped after 10 redirects")
+		}
+		return nil
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, "", err
 	}

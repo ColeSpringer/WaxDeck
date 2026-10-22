@@ -128,6 +128,17 @@ void main() {
       expect(explainError(en, window), en.errorWindowedTrack);
       expect(explainError(es, window), es.errorWindowedTrack);
 
+      // Podcasts turned off is the server's, not the request's, so a
+      // refusal of what was typed says it in this client's words too.
+      const podcasts = WaxDeckApiException(
+        code: 'feature-unavailable',
+        message: _serverMessage,
+        params: <String, String>{'feature': 'podcasts'},
+      );
+      expect(explainError(en, podcasts), en.errorPodcastsOff);
+      expect(explainError(es, podcasts), es.errorPodcastsOff);
+      expect(explainRefusal(en, podcasts), en.errorPodcastsOff);
+
       // A feature named by a newer server is still a feature-unavailable.
       const later = WaxDeckApiException(
         code: 'feature-unavailable',
@@ -183,6 +194,95 @@ void main() {
         message: _serverMessage,
       );
       expect(explainError(en, plain), en.errorUnsupportedFormat);
+    });
+  });
+
+  group('feed failures', () {
+    WaxDeckApiException failed(String code, String? reason) =>
+        WaxDeckApiException(
+          code: code,
+          message: _serverMessage,
+          statusCode: code == 'invalid-request' ? 400 : 502,
+          params: reason == null ? null : {'reason': reason},
+        );
+
+    test('a host failure is worded by its reason', () {
+      final byReason = <String, String Function(AppLocalizations)>{
+        'blocked-address': (l) => l.errorFeedBlockedAddress,
+        'host-refused': (l) => l.errorFeedRefused,
+        'host-missing': (l) => l.errorFeedNotFound,
+        'host-error': (l) => l.errorFeedHostError,
+      };
+      for (final MapEntry(key: reason, value: sentence) in byReason.entries) {
+        final e = failed('feed-unreachable', reason);
+        for (final l10n in <AppLocalizations>[en, es]) {
+          expect(explainError(l10n, e), sentence(l10n), reason: reason);
+          // Nothing the caller typed was refused, so the table words it
+          // on a form too.
+          expect(explainRefusal(l10n, e), sentence(l10n), reason: reason);
+        }
+      }
+      final sentences = {
+        for (final s in byReason.values) s(en),
+        en.errorFeedUnreachable,
+      };
+      expect(sentences, hasLength(5), reason: 'each reason reads apart');
+    });
+
+    test('a host out of reach, or a reason this build does not know, reads '
+        'as the code', () {
+      for (final reason in <String?>['unreachable', 'holo-outage', null]) {
+        expect(
+          explainError(en, failed('feed-unreachable', reason)),
+          en.errorFeedUnreachable,
+          reason: '$reason',
+        );
+      }
+    });
+
+    test('an address refused as invalid is worded by its reason where '
+        'the table words refusals', () {
+      final byReason = <String, String Function(AppLocalizations)>{
+        'not-a-feed': (l) => l.errorFeedNotAFeed,
+        'too-large': (l) => l.errorFeedTooLarge,
+        'blocked-address': (l) => l.errorFeedBlockedAddress,
+      };
+      for (final MapEntry(key: reason, value: sentence) in byReason.entries) {
+        for (final l10n in <AppLocalizations>[en, es]) {
+          expect(
+            explainError(l10n, failed('invalid-request', reason)),
+            sentence(l10n),
+            reason: reason,
+          );
+          // The same reasons under feed-unreachable, an address a feed
+          // supplied, read the same.
+          expect(
+            explainError(l10n, failed('feed-unreachable', reason)),
+            sentence(l10n),
+            reason: reason,
+          );
+        }
+      }
+      expect({
+        for (final s in byReason.values) s(en),
+        en.errorInvalidRequest,
+      }, hasLength(4));
+    });
+
+    test('an address refused as invalid keeps the server sentence on a '
+        'form', () {
+      // It names what was wrong with the address just typed, which the
+      // table cannot.
+      for (final reason in <String>[
+        'not-a-feed',
+        'too-large',
+        'blocked-address',
+      ]) {
+        expect(
+          explainRefusal(en, failed('invalid-request', reason)),
+          _serverMessage,
+        );
+      }
     });
   });
 

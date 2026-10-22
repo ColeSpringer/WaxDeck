@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -139,9 +140,9 @@ func (s *Server) GetRadioPlayInfo(ctx context.Context, req GetRadioPlayInfoReque
 // needs a session and a shared cache must not answer one without.
 const radioLogoCacheControl = artCacheControl
 
-// The logo response's hardening pair, and the one endpoint in this file
-// that needs it: these bytes came from a host any account can name, and
-// they are served from WaxDeck's own origin.
+// The hardening pair of a station's logo and now-playing artwork: these
+// bytes came from a host any account can name, and they are served from
+// WaxDeck's own origin.
 //
 // The service is what makes the response safe - it serves only raster
 // types, decided by sniffing the bytes rather than by trusting the host,
@@ -152,23 +153,6 @@ const (
 	radioLogoNoSniff = service.ArtNoSniff
 	radioLogoCSP     = service.ArtCSP
 )
-
-// radioStreamContentType is the type the stream proxy serves for a
-// station's own, refusing the ones a browser would execute.
-//
-// A station names its type and the proxy relays it from this origin, so
-// the executable families are replaced by the audio default rather than
-// passed on: what a listener asked for is a stream, and a station that
-// answers markup has already failed to be one.
-func radioStreamContentType(declared string) string {
-	essence, _, _ := strings.Cut(declared, ";")
-	switch strings.ToLower(strings.TrimSpace(essence)) {
-	case "", "text/html", "application/xhtml+xml", "image/svg+xml",
-		"application/xml", "text/xml", "text/plain":
-		return "audio/mpeg"
-	}
-	return declared
-}
 
 func (s *Server) GetRadioStationLogo(ctx context.Context, req GetRadioStationLogoRequestObject) (GetRadioStationLogoResponseObject, error) {
 	if _, _, err := s.requireUserCtx(ctx); err != nil {
@@ -438,6 +422,8 @@ func (s *Server) SearchRadioDirectory(ctx context.Context, req SearchRadioDirect
 // station for in-stream ICY metadata, strips it from the audio, and
 // records the current title for play-info to report.
 func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("X-Content-Type-Options", service.MediaNoSniff)
+	w.Header().Set("Content-Security-Policy", service.MediaCSP)
 	pid := r.PathValue("pid")
 	claims, _, ok := s.verifiedMedia(w, r, r.URL.Query().Get("mt"), auth.MediaWant{
 		Purposes: []string{auth.PurposeRadio}, PID: pid,
@@ -469,14 +455,17 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, streamURL, nil)
+	// The station's own requests, ended early only when a playlist, or an
+	// answer that says nothing of what it is, does not arrive in time.
+	stationCtx, stopStation := context.WithCancel(ctx)
+	defer stopStation()
+	client, agent := s.svc.RadioHTTP(), s.svc.UserAgent()
+	req, err := stationRequest(stationCtx, streamURL, agent)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "service-unreachable", "the station could not be contacted")
 		return
 	}
-	req.Header.Set("User-Agent", "WaxDeck")
-	req.Header.Set("Icy-MetaData", "1")
-	resp, err := s.svc.RadioHTTP().Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, "service-unreachable", "the station could not be reached")
 		return
@@ -486,24 +475,37 @@ func (s *Server) ServeRadio(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "service-unreachable", fmt.Sprintf("the station answered status %d", resp.StatusCode))
 		return
 	}
+	// A station's address can answer a playlist naming its stream; the
+	// stream is what goes out, and the station's row keeps the address.
+	resp, err = stationStream(stationCtx, client, agent, resp, stopStation, stationPlaylistWait)
+	if err != nil {
+		var why stationRefusal
+		if !errors.As(err, &why) {
+			why = "the station could not be reached"
+		}
+		writeError(w, http.StatusBadGateway, "service-unreachable", string(why))
+		return
+	}
+	defer resp.Body.Close()
+	// The station's bytes leave under this origin's URL, so only audio
+	// goes out, under the enclosure relay's own gate.
+	upstreamType := resp.Header.Get("Content-Type")
+	ct, untyped, ok := relayedType(upstreamType)
+	if !ok {
+		s.log.Warn("the station answered with something other than audio",
+			"pid", pid, "contentType", clipLabel(upstreamType))
+		writeError(w, http.StatusBadGateway, "service-unreachable", "the station answered with something other than audio")
+		return
+	}
+	if untyped {
+		ct = "application/octet-stream"
+	}
 	metaint, _ := strconv.Atoi(resp.Header.Get("Icy-Metaint"))
 	// Some operators name their logo in the connect headers, which is a
 	// better answer than the discovery walk and free to keep: this is
 	// the one moment the station itself is talking to this server.
 	s.svc.NoteRadioLogoHint(pid, strings.TrimSpace(resp.Header.Get("Icy-Logo")))
-	// The station's own type, minus the ones that would make this origin
-	// run a stranger's markup. The proxy serves an attacker-nameable host's
-	// bytes from WaxDeck's origin, exactly as the logo endpoint does, and a
-	// station answering text/html or an SVG here would be the same stored
-	// XSS from the other door. Passed through rather than allowlisted
-	// because the set of types real stations send is long and odd
-	// (audio/aacp, application/ogg, audio/x-mpegurl) and refusing an
-	// unfamiliar one would break playback to prevent nothing; what is
-	// refused is only what a browser would execute. `nosniff` covers the
-	// rest, so a mislabelled body cannot be re-decided into markup.
-	ct := radioStreamContentType(resp.Header.Get("Content-Type"))
 	w.Header().Set("Content-Type", ct)
-	w.Header().Set("X-Content-Type-Options", radioLogoNoSniff)
 	w.Header().Set("Cache-Control", "no-store")
 	for name, vals := range resp.Header {
 		lower := strings.ToLower(name)

@@ -14,7 +14,8 @@ part 'opml_import_entry.g.dart';
 /// * [feedUrl] - The feed URL from the document.
 /// * [title] - The show title, when the feed resolved.
 /// * [pid] - The subscribed show's PID, when the feed resolved.
-/// * [error] - Why this feed failed to subscribe, when it did.
+/// * [error] - Why this feed failed to subscribe, when it did: a sentence for a person. 
+/// * [reason] - The feed-side failure's reason, when the failure was one: `not-a-feed`, `too-large`, `blocked-address`, `host-refused`, `host-missing`, `host-error` or `unreachable`, as a subscribe's `params.reason` names them. New values may appear. 
 @BuiltValue()
 abstract class OpmlImportEntry implements Built<OpmlImportEntry, OpmlImportEntryBuilder> {
   /// The feed URL from the document.
@@ -29,9 +30,13 @@ abstract class OpmlImportEntry implements Built<OpmlImportEntry, OpmlImportEntry
   @BuiltValueField(wireName: r'pid')
   String? get pid;
 
-  /// Why this feed failed to subscribe, when it did.
+  /// Why this feed failed to subscribe, when it did: a sentence for a person. 
   @BuiltValueField(wireName: r'error')
   String? get error;
+
+  /// The feed-side failure's reason, when the failure was one: `not-a-feed`, `too-large`, `blocked-address`, `host-refused`, `host-missing`, `host-error` or `unreachable`, as a subscribe's `params.reason` names them. New values may appear. 
+  @BuiltValueField(wireName: r'reason')
+  String? get reason;
 
   OpmlImportEntry._();
 
@@ -79,6 +84,13 @@ class _$OpmlImportEntrySerializer implements PrimitiveSerializer<OpmlImportEntry
       yield r'error';
       yield serializers.serialize(
         object.error,
+        specifiedType: const FullType(String),
+      );
+    }
+    if (object.reason != null) {
+      yield r'reason';
+      yield serializers.serialize(
+        object.reason,
         specifiedType: const FullType(String),
       );
     }
@@ -135,6 +147,14 @@ class _$OpmlImportEntrySerializer implements PrimitiveSerializer<OpmlImportEntry
           ) as String?;
           if (valueDes == null) continue;
           result.error = valueDes;
+          break;
+        case r'reason':
+          final valueDes = serializers.deserialize(
+            value,
+            specifiedType: const FullType.nullable(String),
+          ) as String?;
+          if (valueDes == null) continue;
+          result.reason = valueDes;
           break;
         default:
           unhandled.add(key);

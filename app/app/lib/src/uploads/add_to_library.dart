@@ -38,18 +38,28 @@ bool canAddToLibrary(WidgetRef ref) {
   return canUpload && !ref.watch(offlineProvider);
 }
 
+/// The media types a file or a link can be added as. Podcasts are added
+/// by subscribing to a feed, so they are not among them.
+const uploadableMediaTypes = <MediaType>[MediaType.music, MediaType.audiobook];
+
+/// [type] where it can be added, music otherwise: what the dialogs open
+/// on for a caller in a section (podcasts) that has no medium of its own
+/// here.
+MediaType uploadableMediaType(MediaType? type) =>
+    type != null && uploadableMediaTypes.contains(type)
+    ? type
+    : MediaType.music;
+
 /// Opens the add sheet, defaulting the media type to [initial] (the
-/// section the caller is in). Podcasts are added by subscribing, not
-/// here, so the sheet steers a podcast default to music.
+/// section the caller is in), or to music where that section cannot add
+/// its own.
 Future<void> showAddToLibrarySheet(
   BuildContext context,
   WidgetRef ref, {
   MediaType? initial,
 }) async {
   final picker = ref.read(filePickerProvider);
-  final defaultType = (initial == null || initial == MediaType.podcast)
-      ? MediaType.music
-      : initial;
+  final defaultType = uploadableMediaType(initial);
   final colors = WaxColors.of(context);
   final choice = await showWaxSheet<String>(
     context: context,
@@ -618,7 +628,7 @@ class _AcquireDialogState extends State<AcquireDialog> {
   late final _urlController = TextEditingController(
     text: widget.initialUrl ?? '',
   );
-  late var _mediaType = widget.initial;
+  late var _mediaType = uploadableMediaType(widget.initial);
   // Null is "nobody has said": drawn as on, sent absent.
   late bool? _identify = widget.initialIdentify;
   var _format = 'best';
@@ -684,17 +694,11 @@ class _AcquireDialogState extends State<AcquireDialog> {
               value: target,
               onChanged: (value) => setState(() => _target = value),
             ),
-            // Format is a download choice, so it is hidden for podcasts,
-            // which subscribe to a feed rather than transcode a file.
-            if (_mediaType != MediaType.podcast) ...<Widget>[
-              const SizedBox(height: WaxSpace.s12),
-              AcquireFormatSelector(
-                value: _format,
-                onChanged: (value) => setState(() => _format = value),
-              ),
-            ],
-            // Outside that block: a podcast has no format to pick, but
-            // it does open a review entry.
+            const SizedBox(height: WaxSpace.s12),
+            AcquireFormatSelector(
+              value: _format,
+              onChanged: (value) => setState(() => _format = value),
+            ),
             const SizedBox(height: WaxSpace.s12),
             IdentifySwitch(
               value: _identify,
@@ -721,7 +725,7 @@ class _AcquireDialogState extends State<AcquireDialog> {
               : () => Navigator.of(context).pop((
                   url: url,
                   mediaType: _mediaType,
-                  format: _mediaType == MediaType.podcast ? 'best' : _format,
+                  format: _format,
                   identify: _identify,
                   // Only where the picker was a real choice: one
                   // candidate is the routing the server would have done
@@ -778,7 +782,7 @@ class MediaTypeDialog extends StatefulWidget {
 }
 
 class _MediaTypeDialogState extends State<MediaTypeDialog> {
-  late var _mediaType = widget.initial;
+  late var _mediaType = uploadableMediaType(widget.initial);
   late bool? _identify = widget.initialIdentify;
   var _grouping = UploadGrouping.auto;
 
@@ -915,21 +919,27 @@ class UploadGroupingSelector extends StatelessWidget {
 }
 
 /// The required media-type selector shared by the file-upload and
-/// URL-acquisition dialogs; only one of them is ever open at a time.
+/// URL-acquisition dialogs; only one of them is ever open at a time. It
+/// offers [uploadableMediaTypes], so [value] is one of them.
 class MediaTypeSelector extends StatelessWidget {
   const MediaTypeSelector({
     super.key,
     required this.value,
     required this.onChanged,
-  });
+  }) : assert(
+         value != MediaType.podcast,
+         'podcasts are added by subscribing to a feed',
+       );
 
   final MediaType value;
   final ValueChanged<MediaType> onChanged;
 
+  /// Podcasts are not offered, so they are not worded: the wire name keeps
+  /// a stray one legible.
   static String label(AppLocalizations l10n, MediaType type) => switch (type) {
     MediaType.music => l10n.uploadsMediaMusic,
-    MediaType.podcast => l10n.uploadsMediaPodcast,
     MediaType.audiobook => l10n.uploadsMediaBook,
+    MediaType.podcast => type.wireName,
   };
 
   @override
@@ -939,7 +949,9 @@ class MediaTypeSelector extends StatelessWidget {
       label: l10n.uploadsWhatThisIs,
       value: value,
       semanticsId: SemanticsIds.uploadMediaType,
-      options: MediaType.values,
+      optionSemanticsIdFor: (type) =>
+          SemanticsIds.uploadMediaTypeOption(type.wireName),
+      options: uploadableMediaTypes,
       labelFor: (type) => label(l10n, type),
       onChanged: onChanged,
     );

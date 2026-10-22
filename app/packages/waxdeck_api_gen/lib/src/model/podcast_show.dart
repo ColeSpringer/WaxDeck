@@ -12,14 +12,14 @@ import 'package:built_value/serializer.dart';
 
 part 'podcast_show.g.dart';
 
-/// One globally cataloged show. Show privacy is a global, sticky property: a show becomes private when it is first subscribed with credentials or when any subscriber ever marks their subscription private, and it never becomes public again. For a private show, `feedUrl` is omitted from every response for every user, and the show is excluded from every user's OPML export: tokenized feed URLs and credentials are secrets. Privacy protects the URL and credentials only, never the show's existence or content, which any user with visibility into the podcast library can browse and play. 
+/// One globally cataloged show. A caller who follows the show is given, in `feedUrl` and its OPML export, the address it subscribed by, never one another account subscribed by; anyone else is given the catalog's address. Show privacy is a global, sticky property: a show becomes private when anyone subscribes to it with credentials, or by an address that carries user info or a query parameter named, in any case, `auth`, `token`, `key`, `secret`, `sig`, `signature`, `password`, `pass`, `apikey`, `api_key` or `access_token`, or when any subscriber ever marks their subscription private, and it never becomes public again. A private show's `feedUrl` is omitted for anyone who does not follow it: tokenized feed URLs and credentials are secrets. Privacy protects the URL and credentials, never the show's existence or content, which any user with visibility into the podcast library can browse, and play once the server has fetched it. What spends the feed's address or credentials is for the show's subscribers only: an episode the server has not fetched is relayed for them alone, and every episode's transcript and chapters documents are read from the feed for them alone. Chapters the server stored when it fetched an episode are served to anyone who sees that episode. 
 ///
 /// Properties:
 /// * [pid] - Show PID.
-/// * [title] - Show title.
+/// * [title] - Show title, cut to its first 1000 characters.
 /// * [author] - Show author or channel name.
 /// * [descriptionHtml] - Show description as sanitized HTML (server-side allowlist; safe to render directly). 
-/// * [feedUrl] - The feed URL. Omitted for private feeds.
+/// * [feedUrl] - For a caller who follows the show, the address it subscribed by; for anyone else the catalog's address, omitted for a private show. 
 /// * [link] - The show's website, when the feed declares one.
 /// * [sourceType] - Where the show comes from: `rss`, `youtube` (a channel or playlist through the acquisition bridge), or `manual` (a local-folder show). Open set; treat unknown values like `rss`. 
 /// * [artUrl] - Origin-relative URL of the show's artwork endpoint.
@@ -37,7 +37,7 @@ abstract class PodcastShow implements Built<PodcastShow, PodcastShowBuilder> {
   @BuiltValueField(wireName: r'pid')
   String get pid;
 
-  /// Show title.
+  /// Show title, cut to its first 1000 characters.
   @BuiltValueField(wireName: r'title')
   String get title;
 
@@ -49,7 +49,7 @@ abstract class PodcastShow implements Built<PodcastShow, PodcastShowBuilder> {
   @BuiltValueField(wireName: r'descriptionHtml')
   String? get descriptionHtml;
 
-  /// The feed URL. Omitted for private feeds.
+  /// For a caller who follows the show, the address it subscribed by; for anyone else the catalog's address, omitted for a private show. 
   @BuiltValueField(wireName: r'feedUrl')
   String? get feedUrl;
 

@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"strconv"
 	"testing"
 )
 
@@ -40,8 +41,8 @@ func TestSubscriptionRoundTrip(t *testing.T) {
 		CreatedAtNS:   100,
 		UpdatedAtNS:   100,
 	}
-	if err := d.UpsertSubscription(ctx, sub); err != nil {
-		t.Fatal(err)
+	if created, err := d.AttachSubscription(ctx, sub, "", "https://feeds.example/a.xml"); err != nil || !created {
+		t.Fatalf("attach = (%v, %v), want a new row", created, err)
 	}
 
 	got, err := d.SubscriptionFor(ctx, "us-a", sub.ShowPID)
@@ -65,10 +66,19 @@ func TestSubscriptionRoundTrip(t *testing.T) {
 	}
 
 	// Replace clears fields back to NULL when absent and keeps created_at.
-	if err := d.UpsertSubscription(ctx, Subscription{
+	if found, err := d.UpdateSubscriptionSettings(ctx, Subscription{
 		UserID: "us-a", ShowPID: sub.ShowPID, CreatedAtNS: 999, UpdatedAtNS: 200,
-	}); err != nil {
-		t.Fatal(err)
+	}); err != nil || !found {
+		t.Fatalf("update = (%v, %v), want the row found", found, err)
+	}
+	// Settings for a show the account does not follow make nothing.
+	if found, err := d.UpdateSubscriptionSettings(ctx, Subscription{
+		UserID: "us-b", ShowPID: sub.ShowPID, Folder: "x", UpdatedAtNS: 250,
+	}); err != nil || found {
+		t.Fatalf("update of an unfollowed show = (%v, %v), want nothing found", found, err)
+	}
+	if _, err := d.SubscriptionFor(ctx, "us-b", sub.ShowPID); err != ErrNotFound {
+		t.Fatalf("read after a settings write to an unfollowed show = %v, want ErrNotFound", err)
 	}
 	got, err = d.SubscriptionFor(ctx, "us-a", sub.ShowPID)
 	if err != nil {
@@ -86,9 +96,9 @@ func TestSubscriptionRoundTrip(t *testing.T) {
 
 	// A second user's subscription to the same show is independent, and
 	// both appear in the by-show listing the retention union reads.
-	if err := d.UpsertSubscription(ctx, Subscription{
+	if _, err := d.AttachSubscription(ctx, Subscription{
 		UserID: "us-b", ShowPID: sub.ShowPID, CreatedAtNS: 300, UpdatedAtNS: 300,
-	}); err != nil {
+	}, "", "https://feeds.example/a.xml?auth=b"); err != nil {
 		t.Fatal(err)
 	}
 	subs, err := d.SubscribersByShow(ctx, sub.ShowPID)
@@ -107,9 +117,9 @@ func TestSubscriptionRoundTrip(t *testing.T) {
 		t.Fatalf("subscribed shows = %v", shows)
 	}
 	// One user's follows, by show alone, in show order.
-	if err := d.UpsertSubscription(ctx, Subscription{
+	if _, err := d.AttachSubscription(ctx, Subscription{
 		UserID: "us-b", ShowPID: "01JZX5N8QW3F4V9T2B7KDSHOW00", CreatedAtNS: 400, UpdatedAtNS: 400,
-	}); err != nil {
+	}, "", "https://feeds.example/b.xml"); err != nil {
 		t.Fatal(err)
 	}
 	followed, err := d.SubscribedShowPIDsByUser(ctx, "us-b")
@@ -120,13 +130,13 @@ func TestSubscriptionRoundTrip(t *testing.T) {
 		t.Fatalf("us-b follows %v, want SHOW00 then %s", followed, sub.ShowPID)
 	}
 
-	existed, err := d.DeleteSubscription(ctx, "us-a", sub.ShowPID)
-	if err != nil || !existed {
-		t.Fatalf("delete = (%v, %v), want (true, nil)", existed, err)
+	existed, feedURL, err := d.RemoveSubscription(ctx, "us-a", sub.ShowPID)
+	if err != nil || !existed || feedURL != "https://feeds.example/a.xml" {
+		t.Fatalf("remove = (%v, %q, %v), want (true, the account's URL, nil)", existed, feedURL, err)
 	}
-	existed, err = d.DeleteSubscription(ctx, "us-a", sub.ShowPID)
+	existed, _, err = d.RemoveSubscription(ctx, "us-a", sub.ShowPID)
 	if err != nil || existed {
-		t.Fatalf("second delete = (%v, %v), want (false, nil)", existed, err)
+		t.Fatalf("second remove = (%v, %v), want (false, nil)", existed, err)
 	}
 	if _, err := d.SubscriptionFor(ctx, "us-a", sub.ShowPID); err != ErrNotFound {
 		t.Fatalf("read after delete = %v, want ErrNotFound", err)
@@ -257,16 +267,16 @@ func TestGpodderLogs(t *testing.T) {
 	ctx := context.Background()
 	mustCreateTestUser(t, d, "us-g")
 
-	if err := d.UpsertGpodderDevice(ctx, GpodderDevice{
+	if _, err := d.RegisterGpodderDevice(ctx, GpodderDevice{
 		UserID: "us-g", DeviceID: "phone", Caption: "Phone", Type: "mobile",
 		CreatedAtNS: 1, UpdatedAtNS: 1,
-	}); err != nil {
+	}, 50); err != nil {
 		t.Fatal(err)
 	}
 	// A partial update keeps the fields it does not supply.
-	if err := d.UpsertGpodderDevice(ctx, GpodderDevice{
+	if _, err := d.RegisterGpodderDevice(ctx, GpodderDevice{
 		UserID: "us-g", DeviceID: "phone", CreatedAtNS: 2, UpdatedAtNS: 2,
-	}); err != nil {
+	}, 50); err != nil {
 		t.Fatal(err)
 	}
 	devs, err := d.GpodderDevicesByUser(ctx, "us-g")
@@ -279,9 +289,9 @@ func TestGpodderLogs(t *testing.T) {
 
 	for i, action := range []string{"add", "remove", "add"} {
 		if err := d.AppendGpodderSubEvent(ctx, GpodderSubEvent{
-			UserID: "us-g", FeedURL: "https://example.com/feed.xml",
+			UserID: "us-g", ShowPID: "pc-" + strconv.Itoa(i), FeedURL: "https://example.com/feed" + strconv.Itoa(i) + ".xml",
 			Action: action, TsSec: int64(100 + i),
-		}); err != nil {
+		}, 100); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -295,11 +305,11 @@ func TestGpodderLogs(t *testing.T) {
 
 	pos := int64(90)
 	total := int64(300)
-	if err := d.AppendGpodderAction(ctx, GpodderAction{
+	if _, err := d.AppendGpodderActions(ctx, []GpodderAction{{
 		UserID: "us-g", PodcastURL: "https://example.com/feed.xml",
 		EpisodeURL: "https://example.com/ep1.mp3", Action: "play",
 		PositionSec: &pos, TotalSec: &total, UploadedSec: 500,
-	}); err != nil {
+	}}, 20_000); err != nil {
 		t.Fatal(err)
 	}
 	acts, err := d.GpodderActionsSince(ctx, "us-g", 0, "", "")

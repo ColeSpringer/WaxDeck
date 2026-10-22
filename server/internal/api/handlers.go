@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"math/rand/v2"
 	"net"
 	"net/http"
@@ -71,11 +72,14 @@ type Server struct {
 	workerTokens []string
 	// shareStreams caps concurrent anonymous streams per share so a
 	// public link never becomes a bandwidth faucet.
-	shareStreams shareStreamGate
+	shareStreams relayGate
 	// relayStreams caps concurrent third-party relays per account, so
 	// no one caller can pin goroutines and upstream sockets against
 	// remote files this server does not control.
 	relayStreams relayGate
+	// shareRelays caps the relays an owner's public links draw on the
+	// owner's relayStreams, all links together.
+	shareRelays relayGate
 	// enclosures remembers where each episode's redirect chain ends,
 	// so a scrub does not walk an ad-tech prefix chain again.
 	enclosures enclosureRoutes
@@ -97,6 +101,17 @@ type Server struct {
 	// streamRecheckEvery is how often a long-lived stream re-reads its
 	// caller's session and rights; tests shorten it.
 	streamRecheckEvery time.Duration
+	// relayWriteStall is how long one write of a share's stream or
+	// download may wait on its visitor; tests shorten it.
+	relayWriteStall time.Duration
+	// relayWriteStallNoRange is the same wait for a stream the player
+	// cannot resume by range.
+	relayWriteStallNoRange time.Duration
+	// enclosureBounds are the limits one relayed episode is held to;
+	// tests tighten them.
+	enclosureBounds relayLimits
+	// shareTransfers are the share streams and downloads running now.
+	shareTransfers shareTransfers
 }
 
 // logger is the slice of slog the API layer uses (a seam tests can
@@ -145,6 +160,8 @@ func NewServer(version string, opts Options) *Server {
 	}
 	if opts.Logger == nil {
 		opts.Logger = discardLogger{}
+	} else if l, ok := opts.Logger.(*slog.Logger); ok && l != nil {
+		opts.Logger = service.HostOnlyLogger(l)
 	}
 	if opts.Group == nil {
 		opts.Group = supervise.NewGroup(nil)
@@ -177,6 +194,15 @@ func NewServer(version string, opts Options) *Server {
 		// A task's progress is polled each second; the account behind
 		// the stream is re-read every few polls.
 		streamRecheckEvery: 5 * time.Second,
+		relayWriteStall:    relayWriteStallLimit,
+		shareRelays:        relayGate{limit: maxOwnerShareRelays},
+		shareStreams:       relayGate{limit: maxShareStreams},
+
+		relayWriteStallNoRange: relayWriteStallNoRangeLimit,
+		enclosureBounds: relayLimits{
+			idle: enclosureIdle, maxBytes: enclosureMaxBytes,
+			minRate: enclosureMinRate, rateGrace: enclosureRateGrace,
+		},
 	}
 }
 
@@ -1565,6 +1591,7 @@ func (s *Server) AuthMiddleware(next http.Handler) http.Handler {
 				return
 			}
 		}
+		capRequestBody(w, r)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

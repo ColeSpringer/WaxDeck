@@ -71,86 +71,6 @@ const (
 	spokenFinishedFraction = 0.99
 )
 
-// How far the resume shelf will walk the stamp table to fill its page.
-// The cap is the honest half of the trade: a listener whose recent
-// stamps are all music, all trashed, or all outside their libraries
-// gets a short shelf rather than a scan, and 2000 rows is several
-// months of ordinary listening ahead of a shelf that asks for ten.
-const (
-	resumeStampPage    = 200
-	resumeStampScanCap = 2000
-)
-
-// RecentlyPositionedItems lists the caller's spoken-word items with a
-// saved resume position, most recently checkpointed first. Backed by
-// the per-user position stamps, so an item counts from its first
-// checkpoint; the catalog's recently-played list would miss anything
-// never played to completion, which is exactly the state a resume
-// surface exists for.
-func (l *Library) RecentlyPositionedItems(ctx context.Context, uc *UserCtx, limit int) ([]ItemSummary, error) {
-	if limit <= 0 {
-		return []ItemSummary{}, nil
-	}
-	subs := l.newSubscriptionFilter(uc)
-	out := make([]ItemSummary, 0, limit)
-	seen := make(map[string]bool, limit)
-	// Five filters run below - kind, trashed, library visibility,
-	// subscription, content rules - and the last four can drop
-	// arbitrarily many rows, so one bare page of stamps comes back short
-	// for exactly the partial-visibility listener who needs the shelf
-	// most. Read in pages until the shelf is full, bounded so a user
-	// whose whole stamp table is music (kind drops every row) cannot
-	// walk it.
-	for scanned := 0; len(out) < limit && scanned < resumeStampScanCap; scanned += resumeStampPage {
-		pids, err := l.db.RecentPositionStamps(ctx, uc.ID, resumeStampPage, scanned)
-		if err != nil {
-			return nil, &Error{Kind: KindInternal, Err: err}
-		}
-		if len(pids) == 0 {
-			break
-		}
-		for _, pid := range pids {
-			if len(out) == limit {
-				break
-			}
-			// A checkpoint landing mid-walk can shift a row across a page
-			// boundary; the offset does not follow it, so drop the repeat.
-			if seen[pid] {
-				continue
-			}
-			seen[pid] = true
-			it, err := l.lib.Get(ctx, model.PID(pid))
-			if err != nil {
-				// Stamps are dangling-tolerant: the item may be gone.
-				continue
-			}
-			if it.Kind != model.KindEpisode && it.Kind != model.KindBook {
-				continue
-			}
-			// Hydrated by pid rather than by query, so the state predicate
-			// cannot reach it. Subsonic's resume surface reads this
-			// list, so a trashed book would come back there alone.
-			if archived(it) {
-				continue
-			}
-			if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
-				continue
-			}
-			if !subs.allowsItem(ctx, l, it) {
-				continue
-			}
-			if !l.allowedByContent(ctx, uc, it) {
-				continue
-			}
-			out = append(out, summary(it))
-		}
-		if len(pids) < resumeStampPage {
-			break
-		}
-	}
-	return out, nil
-}
-
 // PlayState returns the calling user's state for one item. Items never
 // played return a zero state.
 func (l *Library) PlayState(ctx context.Context, uc *UserCtx, apiItemPID string) (PlayState, error) {
@@ -216,7 +136,8 @@ const recencyGuard = 10 * time.Minute
 // (skewed clocks) clamp to the server clock.
 func clampRecorded(t time.Time) int64 {
 	now := time.Now()
-	if t.After(now) {
+	// Before 1970 a nanosecond count wraps, and nothing was recorded then.
+	if t.After(now) || t.Before(time.Unix(0, 0)) {
 		t = now
 	}
 	return t.UnixNano()
@@ -260,6 +181,17 @@ func applyReplayedPosition(recencyPrim bool, positionMS, recNS, curPositionMS, s
 // report) must not count one, so the outcome is returned rather than
 // hidden behind a nil error.
 func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, recordedAt *time.Time) (applied bool, err error) {
+	return l.checkpoint(ctx, uc, apiItemPID, positionMS, recordedAt, changeFirstParty)
+}
+
+// playChange says who moved a play state: WaxDeck's own surfaces, or the
+// stored gpodder action of this id, which tells the gpodder clients for as
+// long as the action log keeps it.
+type playChange int64
+
+const changeFirstParty playChange = 0
+
+func (l *Library) checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string, positionMS int64, recordedAt *time.Time, by playChange) (applied bool, err error) {
 	it, err := l.getVisibleItem(ctx, uc, apiItemPID)
 	if err != nil {
 		return false, err
@@ -267,7 +199,7 @@ func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string
 	if positionMS < 0 {
 		return false, errInvalid("positionMs must not be negative")
 	}
-	applied, err = l.checkpointLocked(ctx, uc, it, positionMS, recordedAt)
+	applied, err = l.checkpointLocked(ctx, uc, it, positionMS, recordedAt, by)
 	if err != nil || !applied {
 		return applied, err
 	}
@@ -292,7 +224,7 @@ func (l *Library) Checkpoint(ctx context.Context, uc *UserCtx, apiItemPID string
 // meanwhile - which is neither of the two sequential outcomes, since
 // running second the replay would have read the undo's newer stamp and
 // been dropped as stale.
-func (l *Library) checkpointLocked(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, recordedAt *time.Time) (bool, error) {
+func (l *Library) checkpointLocked(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, recordedAt *time.Time, by playChange) (bool, error) {
 	unlock := l.lockPlayed(uc.ID, it.PID)
 	defer unlock()
 	stampNS := time.Now().UnixNano()
@@ -335,10 +267,10 @@ func (l *Library) checkpointLocked(ctx context.Context, uc *UserCtx, it *model.I
 	if err := l.writePosition(ctx, uc, it, positionMS, at); err != nil {
 		return false, err
 	}
-	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), stampNS); err != nil {
+	if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), stampNS, int64(by)); err != nil {
 		l.log.Warn("stamping position", "pid", string(it.PID), "err", err)
 	}
-	l.markSpokenWordProgress(ctx, uc, it, positionMS, at)
+	l.markSpokenWordProgress(ctx, uc, it, positionMS, at, by)
 	return true, nil
 }
 
@@ -370,14 +302,30 @@ func (l *Library) writePosition(ctx context.Context, uc *UserCtx, it *model.Item
 // cannot distort the thresholds; for multi-file books the position is
 // already book-timeline by contract. Best effort on the checkpoint
 // path: a missed mark self-heals at the next checkpoint.
-func (l *Library) markSpokenWordProgress(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, asOf *int64) {
+func (l *Library) markSpokenWordProgress(ctx context.Context, uc *UserCtx, it *model.ItemView, positionMS int64, asOf *int64, by playChange) {
 	crossed, finished, err := l.spokenWordCrossing(ctx, uc, it, positionMS, asOf)
 	if err != nil || !crossed {
 		return
 	}
 	if err := l.lib.Playback().MarkPlayed(ctx, model.PID(uc.CatalogPID), it.PID, finished, asOf); err != nil {
 		l.log.Warn("marking spoken word played", "pid", string(it.PID), "err", err)
+		return
 	}
+	l.touchPlayStamp(ctx, uc, it, by)
+}
+
+// touchPlayStamp notes that the server saw an episode's played state
+// change, which is what the gpodder surface reads as new unless a stored
+// gpodder action made it and still tells it. Other kinds never reach it,
+// so they keep no row for it.
+func (l *Library) touchPlayStamp(ctx context.Context, uc *UserCtx, it *model.ItemView, by playChange) {
+	if mediaTypeForKind(it.Kind) != "podcast" {
+		return
+	}
+	if err := l.db.TouchPlayStamp(ctx, uc.ID, string(it.PID), int64(by)); err != nil {
+		l.log.Warn("touching play stamp", "pid", string(it.PID), "err", err)
+	}
+	l.requeueHeldShow(ctx, uc.ID, it.PID)
 }
 
 // spokenWordCrossing evaluates the position-derived played rules for
@@ -613,7 +561,7 @@ func (l *Library) setPlayedLocked(ctx context.Context, uc *UserCtx, it *model.It
 		// observation of where the listener is. Sound because a
 		// position may only ride a live write: the caller that would
 		// want a recorded time here is refused in SetPlayed.
-		if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), time.Now().UnixNano()); err != nil {
+		if err := l.db.StampPlayState(ctx, uc.ID, string(it.PID), time.Now().UnixNano(), int64(changeFirstParty)); err != nil {
 			l.log.Warn("stamping position", "pid", string(it.PID), "err", err)
 		}
 	}
@@ -621,6 +569,11 @@ func (l *Library) setPlayedLocked(ctx context.Context, uc *UserCtx, it *model.It
 		played, finished, playCount, asOfNS(recordedAt))
 	if err != nil {
 		return false, classify(err)
+	}
+	if changed {
+		// The gpodder surface reports a finished mark as a position, so
+		// it has to see the mark land, after any position stamp above.
+		l.touchPlayStamp(ctx, uc, it, changeFirstParty)
 	}
 	// A position write is a change even when the flags were already
 	// what they are asked to be, or an undo that only moves the
@@ -1116,6 +1069,7 @@ func (l *Library) markListenPlayed(ctx context.Context, uc *UserCtx, it *model.I
 			return listenMarkOutcome{fatal: err}
 		}
 	}
+	l.touchPlayStamp(ctx, uc, it, changeFirstParty)
 	return listenMarkOutcome{marked: true}
 }
 

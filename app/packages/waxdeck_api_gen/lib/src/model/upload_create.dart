@@ -3,7 +3,7 @@
 //
 
 // ignore_for_file: unused_element
-import 'package:waxdeck_api_gen/src/model/media_type.dart';
+import 'package:waxdeck_api_gen/src/model/upload_media_type.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
 
@@ -31,8 +31,8 @@ abstract class UploadCreate implements Built<UploadCreate, UploadCreateBuilder> 
   int get sizeBytes;
 
   @BuiltValueField(wireName: r'mediaType')
-  MediaType get mediaType;
-  // enum mediaTypeEnum {  music,  podcast,  audiobook,  };
+  UploadMediaType get mediaType;
+  // enum mediaTypeEnum {  music,  audiobook,  };
 
   /// The library this upload belongs to, from `GET /uploads/targets`. It selects the library whose matching mode and singles auto-apply setting govern the import, and whose read-only state gates it; it does not choose where the file is placed, which is the catalog's own routing by media type into a managed root. Omitted, the entry belongs to no named library and per-library settings fall back to the one library that could hold its media, staying off where that is ambiguous. 
   @BuiltValueField(wireName: r'libraryPid')
@@ -90,7 +90,7 @@ class _$UploadCreateSerializer implements PrimitiveSerializer<UploadCreate> {
     yield r'mediaType';
     yield serializers.serialize(
       object.mediaType,
-      specifiedType: const FullType(MediaType),
+      specifiedType: const FullType(UploadMediaType),
     );
     if (object.libraryPid != null) {
       yield r'libraryPid';
@@ -167,8 +167,8 @@ class _$UploadCreateSerializer implements PrimitiveSerializer<UploadCreate> {
         case r'mediaType':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(MediaType),
-          ) as MediaType;
+            specifiedType: const FullType(UploadMediaType),
+          ) as UploadMediaType;
           result.mediaType = valueDes;
           break;
         case r'libraryPid':

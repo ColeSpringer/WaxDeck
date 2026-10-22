@@ -147,6 +147,9 @@ class FakeRepository implements WaxDeckRepository {
   /// Held open, an episode's detail read waits on it.
   Completer<void>? getEpisodeGate;
 
+  /// Every episode whose detail was read, in order.
+  final List<String> getEpisodeCalls = [];
+
   /// Held open, a book's detail read waits on it.
   Completer<void>? getBookGate;
 
@@ -228,12 +231,19 @@ class FakeRepository implements WaxDeckRepository {
   final List<({String pid, int positionMs})> putPlayStateCalls = [];
   final List<ListenSession> reportedSessions = [];
   final List<({String url, String? sourceType})> subscribeCalls = [];
+
+  /// Held open, [subscribePodcast] waits on it before answering.
+  Completer<void>? subscribeGate;
   final List<String> unsubscribeCalls = [];
   final List<String> unsubscribeRemoveDownloadsCalls = [];
   final List<({String pid, SubscriptionSettings settings})>
   putSubscriptionSettingsCalls = [];
   final List<String> fetchEpisodeCalls = [];
   final List<String> captureTranscriptCalls = [];
+
+  /// When set, [captureEpisodeTranscript] fails with it once recorded.
+  Object? captureTranscriptError;
+
   final List<
     ({
       String endpointId,
@@ -286,6 +296,9 @@ class FakeRepository implements WaxDeckRepository {
   /// Show pids [getPodcast] was asked for, in order.
   final List<String> getPodcastCalls = [];
   final List<String> importedOpml = [];
+
+  /// What an import answers per feed; empty imports nothing.
+  List<OpmlImportOutcome> opmlOutcomes = const [];
   int refreshCalls = 0;
   int _subscribeCounter = 0;
 
@@ -1525,6 +1538,7 @@ class FakeRepository implements WaxDeckRepository {
     String? folder,
   }) async {
     subscribeCalls.add((url: url, sourceType: sourceType));
+    await subscribeGate?.future;
     final error = subscribeError;
     if (error != null) throw error;
     // Re-subscribing to a known feed returns the existing subscription.
@@ -1623,6 +1637,7 @@ class FakeRepository implements WaxDeckRepository {
 
   @override
   Future<EpisodeDetail> getEpisode(String pid) async {
+    getEpisodeCalls.add(pid);
     await getEpisodeGate?.future;
     final canned = episodeDetails[pid];
     if (canned != null) return canned;
@@ -1672,6 +1687,8 @@ class FakeRepository implements WaxDeckRepository {
   @override
   Future<void> captureEpisodeTranscript(String pid) async {
     captureTranscriptCalls.add(pid);
+    final error = captureTranscriptError;
+    if (error != null) throw error;
   }
 
   @override
@@ -1897,8 +1914,9 @@ class FakeRepository implements WaxDeckRepository {
   Future<String> exportOpml() async => '<opml version="2.0"><body/></opml>';
 
   @override
-  Future<void> importOpml(String opml) async {
+  Future<List<OpmlImportOutcome>> importOpml(String opml) async {
     importedOpml.add(opml);
+    return opmlOutcomes;
   }
 
   /// Playlists by pid, with static members alongside.
@@ -6677,6 +6695,9 @@ class FakeRepository implements WaxDeckRepository {
   createShareCalls = [];
   final List<String> revokeShareCalls = [];
 
+  /// Held open, [createShare] waits on it before answering.
+  Completer<void>? createShareGate;
+
   /// Share links every account holds, answered to an `all: true` listing.
   /// Separate from [shares] so a test can prove which listing a screen
   /// asked for.
@@ -6710,6 +6731,7 @@ class FakeRepository implements WaxDeckRepository {
       allowDownload: allowDownload,
       positionMs: positionMs,
     ));
+    await createShareGate?.future;
     final error = shareError;
     if (error != null) throw error;
     final seq = _shareSeq++;

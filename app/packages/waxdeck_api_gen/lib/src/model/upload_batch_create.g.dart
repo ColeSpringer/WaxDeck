@@ -10,7 +10,7 @@ class _$UploadBatchCreate extends UploadBatchCreate {
   @override
   final UploadGrouping grouping;
   @override
-  final MediaType mediaType;
+  final UploadMediaType mediaType;
   @override
   final String? libraryPid;
   @override
@@ -74,9 +74,9 @@ class UploadBatchCreateBuilder
   UploadGrouping? get grouping => _$this._grouping;
   set grouping(UploadGrouping? grouping) => _$this._grouping = grouping;
 
-  MediaType? _mediaType;
-  MediaType? get mediaType => _$this._mediaType;
-  set mediaType(MediaType? mediaType) => _$this._mediaType = mediaType;
+  UploadMediaType? _mediaType;
+  UploadMediaType? get mediaType => _$this._mediaType;
+  set mediaType(UploadMediaType? mediaType) => _$this._mediaType = mediaType;
 
   String? _libraryPid;
   String? get libraryPid => _$this._libraryPid;

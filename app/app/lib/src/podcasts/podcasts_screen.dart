@@ -174,6 +174,12 @@ class _HubOverflow extends ConsumerWidget {
 
   static const _opml = ShellChannel.opml;
 
+  /// Why one feed of an import did not land: this client's sentence for
+  /// a host's failure, else the server's, which names what was wrong
+  /// with the address.
+  static String _whyNotAdded(AppLocalizations l10n, OpmlImportOutcome o) =>
+      explainFeedReason(l10n, o.reason) ?? o.error ?? l10n.errorUnexpected;
+
   static Future<void> _importOpml(BuildContext context, WidgetRef ref) async {
     final picker = ref.read(filePickerProvider);
     if (picker == null) return;
@@ -191,10 +197,44 @@ class _HubOverflow extends ConsumerWidget {
       await for (final chunk in openRead()) {
         bytes.add(chunk);
       }
-      await ref
+      final outcomes = await ref
           .read(subscriptionsProvider.notifier)
           .importOpml(utf8.decode(bytes.takeBytes(), allowMalformed: true));
-      messenger.show(l10n.podcastOpmlImported, channel: _opml);
+      if (outcomes.isEmpty) {
+        messenger.show(l10n.podcastOpmlNoFeeds, channel: _opml);
+        return;
+      }
+      final notAdded = outcomes.where((o) => o.failed).toList();
+      if (notAdded.isEmpty) {
+        messenger.show(l10n.podcastOpmlImported, channel: _opml);
+        return;
+      }
+      // One reason is said only when it is every failure's: a list that
+      // failed for several would otherwise read as all failing for one.
+      final reasons = {for (final o in notAdded) _whyNotAdded(l10n, o)};
+      messenger.show(
+        reasons.length == 1
+            ? l10n.podcastOpmlNotAdded(notAdded.length, reasons.single)
+            : l10n.podcastOpmlNotAddedMixed(notAdded.length),
+        actionLabel: l10n.podcastOpmlNotAddedDetails,
+        onAction: () {
+          if (!context.mounted) return;
+          unawaited(
+            showDocumentDialog(
+              context,
+              title: l10n.podcastOpmlNotAddedTitle,
+              document: [
+                for (final o in notAdded)
+                  '${o.feedUrl}\n${_whyNotAdded(l10n, o)}',
+              ].join('\n\n'),
+              documentKey: const Key('opml-not-added'),
+              closeLabel: l10n.commonClose,
+              copyLabel: l10n.podcastOpmlCopy,
+            ),
+          );
+        },
+        channel: _opml,
+      );
     } on WaxDeckApiException catch (e) {
       // What was pasted in is what was refused, so the server's words.
       messenger.show(explainRefusal(l10n, e), channel: _opml);

@@ -63,6 +63,47 @@ void main() {
     expect(repo.captureTranscriptCalls, <String>[episodePid]);
   });
 
+  testWidgets('a transcript is captured once an app session, however often '
+      'it is opened and even when the capture failed', (tester) async {
+    final repo = _repo()
+      ..captureTranscriptError = const WaxDeckApiException(
+        code: 'feature-unavailable',
+        message: 'the transcript host did not answer',
+        statusCode: 502,
+      );
+    final container = ProviderContainer(
+      overrides: [
+        repositoryProvider.overrideWithValue(repo),
+        audioEngineProvider.overrideWithValue(FakeEngine()),
+      ],
+    );
+    addTearDown(container.dispose);
+    Future<void> openTranscript() async {
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: localizedHost(const EpisodeScreen(pid: episodePid)),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Transcript'));
+      await tester.pumpAndSettle();
+      expect(find.text('Welcome back to the inn'), findsOneWidget);
+    }
+
+    await openTranscript();
+    // Left and opened again: a screen of its own each time.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: localizedHost(const SizedBox.shrink()),
+      ),
+    );
+    await openTranscript();
+
+    expect(repo.captureTranscriptCalls, <String>[episodePid]);
+  });
+
   testWidgets('a cue tap without a matching player shows the timestamp', (
     tester,
   ) async {

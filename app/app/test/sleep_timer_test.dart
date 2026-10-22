@@ -7,6 +7,7 @@ import 'package:waxdeck/src/l10n/off_tree.dart';
 import 'package:waxdeck/src/player/now_playing_controller.dart';
 import 'package:waxdeck/src/player/output_volume.dart';
 import 'package:waxdeck/src/player/sleep_timer.dart';
+import 'package:waxdeck/src/player/spoken_face.dart';
 import 'package:waxdeck/src/providers.dart';
 import 'package:waxdeck/src/queue/queue_controller.dart';
 import 'package:waxdeck/src/queue/queue_state.dart';
@@ -28,6 +29,17 @@ const bookPid = 'bk-01JZX5N8QW3F4V9T2B7KDBOOK01';
 class _FakeClock {
   DateTime now = DateTime(2026, 7, 18, 22);
   void advance(Duration d) => now = now.add(d);
+}
+
+/// An engine whose media reports no length, as audio whose length
+/// nothing declares does; its position runs on all the same, to an end
+/// at [runsFor].
+class _LengthlessEngine extends FakeEngine {
+  _LengthlessEngine({Duration runsFor = const Duration(hours: 1)})
+    : super(mediaDuration: runsFor);
+
+  @override
+  Duration? get duration => null;
 }
 
 /// The player over a container whose sleep-timer clock the test drives.
@@ -227,6 +239,44 @@ void main() {
     // Never ramps: onPosition fires past the boundary, so a ramp would
     // fade the next chapter.
     expect(engine.volume, closeTo(1, 0.001));
+    await harness.endPlayback(tester);
+  });
+
+  testWidgets('a book\'s last chapter keeps its own end', (tester) async {
+    // Hand-ended short of the audio; the book screen draws it so too.
+    final repo = FakeRepository()
+      ..books[bookPid] = testBook(
+        bookPid,
+        durationMs: 3600000,
+        chapters: const [
+          ChapterMark(index: 0, title: 'One', startMs: 0, endMs: 60000),
+          ChapterMark(index: 1, title: 'Two', startMs: 60000, endMs: 1800000),
+        ],
+      );
+    final harness = await pumpPlayer(
+      tester,
+      repo: repo,
+      engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+      item: const ItemSummary(
+        pid: bookPid,
+        mediaType: MediaType.audiobook,
+        title: 'There And Back Again',
+        durationMs: 3600000,
+      ),
+      positionMs: 90000,
+    );
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      harness.container.read(sleepTimerProvider).endOfChapterEndMs,
+      1800000,
+    );
     await harness.endPlayback(tester);
   });
 
@@ -720,6 +770,716 @@ void main() {
     expect(armed.endOfChapterEndMs, 120000);
     expect(armed.endOfChapterPid, bookPid);
     await harness.endPlayback(tester);
+  });
+
+  group('end of chapter in a chaptered episode', () {
+    const episodePid = 'ep-01JZX5N8QW3F4V9T2B7KDEPIS01';
+    const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
+    const hourMs = 3600000;
+
+    EpisodeSummary episode({int durationMs = hourMs, bool downloaded = true}) =>
+        testEpisode(
+          episodePid,
+          showPid: showPid,
+          durationMs: durationMs,
+          downloaded: downloaded,
+        );
+
+    /// Chapters starting at [startsMs] as the server sends them: each
+    /// ends where the next begins, and the last at the length the feed
+    /// declares when that is past its start.
+    List<ChapterMark> served(List<int> startsMs, {int declaredMs = hourMs}) => [
+      for (final (i, startMs) in startsMs.indexed)
+        ChapterMark(
+          index: i,
+          title: 'Chapter $i',
+          startMs: startMs,
+          endMs: i + 1 < startsMs.length
+              ? startsMs[i + 1]
+              : (declaredMs > startMs ? declaredMs : null),
+        ),
+    ];
+
+    /// An episode whose feed declares [declaredMs], chaptered at
+    /// [startsMs] or with [chapters] as given; [downloaded] false is one
+    /// the server relays from the feed's host.
+    FakeRepository repoWith(
+      List<int> startsMs, {
+      int declaredMs = hourMs,
+      bool downloaded = true,
+      List<ChapterMark>? chapters,
+    }) => FakeRepository()
+      ..addSubscription(testShow(showPid))
+      ..episodesByShow[showPid] = [
+        episode(durationMs: declaredMs, downloaded: downloaded),
+      ]
+      ..episodeDetails[episodePid] = EpisodeDetail(
+        pid: episodePid,
+        mediaType: MediaType.podcast,
+        title: 'Pipeweed Economics',
+        durationMs: declaredMs,
+        showPid: showPid,
+        publishedAt: DateTime.utc(2026, 7, 1),
+        downloaded: downloaded,
+        hasEnclosure: true,
+        chapters: chapters ?? served(startsMs, declaredMs: declaredMs),
+      );
+
+    const twoChapters = [0, 60000];
+
+    Future<void> openSheet(WidgetTester tester) async {
+      await tester.tap(find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen));
+      await tester.pumpAndSettle();
+    }
+
+    /// Plays in steps small enough to count as listening, so a listen
+    /// report has something to say.
+    Future<void> listen(
+      WidgetTester tester,
+      FakeEngine engine,
+      Duration amount,
+    ) async {
+      const step = Duration(seconds: 1);
+      for (var played = Duration.zero; played < amount; played += step) {
+        engine.advance(step);
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the row arms the chapter playing and pauses at its end', (
+      tester,
+    ) async {
+      final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
+      final harness = await pumpPlayer(
+        tester,
+        repo: repoWith(twoChapters),
+        engine: engine,
+        item: episode(),
+        positionMs: 0,
+      );
+
+      await openSheet(tester);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      );
+      await tester.pumpAndSettle();
+      final armed = harness.container.read(sleepTimerProvider);
+      expect(armed.endOfChapterEndMs, 60000);
+      expect(armed.endOfChapterPid, episodePid);
+
+      engine.advance(const Duration(seconds: 59));
+      await tester.pump();
+      expect(engine.playing, isTrue);
+
+      engine.advance(const Duration(seconds: 2));
+      await tester.pump();
+      await tester.pump();
+      expect(engine.playing, isFalse);
+      // Never ramps, as a book's does not: the position is already past
+      // the boundary, so a ramp would fade the next chapter.
+      expect(engine.volume, closeTo(1, 0.001));
+      expect(harness.container.read(sleepTimerProvider).active, isFalse);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a sheet left open across a chapter end arms the chapter '
+        'playing then', (tester) async {
+      final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
+      final harness = await pumpPlayer(
+        tester,
+        repo: repoWith(const [0, 60000, 120000]),
+        engine: engine,
+        item: episode(),
+        positionMs: 50000,
+      );
+
+      await openSheet(tester);
+      // Chapter one ends while the sheet stands open.
+      engine.advance(const Duration(seconds: 20));
+      await tester.pump();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      );
+      await tester.pumpAndSettle();
+
+      final armed = harness.container.read(sleepTimerProvider);
+      expect(armed.endOfChapterEndMs, 120000);
+      expect(armed.endOfChapterPid, episodePid);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a sheet left open into a last chapter whose end nothing '
+        'knows arms nothing', (tester) async {
+      final engine = _LengthlessEngine();
+      final harness = await pumpPlayer(
+        tester,
+        repo: repoWith(twoChapters, declaredMs: 0),
+        engine: engine,
+        item: episode(durationMs: 0),
+        positionMs: 50000,
+      );
+      final states = <SleepTimerState>[];
+      final heard = harness.container.listen(
+        sleepTimerProvider,
+        (_, next) => states.add(next),
+      );
+      addTearDown(heard.close);
+
+      await openSheet(tester);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+        findsOneWidget,
+      );
+      // The last chapter starts while the sheet stands open, and the audio
+      // reports no length for it to end at.
+      engine.advance(const Duration(seconds: 20));
+      await tester.pump();
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      );
+      await tester.pumpAndSettle();
+
+      expect(states.map((s) => s.endOfChapterEndMs).nonNulls, isEmpty);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+        findsNothing,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimer(15)),
+        findsOneWidget,
+      );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('the last chapter ends where the episode does', (tester) async {
+      final harness = await pumpPlayer(
+        tester,
+        repo: repoWith(twoChapters),
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        item: episode(),
+        positionMs: 90000,
+      );
+
+      await openSheet(tester);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        harness.container.read(sleepTimerProvider).endOfChapterEndMs,
+        hourMs,
+      );
+      await harness.endPlayback(tester);
+    });
+
+    // A feed declares 0 for an episode it gives no length, and a length
+    // that can be off the audio served (inserted ads), and the server
+    // stamps that figure on a relayed episode's last chapter: the chapter
+    // ends where the audio does all the same.
+    for (final declaredMs in const [0, hourMs ~/ 2, hourMs * 2]) {
+      testWidgets('the last chapter ends where the audio does, the feed '
+          'declaring $declaredMs ms', (tester) async {
+        final harness = await pumpPlayer(
+          tester,
+          repo: repoWith(
+            twoChapters,
+            declaredMs: declaredMs,
+            downloaded: false,
+          ),
+          engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+          item: episode(durationMs: declaredMs, downloaded: false),
+          positionMs: 90000,
+        );
+
+        await openSheet(tester);
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          harness.container.read(sleepTimerProvider).endOfChapterEndMs,
+          hourMs,
+        );
+        await harness.endPlayback(tester);
+      });
+    }
+
+    testWidgets('a downloaded episode\'s last chapter keeps its own end', (
+      tester,
+    ) async {
+      // Only a streamed episode's last end is the feed's declared length.
+      final harness = await pumpPlayer(
+        tester,
+        repo: repoWith(
+          twoChapters,
+          chapters: const [
+            ChapterMark(index: 0, title: 'Cold open', startMs: 0, endMs: 60000),
+            ChapterMark(
+              index: 1,
+              title: 'The trade',
+              startMs: 60000,
+              endMs: hourMs ~/ 2,
+            ),
+          ],
+        ),
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        item: episode(),
+        positionMs: 90000,
+      );
+
+      await openSheet(tester);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        harness.container.read(sleepTimerProvider).endOfChapterEndMs,
+        hourMs ~/ 2,
+      );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a last chapter played past the declared length still '
+        'stops where the audio ends', (tester) async {
+      final harness = await pumpPlayer(
+        tester,
+        repo: repoWith(twoChapters, declaredMs: hourMs ~/ 2, downloaded: false),
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        item: episode(durationMs: hourMs ~/ 2, downloaded: false),
+        positionMs: 0,
+      );
+      final session = harness.playback.liveSession!;
+      await session.seek(const Duration(minutes: 40));
+      await tester.pumpAndSettle();
+      expect(session.displayPosition, const Duration(minutes: 40));
+
+      await openSheet(tester);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      );
+      await tester.pumpAndSettle();
+
+      final armed = harness.container.read(sleepTimerProvider);
+      expect(armed.active, isTrue);
+      expect(armed.endOfChapterEndMs, hourMs);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a chapter end already behind the playhead offers no row', (
+      tester,
+    ) async {
+      // A downloaded episode's own last end stands, and playback has run
+      // on past it.
+      final harness = await pumpPlayer(
+        tester,
+        repo: repoWith(
+          twoChapters,
+          chapters: const [
+            ChapterMark(index: 0, title: 'Cold open', startMs: 0, endMs: 60000),
+            ChapterMark(
+              index: 1,
+              title: 'The trade',
+              startMs: 60000,
+              endMs: hourMs ~/ 2,
+            ),
+          ],
+        ),
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        item: episode(),
+        positionMs: 0,
+      );
+      final session = harness.playback.liveSession!;
+      await session.seek(const Duration(minutes: 40));
+      await tester.pumpAndSettle();
+      expect(session.displayPosition, const Duration(minutes: 40));
+
+      await openSheet(tester);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+        findsNothing,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimer(15)),
+        findsOneWidget,
+      );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a relayed last chapter of no known length ends where the '
+        'stream does, not at the declared length', (tester) async {
+      // The feed declares 30 s for audio that runs on to 50 s, and the
+      // engine reports no length: the end of the last chapter is wherever
+      // the stream ends.
+      final engine = _LengthlessEngine(runsFor: const Duration(seconds: 50));
+      final repo = repoWith(
+        const [0, 20000],
+        declaredMs: 30000,
+        downloaded: false,
+      );
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: episode(durationMs: 30000, downloaded: false),
+        positionMs: 0,
+      );
+      await listen(tester, engine, const Duration(seconds: 25));
+
+      await openSheet(tester);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      );
+      await tester.pumpAndSettle();
+      await listen(tester, engine, const Duration(seconds: 10));
+      expect(engine.playing, isTrue, reason: 'the declared 30 s is mid-audio');
+      expect(harness.container.read(sleepTimerProvider).active, isTrue);
+
+      await listen(tester, engine, const Duration(seconds: 20));
+      expect(engine.playing, isFalse);
+      expect(repo.reportedSessions.last.finished, isTrue);
+      expect(harness.container.read(sleepTimerProvider).active, isFalse);
+      await harness.endPlayback(tester);
+    });
+
+    // A relayed episode's play-info carries the feed's declared length,
+    // which can fall short of the chapter end: that end is still inside
+    // the audio, parked on, and no end of the episode.
+    for (final declaredMs in const [0, 30000, hourMs]) {
+      testWidgets('a relayed episode declaring $declaredMs ms parks on the '
+          'chapter end and resumes there', (tester) async {
+        final engine = FakeEngine(mediaDuration: const Duration(hours: 1));
+        final repo = repoWith(
+          const [0, 60000, 120000],
+          declaredMs: declaredMs,
+          downloaded: false,
+        );
+        final harness = await pumpPlayer(
+          tester,
+          repo: repo,
+          engine: engine,
+          item: episode(durationMs: declaredMs, downloaded: false),
+          positionMs: 0,
+        );
+
+        await openSheet(tester);
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          harness.container.read(sleepTimerProvider).endOfChapterEndMs,
+          60000,
+        );
+
+        await listen(tester, engine, const Duration(seconds: 59));
+        expect(engine.playing, isTrue);
+        await listen(tester, engine, const Duration(seconds: 2));
+
+        expect(repo.reportedSessions.where((s) => s.finished), isEmpty);
+        expect(engine.playing, isFalse);
+        expect(engine.position, const Duration(seconds: 60));
+        expect(repo.putPlayStateCalls.last.positionMs, 60000);
+
+        await harness.playback.liveSession!.play();
+        await tester.pumpAndSettle();
+        expect(engine.playing, isTrue);
+        expect(engine.position, const Duration(seconds: 60));
+        expect(
+          harness.container.read(queueControllerProvider).currentPid,
+          episodePid,
+        );
+        await harness.endPlayback(tester);
+      });
+    }
+
+    testWidgets('audio of no known length parks on a chapter end it plays '
+        'into', (tester) async {
+      final engine = _LengthlessEngine();
+      final repo = repoWith(
+        const [0, 60000, 120000],
+        declaredMs: 0,
+        downloaded: false,
+      );
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: episode(durationMs: 0, downloaded: false),
+        positionMs: 0,
+      );
+
+      await openSheet(tester);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      );
+      await tester.pumpAndSettle();
+      await listen(tester, engine, const Duration(seconds: 61));
+
+      expect(repo.reportedSessions.where((s) => s.finished), isEmpty);
+      expect(engine.playing, isFalse);
+      expect(engine.position, const Duration(seconds: 60));
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('audio of no known length is not ended by the length its feed '
+        'declares', (tester) async {
+      // The boundary lies past the declared figure, inside audio nothing
+      // has measured: only the audio's own end finishes the listen.
+      final engine = _LengthlessEngine();
+      final repo = repoWith(
+        const [0, 60000, 120000],
+        declaredMs: 30000,
+        downloaded: false,
+      );
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: episode(durationMs: 30000, downloaded: false),
+        positionMs: 0,
+      );
+
+      await openSheet(tester);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        harness.container.read(sleepTimerProvider).endOfChapterEndMs,
+        60000,
+      );
+      await listen(tester, engine, const Duration(seconds: 61));
+
+      expect(repo.reportedSessions.where((s) => s.finished), isEmpty);
+      expect(engine.playing, isFalse);
+      expect(engine.position, const Duration(seconds: 60));
+
+      await harness.playback.liveSession!.play();
+      await tester.pumpAndSettle();
+      expect(engine.playing, isTrue);
+      expect(engine.position, const Duration(seconds: 60));
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('audio of no known length that ends before the chapter does '
+        'finishes there', (tester) async {
+      final engine = _LengthlessEngine(runsFor: const Duration(seconds: 50));
+      final repo = repoWith(
+        const [0, 60000, 120000],
+        declaredMs: 0,
+        downloaded: false,
+      );
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: episode(durationMs: 0, downloaded: false),
+        positionMs: 0,
+      );
+
+      await openSheet(tester);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      );
+      await tester.pumpAndSettle();
+      await listen(tester, engine, const Duration(seconds: 51));
+
+      expect(engine.playing, isFalse);
+      expect(harness.container.read(sleepTimerProvider).active, isFalse);
+      expect(repo.reportedSessions.last.finished, isTrue);
+      await harness.endPlayback(tester);
+    });
+
+    test('a chapter stops at its end only while that end is ahead', () {
+      expect(
+        chapterStopMs(
+          served(twoChapters, declaredMs: 0),
+          const Duration(seconds: 90),
+          0,
+        ),
+        isNull,
+        reason: 'a last chapter whose end nothing knows has no stop',
+      );
+      for (final declaredMs in const [0, hourMs ~/ 2, hourMs * 2]) {
+        expect(
+          chapterStopMs(
+            served(twoChapters, declaredMs: declaredMs),
+            const Duration(seconds: 90),
+            hourMs,
+            relayed: true,
+          ),
+          hourMs,
+          reason: 'the audio\'s length, not the $declaredMs ms stamped',
+        );
+      }
+      expect(
+        chapterStopMs(
+          served(twoChapters, declaredMs: 0),
+          const Duration(seconds: 30),
+          0,
+        ),
+        60000,
+      );
+      expect(
+        chapterStopMs(const [], const Duration(seconds: 30), hourMs),
+        isNull,
+      );
+      // A book's own last end stands, short of the audio.
+      const handEnded = [
+        ChapterMark(index: 0, title: 'One', startMs: 0, endMs: 600000),
+        ChapterMark(index: 1, title: 'Two', startMs: 600000, endMs: 3000000),
+      ];
+      expect(
+        chapterStopMs(handEnded, const Duration(minutes: 20), hourMs),
+        3000000,
+      );
+      // Hand-edited book chapters can leave a gap between two of them.
+      const gapped = [
+        ChapterMark(index: 0, title: 'One', startMs: 0, endMs: 50000),
+        ChapterMark(index: 1, title: 'Two', startMs: 70000, endMs: 90000),
+      ];
+      expect(chapterStopMs(gapped, const Duration(seconds: 40), hourMs), 50000);
+      expect(
+        chapterStopMs(gapped, const Duration(seconds: 60), hourMs),
+        isNull,
+        reason: 'the chapter playing ended before the playhead',
+      );
+      expect(
+        chapterStopMs(gapped, const Duration(seconds: 50), hourMs),
+        isNull,
+        reason: 'an end at the playhead is spent, not ahead',
+      );
+    });
+
+    testWidgets('a timer waiting on the chapter says so', (tester) async {
+      final harness = await pumpPlayer(
+        tester,
+        repo: repoWith(twoChapters),
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        item: episode(),
+        positionMs: 0,
+      );
+
+      await openSheet(tester);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.bySemanticsLabel('Sleep timer, until the chapter ends'),
+        findsOneWidget,
+      );
+      expect(find.text('ch'), findsOneWidget);
+      await openSheet(tester);
+      expect(find.text('Stops when the chapter ends'), findsOneWidget);
+      await tester.tap(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerCancel),
+      );
+      await tester.pumpAndSettle();
+      expect(harness.container.read(sleepTimerProvider).active, isFalse);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('an episode without chapters keeps the sheet as it was', (
+      tester,
+    ) async {
+      final harness = await pumpPlayer(
+        tester,
+        repo: repoWith(const []),
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        item: episode(),
+        positionMs: 0,
+      );
+
+      await openSheet(tester);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+        findsNothing,
+      );
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimer(15)),
+        findsOneWidget,
+      );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('the row appears when the episode\'s chapters arrive', (
+      tester,
+    ) async {
+      final gate = Completer<void>();
+      final repo = repoWith(twoChapters)..getEpisodeGate = gate;
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        item: episode(),
+        positionMs: 0,
+      );
+
+      await openSheet(tester);
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+        findsNothing,
+      );
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.sleepTimerChapter),
+        findsOneWidget,
+      );
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a short window reads the episode once however often the '
+        'sheet opens', (tester) async {
+      // Too short for the panel under the transport, which is what reads
+      // the episode on a taller one.
+      tester.view.physicalSize = const Size(900, 420);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final repo = repoWith(twoChapters);
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: FakeEngine(mediaDuration: const Duration(hours: 1)),
+        item: episode(),
+        positionMs: 0,
+      );
+
+      final rowOnFirstFrame = <bool>[];
+      for (var open = 0; open < 3; open++) {
+        await tester.tap(
+          find.bySemanticsIdentifier(SemanticsIds.sleepTimerOpen),
+        );
+        await tester.pump();
+        rowOnFirstFrame.add(
+          find
+              .bySemanticsIdentifier(SemanticsIds.sleepTimerChapter)
+              .evaluate()
+              .isNotEmpty,
+        );
+        await tester.pumpAndSettle();
+        Navigator.of(
+          tester.element(
+            find.bySemanticsIdentifier(SemanticsIds.sleepTimer(15)),
+          ),
+        ).pop();
+        await tester.pumpAndSettle();
+      }
+
+      expect(repo.getEpisodeCalls, [episodePid]);
+      expect(rowOnFirstFrame, [true, true, true]);
+      await harness.endPlayback(tester);
+    });
   });
 
   testWidgets('the badge speaks the reader\'s language', (tester) async {

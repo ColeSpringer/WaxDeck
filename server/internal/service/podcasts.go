@@ -2,9 +2,19 @@ package service
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"hash/fnv"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
 	"net/url"
+	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,7 +25,8 @@ import (
 	"github.com/colespringer/waxbin/podcast"
 	"github.com/colespringer/waxbin/query"
 	"github.com/colespringer/waxbin/read"
-	"github.com/colespringer/waxbin/source"
+	"github.com/colespringer/waxbin/waxerr"
+	waxtap "github.com/colespringer/waxtap/v3"
 
 	wdb "github.com/colespringer/waxdeck/server/internal/db"
 )
@@ -28,8 +39,9 @@ type PodcastShow struct {
 	Title           string
 	Author          string
 	DescriptionHTML string
-	// FeedURL is empty for private shows; the emptiness is the privacy
-	// rule, not missing data.
+	// FeedURL is the address the caller follows the show by; for anyone
+	// else it is the catalog's, and empty for a private show: the
+	// emptiness is the privacy rule, not missing data.
 	FeedURL         string
 	Link            string
 	SourceType      string
@@ -218,6 +230,12 @@ type EpisodeSummary struct {
 	// HasEnclosure reports that the feed named audio for this episode,
 	// so an unfetched one still streams by passthrough.
 	HasEnclosure bool
+	// Container and MimeType are the format a client should expect: the
+	// fetched file's, or the type the feed declared (held to the relay's
+	// rule) and the container that type names. Empty when neither is
+	// known.
+	Container string
+	MimeType  string
 }
 
 // EpisodeDetail is the full episode view.
@@ -239,18 +257,62 @@ type ChapterMark struct {
 	EndMS   int64
 }
 
-// OpmlImportEntry is one feed's import outcome.
+// OpmlImportEntry is one feed's import outcome. Err is a sentence for a
+// person, and Reason the feed-side failure's reason when it was one.
 type OpmlImportEntry struct {
 	FeedURL string
 	Title   string
 	PID     string
 	Err     string
+	Reason  string
 }
+
+// lockMembership serializes one account's changes to who follows which
+// show, the state and the change log together, so neither a change nor
+// its event can land inside another and the log keeps their order.
+func (l *Library) lockMembership(userID string) func() {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(userID))
+	m := &l.membershipLocks[h.Sum32()%playedStripes]
+	m.Lock()
+	return m.Unlock
+}
+
+// testHookMembership, nil outside tests, runs where two requests for one
+// account could otherwise interleave: inside a change of who follows a
+// show, at the named steps a test can hold one at.
+var testHookMembership func(step string)
 
 // subChangeMeta annotates subscription changes made through the
 // compatibility adapter so other gpodder clients can filter by device.
+// known is a show the catalog already holds, attached without a fetch.
+// park is a parked feed the add lands: every device still asking for it
+// holds the show too, and the park goes, under the account lock. A retry's
+// landing (parkOnly) holds it for those devices alone, and attaches
+// nothing once none of them is left asking. failureLog is the level a
+// feed-side failure is logged at: Info, the zero value, for the apps'
+// subscribes, Debug for gpodder's, which a full list asks again on every
+// sync and the inbox records.
 type subChangeMeta struct {
-	deviceID string
+	deviceID   string
+	known      *model.Podcast
+	park       string
+	parkOnly   bool
+	failureLog slog.Level
+}
+
+// ErrPodcastsOff is the cause of the refusal a server whose podcast
+// directory is off answers every subscribe with.
+var ErrPodcastsOff = errors.New("podcasts are turned off on this server")
+
+// requirePodcastsOn refuses a subscribe for good on a server whose
+// podcast directory is off: it keeps no podcasts, so it follows none and
+// fetches no feed.
+func (l *Library) requirePodcastsOn() error {
+	if l.podcastDir == "" {
+		return &Error{Kind: KindFeature, Msg: ErrPodcastsOff.Error(), Err: ErrPodcastsOff}
+	}
+	return nil
 }
 
 // Subscribe subscribes the caller to a show, cataloging it globally on
@@ -264,6 +326,15 @@ func (l *Library) subscribe(ctx context.Context, uc *UserCtx, req SubscribeReque
 	if err := requirePodcastManagement(uc); err != nil {
 		return Subscription{}, false, err
 	}
+	if err := l.requirePodcastsOn(); err != nil {
+		return Subscription{}, false, err
+	}
+	// Following a show is for hearing it, and the podcast library is what
+	// an account is granted to hear podcasts by.
+	if !l.podcastsVisible(ctx, uc) {
+		return Subscription{}, false, &Error{Kind: KindForbidden,
+			Msg: "this account cannot see the podcast library; an administrator can grant it"}
+	}
 	rawURL := strings.TrimSpace(req.URL)
 	if rawURL == "" {
 		return Subscription{}, false, errInvalid("url is required")
@@ -271,6 +342,14 @@ func (l *Library) subscribe(ctx context.Context, uc *UserCtx, req SubscribeReque
 	if u, err := url.Parse(rawURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") {
 		return Subscription{}, false, errInvalid("url must be http or https")
 	}
+	if !l.allowPrivateFeedHosts && refusedNAT64Host(rawURL) {
+		return Subscription{}, false, blockedFeedAddress()
+	}
+	folder, err := subscriptionFolder(req.Folder)
+	if err != nil {
+		return Subscription{}, false, err
+	}
+	req.Folder = folder
 
 	sourceType := model.SourceRSS
 	switch strings.TrimSpace(req.SourceType) {
@@ -282,16 +361,36 @@ func (l *Library) subscribe(ctx context.Context, uc *UserCtx, req SubscribeReque
 			Msg: "unsupported source type " + req.SourceType}
 	}
 
+	if meta.known != nil {
+		return l.attachSubscription(ctx, uc, meta.known, req, meta)
+	}
 	opts := podcast.AddOptions{User: req.Username, Pass: req.Password}
 	pod, err := l.lib.Podcasts().AddSource(ctx, rawURL, sourceType, opts)
 	if err != nil {
-		return Subscription{}, false, l.classifyFeedErr(ctx, err, rawURL, req.Password != "" || req.Username != "")
+		out := l.classifyFeedErr(ctx, err)
+		if reason := FeedFailureReason(out); reason != "" {
+			l.logFeedFailureAt(meta.failureLog, "subscribing to a feed failed", rawURL, reason, err)
+		}
+		return Subscription{}, false, out
 	}
+	// The catalog has just taken this address up as the show's, so a
+	// secret in it makes the show private before anything can refuse.
+	if addressCarriesSecret(rawURL) {
+		l.markShowPrivate(ctx, string(pod.PID))
+	}
+	return l.attachSubscription(ctx, uc, pod, req, meta)
+}
+
+// attachSubscription subscribes the caller to a cataloged show and
+// records who holds it: meta's device, or the first-party apps.
+func (l *Library) attachSubscription(ctx context.Context, uc *UserCtx, pod *model.Podcast, req SubscribeRequest, meta subChangeMeta) (Subscription, bool, error) {
 	if pod.Explicit && !uc.Explicit {
 		return Subscription{}, false, &Error{Kind: KindForbidden,
 			Msg: "this account cannot subscribe to explicit shows"}
 	}
 	show := string(pod.PID)
+	// The account's own URL for the show, whatever the catalog took up.
+	feedURL := strings.TrimSpace(req.URL)
 
 	hasCreds := req.Username != "" || req.Password != ""
 	if hasCreds {
@@ -300,31 +399,67 @@ func (l *Library) subscribe(ctx context.Context, uc *UserCtx, req SubscribeReque
 		if err := l.lib.Podcasts().SetAuth(ctx, pod.PID, req.Username, req.Password); err != nil {
 			return Subscription{}, false, classify(err)
 		}
+	}
+	// An address that carries a credential is as much the show's secret
+	// as a login; one no fetch put in the catalog is marked here.
+	private := hasCreds || addressCarriesSecret(feedURL)
+	if private {
 		l.markShowPrivate(ctx, show)
 	}
 
 	now := time.Now().UnixNano()
-	_, err = l.db.SubscriptionFor(ctx, uc.ID, show)
-	created := errors.Is(err, wdb.ErrNotFound)
-	if err != nil && !created {
-		return Subscription{}, false, &Error{Kind: KindInternal, Err: err}
+	var created bool
+	var row wdb.Subscription
+	if err := func() error {
+		defer l.lockMembership(uc.ID)()
+		holders, err := l.landingHolders(ctx, uc.ID, show, meta)
+		if err != nil {
+			return err
+		}
+		if testHookMembership != nil {
+			testHookMembership("landing")
+		}
+		// A URL no fetch proved is the holder's, and the account's only
+		// when it had none.
+		attach := l.db.AttachSubscription
+		if meta.known != nil {
+			attach = l.db.AttachKnownSubscription
+		}
+		for _, holder := range holders {
+			made, err := attach(ctx, wdb.Subscription{
+				UserID: uc.ID, ShowPID: show,
+				Folder: strings.TrimSpace(req.Folder), Private: private,
+				CreatedAtNS: now, UpdatedAtNS: now,
+			}, holder, feedURL)
+			if err != nil {
+				return &Error{Kind: KindInternal, Err: err}
+			}
+			if made {
+				created = true
+				if private {
+					l.markShowPrivate(ctx, show)
+				}
+				l.afterSubscriptionChange(ctx, uc, show, gpodderEventURL(pod, feedURL), "add", subChangeMeta{deviceID: holder})
+			}
+		}
+		if meta.park != "" {
+			if err := l.db.DeleteGpodderPending(ctx, uc.ID, meta.park); err != nil {
+				return &Error{Kind: KindInternal, Err: err}
+			}
+		}
+		if testHookMembership != nil {
+			testHookMembership("attach")
+		}
+		// Read before the lock goes: an unsubscribe right after cannot
+		// turn a subscribe that landed into a failure.
+		if row, err = l.db.SubscriptionFor(ctx, uc.ID, show); err != nil {
+			return &Error{Kind: KindInternal, Err: err}
+		}
+		return nil
+	}(); err != nil {
+		return Subscription{}, false, err
 	}
-	if created {
-		sub := wdb.Subscription{
-			UserID: uc.ID, ShowPID: show,
-			Folder: strings.TrimSpace(req.Folder), Private: hasCreds,
-			CreatedAtNS: now, UpdatedAtNS: now,
-		}
-		if err := l.db.UpsertSubscription(ctx, sub); err != nil {
-			return Subscription{}, false, &Error{Kind: KindInternal, Err: err}
-		}
-		if sub.Private {
-			l.markShowPrivate(ctx, show)
-		}
-		l.afterSubscriptionChange(ctx, uc, show, pod.FeedURL, "add", meta)
-	}
-
-	out, err := l.subscriptionFor(ctx, uc, pod)
+	out, err := l.subscriptionRow(ctx, uc, pod, row)
 	if err != nil {
 		return Subscription{}, false, err
 	}
@@ -342,6 +477,9 @@ func (l *Library) Unsubscribe(ctx context.Context, uc *UserCtx, apiShowPID strin
 	if err := requirePodcastManagement(uc); err != nil {
 		return err
 	}
+	if !l.podcastsVisible(ctx, uc) {
+		return errNotFound("no show with pid " + apiShowPID)
+	}
 	return l.unsubscribe(ctx, uc, apiShowPID, removeDownloads, subChangeMeta{})
 }
 
@@ -350,14 +488,33 @@ func (l *Library) unsubscribe(ctx context.Context, uc *UserCtx, apiShowPID strin
 	if err != nil {
 		return err
 	}
-	existed, err := l.db.DeleteSubscription(ctx, uc.ID, string(pod.PID))
-	if err != nil {
-		return &Error{Kind: KindInternal, Err: err}
+	// An unsubscribe is the whole account's: every device's hold goes too,
+	// and every device's parked ask for the show, which a retry would land
+	// again.
+	var existed bool
+	if err := func() error {
+		defer l.lockMembership(uc.ID)()
+		var err error
+		var feedURL string
+		if existed, feedURL, err = l.db.RemoveSubscription(ctx, uc.ID, string(pod.PID)); err != nil {
+			return &Error{Kind: KindInternal, Err: err}
+		}
+		if err := l.dropShowParks(ctx, uc.ID, pod, feedURL); err != nil {
+			return err
+		}
+		if testHookMembership != nil {
+			testHookMembership("unsubscribe")
+		}
+		if existed {
+			l.afterSubscriptionChange(ctx, uc, string(pod.PID), gpodderEventURL(pod, feedURL), "remove", meta)
+		}
+		return nil
+	}(); err != nil {
+		return err
 	}
 	if !existed {
 		return nil
 	}
-	l.afterSubscriptionChange(ctx, uc, string(pod.PID), pod.FeedURL, "remove", meta)
 	if removeDownloads {
 		remaining, err := l.db.SubscribersByShow(ctx, string(pod.PID))
 		if err != nil {
@@ -495,8 +652,13 @@ const (
 // view contains: a mirror synced under the old membership holds rows
 // (or lacks rows) the new membership disagrees on, and episode change
 // seqs predate a fresh subscribe, so only a clean re-mirror converges.
-// Never fails the mutation.
+// feedURL is the account's URL for the show the change log records it
+// under, empty for a show gpodder clients do not sync. Never fails the
+// mutation, and runs whether or not the request that made it is still
+// there: the change has committed, and a retry finds it done and files
+// nothing.
 func (l *Library) afterSubscriptionChange(ctx context.Context, uc *UserCtx, showPID, feedURL, action string, meta subChangeMeta) {
+	ctx = context.WithoutCancel(ctx)
 	l.emitUserEvent(ctx, uc.ID, eventSubscription, showPID)
 	l.bumpGrantEpoch(ctx, uc.ID)
 	// A show followed a moment ago has to be reachable by its first
@@ -504,9 +666,9 @@ func (l *Library) afterSubscriptionChange(ctx context.Context, uc *UserCtx, show
 	l.InvalidatePodpingFeeds()
 	if feedURL != "" {
 		if err := l.db.AppendGpodderSubEvent(ctx, wdb.GpodderSubEvent{
-			UserID: uc.ID, FeedURL: feedURL, Action: action,
+			UserID: uc.ID, ShowPID: showPID, FeedURL: feedURL, Action: action,
 			DeviceID: meta.deviceID, TsSec: time.Now().Unix(),
-		}); err != nil {
+		}, gpodderRemovalsPerUser); err != nil {
 			l.log.Warn("appending gpodder sub event", "err", err)
 		}
 	}
@@ -529,6 +691,11 @@ func (l *Library) afterSubscriptionChange(ctx context.Context, uc *UserCtx, show
 // anyway, does not, and asking for it there would double the work for a
 // number nothing in that protocol carries.
 func (l *Library) Subscriptions(ctx context.Context, uc *UserCtx, cursor string, limit int, withCounts bool) ([]Subscription, string, error) {
+	// An account that cannot see the podcast library follows nothing it
+	// can see; its rows stay for the day it can again.
+	if !l.podcastsVisible(ctx, uc) {
+		return []Subscription{}, "", nil
+	}
 	rows, err := l.db.SubscriptionsByUser(ctx, uc.ID)
 	if err != nil {
 		return nil, "", &Error{Kind: KindInternal, Err: err}
@@ -690,11 +857,7 @@ func (l *Library) PodcastDetailFor(ctx context.Context, uc *UserCtx, apiShowPID 
 	if pod.Explicit && !uc.Explicit {
 		return PodcastDetail{}, errNotFound("no show with pid " + apiShowPID)
 	}
-	show, err := l.showDTO(ctx, uc, pod, true)
-	if err != nil {
-		return PodcastDetail{}, err
-	}
-	out := PodcastDetail{Show: show}
+	var out PodcastDetail
 	row, err := l.db.SubscriptionFor(ctx, uc.ID, string(pod.PID))
 	if err == nil {
 		out.Subscribed = true
@@ -702,6 +865,9 @@ func (l *Library) PodcastDetailFor(ctx context.Context, uc *UserCtx, apiShowPID 
 		out.Settings = &st
 	} else if !errors.Is(err, wdb.ErrNotFound) {
 		return PodcastDetail{}, &Error{Kind: KindInternal, Err: err}
+	}
+	if out.Show, err = l.showDTO(ctx, uc, pod, true, row.FeedURL); err != nil {
+		return PodcastDetail{}, err
 	}
 	return out, nil
 }
@@ -713,38 +879,61 @@ func (l *Library) PutSubscriptionSettings(ctx context.Context, uc *UserCtx, apiS
 	if err != nil {
 		return Subscription{}, err
 	}
+	if !l.podcastsVisible(ctx, uc) {
+		return Subscription{}, errNotFound("no show with pid " + apiShowPID)
+	}
 	show := string(pod.PID)
-	existing, err := l.db.SubscriptionFor(ctx, uc.ID, show)
-	if errors.Is(err, wdb.ErrNotFound) {
-		return Subscription{}, errNotFound("not subscribed to " + apiShowPID)
-	}
-	if err != nil {
-		return Subscription{}, &Error{Kind: KindInternal, Err: err}
-	}
-	if s.Speed != nil && (*s.Speed < 0.5 || *s.Speed > 3.5) {
-		return Subscription{}, errInvalid("speed must be between 0.5 and 3.5")
-	}
-	if s.RetentionKeep != nil && *s.RetentionKeep < 0 {
-		return Subscription{}, errInvalid("retentionKeep must not be negative")
-	}
-	row := wdb.Subscription{
-		UserID: uc.ID, ShowPID: show,
-		Folder:        strings.TrimSpace(s.Folder),
-		Private:       s.Private,
-		RetentionKeep: s.RetentionKeep,
-		AutoDownload:  s.AutoDownload,
-		Speed:         s.Speed,
-		TrimSilence:   s.TrimSilence,
-		VoiceBoost:    s.VoiceBoost,
-		SkipIntroSec:  s.SkipIntroSec,
-		SkipOutroSec:  s.SkipOutroSec,
-		AutoDLInclude: normalizeTerms(s.AutoDLFilter.Include),
-		AutoDLExclude: normalizeTerms(s.AutoDLFilter.Exclude),
-		CreatedAtNS:   existing.CreatedAtNS,
-		UpdatedAtNS:   time.Now().UnixNano(),
-	}
-	if err := l.db.UpsertSubscription(ctx, row); err != nil {
-		return Subscription{}, &Error{Kind: KindInternal, Err: err}
+	// Under the account's lock, so an unsubscribe cannot land between the
+	// read and the write; and the write only updates, so a show the account
+	// does not follow stays unfollowed whatever the order.
+	var row wdb.Subscription
+	if err := func() error {
+		defer l.lockMembership(uc.ID)()
+		if _, err := l.db.SubscriptionFor(ctx, uc.ID, show); errors.Is(err, wdb.ErrNotFound) {
+			return errNotFound("not subscribed to " + apiShowPID)
+		} else if err != nil {
+			return &Error{Kind: KindInternal, Err: err}
+		}
+		if testHookMembership != nil {
+			testHookMembership("settings")
+		}
+		if s.Speed != nil && (*s.Speed < 0.5 || *s.Speed > 3.5) {
+			return errInvalid("speed must be between 0.5 and 3.5")
+		}
+		if s.RetentionKeep != nil && *s.RetentionKeep < 0 {
+			return errInvalid("retentionKeep must not be negative")
+		}
+		folder, err := subscriptionFolder(s.Folder)
+		if err != nil {
+			return err
+		}
+		found, err := l.db.UpdateSubscriptionSettings(ctx, wdb.Subscription{
+			UserID: uc.ID, ShowPID: show,
+			Folder:        folder,
+			Private:       s.Private,
+			RetentionKeep: s.RetentionKeep,
+			AutoDownload:  s.AutoDownload,
+			Speed:         s.Speed,
+			TrimSilence:   s.TrimSilence,
+			VoiceBoost:    s.VoiceBoost,
+			SkipIntroSec:  s.SkipIntroSec,
+			SkipOutroSec:  s.SkipOutroSec,
+			AutoDLInclude: normalizeTerms(s.AutoDLFilter.Include),
+			AutoDLExclude: normalizeTerms(s.AutoDLFilter.Exclude),
+			UpdatedAtNS:   time.Now().UnixNano(),
+		})
+		if err != nil {
+			return &Error{Kind: KindInternal, Err: err}
+		}
+		if !found {
+			return errNotFound("not subscribed to " + apiShowPID)
+		}
+		if row, err = l.db.SubscriptionFor(ctx, uc.ID, show); err != nil {
+			return &Error{Kind: KindInternal, Err: err}
+		}
+		return nil
+	}(); err != nil {
+		return Subscription{}, err
 	}
 	if s.Private {
 		// Privacy is sticky at the show level; setting the flag false
@@ -755,7 +944,7 @@ func (l *Library) PutSubscriptionSettings(ctx context.Context, uc *UserCtx, apiS
 	if err := l.db.EnqueueRetention(ctx, show, time.Now().UnixNano()); err != nil {
 		l.log.Warn("queuing retention", "show", show, "err", err)
 	}
-	return l.subscriptionFor(ctx, uc, pod)
+	return l.subscriptionRow(ctx, uc, pod, row)
 }
 
 // Episodes lists one show's episodes newest first, keyset-paged on
@@ -776,18 +965,20 @@ func (l *Library) Episodes(ctx context.Context, uc *UserCtx, apiShowPID, cursor 
 	if err != nil {
 		return nil, "", classify(err)
 	}
-	rows := make([]EpisodeSummary, 0, len(eps))
+	kept := make([]*model.Episode, 0, len(eps))
 	for _, ep := range eps {
 		if ep.Explicit && !uc.Explicit {
 			continue
 		}
-		rows = append(rows, l.episodeSummary(ctx, ep))
+		kept = append(kept, ep)
 	}
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].PublishedNS != rows[j].PublishedNS {
-			return rows[i].PublishedNS > rows[j].PublishedNS
+	// Ordered and cut before a row is built: a row costs reads beyond the
+	// catalog's episode, and only the page's rows go back.
+	sort.Slice(kept, func(i, j int) bool {
+		if pi, pj := episodePublishedNS(kept[i]), episodePublishedNS(kept[j]); pi != pj {
+			return pi > pj
 		}
-		return rows[i].PID > rows[j].PID
+		return kept[i].PID > kept[j].PID
 	})
 
 	start := 0
@@ -796,17 +987,21 @@ func (l *Library) Episodes(ctx context.Context, uc *UserCtx, apiShowPID, cursor 
 		if !ok {
 			return nil, "", errInvalid("malformed cursor")
 		}
-		start = sort.Search(len(rows), func(i int) bool {
-			if rows[i].PublishedNS != pubNS {
-				return rows[i].PublishedNS < pubNS
+		start = sort.Search(len(kept), func(i int) bool {
+			if pub := episodePublishedNS(kept[i]); pub != pubNS {
+				return pub < pubNS
 			}
-			return rows[i].PID < pid
+			return apiPID(PrefixEpisode, kept[i].PID) < pid
 		})
 	}
-	end := min(start+limit, len(rows))
-	page := rows[start:end]
+	end := min(start+limit, len(kept))
+	facts := l.readEpisodeFacts(ctx, kept[start:end], nil)
+	page := make([]EpisodeSummary, 0, end-start)
+	for _, ep := range kept[start:end] {
+		page = append(page, l.episodeSummary(ctx, ep, facts))
+	}
 	next := ""
-	if end < len(rows) && len(page) > 0 {
+	if end < len(kept) && len(page) > 0 {
 		last := page[len(page)-1]
 		next = encodePubCursor(last.PublishedNS, last.PID)
 	}
@@ -830,7 +1025,7 @@ func (l *Library) EpisodeDetailFor(ctx context.Context, uc *UserCtx, apiEpisodeP
 		return EpisodeDetail{}, errNotFound("no episode with pid " + apiEpisodePID)
 	}
 	out := EpisodeDetail{
-		EpisodeSummary:  l.episodeSummary(ctx, det.Episode),
+		EpisodeSummary:  l.episodeSummary(ctx, det.Episode, l.readEpisodeFacts(ctx, []*model.Episode{det.Episode}, nil)),
 		DescriptionHTML: sanitizeShowNotes(det.Episode.Description),
 		Link:            det.Episode.Link,
 		Persons:         feedPersonsDTO(det.Persons),
@@ -841,7 +1036,38 @@ func (l *Library) EpisodeDetailFor(ctx context.Context, uc *UserCtx, apiEpisodeP
 			Index: i, Title: ch.Title, StartMS: ch.StartMS, EndMS: ch.EndMS,
 		})
 	}
+	// The catalog stores an episode's chapters when it downloads it, so
+	// one that is only streamed has them from the feed's document instead.
+	if len(out.Chapters) == 0 {
+		out.Chapters = l.fetchedChapters(ctx, uc.ID, det.Episode)
+	}
 	return out, nil
+}
+
+// EpisodeSummaryFor answers one episode as its listing row, and whether its
+// show declares itself explicit, under the checks EpisodeDetailFor makes and
+// without the display extras that read costs (show notes, chapters, which
+// can mean a fetch from the feed's host).
+func (l *Library) EpisodeSummaryFor(ctx context.Context, uc *UserCtx, apiEpisodePID string) (EpisodeSummary, bool, error) {
+	det, err := l.getEpisode(ctx, apiEpisodePID)
+	if err != nil {
+		return EpisodeSummary{}, false, err
+	}
+	if !l.podcastsVisible(ctx, uc) {
+		return EpisodeSummary{}, false, errNotFound("no episode with pid " + apiEpisodePID)
+	}
+	ep := det.Episode
+	if !l.episodeAllowed(ctx, uc, ep) {
+		return EpisodeSummary{}, false, errNotFound("no episode with pid " + apiEpisodePID)
+	}
+	// The show's own advisory, for a caller the rule above let through
+	// without reading it; a show that cannot be read says nothing here, as
+	// it says nothing on the detail read.
+	showExplicit := false
+	if pod, err := l.readShow(ctx, ep.PodcastPID); err == nil {
+		showExplicit = pod.Explicit
+	}
+	return l.episodeSummary(ctx, ep, l.readEpisodeFacts(ctx, []*model.Episode{ep}, nil)), showExplicit, nil
 }
 
 // feedPersonsDTO maps facade person credits onto the service DTO, dropping
@@ -880,6 +1106,9 @@ func (l *Library) RefreshPodcast(ctx context.Context, uc *UserCtx, apiShowPID st
 	if err != nil {
 		return 0, err
 	}
+	if !l.podcastsVisible(ctx, uc) {
+		return 0, errNotFound("no show with pid " + apiShowPID)
+	}
 	if _, err := l.db.SubscriptionFor(ctx, uc.ID, string(pod.PID)); err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
 			return 0, &Error{Kind: KindForbidden, Msg: "refresh is for subscribers of the show"}
@@ -903,8 +1132,8 @@ func (l *Library) checkPodcastWritable(ctx context.Context) error {
 }
 
 // QueueEpisodeFetch queues a server-side enclosure download. The
-// caller must be subscribed to the show; an already-present episode is
-// a no-op.
+// caller must be subscribed to the show; an episode already here is
+// fetched no further, only held for the caller as a landing holds it.
 func (l *Library) QueueEpisodeFetch(ctx context.Context, uc *UserCtx, apiEpisodePID string) error {
 	if err := requirePodcastManagement(uc); err != nil {
 		return err
@@ -916,6 +1145,9 @@ func (l *Library) QueueEpisodeFetch(ctx context.Context, uc *UserCtx, apiEpisode
 	if err != nil {
 		return err
 	}
+	if !l.podcastsVisible(ctx, uc) {
+		return errNotFound("no episode with pid " + apiEpisodePID)
+	}
 	ep := det.Episode
 	if _, err := l.db.SubscriptionFor(ctx, uc.ID, string(ep.PodcastPID)); err != nil {
 		if errors.Is(err, wdb.ErrNotFound) {
@@ -924,7 +1156,13 @@ func (l *Library) QueueEpisodeFetch(ctx context.Context, uc *UserCtx, apiEpisode
 		return &Error{Kind: KindInternal, Err: err}
 	}
 	if ep.Downloaded {
+		if err := l.db.HoldFetch(ctx, string(ep.PodcastPID), string(ep.PID), uc.ID, time.Now().UnixNano()); err != nil {
+			return &Error{Kind: KindInternal, Err: err}
+		}
 		return nil
+	}
+	if l.playlistEnclosure(ctx, ep) {
+		return errNotFound("episode " + apiEpisodePID + " names a playlist, not audio; there is nothing to fetch")
 	}
 	if l.podcastDir == "" {
 		// Never queue into a void: without a download directory no
@@ -932,7 +1170,7 @@ func (l *Library) QueueEpisodeFetch(ctx context.Context, uc *UserCtx, apiEpisode
 		return &Error{Kind: KindUnsupported,
 			Msg: "episode downloads are disabled on this server (no podcast directory configured)"}
 	}
-	if err := l.db.EnqueueFetch(ctx, string(ep.PID), uc.ID, time.Now().UnixNano()); err != nil {
+	if err := l.db.EnqueueFetch(ctx, string(ep.PID), uc.ID, time.Now().UnixNano(), fetchMaxAttempts); err != nil {
 		return &Error{Kind: KindInternal, Err: err}
 	}
 	return nil
@@ -960,6 +1198,9 @@ func (l *Library) RemoveEpisodeDownload(ctx context.Context, uc *UserCtx, apiEpi
 	det, err := l.getEpisode(ctx, apiEpisodePID)
 	if err != nil {
 		return err
+	}
+	if !l.podcastsVisible(ctx, uc) {
+		return errNotFound("no episode with pid " + apiEpisodePID)
 	}
 	ep := det.Episode
 	if _, err := l.db.SubscriptionFor(ctx, uc.ID, string(ep.PodcastPID)); err != nil {
@@ -1079,6 +1320,12 @@ func (f *subscriptionFilter) allowsEpisodePID(ctx context.Context, l *Library, e
 	return f.allowsEpisode(ctx, l, it)
 }
 
+// followsAny reports whether the caller follows at least one show.
+func (f *subscriptionFilter) followsAny(ctx context.Context, l *Library) bool {
+	f.ensure(ctx, l)
+	return !f.failed && len(f.set) > 0
+}
+
 // allowsShow reports whether the caller subscribes to the show itself.
 func (f *subscriptionFilter) allowsShow(ctx context.Context, l *Library, showPID string) bool {
 	f.ensure(ctx, l)
@@ -1094,6 +1341,7 @@ func (f *subscriptionFilter) ensure(ctx context.Context, l *Library) {
 	if err != nil {
 		l.log.Warn("loading subscription set", "user", f.uc.ID, "err", err)
 		f.failed = true
+		noteDegraded(ctx)
 	}
 	f.set = set
 }
@@ -1124,6 +1372,20 @@ func (l *Library) getEpisode(ctx context.Context, apiEpisodePID string) (*model.
 	return det, nil
 }
 
+// episodesByPIDs reads episodes by bare pid in one catalog read, in
+// request order and each once, leaving out a pid that is no episode.
+func (l *Library) episodesByPIDs(ctx context.Context, pids []model.PID) ([]*model.Episode, error) {
+	read := l.lib.Podcasts().EpisodesByPIDs
+	if l.episodeReadHook != nil {
+		read = l.episodeReadHook
+	}
+	eps, err := read(ctx, pids)
+	if err != nil {
+		return nil, classify(err)
+	}
+	return eps, nil
+}
+
 // subscriptionFor builds the caller's subscription DTO for a show.
 func (l *Library) subscriptionFor(ctx context.Context, uc *UserCtx, pod *model.Podcast) (Subscription, error) {
 	row, err := l.db.SubscriptionFor(ctx, uc.ID, string(pod.PID))
@@ -1134,7 +1396,7 @@ func (l *Library) subscriptionFor(ctx context.Context, uc *UserCtx, pod *model.P
 }
 
 func (l *Library) subscriptionRow(ctx context.Context, uc *UserCtx, pod *model.Podcast, row wdb.Subscription) (Subscription, error) {
-	show, err := l.showDTO(ctx, uc, pod, false)
+	show, err := l.showDTO(ctx, uc, pod, false, row.FeedURL)
 	if err != nil {
 		return Subscription{}, err
 	}
@@ -1165,11 +1427,14 @@ func settingsDTO(row wdb.Subscription) SubscriptionSettings {
 
 // showDTO builds the API show view. withCounts adds the episode count
 // and newest publication time (detail surfaces only), counted through
-// uc's view of the show; uc is consulted for nothing else.
-func (l *Library) showDTO(ctx context.Context, uc *UserCtx, pod *model.Podcast, withCounts bool) (PodcastShow, error) {
+// uc's view of the show; uc is consulted for nothing else. own is the
+// address uc follows the show by, "" when it does not follow it: a
+// follower is shown its own address, never the one the catalog took up
+// from the last account to add the show.
+func (l *Library) showDTO(ctx context.Context, uc *UserCtx, pod *model.Podcast, withCounts bool, own string) (PodcastShow, error) {
 	out := PodcastShow{
 		PID:             apiPID(PrefixPodcast, pod.PID),
-		Title:           pod.Title,
+		Title:           clipFeedTitle(pod.Title),
 		Author:          pod.Author,
 		DescriptionHTML: sanitizeShowNotes(pod.Description),
 		Link:            pod.Link,
@@ -1183,7 +1448,10 @@ func (l *Library) showDTO(ctx context.Context, uc *UserCtx, pod *model.Podcast, 
 	if out.SourceType == "" {
 		out.SourceType = "rss"
 	}
-	if !l.showIsPrivate(ctx, pod) {
+	switch {
+	case own != "":
+		out.FeedURL = own
+	case !l.showIsPrivate(ctx, pod):
 		out.FeedURL = pod.FeedURL
 	}
 	st, err := l.db.FeedStateFor(ctx, string(pod.PID))
@@ -1205,18 +1473,67 @@ func (l *Library) showDTO(ctx context.Context, uc *UserCtx, pod *model.Podcast, 
 	return out, nil
 }
 
-// showIsPrivate applies the sticky privacy rule: credentialed shows
-// and shows any subscriber ever flagged private stay private.
-func (l *Library) showIsPrivate(ctx context.Context, pod *model.Podcast) bool {
-	if pod.AuthUser != "" {
+// feedTitleMaxChars bounds a show's or an episode's title wherever WaxDeck
+// names one: its feed gives it, and a feed can carry one as long as the
+// feed itself.
+const feedTitleMaxChars = 1000
+
+// clipFeedTitle is a feed-given title cut to its first feedTitleMaxChars
+// characters.
+func clipFeedTitle(s string) string {
+	n := feedTitleMaxChars
+	for i := range s {
+		if n == 0 {
+			return s[:i]
+		}
+		n--
+	}
+	return s
+}
+
+// privateShow is the sticky privacy rule, written once: credentialed
+// shows and shows any subscriber ever flagged private (the mark in
+// sync_state) stay private, and a mark that could not be read counts as
+// set. showIsPrivate and the playlist share filter both ask it.
+func privateShow(pod *model.Podcast, mark string, markErr error) bool {
+	return pod.AuthUser != "" || markErr != nil || mark != ""
+}
+
+// secretParams are the query parameters, by name in any case, that carry
+// a credential in a feed's address.
+var secretParams = []string{"auth", "token", "key", "secret", "sig", "signature",
+	"password", "pass", "apikey", "api_key", "access_token"}
+
+// addressCarriesSecret reports whether a feed address carries a
+// credential: user info, or a query parameter named like one, split on
+// either separator a host may read.
+func addressCarriesSecret(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return false
+	}
+	if u.User != nil {
 		return true
 	}
-	private, err := l.db.SyncStateGet(ctx, syncKeyShowPrivate+string(pod.PID))
+	for _, pair := range strings.FieldsFunc(u.RawQuery, func(r rune) bool { return r == '&' || r == ';' }) {
+		name, _, _ := strings.Cut(pair, "=")
+		if plain, err := url.QueryUnescape(name); err == nil {
+			name = plain
+		}
+		if slices.Contains(secretParams, strings.ToLower(name)) {
+			return true
+		}
+	}
+	return false
+}
+
+// showIsPrivate reads the show's mark and applies privateShow.
+func (l *Library) showIsPrivate(ctx context.Context, pod *model.Podcast) bool {
+	mark, err := l.db.SyncStateGet(ctx, syncKeyShowPrivate+string(pod.PID))
 	if err != nil {
 		l.log.Warn("reading show privacy", "show", string(pod.PID), "err", err)
-		return true
 	}
-	return private != ""
+	return privateShow(pod, mark, err)
 }
 
 // markShowPrivate makes a show sticky-private.
@@ -1361,10 +1678,10 @@ func (l *Library) SubscribedEpisodes(
 
 // episodeRows turns a cut page of item views into episode summaries.
 //
-// One episode read per row, after the cut, never before it: an item view
-// cannot fill an EpisodeSummary (show title, enclosure, transcript), and
-// building a summary costs a fetch-queue read besides, so paying for it
-// per returned row is the whole point of cutting first.
+// The page is hydrated after the cut, never before it: an item view
+// cannot fill an EpisodeSummary (show title, enclosure, transcript), so
+// the episodes are read for the rows returned, in one catalog read, and
+// their fetch states in one more.
 //
 // Only a vanished episode is skipped. Anything else fails the read,
 // because the two look identical to a client and are not: a row removed
@@ -1372,23 +1689,101 @@ func (l *Library) SubscribedEpisodes(
 // a transient store failure silently dropping rows is a page that looks
 // complete and is not.
 func (l *Library) episodeRows(ctx context.Context, items []*model.ItemView) ([]EpisodeSummary, error) {
+	batch, err := l.episodeBatchFor(ctx, items)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]EpisodeSummary, 0, len(items))
 	for _, it := range items {
-		det, err := l.lib.Podcasts().Episode(ctx, it.PID)
-		if err != nil {
-			if KindOf(classify(err)) == KindNotFound {
-				// Removed out from under the page: tolerate and skip, as
-				// the per-show listing does with a dangling subscription.
-				continue
-			}
-			return nil, classify(err)
+		if ep := batch.eps[it.PID]; ep != nil {
+			out = append(out, l.episodeSummary(ctx, ep, batch.facts))
 		}
-		if det == nil || det.Episode == nil {
-			continue
-		}
-		out = append(out, l.episodeSummary(ctx, det.Episode))
 	}
 	return out, nil
+}
+
+// episodeBatch is one page's episodes, read together, with what their
+// rows report beyond the catalog's episode.
+type episodeBatch struct {
+	eps   map[model.PID]*model.Episode
+	facts episodeFacts
+}
+
+// episodeBatchFor reads the episodes behind a page of item views: one
+// catalog read for them all, and one fetch-queue read. Views of other
+// kinds are passed over, and a pid that is no longer an episode is
+// absent from the answer.
+func (l *Library) episodeBatchFor(ctx context.Context, views []*model.ItemView) (episodeBatch, error) {
+	var pids []model.PID
+	for _, it := range views {
+		if it.Kind == model.KindEpisode {
+			pids = append(pids, it.PID)
+		}
+	}
+	if len(pids) == 0 {
+		return episodeBatch{}, nil
+	}
+	eps, err := l.episodesByPIDs(ctx, pids)
+	if err != nil {
+		return episodeBatch{}, err
+	}
+	out := episodeBatch{eps: make(map[model.PID]*model.Episode, len(eps))}
+	for _, ep := range eps {
+		out.eps[ep.PID] = ep
+	}
+	byPID := make(map[model.PID]*model.ItemView, len(views))
+	for _, it := range views {
+		byPID[it.PID] = it
+	}
+	out.facts = l.readEpisodeFacts(ctx, eps, byPID)
+	return out, nil
+}
+
+// episodeFacts is what an episode row reports from outside the episode
+// itself, read for a whole page at once: the fetch queue's word on the
+// episodes not on the server, and the stored container of those that
+// are.
+type episodeFacts struct {
+	fetches    map[string]wdb.FetchAttempts
+	containers map[model.PID]string
+}
+
+// readEpisodeFacts reads the facts for a page of episodes. views are the
+// page's item views where the caller holds them; the fetched episodes it
+// does not hold are read in one more catalog read. A failed read leaves
+// its rows without the fact rather than failing the page, which is what
+// one row's failed read always did.
+func (l *Library) readEpisodeFacts(ctx context.Context, eps []*model.Episode, views map[model.PID]*model.ItemView) episodeFacts {
+	facts := episodeFacts{containers: map[model.PID]string{}}
+	var waiting []string
+	var unread []model.PID
+	for _, ep := range eps {
+		switch {
+		case !ep.Downloaded:
+			waiting = append(waiting, string(ep.PID))
+		case views[ep.PID] != nil:
+			facts.containers[ep.PID] = views[ep.PID].Container
+		default:
+			unread = append(unread, ep.PID)
+		}
+	}
+	if len(unread) > 0 {
+		if got, err := l.lib.GetMany(ctx, unread); err != nil {
+			l.log.Warn("reading fetched episodes' formats", "err", err)
+		} else {
+			for _, it := range got {
+				facts.containers[it.PID] = it.Container
+			}
+		}
+	}
+	if len(waiting) > 0 {
+		fetches, err := l.db.FetchQueueRows(ctx, waiting)
+		if err != nil {
+			l.log.Warn("reading episode fetch states", "err", err)
+		}
+		facts.fetches = fetches
+	}
+	return facts
 }
 
 // episodePublishedNS is the ordering time for one episode: its
@@ -1433,8 +1828,9 @@ func decodeFilteredCursor(s string) (filter SubscribedEpisodeFilter, payload str
 	return SubscribedEpisodeFilter(parts[1]), parts[2], true
 }
 
-// episodeSummary builds the episode list row from the catalog episode.
-func (l *Library) episodeSummary(ctx context.Context, ep *model.Episode) EpisodeSummary {
+// episodeSummary builds the episode list row from the catalog episode
+// and the facts its page read beside it.
+func (l *Library) episodeSummary(ctx context.Context, ep *model.Episode, facts episodeFacts) EpisodeSummary {
 	// Feeds without pubDate still need a total order; first-seen time
 	// is stable and monotone enough for paging.
 	pub := episodePublishedNS(ep)
@@ -1442,58 +1838,304 @@ func (l *Library) episodeSummary(ctx context.Context, ep *model.Episode) Episode
 		ItemSummary: ItemSummary{
 			PID:        apiPID(PrefixEpisode, ep.PID),
 			MediaType:  "podcast",
-			Title:      ep.Title,
-			Artist:     ep.PodcastTitle,
-			Album:      ep.PodcastTitle,
+			Title:      clipFeedTitle(ep.Title),
+			Artist:     clipFeedTitle(ep.PodcastTitle),
+			Album:      clipFeedTitle(ep.PodcastTitle),
 			DurationMS: ep.DurationMS,
 		},
-		ShowPID:      apiPID(PrefixPodcast, ep.PodcastPID),
-		Season:       ep.Season,
-		EpisodeNo:    ep.EpisodeNo,
-		EpisodeType:  string(ep.EpisodeType),
-		PublishedNS:  pub,
-		Downloaded:   ep.Downloaded,
-		Explicit:     ep.Explicit,
-		HasTx:        ep.TranscriptURL != "",
-		HasEnclosure: streamableEnclosure(ep.EnclosureURL),
+		ShowPID:     apiPID(PrefixPodcast, ep.PodcastPID),
+		Season:      ep.Season,
+		EpisodeNo:   ep.EpisodeNo,
+		EpisodeType: string(ep.EpisodeType),
+		PublishedNS: pub,
+		Downloaded:  ep.Downloaded,
+		Explicit:    ep.Explicit,
+		HasTx:       ep.TranscriptURL != "",
 	}
-	if !ep.Downloaded {
-		if attempts, lastErr, err := l.db.FetchQueueRow(ctx, string(ep.PID)); err == nil {
-			if attempts >= fetchMaxAttempts {
-				out.FetchState, out.FetchError = "failed", lastErr
-			} else {
-				out.FetchState = "queued"
-			}
+	// A show whose source cannot be read relays nothing, here as at the
+	// relay, so no row promises audio the relay would then refuse.
+	source, known := l.showSourceType(ctx, ep.PodcastPID)
+	out.HasEnclosure = known && relayableEnclosure(source, ep.EnclosureURL, ep.EnclosureType)
+	if row, ok := facts.fetches[string(ep.PID)]; ok && !ep.Downloaded {
+		if row.Attempts >= fetchMaxAttempts {
+			out.FetchState, out.FetchError = "failed", row.LastError
+		} else {
+			out.FetchState = "queued"
 		}
 	}
+	out.Container, out.MimeType = episodeFormat(ep, facts.containers[ep.PID])
 	return out
 }
 
-// classifyFeedErr maps a subscribe or sync failure onto the API error
-// model: a document that is not a feed is invalid, the feed's own failure
-// unreachable (URLs scrubbed for private shows), the rest by kind.
-func (l *Library) classifyFeedErr(ctx context.Context, err error, feedURL string, private bool) error {
-	if !feedAtFault(ctx, err) || KindOf(classify(err)) == KindInvalid {
+// classifyFeedErr maps a subscribe failure onto the API error model. A
+// feed the server will not take (not a feed, too large, on a private
+// network) is the caller's address to change and refused as invalid; the
+// host's own failure is unreachable. Either way the error says why in a
+// sentence of its own and carries the reason. The rest answer by kind.
+func (l *Library) classifyFeedErr(ctx context.Context, err error) error {
+	if !feedAtFault(ctx, err) {
 		return classify(err)
 	}
-	return l.feedUnreachable(err, feedURL, private)
+	reason, sentence := feedFailureReason(err)
+	switch reason {
+	case reasonNotAFeed, reasonTooLarge, reasonBlockedAddress:
+		return &Error{Kind: KindInvalid, Msg: sentence, Err: &feedFault{reason: reason, err: err}}
+	}
+	return feedUnreachable(err)
 }
 
-// feedUnreachable reports a feed's own failure, its URL scrubbed from the
-// detail and all of the detail withheld for a private show.
-func (l *Library) feedUnreachable(err error, feedURL string, private bool) error {
+// logFeedFailure logs a feed-side failure by its host, reason and cause,
+// and never the URL or the error: a feed URL can be its own credential,
+// and the error's text repeats it.
+func (l *Library) logFeedFailure(msg, rawURL, reason string, err error) {
+	l.logFeedFailureAt(slog.LevelInfo, msg, rawURL, reason, err)
+}
+
+// logFeedFailureAt is logFeedFailure at the level the caller chooses.
+func (l *Library) logFeedFailureAt(level slog.Level, msg, rawURL, reason string, err error) {
+	host := ""
+	if u, perr := url.Parse(rawURL); perr == nil {
+		host = u.Hostname()
+	}
+	l.log.Log(context.Background(), level, msg, "host", host, "reason", reason, "cause", feedCause(err))
+}
+
+// feedCause names what a feed-side failure was in words that carry no
+// URL, for the log: the host's status, or the kind of network failure.
+func feedCause(err error) string {
+	if err == nil {
+		return ""
+	}
 	msg := err.Error()
-	// The catalog's provider label is for the log, not the listener.
-	if pe := (*source.ProviderError)(nil); errors.As(err, &pe) && pe.Err != nil {
-		msg = pe.Err.Error()
+	var (
+		status      *hostStatusError
+		netErr      net.Error
+		dnsErr      *net.DNSError
+		opErr       *net.OpError
+		urlErr      *url.Error
+		verifyErr   *tls.CertificateVerificationError
+		unknownAuth x509.UnknownAuthorityError
+		badHost     x509.HostnameError
+		badCert     x509.CertificateInvalidError
+		badRecord   tls.RecordHeaderError
+	)
+	if errors.As(err, &status) {
+		return "status " + strconv.Itoa(status.status)
 	}
-	if private {
-		msg = "the feed could not be fetched; detail withheld for a private feed (see the server log)"
-		l.log.Warn("private feed fetch failed", "err", err)
-	} else if feedURL != "" {
-		msg = strings.ReplaceAll(msg, feedURL, "the feed url")
+	if m := httpStatusFragment.FindStringSubmatch(msg); m != nil {
+		return "status " + m[1]
 	}
-	return &Error{Kind: KindUpstream, Msg: msg, Err: err}
+	switch {
+	case errors.Is(err, errPrivateAddress), strings.Contains(msg, "non-public address"):
+		return "non-public address"
+	case errors.Is(err, errTranscriptTooLarge), byteLimitFragment.MatchString(msg):
+		return "size limit"
+	case redirectFragment.MatchString(msg):
+		return "redirects"
+	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &netErr) && netErr.Timeout():
+		return "timeout"
+	case errors.As(err, &dnsErr):
+		return "dns"
+	case errors.As(err, &verifyErr), errors.As(err, &unknownAuth), errors.As(err, &badHost),
+		errors.As(err, &badCert), errors.As(err, &badRecord):
+		return "tls"
+	case errors.As(err, &opErr) && opErr.Op == "dial":
+		return "dial"
+	case errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, io.EOF):
+		return "connection closed"
+	case errors.As(err, &opErr):
+		return opErr.Op
+	case errors.As(err, &urlErr) && urlErr.Op == "parse":
+		return "address"
+	}
+	if code := waxerr.CodeOf(err); code != "" {
+		return string(code)
+	}
+	return "error"
+}
+
+// feedUnreachable reports a feed's own failure. Its sentence names neither
+// the URL nor anything the host said; the log keeps the reason and a
+// cause without the URL (feedCause), never the error itself.
+func feedUnreachable(err error) error {
+	reason, sentence := feedFailureReason(err)
+	return &Error{Kind: KindUpstream, Msg: sentence, Err: &feedFault{reason: reason, err: err}}
+}
+
+// The reasons a feed-side fetch fails for: a closed set, so a client can
+// word each one itself.
+const (
+	reasonNotAFeed       = "not-a-feed"
+	reasonTooLarge       = "too-large"
+	reasonBlockedAddress = "blocked-address"
+	reasonHostRefused    = "host-refused"
+	reasonHostMissing    = "host-missing"
+	reasonHostError      = "host-error"
+	reasonUnreachable    = "unreachable"
+)
+
+// feedSentences is what the API says for each reason about a feed.
+var feedSentences = map[string]string{
+	reasonNotAFeed:       "That address did not return a podcast feed.",
+	reasonTooLarge:       "That feed is larger than this server accepts (16 MiB).",
+	reasonBlockedAddress: "This server does not fetch feeds from private or local network addresses.",
+	reasonHostRefused:    "The feed's host refused the request; it may need a login.",
+	reasonHostMissing:    "No feed was found at that address.",
+	reasonHostError:      "The feed's host answered with an error.",
+	reasonUnreachable:    "The feed's host could not be reached.",
+}
+
+// transcriptSentences is the same for an episode's transcript, which is
+// another document from another address, with a cap of its own.
+var transcriptSentences = map[string]string{
+	reasonNotAFeed:       "The transcript's address did not return a transcript.",
+	reasonTooLarge:       "That transcript is larger than this server accepts.",
+	reasonBlockedAddress: "This server does not fetch transcripts from private or local network addresses.",
+	reasonHostRefused:    "The transcript's host refused the request; it may need a login.",
+	reasonHostMissing:    "No transcript was found at the address the feed gives.",
+	reasonHostError:      "The transcript's host answered with an error.",
+	reasonUnreachable:    "The transcript's host could not be reached.",
+}
+
+// downloadSentences is the same for an episode's audio, which the fetch
+// queue keeps for the episode's listing to show.
+var downloadSentences = map[string]string{
+	reasonNotAFeed:       "The episode's address did not return audio.",
+	reasonTooLarge:       "The episode is larger than this server downloads.",
+	reasonBlockedAddress: "This server does not download from private or local network addresses.",
+	reasonHostRefused:    "The episode's host refused the download; it may need a login.",
+	reasonHostMissing:    "The episode's host has no audio at that address anymore.",
+	reasonHostError:      "The episode's host answered with an error.",
+	reasonUnreachable:    "The episode's host could not be reached.",
+}
+
+// feedFault carries a feed-side failure's reason inside the service error,
+// for the API to put in the body's params.
+type feedFault struct {
+	reason string
+	err    error
+}
+
+func (f *feedFault) Error() string {
+	if f.err == nil {
+		return "feed-side failure: " + f.reason
+	}
+	return f.err.Error()
+}
+
+func (f *feedFault) Unwrap() error { return f.err }
+
+// FeedFailureReason is the reason a feed-side failure carries, "" for any
+// other error.
+func FeedFailureReason(err error) string {
+	var f *feedFault
+	if errors.As(err, &f) {
+		return f.reason
+	}
+	return ""
+}
+
+// feedReasonPermanent reports whether asking again can change the answer:
+// a host's error or a host out of reach can pass, the rest answer the same
+// until somebody changes the address or the server.
+func feedReasonPermanent(reason string) bool {
+	return reason != reasonHostError && reason != reasonUnreachable
+}
+
+// WaxBin's feed client words these failures without a type to test (its
+// netsafe package is internal), so they are read off its messages, which
+// feedfailure_test.go pins against the real client.
+var (
+	httpStatusFragment = regexp.MustCompile(`returned HTTP (\d{3})`)
+	byteLimitFragment  = regexp.MustCompile(`exceeds \d+-byte limit`)
+	redirectFragment   = regexp.MustCompile(`stopped after \d+ redirects|too many redirects`)
+)
+
+// feedFailureReason says why a feed-side fetch failed, and in what words,
+// for an error feedAtFault holds to be the feed's.
+func feedFailureReason(err error) (reason, sentence string) {
+	reason = feedReason(err)
+	return reason, feedSentences[reason]
+}
+
+func feedReason(err error) string {
+	msg := err.Error()
+	var status *hostStatusError
+	switch {
+	case errors.Is(err, errPrivateAddress), strings.Contains(msg, "non-public address"):
+		return reasonBlockedAddress
+	case errors.Is(err, errTranscriptTooLarge), byteLimitFragment.MatchString(msg):
+		return reasonTooLarge
+	case errors.As(err, &status):
+		return statusReason(status.status)
+	}
+	if m := httpStatusFragment.FindStringSubmatch(msg); m != nil {
+		code, _ := strconv.Atoi(m[1])
+		return statusReason(code)
+	}
+	if reason, ok := tapReason(err); ok {
+		return reason
+	}
+	var (
+		syntax  *json.SyntaxError
+		mistype *json.UnmarshalTypeError
+		urlErr  *url.Error
+		netErr  net.Error
+	)
+	switch {
+	case waxerr.CodeOf(err) == waxerr.CodeNotFound:
+		return reasonHostMissing
+	case waxerr.CodeOf(err) == waxerr.CodeInvalid, waxerr.CodeOf(err) == waxerr.CodeUnsupported,
+		errors.As(err, &syntax), errors.As(err, &mistype):
+		return reasonNotAFeed
+	case redirectFragment.MatchString(msg):
+		return reasonHostError
+	case errors.As(err, &urlErr) && (urlErr.Op == "parse" || strings.Contains(urlErr.Err.Error(), "unsupported protocol scheme")):
+		// An address the client cannot even ask is wrong as written, and
+		// no try later can reach it.
+		return reasonNotAFeed
+	case errors.As(err, &urlErr), errors.As(err, &netErr), errors.Is(err, io.ErrUnexpectedEOF):
+		return reasonUnreachable
+	}
+	return reasonHostError
+}
+
+// tapReason reads a YouTube source's failure by the cause WaxTap names,
+// which the provider's and the catalog's wraps keep. The rest of what it
+// can say (a throttle, a page shape its parser does not know) is the
+// host's trouble and left to pass.
+func tapReason(err error) (string, bool) {
+	var status *waxtap.HTTPStatusError
+	switch {
+	case errors.As(err, &status):
+		return statusReason(status.StatusCode), true
+	case errors.Is(err, waxtap.ErrPlaylistUnavailable):
+		return reasonHostMissing, true
+	case errors.Is(err, waxtap.ErrUnsupportedInput), errors.Is(err, waxtap.ErrInvalidPlaylistID),
+		errors.Is(err, waxtap.ErrInvalidVideoID), errors.Is(err, waxtap.ErrVideoIDTooShort),
+		errors.Is(err, waxtap.ErrVideoIDTooLong), errors.Is(err, waxtap.ErrPlaylistEmpty):
+		return reasonNotAFeed, true
+	case errors.Is(err, waxtap.ErrLoginRequired), errors.Is(err, waxtap.ErrMembersOnly),
+		errors.Is(err, waxtap.ErrAgeRestricted), errors.Is(err, waxtap.ErrGeoBlocked),
+		errors.Is(err, waxtap.ErrVideoRestricted):
+		return reasonHostRefused, true
+	}
+	return "", false
+}
+
+// statusReason reads a host's HTTP answer: gone, refused, or an error of
+// its own, which is the one a later try can find mended.
+func statusReason(status int) string {
+	switch {
+	case status == http.StatusNotFound, status == http.StatusGone:
+		return reasonHostMissing
+	case status == http.StatusRequestTimeout, status == http.StatusTooEarly,
+		status == http.StatusTooManyRequests, status >= 500:
+		return reasonHostError
+	case status >= 400:
+		return reasonHostRefused
+	}
+	return reasonHostError
 }
 
 // --- cursors -----------------------------------------------------------------

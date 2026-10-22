@@ -6,16 +6,25 @@
 //
 // Authentication on every endpoint is HTTP Basic with the WaxDeck
 // username and an app password (the login password never works here),
-// or the sessionid cookie the login endpoint sets: an opaque token for a
-// stored login that ends with its app password, its account, or a
-// logout. Subscriptions in WaxDeck are user-global; device ids exist to
-// annotate changes and satisfy the protocol's device registry, they
-// never scope the subscription list itself.
+// or the sessionid cookie the login endpoint, and any request signed with
+// Basic, sets: an opaque token for a stored session that ends with its
+// app password, its account, or a logout.
+//
+// Subscriptions are one list for the whole account, and every device
+// reads all of it. A device's list is what it holds: an add holds a
+// show, a full-list upload holds what it names and lets go of what it
+// no longer names, and a show leaves the account only with its last
+// hold, the WaxDeck apps holding what they subscribed to. An incremental
+// remove is a deliberate unsubscribe and goes for the whole account. A
+// device is told each show by the URL it last sent or was sent for it,
+// else the one the account subscribed by.
 package gpodder
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -64,7 +73,10 @@ func New(svc *service.Library, cookieSecure bool, logger *slog.Logger) http.Hand
 	return h
 }
 
+// ServeHTTP keeps every answer out of shared caches: each is one
+// account's, and any may carry a fresh session cookie.
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	h.mux.ServeHTTP(w, r)
 }
 
@@ -82,12 +94,18 @@ func cookieToken(r *http.Request) string {
 // sessionUser resolves the request's cookie to its account, nil when it
 // names no live login.
 func (h *handler) sessionUser(r *http.Request) *wdb.User {
-	u, err := h.svc.GpodderSessionUser(r.Context(), cookieToken(r))
+	u, _ := h.session(r)
+	return u
+}
+
+// session is sessionUser answering the session too.
+func (h *handler) session(r *http.Request) (*wdb.User, *wdb.GpodderSession) {
+	u, s, err := h.svc.GpodderSession(r.Context(), cookieToken(r))
 	if err != nil {
 		h.log.Warn("gpodder session lookup", "err", err)
-		return nil
+		return nil, nil
 	}
-	return u
+	return u, s
 }
 
 // setSession sets the cookie for a fresh login, offered for as long as
@@ -111,42 +129,82 @@ func sameUser(u *wdb.User, pathUser string) bool {
 	return u != nil && strings.EqualFold(u.Username, pathUser)
 }
 
-// authenticate resolves the request to an account: HTTP Basic against
-// app passwords, or the session cookie. Either way the authenticated
-// user must match the path username; mismatches answer exactly like
-// bad credentials so the surface confirms no other account exists.
-func (h *handler) authenticate(r *http.Request, pathUser string) (*wdb.User, int, string) {
-	if username, password, ok := r.BasicAuth(); ok {
-		u, _, err := h.svc.VerifyAppPasswordBasic(r.Context(), username, password)
-		if err != nil || !sameUser(u, pathUser) {
-			return nil, http.StatusUnauthorized, "wrong username or password"
+// signIn is how a request authenticated: by the session its cookie names,
+// or by the app password it was signed with.
+type signIn struct {
+	user        *wdb.User
+	session     *wdb.GpodderSession
+	appPassword string
+}
+
+// authenticate resolves the request to an account: a session cookie of
+// the path's account, else HTTP Basic against app passwords. Either way
+// the authenticated user must match the path username; mismatches answer
+// exactly like bad credentials so the surface confirms no other account
+// exists.
+func (h *handler) authenticate(r *http.Request, pathUser string) (signIn, int, string) {
+	if cookieToken(r) != "" {
+		if u, s := h.session(r); sameUser(u, pathUser) {
+			return signIn{user: u, session: s}, 0, ""
 		}
-		return u, 0, ""
+	}
+	if username, password, ok := r.BasicAuth(); ok {
+		u, apID, err := h.svc.VerifyAppPasswordBasic(r.Context(), username, password)
+		if err != nil || !sameUser(u, pathUser) {
+			return signIn{}, http.StatusUnauthorized, "wrong username or password"
+		}
+		return signIn{user: u, appPassword: apID}, 0, ""
 	}
 	if cookieToken(r) != "" {
-		u := h.sessionUser(r)
-		if !sameUser(u, pathUser) {
-			return nil, http.StatusUnauthorized, "session no longer valid"
-		}
-		return u, 0, ""
+		return signIn{}, http.StatusUnauthorized, "session no longer valid"
 	}
-	return nil, http.StatusUnauthorized, "authentication required"
+	return signIn{}, http.StatusUnauthorized, "authentication required"
 }
 
 // requireUser authenticates against the path username and builds the
-// acting-user context, answering the error itself on failure.
+// acting-user context, answering the error itself on failure. A request
+// signed with Basic credentials is answered a session cookie as a login
+// is, and a session it opened is renewed while the client keeps using it:
+// gPodder's client sends the credentials only when challenged and answers
+// three challenges in its life, so it signs in once and its cookie jar
+// carries the session from there.
 func (h *handler) requireUser(w http.ResponseWriter, r *http.Request, pathUser string) (*service.UserCtx, bool) {
-	u, status, msg := h.authenticate(r, pathUser)
-	if u == nil {
+	uc, _, ok := h.requireClient(w, r, pathUser)
+	return uc, ok
+}
+
+// requireClient is requireUser that also answers the app password the
+// request signed in with, directly or through the session its cookie names.
+func (h *handler) requireClient(w http.ResponseWriter, r *http.Request, pathUser string) (*service.UserCtx, string, bool) {
+	in, status, msg := h.authenticate(r, pathUser)
+	if in.user == nil {
 		h.fail(w, status, msg)
-		return nil, false
+		return nil, "", false
 	}
-	uc, err := h.svc.UserCtx(r.Context(), u)
+	appPassword := in.appPassword
+	if in.session != nil {
+		appPassword = in.session.AppPasswordID
+	}
+	var token string
+	var expires time.Time
+	var err error
+	switch {
+	case in.appPassword != "":
+		token, expires, err = h.svc.GpodderOpenSession(r.Context(), in.user, in.appPassword)
+	case in.session != nil:
+		token, expires, err = h.svc.GpodderSessionUsed(r.Context(), in.session)
+	}
+	if err != nil {
+		h.log.Warn("keeping a gpodder session", "err", err)
+	} else if token != "" {
+		h.setSession(w, token, expires)
+	}
+	uc, err := h.svc.UserCtx(r.Context(), in.user)
 	if err != nil {
 		h.fail(w, http.StatusInternalServerError, "resolving user failed")
-		return nil, false
+		return nil, "", false
 	}
-	return uc, true
+	return uc, appPassword, true
 }
 
 // --- session endpoints ----------------------------------------------------------
@@ -209,10 +267,8 @@ func (h *handler) logout(w http.ResponseWriter, r *http.Request, pathUser string
 
 // --- devices ---------------------------------------------------------------------
 
-// devicesList reports the user's registered devices. Subscriptions
-// are user-global in WaxDeck (a device id only annotates changes), so
-// every device reports the user's total synced-subscription count
-// rather than a per-device one.
+// devicesList reports the user's registered devices. Every device reads
+// the whole account's list, so each reports the account's total.
 func (h *handler) devicesList(w http.ResponseWriter, r *http.Request) {
 	user, ext := splitExt(r.PathValue("userext"))
 	if ext != "json" {
@@ -228,9 +284,9 @@ func (h *handler) devicesList(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, http.StatusInternalServerError, "listing devices failed")
 		return
 	}
-	feeds, err := h.svc.GpodderFeedURLs(r.Context(), uc)
+	feeds, err := h.svc.GpodderFeedURLs(r.Context(), uc, "")
 	if err != nil {
-		h.fail(w, http.StatusInternalServerError, "listing subscriptions failed")
+		h.failService(w, err, "listing subscriptions failed")
 		return
 	}
 	out := make([]deviceJSON, 0, len(devs))
@@ -260,7 +316,7 @@ func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 		Type    *string `json:"type"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&body); err != nil && !errors.Is(err, io.EOF) {
-		h.fail(w, http.StatusBadRequest, "malformed body")
+		h.failBody(w, err)
 		return
 	}
 	caption, devType := "", ""
@@ -270,11 +326,25 @@ func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 	if body.Type != nil && *body.Type != "" {
 		devType = normalizeDeviceType(*body.Type)
 	}
-	if err := h.svc.GpodderUpsertDevice(r.Context(), uc, device, caption, devType); err != nil {
-		h.fail(w, http.StatusInternalServerError, "storing device failed")
+	if !h.upsertDevice(w, r, uc, device, caption, devType) {
 		return
 	}
 	h.writeJSON(w, struct{}{})
+}
+
+// upsertDevice registers or updates a device, answering the error itself:
+// a refused one (an id too long, an account at its device cap) is a 400.
+func (h *handler) upsertDevice(w http.ResponseWriter, r *http.Request, uc *service.UserCtx, device, caption, devType string) bool {
+	err := h.svc.GpodderUpsertDevice(r.Context(), uc, device, caption, devType)
+	switch {
+	case err == nil:
+		return true
+	case service.KindOf(err) == service.KindInvalid:
+		h.fail(w, http.StatusBadRequest, err.Error())
+	default:
+		h.fail(w, http.StatusInternalServerError, "storing device failed")
+	}
+	return false
 }
 
 // --- subscription lists (the Simple API surface) ----------------------------------
@@ -311,9 +381,9 @@ func (h *handler) serveSubscriptionList(w http.ResponseWriter, r *http.Request, 
 	}
 	// Private shows' feed URLs are deliberately included on this
 	// surface; see GpodderFeedURLs for the rationale.
-	urls, err := h.svc.GpodderFeedURLs(r.Context(), uc)
+	urls, err := h.svc.GpodderFeedURLs(r.Context(), uc, device)
 	if err != nil {
-		h.fail(w, http.StatusInternalServerError, "listing subscriptions failed")
+		h.failService(w, err, "listing subscriptions failed")
 		return
 	}
 	switch format {
@@ -333,11 +403,12 @@ func (h *handler) serveSubscriptionList(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
-// subsPut is the full-list upload: the body carries the device's
-// complete subscription list and the server diffs it against the
-// user's current one. Failing feeds are logged and skipped rather
-// than failing the upload; gpodder clients treat any non-200 as a
-// full-sync failure and would retry the whole list forever.
+// subsPut is the full-list upload: the body is the device's own list,
+// which replaces what that device holds (see the package comment). A feed
+// that cannot be added is parked or refused rather than failing the
+// upload: gpodder clients treat any non-200 as a failed sync and would
+// retry the whole list forever, and this call has no answer to carry a
+// refusal in, so the account's inbox does.
 func (h *handler) subsPut(w http.ResponseWriter, r *http.Request) {
 	device, format := splitExt(r.PathValue("devext"))
 	if !knownFormat(format) || device == "" {
@@ -350,7 +421,7 @@ func (h *handler) subsPut(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBodyBytes))
 	if err != nil {
-		h.fail(w, http.StatusBadRequest, "reading body failed")
+		h.failBody(w, err)
 		return
 	}
 	uploaded, err := parseSubscriptionList(body, format)
@@ -358,38 +429,31 @@ func (h *handler) subsPut(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, http.StatusBadRequest, "malformed subscription list")
 		return
 	}
-	if err := h.svc.GpodderUpsertDevice(r.Context(), uc, device, "", ""); err != nil {
-		h.fail(w, http.StatusInternalServerError, "storing device failed")
+	if len(uploaded) > maxUploadFeeds {
+		h.fail(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("a list carries at most %d feeds", maxUploadFeeds))
 		return
 	}
-	current, err := h.svc.GpodderFeedURLs(r.Context(), uc)
+	if !h.upsertDevice(w, r, uc, device, "", "") {
+		return
+	}
+	res, err := h.svc.GpodderReplaceDeviceList(r.Context(), uc, device, feedList(uploaded))
 	if err != nil {
-		h.fail(w, http.StatusInternalServerError, "listing subscriptions failed")
+		h.fail(w, http.StatusInternalServerError, "replacing the device list failed")
 		return
 	}
-	want := make(map[string]bool, len(uploaded))
-	for _, raw := range uploaded {
-		if s := sanitizeFeedURL(raw); s != "" {
-			want[s] = true
-		}
+	counts := map[service.GpodderOutcome]int{}
+	for _, outcome := range res.Outcomes {
+		counts[outcome]++
 	}
-	have := make(map[string]bool, len(current))
-	for _, u := range current {
-		have[u] = true
+	// A list that let go of shows changed the account; parked and refused
+	// feeds are asked for again on every sync, and the inbox records them.
+	level := slog.LevelDebug
+	if res.Released > 0 {
+		level = slog.LevelInfo
 	}
-	for u := range want {
-		if !have[u] {
-			if err := h.svc.GpodderSubscribe(r.Context(), uc, u, device); err != nil {
-				h.log.Warn("gpodder subscribe", "url", u, "err", err)
-			}
-		}
-	}
-	for _, u := range current {
-		if !want[u] {
-			if err := h.svc.GpodderUnsubscribe(r.Context(), uc, u, device); err != nil {
-				h.log.Warn("gpodder unsubscribe", "url", u, "err", err)
-			}
-		}
+	if res.Released > 0 || counts[service.GpodderParked] > 0 || counts[service.GpodderRefused] > 0 {
+		h.log.Log(r.Context(), level, "gpodder device list", "device", device, "released", res.Released,
+			"parked", counts[service.GpodderParked], "refused", counts[service.GpodderRefused])
 	}
 	h.writeJSON(w, struct{}{})
 }
@@ -397,6 +461,7 @@ func (h *handler) subsPut(w http.ResponseWriter, r *http.Request) {
 // --- subscription deltas (the API 2 surface) ---------------------------------------
 
 func (h *handler) subDeltaPost(w http.ResponseWriter, r *http.Request) {
+	arrived := time.Now()
 	device, ext := splitExt(r.PathValue("devext"))
 	if ext != "json" || device == "" {
 		h.fail(w, http.StatusBadRequest, "unknown format")
@@ -406,56 +471,67 @@ func (h *handler) subDeltaPost(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	// As of the upload's arrival, before its own work, which can wait on
+	// the writer or fetch feeds for a while: a client keeps it as the since
+	// of its next delta, which must still carry what changed meanwhile.
+	timestamp, err := h.svc.GpodderUploadCursor(r.Context(), uc, device, arrived)
+	if err != nil {
+		h.fail(w, http.StatusInternalServerError, "reading the device's place failed")
+		return
+	}
 	var body struct {
 		Add    []string `json:"add"`
 		Remove []string `json:"remove"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&body); err != nil {
-		h.fail(w, http.StatusBadRequest, "malformed body")
+		h.failBody(w, err)
 		return
 	}
+	if len(body.Add)+len(body.Remove) > maxUploadFeeds {
+		h.fail(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("a change carries at most %d feeds", maxUploadFeeds))
+		return
+	}
+	// Compared trimmed and sanitized, as the service acts on them.
+	acted := func(raw string) string { return cmp.Or(sanitizeFeedURL(raw), raw) }
 	inAdd := make(map[string]bool, len(body.Add))
 	for _, u := range body.Add {
-		inAdd[u] = true
+		inAdd[acted(u)] = true
 	}
 	for _, u := range body.Remove {
-		if inAdd[u] {
+		if inAdd[acted(u)] {
 			h.fail(w, http.StatusBadRequest, "the same url is in add and remove")
 			return
 		}
 	}
-	if err := h.svc.GpodderUpsertDevice(r.Context(), uc, device, "", ""); err != nil {
-		h.fail(w, http.StatusInternalServerError, "storing device failed")
+	if !h.upsertDevice(w, r, uc, device, "", "") {
 		return
 	}
+	outcomes, err := h.svc.GpodderApplyChanges(r.Context(), uc, device, feedList(body.Add), feedList(body.Remove))
+	if err != nil {
+		h.fail(w, http.StatusInternalServerError, "applying subscription changes failed")
+		return
+	}
+	// A URL this server will not take, malformed or refused, is answered
+	// as "", the protocol's way of saying to drop it, and a rewritten one
+	// as what it became. A parked one is answered as it was sent: it is
+	// still being tried.
 	updates := make([][2]string, 0)
-	apply := func(raw string, remove bool) {
+	answer := func(raw string, add bool) {
 		s := sanitizeFeedURL(raw)
-		if s != raw {
+		switch {
+		case s != "" && add && outcomes[s] == service.GpodderRefused:
+			updates = append(updates, [2]string{raw, ""})
+		case s != raw:
 			updates = append(updates, [2]string{raw, s})
 		}
-		if s == "" {
-			return
-		}
-		var err error
-		if remove {
-			err = h.svc.GpodderUnsubscribe(r.Context(), uc, s, device)
-		} else {
-			err = h.svc.GpodderSubscribe(r.Context(), uc, s, device)
-		}
-		if err != nil {
-			// Best effort, mirroring the full-list upload: a dead feed
-			// must not wedge the client's sync loop.
-			h.log.Warn("gpodder subscription change", "url", s, "remove", remove, "err", err)
-		}
 	}
-	for _, u := range body.Add {
-		apply(u, false)
+	for _, raw := range body.Add {
+		answer(raw, true)
 	}
-	for _, u := range body.Remove {
-		apply(u, true)
+	for _, raw := range body.Remove {
+		answer(raw, false)
 	}
-	h.writeJSON(w, uploadAckJSON{Timestamp: time.Now().Unix(), UpdateURLs: updates})
+	h.writeJSON(w, uploadAckJSON{Timestamp: timestamp, UpdateURLs: updates})
 }
 
 func (h *handler) subDeltaGet(w http.ResponseWriter, r *http.Request) {
@@ -473,37 +549,28 @@ func (h *handler) subDeltaGet(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, http.StatusBadRequest, "malformed since")
 		return
 	}
-	events, err := h.svc.GpodderSubChangesSince(r.Context(), uc, since)
+	h.svc.GpodderSeeDevice(r.Context(), uc, device)
+	events, cursor, err := h.svc.GpodderSubChangesSince(r.Context(), uc, device, since)
+	if err == nil {
+		err = h.svc.GpodderRememberRead(r.Context(), uc, device, cursor)
+	}
 	if err != nil {
 		h.fail(w, http.StatusInternalServerError, "listing changes failed")
 		return
 	}
-	// Collapse per feed URL: the latest action since the cursor is the
-	// state worth reporting; intermediate flip-flops carry nothing.
-	latest := make(map[string]string, len(events))
-	var order []string
-	var maxTS int64
-	for _, ev := range events {
-		if _, seen := latest[ev.FeedURL]; !seen {
-			order = append(order, ev.FeedURL)
-		}
-		latest[ev.FeedURL] = ev.Action
-		if ev.TsSec > maxTS {
-			maxTS = ev.TsSec
-		}
-	}
+	// The service says each URL once, with its show's latest change.
 	out := subDeltaJSON{Add: []string{}, Remove: []string{}}
-	for _, u := range order {
-		if latest[u] == "add" {
-			out.Add = append(out.Add, u)
+	for _, ev := range events {
+		if ev.Action == "add" {
+			out.Add = append(out.Add, ev.FeedURL)
 		} else {
-			out.Remove = append(out.Remove, u)
+			out.Remove = append(out.Remove, ev.FeedURL)
 		}
 	}
-	out.Timestamp = maxTS
-	if out.Timestamp == 0 {
-		out.Timestamp = time.Now().Unix()
-	}
+	// The cursor trails the clock and every change still in flight, so a
+	// change stamped before the read and committed after it is in the next
+	// delta.
+	out.Timestamp = cursor
 	h.writeJSON(w, out)
 }
 
@@ -515,52 +582,92 @@ var validActions = map[string]bool{
 }
 
 func (h *handler) episodesPost(w http.ResponseWriter, r *http.Request) {
+	arrived := time.Now()
 	user, ext := splitExt(r.PathValue("userext"))
 	if ext != "json" {
 		h.fail(w, http.StatusBadRequest, "unknown format")
 		return
 	}
-	uc, ok := h.requireUser(w, r, user)
+	uc, appPassword, ok := h.requireClient(w, r, user)
 	if !ok {
 		return
 	}
-	var actions []episodeActionJSON
+	// As of the upload's arrival, for the same reason as a subscription
+	// upload's.
+	timestamp := h.svc.GpodderEpisodesUploadCursor(uc, appPassword, arrived)
+	var actions []json.RawMessage
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBodyBytes)).Decode(&actions); err != nil {
-		h.fail(w, http.StatusBadRequest, "malformed body")
+		h.failBody(w, err)
 		return
 	}
-	// Validate the whole batch before storing any of it: a bad entry
-	// rejects the request so the client never half-syncs silently.
-	for i := range actions {
-		actions[i].Action = strings.ToLower(actions[i].Action)
-		if actions[i].Podcast == "" || actions[i].Episode == "" || !validActions[actions[i].Action] {
-			h.fail(w, http.StatusBadRequest, "invalid episode action")
-			return
+	if len(actions) > maxUploadActions {
+		h.fail(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("an upload carries at most %d actions", maxUploadActions))
+		return
+	}
+	// A client sends a batch until it is answered, so one action that
+	// cannot be kept, a field of the wrong type included, must not refuse
+	// the rest: it is skipped.
+	rows := make([]wdb.GpodderAction, 0, len(actions))
+	for _, raw := range actions {
+		var a episodeActionJSON
+		if json.Unmarshal(raw, &a) != nil {
+			continue
+		}
+		if row, ok := storedAction(a); ok {
+			rows = append(rows, row)
 		}
 	}
-	now := time.Now().Unix()
-	for _, a := range actions {
-		err := h.svc.GpodderAppendAction(r.Context(), uc, wdb.GpodderAction{
-			PodcastURL: a.Podcast, EpisodeURL: a.Episode, DeviceID: a.Device,
-			Action: a.Action, ActionTS: a.Timestamp,
-			StartedSec: a.Started, PositionSec: a.Position, TotalSec: a.Total,
-			UploadedSec: now,
-		})
-		if err != nil {
-			h.fail(w, http.StatusInternalServerError, "storing episode action failed")
-			return
-		}
-		if a.Action == "play" && a.Position != nil {
-			// Positions flow through to WaxDeck playback state so a
-			// gpodder client's progress survives into first-party
-			// clients. Best effort: unknown feeds and episodes never
-			// fail the batch.
-			if err := h.svc.GpodderApplyPlay(r.Context(), uc, a.Podcast, a.Episode, a.Position, a.Total, a.Timestamp); err != nil {
-				h.log.Warn("gpodder play write-through", "episode", a.Episode, "err", err)
-			}
+	if skipped := len(actions) - len(rows); skipped > 0 {
+		h.log.Info("gpodder episode actions skipped", "skipped", skipped, "kept", len(rows))
+	}
+	if err := h.svc.GpodderRecordActions(r.Context(), uc, rows); err != nil {
+		h.fail(w, http.StatusInternalServerError, "storing episode actions failed")
+		return
+	}
+	h.writeJSON(w, uploadAckJSON{Timestamp: timestamp, UpdateURLs: [][2]string{}})
+}
+
+// storedAction is an uploaded action as the log keeps it; false for one
+// it cannot keep: one naming no feed, episode or action of the protocol's,
+// a field longer than the log keeps, this server's own device, a time no
+// action can have, or numbers no play can have. A client reads each one
+// back, gPodder's mygpoclient refusing whatever the protocol does not
+// allow.
+func storedAction(a episodeActionJSON) (wdb.GpodderAction, bool) {
+	a.Action = strings.ToLower(a.Action)
+	if a.Podcast == "" || a.Episode == "" || !validActions[a.Action] ||
+		len(a.Podcast) > maxURLLen || len(a.Episode) > maxURLLen || len(a.Device) > service.GpodderMaxDeviceIDLen ||
+		a.Device == service.GpodderOwnDevice || !plausiblePlay(a) {
+		return wdb.GpodderAction{}, false
+	}
+	ts, err := service.NormalizeGpodderTime(a.Timestamp)
+	if err != nil {
+		return wdb.GpodderAction{}, false
+	}
+	return wdb.GpodderAction{
+		PodcastURL: a.Podcast, EpisodeURL: a.Episode, DeviceID: a.Device,
+		Action: a.Action, ActionTS: ts,
+		StartedSec: a.Started, PositionSec: a.Position, TotalSec: a.Total,
+	}, true
+}
+
+// plausiblePlay reports whether an action's numbers are a play's that an
+// episode can have: only a play carries a start, position or length, a
+// play its start or length only beside its position, none negative or
+// past maxPlaySeconds, and a position no further than a length given.
+func plausiblePlay(a episodeActionJSON) bool {
+	switch {
+	case a.Action != "play" && (a.Started != nil || a.Position != nil || a.Total != nil):
+		return false
+	case a.Position == nil && (a.Started != nil || a.Total != nil):
+		return false
+	}
+	for _, n := range []*int64{a.Started, a.Position, a.Total} {
+		if n != nil && (*n < 0 || *n > maxPlaySeconds) {
+			return false
 		}
 	}
-	h.writeJSON(w, uploadAckJSON{Timestamp: now, UpdateURLs: [][2]string{}})
+	return a.Position == nil || a.Total == nil || *a.Position <= *a.Total
 }
 
 func (h *handler) episodesGet(w http.ResponseWriter, r *http.Request) {
@@ -569,7 +676,7 @@ func (h *handler) episodesGet(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, http.StatusBadRequest, "unknown format")
 		return
 	}
-	uc, ok := h.requireUser(w, r, user)
+	uc, appPassword, ok := h.requireClient(w, r, user)
 	if !ok {
 		return
 	}
@@ -579,34 +686,32 @@ func (h *handler) episodesGet(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, http.StatusBadRequest, "malformed since")
 		return
 	}
-	rows, err := h.svc.GpodderActionsSince(r.Context(), uc, since, q.Get("podcast"), q.Get("device"))
+	rows, cursor, err := h.svc.GpodderActionsSince(r.Context(), uc, appPassword, since, q.Get("podcast"), q.Get("device"))
 	if err != nil {
 		h.fail(w, http.StatusInternalServerError, "listing episode actions failed")
 		return
 	}
 	aggregated := q.Get("aggregated") == "true" || q.Get("aggregated") == "1"
-	out := actionsPageJSON{Actions: []episodeActionJSON{}}
-	var maxUploaded int64
+	out := actionsPageJSON{Actions: []episodeActionJSON{}, Timestamp: cursor}
 	index := make(map[string]int)
 	for _, a := range rows {
-		if a.UploadedSec > maxUploaded {
-			maxUploaded = a.UploadedSec
-		}
 		j := actionJSON(a)
 		if aggregated {
-			// Rows arrive oldest first, so replacing in place keeps
-			// only the newest action per episode URL.
-			if i, seen := index[a.EpisodeURL]; seen {
-				out.Actions[i] = j
+			// An episode keeps its action of the latest time, and of two at
+			// one time the later upload's, rows coming oldest first. The
+			// protocol's times share one layout, so they compare as text. A
+			// private show's episodes go by their guids as well as their
+			// bare links, which two of them can share.
+			key := a.EpisodeURL + "\x00" + a.GUID
+			if i, seen := index[key]; seen {
+				if a.ActionTS >= out.Actions[i].Timestamp {
+					out.Actions[i] = j
+				}
 				continue
 			}
-			index[a.EpisodeURL] = len(out.Actions)
+			index[key] = len(out.Actions)
 		}
 		out.Actions = append(out.Actions, j)
-	}
-	out.Timestamp = maxUploaded
-	if out.Timestamp == 0 {
-		out.Timestamp = time.Now().Unix()
 	}
 	h.writeJSON(w, out)
 }
@@ -618,6 +723,28 @@ func (h *handler) writeJSON(w http.ResponseWriter, v any) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
 		h.log.Warn("writing gpodder response", "err", err)
 	}
+}
+
+// failBody answers a body that could not be read: 413 for one over the
+// limit, which retrying as it is cannot cure, else 400.
+func (h *handler) failBody(w http.ResponseWriter, err error) {
+	var tooBig *http.MaxBytesError
+	if errors.As(err, &tooBig) {
+		h.fail(w, http.StatusRequestEntityTooLarge, "request body too large")
+		return
+	}
+	h.fail(w, http.StatusBadRequest, "malformed body")
+}
+
+// failService answers a service's failure: 503 while the catalog is in a
+// hand-off, as the REST surface answers, so a client tries again rather
+// than reading an answer, else a 500 saying what failed.
+func (h *handler) failService(w http.ResponseWriter, err error, msg string) {
+	if service.KindOf(err) == service.KindMaintenance {
+		h.fail(w, http.StatusServiceUnavailable, "the catalog is under maintenance; retry shortly")
+		return
+	}
+	h.fail(w, http.StatusInternalServerError, msg)
 }
 
 // fail answers a plain status code; gpodder clients only check the

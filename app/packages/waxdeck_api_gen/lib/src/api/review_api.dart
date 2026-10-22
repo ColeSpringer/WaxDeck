@@ -791,7 +791,7 @@ class ReviewApi {
   }
 
   /// Set a library&#39;s matching behavior
-  /// &#x60;auto&#x60; lets confident matches apply themselves and queues the rest for review (the default), &#x60;review&#x60; queues everything (no auto-apply), and &#x60;off&#x60; never matches the library&#39;s content (as-is libraries: already-curated collections the engine must not touch). Under &#x60;auto&#x60;, one-file units still queue unless &#x60;singlesAutoApply&#x60; is on. The body replaces the whole object. Administrators only. 
+  /// &#x60;auto&#x60; lets confident matches apply themselves and queues the rest for review (the default), &#x60;review&#x60; queues everything (no auto-apply), and &#x60;off&#x60; never matches the library&#39;s content (as-is libraries: already-curated collections the engine must not touch). Under &#x60;auto&#x60;, one-file units still queue unless &#x60;singlesAutoApply&#x60; is on. The body replaces the whole object. A podcast library takes no matching behavior, its episodes coming from their feeds, and is refused with &#x60;invalid-request&#x60;. Administrators only. 
   ///
   /// Parameters:
   /// * [pid] - Type-prefixed PID (e.g. `tr-01JZX5N8QW3F4V9T2B7KD3M9R6`).

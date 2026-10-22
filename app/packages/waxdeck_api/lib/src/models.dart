@@ -1566,7 +1566,8 @@ class EpisodeSummary extends ItemSummary {
   final bool hasTranscript;
 
   /// Whether the feed named audio this server could relay. False with
-  /// [downloaded] false is the one episode that cannot play at all, so
+  /// [downloaded] false is an episode that cannot play until the server
+  /// fetches it (its feed named no audio, or it is a YouTube show's), so
   /// read this rather than [downloaded] before offering play.
   final bool hasEnclosure;
 }
@@ -2356,6 +2357,30 @@ class PodcastDirectoryEntry {
   final String? artworkUrl;
   final String? genre;
   final int? episodeCount;
+}
+
+/// One feed's outcome in an OPML import: subscribed, with the show it
+/// became, or not, with why.
+///
+/// [error] is the server's sentence; [reason] is a feed-side failure's
+/// reason when it was one, the same token a subscribe's `params.reason`
+/// carries.
+class OpmlImportOutcome {
+  const OpmlImportOutcome({
+    required this.feedUrl,
+    this.title,
+    this.pid,
+    this.error,
+    this.reason,
+  });
+
+  final String feedUrl;
+  final String? title;
+  final String? pid;
+  final String? error;
+  final String? reason;
+
+  bool get failed => error != null || pid == null;
 }
 
 /// A resolved, tokenized station stream, absolute against the client

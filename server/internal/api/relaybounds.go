@@ -58,36 +58,40 @@ const (
 	radioIdle     = 60 * time.Second
 )
 
-// relayGate counts live relays per account.
-//
-// The same shape as shareStreamGate, kept separate rather than
-// generalized with it: that one is keyed by share and exists to stop a
-// public link becoming a bandwidth faucet, this one is keyed by account
-// and exists to stop an authenticated caller pinning goroutines. They
-// answer to different limits and will drift.
+// relayGate counts live transfers per key, an account for the relays and
+// a share for its anonymous streams: the first stops an authenticated
+// caller pinning goroutines and sockets, the second a public link
+// becoming a bandwidth faucet. Each holder of one sets its own limit.
 type relayGate struct {
-	mu   sync.Mutex
-	live map[string]int
+	// limit is how many transfers one key holds at once; zero is
+	// maxUserRelays.
+	limit int
+	mu    sync.Mutex
+	live  map[string]int
 }
 
-func (g *relayGate) acquire(userID string) (release func(), ok bool) {
+func (g *relayGate) acquire(key string) (release func(), ok bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.live == nil {
 		g.live = map[string]int{}
 	}
-	if g.live[userID] >= maxUserRelays {
+	limit := g.limit
+	if limit == 0 {
+		limit = maxUserRelays
+	}
+	if g.live[key] >= limit {
 		return nil, false
 	}
-	g.live[userID]++
+	g.live[key]++
 	var once sync.Once
 	return func() {
 		once.Do(func() {
 			g.mu.Lock()
-			// Zeroed entries are dropped, or the map grows by one per
-			// account that ever relayed for the life of the process.
-			if g.live[userID]--; g.live[userID] <= 0 {
-				delete(g.live, userID)
+			// Zeroed entries are dropped, or the map grows by one per key
+			// that ever relayed for the life of the process.
+			if g.live[key]--; g.live[key] <= 0 {
+				delete(g.live, key)
 			}
 			g.mu.Unlock()
 		})

@@ -177,9 +177,9 @@
   "@podcastFetchToPlay": {
     "description": "Play button on an episode whose feed named no audio, so the server has to hold it first."
   },
-  "podcastFetchingBeforePlay": "This feed named no audio to stream, so the server is fetching it. It plays once that lands.",
+  "podcastFetchingBeforePlay": "This episode has no audio to stream until the server fetches it, which it is doing now. Play it again once it has downloaded.",
   "@podcastFetchingBeforePlay": {
-    "description": "Snackbar after pressing play on an episode that has to be fetched first."
+    "description": "Snackbar after pressing play on an episode that has to be fetched first. The press only queues the fetch: nothing plays when it lands."
   },
   "podcastFetchingToServer": "Fetching to server",
   "@podcastFetchingToServer": {
@@ -231,6 +231,10 @@
   "podcastFollow": "Follow",
   "@podcastFollow": {
     "description": "Button on a show's header that follows it."
+  },
+  "podcastFollowPrivate": "This show is private. Follow it by the address you were given, with Add subscription.",
+  "@podcastFollowPrivate": {
+    "description": "Said when Follow is pressed on a private show the account does not follow: the server gives such a show's address to its followers alone, so it is followed by the listener's own address, through the Add subscription dialog."
   },
   "podcastFollowing": "Following",
   "@podcastFollowing": {
@@ -373,7 +377,7 @@
       }
     }
   },
-  "podcastNoAudioCount": "{count, plural, =1{1 had no audio in the feed} other{{count} had no audio in the feed}}",
+  "podcastNoAudioCount": "{count, plural, =1{1 had no audio to stream yet} other{{count} had no audio to stream yet}}",
   "@podcastNoAudioCount": {
     "description": "Half of the snackbar after queueing a batch, counting what could not go in.",
     "placeholders": {
@@ -382,13 +386,17 @@
       }
     }
   },
-  "podcastNoAudioInFeed": "No audio in the feed",
-  "@podcastNoAudioInFeed": {
-    "description": "Fact on an episode row whose feed named no audio to stream, so it has to be fetched before it plays."
-  },
-  "podcastNoAudioToQueue": "This feed named no audio for that episode, so there is nothing to queue.",
+  "podcastNoAudioToQueue": "That episode has no audio to stream until the server fetches it, so there is nothing to queue.",
   "@podcastNoAudioToQueue": {
     "description": "Snackbar refusing to queue an episode with no audio behind it."
+  },
+  "podcastNoAudioToShare": "That episode has no audio a link could play: the server has not fetched any, and its feed offers none to stream. If the show has audio for it, fetch it first.",
+  "@podcastNoAudioToShare": {
+    "description": "Snackbar when the server refuses a share link to an episode a visitor could not hear: not fetched, and its feed names no audio the server relays (a YouTube video, which fetching fixes, or an entry with no audio at all, which it does not)."
+  },
+  "podcastNoAudioToStream": "No audio to stream",
+  "@podcastNoAudioToStream": {
+    "description": "Fact on an episode row the server has not fetched and has no audio to relay for: the feed named none, named one the server does not relay (a playlist, a stream manifest, a YouTube watch page), or could not be read. Fetching is the only way it can play, and a feed that named no audio has nothing to fetch."
   },
   "podcastNoDurationCount": "{count, plural, =1{1 had no duration to finish} other{{count} had no duration to finish}}",
   "@podcastNoDurationCount": {
@@ -463,6 +471,40 @@
   "podcastOpmlImported": "Subscriptions imported",
   "@podcastOpmlImported": {
     "description": "Snackbar after an OPML import landed."
+  },
+  "podcastOpmlNoFeeds": "No feeds were found in that file.",
+  "@podcastOpmlNoFeeds": {
+    "description": "Snackbar after an OPML import whose file listed no feed, so nothing was subscribed."
+  },
+  "podcastOpmlNotAdded": "{count, plural, =1{1 feed could not be added. {reason}} other{{count} feeds could not be added. {reason}}}",
+  "@podcastOpmlNotAdded": {
+    "description": "Snackbar after an OPML import where some feeds did not subscribe, all for the same reason, counting them. {reason} is that reason as a whole sentence.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "reason": {
+        "type": "String",
+        "example": "The host refused the request. It may need a login."
+      }
+    }
+  },
+  "podcastOpmlNotAddedDetails": "Details",
+  "@podcastOpmlNotAddedDetails": {
+    "description": "Action on the snackbar after an OPML import with failures, opening the list of each feed that was not added and why."
+  },
+  "podcastOpmlNotAddedMixed": "{count, plural, =1{1 feed could not be added.} other{{count} feeds could not be added, for different reasons.}}",
+  "@podcastOpmlNotAddedMixed": {
+    "description": "Snackbar after an OPML import where feeds did not subscribe for more than one reason, counting them; its Details action lists each feed with its reason.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "podcastOpmlNotAddedTitle": "Feeds not added",
+  "@podcastOpmlNotAddedTitle": {
+    "description": "Title of the dialog listing each feed an OPML import could not add, with its reason, which can be copied."
   },
   "podcastOpmlPickerLabel": "OPML",
   "@podcastOpmlPickerLabel": {

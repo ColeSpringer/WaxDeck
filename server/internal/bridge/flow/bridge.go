@@ -879,6 +879,11 @@ func streamCut(raw string, shape Shape, durationMS int64) (string, int64, error)
 // becomes someone else's CPU.
 func (b *Bridge) ServeShareStream(w http.ResponseWriter, r *http.Request, apiItemPID, ownerUserID string) {
 	src, err := b.resolver.StreamSource(r.Context(), apiItemPID, r.URL.Query().Get("f"))
+	if errors.Is(err, ErrCatalogMaintenance) {
+		// Briefly away, which a player retries; not found, it does not.
+		writeJSONError(w, http.StatusServiceUnavailable, "catalog-maintenance", "the catalog is in maintenance; retry shortly")
+		return
+	}
 	if err != nil {
 		writeJSONError(w, http.StatusNotFound, "not-found", "no streamable item with pid "+apiItemPID)
 		return

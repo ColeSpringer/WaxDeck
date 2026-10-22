@@ -41,9 +41,33 @@
   "@errorFeatureUnavailable": {
     "description": "Error sentence for the spec code `feature-unavailable` where nothing more specific is known about which capability is missing."
   },
+  "errorFeedBlockedAddress": "This server does not fetch from private or local network addresses.",
+  "@errorFeedBlockedAddress": {
+    "description": "Error sentence for the reason blocked-address, under `invalid-request` (a subscribe the table words) or `feed-unreachable` (a refresh or a transcript): a feed, or a transcript a feed points at, sits on a private or local network, which this server does not fetch from."
+  },
+  "errorFeedHostError": "The host answered with an error. Try again later.",
+  "@errorFeedHostError": {
+    "description": "Error sentence for `feed-unreachable` with the reason host-error: the host of a feed or of its transcript answered a server error or asked to be tried later, which can pass on its own."
+  },
+  "errorFeedNotAFeed": "That address answered, but not with anything a podcast app can read.",
+  "@errorFeedNotAFeed": {
+    "description": "Error sentence for the reason not-a-feed, under `invalid-request` (a subscribe the table words, such as from a directory match) or `feed-unreachable` (a refresh or a transcript): the address returned something that is not a feed or a transcript."
+  },
+  "errorFeedNotFound": "The host has nothing at that address.",
+  "@errorFeedNotFound": {
+    "description": "Error sentence for `feed-unreachable` with the reason host-missing: the host of a feed or of its transcript answered that nothing is there (404 or 410)."
+  },
+  "errorFeedRefused": "The host refused the request. It may need a login.",
+  "@errorFeedRefused": {
+    "description": "Error sentence for `feed-unreachable` with the reason host-refused: the host of a feed or of its transcript refused the request (401, 403 and the like), which can mean the feed wants credentials."
+  },
+  "errorFeedTooLarge": "What that address sent back is larger than this server accepts.",
+  "@errorFeedTooLarge": {
+    "description": "Error sentence for the reason too-large, under `invalid-request` or `feed-unreachable`: the feed or transcript is over this server's size cap. It names no size, since feeds and transcripts have different caps."
+  },
   "errorFeedUnreachable": "The feed's own server did not answer, or did not answer with a feed.",
   "@errorFeedUnreachable": {
-    "description": "Error sentence for the spec code `feed-unreachable`."
+    "description": "Error sentence for the spec code `feed-unreachable`, and for the reasons under it this client has no sentence of its own for, a host out of reach among them."
   },
   "errorFieldLocked": "That field is locked. Unlock it, or save with the override.",
   "@errorFieldLocked": {
@@ -84,6 +108,10 @@
   "errorNotFound": "That is not here any more.",
   "@errorNotFound": {
     "description": "Error sentence for the spec code `not-found`."
+  },
+  "errorPodcastsOff": "Podcasts are turned off on this server.",
+  "@errorPodcastsOff": {
+    "description": "Error sentence for `feature-unavailable` when the params name the feature as podcasts: a subscribe or an OPML import on a server run with its podcast directory turned off."
   },
   "errorQuotaExceeded": "That is over a limit this server keeps.",
   "@errorQuotaExceeded": {

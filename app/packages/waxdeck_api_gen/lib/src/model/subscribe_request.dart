@@ -15,7 +15,7 @@ part 'subscribe_request.g.dart';
 /// * [sourceType] - Source kind: `rss` (default) or `youtube`. Open set for forward compatibility; servers reject values they do not support with `source-unavailable`. 
 /// * [username] - Basic-auth username for a private feed.
 /// * [password] - Basic-auth password for a private feed. Stored sealed at rest; never returned by any endpoint. 
-/// * [folder] - Initial folder path for the subscription.
+/// * [folder] - Initial folder path for the subscription, normalized and bounded as the settings' `folder` is. 
 @BuiltValue()
 abstract class SubscribeRequest implements Built<SubscribeRequest, SubscribeRequestBuilder> {
   /// Feed URL, or a YouTube channel or playlist URL when `sourceType` is `youtube`. 
@@ -34,7 +34,7 @@ abstract class SubscribeRequest implements Built<SubscribeRequest, SubscribeRequ
   @BuiltValueField(wireName: r'password')
   String? get password;
 
-  /// Initial folder path for the subscription.
+  /// Initial folder path for the subscription, normalized and bounded as the settings' `folder` is. 
   @BuiltValueField(wireName: r'folder')
   String? get folder;
 

@@ -489,6 +489,13 @@ String formatEpisodeMeta(AppLocalizations l10n, EpisodeSummary episode) {
   ].join(' · ');
 }
 
+/// The episodes whose transcript this app session has asked the server to
+/// capture: asked once per episode however often it is opened, and a
+/// capture that failed is not asked again on the next open.
+final transcriptCapturesAskedProvider = Provider<Set<String>>(
+  (ref) => <String>{},
+);
+
 /// Transcript cues, fetched only when the section is first expanded.
 class _TranscriptSection extends ConsumerStatefulWidget {
   const _TranscriptSection({required this.pid});
@@ -501,7 +508,6 @@ class _TranscriptSection extends ConsumerStatefulWidget {
 
 class _TranscriptSectionState extends ConsumerState<_TranscriptSection> {
   Future<Transcript>? _loading;
-  var _captured = false;
 
   void _onExpanded(bool expanded) {
     if (!expanded || _loading != null) return;
@@ -511,8 +517,7 @@ class _TranscriptSectionState extends ConsumerState<_TranscriptSection> {
     // Opening the transcript also indexes it for search, so an episode a
     // listener streams but never downloads becomes findable by its words.
     // Best-effort: a capture failure never affects the display transcript.
-    if (!_captured) {
-      _captured = true;
+    if (ref.read(transcriptCapturesAskedProvider).add(widget.pid)) {
       unawaited(
         ref
             .read(repositoryProvider)

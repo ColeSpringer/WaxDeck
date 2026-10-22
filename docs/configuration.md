@@ -202,7 +202,8 @@ provider.
 
 - `WAXDECK_PODCAST_DIR`: episode download directory - its own library,
   never inside a library root. Defaults to `<data-dir>/podcasts`; an
-  explicit empty (`-podcast-dir=""`) disables podcasts.
+  explicit empty (`-podcast-dir=""`) disables podcasts: every subscribe
+  is refused, in the apps, an OPML import and podcast apps alike.
 - `WAXDECK_PODCAST_ROOT_NAME` (default `podcasts`): WaxFlow root name
   the podcast dir is mounted under.
 - `WAXDECK_FEED_REFRESH_MINUTES` (default `30`): minutes between
@@ -246,6 +247,18 @@ provider.
 - `WAXDECK_ALLOW_PRIVATE_NOTIFY_HOSTS` (default `false`): allow
   user-pointed notification destinations on private addresses (a LAN
   ntfy or Gotify).
+
+The private-address guard behind these flags and
+`WAXDECK_ALLOW_PRIVATE_FEED_HOSTS` also covers carrier-grade NAT
+addresses (100.64.0.0/10, where Tailscale and similar overlay networks
+put their hosts), and the same flags let them in.
+
+Feeds, episode audio, transcripts, chapters, synced playlist covers,
+radio streams, ListenBrainz and user-pointed notification destinations,
+while `WAXDECK_ALLOW_PRIVATE_NOTIFY_HOSTS` is off, are fetched directly,
+never through `HTTP_PROXY` or `HTTPS_PROXY`: the guard on each judges
+the address it dials, which behind a proxy would be the proxy's. A
+deployment whose only way out is a proxy loses those.
 
 ## Matching and enrichment
 

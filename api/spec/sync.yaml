@@ -269,7 +269,10 @@ components:
           description: >
             What changed: `play-state` (`pid`, `playState`), `prefs`, or
             `subscription` (`pid`, the show; `subscription` absent once the
-            caller unsubscribed); `book-settings` (`pid`, `bookSettings`);
+            caller unsubscribed, and while the caller cannot see the
+            podcast library, which a change to what the caller may see
+            announces for every show it follows); `book-settings` (`pid`,
+            `bookSettings`);
 
 
             `bookmarks` (`pid`, the book, and `bookmarks`, its whole current

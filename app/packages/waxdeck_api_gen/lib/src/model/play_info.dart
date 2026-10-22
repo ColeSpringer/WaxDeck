@@ -13,7 +13,7 @@ part 'play_info.g.dart';
 /// Properties:
 /// * [pid] - The resolved item's PID.
 /// * [url] - Origin-relative, media-token-authenticated stream URL. Short TTL; re-request play-info on expiry or a `stream-stale` error. Which endpoint it names follows how the item resolves: `/media/stream` through the streaming engine (`/media/hls` when that is an HLS presentation, see `hls`), `/media/download` on a server running without it, and `/media/enclosure` for a podcast episode served by enclosure passthrough. Clients play the url they are given and do not parse it. 
-/// * [mimeType] - MIME type the stream will be served as; `application/vnd.apple.mpegurl` for an HLS presentation. 
+/// * [mimeType] - MIME type the stream will be served as; `application/vnd.apple.mpegurl` for an HLS presentation. For enclosure passthrough it is the type the feed declared when that names one audio or video format, never a playlist, or is `application/ogg`, `application/mpeg` or `application/mp4`, else `audio/mpeg`; the relay answers with the podcast host's own type when that passes the same rule. 
 /// * [durationMs] - Duration in milliseconds.
 /// * [seekable] - Whether a client can seek anywhere in the stream: it answers byte-range requests, or it is an HLS presentation (see `hls`), whose player fetches the segment a seek lands in. False for a live encode (a bitrate cap, voice boost, a track carved from a larger file): such a stream is positioned by requesting play-info again with `positionMs`, never by seeking the media past what it has buffered. Best effort for an unfetched podcast episode served by enclosure passthrough: the relay forwards ranges, but whether the podcast host honours them is unknown until the first upstream request, so a client should degrade rather than assume. 
 /// * [startOffsetMs] - Milliseconds into the resolved item (into the resolved part, for a multi-file audiobook) at which the served audio begins. Present only when the server cut a non-seekable stream at the requested `positionMs`: the whole second at or before that position within the item or part, or its last whole second when the position lies past its end. The served audio's own timeline starts at zero, so a client adds this to the player's position and seeks the rest of the way itself; `durationMs` stays the length of the whole item or part. 
@@ -35,7 +35,7 @@ abstract class PlayInfo implements Built<PlayInfo, PlayInfoBuilder> {
   @BuiltValueField(wireName: r'url')
   String get url;
 
-  /// MIME type the stream will be served as; `application/vnd.apple.mpegurl` for an HLS presentation. 
+  /// MIME type the stream will be served as; `application/vnd.apple.mpegurl` for an HLS presentation. For enclosure passthrough it is the type the feed declared when that names one audio or video format, never a playlist, or is `application/ogg`, `application/mpeg` or `application/mp4`, else `audio/mpeg`; the relay answers with the podcast host's own type when that passes the same rule. 
   @BuiltValueField(wireName: r'mimeType')
   String get mimeType;
 

@@ -213,7 +213,7 @@ func TestEntityNameIsCanonicalNotFirstSeen(t *testing.T) {
 		{PID: "tr-2", Artist: "The Beatles", AlbumArtist: "The Beatles", Album: "Revolver",
 			AlbumArtistPID: "ar-B", AlbumPID: "al-R"},
 	}
-	names := map[string]string{"ar-B": "The Beatles", "al-R": "Revolver"}
+	names := map[string]service.EntityFacts{"ar-B": {Name: "The Beatles"}, "al-R": {Name: "Revolver"}}
 
 	idx := buildIndex(rows, names)
 	if len(idx.artists) != 1 || idx.artists[0].name != "The Beatles" {
@@ -244,8 +244,8 @@ func TestCompilationCollapsesIntoOneAlbum(t *testing.T) {
 		{PID: "tr-2", Title: "Two", Artist: "Quartet", AlbumArtist: "Quartet", Album: "Sampler",
 			AlbumArtistPID: "ar-Q", AlbumPID: "al-S"},
 	}
-	idx := buildIndex(rows, map[string]string{
-		"ar-E": "Ensemble", "ar-Q": "Quartet", "al-S": "Sampler",
+	idx := buildIndex(rows, map[string]service.EntityFacts{
+		"ar-E": {Name: "Ensemble"}, "ar-Q": {Name: "Quartet"}, "al-S": {Name: "Sampler"},
 	})
 
 	if len(idx.albums) != 1 {

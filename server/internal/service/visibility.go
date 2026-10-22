@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/query"
@@ -134,6 +136,21 @@ func (l *Library) UserCtx(ctx context.Context, u *wdb.User) (*UserCtx, error) {
 type libraryDirs struct {
 	mu   sync.Mutex
 	dirs []libraryDir
+	// podcast is the podcast library's bare PID, recorded as the table
+	// loads; empty while there is none. podcastAtRoot says it is the one
+	// at the configured directory rather than one an earlier directory
+	// left.
+	podcast       string
+	podcastAtRoot bool
+	// podcasts is every podcast-mode library, an earlier directory's
+	// included.
+	podcasts []string
+	// missed is when podcastLibrary last reloaded the table without
+	// finding the podcast library; zero when it has not. missFailed says
+	// that reload failed and no load has worked since, so the table is of
+	// unknown age.
+	missed     time.Time
+	missFailed bool
 }
 
 type libraryDir struct {
@@ -147,24 +164,45 @@ type libraryDir struct {
 // once rather than on the first cache miss under the new root.
 func (l *Library) invalidateAttribution() {
 	l.libDirs.mu.Lock()
-	l.libDirs.dirs = nil
+	l.libDirs.dirs, l.libDirs.podcast, l.libDirs.podcastAtRoot, l.libDirs.missed = nil, "", false, time.Time{}
+	l.libDirs.podcasts, l.libDirs.missFailed = nil, false
 	l.libDirs.mu.Unlock()
 }
 
 // attribution returns the attribution table, loading it on first use.
 // forceReload refreshes it (a miss may mean a library appeared since).
 func (l *Library) attribution(ctx context.Context, forceReload bool) ([]libraryDir, error) {
+	dirs, _, _, err := l.attributionTable(ctx, forceReload)
+	return dirs, err
+}
+
+// attributionTable is attribution with the podcast library's PID, known
+// by its mode rather than by matching the configured directory against
+// the stored root: where the platform folds case the catalog keeps the
+// spelling it first saw. A server that changed its podcast directory has
+// the old library too, and the one at the configured root, by the rule
+// the catalog matches roots with, is the one downloads land in now;
+// atRoot says the one recorded is that one.
+func (l *Library) attributionTable(ctx context.Context, forceReload bool) (dirs []libraryDir, podcast string, atRoot bool, err error) {
 	l.libDirs.mu.Lock()
 	defer l.libDirs.mu.Unlock()
 	if l.libDirs.dirs != nil && !forceReload {
-		return l.libDirs.dirs, nil
+		return l.libDirs.dirs, l.libDirs.podcast, l.libDirs.podcastAtRoot, nil
 	}
 	libs, err := l.lib.Libraries(ctx)
 	if err != nil {
-		return nil, classify(err)
+		return nil, "", false, classify(err)
 	}
-	dirs := make([]libraryDir, 0, len(libs))
+	dirs = make([]libraryDir, 0, len(libs))
+	var podcasts []string
 	for _, lib := range libs {
+		if lib.Mode == model.ModePodcast {
+			here := samePath(rootKey(lib.DisplayRoot), rootKey(l.podcastDir))
+			if podcast == "" || (here && !atRoot) {
+				podcast, atRoot = string(lib.PID), here
+			}
+			podcasts = append(podcasts, string(lib.PID))
+		}
 		root := lib.DisplayRoot
 		if root == "" {
 			continue
@@ -175,8 +213,21 @@ func (l *Library) attribution(ctx context.Context, forceReload bool) ([]libraryD
 		})
 	}
 	sort.Slice(dirs, func(i, j int) bool { return len(dirs[i].path) > len(dirs[j].path) })
-	l.libDirs.dirs = dirs
-	return dirs, nil
+	l.libDirs.dirs, l.libDirs.podcast, l.libDirs.podcastAtRoot = dirs, podcast, atRoot
+	l.libDirs.podcasts, l.libDirs.missFailed = podcasts, false
+	return dirs, podcast, atRoot, nil
+}
+
+// podcastLibraries answers every podcast-mode library: the one at the
+// configured directory, and any an earlier directory left, which still
+// holds the episodes fetched while it was configured.
+func (l *Library) podcastLibraries(ctx context.Context) ([]string, error) {
+	if _, _, _, err := l.attributionTable(ctx, false); err != nil {
+		return nil, err
+	}
+	l.libDirs.mu.Lock()
+	defer l.libDirs.mu.Unlock()
+	return slices.Clone(l.libDirs.podcasts), nil
 }
 
 // libraryForPath attributes a file path to its library PID, or "" when
@@ -213,8 +264,9 @@ func matchDir(dirs []libraryDir, path string) string {
 
 // itemVisible reports whether the item is inside the user's visible
 // libraries. Full-visibility users skip attribution entirely. An item
-// with no file (undownloaded, missing, stream-only) is attributed to no
-// library and so fails closed for restricted users.
+// with no file (missing, stream-only) is attributed to no library and
+// so fails closed for restricted users, except an episode: it belongs to
+// the podcast library whether or not it has a file (viewVisible's rule).
 //
 // The located record carries the library handle, so this reads it
 // rather than re-deriving it from the path. That is also the more
@@ -224,11 +276,13 @@ func (l *Library) itemVisible(ctx context.Context, uc *UserCtx, pid model.PID) b
 	if uc.AllLibraries {
 		return true
 	}
-	loc, err := l.paths.Locate(ctx, pid)
-	if err != nil || loc.LibraryPID == "" {
-		return false
+	if loc, err := l.paths.Locate(ctx, pid); err == nil && loc.LibraryPID != "" {
+		return uc.Libraries[string(loc.LibraryPID)]
 	}
-	return uc.Libraries[string(loc.LibraryPID)]
+	// The record does not say what a fileless item is, so the catalog is
+	// asked, for the one kind that can still be visible.
+	it, err := l.lib.Get(ctx, pid)
+	return err == nil && it.Kind == model.KindEpisode && l.podcastsVisible(ctx, uc)
 }
 
 // viewVisible is itemVisible for callers already holding a fresh item
@@ -236,9 +290,17 @@ func (l *Library) itemVisible(ctx context.Context, uc *UserCtx, pid model.PID) b
 // -path cache. The sync paths need this because the cache invalidates
 // on a poll, and a delta racing that poll would decide a tombstone from
 // a stale attribution.
+//
+// An episode is visible exactly when the podcast library is: it belongs
+// to that library whether or not it has a file, and an unfetched one has
+// none to attribute. Every episode file is bound to the podcast library,
+// so for a fetched one the two answers are the same.
 func (l *Library) viewVisible(ctx context.Context, uc *UserCtx, it *model.ItemView) bool {
 	if uc.AllLibraries {
 		return true
+	}
+	if it.Kind == model.KindEpisode {
+		return l.podcastsVisible(ctx, uc)
 	}
 	if it.LibraryPID == "" {
 		return false
@@ -246,21 +308,100 @@ func (l *Library) viewVisible(ctx context.Context, uc *UserCtx, it *model.ItemVi
 	return uc.Libraries[string(it.LibraryPID)]
 }
 
+// grantNode is viewVisible's rule as a query node, for a caller granted
+// libraries by pid: the libraries granted, and every episode for a caller
+// granted the podcast library, since an unfetched episode's library
+// column is empty. Nil for a caller who sees every library.
+//
+// An allow-list, so `in`: it seeks the index and an empty grant compiles
+// to `1=0`. Deliberately not `notIn` over the complement - that is an
+// anti-join scanning the catalog, and it keeps every fileless item.
+// Sorted so the compiled SQL is stable across map iteration orders, and
+// chunked (inSet), since the engine takes at most 500 values in one
+// membership test.
+func (l *Library) grantNode(ctx context.Context, uc *UserCtx) query.Node {
+	if uc.AllLibraries {
+		return nil
+	}
+	libs := make([]string, 0, len(uc.Libraries))
+	for lib := range uc.Libraries {
+		libs = append(libs, lib)
+	}
+	sort.Strings(libs)
+	granted := inSet("library", libs)
+	if !l.podcastsVisible(ctx, uc) {
+		return granted
+	}
+	return query.Or{Nodes: []query.Node{
+		granted,
+		query.Cond{Field: "kind", Op: query.OpIs, Value: string(model.KindEpisode)},
+	}}
+}
+
 // podcastsVisible reports whether the caller can see the podcast
 // library (shows are not items, so show surfaces gate on the library
 // itself). Servers without a podcast dir have nothing to show.
 func (l *Library) podcastsVisible(ctx context.Context, uc *UserCtx) bool {
+	visible, judged := l.podcastsJudged(ctx, uc)
+	if !judged {
+		// A no standing on a library list that could not be read.
+		noteDegraded(ctx)
+	}
+	return visible
+}
+
+// podcastsJudged is podcastsVisible saying whether its answer is a
+// judgment: a false that stands on a podcast library which could not be
+// read is not one.
+func (l *Library) podcastsJudged(ctx context.Context, uc *UserCtx) (visible, judged bool) {
 	if uc.AllLibraries {
-		return true
+		return true, true
 	}
+	libPID, read := l.podcastLibrary(ctx)
+	visible = libPID != "" && uc.Libraries[libPID]
+	return visible, visible || read
+}
+
+// podcastLibrary answers the podcast library's pid, empty without a
+// podcast dir and until the catalog creates the library, which it does on
+// the first episode download, and whether the table read it stands on
+// worked: false when a load failed and none has worked since, the pid then
+// being what an earlier load left, if anything. A miss, no library or only
+// one an earlier podcast directory left, reloads the attribution table at
+// most once a second rather than on every call: every episode offered a
+// restricted reader asks, and on a server that has fetched nothing every
+// ask misses. The earlier directory's library stands in meanwhile.
+func (l *Library) podcastLibrary(ctx context.Context) (pid string, read bool) {
 	if l.podcastDir == "" {
-		return false
+		return "", true
 	}
-	libPID, err := l.libraryForPath(ctx, l.podcastDir)
-	if err != nil || libPID == "" {
-		return false
+	_, pid, atRoot, err := l.attributionTable(ctx, false)
+	if err != nil {
+		return "", false
 	}
-	return uc.Libraries[libPID]
+	if atRoot {
+		return pid, true
+	}
+	// On the monotonic clock: a wall clock stepped back would otherwise
+	// hold the next reload off for the length of the step.
+	l.libDirs.mu.Lock()
+	due := l.libDirs.missed.IsZero() || time.Since(l.libDirs.missed) >= time.Second
+	if due {
+		l.libDirs.missed = time.Now()
+	}
+	failed := l.libDirs.missFailed
+	l.libDirs.mu.Unlock()
+	if !due {
+		return pid, !failed
+	}
+	_, fresh, _, err := l.attributionTable(ctx, true)
+	if err != nil {
+		l.libDirs.mu.Lock()
+		l.libDirs.missFailed = true
+		l.libDirs.mu.Unlock()
+		return pid, false
+	}
+	return fresh, true
 }
 
 // getVisibleItem is getItem plus the visibility check: an item outside

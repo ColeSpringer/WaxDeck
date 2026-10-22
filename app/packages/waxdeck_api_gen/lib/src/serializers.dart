@@ -390,6 +390,7 @@ import 'package:waxdeck_api_gen/src/model/upload_batch.dart';
 import 'package:waxdeck_api_gen/src/model/upload_batch_create.dart';
 import 'package:waxdeck_api_gen/src/model/upload_create.dart';
 import 'package:waxdeck_api_gen/src/model/upload_grouping.dart';
+import 'package:waxdeck_api_gen/src/model/upload_media_type.dart';
 import 'package:waxdeck_api_gen/src/model/upload_page.dart';
 import 'package:waxdeck_api_gen/src/model/upload_quota.dart';
 import 'package:waxdeck_api_gen/src/model/upload_target.dart';
@@ -797,6 +798,7 @@ part 'serializers.g.dart';
   UploadBatchCreate,
   UploadCreate,
   UploadGrouping,
+  UploadMediaType,
   UploadPage,
   UploadQuota,
   UploadTarget,

@@ -351,7 +351,7 @@ func (l *Library) showCards(ctx context.Context, uc *UserCtx, pids []model.PID) 
 		out[api] = EntityCard{
 			PID:    api,
 			Kind:   entityCardKind[PrefixPodcast],
-			Title:  pod.Title,
+			Title:  clipFeedTitle(pod.Title),
 			Artist: pod.Author,
 		}
 	}
@@ -384,7 +384,7 @@ func (l *Library) bookCards(ctx context.Context, uc *UserCtx, pids []model.PID) 
 			departed[api] = true
 			continue
 		}
-		if !l.itemVisible(ctx, uc, it.PID) || !l.allowedByContent(ctx, uc, it) {
+		if archived(it) || !l.viewVisible(ctx, uc, it) || !l.allowedByContent(ctx, uc, it) {
 			continue
 		}
 		out[api] = EntityCard{

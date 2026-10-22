@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/auth"
@@ -83,9 +84,9 @@ func (r *ConnectResolver) enclosureItem(ctx context.Context, userID, pid string,
 // that reach the client. An allowlist rather than a denylist: a podcast
 // host's Set-Cookie, its server banner, and whatever else it chooses to
 // send are excluded because they are not on this list, not because
-// somebody remembered to name them.
+// somebody remembered to name them. Content-Type is not on it either:
+// the relay states that itself, from enclosureContentType.
 var enclosureRelayHeaders = []string{
-	"Content-Type",
 	"Content-Length",
 	"Content-Range",
 	"Accept-Ranges",
@@ -114,6 +115,11 @@ var enclosureRelayHeaders = []string{
 // listener scrubs an episode, so Range and If-Range go upstream and 206,
 // Content-Range, and Accept-Ranges come back. A host that ignores ranges
 // answers 200 and the relay carries that through unchanged.
+//
+// Only audio goes out. A host answering with a page, a document or a
+// picture is refused rather than relayed, and every relayed answer
+// carries nosniff and a sandboxing policy, since the bytes are a
+// stranger's and the URL is this origin's.
 //
 // Passthrough audio is not analyzed, so silence trim and voice boost are
 // absent until the episode is fetched, and there is no local file to cut,
@@ -162,7 +168,16 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	s.relayEnclosure(w, r, pid, src)
+}
 
+// relayEnclosure moves one episode's enclosure bytes from the podcast
+// host to the listener: the chain walk, the status mapping, the header
+// allowlist and the bounded copy. Whoever calls it has already decided
+// the listener may hear this episode and has taken the slot it costs.
+func (s *Server) relayEnclosure(w http.ResponseWriter, r *http.Request, pid string, src service.EnclosureSource) {
+	w.Header().Set("X-Content-Type-Options", service.MediaNoSniff)
+	w.Header().Set("Content-Security-Policy", service.MediaCSP)
 	// A cancellable child of the request context, so the bounds below
 	// can end a transfer the listener has not abandoned. Cancelling
 	// releases the upstream socket as well as the read.
@@ -170,13 +185,13 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	// A remembered chain end is tried first. It is a shortcut, not an
-	// address: anything wrong with it drops the entry and the full
-	// chain is walked once, which is what this handler did before the
-	// cache existed.
+	// address: anything wrong with it, an answer the type gate below
+	// refuses included, drops the entry and the full chain is walked
+	// once, which is what this handler did before the cache existed.
 	var resp *http.Response
 	if shortcut, ok := s.enclosures.lookup(pid, src.URL); ok {
 		tried, triedErr := s.fetchEnclosure(ctx, r, src, shortcut)
-		if usableEnclosureResponse(tried, triedErr) {
+		if usableEnclosureResponse(tried, triedErr) && gatedEnclosureResponse(tried, src.MimeType) {
 			resp = tried
 		} else {
 			if tried != nil {
@@ -203,11 +218,23 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 	case http.StatusRequestedRangeNotSatisfiable:
 		// The listener's range, not the host's health: a client that
 		// scrubbed past the end has to see that rather than a bad
-		// gateway, which would send it looking for a network fault.
+		// gateway. The host's own length goes with it, which is how a
+		// player that asked for exactly the end learns it has all of it.
+		if v, ok := unsatisfiedRange(resp.Header.Get("Content-Range")); ok {
+			w.Header().Set("Content-Range", v)
+		}
 		writeError(w, http.StatusRequestedRangeNotSatisfiable, "invalid-request",
 			"the requested range is outside the episode")
 		return
 	case http.StatusUnauthorized, http.StatusForbidden:
+		// Off the feed's origin the request went without the show's
+		// login, which a fetch to the server does send.
+		if src.AuthUser != "" && resp.Request != nil && resp.Request.URL != nil &&
+			!sameEnclosureOrigin(resp.Request.URL.String(), src.FeedURL) {
+			writeError(w, http.StatusBadGateway, "feed-unreachable",
+				"the episode's audio host wants the show's login, which this server sends only to the feed's own host; fetch the episode to play it")
+			return
+		}
 		// A credentialed feed whose stored credentials no longer work,
 		// or a signed CDN URL from a feed refresh that has since
 		// expired. Both are fixed by re-subscribing or refreshing the
@@ -222,17 +249,29 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	upstreamType := resp.Header.Get("Content-Type")
+	contentType, ok := enclosureContentType(upstreamType, src.MimeType)
+	if !ok {
+		// Whatever it is, a browser must never be handed it from this
+		// origin. The route is dropped so the next listener walks the
+		// chain again rather than trusting where this one ended. The
+		// label's start is logged so a real host's odd audio type can
+		// join the list; the host chose all of it.
+		s.enclosures.forget(pid)
+		s.log.Warn("the podcast host answered with something other than audio",
+			"pid", pid, "contentType", clipLabel(upstreamType))
+		writeError(w, http.StatusBadGateway, "feed-unreachable",
+			"the podcast host answered with a page rather than audio")
+		return
+	}
 	out := w.Header()
 	for _, name := range enclosureRelayHeaders {
 		for _, v := range resp.Header.Values(name) {
 			out.Add(name, v)
 		}
 	}
-	// The one header this relay invents. A response with no Content-Type
-	// will not play at all, and the feed's declared enclosure type is the
-	// standard answer for what the audio is; guessing wrong costs a
-	// mislabeled codec, which players sniff past.
-	//
+	out.Set("Content-Type", contentType)
+
 	// Content-Length is deliberately not backfilled from the feed's
 	// declared enclosure size, which the plan proposed and which is a
 	// trap: a host that omits it is answering chunked, the size a feed
@@ -243,9 +282,7 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 	// is not invented either, for the same reason in miniature: the host
 	// is the only party that knows, and play-info already tells clients
 	// that seeking is best effort for passthrough.
-	if out.Get("Content-Type") == "" {
-		out.Set("Content-Type", src.MimeType)
-	}
+	//
 	// The bytes are the podcast host's and this origin-relative URL is
 	// per-listener - it carries that listener's media token - so a
 	// shared cache holding either would be wrong. Nothing to do with
@@ -268,63 +305,35 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Unbuffered, and the read and write halves are kept apart rather
-	// than folded into io.Copy, because only that distinction says who
-	// ended the stream.
+	// Reads and writes stay apart, not folded into io.Copy, because only
+	// that says who ended the stream. A failed write is the listener
+	// leaving. A failed read is the host unless the request is over, as
+	// media elements abort and re-range all the time.
 	//
-	// A write failure is the listener: they closed the tab, skipped, or
-	// seeked, and a seek is not an error the operator wants a line
-	// about. A read failure whose cause is the request context is the
-	// same listener seen from the other side, since the upstream GET
-	// rides r.Context(): media elements abort and re-range constantly,
-	// so this is the common case, and it is exactly what a string match
-	// on "broken pipe" misses. Only a read that failed for its own
-	// reason is a real event: the podcast host cut the episode short,
-	// which is worth a line because the listener heard it stop.
+	// Whoever stops the relay before the host's own clean end, a failed
+	// read or a tripped bound, breaks the response off: a clean end would
+	// read as the whole episode, with a length declared or not, and the
+	// player would never ask for the rest.
 	//
-	// ServeRadio makes the same split and logs neither side; the
-	// difference here is that an episode has a definite length, so a
-	// truncated one is a fact about the host rather than the ordinary
-	// end of a live stream.
-	//
-	// An episode is a finite file, so this relay takes the two bounds a
-	// finite transfer can carry that a live stream cannot: an overall
-	// size cap and an average rate floor. Both describe a transfer that
-	// was never going to finish, which is the case an idle deadline
-	// alone misses -- a host dribbling bytes forever is never idle.
-	guard := newRelayGuard(relayLimits{
-		idle:      enclosureIdle,
-		maxBytes:  enclosureMaxBytes,
-		minRate:   enclosureMinRate,
-		rateGrace: enclosureRateGrace,
-	}, cancel)
+	// A finite file takes two bounds a live stream cannot, a size cap and
+	// an average rate floor; the idle watchdog alone misses a host that
+	// dribbles bytes forever.
+	guard := newRelayGuard(s.enclosureBounds, cancel)
 	defer guard.stop()
 	buf := make([]byte, 32<<10)
 	for {
 		n, readErr := resp.Body.Read(buf)
-		// Noted before the write, and the write bracketed, so that the
-		// listener's own pace is never charged to the podcast host. A
-		// paused media element stops reading once its buffer fills and
-		// the write below blocks for as long as the pause lasts; judged
-		// from out here that is indistinguishable from a dead host.
+		// Noted before readErr is examined, so a cancel that trips the
+		// idle watchdog still finds the guard stopped and is logged. The
+		// write below is bracketed so the listener's pace is never charged
+		// to the host: a paused player stops reading once its buffer is
+		// full and the write blocks for as long as the pause lasts.
 		if !guard.note(n) {
-			// A bound tripped, which is this server ending the transfer
-			// rather than either endpoint doing it. The listener sees a
-			// truncated episode either way, so it is worth a line: the
-			// operator is the only one who can tell whether the host is
-			// broken or the cap is too tight, and the measured bytes and
-			// duration are what let them tell.
-			//
-			// Reached on every trip, including the idle timer's: note is
-			// called before readErr is examined, and trip marks the guard
-			// stopped before it cancels, so the read that returns because
-			// of that cancel still finds a stopped guard here. A cut is
-			// never silent.
 			relayed, elapsed := guard.stats()
 			s.log.Warn("the episode relay was cut short",
 				"pid", pid, "reason", guard.reason(),
 				"bytes", relayed, "elapsed", elapsed.Round(time.Second))
-			return
+			panic(http.ErrAbortHandler)
 		}
 		if n > 0 {
 			done := guard.writing()
@@ -335,56 +344,100 @@ func (s *Server) ServeEnclosure(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if readErr != nil {
-			if !errors.Is(readErr, io.EOF) && r.Context().Err() == nil {
+			if errors.Is(readErr, io.EOF) {
+				return
+			}
+			if r.Context().Err() == nil {
 				s.log.Warn("the podcast host ended the episode early",
 					"pid", pid, "err", readErr)
 			}
-			return
+			panic(http.ErrAbortHandler)
 		}
 	}
 }
 
-// fetchEnclosure performs one upstream GET for the relay against
-// target, carrying the listener's range headers.
+// enclosureContentType is the type a relayed answer goes out as, false
+// when the host's answer is not audio and must not go out at all.
 //
-// The feed's credentials go out only when target is on the host the
-// feed named. On a walk that is always true; on a remembered chain end
-// it usually is not, and the difference matters because a remembered
-// URL arrives without the chain that produced it. See
-// [sameEnclosureOrigin].
+// The host's type goes through relayedType. A host that does not say, or
+// says only octet-stream, takes the feed's declared type, held to the
+// same rule (EnclosureMediaType): the feed's word is as untrusted as the
+// host's, and a response with no type will not play.
+func enclosureContentType(upstream, declared string) (string, bool) {
+	mediaType, untyped, ok := relayedType(upstream)
+	if untyped {
+		return service.EnclosureMediaType(declared), true
+	}
+	return mediaType, ok
+}
+
+// unsatisfiedRange reports whether a host's Content-Range is the length
+// form of a refused range, "bytes */N", which is all a 416 passes on.
+func unsatisfiedRange(v string) (string, bool) {
+	length, ok := strings.CutPrefix(strings.TrimSpace(v), "bytes */")
+	if !ok || length == "" || len(length) > 19 || strings.Trim(length, "0123456789") != "" {
+		return "", false
+	}
+	return "bytes */" + length, true
+}
+
+// clipLabel cuts a header value a host chose to its first 100 bytes for
+// a log line.
+func clipLabel(v string) string {
+	if len(v) <= 100 {
+		return v
+	}
+	return strings.ToValidUTF8(v[:100], "")
+}
+
+// gatedEnclosureResponse reports whether a usable answer passes the
+// type gate the relay holds it to: a 416 carries no audio to judge.
+func gatedEnclosureResponse(resp *http.Response, declared string) bool {
+	if resp.StatusCode == http.StatusRequestedRangeNotSatisfiable {
+		return true
+	}
+	_, ok := enclosureContentType(resp.Header.Get("Content-Type"), declared)
+	return ok
+}
+
+// fetchEnclosure performs one upstream GET for the relay against
+// target, carrying the listener's range headers, on a walk and on a
+// remembered chain end alike.
 func (s *Server) fetchEnclosure(ctx context.Context, r *http.Request, src service.EnclosureSource, target string) (*http.Response, error) {
-	req, err := enclosureRequest(ctx, src, target)
+	req, err := s.enclosureRequest(ctx, target)
 	if err != nil {
 		return nil, err
 	}
 	// The two conditional-range headers, forwarded verbatim. If-Range
 	// alone is meaningless, and a host that honors it needs the validator
-	// exactly as it issued it.
-	for _, h := range []string{"Range", "If-Range"} {
-		if v := r.Header.Get(h); v != "" {
-			req.Header.Set(h, v)
+	// exactly as it issued it. A request for several ranges goes up as
+	// one for the whole episode, which a server may always answer: the
+	// host's multipart answer would carry part headers of its own past
+	// the type gate, and no media element asks for one.
+	if rng := r.Header.Get("Range"); rng != "" && !strings.Contains(rng, ",") {
+		req.Header.Set("Range", rng)
+		if v := r.Header.Get("If-Range"); v != "" {
+			req.Header.Set("If-Range", v)
 		}
 	}
-	return s.svc.EnclosureHTTP().Do(req)
+	return s.svc.FetchEnclosure(req, src)
 }
 
 // enclosureRequest builds one outbound GET at target on the feed's
-// behalf. The single place the credential rule is applied, so the relay
-// and the background warm cannot drift apart on it.
-func enclosureRequest(ctx context.Context, src service.EnclosureSource, target string) (*http.Request, error) {
+// behalf, for the relay and the background warm alike.
+//
+// A private or paid feed refuses an unauthenticated GET. The credentials
+// are the show's own and never reach the listener, nor any host but the
+// feed's own: FetchEnclosure sets them on each request of the chain at
+// the feed's origin, the first or a redirect hop, and takes them off any
+// other (a measurement prefix, a CDN). The service layer decides whether
+// this caller gets them at all.
+func (s *Server) enclosureRequest(ctx context.Context, target string) (*http.Request, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", "WaxDeck")
-	// A private or paid feed refuses an unauthenticated GET. The
-	// credentials are the show's own and never reach the listener: they
-	// are set on this outbound request, and Go strips Authorization from
-	// a redirect that leaves the host, so a CDN hop does not carry them
-	// either. The service layer decides whether this caller gets them.
-	if src.AuthUser != "" && sameEnclosureOrigin(target, src.URL) {
-		req.SetBasicAuth(src.AuthUser, src.AuthPass)
-	}
+	req.Header.Set("User-Agent", s.svc.UserAgent())
 	return req, nil
 }
 
@@ -424,19 +477,22 @@ func usableEnclosureResponse(resp *http.Response, err error) bool {
 // rememberEnclosureRoute records where a walk ended, when the entry
 // would be worth having.
 //
-// Two refusals. A response the relay cannot act on says nothing about
-// where the chain ends - see [usableEnclosureResponse]. And a
-// credentialed feed whose chain leaves its own origin cannot be
-// shortcut at all: the shortcut would go out unauthenticated, earn a
-// 401, and cost a full walk on top of itself. Remembering nothing there
-// is what keeps such a feed at one walk per range rather than two,
-// which is what it cost before this cache existed.
+// Three refusals. A response the relay cannot act on says nothing about
+// where the chain ends - see [usableEnclosureResponse]. A chain that ends
+// in something the relay would refuse as not audio is not a route to
+// try first. And a credentialed feed whose chain ends off its own origin
+// is not shortcut: the walk can have reached that end through a request
+// carrying the show's login, which a shortcut would skip, so only a
+// walk says the end still answers. Remembering nothing there keeps
+// such a feed at one walk per range, which is what it cost before this
+// cache existed.
 func (s *Server) rememberEnclosureRoute(pid string, src service.EnclosureSource, resp *http.Response) {
-	if !usableEnclosureResponse(resp, nil) || resp.Request == nil || resp.Request.URL == nil {
+	if !usableEnclosureResponse(resp, nil) || !gatedEnclosureResponse(resp, src.MimeType) ||
+		resp.Request == nil || resp.Request.URL == nil {
 		return
 	}
 	resolved := resp.Request.URL.String()
-	if src.AuthUser != "" && !sameEnclosureOrigin(resolved, src.URL) {
+	if src.AuthUser != "" && !sameEnclosureOrigin(resolved, src.FeedURL) {
 		return
 	}
 	s.enclosures.remember(pid, src.URL, resolved)
@@ -446,6 +502,10 @@ func (s *Server) rememberEnclosureRoute(pid string, src service.EnclosureSource,
 // than the walk should ever take and far shorter than a listen, because
 // this is a head start and nothing is waiting on it.
 const enclosureWarmDeadline = 30 * time.Second
+
+// enclosureWarmDrain is the most of a warm's body that is read out so its
+// connection can be reused.
+const enclosureWarmDrain = 4 << 10
 
 // warmEnclosure resolves an episode's redirect chain in the background,
 // so the walk is already paid for by the time the engine's own GET
@@ -473,22 +533,26 @@ func (s *Server) warmEnclosure(pid string, src service.EnclosureSource) {
 	started := s.group.GoOnce(warm, "enclosure-warm", func(wctx context.Context) error {
 		defer cancel()
 		defer s.enclosures.releaseWarm(pid)
-		req, err := enclosureRequest(wctx, src, src.URL)
+		req, err := s.enclosureRequest(wctx, src.URL)
 		if err != nil {
 			return nil
 		}
-		// One byte: the chain is walked by the request, not by the
-		// body, and a host that ignores the range answers the whole
-		// episode - which is why the body is closed rather than read.
+		// One byte: the chain is walked by the request, not by the body.
 		req.Header.Set("Range", "bytes=0-0")
-		resp, err := s.svc.EnclosureHTTP().Do(req)
+		resp, err := s.svc.FetchEnclosure(req, src)
 		if err != nil {
 			// Nothing to report: the relay will walk the chain itself
 			// and answer the listener with whatever this would have
 			// said.
 			return nil
 		}
-		defer resp.Body.Close()
+		// A short body is read out so the connection can serve the
+		// listener's own request; a host that ignored the range and sends
+		// the whole episode is let go of instead.
+		defer func() {
+			io.CopyN(io.Discard, resp.Body, enclosureWarmDrain)
+			resp.Body.Close()
+		}()
 		s.rememberEnclosureRoute(pid, src, resp)
 		return nil
 	})

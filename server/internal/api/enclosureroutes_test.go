@@ -129,10 +129,8 @@ func TestEnclosureRoutesAreBounded(t *testing.T) {
 	}
 }
 
-// The rule the feed's stored credentials are spent under. A remembered
-// URL arrives without the chain that produced it, so the origin
-// matching is the only evidence that the far end is still the party the
-// feed named.
+// The rule the feed's stored credentials are spent under: an address at
+// the feed's own origin, and nothing else.
 func TestSameEnclosureOrigin(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
@@ -149,6 +147,11 @@ func TestSameEnclosureOrigin(t *testing.T) {
 		// doing it for the whole TTL.
 		{"a same-host downgrade to http", "http://feeds.example/a.mp3", "https://feeds.example/b.mp3", false},
 		{"a port is part of the origin", "https://feeds.example:8443/a.mp3", "https://feeds.example/b.mp3", false},
+		// A scheme's default port stands for itself, spelled out or not;
+		// the other scheme's default is just another port.
+		{"the default port spelled out", "https://feeds.example:443/a.mp3", "https://feeds.example/b.mp3", true},
+		{"a plain feed's default port spelled out", "http://feeds.example/a.mp3", "http://feeds.example:80/b.mp3", true},
+		{"the other scheme's default port", "https://feeds.example:80/a.mp3", "https://feeds.example/b.mp3", false},
 		// Stricter than Go's own redirect forwarding, deliberately: it
 		// keeps Authorization across a subdomain hop and this does not.
 		{"a subdomain is a different party", "https://cdn.feeds.example/a.mp3", "https://feeds.example/b.mp3", false},

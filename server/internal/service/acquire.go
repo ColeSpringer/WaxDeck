@@ -79,6 +79,10 @@ func (l *Library) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, med
 	if !ok {
 		return ToolTaskDTO{}, errInvalid("unknown acquisition format")
 	}
+	kind, err := requireUploadMediaType(mediaType)
+	if err != nil {
+		return ToolTaskDTO{}, err
+	}
 	if len(l.sourceProviders) == 0 {
 		return ToolTaskDTO{}, &Error{Kind: KindUnsupported, Msg: "no acquisition source is running; start the server with WAXDECK_YOUTUBE=true to acquire from URLs"}
 	}
@@ -88,10 +92,6 @@ func (l *Library) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, med
 	}
 	if err := l.guardAcquireHost(ctx, parsed.Hostname()); err != nil {
 		return ToolTaskDTO{}, err
-	}
-	kind, ok := kindForMediaType(mediaType)
-	if !ok {
-		return ToolTaskDTO{}, errInvalid("unknown media type")
 	}
 	// The upload surfaces' own check, rather than a second copy of it:
 	// this one used to stop at visibility and let an acquisition name a
@@ -103,15 +103,13 @@ func (l *Library) StartAcquisition(ctx context.Context, uc *UserCtx, rawURL, med
 	// Acquired files are placed into the library, which the catalog
 	// only does for a managed root. Fail here, before spending a
 	// download, rather than staging bytes that would quarantine.
-	if kind != model.KindEpisode {
-		has, err := l.hasManagedDestination(ctx, uc, kind)
-		if err != nil {
-			return ToolTaskDTO{}, err
-		}
-		if !has {
-			return ToolTaskDTO{}, errInvalid("no managed " + mediaType +
-				" library to receive the files; an administrator must mark a library root managed (WAXDECK_MANAGED_ROOTS)")
-		}
+	has, err := l.hasManagedDestination(ctx, uc, kind)
+	if err != nil {
+		return ToolTaskDTO{}, err
+	}
+	if !has {
+		return ToolTaskDTO{}, errInvalid("no managed " + mediaType +
+			" library to receive the files; an administrator must mark a library root managed (WAXDECK_MANAGED_ROOTS)")
 	}
 	return l.insertToolTask(ctx, uc, taskTypeAcquire, "", toolTaskParams{
 		URL:        parsed.String(),
@@ -281,9 +279,7 @@ func (l *Library) guardAcquireHost(ctx context.Context, host string) error {
 		return errInvalid("the url's host does not resolve")
 	}
 	for _, a := range addrs {
-		ip := a.IP
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() ||
-			ip.IsLinkLocalMulticast() || ip.IsUnspecified() || ip.IsMulticast() {
+		if privateIP(a.IP) || a.IP.IsMulticast() {
 			return errInvalid("the url points at a private or internal address")
 		}
 	}
@@ -293,8 +289,7 @@ func (l *Library) guardAcquireHost(ctx context.Context, host string) error {
 // hasManagedDestination reports whether a managed library the caller
 // can see accepts the given item kind, which is the precondition for
 // importing an acquired or uploaded file (the catalog places files
-// only into managed roots). Podcast episodes ingest into the internal
-// podcast library and are not checked here.
+// only into managed roots).
 func (l *Library) hasManagedDestination(ctx context.Context, uc *UserCtx, kind model.Kind) (bool, error) {
 	roots := l.libraryRoots()
 	managed := make(map[string]bool, len(roots))

@@ -10,12 +10,14 @@ import (
 //
 // A feed cover's source URL is minted from the feed document and lives
 // on the feed's host, so a credentialed show's channel image sits on
-// the same tokenized path its feed does - the value `showDTO` already
-// withholds, OPML export skips, shares refuse, and feed errors scrub.
-// The art source is the newest way to ask for it, and it reaches four
-// read paths at once (the show detail, an episode's item read, the
-// art-roles read, and the `X-Art-Source-Url` header on the bytes), so
-// the withholding lives under all four rather than at each.
+// the same tokenized path its feed does - the value `showDTO` withholds
+// from anyone who does not follow the show, shares refuse, and feed
+// errors scrub. A follower is shown only the address it subscribed by,
+// and the cover's address is the catalog's, so it is withheld from the
+// follower too. The art source is the newest way to ask for it, and it
+// reaches four read paths at once (the show detail, an episode's item
+// read, the art-roles read, and the `X-Art-Source-Url` header on the
+// bytes), so the withholding lives under all four rather than at each.
 //
 // The rest of the attribution stays: what the caller loses is the
 // address, not the fact that the picture came from the feed.
@@ -35,10 +37,8 @@ func TestPrivateFeedArtURLIsWithheld(t *testing.T) {
 	show := decode[Subscription](t, resp).Show
 
 	detail := decode[PodcastDetail](t, get(t, h.ts, "/api/v1/podcasts/"+show.Pid, h.token)).Show
-	// The feed URL itself is the rule this follows; if it ever stopped
-	// being withheld the art URL would be the least of it.
-	if got := deref(detail.FeedUrl); got != "" {
-		t.Fatalf("a credentialed feed URL was reported at all: %q", got)
+	if got := deref(detail.FeedUrl); got != fs.feedURL() {
+		t.Fatalf("the follower is shown %q, want only the address it subscribed by", got)
 	}
 	if detail.ArtSource == nil {
 		t.Fatal("a private show reported no art source; the attribution is not the secret, the address is")

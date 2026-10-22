@@ -94,6 +94,9 @@ type Strings struct {
 	ShareExpiresPrefix string
 	ShareNotFoundTitle string
 	ShareNotFoundBody  string
+	ShareNotAvailable  string
+	ShareAwayTitle     string
+	ShareAwayBody      string
 
 	OidcTitle              string
 	OidcCodeHeading        string

@@ -11,6 +11,7 @@ import { test, expect } from './fixtures';
 // the typed hand. The first-party half beside them is typed.
 
 const FEED_URL = 'http://127.0.0.1:4421/feed.xml';
+const EARLY_FEED = 'http://127.0.0.1:4421/early/feed.xml';
 
 function basic(user: string, secret: string) {
   return { Authorization: 'Basic ' + Buffer.from(`${user}:${secret}`).toString('base64') };
@@ -77,8 +78,9 @@ test('a gpodder client syncs subscriptions and play positions', async ({
     // feed the way a podcast app holds one.
     const feedDoc = await (await request.get(FEED_URL)).text();
     const enclosures = [...feedDoc.matchAll(/enclosure url="([^"]+)"/g)].map((m) => m[1]);
-    expect(enclosures.length).toBe(3);
-    const episodeUrl = enclosures[enclosures.length - 1];
+    expect(enclosures.length).toBe(4);
+    // Not the last: that one is never touched (podcasts.spec.ts).
+    const episodeUrl = enclosures[2];
 
     const actions = await request.post(`/api/2/episodes/${who}.json`, {
       headers: basic(who, secret),
@@ -129,6 +131,57 @@ test('a gpodder client syncs subscriptions and play positions', async ({
     expect((await withCookie()).status(), 'the cookie after its app password was revoked').toBe(401);
   } finally {
     // Gone already on the passing path; this is for the failing one.
+    await app.api.raw.delete('/users/me/app-passwords/{appPasswordId}', {
+      path: { appPasswordId: id },
+    });
+  }
+});
+
+// A full-list upload replaces only the uploading device's own list: what
+// the web app follows and what another device added stay, and an empty
+// list from a device that never held them takes nothing.
+test("a second device's full list does not unsubscribe the first", async ({
+  app,
+  request,
+}) => {
+  const who = app.account.username;
+  const { id, secret } = await app.seed.appPassword('gpodder e2e lists');
+  try {
+    await app.seed.subscribePodcast(FEED_URL);
+
+    const phone = await request.post(`/api/2/subscriptions/${who}/e2ephone.json`, {
+      headers: basic(who, secret),
+      data: { add: [EARLY_FEED], remove: [] },
+    });
+    expect(phone.status()).toBe(200);
+    expect(((await phone.json()).update_urls ?? []) as string[][]).toEqual([]);
+
+    // The desk's "replace list on server", naming only the phone's show,
+    // then nothing at all.
+    const replace = await request.put(`/subscriptions/${who}/e2edesk.txt`, {
+      headers: { ...basic(who, secret), 'Content-Type': 'text/plain' },
+      data: `${EARLY_FEED}\n`,
+    });
+    expect(replace.status()).toBe(200);
+    const empty = await request.put(`/subscriptions/${who}/e2edesk.json`, {
+      headers: basic(who, secret),
+      data: [],
+    });
+    expect(empty.status()).toBe(200);
+
+    const subs = await app.api.get('/podcasts');
+    const followed = (subs.items ?? []).map((s) => s.show.feedUrl);
+    expect(followed, 'the web subscription survives the desk').toContain(FEED_URL);
+    expect(followed, "the phone's subscription survives the desk").toContain(EARLY_FEED);
+
+    const listed = await request.get(`/subscriptions/${who}.json`, {
+      headers: basic(who, secret),
+    });
+    expect(listed.status()).toBe(200);
+    expect((await listed.json()) as string[]).toEqual(
+      expect.arrayContaining([FEED_URL, EARLY_FEED]),
+    );
+  } finally {
     await app.api.raw.delete('/users/me/app-passwords/{appPasswordId}', {
       path: { appPasswordId: id },
     });

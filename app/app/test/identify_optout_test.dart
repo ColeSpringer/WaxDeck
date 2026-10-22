@@ -185,6 +185,74 @@ void main() {
     expect(repo.acquisitionCalls.single.identify, isFalse);
   });
 
+  testWidgets('the Add-from-URL sheet asks an audiobook about review, not '
+      'MusicBrainz, and sends the answer', (tester) async {
+    // Nothing is matched for a book, so the switch does not promise
+    // MusicBrainz; it does open a review entry, so whether that waits for
+    // a decision is still asked, and an opt-out is sent as one.
+    final repo = _repo(optOut: true);
+    await tester.pumpWidget(
+      _host(
+        repo,
+        (context, ref) =>
+            acquireFromUrl(context, ref, initial: MediaType.audiobook),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(_switchWithId(SemanticsIds.acquireIdentify), findsOne);
+    expect(find.text('Review before adding'), findsOne);
+    expect(find.text('Identify against MusicBrainz'), findsNothing);
+
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.acquireUrl),
+      'https://books.example/reading.m4b',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
+    await tester.pumpAndSettle();
+
+    expect(repo.acquisitionCalls.single.mediaType, MediaType.audiobook);
+    expect(repo.acquisitionCalls.single.identify, isFalse);
+  });
+
+  testWidgets('the Add-from-URL switch follows a medium changed in the '
+      'sheet', (tester) async {
+    final repo = _repo();
+    await tester.pumpWidget(
+      _host(repo, (context, ref) => acquireFromUrl(context, ref)),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    expect(find.text('Identify against MusicBrainz'), findsOne);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.uploadMediaType));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(
+        SemanticsIds.uploadMediaTypeOption(MediaType.audiobook.wireName),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Review before adding'), findsOne);
+    expect(find.text('Identify against MusicBrainz'), findsNothing);
+
+    // Nothing stored, so it opens on; the press is the opt-out.
+    await tester.tap(_switchWithId(SemanticsIds.acquireIdentify));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.acquireUrl),
+      'https://books.example/reading.m4b',
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
+    await tester.pumpAndSettle();
+
+    expect(repo.acquisitionCalls.single.mediaType, MediaType.audiobook);
+    expect(repo.acquisitionCalls.single.identify, isFalse);
+  });
+
   // Only ever seen where the automatic import refused, which is the
   // one case a declined submission is still waiting for somebody.
   testWidgets('a stuck declined entry says nothing was searched', (
@@ -238,42 +306,9 @@ void main() {
     expect(find.text('Identification was skipped'), findsNothing);
   });
 
-  testWidgets('a podcast is asked, and the control says what it does', (
-    tester,
-  ) async {
-    // Nothing is matched for a podcast, so the switch does not promise
-    // MusicBrainz - but it does open a review entry, so whether that
-    // waits for a decision is a real question and is asked.
-    final repo = _repo(optOut: true);
-    await tester.pumpWidget(
-      _host(
-        repo,
-        (context, ref) =>
-            acquireFromUrl(context, ref, initial: MediaType.podcast),
-      ),
-    );
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
-
-    expect(_switchWithId(SemanticsIds.acquireIdentify), findsOne);
-    expect(find.text('Review before adding'), findsOne);
-    expect(find.text('Identify against MusicBrainz'), findsNothing);
-
-    await tester.enterText(
-      find.bySemanticsIdentifier(SemanticsIds.acquireUrl),
-      'https://feeds.example/show.xml',
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.acquireSubmit));
-    await tester.pumpAndSettle();
-
-    expect(repo.acquisitionCalls.single.identify, isFalse);
-  });
-
-  testWidgets('an audiobook is not promised a match either', (tester) async {
-    // The lie this catches is not the podcast one: the switch has
-    // always been drawn for books, and the identify worker has never
-    // taken one to the engine.
+  testWidgets('an audiobook is not promised a match', (tester) async {
+    // The switch has always been drawn for books, and the identify
+    // worker has never taken one to the engine.
     final repo = _repo();
     await tester.pumpWidget(
       _host(

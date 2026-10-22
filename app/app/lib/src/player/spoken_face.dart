@@ -115,14 +115,45 @@ String chapterTitle(ChapterMark chapter) =>
 /// compares: an end taken from the first later mark in an unordered
 /// list is a chapter bar drawn twice its width and a sleep timer that
 /// stops a chapter late.
-int chapterEndMs(List<ChapterMark> chapters, ChapterMark chapter, int totalMs) {
-  if (chapter.endMs != null) return chapter.endMs!;
+///
+/// [relayed] is an episode the server streams from its feed, whose last
+/// chapter it ends at the length the feed declares, which can be 0 or
+/// off the audio: that chapter ends at [totalMs] instead whenever that is
+/// past its start, and where the stream ends ([PlaybackSession.mediaEndStopMs])
+/// when no length is known.
+int chapterEndMs(
+  List<ChapterMark> chapters,
+  ChapterMark chapter,
+  int totalMs, {
+  bool relayed = false,
+}) {
   int? nearest;
   for (final other in chapters) {
     if (other.startMs <= chapter.startMs) continue;
     if (nearest == null || other.startMs < nearest) nearest = other.startMs;
   }
-  return nearest ?? totalMs;
+  if (relayed && nearest == null) {
+    return totalMs > chapter.startMs ? totalMs : PlaybackSession.mediaEndStopMs;
+  }
+  return chapter.endMs ?? nearest ?? totalMs;
+}
+
+/// Where end-of-chapter sleep stops in the chapter playing at [position],
+/// the marks laid out against [totalMs] as [chapterEndMs] lays them
+/// ([relayed] likewise): that chapter's end, or null when no chapter is
+/// playing, its end is not known (the last chapter of audio whose length
+/// nothing reports yet), or the end is not ahead of [position] (a gap
+/// between hand-edited chapters).
+int? chapterStopMs(
+  List<ChapterMark> chapters,
+  Duration position,
+  int totalMs, {
+  bool relayed = false,
+}) {
+  final current = chapterAt(chapters, position);
+  if (current == null) return null;
+  final end = chapterEndMs(chapters, current, totalMs, relayed: relayed);
+  return end > current.startMs && end > position.inMilliseconds ? end : null;
 }
 
 /// The show an episode is from, above its title and tappable.
@@ -662,15 +693,16 @@ class _SpokenBottomRegionState extends ConsumerState<SpokenBottomRegion> {
   @override
   Widget build(BuildContext context) {
     final colors = WaxColors.of(context);
+    // Watched on a window too short for the panel as well: the sleep
+    // sheet's chapter row reads the same detail, which would otherwise be
+    // fetched again on every open.
+    final detail = _isBook ? null : ref.watch(episodeDetailProvider(_item.pid));
     final extent = spokenRegionExtent(context);
     if (extent == null) return const SizedBox.shrink();
     // Held through the first read, so the column above does not jump
     // under a press when the episode lands.
-    if (!_isBook) {
-      final detail = ref.watch(episodeDetailProvider(_item.pid));
-      if (!detail.hasValue && !detail.hasError) {
-        return SizedBox(width: double.infinity, height: extent);
-      }
+    if (detail != null && !detail.hasValue && !detail.hasError) {
+      return SizedBox(width: double.infinity, height: extent);
     }
 
     final regions = _regions();

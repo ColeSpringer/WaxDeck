@@ -101,10 +101,10 @@ type Config struct {
 	// DefaultRetentionKeep applies to subscribers who leave retention
 	// unset: keep the newest N downloaded episode files, 0 keeps all.
 	DefaultRetentionKeep int64
-	// RetentionInUseWindow is how recently a subscriber's position must
-	// have moved for an episode to count as in use (deferring its
-	// show's sweep). Zero means the default of two minutes; a negative
-	// value disables the guard (tests).
+	// RetentionInUseWindow is how recently anyone's position must have
+	// moved for an episode to count as in use (deferring its show's
+	// sweep). Zero means the default of two minutes; a negative value
+	// disables the guard (tests).
 	RetentionInUseWindow time.Duration
 	// SourceProviders are injected acquisition providers (the YouTube
 	// bridge); the catalog dispatches shows to them by source type.
@@ -134,6 +134,8 @@ type Config struct {
 	// when it is set: without it the server does not know a URL anybody
 	// outside its own network could follow.
 	PublicBase string
+	// Version is the build's version, which UserAgent names.
+	Version string
 	// RadioDirectoryBase is the radio-browser directory API base;
 	// empty selects the public instance. Set, it is the only host the
 	// directory search talks to.
@@ -346,11 +348,25 @@ type Library struct {
 	// playedLocks serializes the played decide-act per (user, item);
 	// see lockPlayed.
 	playedLocks [playedStripes]sync.Mutex
+	// membershipLocks serializes changes to who follows which show, per
+	// account; see lockMembership.
+	membershipLocks [playedStripes]sync.Mutex
+	// showHolds keep a download from landing in a show while its
+	// retention sweep runs; see showHold.
+	showHolds [playedStripes]sync.Mutex
+	// gpodderDownloads is what gpodder episodes downloads answered lately,
+	// which an episodes upload answers no later than.
+	gpodderDownloads gpodderDownloads
 	// transcriptHTTP is the guarded client for transcript pointers,
 	// built on first use; allowPrivateFeedHosts relaxes its SSRF guard.
 	transcriptHTTP        *http.Client
 	transcriptHTTPOnce    sync.Once
 	allowPrivateFeedHosts bool
+	// transcriptCacheBytes overrides transcriptCacheMaxBytes when set
+	// (tests).
+	transcriptCacheBytes int64
+	// chapterDocs keeps what episodes' chapters documents read for display.
+	chapterDocs chaptersCache
 	// enclosureHTTP is the guarded client the podcast enclosure
 	// passthrough relays through, built on first use and sharing
 	// allowPrivateFeedHosts with transcript fetches. It carries no
@@ -358,6 +374,30 @@ type Library struct {
 	// session, so the request context is its only bound.
 	enclosureHTTP     *http.Client
 	enclosureHTTPOnce sync.Once
+	// showSources remembers each show's source type; see showSourceType.
+	showSources sync.Map
+	// episodeReadHook stands in for the catalog's episode read by pids in
+	// a test; nothing in the server sets it.
+	episodeReadHook func(context.Context, []model.PID) ([]*model.Episode, error)
+	// showReadHook stands in for readShow's catalog read in a test;
+	// nothing in the server sets it.
+	showReadHook func(context.Context, model.PID) (*model.Podcast, error)
+	// listenerReadHook stands in for podcastListeners' read of a
+	// subscriber's account in a test; nothing in the server sets it.
+	listenerReadHook func(context.Context, string) (*UserCtx, error)
+	// retentionStatesHook stands in for the retention sweep's read of
+	// its candidates' play states in a test; nothing in the server sets
+	// it.
+	retentionStatesHook func(context.Context, []model.PID) (map[model.PID][]model.PlayState, error)
+	// pinHook stands in for the catalog write that pins or unpins an
+	// episode in a test; nothing in the server sets it.
+	pinHook func(context.Context, model.PID, *model.Episode, bool) error
+	// secretReadHook stands in for the catalog's read of a show's stored
+	// feed password in a test; nothing in the server sets it.
+	secretReadHook func(context.Context, string) (string, error)
+	// searchCandidates shrinks Search's candidate pool in a test; zero is
+	// searchMaxCandidates.
+	searchCandidates int
 	// radioHTTP is the guarded client for radio streams and the
 	// station directory, built on first use; allowPrivateRadioHosts
 	// relaxes its SSRF guard. It carries no overall timeout (radio
@@ -446,6 +486,8 @@ type Library struct {
 	// publicBase is where this server's web app answers, trailing slash
 	// trimmed; empty leaves every notification link out.
 	publicBase string
+	// version mirrors Config.Version.
+	version string
 	// notifyGuardedHTTP is the dial-guarded client for user-pointed
 	// notification destinations, built on first use;
 	// allowPrivateNotifyHosts relaxes its SSRF guard.
@@ -587,6 +629,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
 	}
+	log = HostOnlyLogger(log)
 	if a, b, ok := overlappingRoots(cfg.Roots); ok {
 		return nil, fmt.Errorf("service: the configured library roots %s and %s overlap", a, b)
 	}
@@ -629,6 +672,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	if cfg.PodcastDir != "" {
 		opts.Podcasts = config.PodcastConfig{
 			Dir:             cfg.PodcastDir,
+			UserAgent:       UserAgentFor(cfg.Version),
 			BlockPrivateIPs: !cfg.AllowPrivateFeedHosts,
 		}
 	}
@@ -764,6 +808,7 @@ func Open(ctx context.Context, cfg Config, store *wdb.DB, group *supervise.Group
 	l.listenbrainz.HTTP = scrobbleHTTPClient(cfg.AllowPrivateScrobbleHosts)
 	l.allowPrivateNotifyHosts = cfg.AllowPrivateNotifyHosts
 	l.publicBase = strings.TrimRight(cfg.PublicBase, "/")
+	l.version = cfg.Version
 	l.dropLegacyNotifySetting(ctx)
 	l.loadRuntimeToggles(ctx)
 	l.envLastfmKey, l.envLastfmSecret = cfg.LastfmAPIKey, cfg.LastfmSecret
@@ -1162,12 +1207,13 @@ func (l *Library) Jobs(ctx context.Context, uc *UserCtx, limit int) ([]Job, erro
 
 // summary converts an item view to the list-row DTO.
 func summary(it *model.ItemView) ItemSummary {
+	title, artist, album := itemNames(it)
 	return ItemSummary{
 		PID:             itemAPIPID(it),
 		MediaType:       mediaTypeForKind(it.Kind),
-		Title:           it.Title,
-		Artist:          it.Artist,
-		Album:           it.Album,
+		Title:           title,
+		Artist:          artist,
+		Album:           album,
 		ArtistPID:       entityAPIPID(PrefixArtist, it.ArtistPID),
 		AlbumPID:        entityAPIPID(PrefixAlbum, it.AlbumPID),
 		TrackNo:         it.TrackNo,
@@ -1176,6 +1222,16 @@ func summary(it *model.ItemView) ItemSummary {
 		Virtual:         it.Virtual,
 		AdvisoryFlagged: it.AdvisoryFlagged(),
 	}
+}
+
+// itemNames are an item view's title, artist and album as WaxDeck names
+// them: an episode's come from its feed, its own title and its show's, and
+// are clipped as every feed title is.
+func itemNames(it *model.ItemView) (title, artist, album string) {
+	if it.Kind != model.KindEpisode {
+		return it.Title, it.Artist, it.Album
+	}
+	return clipFeedTitle(it.Title), clipFeedTitle(it.Artist), clipFeedTitle(it.Album)
 }
 
 // getItem fetches an item and enforces that the API prefix fits its

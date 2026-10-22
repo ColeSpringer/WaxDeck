@@ -5739,7 +5739,43 @@ abstract class AppLocalizations {
   /// **'This server is not running the feature that request needs.'**
   String get errorFeatureUnavailable;
 
-  /// Error sentence for the spec code `feed-unreachable`.
+  /// Error sentence for the reason blocked-address, under `invalid-request` (a subscribe the table words) or `feed-unreachable` (a refresh or a transcript): a feed, or a transcript a feed points at, sits on a private or local network, which this server does not fetch from.
+  ///
+  /// In en, this message translates to:
+  /// **'This server does not fetch from private or local network addresses.'**
+  String get errorFeedBlockedAddress;
+
+  /// Error sentence for `feed-unreachable` with the reason host-error: the host of a feed or of its transcript answered a server error or asked to be tried later, which can pass on its own.
+  ///
+  /// In en, this message translates to:
+  /// **'The host answered with an error. Try again later.'**
+  String get errorFeedHostError;
+
+  /// Error sentence for the reason not-a-feed, under `invalid-request` (a subscribe the table words, such as from a directory match) or `feed-unreachable` (a refresh or a transcript): the address returned something that is not a feed or a transcript.
+  ///
+  /// In en, this message translates to:
+  /// **'That address answered, but not with anything a podcast app can read.'**
+  String get errorFeedNotAFeed;
+
+  /// Error sentence for `feed-unreachable` with the reason host-missing: the host of a feed or of its transcript answered that nothing is there (404 or 410).
+  ///
+  /// In en, this message translates to:
+  /// **'The host has nothing at that address.'**
+  String get errorFeedNotFound;
+
+  /// Error sentence for `feed-unreachable` with the reason host-refused: the host of a feed or of its transcript refused the request (401, 403 and the like), which can mean the feed wants credentials.
+  ///
+  /// In en, this message translates to:
+  /// **'The host refused the request. It may need a login.'**
+  String get errorFeedRefused;
+
+  /// Error sentence for the reason too-large, under `invalid-request` or `feed-unreachable`: the feed or transcript is over this server's size cap. It names no size, since feeds and transcripts have different caps.
+  ///
+  /// In en, this message translates to:
+  /// **'What that address sent back is larger than this server accepts.'**
+  String get errorFeedTooLarge;
+
+  /// Error sentence for the spec code `feed-unreachable`, and for the reasons under it this client has no sentence of its own for, a host out of reach among them.
   ///
   /// In en, this message translates to:
   /// **'The feed\'s own server did not answer, or did not answer with a feed.'**
@@ -5804,6 +5840,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'That is not here any more.'**
   String get errorNotFound;
+
+  /// Error sentence for `feature-unavailable` when the params name the feature as podcasts: a subscribe or an OPML import on a server run with its podcast directory turned off.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcasts are turned off on this server.'**
+  String get errorPodcastsOff;
 
   /// Error sentence for the spec code `quota-exceeded`. The code is shared by an upload over the uploader's allowance, a backup import and an account export, so it names no particular limit.
   ///
@@ -9075,6 +9117,18 @@ abstract class AppLocalizations {
   /// **'Feed switched off'**
   String get notifFeedDisabledTitle;
 
+  /// What the `gpodder-device-removed` notification is about, drawn under its switch: an account keeps fifty gpodder devices, and a new one past that removes the least recently seen.
+  ///
+  /// In en, this message translates to:
+  /// **'A new podcast app device took the place of the least recently seen one; what it kept followed stays followed.'**
+  String get notifGpodderDeviceRemovedHelp;
+
+  /// Switch label for the `gpodder-device-removed` notification, and the heading of its inbox row.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcast app removed'**
+  String get notifGpodderDeviceRemovedTitle;
+
   /// What the health-fix-finished notification is about, in a delivery target's event checklist.
   ///
   /// In en, this message translates to:
@@ -9158,6 +9212,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Account request'**
   String get notifSignupRequestedTitle;
+
+  /// What the `subscription-failed` notification is about, drawn under its switch.
+  ///
+  /// In en, this message translates to:
+  /// **'A podcast app syncing over gpodder asked to add a feed that could not be subscribed, or to change subscriptions this account may not change.'**
+  String get notifSubscriptionFailedHelp;
+
+  /// Switch label for the `subscription-failed` notification, and the heading of its inbox row: a subscription change a gpodder client asked for was not made, a feed that did not subscribe or any change from an account that may not change its subscriptions.
+  ///
+  /// In en, this message translates to:
+  /// **'Podcast subscriptions not changed'**
+  String get notifSubscriptionFailedTitle;
 
   /// Runs the move. Both the confirming button and the button that opens the confirmation.
   ///
@@ -12544,10 +12610,10 @@ abstract class AppLocalizations {
   /// **'Fetch to play'**
   String get podcastFetchToPlay;
 
-  /// Snackbar after pressing play on an episode that has to be fetched first.
+  /// Snackbar after pressing play on an episode that has to be fetched first. The press only queues the fetch: nothing plays when it lands.
   ///
   /// In en, this message translates to:
-  /// **'This feed named no audio to stream, so the server is fetching it. It plays once that lands.'**
+  /// **'This episode has no audio to stream until the server fetches it, which it is doing now. Play it again once it has downloaded.'**
   String get podcastFetchingBeforePlay;
 
   /// Snackbar after asking the server to hold one episode's bytes.
@@ -12603,6 +12669,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Follow'**
   String get podcastFollow;
+
+  /// Said when Follow is pressed on a private show the account does not follow: the server gives such a show's address to its followers alone, so it is followed by the listener's own address, through the Add subscription dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'This show is private. Follow it by the address you were given, with Add subscription.'**
+  String get podcastFollowPrivate;
 
   /// Button on a show's header saying it is followed, and unfollowing it.
   ///
@@ -12745,20 +12817,26 @@ abstract class AppLocalizations {
   /// Half of the snackbar after queueing a batch, counting what could not go in.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 had no audio in the feed} other{{count} had no audio in the feed}}'**
+  /// **'{count, plural, =1{1 had no audio to stream yet} other{{count} had no audio to stream yet}}'**
   String podcastNoAudioCount(int count);
-
-  /// Fact on an episode row whose feed named no audio to stream, so it has to be fetched before it plays.
-  ///
-  /// In en, this message translates to:
-  /// **'No audio in the feed'**
-  String get podcastNoAudioInFeed;
 
   /// Snackbar refusing to queue an episode with no audio behind it.
   ///
   /// In en, this message translates to:
-  /// **'This feed named no audio for that episode, so there is nothing to queue.'**
+  /// **'That episode has no audio to stream until the server fetches it, so there is nothing to queue.'**
   String get podcastNoAudioToQueue;
+
+  /// Snackbar when the server refuses a share link to an episode a visitor could not hear: not fetched, and its feed names no audio the server relays (a YouTube video, which fetching fixes, or an entry with no audio at all, which it does not).
+  ///
+  /// In en, this message translates to:
+  /// **'That episode has no audio a link could play: the server has not fetched any, and its feed offers none to stream. If the show has audio for it, fetch it first.'**
+  String get podcastNoAudioToShare;
+
+  /// Fact on an episode row the server has not fetched and has no audio to relay for: the feed named none, named one the server does not relay (a playlist, a stream manifest, a YouTube watch page), or could not be read. Fetching is the only way it can play, and a feed that named no audio has nothing to fetch.
+  ///
+  /// In en, this message translates to:
+  /// **'No audio to stream'**
+  String get podcastNoAudioToStream;
 
   /// Half of the snackbar after marking a batch played, counting the episodes whose feed declared no length.
   ///
@@ -12855,6 +12933,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Subscriptions imported'**
   String get podcastOpmlImported;
+
+  /// Snackbar after an OPML import whose file listed no feed, so nothing was subscribed.
+  ///
+  /// In en, this message translates to:
+  /// **'No feeds were found in that file.'**
+  String get podcastOpmlNoFeeds;
+
+  /// Snackbar after an OPML import where some feeds did not subscribe, all for the same reason, counting them. {reason} is that reason as a whole sentence.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 feed could not be added. {reason}} other{{count} feeds could not be added. {reason}}}'**
+  String podcastOpmlNotAdded(int count, String reason);
+
+  /// Action on the snackbar after an OPML import with failures, opening the list of each feed that was not added and why.
+  ///
+  /// In en, this message translates to:
+  /// **'Details'**
+  String get podcastOpmlNotAddedDetails;
+
+  /// Snackbar after an OPML import where feeds did not subscribe for more than one reason, counting them; its Details action lists each feed with its reason.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 feed could not be added.} other{{count} feeds could not be added, for different reasons.}}'**
+  String podcastOpmlNotAddedMixed(int count);
+
+  /// Title of the dialog listing each feed an OPML import could not add, with its reason, which can be copied.
+  ///
+  /// In en, this message translates to:
+  /// **'Feeds not added'**
+  String get podcastOpmlNotAddedTitle;
 
   /// What the file picker calls the document it is asking for. The format's name, the same everywhere.
   ///
@@ -18628,7 +18736,7 @@ abstract class AppLocalizations {
   /// **'Matches it, then waits for your decision. Off adds it with the tags it has'**
   String get uploadsIdentifyMusicHelp;
 
-  /// The same switch for a podcast or a book, where there is no catalogue to match against, so all it decides is whether the submission waits.
+  /// The same switch for a book, where there is no catalogue to match against, so all it decides is whether the submission waits.
   ///
   /// In en, this message translates to:
   /// **'Review before adding'**
@@ -18681,12 +18789,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Music'**
   String get uploadsMediaMusic;
-
-  /// Medium choice on the upload dialogs.
-  ///
-  /// In en, this message translates to:
-  /// **'Podcast'**
-  String get uploadsMediaPodcast;
 
   /// Opens the review queue on the entry this upload made.
   ///

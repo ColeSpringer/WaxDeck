@@ -627,20 +627,18 @@ func TestMigrateAudiobookshelfImport(t *testing.T) {
 		t.Errorf("book position after re-run = %d, want the imported 12500 intact", st.PositionMS)
 	}
 
-	// The imported positions feed the resume shelf, which is what the
-	// position stamps exist for beyond replay ordering.
-	resume, err := f.svc.RecentlyPositionedItems(ctx, f.uc, 10)
+	// An imported position is the book's resume position everywhere, a
+	// Subsonic client's bookmarks included.
+	marks, err := f.svc.SubsonicBookmarks(ctx, f.uc)
 	if err != nil {
-		t.Fatalf("RecentlyPositionedItems: %v", err)
+		t.Fatal(err)
 	}
 	found := false
-	for _, it := range resume {
-		if it.PID == book {
-			found = true
-		}
+	for _, b := range marks {
+		found = found || (b.Item.PID == book && b.PositionMS == 12500)
 	}
 	if !found {
-		t.Fatalf("imported book missing from the resume shelf: %+v", resume)
+		t.Fatalf("imported book missing from the bookmarks at 12500: %+v", marks)
 	}
 }
 

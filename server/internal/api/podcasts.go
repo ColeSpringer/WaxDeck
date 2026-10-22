@@ -72,11 +72,15 @@ func (s *Server) SubscribePodcast(ctx context.Context, req SubscribePodcastReque
 	if err != nil {
 		switch service.KindOf(err) {
 		case service.KindInvalid:
-			return SubscribePodcast400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+			return SubscribePodcast400JSONResponse{InvalidRequestJSONResponse(feedErrObj("invalid-request", err))}, nil
+		case service.KindForbidden:
+			return SubscribePodcast403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindUnsupported:
-			return SubscribePodcast501JSONResponse{SourceUnavailableJSONResponse(errObj("source-unavailable", err.Error()))}, nil
+			return SubscribePodcast501JSONResponse(errObj("source-unavailable", err.Error())), nil
+		case service.KindFeature:
+			return SubscribePodcast501JSONResponse(featureErrObj(err)), nil
 		case service.KindUpstream:
-			return SubscribePodcast502JSONResponse{FeedUnreachableJSONResponse(errObj("feed-unreachable", err.Error()))}, nil
+			return SubscribePodcast502JSONResponse{FeedUnreachableJSONResponse(feedErrObj("feed-unreachable", err))}, nil
 		}
 		return nil, err
 	}
@@ -300,10 +304,12 @@ func (s *Server) GetEpisodeTranscript(ctx context.Context, req GetEpisodeTranscr
 	tx, err := s.svc.Transcript(ctx, uc, req.Pid)
 	if err != nil {
 		switch service.KindOf(err) {
+		case service.KindForbidden:
+			return GetEpisodeTranscript403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindNotFound:
 			return GetEpisodeTranscript404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
 		case service.KindUpstream:
-			return GetEpisodeTranscript502JSONResponse{FeedUnreachableJSONResponse(errObj("feed-unreachable", err.Error()))}, nil
+			return GetEpisodeTranscript502JSONResponse{FeedUnreachableJSONResponse(feedErrObj("feed-unreachable", err))}, nil
 		}
 		return nil, err
 	}
@@ -330,10 +336,12 @@ func (s *Server) CaptureEpisodeTranscript(ctx context.Context, req CaptureEpisod
 	}
 	if err := s.svc.CaptureEpisodeTranscript(ctx, uc, req.Pid); err != nil {
 		switch service.KindOf(err) {
+		case service.KindForbidden:
+			return CaptureEpisodeTranscript403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
 		case service.KindNotFound:
 			return CaptureEpisodeTranscript404JSONResponse{NotFoundJSONResponse(errObj("not-found", err.Error()))}, nil
 		case service.KindUpstream:
-			return CaptureEpisodeTranscript502JSONResponse{FeedUnreachableJSONResponse(errObj("feed-unreachable", err.Error()))}, nil
+			return CaptureEpisodeTranscript502JSONResponse{FeedUnreachableJSONResponse(feedErrObj("feed-unreachable", err))}, nil
 		}
 		return nil, err
 	}
@@ -353,7 +361,7 @@ func (s *Server) RefreshPodcast(ctx context.Context, req RefreshPodcastRequestOb
 		case service.KindForbidden:
 			return RefreshPodcast403JSONResponse(errObj("forbidden", err.Error())), nil
 		case service.KindUpstream:
-			return RefreshPodcast502JSONResponse{FeedUnreachableJSONResponse(errObj("feed-unreachable", err.Error()))}, nil
+			return RefreshPodcast502JSONResponse{FeedUnreachableJSONResponse(feedErrObj("feed-unreachable", err))}, nil
 		}
 		return nil, err
 	}
@@ -425,8 +433,13 @@ func (s *Server) ImportOpml(ctx context.Context, req ImportOpmlRequestObject) (I
 	}
 	results, err := s.svc.ImportOPML(ctx, uc, []byte(req.Body.Opml))
 	if err != nil {
-		if service.KindOf(err) == service.KindInvalid {
+		switch service.KindOf(err) {
+		case service.KindInvalid:
 			return ImportOpml400JSONResponse{InvalidRequestJSONResponse(errObj("invalid-request", err.Error()))}, nil
+		case service.KindForbidden:
+			return ImportOpml403JSONResponse{ForbiddenJSONResponse(errObj("forbidden", err.Error()))}, nil
+		case service.KindFeature:
+			return ImportOpml501JSONResponse{FeatureUnavailableJSONResponse(featureErrObj(err))}, nil
 		}
 		return nil, err
 	}
@@ -445,9 +458,33 @@ func (s *Server) ImportOpml(ctx context.Context, req ImportOpmlRequestObject) (I
 			msg := r.Err
 			entry.Error = &msg
 		}
+		if r.Reason != "" {
+			reason := r.Reason
+			entry.Reason = &reason
+		}
 		out.Results = append(out.Results, entry)
 	}
 	return ImportOpml200JSONResponse(out), nil
+}
+
+// featureErrObj is a refusal of a feature this server is not running,
+// naming podcasts when they are the one turned off.
+func featureErrObj(err error) Error {
+	e := errObj("feature-unavailable", err.Error())
+	if errors.Is(err, service.ErrPodcastsOff) {
+		e.Params = &map[string]string{"feature": "podcasts"}
+	}
+	return e
+}
+
+// feedErrObj is a feed failure's body: the service's sentence, and the
+// failure's reason when it carries one.
+func feedErrObj(code string, err error) Error {
+	e := errObj(code, err.Error())
+	if reason := service.FeedFailureReason(err); reason != "" {
+		e.Params = &map[string]string{"reason": reason}
+	}
+	return e
 }
 
 func (s *Server) GetBook(ctx context.Context, req GetBookRequestObject) (GetBookResponseObject, error) {

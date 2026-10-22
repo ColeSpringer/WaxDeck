@@ -34,6 +34,16 @@ enum NotificationKind {
   catalogReset('catalog-reset', WaxIcons.warning, WaxRoute.libraries),
   reviewReady('review-ready', WaxIcons.check, WaxRoute.review),
   feedDisabled('feed-disabled', WaxIcons.warning, WaxRoute.podcasts),
+  subscriptionFailed(
+    'subscription-failed',
+    WaxIcons.warning,
+    WaxRoute.podcasts,
+  ),
+  gpodderDeviceRemoved(
+    'gpodder-device-removed',
+    WaxIcons.podcasts,
+    WaxRoute.podcasts,
+  ),
   episodeDownloaded('episode-downloaded', WaxIcons.podcasts, WaxRoute.podcasts),
   episodeArrived('episode-arrived', WaxIcons.podcasts, WaxRoute.podcasts),
   importCompleted('import-completed', WaxIcons.success, WaxRoute.review),
@@ -110,6 +120,8 @@ enum NotificationKind {
     NotificationKind.backupFailed => l10n.bellSurfaceBackups,
     NotificationKind.catalogReset => l10n.bellSurfaceLibraries,
     NotificationKind.feedDisabled ||
+    NotificationKind.subscriptionFailed ||
+    NotificationKind.gpodderDeviceRemoved ||
     NotificationKind.episodeArrived ||
     NotificationKind.episodeDownloaded => l10n.bellSurfacePodcasts,
     NotificationKind.importCompleted => l10n.bellSurfaceImports,

@@ -212,6 +212,73 @@ func TestSubsonicExplicitStatusFromAdvisoryTag(t *testing.T) {
 	}
 }
 
+// A deny rule compiles from the spellings the catalog holds, which a read
+// memoizes: an account that read an album before any track carried the
+// denied value still loses the track once one does.
+func TestSubsonicDenyRuleCatchesATagAddedAfterTheFirstRead(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	var flagged, albumID string
+	for _, it := range h.items(t, "").Items {
+		if it.Title == "Alpha Song" && it.AlbumPid != nil {
+			flagged, albumID = it.Pid, *it.AlbumPid
+		}
+	}
+	if flagged == "" {
+		t.Fatal("no Alpha Song with an album")
+	}
+	resp := h.postJSON(t, "/api/v1/users", map[string]any{
+		"username": "kid", "password": testPassword,
+		"permissions": map[string]any{
+			"tagDeny": []map[string]string{{"key": "ITUNESADVISORY", "value": "1"}},
+		},
+	})
+	wantStatus(t, resp, 201, "creating the restricted account")
+	kid := loginAs(t, h.ts, "kid", testPassword)
+	appPw := postJSON(t, h.ts.URL+"/api/v1/users/me/app-passwords", kid.Token, `{"label":"subsonic kid"}`)
+	if appPw.StatusCode != 201 {
+		t.Fatalf("kid app password status = %d", appPw.StatusCode)
+	}
+	kidSecret := decode[AppPasswordCreated](t, appPw).Secret
+	sees := func() bool {
+		t.Helper()
+		var album struct {
+			Status string `json:"status"`
+			Album  struct {
+				Songs []struct {
+					ID string `json:"id"`
+				} `json:"song"`
+			} `json:"album"`
+		}
+		r, err := http.Get(h.ts.URL + "/rest/getAlbum?apiKey=" + kidSecret + "&v=1.16.1&c=test&f=json&id=" + url.QueryEscape(albumID))
+		if err != nil {
+			t.Fatal(err)
+		}
+		decodeSubsonicBody(t, r, &album)
+		if album.Status != "ok" {
+			t.Fatalf("kid getAlbum status = %q", album.Status)
+		}
+		for _, s := range album.Album.Songs {
+			if s.ID == flagged {
+				return true
+			}
+		}
+		return false
+	}
+	if !sees() {
+		t.Fatal("the restricted account does not see the track before it carries the value")
+	}
+	resp = putJSON(t, h.ts, "/api/v1/items/"+flagged+"/tags/ITUNESADVISORY", h.token, map[string]any{"values": []string{"1"}})
+	wantStatus(t, resp, 200, "tagging the track")
+	// The edit reaches the content position through a background consumer.
+	for deadline := time.Now().Add(30 * time.Second); sees(); {
+		if time.Now().After(deadline) {
+			t.Fatal("the restricted account still sees the track after it gained the denied value")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+}
+
 // decodeSubsonicBody unwraps one subsonic-response envelope from a
 // finished HTTP response, for calls made as a caller the shared
 // helpers' hardcoded admin identity cannot express.

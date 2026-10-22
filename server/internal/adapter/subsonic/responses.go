@@ -3,9 +3,14 @@ package subsonic
 import (
 	"encoding/json"
 	"encoding/xml"
+	"fmt"
 	"net/http"
+	"reflect"
+	"regexp"
+	"strings"
 
 	"github.com/colespringer/waxdeck/server/internal/bridge/flow"
+	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
 // The wire shapes. One set of structs renders both response formats:
@@ -41,6 +46,7 @@ type envelope struct {
 	NowPlaying            *nowPlaying            `xml:"nowPlaying,omitempty" json:"nowPlaying,omitempty"`
 
 	OpenSubsonicExtensions []openSubsonicExtension `xml:"openSubsonicExtensions,omitempty" json:"openSubsonicExtensions,omitempty"`
+	TokenInfo              *tokenInfo              `xml:"tokenInfo,omitempty" json:"tokenInfo,omitempty"`
 	Indexes                *indexes                `xml:"indexes,omitempty" json:"indexes,omitempty"`
 	Directory              *directory              `xml:"directory,omitempty" json:"directory,omitempty"`
 	AlbumList              *albumList              `xml:"albumList,omitempty" json:"albumList,omitempty"`
@@ -57,6 +63,15 @@ type envelope struct {
 	SimilarSongs2          *songList               `xml:"similarSongs2,omitempty" json:"similarSongs2,omitempty"`
 	SonicSimilarTracks     *songList               `xml:"sonicSimilarTracks,omitempty" json:"sonicSimilarTracks,omitempty"`
 	SonicPath              *songList               `xml:"sonicPath,omitempty" json:"sonicPath,omitempty"`
+
+	// entityMarks are marks a handler's own read already holds, for the
+	// entities they name, which the annotate pass takes as they are.
+	entityMarks map[string]service.EntityMark
+}
+
+// tokenInfo names the account an API key belongs to.
+type tokenInfo struct {
+	Username string `xml:"username,attr" json:"username"`
 }
 
 // openSubsonicExtension is one advertised OpenSubsonic extension.
@@ -81,6 +96,21 @@ type folderIndex struct {
 type folderArtist struct {
 	ID   string `xml:"id,attr" json:"id"`
 	Name string `xml:"name,attr" json:"name"`
+
+	marks
+}
+
+// marks are the caller's own star and rating on a song, album or artist:
+// the star's time as an RFC 3339 date, the stored 0..100 rating as 1..5.
+type marks struct {
+	Starred    string `xml:"starred,attr,omitempty" json:"starred,omitempty"`
+	UserRating int    `xml:"userRating,attr,omitempty" json:"userRating,omitempty"`
+}
+
+// plays are the caller's play count and last play of a song or album.
+type plays struct {
+	PlayCount int    `xml:"playCount,attr,omitempty" json:"playCount,omitempty"`
+	Played    string `xml:"played,attr,omitempty" json:"played,omitempty"`
 }
 
 type directory struct {
@@ -88,6 +118,8 @@ type directory struct {
 	Parent   string  `xml:"parent,attr,omitempty" json:"parent,omitempty"`
 	Name     string  `xml:"name,attr" json:"name"`
 	Children []child `xml:"child" json:"child"`
+
+	marks
 }
 
 type albumList struct {
@@ -152,8 +184,8 @@ type license struct {
 // at sign-in to decide which controls to draw at all, so a role claimed
 // here that the server then refuses is worse than one denied up front:
 // every flag below maps to something WaxDeck actually honors, and the
-// ones with no WaxDeck equivalent (comments, video conversion) are
-// false rather than optimistic.
+// ones with nothing behind them here (comments, video conversion,
+// shares, podcast management) are false rather than optimistic.
 type subsonicUser struct {
 	Username            string `xml:"username,attr" json:"username"`
 	ScrobblingEnabled   bool   `xml:"scrobblingEnabled,attr" json:"scrobblingEnabled"`
@@ -176,7 +208,7 @@ type musicFolders struct {
 }
 
 type musicFolder struct {
-	ID   int    `xml:"id,attr" json:"id"`
+	ID   int64  `xml:"id,attr" json:"id"`
 	Name string `xml:"name,attr" json:"name"`
 }
 
@@ -195,6 +227,8 @@ type artistID3 struct {
 	Name       string `xml:"name,attr" json:"name"`
 	CoverArt   string `xml:"coverArt,attr,omitempty" json:"coverArt,omitempty"`
 	AlbumCount int    `xml:"albumCount,attr" json:"albumCount"`
+
+	marks
 }
 
 type artistWithAlbums struct {
@@ -217,6 +251,13 @@ type albumID3 struct {
 	// member track asserting the advisory marks the album, so a badge
 	// on song rows has one on the album card those rows sit under.
 	ExplicitStatus string `xml:"explicitStatus,attr,omitempty" json:"explicitStatus,omitempty"`
+
+	// Created is when the album's first track's file arrived.
+	Created string `xml:"created,attr,omitempty" json:"created,omitempty"`
+	marks
+	plays
+
+	tracks []track
 }
 
 type albumWithSongs struct {
@@ -262,6 +303,23 @@ type child struct {
 	Type        string `xml:"type,attr" json:"type"`
 
 	ExplicitStatus string `xml:"explicitStatus,attr,omitempty" json:"explicitStatus,omitempty"`
+
+	// The primary file's size, bitrate and arrival; a track carved out
+	// of a larger file carries no size, since its file is the whole rip.
+	Size    int64  `xml:"size,attr,omitempty" json:"size,omitempty"`
+	BitRate int    `xml:"bitRate,attr,omitempty" json:"bitRate,omitempty"`
+	Created string `xml:"created,attr,omitempty" json:"created,omitempty"`
+	marks
+	plays
+	// BookmarkPosition is where the caller's bookmark on the song stands,
+	// in ms, as getBookmarks lists it.
+	BookmarkPosition int64 `xml:"bookmarkPosition,attr,omitempty" json:"bookmarkPosition,omitempty"`
+
+	// fileID and carved feed the facts above; tracks are an album
+	// folder's, for its plays.
+	fileID string
+	carved bool
+	tracks []track
 }
 
 type genres struct {
@@ -271,8 +329,7 @@ type genres struct {
 type genre struct {
 	Name      string `xml:",chardata" json:"value"`
 	SongCount int    `xml:"songCount,attr" json:"songCount"`
-	// AlbumCount is nominally part of the shape; the read-only surface
-	// reports songs only.
+	// AlbumCount counts the albums holding a track of the genre.
 	AlbumCount int `xml:"albumCount,attr" json:"albumCount"`
 }
 
@@ -338,7 +395,17 @@ type internetRadioStation struct {
 }
 
 type nowPlaying struct {
-	Entries []child `xml:"entry" json:"entry"`
+	Entries []nowPlayingEntry `xml:"entry" json:"entry"`
+}
+
+// nowPlayingEntry is one session's current item: the song, who plays it,
+// on which device, and how long ago the session last moved.
+type nowPlayingEntry struct {
+	child
+	Username   string `xml:"username,attr" json:"username"`
+	MinutesAgo int    `xml:"minutesAgo,attr" json:"minutesAgo"`
+	PlayerID   int    `xml:"playerId,attr" json:"playerId"`
+	PlayerName string `xml:"playerName,attr,omitempty" json:"playerName,omitempty"`
 }
 
 // --- shape builders ----------------------------------------------------------
@@ -347,6 +414,11 @@ func (a *artist) id3() artistID3 {
 	out := artistID3{ID: a.id, Name: a.name, AlbumCount: len(a.albums)}
 	out.CoverArt = out.ID
 	return out
+}
+
+// folder renders an artist as a folder-mode index entry.
+func (a *artist) folder() folderArtist {
+	return folderArtist{ID: a.id, Name: a.name}
 }
 
 func (al *album) id3() albumID3 {
@@ -360,6 +432,7 @@ func (al *album) id3() albumID3 {
 		Duration:  int(al.durMS / 1000),
 		Year:      al.year,
 		Genre:     al.genre,
+		tracks:    al.tracks,
 	}
 	if al.explicit {
 		out.ExplicitStatus = "explicit"
@@ -408,6 +481,7 @@ func albumDirChild(al *album) child {
 		AlbumID:  al.id,
 		ArtistID: al.artistID,
 		Type:     "music",
+		tracks:   al.tracks,
 	}
 	if al.explicit {
 		c.ExplicitStatus = "explicit"
@@ -433,6 +507,8 @@ func songChild(tr track, al *album) child {
 		Suffix:      suffix,
 		ContentType: mime,
 		Type:        "music",
+		fileID:      tr.FilePID,
+		carved:      tr.Virtual,
 	}
 	if tr.Explicit {
 		// The facts sweep matches the tag values that assert explicit,
@@ -462,9 +538,11 @@ func songChild(tr track, al *album) child {
 
 // --- rendering ---------------------------------------------------------------
 
-// ok renders a success envelope in the requested format.
+// ok renders a success envelope in the requested format, the caller's
+// marks filled in.
 func (h *Handler) ok(w http.ResponseWriter, r *http.Request, env envelope) {
 	env.Status = "ok"
+	h.annotate(r, &env)
 	h.render(w, r, env)
 }
 
@@ -474,18 +552,94 @@ func (h *Handler) fail(w http.ResponseWriter, r *http.Request, code int, message
 	h.render(w, r, envelope{Status: "failed", Error: &subError{Code: code, Message: message}})
 }
 
+// failStatus is fail under an HTTP status of its own, for the responses
+// a browser loads directly, where only the status says it failed.
+func (h *Handler) failStatus(w http.ResponseWriter, r *http.Request, status, code int, message string) {
+	h.renderStatus(w, r, status, envelope{Status: "failed", Error: &subError{Code: code, Message: message}})
+}
+
 func (h *Handler) render(w http.ResponseWriter, r *http.Request, env envelope) {
+	h.renderStatus(w, r, http.StatusOK, env)
+}
+
+// jsonpCallback is what a jsonp callback name may be: a dotted
+// JavaScript identifier, nothing a response could be made to run.
+var jsonpCallback = regexp.MustCompile(`^[A-Za-z_$][A-Za-z0-9_$]*(\.[A-Za-z_$][A-Za-z0-9_$]*)*$`)
+
+func (h *Handler) renderStatus(w http.ResponseWriter, r *http.Request, status int, env envelope) {
 	env.Xmlns = "http://subsonic.org/restapi"
 	env.Version = apiVersion
 	env.Type = "waxdeck"
 	env.ServerVersion = h.version
 	env.OpenSubsonic = true
-	if r.Form.Get("f") == "json" {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]envelope{"subsonic-response": env})
+	switch strings.ToLower(r.Form.Get("f")) {
+	case "json":
+		h.writeJSON(w, status, "", env)
+	case "jsonp":
+		callback := r.Form.Get("callback")
+		if !jsonpCallback.MatchString(callback) {
+			env = envelope{Xmlns: env.Xmlns, Version: env.Version, Type: env.Type, ServerVersion: env.ServerVersion,
+				OpenSubsonic: true, Status: "failed", Error: &subError{Code: 10, Message: "jsonp needs a callback name"}}
+			h.writeJSON(w, status, "", env)
+			return
+		}
+		h.writeJSON(w, status, callback, env)
+	default:
+		w.Header().Set("Content-Type", "application/xml")
+		w.WriteHeader(status)
+		w.Write([]byte(xml.Header))
+		xml.NewEncoder(w).Encode(env)
+	}
+}
+
+// writeJSON renders the JSON form, wrapped in callback when one is named.
+// Every list renders as [] when it has no members: clients index into
+// them without checking for null.
+func (h *Handler) writeJSON(w http.ResponseWriter, status int, callback string, env envelope) {
+	emptyLists(reflect.ValueOf(&env).Elem())
+	body, err := json.Marshal(map[string]envelope{"subsonic-response": env})
+	if err != nil {
+		http.Error(w, "rendering the response failed", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/xml")
-	w.Write([]byte(xml.Header))
-	xml.NewEncoder(w).Encode(env)
+	if callback == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		w.Write(body)
+		w.Write([]byte("\n"))
+		return
+	}
+	w.Header().Set("Content-Type", "application/javascript")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(status)
+	fmt.Fprintf(w, "%s(%s);", callback, body)
+}
+
+// emptyLists replaces every nil slice the JSON rendering reaches from v
+// with an empty one: exported fields, and embedded shapes whatever their
+// own names, whose exported fields render as the outer shape's.
+func emptyLists(v reflect.Value) {
+	switch v.Kind() {
+	case reflect.Pointer:
+		if !v.IsNil() {
+			emptyLists(v.Elem())
+		}
+	case reflect.Struct:
+		t := v.Type()
+		for i := range v.NumField() {
+			if f := t.Field(i); f.IsExported() || f.Anonymous {
+				emptyLists(v.Field(i))
+			}
+		}
+	case reflect.Slice:
+		if v.IsNil() {
+			if v.CanSet() {
+				v.Set(reflect.MakeSlice(v.Type(), 0, 0))
+			}
+			return
+		}
+		for i := range v.Len() {
+			emptyLists(v.Index(i))
+		}
+	}
 }

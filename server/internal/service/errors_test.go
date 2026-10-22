@@ -58,14 +58,19 @@ func TestTheTrashNoticeCountsWhatStayed(t *testing.T) {
 	}
 }
 
-// A feed's failure reads as its own words, without the provider label
-// the catalog wraps it in.
-func TestAFeedFailureKeepsItsOwnWords(t *testing.T) {
+// A feed's failure reads as the sentence its reason carries: nothing the
+// host said and no provider label, with the reason beside it.
+func TestAFeedFailureSaysWhyInItsOwnSentence(t *testing.T) {
 	t.Parallel()
-	l := &Library{log: slog.New(slog.DiscardHandler)}
-	err := l.feedUnreachable(hostFailure(context.Background(), "service.fetchTranscript", errors.New("transcript host answered status 404")), "", false)
-	if strings.Contains(err.Error(), "provider") || !strings.Contains(err.Error(), "status 404") {
-		t.Errorf("message = %q, want the host's answer alone", err.Error())
+	err := feedUnreachable(hostFailure(context.Background(), "service.fetchTranscript", &hostStatusError{status: 404}))
+	if err.Error() != feedSentences[reasonHostMissing] {
+		t.Errorf("message = %q, want %q", err.Error(), feedSentences[reasonHostMissing])
+	}
+	if got := FeedFailureReason(err); got != reasonHostMissing {
+		t.Errorf("reason = %q, want %q", got, reasonHostMissing)
+	}
+	if KindOf(err) != KindUpstream {
+		t.Errorf("kind = %q, want feed-unreachable", KindOf(err))
 	}
 }
 

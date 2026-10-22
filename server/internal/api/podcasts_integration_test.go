@@ -292,6 +292,19 @@ func drainFetches(t *testing.T, h *harness) {
 	}
 }
 
+// fetchUnasked has the server fetch each episode on its own account, as
+// auto-download does, and runs the queue: files nobody asked for, which
+// retention alone decides.
+func fetchUnasked(t *testing.T, h *harness, pids ...string) {
+	t.Helper()
+	for _, pid := range pids {
+		if err := h.store.EnqueueFetch(context.Background(), strings.TrimPrefix(pid, "ep-"), "", time.Now().UnixNano(), 5); err != nil {
+			t.Fatal(err)
+		}
+	}
+	drainFetches(t, h)
+}
+
 func TestPodcastLifecycle(t *testing.T) {
 	t.Parallel()
 	h := newPodcastHarness(t)
@@ -716,10 +729,8 @@ func TestPodcastRetentionUnion(t *testing.T) {
 		t.Fatalf("episodes = %d", len(page.Items))
 	}
 	for _, ep := range page.Items {
-		r := h.postJSON(t, "/api/v1/episodes/"+ep.Pid+"/fetch", nil)
-		r.Body.Close()
+		fetchUnasked(t, h, ep.Pid)
 	}
-	drainFetches(t, h)
 
 	// The admin keeps only the newest episode; sam keeps everything.
 	// The union must keep everything.
@@ -815,23 +826,23 @@ func TestPodcastPrivacy(t *testing.T) {
 		t.Fatalf("private subscribe status = %d", resp.StatusCode)
 	}
 	sub := decode[Subscription](t, resp)
-	if sub.Show.FeedUrl != nil {
-		t.Fatalf("private show leaked its feed url: %v", *sub.Show.FeedUrl)
+	if got := deref(sub.Show.FeedUrl); got != feed.feedURL() {
+		t.Fatalf("the subscriber is handed %q, want the address it subscribed by", got)
 	}
 	if sub.Settings.Private == nil || !*sub.Settings.Private {
 		t.Fatalf("credentialed subscription should be private: %+v", sub.Settings)
 	}
 
-	// The OPML export omits the private show entirely.
+	// The subscriber's export names the show by that address, never with
+	// the login.
 	resp = get(t, h.ts, "/api/v1/podcasts/opml", h.token)
 	opml, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	if strings.Contains(string(opml), feed.ts.URL) {
-		t.Fatalf("opml export leaked a private feed url: %s", opml)
+	if !strings.Contains(string(opml), `xmlUrl="`+feed.feedURL()+`"`) || strings.Contains(string(opml), "tokensecret") {
+		t.Fatalf("the export = %s, want the subscriber's own address and no login", opml)
 	}
 
-	// A second user browsing the show also never sees the URL, and the
-	// snapshot's show entry hides it too.
+	// A second user browsing the show never sees the URL.
 	resp = h.postJSON(t, "/api/v1/users", map[string]any{"username": "kim", "password": testPassword})
 	resp.Body.Close()
 	kim := loginAs(t, h.ts, "kim", testPassword)
@@ -2796,6 +2807,10 @@ func TestAReadOnlyServerKeepsThePodcastTreeAsItIs(t *testing.T) {
 
 	resp = reqAs(t, h, "PUT", "/api/v1/podcasts/"+show+"/settings", h.token, map[string]any{"retentionKeep": 1})
 	wantStatus(t, resp, 200, "keep one download")
+	// Heard, so the downloads the administrator asked for hold nothing back.
+	for _, pid := range pids {
+		wantStatus(t, h.putJSON(t, "/api/v1/items/"+pid+"/played", map[string]any{"played": true, "finished": true}), 200, "marking it heard")
+	}
 	setReadOnly(true)
 	h.svc.SweepRetention(ctx)
 	if n, _ := downloaded(); n != 2 {

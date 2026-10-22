@@ -19,7 +19,7 @@ part 'episode.g.dart';
 /// Properties:
 /// * [pid] - Type-prefixed ULID.
 /// * [mediaType] 
-/// * [title] - Display title.
+/// * [title] - Display title. An episode's, which its feed gives, is cut to its first 1000 characters, and so is the show title it carries in `artist` and `album`. 
 /// * [artist] - Primary display artist / author / show name.
 /// * [album] - Album / series / podcast title, when applicable.
 /// * [artistPid] - The artist entity behind `artist`, so a client can group and link by identity rather than by display text - two artists with the same name are two entities, and one artist spelled two ways is still one. Absent when the item has no artist entity. For an audiobook this is its author. 
@@ -38,7 +38,7 @@ part 'episode.g.dart';
 /// * [fetchError] - Why the last fetch attempt failed (`fetchState` is `failed`). Retrying the fetch endpoint re-queues it. 
 /// * [explicit] - Feed-declared explicit flag.
 /// * [hasTranscript] - Whether a transcript is available.
-/// * [hasEnclosure] - Whether the feed named audio this server could relay for this episode: an enclosure URL, over http or https. True with `downloaded` false is the passthrough case, where the episode plays relayed from the feed's own host. False means the episode cannot play at all, and play-info answers `conflict`, so a client offering a play affordance should read this rather than assume an undownloaded episode is playable. True is a fact about the feed rather than a promise to the caller: a show whose feed needs credentials relays only for its own subscribers, so play-info may still answer `conflict` for someone reading an episode of a show they do not subscribe to. Treat it as the signal to offer play, not as a guarantee play succeeds. 
+/// * [hasEnclosure] - Whether the feed named audio this server could relay for this episode: an enclosure URL, over http or https, that the feed does not call a playlist or a stream manifest. True with `downloaded` false is the passthrough case, where the episode plays relayed from the feed's own host. Never true for an episode of a YouTube show: its enclosure is a watch page, not audio, so it plays once the server has fetched it. False with `downloaded` false means the episode cannot play until the server fetches it, and play-info answers `conflict`, so a client offering a play affordance should read this rather than assume an undownloaded episode is playable. True is a fact about the feed rather than a promise to the caller: a private show (see `PodcastShow`) relays only for its own subscribers, so play-info may still answer `conflict` for someone reading an episode of a show they do not subscribe to. Treat it as the signal to offer play, not as a guarantee play succeeds. 
 /// * [descriptionHtml] - Show notes as sanitized HTML (server-side allowlist; safe to render directly). 
 /// * [link] - The episode's web page, when the feed declares one.
 /// * [chapters] - Chapter marks, ordered by `startMs`.

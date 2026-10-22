@@ -225,6 +225,32 @@ note.
   shows to admit or a `query.Node` applied before the cap. Shipped
   workaround: the subscription filter runs after the cap; the listings,
   which page, carry the scope in their query instead.
+- **A feed's failure says why only in its words.** `AddSource` and
+  `Sync` mark a failed enumeration as the provider's
+  (`source.ProviderError`), but within it a page that is not a feed, a
+  body over the size cap, a refused private address and the host's HTTP
+  status differ only by text: `netsafe`, whose `TooLarge` tells the cap
+  apart, is internal, and a status is a sentence ending `returned HTTP
+  403`. Wanted: typed reasons on a provider failure (the status,
+  too-large, blocked-address, not-a-feed), or `netsafe.TooLarge` and a
+  status error exported. Shipped workaround: WaxDeck reads the reason
+  off the stable fragments of those messages, and tests run each
+  failure through the real client, so a change of wording fails there
+  rather than reaching a listener as the wrong sentence.
+- **Log lines name whole feed, cover and transcript addresses.** A
+  private show's addresses can carry its token, and WaxBin logs them
+  whole: `podcast image fetch failed`, `podcast image undecodable`,
+  `chapters fetch failed`, `chapters parse failed` and `transcript fetch
+  failed` (Debug) log `url` and an error that repeats it, `OPML import:
+  feed failed` (Warn) logs the feed URL, and `watch: podcast sync failed`
+  (Warn) logs a sync error whose text names the feed, as every `netsafe`
+  error's text does. Wanted: the host alone in a log line, and `netsafe`
+  errors that name the host rather than the URL, since their text
+  reaches every caller's log. Shipped workaround: the logger WaxDeck
+  hands WaxBin cuts every web address in a line, in its message or any
+  value, to its scheme and host; WaxDeck's own feed, transcript and
+  download failure lines log a reason and a cause, and its chapters
+  lines the host and a cause, never the error.
 - **A book's timeline runs a part by its chapter marks.** `bookChapters`
   advances the book timeline by each part's effective length (its chapter
   extent where CHAP frames or a chapter track run past the measured
@@ -249,6 +275,142 @@ note.
   before any), as documented. Shipped workaround: WaxDeck calls neither;
   it names a resume's chapter from the marks it serves, the way its
   player names the chapter playing.
+- **The older `/blob/master/` Podcasting 2.0 namespace spelling is not
+  aliased.** `nsAliases` maps the GitHub address ending
+  `/blob/main/docs/1.0.md` onto the current namespace, so a feed
+  declaring that one parses with its credits, chapters and transcripts;
+  one declaring the same address with `/blob/master/` reads as having
+  none of them. No feed is known to use it. Wanted: that spelling in the
+  same table. Shipped workaround: none needed today; a feed test pins
+  the aliased spelling, so a WaxBin bump cannot lose it unnoticed.
+- **An episode's chapters are read only by a download.** `Download`
+  fetches the chapters document after attaching the file, and
+  `PutEpisodeChapters` refuses an episode with no file, so one that is
+  only streamed by enclosure never has chapters stored, while
+  `FetchTranscript` fetches a transcript with no download. Wanted: a
+  verb beside `FetchTranscript` that fetches and stores an episode's
+  chapters without downloading it, which needs the store to hold them
+  without a backing file. Shipped workaround: the episode detail read
+  fetches the chapters document itself for display, through the guarded
+  transcript client, and keeps the result in memory for hours (ten
+  minutes when the fetch failed); chapters the catalog stored win. A
+  credentialed show's document is read only for its subscribers, with the
+  show's credentials sent to the feed's own host and no other.
+- **Rated entities cannot be listed.** `StarredEntities` lists a user's
+  starred artists or albums in one read, but nothing lists the rated
+  ones: a rating comes only from `EntityPlayState`, one entity per read.
+  Wanted: `RatedEntities(ctx, userPID, kind)` beside `StarredEntities`.
+  Shipped workaround: the Subsonic surface reads every album's rating
+  with a point read for `getAlbumList2 type=highest` (a starred one's
+  rides its star read), memoized per user until that user rates the
+  entity again, an artist or album change in the catalog, or a replaced
+  catalog, within 1,000,000 answers shared by every account: past that,
+  accounts idle for ten minutes give way, least recently used first, and
+  what still does not fit is read again. Ratings go on a response only
+  when it names at most 500 artists and albums (stars alone past that).
+- **An item view carries no added time and no primary-file facts.**
+  `model.ItemView` has no `CreatedAt` (the `playable_item.created_at`
+  the recently-added list orders by) and nothing of its primary file's
+  size or bitrate, so the Subsonic sweep cannot carry what `created`,
+  `size` and `bitRate` need. Wanted: `CreatedAt`, `FileSize` and
+  `Bitrate` of the primary file on `ItemView`. Shipped workaround: those
+  are read per rendered song from the primary file's row (`File`), at
+  most 500 a response, each answer held at most ten minutes; an album's
+  `created` is its first track's file's `FirstSeen`, and `type=newest`
+  folds the recently-added track list into albums (a music folder's own,
+  for a folder).
+- **The podcast library exists only after the first download.**
+  `podcast.Service` creates it lazily (`EnsurePodcastLibrary`, reached
+  from `Download` and `ImportEpisodeFile` only), and a host cannot
+  register it itself: `AddRoot` and `Options.Roots` refuse a root that
+  overlaps the podcast dir. Until something is fetched there is no pid
+  to grant, so an account limited to chosen libraries cannot be given
+  podcasts. Wanted: the library created when the podcast service opens
+  with a dir configured, or an exported ensure. Shipped workaround: the
+  docs tell an administrator to fetch one episode before granting it,
+  and WaxDeck throttles the attribution reloads its lookups of the
+  missing library cost.
+- **A download sends a show's credentials to whatever host its enclosure
+  names.** `HTTPProvider.Fetch` sets the show's stored basic auth on the
+  enclosure URL, so a credentialed feed whose enclosures carry a
+  measurement prefix or sit on another host hands the login to that
+  host, and Go's redirect rule keeps it across a hop to another port, a
+  scheme or a subdomain. The same rule drops it for the rest of a chain
+  once a hop leaves for another domain, so audio a prefix sends back to
+  the feed's own host is asked for there without it. Wanted: the
+  credentials on every request at the feed's own origin (scheme, host
+  and port), a redirect hop that lands there included, and on no other.
+  Shipped workaround: WaxDeck's own requests for a show's files (the
+  stream relay and its warm-up, transcripts and chapters) hold that
+  rule; fetching an episode to the server still goes through the
+  download.
+- **A download's transcript and chapters are fetched with no login.**
+  `Download` reads the episode's transcript and chapters documents
+  through the guarded client with no basic auth, so a credentialed
+  show's documents at its feed's own origin are refused on every
+  download and the episode's transcript never reaches the search index.
+  Wanted: the show's credentials on those requests at the feed's own
+  origin, by the rule the entry above asks of the enclosure. Shipped
+  workaround: WaxDeck reads a credentialed show's transcript and
+  chapters itself, with the login at the feed's origin, and capturing
+  the transcript hands its text to the index through `PutTranscript`.
+- **A password that cannot be read still sends half a login.**
+  `authFor` answers the user name alone on any `GetSecret` error, a
+  store failure or a sealed secret with no cipher included, so the
+  download goes out without the password and the host's refusal is
+  counted against the episode. Wanted: a read failure other than
+  not-found failing the download as the catalog's. Shipped workaround:
+  WaxDeck's own requests send no login on such a failure and answer
+  the server's error; a download still goes through `authFor`.
+- **The download's type gate is not the relay's.** `HTTPProvider.Fetch`
+  accepts `audio/*`, `video/*`, `application/ogg`, `application/mp4`
+  and octet-stream, and requires a type, so a host labelling MP3
+  `application/mpeg`, or sending no type, fails every fetch of an
+  episode that streams fine, while a host answering a playlist or
+  manifest type under `audio/` or `video/` (`audio/x-mpegurl`,
+  `audio/x-scpls`) has the playlist stored as the episode. Wanted:
+  `application/mpeg` and an untyped answer admitted, and the playlist
+  and manifest types (M3U and HLS, PLS, ASX and its kin, RealMedia's,
+  DASH) refused; or the accepted types and the required type as fetch
+  options. Shipped workaround: WaxDeck queues nothing for an episode
+  whose feed declares a playlist or manifest type, or whose host its
+  relay saw answer one for the address the feed names, and drops such a
+  fetch queued before anyone knew; an episode whose host labels its
+  audio `application/mpeg` or leaves it untyped streams through the
+  relay and cannot be fetched.
+- **The feed client's address guard passes NAT64 forms of private
+  addresses.** `netsafe`'s `isBlockedIP` judges an IPv4-mapped address by
+  the IPv4 address in it but has no case for NAT64's well-known prefix,
+  so `64:ff9b::a9fe:a9fe` (169.254.169.254) or `64:ff9b::a00:1`
+  (10.0.0.1) passes it, and a subscribe, a sync, an episode download or
+  a transcript capture dials it with `BlockPrivateIPs` set. Behind a
+  translator that forwards non-global IPv4, that reaches the address
+  the prefix carries. Wanted: a `64:ff9b::/96` address judged by the
+  IPv4 address in its last four bytes. Shipped workaround: WaxDeck's own
+  clients (the enclosure, transcript, chapters and radio relays,
+  notifications, scrobbling) refuse the form, and a subscribe whose feed
+  host is such a literal is refused with `blocked-address` (a name or a
+  redirect that leads there is not); the catalog's fetches of addresses
+  a feed names have none.
+- **A re-add takes the re-adder's address as the show's.** `AddSource`
+  upserts a show it already holds with `feed_url` set to the address it
+  was just given, so a second subscriber's personal address (a token in
+  its query, a login in its user info) becomes the address every reader
+  of the show sees. Wanted: an add option that keeps a held show's stored
+  address. Shipped workaround: WaxDeck gives each follower the address
+  it subscribed by, and marks the show private, which hides its address
+  from everyone who does not follow it, right after an add whose address
+  carries a credential and before anything can refuse the subscribe; a
+  read in the moment between the add and the mark still sees the new
+  address.
+- **Feed and episode titles are kept at any length.** The feed parser
+  trims a channel's and an item's title but never cuts one, so a feed
+  can carry a title as long as the 16 MiB a feed may be, and every
+  listing, export and API answer that names the show or the episode
+  repeats it. Wanted: titles cut at parse, to a thousand characters or
+  so, far past any real one. Shipped workaround: WaxDeck cuts show and
+  episode titles to their first 1,000 characters where it maps them, in
+  its REST and Subsonic answers, its notifications and its OPML export.
 
 ## WaxTap
 

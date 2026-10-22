@@ -991,6 +991,8 @@ abstract final class SemanticsIds {
   static String uploadLibraryOption(Object pid) => 'upload-library-$pid';
   static const String uploadMediaConfirm = 'upload-media-confirm';
   static const String uploadMediaType = 'upload-media-type';
+  static String uploadMediaTypeOption(Object wireName) =>
+      'upload-media-type-$wireName';
   static const String uploadPick = 'upload-pick';
   static const String uploadQuota = 'upload-quota';
   static String uploadRetry(Object id) => 'upload-retry-$id';

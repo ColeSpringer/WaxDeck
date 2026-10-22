@@ -29,12 +29,19 @@ type Subscription struct {
 	AutoDLExclude []string
 	CreatedAtNS   int64
 	UpdatedAtNS   int64
+	// FeedURL is the address the account last subscribed the show by.
+	// Reads fill it; AttachSubscription takes the address it writes as an
+	// argument instead.
+	FeedURL string
 }
 
 const subscriptionCols = `user_id, show_pid, folder, private, retention_keep,
 	auto_download, speed, trim_silence, voice_boost, skip_intro_secs,
 	skip_outro_secs, auto_dl_include, auto_dl_exclude,
 	created_at_ns, updated_at_ns`
+
+// subscriptionReadCols is what a read of a subscription row selects.
+const subscriptionReadCols = subscriptionCols + `, feed_url`
 
 func scanSubscription(row interface{ Scan(...any) error }) (Subscription, error) {
 	var s Subscription
@@ -43,7 +50,7 @@ func scanSubscription(row interface{ Scan(...any) error }) (Subscription, error)
 	var include, exclude sql.NullString
 	err := row.Scan(&s.UserID, &s.ShowPID, &s.Folder, &private, &s.RetentionKeep,
 		&autoDownload, &s.Speed, &trim, &boost, &s.SkipIntroSec,
-		&s.SkipOutroSec, &include, &exclude, &s.CreatedAtNS, &s.UpdatedAtNS)
+		&s.SkipOutroSec, &include, &exclude, &s.CreatedAtNS, &s.UpdatedAtNS, &s.FeedURL)
 	if err != nil {
 		return Subscription{}, err
 	}
@@ -103,41 +110,37 @@ func nullBool(b *bool) any {
 	return int64(0)
 }
 
-// UpsertSubscription creates or fully replaces one subscription row,
-// preserving created_at_ns on replace.
-func (d *DB) UpsertSubscription(ctx context.Context, s Subscription) error {
-	_, err := d.w.ExecContext(ctx, `
-		INSERT INTO podcast_subscriptions (`+subscriptionCols+`)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (user_id, show_pid) DO UPDATE SET
-			folder = excluded.folder,
-			private = excluded.private,
-			retention_keep = excluded.retention_keep,
-			auto_download = excluded.auto_download,
-			speed = excluded.speed,
-			trim_silence = excluded.trim_silence,
-			voice_boost = excluded.voice_boost,
-			skip_intro_secs = excluded.skip_intro_secs,
-			skip_outro_secs = excluded.skip_outro_secs,
-			auto_dl_include = excluded.auto_dl_include,
-			auto_dl_exclude = excluded.auto_dl_exclude,
-			updated_at_ns = excluded.updated_at_ns`,
-		s.UserID, s.ShowPID, s.Folder, boolInt(s.Private), s.RetentionKeep,
+// UpdateSubscriptionSettings replaces one subscription's settings,
+// keeping when it was made, and reports whether the account follows the
+// show. It never makes a subscription: only AttachSubscription does, with
+// a holder.
+func (d *DB) UpdateSubscriptionSettings(ctx context.Context, s Subscription) (bool, error) {
+	res, err := d.w.ExecContext(ctx, `
+		UPDATE podcast_subscriptions SET
+			folder = ?, private = ?, retention_keep = ?, auto_download = ?, speed = ?,
+			trim_silence = ?, voice_boost = ?, skip_intro_secs = ?, skip_outro_secs = ?,
+			auto_dl_include = ?, auto_dl_exclude = ?, updated_at_ns = ?
+		WHERE user_id = ? AND show_pid = ?`,
+		s.Folder, boolInt(s.Private), s.RetentionKeep,
 		boolInt(s.AutoDownload), s.Speed, nullBool(s.TrimSilence),
 		nullBool(s.VoiceBoost), s.SkipIntroSec, s.SkipOutroSec,
 		encodeTerms(s.AutoDLInclude), encodeTerms(s.AutoDLExclude),
-		s.CreatedAtNS, s.UpdatedAtNS)
+		s.UpdatedAtNS, s.UserID, s.ShowPID)
 	if err != nil {
-		return fmt.Errorf("db: upserting subscription: %w", err)
+		return false, fmt.Errorf("db: updating subscription settings: %w", err)
 	}
-	return nil
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("db: updating subscription settings: %w", err)
+	}
+	return n > 0, nil
 }
 
 // SubscriptionFor reads one (user, show) subscription; ErrNotFound when
 // the user does not follow the show.
 func (d *DB) SubscriptionFor(ctx context.Context, userID, showPID string) (Subscription, error) {
 	row := d.r.QueryRowContext(ctx, `
-		SELECT `+subscriptionCols+` FROM podcast_subscriptions
+		SELECT `+subscriptionReadCols+` FROM podcast_subscriptions
 		WHERE user_id = ? AND show_pid = ?`, userID, showPID)
 	s, err := scanSubscription(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -154,7 +157,7 @@ func (d *DB) SubscriptionFor(ctx context.Context, userID, showPID string) (Subsc
 // which holds the titles.
 func (d *DB) SubscriptionsByUser(ctx context.Context, userID string) ([]Subscription, error) {
 	rows, err := d.r.QueryContext(ctx, `
-		SELECT `+subscriptionCols+` FROM podcast_subscriptions
+		SELECT `+subscriptionReadCols+` FROM podcast_subscriptions
 		WHERE user_id = ? ORDER BY show_pid`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("db: listing subscriptions: %w", err)
@@ -197,7 +200,7 @@ func (d *DB) SubscribedShowPIDsByUser(ctx context.Context, userID string) ([]str
 // retention union reads these).
 func (d *DB) SubscribersByShow(ctx context.Context, showPID string) ([]Subscription, error) {
 	rows, err := d.r.QueryContext(ctx, `
-		SELECT `+subscriptionCols+` FROM podcast_subscriptions
+		SELECT `+subscriptionReadCols+` FROM podcast_subscriptions
 		WHERE show_pid = ? ORDER BY user_id`, showPID)
 	if err != nil {
 		return nil, fmt.Errorf("db: listing subscribers: %w", err)
@@ -212,22 +215,6 @@ func (d *DB) SubscribersByShow(ctx context.Context, showPID string) ([]Subscript
 		out = append(out, s)
 	}
 	return out, rows.Err()
-}
-
-// DeleteSubscription removes one subscription; reports whether a row
-// existed.
-func (d *DB) DeleteSubscription(ctx context.Context, userID, showPID string) (bool, error) {
-	res, err := d.w.ExecContext(ctx, `
-		DELETE FROM podcast_subscriptions WHERE user_id = ? AND show_pid = ?`,
-		userID, showPID)
-	if err != nil {
-		return false, fmt.Errorf("db: deleting subscription: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("db: deleting subscription: %w", err)
-	}
-	return n > 0, nil
 }
 
 // SubscribedShowPIDs returns the distinct shows any user follows: the

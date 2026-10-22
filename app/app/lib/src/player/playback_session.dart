@@ -312,6 +312,10 @@ class PlaybackSession {
   /// How near the end of the loaded media a boundary counts as that end.
   static const _stopSlackMs = 250;
 
+  /// How near the end of the audio a checkpoint counts as that end: a
+  /// listen heard through rather than a place to resume.
+  static const _resumeSlackMs = 5000;
+
   /// Engine loads in flight. A load stops the outgoing media first, and
   /// the pause that publishes must not checkpoint: the engine's position
   /// is already the new media's while the timeline state is still the old.
@@ -352,8 +356,7 @@ class PlaybackSession {
   int _lastJumpedSpan = -1;
   bool _skipMapRetried = false;
 
-  // Episode outro cutoff, in the file timeline; null when unset.
-  int? _outroCutoffMs;
+  // Whether the episode outro cutoff ([_outroCutoffMs]) has fired.
   bool _outroFired = false;
 
   /// Whether silence trimming is currently on, for the player chip.
@@ -451,6 +454,16 @@ class PlaybackSession {
     }
   }
 
+  /// A [stopAt] position past any the media can reach, so only its own
+  /// end does: a stop there rests wherever the loaded media ends, for
+  /// audio whose length nothing reports.
+  static const mediaEndStopMs = 1 << 40;
+
+  /// Where the loaded media ends on the display timeline as far as
+  /// anything to be trusted says (see [_mediaEndMs]); null when nothing
+  /// does.
+  int? get knownEndMs => _mediaEndMs;
+
   final StreamController<SessionFailure> _sessionFailed =
       StreamController<SessionFailure>.broadcast();
 
@@ -477,6 +490,15 @@ class PlaybackSession {
   BookDetail? get book => _book;
 
   bool get _isBook => item.mediaType == MediaType.audiobook;
+
+  /// Whether play-info's length can be a feed's word rather than the
+  /// audio's: an episode not known to be downloaded, which the server
+  /// streams from its feed with the length the feed declares.
+  bool get _lengthMayBeDeclared {
+    final it = item;
+    return it.mediaType == MediaType.podcast &&
+        !(it is EpisodeSummary && it.downloaded);
+  }
 
   /// Whether this item carries spoken-word playback affordances.
   bool get isSpokenWord => item.mediaType != MediaType.music;
@@ -682,12 +704,32 @@ class PlaybackSession {
                     seekable: true,
                     expiresAt: slot.media.expiresAt,
                   ))!;
-        _applyOutroCutoff(info.durationMs);
         // The same guard against a checkpoint the media outgrew: a
         // position at or past the end is not a place to start, however
         // it got there (a re-imported file, a listen that rounded up,
-        // a finished flag that never landed).
-        if (info.durationMs > 0 && resumeMs >= info.durationMs) resumeMs = 0;
+        // a finished flag that never landed). An episode the server
+        // streams from its feed carries the feed's length here, which can
+        // fall short of the audio or be missing: a checkpoint strictly past
+        // it, or any checkpoint where the feed gave none, is held until the
+        // audio's own length says whether it is clearly inside. One at the
+        // declared length itself is the end a finish records when
+        // play-info's length is all it has, so it replays from the top
+        // like any end.
+        final streamed =
+            slot == null &&
+            _lengthMayBeDeclared &&
+            info.seekable &&
+            info.partIndex == null;
+        int? heldMs;
+        var heldWithoutLength = false;
+        if (info.durationMs > 0 && resumeMs >= info.durationMs) {
+          if (streamed && resumeMs > info.durationMs) heldMs = resumeMs;
+          resumeMs = 0;
+        } else if (info.durationMs <= 0 && streamed && resumeMs > 0) {
+          heldMs = resumeMs;
+          heldWithoutLength = true;
+          resumeMs = 0;
+        }
         resumeMs = _applyIntroSkip(resumeMs);
         _loadTarget = resumeMs;
         if (slot != null) {
@@ -705,6 +747,20 @@ class PlaybackSession {
           final minted = !info.seekable && at > 0 ? await _mint(at) : info;
           if (_disposed) return;
           await _loadStream(minted, at);
+          if (_disposed) return;
+          // Only clearly inside: a checkpoint in the last seconds is a
+          // listen that reached the end, give or take another engine's
+          // reading of the same audio, and replays from the top. Where no
+          // length is known anywhere, nothing says it is not a place to
+          // resume, and it is gone to as it stands.
+          final held = heldMs;
+          final length = engine.duration?.inMilliseconds;
+          if (held != null &&
+              (length == null
+                  ? heldWithoutLength
+                  : held + _resumeSlackMs < length)) {
+            await engine.seek(_inMedia(held));
+          }
         }
         if (trimEnabled.value) unawaited(_loadSkipMap());
       }
@@ -781,7 +837,6 @@ class PlaybackSession {
       cutMs: info.startOffsetMs,
       durationMs: info.durationMs,
     );
-    _applyOutroCutoff(info.durationMs);
     _lastPosition = engine.position;
     _loaded = true;
     _watchEngine();
@@ -1140,11 +1195,16 @@ class PlaybackSession {
     return resumeMs > introMs ? resumeMs : introMs;
   }
 
-  void _applyOutroCutoff(int durationMs) {
+  /// The episode outro cutoff on the loaded file's own timeline: the
+  /// show's outro seconds back from where the audio ends ([_mediaEndMs]).
+  /// Null when unset, and when nothing says where the audio ends: a
+  /// feed's declared length never ends the listen.
+  int? get _outroCutoffMs {
     final outro = _showSettings?.skipOutroSeconds;
-    if (outro == null || outro <= 0 || durationMs <= 0) return;
-    final cutoff = durationMs - outro * 1000;
-    if (cutoff > 0) _outroCutoffMs = cutoff;
+    final end = _isBook ? null : _mediaEndMs;
+    if (outro == null || outro <= 0 || end == null) return null;
+    final cutoff = end - outro * 1000;
+    return cutoff > 0 ? cutoff : null;
   }
 
   /// Where a play from display [ms] starts: a position at or past the end
@@ -2144,7 +2204,7 @@ class PlaybackSession {
     // Held as well as written: the engine is paused at the cutoff, so a
     // final checkpoint taken from it would put the resume point back
     // before the outro and fire this again on the next play.
-    final endMs = _loadedDurationMs > 0 ? _loadedDurationMs : fileMs;
+    final endMs = _mediaEndMs ?? fileMs;
     // On the engine's clock, which [_display] reads back through the cut.
     _endedAt = Duration(milliseconds: endMs - _cutMs);
     unawaited(_checkpoint(at: _endedAt!));
@@ -2204,7 +2264,7 @@ class PlaybackSession {
       // boundary still armed is the end too, since a chapter can be
       // marked past where the audio stops.
       _stopAtMs = null;
-      unawaited(_stopHere(stop));
+      unawaited(_stopHere(stop, ended: true));
       return;
     }
     if (_hasNextPart) {
@@ -2262,15 +2322,37 @@ class PlaybackSession {
     return crossed;
   }
 
+  /// Where the loaded media ends on the display timeline: a book part's
+  /// end; for anything else the audio's own length as the engine reports
+  /// it, else play-info's where that is the audio's rather than a feed's
+  /// word. Null when nothing says, and a stop there parks: only the
+  /// media's own end finishes the listen.
+  int? get _mediaEndMs {
+    if (_isBook) return _partStartMs + _loadedDurationMs;
+    // A cut stream's own clock covers only what is left of the item.
+    final reported = _cutMs > 0 ? null : engine.duration;
+    if (reported != null && reported > Duration.zero) {
+      return reported.inMilliseconds;
+    }
+    if (_lengthMayBeDeclared || _loadedDurationMs <= 0) return null;
+    return _loadedDurationMs;
+  }
+
   /// Rests at [stopMs]: pauses and parks on the boundary, so a resume
   /// starts what follows at its head. A boundary at the end of the loaded
   /// media is that end: a book's next part is loaded paused, and the last
   /// part finishes without the queue moving on under a sleeper. A load
   /// under way while it does, so a press made meanwhile is how it ends.
-  Future<void> _stopHere(int stopMs) async {
+  ///
+  /// [ended] is the media's own end arriving with the boundary armed,
+  /// which for media of no known length is where it stops.
+  Future<void> _stopHere(int stopMs, {bool ended = false}) async {
     _stopping = true;
-    final mediaEnd = _partStartMs + _loadedDurationMs;
-    final at = stopMs < mediaEnd ? stopMs : mediaEnd;
+    final mediaEnd =
+        _mediaEndMs ??
+        (ended ? _display(engine.position).inMilliseconds : null);
+    final atEnd = mediaEnd != null && stopMs >= mediaEnd - _stopSlackMs;
+    final at = mediaEnd != null && mediaEnd < stopMs ? mediaEnd : stopMs;
     try {
       await _underway(
         at,
@@ -2278,13 +2360,13 @@ class PlaybackSession {
         load: () async {
           await engine.pause();
           if (_disposed) return;
-          if (stopMs < mediaEnd - _stopSlackMs) {
+          if (!atEnd) {
             // The pause lands up to a tick late; parked back where the
             // engine can seek, left there where it would restart the
             // stream.
             if (!_cantSeekHere) await engine.seek(_inMedia(stopMs));
           } else if (_hasNextPart) {
-            await _loadAt(mediaEnd);
+            await _loadAt(_partStartMs + _loadedDurationMs);
           } else {
             _finished = true;
             _atEnd = _AtEnd.held;

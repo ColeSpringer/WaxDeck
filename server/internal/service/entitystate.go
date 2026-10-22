@@ -152,6 +152,7 @@ func (l *Library) SetEntityRating(ctx context.Context, uc *UserCtx, apiEntityPID
 		return EntityPlayState{}, classify(err)
 	}
 	if changed {
+		l.trackFacts.ratings.forget(uc.ID, pid)
 		l.emitUserEvent(ctx, uc.ID, eventEntityState, apiEntityPID)
 	}
 	return l.entityStateFor(ctx, uc, apiEntityPID, kind, pid)

@@ -206,6 +206,20 @@ func (l *Library) requireUploader(uc *UserCtx) error {
 	return nil
 }
 
+// requireUploadMediaType resolves the kind an upload surface files a
+// media type under. A podcast is a feed's show, so it has no upload: an
+// episode filed any other way belongs to no subscriber.
+func requireUploadMediaType(mediaType string) (model.Kind, error) {
+	kind, ok := kindForMediaType(mediaType)
+	switch {
+	case !ok:
+		return "", errInvalid("unknown media type")
+	case kind == model.KindEpisode:
+		return "", errInvalid("podcasts are added by subscribing to a feed")
+	}
+	return kind, nil
+}
+
 // validateUploadTargetLibrary checks a caller-named target library for
 // the upload surfaces (sessions, batches, and acquisitions): it must
 // exist, not be the internal episode library, be visible to the
@@ -366,8 +380,8 @@ func (l *Library) CreateUpload(ctx context.Context, uc *UserCtx, p UploadCreateP
 		}
 		return UploadDTO{}, &Error{Kind: KindFormat, Msg: msg}
 	}
-	if _, ok := kindForMediaType(p.MediaType); !ok {
-		return UploadDTO{}, errInvalid("unknown media type")
+	if _, err := requireUploadMediaType(p.MediaType); err != nil {
+		return UploadDTO{}, err
 	}
 	if err := l.validateUploadTargetLibrary(ctx, uc, p.LibraryPID); err != nil {
 		return UploadDTO{}, err
@@ -805,20 +819,17 @@ func (l *Library) CompleteUpload(ctx context.Context, uc *UserCtx, id string) (U
 	// one that could not run leaves that warning standing.
 	tags := flatTags(doc)
 	kind, _ := kindForMediaType(u.MediaType)
-	if kind != model.KindEpisode {
-		// No SourceType, for the reason importToolFile gives: an
-		// upload knows the bytes arrived, not where they came from,
-		// and a standing origin is left alone rather than claimed as
-		// manual.
-		res, err := l.planImport(ctx, waxbin.AcquiredFile{Path: final}, kind, waxbin.AcquiredMeta{
-			Copy: true, DupPolicy: model.DupAllow,
-		})
-		if err == nil {
-			u.DuplicatePID, u.DuplicateKind = "", ""
-			if res.AlreadyPresent && res.AlreadyPresentPID != "" {
-				u.DuplicatePID = string(res.AlreadyPresentPID)
-				u.DuplicateKind = "content"
-			}
+	// No SourceType, for the reason importToolFile gives: an upload knows
+	// the bytes arrived, not where they came from, and a standing origin
+	// is left alone rather than claimed as manual.
+	res, err := l.planImport(ctx, waxbin.AcquiredFile{Path: final}, kind, waxbin.AcquiredMeta{
+		Copy: true, DupPolicy: model.DupAllow,
+	})
+	if err == nil {
+		u.DuplicatePID, u.DuplicateKind = "", ""
+		if res.AlreadyPresent && res.AlreadyPresentPID != "" {
+			u.DuplicatePID = string(res.AlreadyPresentPID)
+			u.DuplicateKind = "content"
 		}
 	}
 	// The file's own length, which fpcalc's whole seconds only stand in
@@ -1089,9 +1100,6 @@ func (l *Library) importEntryFiles(ctx context.Context, entry *wdb.ReviewEntry, 
 			return fail(classifyMutation(err))
 		}
 		switch {
-		case res.EpisodePID != "":
-			doc.PID = string(res.EpisodePID)
-			imported[doc.Path] = importedFile{pid: doc.PID}
 		case l.heldWhereItGoes(ctx, res, doc):
 			// The audio is already where these tags would put it, so the
 			// staged copy adds nothing: settling removes it, granting
@@ -1165,12 +1173,8 @@ type plannedFile struct {
 // a library holding neither, and every file after the first is planned
 // again right before it moves. The first's plan is answered for the
 // import to use: nothing lands between the two, and planning hashes the
-// whole file's audio. Episodes are not planned here: their import is the
-// ingest.
+// whole file's audio.
 func (l *Library) preflightImport(ctx context.Context, payload *reviewPayload, kind model.Kind) ([]string, *plannedFile, error) {
-	if kind != model.KindTrack && kind != model.KindBook {
-		return nil, nil, nil
-	}
 	var failures []string
 	var first *plannedFile
 	for _, doc := range payload.Tracks {

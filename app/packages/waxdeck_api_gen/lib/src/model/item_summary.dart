@@ -14,7 +14,7 @@ part 'item_summary.g.dart';
 /// Properties:
 /// * [pid] - Type-prefixed ULID.
 /// * [mediaType] 
-/// * [title] - Display title.
+/// * [title] - Display title. An episode's, which its feed gives, is cut to its first 1000 characters, and so is the show title it carries in `artist` and `album`. 
 /// * [artist] - Primary display artist / author / show name.
 /// * [album] - Album / series / podcast title, when applicable.
 /// * [artistPid] - The artist entity behind `artist`, so a client can group and link by identity rather than by display text - two artists with the same name are two entities, and one artist spelled two ways is still one. Absent when the item has no artist entity. For an audiobook this is its author. 
@@ -33,7 +33,7 @@ abstract class ItemSummary  {
   MediaType get mediaType;
   // enum mediaTypeEnum {  music,  podcast,  audiobook,  };
 
-  /// Display title.
+  /// Display title. An episode's, which its feed gives, is cut to its first 1000 characters, and so is the show title it carries in `artist` and `album`. 
   @BuiltValueField(wireName: r'title')
   String get title;
 

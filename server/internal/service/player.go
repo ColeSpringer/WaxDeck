@@ -34,10 +34,11 @@ func (l *Library) QueueEntries(ctx context.Context, userID string, pids []string
 		if err != nil {
 			return nil, err
 		}
+		title, artist, _ := itemNames(it)
 		out = append(out, connect.QueueEntry{
 			PID:        pid,
-			Title:      it.Title,
-			Artist:     it.Artist,
+			Title:      title,
+			Artist:     artist,
 			DurationMS: it.DurationMS,
 		})
 	}

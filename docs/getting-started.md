@@ -182,20 +182,22 @@ WAXDECK_MANAGED_ROOTS=music \
 Then, in the web UI, the **+** button on the library adds audio: **Add
 from URL** acquires from a video, playlist, or channel, and **Upload
 files** sends them from your device. The button uses the media type of
-the section you are in (Music, Audiobooks), and podcasts are added by
-subscribing to a feed instead. The type you pick is what the files
-become: an Audiobook upload is cataloged as a book and a Music upload as
-a track, whatever their tags say, and later scans keep it. **Past uploads**, in the same **+**
-sheet, lists in-progress and past sessions with the quota they are
-spending; a notification about an upload opens the same list, as does
-the origin line on a review entry. Either way the
-download runs as a background task: the files arrive with the source's
-own title, thumbnail, and provenance tags, cluster into album units,
-and wait in the review queue where you approve a match, keep them as
-is, or mark them unofficial (for remixes and rips with no canonical
-release). A user with upload rights keeps editing rights over what
-their own uploads and acquisitions bring in, so hand-naming an
-unofficial track does not need an administrator.
+the section you are in (Music, Audiobooks), and the type chooser offers
+those two: podcasts are added by subscribing to a feed instead, and the
+server refuses an upload or acquisition labelled as one. The type you
+pick is what the files become: an Audiobook upload is cataloged as a
+book and a Music upload as a track, whatever their tags say, and later
+scans keep it. **Past uploads**, in the same **+** sheet, lists
+in-progress and past sessions with the quota they are spending; a
+notification about an upload opens the same list, as does the origin
+line on a review entry. Either way the download runs as a background
+task: the files arrive with the source's own title, thumbnail, and
+provenance tags, cluster into album units, and wait in the review queue
+where you approve a match, keep them as is, or mark them unofficial
+(for remixes and rips with no canonical release). A user with upload
+rights keeps editing rights over what their own uploads and
+acquisitions bring in, so hand-naming an unofficial track does not need
+an administrator.
 
 By default an acquisition keeps the source's highest-quality audio with
 no re-encode (Opus, in practice, for YouTube), delivered in a clean,
@@ -210,7 +212,7 @@ Uploading also works from the API directly:
 `POST /uploads` to open a session, `PUT /uploads/{id}/data` for each
 chunk, `POST /uploads/{id}/complete`; acquisitions are one call,
 `POST /acquisitions` with a `url` and `mediaType` (and an optional
-`format`).
+`format`). `mediaType` is `music` or `audiobook` on all three.
 
 ## Sonic discovery
 

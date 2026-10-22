@@ -38,9 +38,10 @@ class EpisodeActions {
   /// landed: an episode nobody fetched still plays, relayed from the
   /// feed's own host. What fetching adds is local bytes and the analysis
   /// that rides them (silence trim, voice boost, the skip map), so it
-  /// is worth offering and is no longer the gate. The one episode that
-  /// cannot play at all is undownloaded with no enclosure, which is the
-  /// only case the fetch-wait path is still for.
+  /// is worth offering and is no longer the gate. The episodes that
+  /// cannot play at all are undownloaded with no enclosure the server
+  /// relays - none in the feed, or a YouTube show's watch page - which
+  /// are the only cases the fetch-wait path is still for.
   static bool playable(EpisodeSummary episode) =>
       episode.downloaded || episode.hasEnclosure;
 

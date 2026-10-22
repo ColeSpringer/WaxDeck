@@ -2,9 +2,10 @@ package api
 
 import (
 	"net/url"
-	"strings"
 	"sync"
 	"time"
+
+	"github.com/colespringer/waxdeck/server/internal/service"
 )
 
 const (
@@ -150,33 +151,22 @@ func (c *enclosureRoutes) releaseWarm(pid string) {
 	delete(c.warming, pid)
 }
 
-// sameEnclosureOrigin reports whether a resolved URL ends on the same
-// scheme and host the feed named.
+// sameEnclosureOrigin reports whether target is at the origin of the
+// feed's address, by service.SameOrigin over the two as the relay holds
+// them; one that does not parse matches nothing.
 //
 // The rule the feed's stored credentials are spent under, and stricter
 // than Go's own redirect forwarding, which keeps an Authorization
-// header across a subdomain hop. A remembered URL is used without the
-// chain that produced it, so there is no evidence here that the far end
-// is still the same party the feed pointed at; the origin matching is
-// the only evidence available. Getting it wrong the safe way costs a
-// 401, which invalidates the entry and walks the chain properly.
-//
-// The scheme is half of it, not a detail: an https feed whose chain
-// ends at a same-host http rewrite would otherwise have this server
-// open a plaintext connection of its own carrying the show's basic-auth
-// in a base64 header, and go on doing it for the whole TTL. That is not
-// what Go's rule permits either - there the credentials ride a request
-// the client chose to follow, rather than a connection this server
-// originates.
-func sameEnclosureOrigin(resolved, original string) bool {
-	a, err := url.Parse(resolved)
+// header across a subdomain hop, a port or a scheme. The scheme is half
+// of it, not a detail: an https feed whose chain ends at a same-host
+// http rewrite would otherwise have this server open a plaintext
+// connection of its own carrying the show's basic-auth in a base64
+// header, and go on doing it for a remembered route's whole TTL.
+func sameEnclosureOrigin(target, feed string) bool {
+	a, err := url.Parse(target)
 	if err != nil {
 		return false
 	}
-	b, err := url.Parse(original)
-	if err != nil {
-		return false
-	}
-	return a.Host != "" && strings.EqualFold(a.Host, b.Host) &&
-		strings.EqualFold(a.Scheme, b.Scheme)
+	b, err := url.Parse(feed)
+	return err == nil && service.SameOrigin(a, b)
 }

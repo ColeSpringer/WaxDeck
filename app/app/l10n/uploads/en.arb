@@ -225,7 +225,7 @@
   },
   "uploadsIdentifyOther": "Review before adding",
   "@uploadsIdentifyOther": {
-    "description": "The same switch for a podcast or a book, where there is no catalogue to match against, so all it decides is whether the submission waits."
+    "description": "The same switch for a book, where there is no catalogue to match against, so all it decides is whether the submission waits."
   },
   "uploadsIdentifyOtherHelp": "Waits for your decision. Off adds it with the tags it has",
   "@uploadsIdentifyOtherHelp": {
@@ -263,10 +263,6 @@
   },
   "uploadsMediaMusic": "Music",
   "@uploadsMediaMusic": {
-    "description": "Medium choice on the upload dialogs."
-  },
-  "uploadsMediaPodcast": "Podcast",
-  "@uploadsMediaPodcast": {
     "description": "Medium choice on the upload dialogs."
   },
   "uploadsOpenReview": "Open review entry",

@@ -1184,6 +1184,16 @@ PodcastDirectoryEntry podcastDirectoryEntryFromGen(
   );
 }
 
+OpmlImportOutcome opmlImportOutcomeFromGen(gen.OpmlImportEntry e) {
+  return OpmlImportOutcome(
+    feedUrl: e.feedUrl,
+    title: e.title,
+    pid: e.pid,
+    error: e.error,
+    reason: e.reason,
+  );
+}
+
 Scrobbler scrobblerFromGen(gen.Scrobbler s) {
   return Scrobbler(
     service: s.service,
@@ -1564,6 +1574,22 @@ gen.UploadGrouping uploadGroupingToGen(UploadGrouping grouping) {
     UploadGrouping.auto => gen.UploadGrouping.auto,
     UploadGrouping.album => gen.UploadGrouping.album,
     UploadGrouping.tracks => gen.UploadGrouping.tracks,
+  };
+}
+
+/// What a file is uploaded or acquired as, from a media type's wire
+/// name. Refused here for anything else rather than sent as the
+/// generator's unknown value: a podcast is subscribed to, not uploaded.
+gen.UploadMediaType uploadMediaTypeToGen(String wireName) {
+  return switch (wireName) {
+    'music' => gen.UploadMediaType.music,
+    'audiobook' => gen.UploadMediaType.audiobook,
+    _ => throw ArgumentError.value(
+      wireName,
+      'mediaType',
+      'podcasts are added by subscribing to a feed, and only music and '
+          'audiobooks are uploaded',
+    ),
   };
 }
 

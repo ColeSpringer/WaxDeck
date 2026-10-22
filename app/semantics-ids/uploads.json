@@ -23,6 +23,7 @@
     "uploadLibraryOption": "upload-library-{pid}",
     "uploadMediaConfirm": "upload-media-confirm",
     "uploadMediaType": "upload-media-type",
+    "uploadMediaTypeOption": "upload-media-type-{wireName}",
     "uploadPick": "upload-pick",
     "uploadQuota": "upload-quota",
     "uploadRetry": "upload-retry-{id}",

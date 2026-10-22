@@ -11,6 +11,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync/atomic"
 
 	_ "modernc.org/sqlite"
 )
@@ -20,6 +21,12 @@ import (
 type DB struct {
 	w *sql.DB
 	r *sql.DB
+	// transcriptEvictions counts transcript cache eviction passes, which a
+	// store under the bound never runs.
+	transcriptEvictions atomic.Int64
+	// gpodderWrites are the stamps of the writes gpodder reads that have
+	// not committed yet.
+	gpodderWrites writesInFlight
 }
 
 // migrations are applied in order; user_version tracks the last applied
@@ -178,13 +185,16 @@ const baselineSchema = `
 	-- Sync and compatibility-API state. event_log is the server change
 	-- stream (the serverSeq cursor): one row per user-scoped state
 	-- change, written by the sole writer (the service) at mutation
-	-- time. play_state_stamps is the resume shelf: when each user last
-	-- moved an item's position, which orders an offline position replay
-	-- against the observation it competes with and feeds the in-progress
-	-- list. WaxBin's play_state row has only one UpdatedAt, which
-	-- position checkpoints bump constantly. Star and rating stamps used
-	-- to live here too; the catalog orders those itself now, by the
-	-- recorded time its writes carry. sync_state is a small key-value
+	-- time. play_state_stamps holds when each user last moved an item's
+	-- position, which orders an offline position replay against the
+	-- observation it competes with, and when the server saw its play
+	-- state change (seen_ns), which is what the gpodder surface reports
+	-- as new unless an uploaded gpodder action made that change
+	-- (gpodder_action, its id) and the action log still keeps it to say
+	-- so. WaxBin's play_state row has only one UpdatedAt, which position
+	-- checkpoints bump constantly. Star and rating stamps used to live
+	-- here too; the catalog orders those itself now, by the recorded time
+	-- its writes carry. sync_state is a small key-value
 	-- table for stream generations, floors, cursors, per-user grant
 	-- epochs, and the schema baseline fingerprint. app_passwords hold
 	-- the recoverable per-client secrets the Subsonic scheme demands,
@@ -204,9 +214,12 @@ const baselineSchema = `
 	CREATE TABLE play_state_stamps (
 		user_id     TEXT    NOT NULL,
 		item_pid    TEXT    NOT NULL,
-		position_ns INTEGER NOT NULL DEFAULT 0,
+		position_ns    INTEGER NOT NULL DEFAULT 0,
+		seen_ns        INTEGER NOT NULL DEFAULT 0,
+		gpodder_action INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (user_id, item_pid)
 	);
+	CREATE INDEX play_state_stamps_seen ON play_state_stamps (user_id, seen_ns, item_pid);
 	CREATE TABLE sync_state (
 		key   TEXT PRIMARY KEY,
 		value TEXT NOT NULL
@@ -240,7 +253,10 @@ const baselineSchema = `
 	-- NULL in a settings column always means "server default", which
 	-- is distinct from an explicit 0 or false. Retention resolves
 	-- across a show's subscribers as the most generous union, so
-	-- sweeps read podcast_subscriptions by show. feed_state carries
+	-- sweeps read podcast_subscriptions by show. A subscription's
+	-- feed_url is the URL the account last subscribed the show by: the
+	-- catalog keeps one per show, the one added last, which can be
+	-- another subscriber's own. feed_state carries
 	-- the refresh scheduler's per-feed failure accounting (the catalog
 	-- keeps none). silence_maps cache the streaming sidecar's silence
 	-- analysis keyed by audio essence, so retags and moves never
@@ -248,12 +264,28 @@ const baselineSchema = `
 	-- The three queue tables are durable work queues drained by
 	-- supervised workers with row leases; the gpodder tables serve the
 	-- compatibility adapter, whose protocol speaks feed URLs and epoch
-	-- seconds. A gpodder session is one login's cookie, gone with its
-	-- app password or its account. gpodder_holds say who keeps a show
-	-- subscribed - holder '' for the first-party apps, else a device
-	-- id - so one device's list releases only its own holds;
+	-- seconds. A gpodder session is the cookie of one login, or of one
+	-- request signed with Basic credentials (basic), gone with its app
+	-- password or its account; presented marks one whose cookie came
+	-- back. gpodder_holds say who keeps a show subscribed - holder ''
+	-- for the first-party apps, else a device id - so one device's list
+	-- releases only its own holds;
 	-- gpodder_pending parks a feed a device added that could not be
-	-- fetched for a reason that may pass, for a supervised retry.
+	-- fetched for a reason that may pass, for a supervised retry: a row
+	-- per device that asked, sharing one schedule. gpodder_sub_events
+	-- keeps each show's latest subscription change, with the account's
+	-- URL for the show at the time; removal numbers the account's
+	-- removals in the order made, and the log keeps those within 10,000
+	-- of the newest. gpodder_device_urls is what each device calls a
+	-- show: the URL it last sent for it, or was last sent; removed_sec
+	-- marks one a read told the device the show's removal under, with
+	-- the second from which its reads let the URL go.
+	-- gpodder_actions keeps each uploaded episode action once, seq
+	-- numbering the account's in the order stored, and the log keeps the
+	-- newest 20,000, trimming once a tenth more have piled up.
+	-- gpodder_notices is what the account was told of a device's failed
+	-- adds, by feed and reason, which it is not told again for a month
+	-- whatever becomes of the inbox row that told it.
 	CREATE TABLE podcast_subscriptions (
 		user_id          TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		show_pid         TEXT    NOT NULL,
@@ -272,6 +304,7 @@ const baselineSchema = `
 		auto_dl_exclude  TEXT,
 		created_at_ns    INTEGER NOT NULL,
 		updated_at_ns    INTEGER NOT NULL,
+		feed_url         TEXT    NOT NULL DEFAULT '',
 		PRIMARY KEY (user_id, show_pid)
 	);
 	CREATE INDEX podcast_subscriptions_by_show ON podcast_subscriptions (show_pid);
@@ -364,38 +397,79 @@ const baselineSchema = `
 		user_id     TEXT NOT NULL,
 		PRIMARY KEY (episode_pid, user_id)
 	);
+	-- A download somebody asked for, which retention keeps for them
+	-- until they finish the episode after held_at_ns or stop following
+	-- its show.
+	CREATE TABLE fetch_holds (
+		episode_pid TEXT    NOT NULL,
+		user_id     TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		show_pid    TEXT    NOT NULL,
+		held_at_ns  INTEGER NOT NULL,
+		PRIMARY KEY (episode_pid, user_id)
+	);
+	CREATE INDEX fetch_holds_by_show ON fetch_holds (show_pid);
 	CREATE TABLE retention_queue (
 		show_pid       TEXT    PRIMARY KEY,
 		enqueued_at_ns INTEGER NOT NULL
 	);
+	-- The display transcript cache. Its size, the sum of row_bytes, is
+	-- kept in transcript_cache_size with every store and eviction; past
+	-- its bound the rows read longest ago (read_at_ns) go first, read
+	-- through transcript_cache_by_read.
 	CREATE TABLE transcript_cache (
 		episode_pid   TEXT    PRIMARY KEY,
 		format        TEXT    NOT NULL DEFAULT '',
 		cues          TEXT    NOT NULL DEFAULT '',
 		negative      INTEGER NOT NULL DEFAULT 0,
-		fetched_at_ns INTEGER NOT NULL
+		fail_reason   TEXT    NOT NULL DEFAULT '',
+		fetched_at_ns INTEGER NOT NULL,
+		read_at_ns    INTEGER NOT NULL DEFAULT 0,
+		row_bytes     INTEGER NOT NULL DEFAULT 0
 	);
+	CREATE INDEX transcript_cache_by_read ON transcript_cache (read_at_ns, episode_pid, row_bytes);
+	CREATE TABLE transcript_cache_size (
+		id    INTEGER PRIMARY KEY CHECK (id = 1),
+		bytes INTEGER NOT NULL
+	);
+	-- sub_cursor_sec is the timestamp the device's last subscription read
+	-- was answered with, 0 before it reads.
 	CREATE TABLE gpodder_devices (
-		user_id       TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-		device_id     TEXT    NOT NULL,
-		caption       TEXT    NOT NULL DEFAULT '',
-		type          TEXT    NOT NULL DEFAULT 'other',
-		created_at_ns INTEGER NOT NULL,
-		updated_at_ns INTEGER NOT NULL,
+		user_id        TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		device_id      TEXT    NOT NULL,
+		caption        TEXT    NOT NULL DEFAULT '',
+		type           TEXT    NOT NULL DEFAULT 'other',
+		created_at_ns  INTEGER NOT NULL,
+		updated_at_ns  INTEGER NOT NULL,
+		sub_cursor_sec INTEGER NOT NULL DEFAULT 0,
 		PRIMARY KEY (user_id, device_id)
 	);
 	CREATE TABLE gpodder_sub_events (
 		id        INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id   TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		show_pid  TEXT    NOT NULL,
 		feed_url  TEXT    NOT NULL,
 		action    TEXT    NOT NULL,
 		device_id TEXT    NOT NULL DEFAULT '',
-		ts_sec    INTEGER NOT NULL
+		ts_sec    INTEGER NOT NULL,
+		removal   INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE INDEX gpodder_sub_events_by_user ON gpodder_sub_events (user_id, id);
+	CREATE UNIQUE INDEX gpodder_sub_events_by_show ON gpodder_sub_events (user_id, show_pid);
+	CREATE INDEX gpodder_sub_events_removals ON gpodder_sub_events (user_id, removal) WHERE action = 'remove';
+	CREATE TABLE gpodder_device_urls (
+		user_id     TEXT    NOT NULL,
+		device_id   TEXT    NOT NULL,
+		show_pid    TEXT    NOT NULL,
+		feed_url    TEXT    NOT NULL,
+		removed_sec INTEGER NOT NULL DEFAULT 0,
+		PRIMARY KEY (user_id, device_id, show_pid),
+		FOREIGN KEY (user_id, device_id) REFERENCES gpodder_devices (user_id, device_id) ON DELETE CASCADE
+	);
+	CREATE INDEX gpodder_device_urls_by_show ON gpodder_device_urls (user_id, show_pid);
 	CREATE TABLE gpodder_actions (
 		id           INTEGER PRIMARY KEY AUTOINCREMENT,
 		user_id      TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		seq          INTEGER NOT NULL,
 		podcast_url  TEXT    NOT NULL,
 		episode_url  TEXT    NOT NULL,
 		device_id    TEXT    NOT NULL DEFAULT '',
@@ -406,17 +480,29 @@ const baselineSchema = `
 		total_sec    INTEGER,
 		uploaded_sec INTEGER NOT NULL
 	);
-	CREATE INDEX gpodder_actions_by_user ON gpodder_actions (user_id, id);
+	CREATE INDEX gpodder_actions_by_user ON gpodder_actions (user_id, seq);
+	CREATE INDEX gpodder_actions_by_episode ON gpodder_actions (user_id, episode_url);
+	CREATE TABLE gpodder_notices (
+		user_id   TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+		device_id TEXT    NOT NULL,
+		feed_key  TEXT    NOT NULL,
+		reason    TEXT    NOT NULL,
+		said_ns   INTEGER NOT NULL,
+		PRIMARY KEY (user_id, device_id, feed_key, reason)
+	);
+	CREATE INDEX gpodder_notices_said ON gpodder_notices (said_ns);
 	CREATE TABLE gpodder_sessions (
 		id              TEXT    PRIMARY KEY,
 		user_id         TEXT    NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		app_password_id TEXT    NOT NULL REFERENCES app_passwords(id) ON DELETE CASCADE,
 		token_hash      BLOB    NOT NULL UNIQUE,
 		created_at_ns   INTEGER NOT NULL,
-		expires_at_ns   INTEGER NOT NULL
+		expires_at_ns   INTEGER NOT NULL,
+		basic           INTEGER NOT NULL DEFAULT 0,
+		presented       INTEGER NOT NULL DEFAULT 0
 	);
 	CREATE INDEX gpodder_sessions_by_user ON gpodder_sessions (user_id);
-	CREATE INDEX gpodder_sessions_by_password ON gpodder_sessions (app_password_id, created_at_ns);
+	CREATE INDEX gpodder_sessions_by_password ON gpodder_sessions (app_password_id, basic, created_at_ns);
 	CREATE TABLE gpodder_holds (
 		user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
 		show_pid TEXT NOT NULL,
@@ -432,7 +518,7 @@ const baselineSchema = `
 		attempts      INTEGER NOT NULL DEFAULT 0,
 		next_try_ns   INTEGER NOT NULL,
 		last_error    TEXT    NOT NULL DEFAULT '',
-		PRIMARY KEY (user_id, feed_url)
+		PRIMARY KEY (user_id, feed_url, device_id)
 	);
 	CREATE INDEX gpodder_pending_due ON gpodder_pending (next_try_ns);
 
@@ -1070,6 +1156,10 @@ func Open(ctx context.Context, path string) (*DB, error) {
 
 	d := &DB{w: w, r: r}
 	if err := d.migrate(ctx); err != nil {
+		d.Close()
+		return nil, err
+	}
+	if err := d.recountTranscriptCache(ctx); err != nil {
 		d.Close()
 		return nil, err
 	}

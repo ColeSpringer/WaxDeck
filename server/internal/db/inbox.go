@@ -187,3 +187,16 @@ func (d *DB) NotificationByID(ctx context.Context, userID, id string) (Notificat
 	}
 	return n, nil
 }
+
+// CountNotificationsSince counts the account's inbox rows of event filed
+// after sinceNS.
+func (d *DB) CountNotificationsSince(ctx context.Context, userID, event string, sinceNS int64) (int, error) {
+	var n int
+	if err := d.r.QueryRowContext(ctx, `
+		SELECT COUNT(*) FROM notifications
+		WHERE user_id = ? AND event = ? AND created_at_ns > ?`,
+		userID, event, sinceNS).Scan(&n); err != nil {
+		return 0, fmt.Errorf("db: counting inbox rows: %w", err)
+	}
+	return n, nil
+}

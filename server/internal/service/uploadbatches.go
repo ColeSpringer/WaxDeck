@@ -92,8 +92,8 @@ func (l *Library) CreateUploadBatch(ctx context.Context, uc *UserCtx, p UploadBa
 	default:
 		return UploadBatchDTO{}, errInvalid("unknown grouping")
 	}
-	if _, ok := kindForMediaType(p.MediaType); !ok {
-		return UploadBatchDTO{}, errInvalid("unknown media type")
+	if _, err := requireUploadMediaType(p.MediaType); err != nil {
+		return UploadBatchDTO{}, err
 	}
 	if err := l.validateUploadTargetLibrary(ctx, uc, p.LibraryPID); err != nil {
 		return UploadBatchDTO{}, err

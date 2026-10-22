@@ -1434,15 +1434,53 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
     super.dispose();
   }
 
-  /// Where the current chapter ends on the book timeline, for
-  /// end-of-chapter mode; null when the book has no chapters.
-  int? _currentChapterEndMs() {
+  /// The chapter marks of what is playing, the length they are laid out
+  /// against, and whether they are a relayed episode's (see
+  /// [chapterEndMs]): a book's own, or an episode's from its detail
+  /// against the audio playing. A relayed episode's against the end the
+  /// session can vouch for, never the feed's declared length, which can
+  /// be 0 or off the audio served. Null for anything else, and while an
+  /// episode's detail is on its way; [watch] is for build, which has to
+  /// draw again when it arrives.
+  (List<ChapterMark>, int, bool)? _chapters({required bool watch}) {
     final session = widget.session;
-    final book = session?.book;
-    if (session == null || book == null || book.chapters.isEmpty) return null;
-    final current = chapterAt(book.chapters, session.displayPosition);
-    if (current == null) return null;
-    return chapterEndMs(book.chapters, current, book.durationMs);
+    if (session == null) return null;
+    switch (session.item.mediaType) {
+      case MediaType.audiobook:
+        final book = session.book;
+        return book == null ? null : (book.chapters, book.durationMs, false);
+      case MediaType.podcast:
+        final detail = watch
+            ? ref.watch(episodeDetailProvider(session.item.pid))
+            : ref.read(episodeDetailProvider(session.item.pid));
+        final episode = detail.value;
+        if (episode == null) return null;
+        final relayed = !episode.downloaded;
+        return (
+          episode.chapters,
+          relayed
+              ? session.knownEndMs ?? 0
+              : session.mediaDuration.inMilliseconds,
+          relayed,
+        );
+      case MediaType.music:
+        return null;
+    }
+  }
+
+  /// Where the current chapter ends on the item's timeline, for
+  /// end-of-chapter mode; null when it has no chapters, or no known end.
+  int? _currentChapterEndMs({bool watch = false}) {
+    final session = widget.session;
+    final chapters = _chapters(watch: watch);
+    if (session == null || chapters == null) return null;
+    final (marks, totalMs, relayed) = chapters;
+    return chapterStopMs(
+      marks,
+      session.displayPosition,
+      totalMs,
+      relayed: relayed,
+    );
   }
 
   void _startMinutes(int minutes) {
@@ -1454,9 +1492,7 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     final timer = ref.watch(sleepTimerProvider);
-    final chapterEndMs = widget.session?.item.mediaType == MediaType.audiobook
-        ? _currentChapterEndMs()
-        : null;
+    final chapterEndMs = _currentChapterEndMs(watch: true);
     return SafeArea(
       child: SingleChildScrollView(
         child: Column(
@@ -1508,13 +1544,20 @@ class _SleepTimerSheetState extends ConsumerState<_SleepTimerSheet> {
               WaxOptionRow(
                 key: const Key(SemanticsIds.sleepTimerChapter),
                 semanticsId: SemanticsIds.sleepTimerChapter,
-                glyph: WaxIcons.audiobooks,
+                glyph: widget.session?.item.mediaType == MediaType.podcast
+                    ? WaxIcons.podcasts
+                    : WaxIcons.audiobooks,
                 title: l10n.playerTimerChapterEnd,
                 onTap: () {
                   // Read now rather than when the sheet opened: a sheet
                   // left open across a chapter end means the chapter
-                  // playing now.
-                  final endMs = _currentChapterEndMs() ?? chapterEndMs;
+                  // playing now. One whose end nothing knows arms
+                  // nothing, and the sheet is drawn again without the row.
+                  final endMs = _currentChapterEndMs();
+                  if (endMs == null) {
+                    setState(() {});
+                    return;
+                  }
                   ref
                       .read(sleepTimerProvider.notifier)
                       .startEndOfChapter(endMs, pid: widget.session?.item.pid);

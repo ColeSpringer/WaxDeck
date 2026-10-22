@@ -3,7 +3,7 @@ import { J, T, retryCatalogBusy } from './driver';
 import { SemanticsIds } from './semantics-ids';
 
 // The podcast domain over the real stack. The feed host (feedserv)
-// serves a generated three-episode feed whose audio carries lead
+// serves a generated four-episode feed whose audio carries lead
 // silence.
 //
 // This was one 304-line journey. It is six tests now, by the rule that
@@ -16,25 +16,34 @@ import { SemanticsIds } from './semantics-ids';
 // to exist, which is a precondition, and preconditions are seeded.
 //
 // Every test owns its account, so a subscription made here is nobody
-// else's. The feed's three EPISODES are not: a download is one file in
+// else's. The feed's four EPISODES are not: a download is one file in
 // one catalog, shared by every subscriber, and removing one is refused
 // while anybody is listening to it. So the episodes are divided by role,
 // one owner each for anything that writes:
 //
-//   [0] fetched by the unsubscribe test and left that way; played by the
-//       two speed tests and the location test. Never unfetched.
+//   [0] fetched by the unsubscribe test and the sleep test, and left
+//       that way; played by the two speed tests, the location test and
+//       the sleep test. Never unfetched.
 //   [1] the passthrough test's alone: it fetches it, unfetches it - that
 //       unfetch is its subject - and then plays it with no bytes there.
 //   [2] the journey's alone: unfetched as a precondition, fetched
 //       through the UI, played.
+//   [3] the share test's alone (sharing-stats.spec.ts): unfetched as a
+//       precondition and never fetched, so its link plays before the
+//       server holds it.
 //
 // Written down because rediscovering it costs a soak: two tests sharing
 // a mutable episode is a test waiting sixty seconds for a file a sibling
 // is playing, reported as a broken unfetch.
 // A repeat is a second owner, so the two that unfetch run their first
 // copy only; the soak repeats.
+//
+// The relay feed beside it holds one chaptered episode whose feed declares
+// less than its audio runs. Nothing fetches it, so it is only ever
+// streamed from the feed: the streamed end-of-chapter test's alone.
 
 const FEED_URL = 'http://127.0.0.1:4421/feed.xml';
+const RELAY_FEED = 'http://127.0.0.1:4421/relayed/feed.xml';
 
 test('subscribe, fetch, and play an episode with silence trimming', async (
   { app },
@@ -207,6 +216,139 @@ test('the speed sheet is reachable again after the player is dismissed', async (
 
   await app.player.setSpeed(150);
   await expect(app.player.speed()).toHaveAccessibleName(/1\.5x/);
+});
+
+test('end of chapter stops a chaptered episode where its chapter ends', async ({ app }) => {
+  test.setTimeout(J.long);
+  const showPid = await app.seed.subscribePodcast(FEED_URL);
+  const [episode] = await app.seed.episodes(showPid);
+
+  // The fixture feed's first episode is the one that carries chapters, at
+  // 0 s and 2 s. Fetched here, as the unsubscribe test leaves it, so what
+  // this plays is the same whichever of the two ran first: the stored
+  // copy's chapters, against the audio's own length.
+  expect(episode.title).toBe('Getting Waxy');
+  await app.seed.fetchEpisode(showPid, episode.pid);
+  const detail = await app.api.get('/episodes/{pid}', { path: { pid: episode.pid } });
+  expect(detail.chapters?.map((c) => c.title)).toEqual(['Intro', 'Body']);
+  const boundary = detail.chapters![1].startMs;
+  expect(boundary, 'the first chapter should end at 2 s').toBe(2000);
+
+  // Half speed, for this account's view of the show: the whole episode
+  // runs five and a half seconds, and the setup below has to pause it
+  // before a slow start plays it out.
+  await app.seed.podcastSettings(showPid, { speed: 0.5 });
+  const position = async () =>
+    (await app.api.tryGet('/items/{pid}/play-state', { path: { pid: episode.pid } }))
+      ?.positionMs ?? -1;
+  // Inside the first chapter and off its head, so the 0 below can only be
+  // the chapter row's seek.
+  await app.seed.setPosition(episode.pid, 1000);
+
+  await app.nav.enter('podcasts');
+  await app.podcasts.openShow(showPid);
+  await app.podcasts.playEpisode(episode.pid);
+  await app.player.pause();
+
+  // At the head of the first chapter, wherever the clock had got to. A
+  // chapter row seeks there and leaves the pause, and the checkpoint the
+  // seek writes is what says it landed.
+  await expect(async () => {
+    await app.player.tapChapter(0);
+    await expect.poll(position, { timeout: T.step }).toBe(0);
+  }).toPass({ timeout: T.nav });
+
+  await app.player.armEndOfChapter();
+  await expect(app.player.sleepTimer()).toHaveAccessibleName(/until the chapter ends/);
+  await app.player.play();
+
+  // It stops itself at the chapter's end...
+  await expect(app.player.toggle()).toHaveAccessibleName(/Play/i, { timeout: T.nav });
+
+  // ...and the server agrees where, and it stays there past the
+  // checkpoint interval (a playing episode writes one every five
+  // seconds), so nothing played on.
+  await expect
+    .poll(async () => Math.abs((await position()) - boundary), {
+      message: `the episode should rest where its first chapter ends, ${boundary} ms`,
+    })
+    .toBeLessThanOrEqual(250);
+  const rested = await position();
+  const since = Date.now();
+  await expect
+    .poll(async () => ((await position()) === rested ? Date.now() - since : -1), {
+      message: `the episode should stay at ${rested} ms`,
+      timeout: T.assert,
+    })
+    .toBeGreaterThanOrEqual(6000);
+  await expect(app.player.toggle()).toHaveAccessibleName(/Play/i);
+  expect(Math.abs(rested - boundary)).toBeLessThanOrEqual(250);
+});
+
+test('end of chapter stops a streamed episode where its audio ends, not where its feed says', async ({
+  app,
+}) => {
+  test.setTimeout(J.long);
+  const showPid = await app.seed.subscribePodcast(RELAY_FEED);
+  const [episode] = await app.seed.episodes(showPid);
+
+  // The relay feed's one episode: chapters at 0 s and 2 s, and a feed that
+  // declares 3 s for audio that runs 5.5 s (fixtures/podcast.go: 1.5 s of
+  // lead silence, a 3 s tone, 1 s of trail). Streamed, so the server ends
+  // its last chapter at the declared 3 s.
+  expect(episode.title).toBe('Running Over');
+  expect(episode.downloaded, 'nothing fetches this episode').toBeFalsy();
+  const detail = await app.api.get('/episodes/{pid}', { path: { pid: episode.pid } });
+  expect(detail.durationMs).toBe(3000);
+  expect(detail.chapters?.map((c) => [c.title, c.startMs, c.endMs])).toEqual([
+    ['Cold open', 0, 2000],
+    ['Running over', 2000, 3000],
+  ]);
+  const audioEnd = 5500;
+
+  // Half speed, for the reason the fetched episode's test gives.
+  await app.seed.podcastSettings(showPid, { speed: 0.5 });
+  const position = async () =>
+    (await app.api.tryGet('/items/{pid}/play-state', { path: { pid: episode.pid } }))
+      ?.positionMs ?? -1;
+  // In the first chapter, so the 2000 below can only be the last chapter
+  // row's seek.
+  await app.seed.setPosition(episode.pid, 1000);
+
+  await app.nav.enter('podcasts');
+  await app.podcasts.openShow(showPid);
+  await app.podcasts.playEpisode(episode.pid);
+  await app.player.pause();
+
+  // At the head of the last chapter, wherever the clock had got to.
+  await expect(async () => {
+    await app.player.tapChapter(1);
+    await expect.poll(position, { timeout: T.step }).toBe(2000);
+  }).toPass({ timeout: T.nav });
+
+  await app.player.armEndOfChapter();
+  await expect(app.player.sleepTimer()).toHaveAccessibleName(/until the chapter ends/);
+  await app.player.play();
+
+  // It stops itself past the 3 s the feed declares...
+  await expect(app.player.toggle()).toHaveAccessibleName(/Play/i, { timeout: T.nav });
+
+  // ...at the end of the audio, and rests there.
+  await expect
+    .poll(async () => Math.abs((await position()) - audioEnd), {
+      message: `the episode should rest at the end of its audio, ${audioEnd} ms`,
+    })
+    .toBeLessThanOrEqual(250);
+  const rested = await position();
+  const since = Date.now();
+  await expect
+    .poll(async () => ((await position()) === rested ? Date.now() - since : -1), {
+      message: `the episode should stay at ${rested} ms`,
+      timeout: T.assert,
+    })
+    .toBeGreaterThanOrEqual(6000);
+  await expect(app.player.toggle()).toHaveAccessibleName(/Play/i);
+  expect(Math.abs(rested - audioEnd)).toBeLessThanOrEqual(250);
 });
 
 test("an episode's location carries its show", async ({ app }) => {

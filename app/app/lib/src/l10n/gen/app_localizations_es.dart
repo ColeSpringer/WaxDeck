@@ -3526,6 +3526,30 @@ class AppLocalizationsEs extends AppLocalizations {
       'Este servidor no tiene activa la función que hace falta.';
 
   @override
+  String get errorFeedBlockedAddress =>
+      'Este servidor no descarga nada de direcciones de redes privadas o locales.';
+
+  @override
+  String get errorFeedHostError =>
+      'El servidor de origen ha respondido con un error. Inténtalo más tarde.';
+
+  @override
+  String get errorFeedNotAFeed =>
+      'Esa dirección ha respondido, pero no con algo que una aplicación de podcasts pueda leer.';
+
+  @override
+  String get errorFeedNotFound =>
+      'El servidor de origen no tiene nada en esa dirección.';
+
+  @override
+  String get errorFeedRefused =>
+      'El servidor de origen ha rechazado la petición. Puede que haga falta iniciar sesión.';
+
+  @override
+  String get errorFeedTooLarge =>
+      'Lo que ha devuelto esa dirección es más grande de lo que este servidor acepta.';
+
+  @override
   String get errorFeedUnreachable =>
       'El servidor del feed no ha respondido, o lo que ha devuelto no es un feed.';
 
@@ -3566,6 +3590,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get errorNotFound => 'Eso ya no está aquí.';
+
+  @override
+  String get errorPodcastsOff =>
+      'Los podcasts están desactivados en este servidor.';
 
   @override
   String get errorQuotaExceeded => 'Eso supera un límite de este servidor.';
@@ -5845,6 +5873,13 @@ class AppLocalizationsEs extends AppLocalizations {
   String get notifFeedDisabledTitle => 'Feed desactivado';
 
   @override
+  String get notifGpodderDeviceRemovedHelp =>
+      'Un dispositivo nuevo de una app de podcasts ha ocupado el sitio del que llevaba más tiempo sin conectarse; lo que este seguía sigue suscrito.';
+
+  @override
+  String get notifGpodderDeviceRemovedTitle => 'App de podcasts quitada';
+
+  @override
   String get notifHealthFixFinishedHelp =>
       'Ha terminado una corrección de salud de la biblioteca que iniciaste.';
 
@@ -5892,6 +5927,14 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get notifSignupRequestedTitle => 'Solicitud de cuenta';
+
+  @override
+  String get notifSubscriptionFailedHelp =>
+      'Una aplicación de podcasts que sincroniza por gpodder pidió añadir un feed al que no se ha podido suscribir, o cambiar suscripciones que esta cuenta no puede cambiar.';
+
+  @override
+  String get notifSubscriptionFailedTitle =>
+      'Suscripciones de podcasts sin modificar';
 
   @override
   String get organizeApply => 'Aplicar';
@@ -8163,7 +8206,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get podcastFetchingBeforePlay =>
-      'Este feed no ha indicado audio para transmitir, así que el servidor lo está descargando. Se reproducirá en cuanto llegue.';
+      'Este episodio no tiene audio que transmitir hasta que el servidor lo descargue, y ya lo está descargando. Vuelve a reproducirlo cuando se haya descargado.';
 
   @override
   String get podcastFetchingToServer => 'Descargando en el servidor';
@@ -8203,6 +8246,10 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get podcastFollow => 'Seguir';
+
+  @override
+  String get podcastFollowPrivate =>
+      'Este programa es privado. Síguelo con la dirección que te dieron, desde Añadir una suscripción.';
 
   @override
   String get podcastFollowing => 'Siguiendo';
@@ -8321,18 +8368,22 @@ class AppLocalizationsEs extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '$count no tenían audio en el feed',
-      one: '1 no tenía audio en el feed',
+      other: '$count aún no tenían audio que transmitir',
+      one: '1 aún no tenía audio que transmitir',
     );
     return '$_temp0';
   }
 
   @override
-  String get podcastNoAudioInFeed => 'No hay audio en el feed';
+  String get podcastNoAudioToQueue =>
+      'Ese episodio no tiene audio que transmitir hasta que el servidor lo descargue, así que no hay nada que poner en cola.';
 
   @override
-  String get podcastNoAudioToQueue =>
-      'Este feed no ha indicado audio para ese episodio, así que no hay nada que poner en cola.';
+  String get podcastNoAudioToShare =>
+      'Ese episodio no tiene audio que un enlace pueda reproducir: el servidor no ha descargado nada y su feed no ofrece audio que transmitir. Si el programa tiene audio para él, descárgalo primero.';
+
+  @override
+  String get podcastNoAudioToStream => 'Sin audio que transmitir';
 
   @override
   String podcastNoDurationCount(int count) {
@@ -8394,6 +8445,38 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get podcastOpmlImported => 'Suscripciones importadas';
+
+  @override
+  String get podcastOpmlNoFeeds =>
+      'No se ha encontrado ningún feed en ese archivo.';
+
+  @override
+  String podcastOpmlNotAdded(int count, String reason) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'No se han podido añadir $count feeds. $reason',
+      one: 'No se ha podido añadir 1 feed. $reason',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastOpmlNotAddedDetails => 'Detalles';
+
+  @override
+  String podcastOpmlNotAddedMixed(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'No se han podido añadir $count feeds, por motivos distintos.',
+      one: 'No se ha podido añadir 1 feed.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get podcastOpmlNotAddedTitle => 'Feeds no añadidos';
 
   @override
   String get podcastOpmlPickerLabel => 'OPML';
@@ -12212,9 +12295,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get uploadsMediaMusic => 'Música';
-
-  @override
-  String get uploadsMediaPodcast => 'Pódcast';
 
   @override
   String get uploadsOpenReview => 'Abrir la entrada de revisión';

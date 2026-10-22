@@ -463,7 +463,7 @@ func (l *Library) edgesToSummaries(ctx context.Context, uc *UserCtx, edges []sim
 		if archived(v) {
 			continue
 		}
-		if !uc.AllLibraries && !l.itemVisible(ctx, uc, v.PID) {
+		if !uc.AllLibraries && !l.viewVisible(ctx, uc, v) {
 			continue
 		}
 		if !l.allowedByContent(ctx, uc, v) {
@@ -474,13 +474,15 @@ func (l *Library) edgesToSummaries(ctx context.Context, uc *UserCtx, edges []sim
 	return out, nil
 }
 
-// tracksWhere pages music tracks matching one text field exactly
-// (case-insensitively, matching the engine's text semantics), capped.
+// tracksWhere pages the music tracks the caller may be offered matching
+// one text field exactly (case-insensitively, matching the engine's text
+// semantics), capped. The caller's grants and content rules ride the
+// query, so the cap counts tracks the caller can have.
 func (l *Library) tracksWhere(ctx context.Context, uc *UserCtx, field, value string, cap int) ([]*model.ItemView, error) {
-	q := visibleItems().
+	q := l.scopedTo(ctx, uc, visibleItems().
 		Where("kind", query.OpIs, string(model.KindTrack)).
 		Where(field, query.OpIs, value).
-		OrderBy("title", false).Build()
+		OrderBy("title", false)).Build()
 	var out []*model.ItemView
 	cursor := read.Cursor("")
 	for len(out) < cap {
@@ -520,14 +522,14 @@ func (l *Library) metadataMix(ctx context.Context, uc *UserCtx, genre, artist st
 		genrePool = pool
 	}
 	// Random catalog tracks widen the mix; always fetched so a sparse
-	// genre still fills the request. Scoped in the draw, so 300 rows are
-	// 300 candidates.
+	// genre still fills the request. Scoped in the draw, as the two pools
+	// above are, so 300 rows are 300 candidates.
 	page, err := l.lib.Browse(ctx, read.ListRandom, read.BrowseOptions{
 		UserPID: model.PID(uc.CatalogPID),
 		Seed:    rand.Int63(),
 		Limit:   300,
-		Query: visibleItems().
-			Where("kind", query.OpIs, string(model.KindTrack)).Build(),
+		Query: l.scopedTo(ctx, uc, visibleItems().
+			Where("kind", query.OpIs, string(model.KindTrack))).Build(),
 	})
 	if err != nil {
 		return nil, classify(err)
@@ -557,12 +559,6 @@ func (l *Library) metadataMix(ctx context.Context, uc *UserCtx, genre, artist st
 			*pool = (*pool)[1:]
 			pid := string(it.PID)
 			if seen[pid] || exclude.blocks(pid) {
-				continue
-			}
-			if !uc.AllLibraries && !l.itemVisible(ctx, uc, it.PID) {
-				continue
-			}
-			if !l.allowedByContent(ctx, uc, it) {
 				continue
 			}
 			seen[pid] = true

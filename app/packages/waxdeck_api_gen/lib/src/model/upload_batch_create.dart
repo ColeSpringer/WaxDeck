@@ -3,7 +3,7 @@
 //
 
 // ignore_for_file: unused_element
-import 'package:waxdeck_api_gen/src/model/media_type.dart';
+import 'package:waxdeck_api_gen/src/model/upload_media_type.dart';
 import 'package:waxdeck_api_gen/src/model/upload_grouping.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
@@ -24,8 +24,8 @@ abstract class UploadBatchCreate implements Built<UploadBatchCreate, UploadBatch
   // enum groupingEnum {  auto,  album,  tracks,  };
 
   @BuiltValueField(wireName: r'mediaType')
-  MediaType get mediaType;
-  // enum mediaTypeEnum {  music,  podcast,  audiobook,  };
+  UploadMediaType get mediaType;
+  // enum mediaTypeEnum {  music,  audiobook,  };
 
   /// The library every member belongs to; see `UploadCreate` for what naming one selects. Members re-declare it at session creation and must match (a differing member value answers `invalid-request`). 
   @BuiltValueField(wireName: r'libraryPid')
@@ -66,7 +66,7 @@ class _$UploadBatchCreateSerializer implements PrimitiveSerializer<UploadBatchCr
     yield r'mediaType';
     yield serializers.serialize(
       object.mediaType,
-      specifiedType: const FullType(MediaType),
+      specifiedType: const FullType(UploadMediaType),
     );
     if (object.libraryPid != null) {
       yield r'libraryPid';
@@ -115,8 +115,8 @@ class _$UploadBatchCreateSerializer implements PrimitiveSerializer<UploadBatchCr
         case r'mediaType':
           final valueDes = serializers.deserialize(
             value,
-            specifiedType: const FullType(MediaType),
-          ) as MediaType;
+            specifiedType: const FullType(UploadMediaType),
+          ) as UploadMediaType;
           result.mediaType = valueDes;
           break;
         case r'libraryPid':

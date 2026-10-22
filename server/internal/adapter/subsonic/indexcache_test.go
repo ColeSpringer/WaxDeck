@@ -126,3 +126,45 @@ func TestScopedIndexCapEvictsOneAtATime(t *testing.T) {
 		t.Fatal("the entry the cap was enforced for was itself evicted")
 	}
 }
+
+// A folder's index is cut from its caller's whole one and held beside
+// it, never in the grant-set cache: two restricted accounts each
+// browsing two folders keep both their base indexes, which cost a
+// whole-catalog sweep each to rebuild.
+func TestFolderCutsKeepTheGrantSetIndexes(t *testing.T) {
+	h := &Handler{}
+	rows := []track{
+		{PID: "tr-1", AlbumArtist: "X", Album: "A", LibraryPID: "lb-1"},
+		{PID: "tr-2", AlbumArtist: "Y", Album: "B", LibraryPID: "lb-2"},
+	}
+	type caller struct {
+		uc    *service.UserCtx
+		scope string
+		base  *index
+	}
+	var callers []caller
+	for i := range idxScopedCap {
+		uc := &service.UserCtx{Libraries: map[string]bool{string(rune('a' + i)): true}}
+		base := buildIndex(append([]track(nil), rows...), nil)
+		base.tail = 7
+		scope := indexScope(uc)
+		h.cacheIndex(7, scope, base)
+		callers = append(callers, caller{uc, scope, base})
+	}
+	for _, c := range callers {
+		for _, lib := range []string{"lb-1", "lb-2"} {
+			cut := c.base.cut(lib)
+			if again := c.base.cut(lib); again != cut {
+				t.Fatalf("a second browse of %s rebuilt its cut", lib)
+			}
+			if len(cut.tracks) != 1 || cut.tracks[0].LibraryPID != lib || cut.folder != lib {
+				t.Fatalf("cut for %s = %+v", lib, cut.tracks)
+			}
+		}
+	}
+	for _, c := range callers {
+		if h.cachedIndex(7, c.scope) != c.base {
+			t.Fatalf("a folder cut evicted the grant set %q's index", c.scope)
+		}
+	}
+}

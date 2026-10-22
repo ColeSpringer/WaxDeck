@@ -4,7 +4,7 @@ WaxDeck serves everything on one origin: the web app, the REST API,
 the WebSocket event channel, media streaming, share pages, and the
 compatibility APIs all listen on port 4420. Put a TLS-terminating
 reverse proxy in front before exposing it beyond your LAN, and proxy
-the whole origin; do not try to route path-by-path.
+the whole origin to it; do not split paths between servers.
 
 Four things trip generic proxy configs:
 
@@ -13,7 +13,13 @@ Four things trip generic proxy configs:
 2. **Streaming and long responses.** Audio streams, radio proxying,
    and job event streams are long-lived and unbuffered. Disable
    response buffering and give them generous or unlimited read
-   timeouts.
+   timeouts. A paused player stops reading, and WaxDeck decides when
+   to let it go: never for a signed-in listener, after 15 minutes at
+   most for a visitor to a share link. A proxy that gives up on a
+   stalled client sooner (nginx's `send_timeout`, a minute by default)
+   cuts those streams first, so raise that limit for `/media/` and
+   `/s/` and leave it alone elsewhere, where it is what clears a
+   client that asks for a download and never reads.
 3. **Upload sizes.** Chunked uploads and backup imports post large
    bodies; raise the body-size limit.
 4. **App locations are paths.** `/music/albums/al-...` is a screen,
@@ -140,6 +146,36 @@ server {
 
     client_max_body_size 4g;
 
+    # Signed-in listening: WaxDeck never cuts a paused player, so the
+    # proxy waits a day on one that has stopped reading.
+    location /media/ {
+        proxy_pass http://127.0.0.1:4420;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_buffering off;
+        proxy_read_timeout 1d;
+        proxy_send_timeout 1d;
+        send_timeout 1d;
+    }
+
+    # Share links: WaxDeck lets a paused visitor go after 15 minutes at
+    # most, so twenty leaves the proxy a margin.
+    location /s/ {
+        proxy_pass http://127.0.0.1:4420;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_buffering off;
+        proxy_read_timeout 1d;
+        proxy_send_timeout 1d;
+        send_timeout 20m;
+    }
+
+    # Everything else keeps nginx's own minute for a client that has
+    # stopped reading.
     location / {
         proxy_pass http://127.0.0.1:4420;
         proxy_http_version 1.1;

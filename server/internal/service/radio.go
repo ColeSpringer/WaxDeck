@@ -14,7 +14,6 @@ import (
 	"net/url"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/oklog/ulid/v2"
@@ -366,7 +365,7 @@ func (l *Library) fetchRadioDirectory(ctx context.Context, base, q string, limit
 		return nil, 0, err
 	}
 	// The directory asks clients to identify themselves.
-	req.Header.Set("User-Agent", "WaxDeck")
+	req.Header.Set("User-Agent", l.UserAgent())
 	resp, err := l.radioClient().Do(req)
 	if err != nil {
 		return nil, 0, err
@@ -833,7 +832,7 @@ func (l *Library) fetchRadioLogo(ctx context.Context, logoURL string) (RadioLogo
 	if err != nil {
 		return RadioLogo{}, err
 	}
-	req.Header.Set("User-Agent", "WaxDeck")
+	req.Header.Set("User-Agent", l.UserAgent())
 	req.Header.Set("Accept", "image/*")
 	// The stream proxy's client: private destinations refused at dial
 	// time after DNS resolution, redirects bounded. A logo URL is
@@ -1279,14 +1278,7 @@ func (l *Library) RadioHTTP() *http.Client { return l.radioClient() }
 
 func (l *Library) radioClient() *http.Client {
 	l.radioHTTPOnce.Do(func() {
-		dialer := &net.Dialer{Timeout: 10 * time.Second}
-		if !l.allowPrivateRadioHosts {
-			dialer.Control = func(network, address string, _ syscall.RawConn) error {
-				return refusePrivateAddr(address)
-			}
-		}
-		transport := http.DefaultTransport.(*http.Transport).Clone()
-		transport.DialContext = dialer.DialContext
+		transport := guardedTransport(l.allowPrivateRadioHosts)
 		transport.ResponseHeaderTimeout = 15 * time.Second
 		l.radioHTTP = &http.Client{
 			Transport: transport,

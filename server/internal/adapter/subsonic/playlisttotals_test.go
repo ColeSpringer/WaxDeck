@@ -7,9 +7,9 @@ import (
 )
 
 // The entry is keyed on the playlist's updatedAt and a TTL, not on the
-// catalog feed position. A smart rule can name played or finished, and a
-// play-state write moves no catalog change, so a tail-keyed entry would
-// be stale forever; one scan would meanwhile invalidate every entry for
+// catalog content position. A smart rule can name played or finished, and
+// a play-state write moves no content, so a content-keyed entry would be
+// stale forever; one scan would meanwhile invalidate every entry for
 // every user at once.
 func TestPlaylistTotalIsUsedUntilItExpires(t *testing.T) {
 	fresh := playlistTotal{updatedAtNS: 7, at: time.Now(), songs: 3}

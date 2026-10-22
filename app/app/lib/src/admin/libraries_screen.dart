@@ -142,7 +142,9 @@ class _LibraryTable extends ConsumerWidget {
         WaxColumn<LibraryInfo>(
           label: l10n.adminLibrariesColumnMatching,
           width: 148,
-          cell: (context, library) => _MatchingChoice(library: library),
+          cell: (context, library) => libraryTakesMatching(library)
+              ? _MatchingChoice(library: library)
+              : const SizedBox.shrink(),
         ),
         WaxColumn<LibraryInfo>(
           label: l10n.adminLibrariesColumnProfile,
@@ -193,7 +195,11 @@ class _LibraryTable extends ConsumerWidget {
                 ),
         ),
       ],
-      trailing: (context, library) => _RescanButton(library: library),
+      // A rescan reads every root but the podcast library, whose episodes
+      // the podcast engine catalogs.
+      trailing: (context, library) => library.media == 'podcast'
+          ? const SizedBox.shrink()
+          : _RescanButton(library: library),
     );
   }
 

@@ -99,8 +99,9 @@ Conventions:
   history; drop the local mirror and re-mirror from a fresh snapshot),
   `feed-unreachable` (an upstream feed could not be fetched or parsed;
   the feed's own server answered an error, timed out, or returned
-  something that is not a feed, or refused the show's stored
-  credentials for one of its episode enclosures), `source-unavailable`
+  something that is not a feed, or, for one of its episode
+  enclosures, refused the show's stored credentials or answered with
+  something other than audio or video), `source-unavailable`
   (the request
   needs an acquisition source integration, such as the YouTube bridge,
   that this server is not running), `directory-unavailable` (an
@@ -153,12 +154,14 @@ Conventions:
   params as a refinement and never require them. Under
   `feature-unavailable` - the umbrella for anything this server cannot
   do for a request - the defined keys are `feature`, the missing
-  capability, and `pid`, the subject it was asked about; the value
-  defined for `feature` so far is `windowed-track` (a track that is a
+  capability, and `pid`, the subject it was asked about; the values
+  defined for `feature` so far are `windowed-track` (a track that is a
   window into a larger file, sent to a device endpoint on a server
-  running without the streaming engine), and other refusals under
-  that code carry no params yet. Under `conflict`, a bookmark create
-  replaying the id of a removed bookmark carries `reason: removed`,
+  running without the streaming engine) and `podcasts` (a subscribe
+  or an OPML import on a server whose podcasts are turned off), and
+  other refusals under that code carry no params yet. Under
+  `conflict`, a bookmark create replaying the id of a removed
+  bookmark carries `reason: removed`,
   and a client drops its copy; a completed upload whose bytes miss
   their declared SHA-256 carries `reason: checksum-mismatch`, its
   session already ended. Under `unsupported-format`,
@@ -167,9 +170,26 @@ Conventions:
   server refuses. Under `invalid-request`, `reason` names
   two refusals a client words itself: `incompatible-schema` (a backup
   whose schema this server cannot open) and `cue-rip` (a delete
-  naming some tracks of a cue rip but not all). Values are
-  strings even when they read as numbers. Clients must ignore keys
-  they do not know, and an absent `params` means the plain code.
+  naming some tracks of a cue rip but not all); a subscribe also
+  names the feed address it will not take, in a message that is
+  already a sentence for a person (an import names it per entry, in
+  the entry's `reason`): `not-a-feed` (it answered with something
+  that is not a podcast feed), `too-large` (over the 16 MiB a feed
+  may be) or `blocked-address` (on a private or local network, which
+  this server does not fetch from). Under
+  `feed-unreachable`, `reason` says how the feed side failed:
+  `host-refused` (the host refused the request, which can mean it
+  wants credentials), `host-missing` (nothing at the address),
+  `host-error` (the host answered with an error, asked for the
+  request again later, or redirected in a loop) or `unreachable`
+  (no connection, or no answer in time); on a route whose address
+  the feed supplied rather than the caller, a refresh or a
+  transcript, the three refusals above arrive under this code.
+  `host-error` and `unreachable` can pass on their own; the rest
+  answer the same until the address or the server changes. Values
+  are strings even when they read as numbers. Clients must ignore
+  keys they do not know, and an absent `params` means the plain
+  code.
 - Media URLs returned by the API (e.g. `PlayInfo.url`) are relative to the
   server origin, the same origin that serves this API and the web UI.
   They live outside `/api/v1` and are not declared as operations here:
@@ -1071,6 +1091,7 @@ Class | Method | HTTP request | Description
  - [UploadBatchCreate](doc/UploadBatchCreate.md)
  - [UploadCreate](doc/UploadCreate.md)
  - [UploadGrouping](doc/UploadGrouping.md)
+ - [UploadMediaType](doc/UploadMediaType.md)
  - [UploadPage](doc/UploadPage.md)
  - [UploadQuota](doc/UploadQuota.md)
  - [UploadTarget](doc/UploadTarget.md)

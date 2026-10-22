@@ -2114,7 +2114,7 @@ class AdminApi {
   }
 
   /// List libraries
-  /// The catalog&#39;s libraries, for granting per-library visibility. Administrators only. Unpaginated: libraries are a handful of roots, not a collection that grows with content. &#x60;itemCount&#x60; is opt-in through &#x60;counts&#x60;, because it is the one field here that costs anything: the catalog has no library dimension, so counting a root means matching every item&#39;s path against it. Callers that want the names and pids - a permission editor, a matching-mode menu - should leave it off. 
+  /// The catalog&#39;s libraries, for granting per-library visibility. Administrators only. Unpaginated: libraries are a handful of roots, not a collection that grows with content. The podcast library (&#x60;media&#x60; is &#x60;podcast&#x60;) is listed once the server has fetched its first episode, which is when it is created. Granting it grants podcasts: every show and every episode, fetched or not. &#x60;itemCount&#x60; is opt-in through &#x60;counts&#x60;, because it is the one field here that costs anything: the catalog has no library dimension, so counting a root means matching every item&#39;s path against it. Callers that want the names and pids - a permission editor, a matching-mode menu - should leave it off. 
   ///
   /// Parameters:
   /// * [counts] - Count the items under each root. Off by default; the count is a scan per library, so it is asked for by the one screen that shows it. 

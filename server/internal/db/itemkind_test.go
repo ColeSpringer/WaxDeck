@@ -44,7 +44,7 @@ func TestRemapItemsAfterAKindChange(t *testing.T) {
 		pid string
 		ns  int64
 	}{{book, 100}, {folded, 300}} {
-		if err := d.StampPlayState(ctx, "us-1", s.pid, s.ns); err != nil {
+		if err := d.StampPlayState(ctx, "us-1", s.pid, s.ns, 0); err != nil {
 			t.Fatal(err)
 		}
 	}

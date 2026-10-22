@@ -9,6 +9,11 @@ paths:
         Administrators only. Unpaginated: libraries are a handful of roots,
         not a collection that grows with content.
 
+        The podcast library (`media` is `podcast`) is listed once the
+        server has fetched its first episode, which is when it is created.
+        Granting it grants podcasts: every show and every episode, fetched
+        or not.
+
         `itemCount` is opt-in through `counts`, because it is the one
         field here that costs anything: the catalog has no library
         dimension, so counting a root means matching every item's path

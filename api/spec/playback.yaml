@@ -51,9 +51,17 @@ paths:
         silence trim nor voice boost applies until the episode is fetched,
         and `seekable` is best effort for passthrough: whether the host
         honours ranges is unknown until the first upstream request. The
-        episode still reports `downloaded: false`, and fetching it is
-        still what makes it play from local bytes with analysis. Only an
-        episode whose feed named no enclosure at all answers `conflict`.
+        relay serves only audio and video, never a playlist or a stream
+        manifest: a host answering with a page, a document, a picture or a
+        playlist is refused with `feed-unreachable`, and every relayed
+        response carries `X-Content-Type-Options: nosniff`. The episode
+        still reports `downloaded: false`, and fetching it is still what
+        makes it play from local bytes with analysis. An episode whose
+        feed named no enclosure at all answers `conflict`, as does one
+        whose feed calls its enclosure a playlist or a stream manifest,
+        and an episode of a YouTube show, whose enclosure is a watch page
+        rather than audio, answers `conflict` until the server has
+        fetched it.
       tags: [playback]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -150,8 +158,11 @@ paths:
           description: >
             The item cannot stream (code `conflict`): a podcast episode
             whose audio has not been fetched to the server and whose feed
-            named no enclosure to relay. An unfetched episode that does
-            have an enclosure answers 200 with a passthrough url instead.
+            named no enclosure to relay, an unfetched episode of a
+            YouTube show, or an unfetched episode of a private show (see
+            `PodcastShow`) the caller does not subscribe to. An unfetched
+            episode that does have an enclosure to relay answers 200 with
+            a passthrough url instead.
           content:
             application/json:
               schema:
@@ -1331,7 +1342,12 @@ components:
           type: string
           description: >
             MIME type the stream will be served as;
-            `application/vnd.apple.mpegurl` for an HLS presentation.
+            `application/vnd.apple.mpegurl` for an HLS presentation. For
+            enclosure passthrough it is the type the feed declared when
+            that names one audio or video format, never a playlist, or is
+            `application/ogg`, `application/mpeg` or `application/mp4`,
+            else `audio/mpeg`; the relay answers with the podcast host's
+            own type when that passes the same rule.
           example: audio/flac
         durationMs:
           type: integer

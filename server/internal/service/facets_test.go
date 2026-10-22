@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -9,10 +10,10 @@ import (
 )
 
 // settleCatalogFeed waits for the change-feed consumer to catch up with
-// everything written so far. The enumeration cache keys on that
-// position, so an assertion about what is cached needs it to hold still
-// -- and the sweeper's own rewrites keep it moving for a moment after
-// the sweep returns.
+// everything written so far. The enumeration cache keys on the content
+// position, which follows the feed, so an assertion about what is cached
+// needs it to hold still -- and the sweeper's own rewrites keep it moving
+// for a moment after the sweep returns.
 func settleCatalogFeed(t *testing.T, svc *Library) int64 {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
@@ -240,7 +241,7 @@ func TestRestrictedFacetsAreComputedLive(t *testing.T) {
 // this dimension right now: the entry has to exist *and* belong to the
 // generation the cache is currently valid for.
 func servesFromCache(l *Library, dimension string) bool {
-	gen := l.facetGeneration()
+	gen := l.facetGeneration(context.Background())
 	l.facets.mu.Lock()
 	defer l.facets.mu.Unlock()
 	if l.facets.gen != gen {
@@ -327,7 +328,7 @@ func TestStaleEnumerationCannotEvictACurrentOne(t *testing.T) {
 	settleCatalogFeed(t, f.svc)
 
 	// The slow reader's work: computed and held, not yet published.
-	stale := f.svc.facetGeneration()
+	stale := f.svc.facetGeneration(f.ctx)
 	staleBuckets := facetsOf(t, f, "genre")
 
 	// The generation moves under it, and a second dimension publishes
@@ -343,7 +344,7 @@ func TestStaleEnumerationCannotEvictACurrentOne(t *testing.T) {
 	}
 
 	// Now the slow reader publishes. It must be dropped on the floor.
-	f.svc.publishFacetBuckets(stale, "genre", FacetSortCount, staleBuckets)
+	f.svc.publishFacetBuckets(f.ctx, stale, "genre", FacetSortCount, staleBuckets)
 	if !servesFromCache(f.svc, "artist") {
 		t.Fatal("a superseded enumeration rolled the cache back and evicted a current one")
 	}

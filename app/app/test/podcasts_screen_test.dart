@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:waxdeck/src/auth/credential_store.dart';
 import 'package:waxdeck/src/player/play_progress.dart';
+import 'package:waxdeck/src/podcasts/add_podcast.dart';
 import 'package:waxdeck/src/podcasts/podcasts_controller.dart';
 import 'package:waxdeck/src/podcasts/podcasts_screen.dart';
 import 'package:waxdeck/src/podcasts/show_actions.dart';
@@ -16,6 +19,7 @@ import 'package:waxdeck_player_testing/waxdeck_player_testing.dart';
 import 'package:waxdeck_ui/waxdeck_ui.dart';
 
 import 'fakes.dart';
+import 'localized_host.dart';
 import 'player_host.dart';
 import 'routed_host.dart';
 import 'secondary_click.dart';
@@ -634,6 +638,141 @@ void main() {
     );
     // The dialog stays open for another attempt.
     expect(find.byKey(const Key('podcast-url-field')), findsOneWidget);
+  });
+
+  testWidgets('a subscribe whose list reload fails still closes the dialog', (
+    tester,
+  ) async {
+    final repo = FakeRepository();
+    await _pump(tester, repo);
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastAdd));
+    await tester.pumpAndSettle();
+    await _openUrlPath(tester);
+    await tester.enterText(
+      find.byKey(const Key('podcast-url-field')),
+      'https://pony.example/feed.xml',
+    );
+    repo.listError = const WaxDeckApiException(
+      code: 'internal',
+      message: 'the list could not be read',
+      statusCode: 500,
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSubscribeConfirm),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(repo.subscribeCalls, hasLength(1));
+    // Subscribed: the reload's failure is the list's to show, not the
+    // dialog's.
+    expect(find.byKey(const Key('podcast-url-field')), findsNothing);
+
+    repo.listError = null;
+    await tester.pump(const Duration(minutes: 1));
+    await tester.pumpAndSettle();
+    expect(find.text('Subscribed Show 1'), findsOneWidget);
+  });
+
+  /// The add dialog over a page of its own, so a pop meant for the
+  /// dialog that lands on that page shows.
+  Future<void> openDialogOverPage(
+    WidgetTester tester,
+    FakeRepository repo,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          repositoryProvider.overrideWithValue(repo),
+          audioEngineProvider.overrideWithValue(FakeEngine()),
+        ],
+        child: localizedHost(
+          Builder(
+            builder: (context) => WaxButton(
+              label: 'Open',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => WaxButton(
+                    label: 'Add one',
+                    onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (_) => const SubscribeDialog(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add one'));
+    await tester.pumpAndSettle();
+  }
+
+  /// Cancels the dialog while the subscribe it sent is held, lets the
+  /// subscribe land one frame into the dialog's exit, and checks the page
+  /// under it stands.
+  Future<void> landWhileClosing(
+    WidgetTester tester,
+    FakeRepository repo,
+    Completer<void> gate,
+  ) async {
+    await tester.pump();
+    await tester.tap(find.text('Cancel'));
+    await tester.pump();
+    // Still on its way out when the subscription lands.
+    expect(find.byType(SubscribeDialog), findsOneWidget);
+
+    gate.complete();
+    await tester.pumpAndSettle();
+
+    expect(repo.subscribeCalls, hasLength(1));
+    expect(find.byType(SubscribeDialog), findsNothing);
+    expect(find.text('Add one'), findsOneWidget);
+  }
+
+  testWidgets('a subscribe that lands while the dialog is closing leaves the '
+      'page under it', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository()..subscribeGate = gate;
+    await openDialogOverPage(tester, repo);
+    await _openUrlPath(tester);
+    await tester.enterText(
+      find.byKey(const Key('podcast-url-field')),
+      'https://pony.example/feed.xml',
+    );
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSubscribeConfirm),
+    );
+    await landWhileClosing(tester, repo, gate);
+  });
+
+  testWidgets('a directory match that lands while the dialog is closing '
+      'leaves the page under it', (tester) async {
+    final gate = Completer<void>();
+    final repo = FakeRepository()
+      ..subscribeGate = gate
+      ..podcastDirectoryEntries = const <PodcastDirectoryEntry>[
+        PodcastDirectoryEntry(
+          name: 'Pipeweed Economics',
+          feedUrl: 'https://pony.example/feed.xml',
+        ),
+      ];
+    await openDialogOverPage(tester, repo);
+    await tester.enterText(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSearchField),
+      'pipeweed',
+    );
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.podcastSearchRun));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.bySemanticsIdentifier(SemanticsIds.podcastSearchSubscribe(0)),
+    );
+    await landWhileClosing(tester, repo, gate);
   });
 
   testWidgets('folders group the shows that declare one', (tester) async {

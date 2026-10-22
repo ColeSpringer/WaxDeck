@@ -281,7 +281,10 @@ components:
           $ref: "#/components/schemas/MediaType"
         title:
           type: string
-          description: Display title.
+          description: >
+            Display title. An episode's, which its feed gives, is cut to
+            its first 1000 characters, and so is the show title it
+            carries in `artist` and `album`.
           example: Prancing Pony Blues
         artist:
           type: string

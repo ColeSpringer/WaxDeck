@@ -13,6 +13,9 @@ var en = Strings{
 	ShareExpiresPrefix: "link expires",
 	ShareNotFoundTitle: "Not found",
 	ShareNotFoundBody:  "This link does not exist, has expired, or was revoked.",
+	ShareNotAvailable:  "Not available to play yet",
+	ShareAwayTitle:     "Back in a moment",
+	ShareAwayBody:      "The server is busy with maintenance. Try this link again in a minute.",
 
 	OidcTitle:              "WaxDeck sign-on",
 	OidcCodeHeading:        "Almost there",

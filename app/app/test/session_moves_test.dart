@@ -22,6 +22,15 @@ class _Clock {
   void advance(Duration by) => now = now.add(by);
 }
 
+/// An engine whose media reports no length, as a stream nothing has
+/// measured; it plays on all the same, to an end at [runsFor].
+class _LengthlessEngine extends FakeEngine {
+  _LengthlessEngine(Duration runsFor) : super(mediaDuration: runsFor);
+
+  @override
+  Duration? get duration => null;
+}
+
 /// A book in [count] parts of a minute each, whose own length says
 /// [totalMs] (its chapter timeline can run past the parts).
 BookDetail _book({int count = 2, int? totalMs}) => BookDetail(
@@ -509,6 +518,62 @@ void main() {
       expect(repo.putPlayStateCalls.last.positionMs, 12000);
     },
   );
+
+  group('an outro cutoff on an episode streamed from its feed', () {
+    // The feed declares ten minutes for twenty minutes of audio.
+    final episode = testEpisode(
+      _episodePid,
+      durationMs: 600000,
+      downloaded: false,
+    );
+
+    setUp(() {
+      repo
+        ..addSubscription(
+          testShow(_showPid),
+          settings: const SubscriptionSettings(skipOutroSeconds: 300),
+        )
+        ..episodesByShow[_showPid] = [episode];
+    });
+
+    test(
+      'counts back from the end of the audio, not the declared length',
+      () async {
+        engine.mediaDuration = const Duration(minutes: 20);
+        final session = await started(item: episode);
+        await session.seek(const Duration(seconds: 298));
+        engine.advance(const Duration(seconds: 2));
+        await settle();
+        expect(
+          engine.playing,
+          isTrue,
+          reason: 'mid-audio, whatever the feed says',
+        );
+
+        await session.seek(const Duration(seconds: 898));
+        engine.advance(const Duration(seconds: 2));
+        await settle();
+        expect(
+          engine.playing,
+          isFalse,
+          reason: 'five minutes before the audio ends',
+        );
+        await session.dispose();
+        expect(repo.putPlayStateCalls.last.positionMs, 1200000);
+      },
+    );
+
+    test('cuts nothing where the audio reports no length', () async {
+      engine = _LengthlessEngine(const Duration(minutes: 20));
+      final session = await started(item: episode);
+      await session.seek(const Duration(seconds: 298));
+      engine.advance(const Duration(seconds: 2));
+      await settle();
+      expect(engine.playing, isTrue);
+      expect(repo.reportedSessions.where((s) => s.finished), isEmpty);
+      await session.dispose();
+    });
+  });
 
   test('a stop armed behind the playhead is spent, not reached', () async {
     final session = await started();

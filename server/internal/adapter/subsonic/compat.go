@@ -5,6 +5,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/service"
@@ -37,12 +38,13 @@ func (h *Handler) getOpenSubsonicExtensions(w http.ResponseWriter, r *http.Reque
 }
 
 func (h *Handler) getIndexes(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	idx, err := h.index(r.Context(), uc)
-	if err != nil {
-		h.fail(w, r, 0, "reading the library failed")
+	idx, ok := h.scopedIndex(w, r, uc)
+	if !ok {
 		return
 	}
-	out := &indexes{LastModified: h.svc.CatalogTailSeq()}
+	// The position the index answers for, so a client's change check
+	// moves exactly when what it is shown does.
+	out := &indexes{LastModified: idx.tail}
 	var section *folderIndex
 	for _, a := range idx.artists {
 		letter := indexLetter(a.name)
@@ -50,13 +52,17 @@ func (h *Handler) getIndexes(w http.ResponseWriter, r *http.Request, uc *service
 			out.Index = append(out.Index, folderIndex{Name: letter})
 			section = &out.Index[len(out.Index)-1]
 		}
-		section.Artists = append(section.Artists, folderArtist{ID: a.id, Name: a.name})
+		section.Artists = append(section.Artists, a.folder())
 	}
 	h.ok(w, r, envelope{Indexes: out})
 }
 
 func (h *Handler) getMusicDirectory(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
 	id := r.Form.Get("id")
+	if id == "" {
+		h.fail(w, r, 10, "missing id")
+		return
+	}
 	idx, err := h.index(r.Context(), uc)
 	if err != nil {
 		h.fail(w, r, 0, "reading the library failed")
@@ -84,24 +90,31 @@ func (h *Handler) getMusicDirectory(w http.ResponseWriter, r *http.Request, uc *
 }
 
 func (h *Handler) getAlbumList(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	idx, err := h.index(r.Context(), uc)
+	idx, ok := h.scopedIndex(w, r, uc)
+	if !ok {
+		return
+	}
+	albums, marks, ref, err := h.albumList(r.Context(), r, uc, idx)
+	if ref != nil {
+		h.fail(w, r, ref.code, ref.msg)
+		return
+	}
 	if err != nil {
-		h.fail(w, r, 0, "reading the library failed")
+		h.failFromService(w, r, err, "listing albums failed")
 		return
 	}
 	out := &albumList{}
-	for _, al := range h.pagedAlbums(r, idx) {
+	for _, al := range albums {
 		out.Albums = append(out.Albums, albumDirChild(al))
 	}
-	h.ok(w, r, envelope{AlbumList: out})
+	h.ok(w, r, envelope{AlbumList: out, entityMarks: marks})
 }
 
 // getStarred is getStarred2's folder-mode twin: the same three lists in
 // the directory shapes this mode uses.
 func (h *Handler) getStarred(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	idx, err := h.index(r.Context(), uc)
-	if err != nil {
-		h.fail(w, r, 0, "reading the library failed")
+	idx, ok := h.scopedIndex(w, r, uc)
+	if !ok {
 		return
 	}
 	songs, err := h.starredSongs(r, uc, idx)
@@ -109,14 +122,14 @@ func (h *Handler) getStarred(w http.ResponseWriter, r *http.Request, uc *service
 		h.failFromService(w, r, err, "listing starred items failed")
 		return
 	}
-	artists, albums, err := h.starredGroups(r, uc, idx)
+	artists, albums, err := h.starredGroups(r.Context(), uc, idx)
 	if err != nil {
 		h.failFromService(w, r, err, "listing starred entities failed")
 		return
 	}
 	out := &starred{Songs: songs}
 	for _, a := range artists {
-		out.Artists = append(out.Artists, folderArtist{ID: a.id, Name: a.name})
+		out.Artists = append(out.Artists, a.folder())
 	}
 	for _, al := range albums {
 		out.Albums = append(out.Albums, albumDirChild(al))
@@ -125,9 +138,8 @@ func (h *Handler) getStarred(w http.ResponseWriter, r *http.Request, uc *service
 }
 
 func (h *Handler) getRandomSongs(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
-	idx, err := h.index(r.Context(), uc)
-	if err != nil {
-		h.fail(w, r, 0, "reading the library failed")
+	idx, ok := h.scopedIndex(w, r, uc)
+	if !ok {
 		return
 	}
 	size := clampCount(formInt(r, "size", 10))
@@ -171,9 +183,8 @@ func (h *Handler) getSongsByGenre(w http.ResponseWriter, r *http.Request, uc *se
 		h.fail(w, r, 10, "missing genre")
 		return
 	}
-	idx, err := h.index(r.Context(), uc)
-	if err != nil {
-		h.fail(w, r, 0, "reading the library failed")
+	idx, ok := h.scopedIndex(w, r, uc)
+	if !ok {
 		return
 	}
 	count := clampCount(formInt(r, "count", 10))
@@ -208,18 +219,72 @@ func (h *Handler) getScanStatus(w http.ResponseWriter, r *http.Request, uc *serv
 	h.ok(w, r, envelope{ScanStatus: &scanStatus{Scanning: false, Count: int64(len(idx.tracks))}})
 }
 
-// Artist biographies and top-song rankings have no backing source on
-// this server; the empty shapes keep client artist pages rendering.
+// Artist biographies have no backing source on this server; the empty
+// shapes keep client artist pages rendering.
 func (h *Handler) getArtistInfo(w http.ResponseWriter, r *http.Request) {
+	if r.Form.Get("id") == "" {
+		h.fail(w, r, 10, "missing id")
+		return
+	}
 	h.ok(w, r, envelope{ArtistInfo: &artistInfo{}})
 }
 
 func (h *Handler) getArtistInfo2(w http.ResponseWriter, r *http.Request) {
+	if r.Form.Get("id") == "" {
+		h.fail(w, r, 10, "missing id")
+		return
+	}
 	h.ok(w, r, envelope{ArtistInfo2: &artistInfo{}})
 }
 
-func (h *Handler) getTopSongs(w http.ResponseWriter, r *http.Request) {
-	h.ok(w, r, envelope{TopSongs: &songList{}})
+// getTopSongs is an artist's tracks the caller has played, most played
+// first, the more recently played on a tie. The artist is named, as the
+// protocol has it, matched on either the track's artist or the album
+// artist it groups under.
+func (h *Handler) getTopSongs(w http.ResponseWriter, r *http.Request, uc *service.UserCtx) {
+	name := r.Form.Get("artist")
+	if name == "" {
+		h.fail(w, r, 10, "missing artist")
+		return
+	}
+	idx, err := h.index(r.Context(), uc)
+	if err != nil {
+		h.fail(w, r, 0, "reading the library failed")
+		return
+	}
+	count := clampCount(formInt(r, "count", 50))
+	var candidates []track
+	var pids []string
+	for _, tr := range idx.tracks {
+		al := idx.albumForTrack(tr)
+		if strings.EqualFold(tr.Artist, name) || (al != nil && strings.EqualFold(al.artist, name)) {
+			candidates = append(candidates, tr)
+			pids = append(pids, tr.PID)
+		}
+	}
+	counts, err := h.svc.ItemMarks(r.Context(), uc, pids)
+	if err != nil {
+		h.failFromService(w, r, err, "reading play counts failed")
+		return
+	}
+	played := candidates[:0]
+	for _, tr := range candidates {
+		if counts[tr.PID].PlayCount > 0 {
+			played = append(played, tr)
+		}
+	}
+	sort.SliceStable(played, func(i, j int) bool {
+		mi, mj := counts[played[i].PID], counts[played[j].PID]
+		if mi.PlayCount != mj.PlayCount {
+			return mi.PlayCount > mj.PlayCount
+		}
+		return mi.LastPlayedAt.After(mj.LastPlayedAt)
+	})
+	out := &songList{Songs: []child{}}
+	for _, tr := range played[:min(count, len(played))] {
+		out.Songs = append(out.Songs, songChild(tr, idx.albumForTrack(tr)))
+	}
+	h.ok(w, r, envelope{TopSongs: out})
 }
 
 // --- podcasts (read-only) ----------------------------------------------------
@@ -338,19 +403,25 @@ func (h *Handler) channelEpisodes(ctx context.Context, uc *service.UserCtx, show
 // button honest about what is held locally.
 func episodeShape(ep service.EpisodeSummary, show service.PodcastShow) podcastEpisode {
 	showPID := show.PID
+	// The fetched file's format, or the one its feed declared for an
+	// episode the relay serves; formatFacts' floor when neither is known,
+	// which keeps contentType present (formatFacts says why it must be).
+	suffix, contentType := formatFacts(ep.Container)
+	if ep.MimeType != "" {
+		contentType = ep.MimeType
+	}
 	out := podcastEpisode{
 		child: child{
-			ID:       ep.PID,
-			Parent:   showPID,
-			Title:    ep.Title,
-			Artist:   ep.Artist,
-			Album:    ep.Album,
-			CoverArt: ep.PID,
-			Duration: int(ep.DurationMS / 1000),
-			Type:     "podcast",
-			// The episode row carries no container; the floor keeps
-			// contentType present (formatFacts says why it must be).
-			ContentType: "application/octet-stream",
+			ID:          ep.PID,
+			Parent:      showPID,
+			Title:       ep.Title,
+			Artist:      ep.Artist,
+			Album:       ep.Album,
+			CoverArt:    ep.PID,
+			Duration:    int(ep.DurationMS / 1000),
+			Type:        "podcast",
+			Suffix:      suffix,
+			ContentType: contentType,
 		},
 		ChannelID: showPID,
 	}

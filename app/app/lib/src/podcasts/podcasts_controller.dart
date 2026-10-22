@@ -31,7 +31,9 @@ class SubscriptionsController extends AsyncNotifier<List<Subscription>> {
 
   /// Subscribes and reloads the list. Errors propagate to the caller so
   /// the dialog can surface the server message (feed-unreachable text
-  /// matters to the user).
+  /// matters to the user). Answers once the subscription lands, without
+  /// waiting on the reload: a reload that fails, or sits in its retry
+  /// backoff, is the list's to show and never the subscription's.
   Future<Subscription> subscribe({
     required String url,
     String? sourceType,
@@ -40,16 +42,16 @@ class SubscriptionsController extends AsyncNotifier<List<Subscription>> {
         .read(repositoryProvider)
         .subscribePodcast(url: url, sourceType: sourceType);
     ref.invalidateSelf();
-    await future;
     return subscription;
   }
 
-  /// Imports an OPML document and reloads, so the shows that resolved
-  /// are on screen before the per-feed outcomes are reported.
-  Future<void> importOpml(String opml) async {
-    await ref.read(repositoryProvider).importOpml(opml);
+  /// Imports an OPML document and reloads the list, answering the
+  /// per-feed outcomes once the import lands, for the reason [subscribe]
+  /// gives: a failed reload never replaces the import's report.
+  Future<List<OpmlImportOutcome>> importOpml(String opml) async {
+    final outcomes = await ref.read(repositoryProvider).importOpml(opml);
     ref.invalidateSelf();
-    await future;
+    return outcomes;
   }
 }
 

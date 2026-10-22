@@ -90,6 +90,14 @@ table feed_state
   column last_synced_ns|INTEGER|notnull=1|default=0|pk=0
   column show_pid|TEXT|notnull=0|default=<none>|pk=1
   autoindex pk|unique=1|(show_pid)
+table fetch_holds
+  column episode_pid|TEXT|notnull=1|default=<none>|pk=1
+  column held_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column show_pid|TEXT|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=2
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(episode_pid,user_id)
+  index fetch_holds_by_show|unique=0|partial=0|(show_pid)
 table fetch_queue
   column attempts|INTEGER|notnull=1|default=0|pk=0
   column enqueued_at_ns|INTEGER|notnull=1|default=<none>|pk=0
@@ -114,16 +122,29 @@ table gpodder_actions
   column id|INTEGER|notnull=0|default=<none>|pk=1
   column podcast_url|TEXT|notnull=1|default=<none>|pk=0
   column position_sec|INTEGER|notnull=0|default=<none>|pk=0
+  column seq|INTEGER|notnull=1|default=<none>|pk=0
   column started_sec|INTEGER|notnull=0|default=<none>|pk=0
   column total_sec|INTEGER|notnull=0|default=<none>|pk=0
   column uploaded_sec|INTEGER|notnull=1|default=<none>|pk=0
   column user_id|TEXT|notnull=1|default=<none>|pk=0
   fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
-  index gpodder_actions_by_user|unique=0|partial=0|(user_id,id)
+  index gpodder_actions_by_episode|unique=0|partial=0|(user_id,episode_url)
+  index gpodder_actions_by_user|unique=0|partial=0|(user_id,seq)
+table gpodder_device_urls
+  column device_id|TEXT|notnull=1|default=<none>|pk=2
+  column feed_url|TEXT|notnull=1|default=<none>|pk=0
+  column removed_sec|INTEGER|notnull=1|default=0|pk=0
+  column show_pid|TEXT|notnull=1|default=<none>|pk=3
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  fk device_id->gpodder_devices.device_id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  fk user_id->gpodder_devices.user_id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,device_id,show_pid)
+  index gpodder_device_urls_by_show|unique=0|partial=0|(user_id,show_pid)
 table gpodder_devices
   column caption|TEXT|notnull=1|default=''|pk=0
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
   column device_id|TEXT|notnull=1|default=<none>|pk=2
+  column sub_cursor_sec|INTEGER|notnull=1|default=0|pk=0
   column type|TEXT|notnull=1|default='other'|pk=0
   column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
   column user_id|TEXT|notnull=1|default=<none>|pk=1
@@ -136,39 +157,54 @@ table gpodder_holds
   fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
   autoindex pk|unique=1|(user_id,show_pid,holder)
   index gpodder_holds_by_holder|unique=0|partial=0|(user_id,holder)
+table gpodder_notices
+  column device_id|TEXT|notnull=1|default=<none>|pk=2
+  column feed_key|TEXT|notnull=1|default=<none>|pk=3
+  column reason|TEXT|notnull=1|default=<none>|pk=4
+  column said_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column user_id|TEXT|notnull=1|default=<none>|pk=1
+  fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  autoindex pk|unique=1|(user_id,device_id,feed_key,reason)
+  index gpodder_notices_said|unique=0|partial=0|(said_ns)
 table gpodder_pending
   column attempts|INTEGER|notnull=1|default=0|pk=0
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
-  column device_id|TEXT|notnull=1|default=<none>|pk=0
+  column device_id|TEXT|notnull=1|default=<none>|pk=3
   column feed_url|TEXT|notnull=1|default=<none>|pk=2
   column last_error|TEXT|notnull=1|default=''|pk=0
   column next_try_ns|INTEGER|notnull=1|default=<none>|pk=0
   column user_id|TEXT|notnull=1|default=<none>|pk=1
   fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
-  autoindex pk|unique=1|(user_id,feed_url)
+  autoindex pk|unique=1|(user_id,feed_url,device_id)
   index gpodder_pending_due|unique=0|partial=0|(next_try_ns)
 table gpodder_sessions
   column app_password_id|TEXT|notnull=1|default=<none>|pk=0
+  column basic|INTEGER|notnull=1|default=0|pk=0
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
   column expires_at_ns|INTEGER|notnull=1|default=<none>|pk=0
   column id|TEXT|notnull=0|default=<none>|pk=1
+  column presented|INTEGER|notnull=1|default=0|pk=0
   column token_hash|BLOB|notnull=1|default=<none>|pk=0
   column user_id|TEXT|notnull=1|default=<none>|pk=0
   fk app_password_id->app_passwords.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
   fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
   autoindex pk|unique=1|(id)
   autoindex u|unique=1|(token_hash)
-  index gpodder_sessions_by_password|unique=0|partial=0|(app_password_id,created_at_ns)
+  index gpodder_sessions_by_password|unique=0|partial=0|(app_password_id,basic,created_at_ns)
   index gpodder_sessions_by_user|unique=0|partial=0|(user_id)
 table gpodder_sub_events
   column action|TEXT|notnull=1|default=<none>|pk=0
   column device_id|TEXT|notnull=1|default=''|pk=0
   column feed_url|TEXT|notnull=1|default=<none>|pk=0
   column id|INTEGER|notnull=0|default=<none>|pk=1
+  column removal|INTEGER|notnull=1|default=0|pk=0
+  column show_pid|TEXT|notnull=1|default=<none>|pk=0
   column ts_sec|INTEGER|notnull=1|default=<none>|pk=0
   column user_id|TEXT|notnull=1|default=<none>|pk=0
   fk user_id->users.id|on_update=NO ACTION|on_delete=CASCADE|match=NONE
+  index gpodder_sub_events_by_show|unique=1|partial=0|(user_id,show_pid)
   index gpodder_sub_events_by_user|unique=0|partial=0|(user_id,id)
+  index gpodder_sub_events_removals|unique=0|partial=1|(user_id,removal)
 table health_index
   column artist|TEXT|notnull=1|default=''|pk=0
   column detail|TEXT|notnull=1|default=''|pk=0
@@ -346,10 +382,13 @@ table organize_profiles
   column updated_at_ns|INTEGER|notnull=1|default=<none>|pk=0
   autoindex pk|unique=1|(name)
 table play_state_stamps
+  column gpodder_action|INTEGER|notnull=1|default=0|pk=0
   column item_pid|TEXT|notnull=1|default=<none>|pk=2
   column position_ns|INTEGER|notnull=1|default=0|pk=0
+  column seen_ns|INTEGER|notnull=1|default=0|pk=0
   column user_id|TEXT|notnull=1|default=<none>|pk=1
   autoindex pk|unique=1|(user_id,item_pid)
+  index play_state_stamps_seen|unique=0|partial=0|(user_id,seen_ns,item_pid)
 table playback_sessions
   column active|INTEGER|notnull=1|default=1|pk=0
   column authority|TEXT|notnull=1|default=<none>|pk=0
@@ -426,6 +465,7 @@ table podcast_subscriptions
   column auto_dl_include|TEXT|notnull=0|default=<none>|pk=0
   column auto_download|INTEGER|notnull=1|default=0|pk=0
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
+  column feed_url|TEXT|notnull=1|default=''|pk=0
   column folder|TEXT|notnull=1|default=''|pk=0
   column private|INTEGER|notnull=1|default=0|pk=0
   column retention_keep|INTEGER|notnull=0|default=<none>|pk=0
@@ -654,10 +694,17 @@ table tool_tasks
 table transcript_cache
   column cues|TEXT|notnull=1|default=''|pk=0
   column episode_pid|TEXT|notnull=0|default=<none>|pk=1
+  column fail_reason|TEXT|notnull=1|default=''|pk=0
   column fetched_at_ns|INTEGER|notnull=1|default=<none>|pk=0
   column format|TEXT|notnull=1|default=''|pk=0
   column negative|INTEGER|notnull=1|default=0|pk=0
+  column read_at_ns|INTEGER|notnull=1|default=0|pk=0
+  column row_bytes|INTEGER|notnull=1|default=0|pk=0
   autoindex pk|unique=1|(episode_pid)
+  index transcript_cache_by_read|unique=0|partial=0|(read_at_ns,episode_pid,row_bytes)
+table transcript_cache_size
+  column bytes|INTEGER|notnull=1|default=<none>|pk=0
+  column id|INTEGER|notnull=0|default=<none>|pk=1
 table upload_batches
   column created_at_ns|INTEGER|notnull=1|default=<none>|pk=0
   column expires_at_ns|INTEGER|notnull=1|default=<none>|pk=0

@@ -694,7 +694,9 @@ class _MatchingModeMenu extends ConsumerWidget {
             .contains('admin') ??
         false;
     if (!isAdmin) return const SizedBox.shrink();
-    final libraries = ref.watch(librariesProvider).value ?? const [];
+    final libraries = [
+      ...?ref.watch(librariesProvider).value?.where(libraryTakesMatching),
+    ];
     if (libraries.isEmpty) return const SizedBox.shrink();
     final l10n = context.l10n;
     return WaxMenuButton<(String, String)>(

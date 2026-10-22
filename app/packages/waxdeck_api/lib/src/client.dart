@@ -525,8 +525,9 @@ abstract interface class WaxDeckRepository {
   Future<String> exportOpml();
 
   /// `POST /podcasts/opml`: subscribes the caller to every feed in the
-  /// document; per-feed failures do not fail the import.
-  Future<void> importOpml(String opml);
+  /// document and answers each feed's outcome; per-feed failures do not
+  /// fail the import.
+  Future<List<OpmlImportOutcome>> importOpml(String opml);
 
   /// `GET /playlists`: the caller's playlists plus every shared one.
   /// [containsItem] restricts to static playlists holding that item.
@@ -2979,10 +2980,15 @@ class WaxDeckClient implements WaxDeckRepository {
   });
 
   @override
-  Future<void> importOpml(String opml) => _guard(() async {
-    await _gen.getPodcastsApi().importOpml(
+  Future<List<OpmlImportOutcome>> importOpml(String opml) => _guard(() async {
+    final response = await _gen.getPodcastsApi().importOpml(
+      // Every feed is subscribed, one after another, before it answers.
+      extra: const {_longOperation: true},
       opmlImport: gen.OpmlImport((b) => b..opml = opml),
     );
+    return _require(
+      response.data,
+    ).results.map(opmlImportOutcomeFromGen).toList(growable: false);
   });
 
   @override
@@ -4092,7 +4098,7 @@ class WaxDeckClient implements WaxDeckRepository {
         (b) => b
           ..fileName = fileName
           ..sizeBytes = sizeBytes
-          ..mediaType = gen.MediaType.valueOf(mediaType)
+          ..mediaType = uploadMediaTypeToGen(mediaType)
           ..libraryPid = libraryPid
           ..sha256 = sha256
           ..batchId = batchId
@@ -4129,7 +4135,7 @@ class WaxDeckClient implements WaxDeckRepository {
       uploadBatchCreate: gen.UploadBatchCreate(
         (b) => b
           ..grouping = uploadGroupingToGen(grouping)
-          ..mediaType = gen.MediaType.valueOf(mediaType)
+          ..mediaType = uploadMediaTypeToGen(mediaType)
           ..libraryPid = libraryPid
           ..identify = identify,
       ),
@@ -4194,7 +4200,7 @@ class WaxDeckClient implements WaxDeckRepository {
       acquisitionRequest: gen.AcquisitionRequest(
         (b) => b
           ..url = url
-          ..mediaType = mediaTypeToGen(mediaType)
+          ..mediaType = uploadMediaTypeToGen(mediaType.wireName)
           ..libraryPid = libraryPid
           ..identify = identify
           // "best" is the server default, so it rides as an absent field.

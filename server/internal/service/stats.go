@@ -490,7 +490,7 @@ func (l *Library) groupTotals(ctx context.Context, totals map[string]*itemTotals
 			if v.Artist == "" {
 				continue
 			}
-			key, name = strings.ToLower(v.Artist), v.Artist
+			key, name = strings.ToLower(v.Artist), clipFeedTitle(v.Artist)
 			artPID = itemAPIPID(v)
 		}
 		g := groups[key]
@@ -610,7 +610,7 @@ func (l *Library) ListenLog(ctx context.Context, uc *UserCtx, client, cursor str
 			}
 		}
 		if v := byPID[r.ItemPID]; v != nil {
-			e.Title, e.Artist = v.Title, v.Artist
+			e.Title, e.Artist, _ = itemNames(v)
 			e.PID = itemAPIPID(v)
 		}
 		out.Sessions = append(out.Sessions, e)

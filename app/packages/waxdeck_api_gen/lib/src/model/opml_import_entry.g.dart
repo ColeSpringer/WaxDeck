@@ -15,12 +15,19 @@ class _$OpmlImportEntry extends OpmlImportEntry {
   final String? pid;
   @override
   final String? error;
+  @override
+  final String? reason;
 
   factory _$OpmlImportEntry([void Function(OpmlImportEntryBuilder)? updates]) =>
       (OpmlImportEntryBuilder()..update(updates))._build();
 
-  _$OpmlImportEntry._({required this.feedUrl, this.title, this.pid, this.error})
-    : super._();
+  _$OpmlImportEntry._({
+    required this.feedUrl,
+    this.title,
+    this.pid,
+    this.error,
+    this.reason,
+  }) : super._();
   @override
   OpmlImportEntry rebuild(void Function(OpmlImportEntryBuilder) updates) =>
       (toBuilder()..update(updates)).build();
@@ -35,7 +42,8 @@ class _$OpmlImportEntry extends OpmlImportEntry {
         feedUrl == other.feedUrl &&
         title == other.title &&
         pid == other.pid &&
-        error == other.error;
+        error == other.error &&
+        reason == other.reason;
   }
 
   @override
@@ -45,6 +53,7 @@ class _$OpmlImportEntry extends OpmlImportEntry {
     _$hash = $jc(_$hash, title.hashCode);
     _$hash = $jc(_$hash, pid.hashCode);
     _$hash = $jc(_$hash, error.hashCode);
+    _$hash = $jc(_$hash, reason.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -55,7 +64,8 @@ class _$OpmlImportEntry extends OpmlImportEntry {
           ..add('feedUrl', feedUrl)
           ..add('title', title)
           ..add('pid', pid)
-          ..add('error', error))
+          ..add('error', error)
+          ..add('reason', reason))
         .toString();
   }
 }
@@ -80,6 +90,10 @@ class OpmlImportEntryBuilder
   String? get error => _$this._error;
   set error(String? error) => _$this._error = error;
 
+  String? _reason;
+  String? get reason => _$this._reason;
+  set reason(String? reason) => _$this._reason = reason;
+
   OpmlImportEntryBuilder() {
     OpmlImportEntry._defaults(this);
   }
@@ -91,6 +105,7 @@ class OpmlImportEntryBuilder
       _title = $v.title;
       _pid = $v.pid;
       _error = $v.error;
+      _reason = $v.reason;
       _$v = null;
     }
     return this;
@@ -121,6 +136,7 @@ class OpmlImportEntryBuilder
           title: title,
           pid: pid,
           error: error,
+          reason: reason,
         );
     replace(_$result);
     return _$result;

@@ -66,7 +66,7 @@ func TestCallerScopeNodeChunksPast500Shows(t *testing.T) {
 	ctx, svc, uc := newCatalogFixture(t)
 	all := len(fixtureItemPIDs(t, ctx, svc, uc))
 	for i := range 1001 {
-		if err := svc.db.UpsertSubscription(ctx, wdb.Subscription{UserID: uc.ID, ShowPID: fmt.Sprintf("show-%04d", i)}); err != nil {
+		if _, err := svc.db.AttachSubscription(ctx, wdb.Subscription{UserID: uc.ID, ShowPID: fmt.Sprintf("show-%04d", i)}, "", ""); err != nil {
 			t.Fatal(err)
 		}
 	}

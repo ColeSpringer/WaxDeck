@@ -12,6 +12,15 @@ import 'fakes.dart';
 import 'localized_host.dart';
 import 'player_host.dart';
 
+/// An engine whose media reports no length; it plays on all the same, to
+/// an end at [runsFor].
+class _LengthlessEngine extends FakeEngine {
+  _LengthlessEngine(Duration runsFor) : super(mediaDuration: runsFor);
+
+  @override
+  Duration? get duration => null;
+}
+
 /// Steps the fake clock one second at a time so each delta registers as
 /// normal playback progress in the listen accounting.
 Future<void> _listen(WidgetTester tester, FakeEngine engine, int secs) async {
@@ -133,6 +142,162 @@ void main() {
 
     expect(engine.position, Duration.zero);
     await harness.endPlayback(tester);
+  });
+
+  group('an episode checkpointed at or past the length its feed declares', () {
+    const episodePid = 'ep-01JZX5N8QW3F4V9T2B7KDEPIS01';
+    const showPid = 'pc-01JZX5N8QW3F4V9T2B7KDSHOW01';
+    // What a relayed episode's play-info carries: the length the feed
+    // declares, which inserted ads can leave well short of the audio.
+    const declaredMs = 30 * 60000;
+
+    Future<(FakeEngine, PlayerHarness)> resume(
+      WidgetTester tester, {
+      required Duration audio,
+      required int checkpointMs,
+      bool downloaded = false,
+      int declared = declaredMs,
+      bool lengthless = false,
+    }) async {
+      final episode = testEpisode(
+        episodePid,
+        showPid: showPid,
+        durationMs: declared,
+        downloaded: downloaded,
+      );
+      final repo = FakeRepository()
+        ..addSubscription(testShow(showPid))
+        ..episodesByShow[showPid] = [episode]
+        ..playPositions[episodePid] = checkpointMs;
+      final engine = lengthless
+          ? _LengthlessEngine(audio)
+          : FakeEngine(mediaDuration: audio);
+      final harness = await pumpPlayer(
+        tester,
+        repo: repo,
+        engine: engine,
+        item: episode,
+      );
+      return (engine, harness);
+    }
+
+    /// Plays from the top and keeps playing, rather than resuming at an
+    /// end it would run straight off.
+    Future<void> expectReplayFromTop(
+      WidgetTester tester,
+      FakeEngine engine,
+    ) async {
+      expect(engine.position, Duration.zero);
+      expect(engine.seekCalls, isEmpty);
+      engine.advance(const Duration(seconds: 1));
+      await tester.pump();
+      expect(engine.playing, isTrue);
+      expect(engine.position, const Duration(seconds: 1));
+    }
+
+    testWidgets('a relayed one resumes past that length', (tester) async {
+      final (engine, harness) = await resume(
+        tester,
+        audio: const Duration(hours: 1),
+        checkpointMs: 40 * 60000,
+      );
+      expect(engine.position, const Duration(minutes: 40));
+      expect(engine.playing, isTrue);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a relayed one starts over from a checkpoint past the end of '
+        'its audio', (tester) async {
+      final (engine, harness) = await resume(
+        tester,
+        audio: const Duration(minutes: 35),
+        checkpointMs: 40 * 60000,
+      );
+      await expectReplayFromTop(tester, engine);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a relayed one heard to the end of its audio replays from the '
+        'top', (tester) async {
+      // Where the last listen ended, give or take what another engine
+      // makes of the same audio's length.
+      final (engine, harness) = await resume(
+        tester,
+        audio: const Duration(hours: 1),
+        checkpointMs: 60 * 60000 - 2000,
+      );
+      await expectReplayFromTop(tester, engine);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a relayed one finished at its declared length replays from '
+        'the top', (tester) async {
+      // The end a finish records when all it has is play-info's length:
+      // the next item taking over, an outro cutoff.
+      final (engine, harness) = await resume(
+        tester,
+        audio: const Duration(hours: 1),
+        checkpointMs: declaredMs,
+      );
+      await expectReplayFromTop(tester, engine);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a relayed one whose feed declares no length, heard to its '
+        'end, replays from the top', (tester) async {
+      final (engine, harness) = await resume(
+        tester,
+        audio: const Duration(minutes: 30),
+        checkpointMs: 30 * 60000,
+        declared: 0,
+      );
+      await expectReplayFromTop(tester, engine);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a relayed one whose feed declares no length resumes where '
+        'it stood', (tester) async {
+      final (engine, harness) = await resume(
+        tester,
+        audio: const Duration(hours: 1),
+        checkpointMs: 10 * 60000,
+        declared: 0,
+      );
+      expect(engine.position, const Duration(minutes: 10));
+      expect(engine.playing, isTrue);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a relayed one of no length at all resumes where it stood', (
+      tester,
+    ) async {
+      // Neither the feed nor the audio says how long it is, so there is
+      // no end to hold the checkpoint against.
+      final (engine, harness) = await resume(
+        tester,
+        audio: const Duration(hours: 1),
+        checkpointMs: 10 * 60000,
+        declared: 0,
+        lengthless: true,
+      );
+      expect(engine.position, const Duration(minutes: 10));
+      expect(engine.playing, isTrue);
+      await harness.endPlayback(tester);
+    });
+
+    testWidgets('a downloaded one checkpointed at its end replays from the '
+        'top', (tester) async {
+      // Its play-info length is the audio's, measured, and the engine
+      // reads the same audio a few milliseconds longer.
+      final (engine, harness) = await resume(
+        tester,
+        audio: const Duration(milliseconds: declaredMs + 400),
+        checkpointMs: declaredMs,
+        downloaded: true,
+      );
+      await expectReplayFromTop(tester, engine);
+      await harness.endPlayback(tester);
+    });
   });
 
   testWidgets('starts from the top when nothing is saved', (tester) async {

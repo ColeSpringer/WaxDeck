@@ -31,6 +31,9 @@ var es = Strings{
 	ShareExpiresPrefix: "el enlace caduca el",
 	ShareNotFoundTitle: "No encontrado",
 	ShareNotFoundBody:  "Este enlace no existe, ha caducado o fue revocado.",
+	ShareNotAvailable:  "Todavía no se puede reproducir",
+	ShareAwayTitle:     "Vuelve en un momento",
+	ShareAwayBody:      "El servidor está en mantenimiento. Vuelve a abrir este enlace en un minuto.",
 
 	OidcTitle:              "Inicio de sesión de WaxDeck",
 	OidcCodeHeading:        "Ya casi está",

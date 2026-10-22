@@ -42,6 +42,8 @@ void main() {
     'catalog-reset': WaxRoute.libraries,
     'import-completed': WaxRoute.review,
     'feed-disabled': WaxRoute.podcasts,
+    'subscription-failed': WaxRoute.podcasts,
+    'gpodder-device-removed': WaxRoute.podcasts,
     'episode-downloaded': WaxRoute.podcasts,
     'episode-arrived': WaxRoute.podcasts,
     'playlist-synced': WaxRoute.playlists,

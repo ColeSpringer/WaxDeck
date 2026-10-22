@@ -438,6 +438,83 @@ func TestSubsonicScrobbleParity(t *testing.T) {
 	}
 }
 
+// A client that retries an untimed submission it timed out on records
+// one listen, not two a few milliseconds apart.
+func TestSubsonicUntimedScrobbleRetryDedupes(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	// The demo tracks are shorter than ten seconds, so the dedupe window
+	// is ten seconds; a pair straddling its edge is the accepted residue,
+	// so a pair that did is tried again on the next track.
+	for _, it := range h.items(t, "?mediaType=music").Items {
+		before := time.Now()
+		for range 2 {
+			if env := subsonicGet(t, h, "scrobble", secret, "&id="+it.Pid); env.Status != "ok" {
+				t.Fatalf("untimed scrobble = %+v", env)
+			}
+		}
+		if before.Truncate(10*time.Second) != time.Now().Truncate(10*time.Second) {
+			continue
+		}
+		st := decode[PlayState](t, get(t, h.ts, "/api/v1/items/"+it.Pid+"/play-state", h.token))
+		if st.PlayCount != 1 {
+			t.Fatalf("play count after an untimed retry = %d, want 1", st.PlayCount)
+		}
+		return
+	}
+	t.Fatal("every pair straddled a window edge")
+}
+
+// One untimed submission naming an id twice is two listens, and the same
+// submission retried is still two.
+func TestSubsonicUntimedRepeatsInOneSubmissionCountApart(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	for _, it := range h.items(t, "?mediaType=music").Items {
+		before := time.Now()
+		for range 2 {
+			if env := subsonicGet(t, h, "scrobble", secret, "&id="+it.Pid+"&id="+it.Pid); env.Status != "ok" {
+				t.Fatalf("untimed scrobble = %+v", env)
+			}
+		}
+		if before.Truncate(10*time.Second) != time.Now().Truncate(10*time.Second) {
+			continue
+		}
+		st := decode[PlayState](t, get(t, h.ts, "/api/v1/items/"+it.Pid+"/play-state", h.token))
+		if st.PlayCount != 2 {
+			t.Fatalf("play count after a submission naming the track twice, retried = %d, want 2", st.PlayCount)
+		}
+		return
+	}
+	t.Fatal("every pair straddled a window edge")
+}
+
+// A time in seconds is read as seconds: the play lands when it happened,
+// not twenty days into 1970.
+func TestSubsonicScrobbleTimeInSeconds(t *testing.T) {
+	t.Parallel()
+	h := newHarness(t)
+	secret := newSubsonicSecret(t, h)
+	pid := h.items(t, "?mediaType=music").Items[0].Pid
+	at := time.Now().Add(-30 * time.Minute).Truncate(time.Second)
+	if env := subsonicGet(t, h, "scrobble", secret, fmt.Sprintf("&id=%s&time=%d", pid, at.Unix())); env.Status != "ok" {
+		t.Fatalf("scrobble = %+v", env)
+	}
+	log := decode[ListenLogPage](t, get(t, h.ts, "/api/v1/stats/sessions?client=test", h.token))
+	if len(log.Sessions) != 1 || log.Sessions[0].Pid != pid || !log.Sessions[0].StartedAt.Equal(at) {
+		t.Fatalf("listen log = %+v, want the play at %v", log.Sessions, at)
+	}
+	if since := time.Since(log.Sessions[0].StartedAt); since < 0 || since > time.Hour {
+		t.Fatalf("the play landed %v ago, want within the last hour", since)
+	}
+	heatmap := decode[ListeningHeatmap](t, get(t, h.ts, "/api/v1/stats/heatmap?year=1970", h.token))
+	if len(heatmap.Days) != 0 {
+		t.Fatalf("1970 heatmap = %+v, want no listening", heatmap.Days)
+	}
+}
+
 func TestListenBrainzPrivateHostRefused(t *testing.T) {
 	t.Parallel()
 	// Without the opt-in flag, a caller-supplied API base on a private

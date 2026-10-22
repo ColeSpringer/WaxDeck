@@ -418,6 +418,7 @@ Serializers _$serializers =
           ..add(UploadBatchCreate.serializer)
           ..add(UploadCreate.serializer)
           ..add(UploadGrouping.serializer)
+          ..add(UploadMediaType.serializer)
           ..add(UploadPage.serializer)
           ..add(UploadQuota.serializer)
           ..add(UploadTarget.serializer)

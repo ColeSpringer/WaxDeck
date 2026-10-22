@@ -68,6 +68,8 @@ void main() {
         NotificationKind.catalogReset: 'catalog-reset',
         NotificationKind.reviewReady: 'review-ready',
         NotificationKind.feedDisabled: 'feed-disabled',
+        NotificationKind.subscriptionFailed: 'subscription-failed',
+        NotificationKind.gpodderDeviceRemoved: 'gpodder-device-removed',
         NotificationKind.importCompleted: 'import-completed',
         NotificationKind.episodeDownloaded: 'episode-downloaded',
         NotificationKind.episodeArrived: 'episode-arrived',

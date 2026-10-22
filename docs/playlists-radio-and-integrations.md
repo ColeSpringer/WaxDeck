@@ -254,7 +254,9 @@ The radio library is shared by the whole server: any user can add,
 edit, or remove stations. Add stations by searching the public
 radio-browser directory or by pasting a stream URL. Playback proxies
 through the server's origin, so web clients are never blocked by a
-station's missing CORS headers.
+station's missing CORS headers. The proxy relays audio only: a `.pls`
+or `.m3u` playlist address is followed to the first stream it names,
+and HLS station addresses are not supported.
 
 Stream URLs pointing at private network addresses are refused by
 default, since the server fetches them; set
@@ -427,30 +429,91 @@ distributors are legitimate.
 
 ## Third-party apps
 
-The Subsonic surface now covers playlists (create, read, update,
-delete, reorder, remove by index, several indexes in one write), stars
-and ratings, `getStarred2`, scrobbling
-(submissions become listens with full dedup; now-playing updates
-forward to connected scrobblers), the radio library, and bookmark
-calls mapped onto podcast and audiobook resume positions. Song and
-album rows carry the OpenSubsonic `explicitStatus` advisory - episodes
-from their feed's declared flag (their show's counts too), music from
-an `ITUNESADVISORY` tag asserting explicit, albums from any flagged
-member - emitted only in the positive direction, so an absent value
-means unasserted, never clean. Clients
-authenticate with app passwords, managed under Settings; the login
-password never works there.
+Subsonic and OpenSubsonic clients sign in with an app password,
+managed under Settings; the login password never works there.
 
-Real clients hit more than the ID3 core on startup, so the surface
-also answers folder-mode browsing (`getIndexes`, `getMusicDirectory`,
-`getAlbumList`, `getStarred`, emulated from tags with the same ids as
-the ID3 views), `getRandomSongs` and `getSongsByGenre`,
-`getScanStatus`, empty-but-valid `getArtistInfo`/`getArtistInfo2` and
-`getTopSongs`, `getOpenSubsonicExtensions` (advertising
-`apiKeyAuthentication`, `formPost`, `sonicSimilarity` and, on a server
-running the streaming engine, `transcodeOffset`, all real), and read-only
-podcasts (`getPodcasts`/`getNewestPodcasts`: your subscriptions, with
-downloaded episodes streamable and everything else honestly marked).
+Browsing covers the ID3 views and folder mode (`getIndexes`,
+`getMusicDirectory`, `getAlbumList`, `getStarred`, emulated from tags
+with the same ids as the ID3 views), search, `getRandomSongs`,
+`getSongsByGenre`, `getGenres`, `getScanStatus` and cover art. A cover
+that does not exist answers HTTP 404, so a client shows its own
+placeholder. Music folders are your music libraries, each under an id
+that stays put as libraries come and go; `musicFolderId` narrows
+browsing, the album and song lists, search and the starred lists to one
+of them, and an album with tracks in two libraries is in both.
+Audiobook libraries and the podcast library are never music folders.
+Books and episodes appear as songs in the starred lists (unless
+`musicFolderId` narrows them), playlists, bookmarks, `getNowPlaying`
+and `getSong` on their own ids, and episodes in `getPodcasts` and
+`getNewestPodcasts`. They never appear in the browse views, the album
+lists, search, `getRandomSongs`, `getSongsByGenre`, `getGenres`,
+`getTopSongs` or the similar-song views, and `getScanStatus` counts
+music alone.
+
+Album lists answer every type: `random`, `newest` (recently added),
+`recent` (recently played), `frequent` (most played, an album's tracks
+added up), `highest` (your album ratings), `starred`,
+`alphabeticalByName`, `alphabeticalByArtist`, `byYear` (either
+direction; albums with no year only when the range starts at 0) and
+`byGenre` (any album with a track of that genre). `recent`, `frequent`,
+`highest` and `starred` are the signed-in account's own; `recent` and
+`frequent` can lag a play by up to a minute. `newest` lists
+every album: those of the 20,000 most recently added tracks in that
+order, then the rest by name, so paging through it reaches the whole
+library. Songs, albums, artists and folder-mode directories carry your
+star (`starred`, with when you starred it) and your rating
+(`userRating`, 1 to 5); songs and albums carry your play count and last
+play, and when they were added; songs also carry their file's size and
+bitrate, and `bookmarkPosition` where you hold a bookmark on them.
+`getTopSongs` is your most played tracks by the artist. `getNowPlaying`
+lists what the WaxDeck apps and devices are playing for you, and for
+others on a device shared with you, a paused session until ten minutes
+after it last moved; a Subsonic client's own plays are not sessions
+there.
+
+Stars and ratings write the same state the WaxDeck apps show, and so do
+playlists (create, read, update, delete, reorder, remove by index,
+several indexes in one write; an index from a listing the playlist has
+since changed away from is refused rather than removing another track).
+Scrobbles become listens with full dedup, and now-playing updates
+forward to connected scrobblers. A scrobble time in seconds,
+milliseconds, microseconds or nanoseconds lands when the play happened;
+one before 2000 or more than a day ahead is stamped on arrival instead,
+and a client resending an untimed scrobble straight away (within the
+track's length, at most ten minutes) normally counts once, while one
+submission naming a track twice counts twice. Bookmarks work for every
+kind of item: every book and episode in progress is one, the position
+the WaxDeck apps resume from (a finished one is not, unless you save a
+bookmark on it), while a track's is kept on its own and leaves the
+track's place alone, and stays when the track becomes a book. Comments
+are kept, and an account holds up to 1000 bookmarks; those on items
+hidden from you for now (a library or content setting) are kept without
+counting, up to 1000 more, the oldest let go past that.
+
+Song and album rows carry the OpenSubsonic `explicitStatus` advisory -
+episodes from their feed's declared flag (their show's counts too),
+music from an `ITUNESADVISORY` tag asserting explicit, albums from any
+flagged member - emitted only in the positive direction, so an absent
+value means unasserted, never clean. `getOpenSubsonicExtensions`
+advertises `apiKeyAuthentication`, `formPost`, `sonicSimilarity` and,
+on a server running the streaming engine, `transcodeOffset`, all real,
+and `tokenInfo` names the account an API key belongs to. Podcasts are
+read-only (`getPodcasts`, `getNewestPodcasts`: your subscriptions); an
+episode plays whether or not the server has fetched it, relayed from
+the feed's own file where the server can relay it, and its status says
+whether it is on the server. The internet radio library is there too.
+
+What clients will not find: `getPlayQueue` and `savePlayQueue` are
+refused, artist biographies are empty, and there are no share, jukebox,
+lyrics, scan or podcast-management verbs; `getUser` claims no share or
+podcast role, so clients hide those controls. A response naming more
+than 500 artists and albums carries their stars but no ratings; only
+the first 500 files of a response carry a size, a bitrate and an added
+time; a track cut from a CD image by a cue sheet carries no size; and
+an album's added time is its first track's. `newest`, `recent` and
+`frequent` read at most the first 20,000 tracks of the list each comes
+from (a music folder's own, under `musicFolderId`).
+
 The test suite replays the startup, browse, and play request
 sequences of DSub, Feishin, and Symfonium against a live server on
 every run, so a regression on any of those paths fails CI rather than
@@ -465,7 +528,9 @@ or an empty value means "no cap" and still serves the original bytes.
 A `format` pinned alongside a cap is honored where the server can
 produce it, so a client that asks for 192 kbps mp3 gets mp3 rather than
 whatever the ladder would have picked; one the server cannot produce
-falls back to the ladder. `format=raw` beats a cap outright and serves
+falls back to the ladder. A client that names no format gets a capped
+stream, its own cap or the account's ceiling, as MP3, which every
+client decodes. `format=raw` beats a cap outright and serves
 the file as it is, which is what that value means everywhere else in the
 protocol; a book in parts has no one file, and gets the joined stream
 described below. A `format` on its own, with no cap beside it, changes

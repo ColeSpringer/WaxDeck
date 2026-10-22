@@ -4,8 +4,9 @@
 // ETag/Last-Modified conditional GETs so feed polling behaves like it
 // does against a real host. With -generate it first synthesizes the
 // preset fixture feeds into the directory (the default one at its root,
-// fixtures.EarlyPodcastFeed under early/), enclosure URLs pointing back
-// at itself. It holds no state and must never face a real network.
+// fixtures.EarlyPodcastFeed under early/, fixtures.RelayPodcastFeed under
+// relayed/), enclosure URLs pointing back at itself. It holds no state and
+// must never face a real network.
 //
 //	feedserv -dir /tmp/feed -generate
 package main

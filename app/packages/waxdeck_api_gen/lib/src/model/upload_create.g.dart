@@ -12,7 +12,7 @@ class _$UploadCreate extends UploadCreate {
   @override
   final int sizeBytes;
   @override
-  final MediaType mediaType;
+  final UploadMediaType mediaType;
   @override
   final String? libraryPid;
   @override
@@ -100,9 +100,9 @@ class UploadCreateBuilder
   int? get sizeBytes => _$this._sizeBytes;
   set sizeBytes(int? sizeBytes) => _$this._sizeBytes = sizeBytes;
 
-  MediaType? _mediaType;
-  MediaType? get mediaType => _$this._mediaType;
-  set mediaType(MediaType? mediaType) => _$this._mediaType = mediaType;
+  UploadMediaType? _mediaType;
+  UploadMediaType? get mediaType => _$this._mediaType;
+  set mediaType(UploadMediaType? mediaType) => _$this._mediaType = mediaType;
 
   String? _libraryPid;
   String? get libraryPid => _$this._libraryPid;

@@ -195,7 +195,7 @@ func TestFeedErrorsAnswerByWhoseFaultTheyAre(t *testing.T) {
 		{"a raw database error", errors.New("database or disk is full"), KindInternal},
 		{"a switched-off source", waxerr.New(waxerr.CodeUnsupported, "podcast", "no provider for youtube"), KindUnsupported},
 	} {
-		if got := KindOf(l.classifyFeedErr(context.Background(), c.err, "https://feed.example/rss", false)); got != c.want {
+		if got := KindOf(l.classifyFeedErr(context.Background(), c.err)); got != c.want {
 			t.Errorf("%s answered %q, want %q", c.name, got, c.want)
 		}
 	}

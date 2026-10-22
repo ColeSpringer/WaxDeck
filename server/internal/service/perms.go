@@ -148,7 +148,9 @@ func (l *Library) allowedByContent(ctx context.Context, uc *UserCtx, it *model.I
 	}
 	tags, err := l.lib.ItemTags(ctx, it.PID)
 	if err != nil {
-		return false // fail closed for restricted callers
+		// Fail closed for restricted callers, and say so.
+		noteDegraded(ctx)
+		return false
 	}
 	return matchesTagRules(tags, uc.TagAllow, uc.TagDeny)
 }
@@ -195,7 +197,7 @@ func (l *Library) episodeAllowed(ctx context.Context, uc *UserCtx, ep *model.Epi
 	if ep.Explicit {
 		return false
 	}
-	show, err := l.lib.Podcasts().Get(ctx, ep.PodcastPID)
+	show, err := l.readShow(ctx, ep.PodcastPID)
 	return err == nil && !show.Explicit
 }
 
@@ -234,10 +236,11 @@ func (l *Library) contentAllowsPID(ctx context.Context, uc *UserCtx, pid model.P
 // the per-item filter short-circuits them before it ever reads tags.
 //
 // A spelling read that fails compiles to match-nothing for the
-// caller's non-episode rows, allow and deny alike. The per-item filter
-// fails closed on an unreadable tag read, and the listing path carries
-// this node in place of that filter, so a transient store error must
-// not serve a page the deny rules would have hidden.
+// caller's non-episode rows, allow and deny alike, and says so to the
+// watchers ctx carries (WatchDegraded). The per-item filter fails closed
+// on an unreadable tag read, and the listing path carries this node in
+// place of that filter, so a transient store error must not serve a page
+// the deny rules would have hidden.
 func (l *Library) contentRuleNode(ctx context.Context, uc *UserCtx) query.Node {
 	if uc.Admin || uc.ContentUnrestricted() {
 		return nil
@@ -274,6 +277,7 @@ func (l *Library) contentRuleNode(ctx context.Context, uc *UserCtx) query.Node {
 		}
 		spellings, err := l.tagSpellings(ctx, field, r.Value)
 		if err != nil {
+			noteDegraded(ctx)
 			return episodesAside(matchNothing)
 		}
 		conds = append(conds, query.Cond{
@@ -291,6 +295,7 @@ func (l *Library) contentRuleNode(ctx context.Context, uc *UserCtx) query.Node {
 		}
 		spellings, err := l.tagSpellings(ctx, field, r.Value)
 		if err != nil {
+			noteDegraded(ctx)
 			return episodesAside(matchNothing)
 		}
 		if len(spellings) == 0 {
@@ -332,7 +337,7 @@ func tagRuleField(key string) (string, bool) {
 // aggregation neither lands stale nor rolls the stamp back over a newer
 // field's entry.
 func (l *Library) tagSpellings(ctx context.Context, field, value string) ([]string, error) {
-	gen := l.facetGeneration()
+	gen := l.facetGeneration(ctx)
 	l.tagValues.mu.Lock()
 	if l.tagValues.gen == gen {
 		if held, ok := l.tagValues.byField[field]; ok {
@@ -346,8 +351,12 @@ func (l *Library) tagSpellings(ctx context.Context, field, value string) ([]stri
 	// items cannot change any answer - the state predicate drops those
 	// rows wherever this node is conjoined - and narrowing the
 	// aggregation is the cheaper way to say so.
-	res, err := l.lib.Facet(ctx, visibleItems().Build(),
-		read.GroupBy(field), read.FacetOrderLabel, 0, "")
+	var res *read.FacetResult
+	err := l.fallbackFault("tag spellings")
+	if err == nil {
+		res, err = l.lib.Facet(ctx, visibleItems().Build(),
+			read.GroupBy(field), read.FacetOrderLabel, 0, "")
+	}
 	if err != nil {
 		l.log.Warn("enumerating tag values for a content rule", "field", field, "err", err)
 		return nil, classify(err)
@@ -358,15 +367,28 @@ func (l *Library) tagSpellings(ctx context.Context, field, value string) ([]stri
 			stored = append(stored, b.Display)
 		}
 	}
-	l.tagValues.mu.Lock()
-	if l.facetGeneration() == gen {
-		if l.tagValues.gen != gen || l.tagValues.byField == nil {
-			l.tagValues.gen, l.tagValues.byField = gen, map[string][]string{}
-		}
-		l.tagValues.byField[field] = stored
-	}
-	l.tagValues.mu.Unlock()
+	l.publishTagValues(ctx, gen, field, stored)
 	return foldMatching(stored, value), nil
+}
+
+// publishTagValues stores one field's spellings, read under gen, while gen
+// is still the current generation: read before the lock, which holds no
+// catalog read, with only a generation dominating the held one installed
+// under it, so no publisher holding an older one can land after a newer
+// publish.
+func (l *Library) publishTagValues(ctx context.Context, gen facetGeneration, field string, stored []string) {
+	if l.facetGeneration(ctx) != gen {
+		return
+	}
+	l.tagValues.mu.Lock()
+	defer l.tagValues.mu.Unlock()
+	if l.tagValues.byField != nil && !gen.dominates(l.tagValues.gen) {
+		return
+	}
+	if l.tagValues.gen != gen || l.tagValues.byField == nil {
+		l.tagValues.gen, l.tagValues.byField = gen, map[string][]string{}
+	}
+	l.tagValues.byField[field] = stored
 }
 
 func foldMatching(stored []string, value string) []string {

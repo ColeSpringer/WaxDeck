@@ -751,6 +751,65 @@ void main() {
     expect(find.bySemanticsIdentifier(SemanticsIds.matchingMenu), findsNothing);
   });
 
+  testWidgets('the podcast library offers no matching rows', (tester) async {
+    // Its episodes come from their feeds, and the server refuses a
+    // matching change on it.
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(
+          id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
+          username: 'admin',
+          roles: ['admin'],
+        ),
+      ),
+    );
+    repo.libraries.addAll(const [
+      LibraryInfo(pid: 'lb-1', name: 'Music'),
+      LibraryInfo(pid: 'lb-p', name: 'Podcasts', media: 'podcast'),
+    ]);
+    await _pump(tester, _host(_container(repo)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.bySemanticsIdentifier(SemanticsIds.matchingMenu));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.matchingOption('lb-1', 'auto')),
+      findsOneWidget,
+    );
+    for (final mode in const ['auto', 'review', 'off']) {
+      expect(
+        find.bySemanticsIdentifier(SemanticsIds.matchingOption('lb-p', mode)),
+        findsNothing,
+      );
+    }
+    expect(
+      find.bySemanticsIdentifier(SemanticsIds.matchingSingles('lb-p')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('a server whose only library is the podcast one offers no '
+      'matching menu', (tester) async {
+    final repo = FakeRepository(
+      sessionState: const SessionState(
+        authenticated: true,
+        user: WaxDeckUser(
+          id: 'us-01JZX5N8QW3F4V9T2B7KDEXAMPLE',
+          username: 'admin',
+          roles: ['admin'],
+        ),
+      ),
+    );
+    repo.libraries.add(
+      const LibraryInfo(pid: 'lb-p', name: 'Podcasts', media: 'podcast'),
+    );
+    await _pump(tester, _host(_container(repo)));
+    await tester.pumpAndSettle();
+
+    expect(find.bySemanticsIdentifier(SemanticsIds.matchingMenu), findsNothing);
+  });
+
   group('the two panes', () {
     /// The width the report came from: a 1020-pixel window, less the
     /// shell rail and the console list that used to sit in front of

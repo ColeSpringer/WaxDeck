@@ -26,7 +26,8 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   // Every code the spec's `Error` currently defines. A code added there
   // and not here fails `error_table_test.dart`, which reads the list out
   // of the committed bundle rather than out of a second copy of it.
-  'invalid-request' => _invalidRequest(l, e) ?? l.errorInvalidRequest,
+  'invalid-request' =>
+    _invalidRequest(l, e) ?? _refusedAddress(l, e) ?? l.errorInvalidRequest,
   'unauthenticated' => l.errorUnauthenticated,
   'forbidden' => l.errorForbidden,
   'not-found' => l.errorNotFound,
@@ -37,7 +38,8 @@ String? _byCode(AppLocalizations l, WaxDeckApiException e) => switch (e.code) {
   'catalog-maintenance' => l.errorCatalogMaintenance,
   'catalog-busy' => l.errorCatalogBusy,
   'sync-reset' => l.errorSyncReset,
-  'feed-unreachable' => l.errorFeedUnreachable,
+  'feed-unreachable' =>
+    explainFeedReason(l, e.params?['reason']) ?? l.errorFeedUnreachable,
   'source-unavailable' => l.errorSourceUnavailable,
   'directory-unavailable' => l.errorDirectoryUnavailable,
   'service-unreachable' => l.errorServiceUnreachable,
@@ -164,6 +166,40 @@ String? _invalidRequest(AppLocalizations l, WaxDeckApiException e) =>
         _ => null,
       };
 
+/// The sentence for how the feed side failed, by the `reason` a
+/// `feed-unreachable` or an import entry carries, or null to keep the
+/// server's words.
+///
+/// A form that shows the address somebody typed keeps the server's
+/// sentence for the three a subscribe refuses as `invalid-request`
+/// instead; see [explainRefusal].
+String? explainFeedReason(AppLocalizations l, String? reason) =>
+    switch (reason) {
+      'not-a-feed' => l.errorFeedNotAFeed,
+      'too-large' => l.errorFeedTooLarge,
+      'blocked-address' => l.errorFeedBlockedAddress,
+      'host-refused' => l.errorFeedRefused,
+      'host-missing' => l.errorFeedNotFound,
+      'host-error' => l.errorFeedHostError,
+      'unreachable' => l.errorFeedUnreachable,
+      _ => null,
+    };
+
+/// The sentence for an address a subscribe refused, for a surface that
+/// words refusals from the table: nothing was typed there for the
+/// server's own sentence to name.
+String? _refusedAddress(AppLocalizations l, WaxDeckApiException e) =>
+    switch (e.params?['reason']) {
+      final reason?
+          when const {
+            'not-a-feed',
+            'too-large',
+            'blocked-address',
+          }.contains(reason) =>
+        explainFeedReason(l, reason),
+      _ => null,
+    };
+
 /// `feature-unavailable` is an umbrella, and its `params` are what say
 /// which refusal it is.
 ///
@@ -174,5 +210,6 @@ String? _invalidRequest(AppLocalizations l, WaxDeckApiException e) =>
 String _featureUnavailable(AppLocalizations l, WaxDeckApiException e) =>
     switch (e.params?['feature']) {
       'windowed-track' => l.errorWindowedTrack,
+      'podcasts' => l.errorPodcastsOff,
       _ => l.errorFeatureUnavailable,
     };

@@ -412,6 +412,7 @@ export 'package:waxdeck_api_gen/src/model/upload_batch.dart';
 export 'package:waxdeck_api_gen/src/model/upload_batch_create.dart';
 export 'package:waxdeck_api_gen/src/model/upload_create.dart';
 export 'package:waxdeck_api_gen/src/model/upload_grouping.dart';
+export 'package:waxdeck_api_gen/src/model/upload_media_type.dart';
 export 'package:waxdeck_api_gen/src/model/upload_page.dart';
 export 'package:waxdeck_api_gen/src/model/upload_quota.dart';
 export 'package:waxdeck_api_gen/src/model/upload_target.dart';

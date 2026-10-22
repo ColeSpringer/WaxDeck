@@ -17,7 +17,7 @@ part 'item.g.dart';
 /// Properties:
 /// * [pid] - Type-prefixed ULID.
 /// * [mediaType] 
-/// * [title] - Display title.
+/// * [title] - Display title. An episode's, which its feed gives, is cut to its first 1000 characters, and so is the show title it carries in `artist` and `album`. 
 /// * [artist] - Primary display artist / author / show name.
 /// * [album] - Album / series / podcast title, when applicable.
 /// * [artistPid] - The artist entity behind `artist`, so a client can group and link by identity rather than by display text - two artists with the same name are two entities, and one artist spelled two ways is still one. Absent when the item has no artist entity. For an audiobook this is its author. 
@@ -33,7 +33,7 @@ part 'item.g.dart';
 /// * [container] - Source file container.
 /// * [sampleRate] - Source sample rate in Hz.
 /// * [bitrate] - Source bitrate in kilobits per second, when known.
-/// * [addedAt] - When the item entered the library: when its primary file, or a copy of it the caller can see found before that, was found. 
+/// * [addedAt] - When the item entered the library: when its primary file, or a copy of it the caller can see found before that, was found. An episode's is when its show's feed first listed it here, whether or not its audio has been fetched. 
 /// * [copies] - How many copies the item holds beside its own files (getItemFiles lists them), counting those in libraries the caller can see. Absent when none. 
 /// * [mbid] - MusicBrainz identifier for what this item is - a recording for a track, a release for a book. Absent unless the file was tagged with one or matching found one. 
 /// * [isrc] - The recording's ISRC, as tagged or matched. Absent for anything carrying none, which is most of a library. 
@@ -48,7 +48,7 @@ abstract class Item implements ItemSummary, Built<Item, ItemBuilder> {
   @BuiltValueField(wireName: r'codec')
   String? get codec;
 
-  /// When the item entered the library: when its primary file, or a copy of it the caller can see found before that, was found. 
+  /// When the item entered the library: when its primary file, or a copy of it the caller can see found before that, was found. An episode's is when its show's feed first listed it here, whether or not its audio has been fetched. 
   @BuiltValueField(wireName: r'addedAt')
   DateTime? get addedAt;
 

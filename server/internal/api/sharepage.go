@@ -1,15 +1,17 @@
 package api
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/colespringer/waxdeck/server/internal/httpcache"
@@ -27,62 +29,57 @@ import (
 // maxShareStreams bounds concurrent anonymous streams per share.
 const maxShareStreams = 4
 
+// maxOwnerShareRelays bounds the relays every public link of one owner
+// draws together, below the owner's own maxUserRelays: however popular
+// the links, the owner's own listening and radio keep two slots.
+const maxOwnerShareRelays = maxUserRelays - 2
+
 // shareArtSize is the box the share page's cover is resolved at. From
 // the service, which is the layer that can see the catalog's ladder and
 // the one place these are kept on it.
 const shareArtSize = service.ArtSizeShare
 
-// shareStreamGate counts live streams per share id.
-type shareStreamGate struct {
-	mu   sync.Mutex
-	live map[string]int
-}
+// errNoShare is a link that does not exist, has expired, or was revoked.
+var errNoShare = errors.New("no such share")
 
-func (g *shareStreamGate) acquire(id string) (release func(), ok bool) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.live == nil {
-		g.live = map[string]int{}
-	}
-	if g.live[id] >= maxShareStreams {
-		return nil, false
-	}
-	g.live[id]++
-	var once sync.Once
-	return func() {
-		once.Do(func() {
-			g.mu.Lock()
-			// Zeroed entries are dropped, or the map grows by one per
-			// share id ever streamed for the life of the process.
-			if g.live[id]--; g.live[id] <= 0 {
-				delete(g.live, id)
-			}
-			g.mu.Unlock()
-		})
-	}, true
-}
-
-// resolveShareRequest verifies the token and loads the live share.
-func (s *Server) resolveShareRequest(r *http.Request) (*service.SharePublic, string, bool) {
+// resolveShareRequest verifies the token and loads the live share. The
+// error is errNoShare, or the catalog being away for a hand-off.
+func (s *Server) resolveShareRequest(r *http.Request) (*service.SharePublic, string, error) {
 	if s.shares == nil {
-		return nil, "", false
+		return nil, "", errNoShare
 	}
 	id, err := s.shares.Verify(r.PathValue("token"))
 	if err != nil {
-		return nil, "", false
+		return nil, "", errNoShare
 	}
 	pub, err := s.svc.ResolveShare(r.Context(), id)
-	if err != nil {
-		return nil, "", false
+	if service.KindOf(err) == service.KindMaintenance {
+		return nil, "", err
 	}
-	return pub, id, true
+	if err != nil {
+		return nil, "", errNoShare
+	}
+	return pub, id, nil
+}
+
+// writeShareMiss answers a share route whose link did not resolve: the
+// catalog away is a 503 a player retries, anything else the 404 given.
+func writeShareMiss(w http.ResponseWriter, err error, notFound string) {
+	if service.KindOf(err) == service.KindMaintenance {
+		writeError(w, http.StatusServiceUnavailable, "catalog-maintenance", "the catalog is in maintenance; retry shortly")
+		return
+	}
+	writeError(w, http.StatusNotFound, "not-found", notFound)
 }
 
 // shareHeaders are on every share response: capability URLs must not
-// leak through referrers, and public pages stay out of indexes.
+// leak through referrers, public pages stay out of indexes, and no cache
+// keeps an answer for a link that may be revoked. The artwork alone
+// replaces the last: it is stored and revalidated at every use.
 func shareHeaders(w http.ResponseWriter) {
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+	w.Header().Set("Cache-Control", "no-store")
 }
 
 // ServeSharePage renders the landing page.
@@ -94,54 +91,85 @@ func (s *Server) ServeSharePage(w http.ResponseWriter, r *http.Request) {
 	// context: this page is not a strict-server handler.
 	w.Header().Set("Vary", "Accept-Language")
 	loc := pagetext.For(pagetext.Negotiate(r.Header.Get("Accept-Language")))
-	pub, _, ok := s.resolveShareRequest(r)
-	if !ok {
-		shareNotFound(w, loc)
+	pub, _, err := s.resolveShareRequest(r)
+	if service.KindOf(err) == service.KindMaintenance {
+		sharePlainPage(w, http.StatusServiceUnavailable, loc, loc.ShareAwayTitle, loc.ShareAwayBody)
 		return
 	}
-	base := "/s/" + url.PathEscape(r.PathValue("token"))
-	type row struct {
-		Index     int
-		Title     string
-		Artist    string
-		Duration  string
-		StreamURL string
+	if err != nil {
+		sharePlainPage(w, http.StatusNotFound, loc, loc.ShareNotFoundTitle, loc.ShareNotFoundBody)
+		return
 	}
-	data := struct {
-		Lang        string
-		T           *pagetext.Strings
-		Title       string
-		Subtitle    string
-		ArtURL      string
-		OGImage     string
-		Rows        []row
-		Download    bool
-		DownloadURL string
-		ExpiresAt   string
-		Single      bool
-	}{
+	// The cover is resolved here rather than linked on faith: the page
+	// runs no script, so an image that fails to load could not be traded
+	// for the placeholder afterwards.
+	art := false
+	if pub.ArtItemPID != "" {
+		blob, err := s.svc.PublicArt(r.Context(), pub.ArtItemPID, shareArtSize)
+		art = err == nil && !artTooBigForSize(blob)
+	}
+	page := newSharePage(pub, loc, "/s/"+url.PathEscape(r.PathValue("token")), art, s.publicBase)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy",
+		"default-src 'none'; media-src 'self'; img-src 'self'; style-src 'unsafe-inline'")
+	if err := sharePageTmpl.Execute(w, page); err != nil {
+		s.log.Warn("rendering share page", "err", err)
+	}
+}
+
+// sharePage is everything the landing page draws.
+type sharePage struct {
+	Lang        string
+	T           *pagetext.Strings
+	Title       string
+	Subtitle    string
+	ArtURL      string
+	OGImage     string
+	Rows        []sharePageRow
+	Download    bool
+	DownloadURL string
+	ExpiresAt   string
+	// Single is a share of one track, episode or book, whose title is
+	// the page's heading already, so its row is not titled again.
+	Single bool
+}
+
+// sharePageRow is one member's line. A member with nothing a visitor
+// could hear draws a note where its player would be.
+type sharePageRow struct {
+	Index     int
+	Title     string
+	Artist    string
+	Duration  string
+	StreamURL string
+	Playable  bool
+}
+
+// newSharePage lays out a resolved share; art reports whether its cover
+// resolved.
+func newSharePage(pub *service.SharePublic, loc *pagetext.Strings, base string, art bool, publicBase string) sharePage {
+	page := sharePage{
 		Lang:     loc.Lang,
 		T:        loc,
 		Title:    pub.Title,
 		Subtitle: pub.Subtitle,
-		// The page's one download link points at the first entry; a
-		// virtual first entry has no standalone file (the download
-		// route refuses it), so the link is not offered.
-		Download: pub.Share.AllowDownload &&
-			len(pub.Items) > 0 && !pub.Items[0].Virtual,
-		Single: len(pub.Items) == 1,
+		Single:   pub.Share.TargetKind != "album" && pub.Share.TargetKind != "playlist",
 	}
-	if pub.ArtItemPID != "" {
-		data.ArtURL = base + "/art"
-		if s.publicBase != "" {
-			data.OGImage = strings.TrimRight(s.publicBase, "/") + data.ArtURL
+	// The page's one download link points at the first entry, which has
+	// to be a file here: a virtual entry has no standalone file, and an
+	// episode the server has not fetched has none on this server at all.
+	if pub.Share.AllowDownload && len(pub.Items) > 0 && !pub.Items[0].Virtual &&
+		pub.Audio[pub.Items[0].PID] == service.ShareAudioLocal {
+		page.Download, page.DownloadURL = true, base+"/download"
+	}
+	if art {
+		page.ArtURL = base + "/art"
+		if publicBase != "" {
+			page.OGImage = strings.TrimRight(publicBase, "/") + page.ArtURL
 		}
 	}
-	if pub.Share.AllowDownload {
-		data.DownloadURL = base + "/download"
-	}
 	if !pub.Share.ExpiresAt.IsZero() {
-		data.ExpiresAt = loc.FormatDate(pub.Share.ExpiresAt.UTC())
+		page.ExpiresAt = loc.FormatDate(pub.Share.ExpiresAt.UTC())
 	}
 	for i, it := range pub.Items {
 		streamURL := base + "/stream?i=" + strconv.Itoa(i)
@@ -150,20 +178,16 @@ func (s *Server) ServeSharePage(w http.ResponseWriter, r *http.Request) {
 			// without a line of script.
 			streamURL += "#t=" + strconv.FormatInt(pub.Share.PositionMs/1000, 10)
 		}
-		data.Rows = append(data.Rows, row{
+		page.Rows = append(page.Rows, sharePageRow{
 			Index:     i,
 			Title:     it.Title,
 			Artist:    it.Artist,
 			Duration:  formatShareDuration(it.DurationMS),
 			StreamURL: streamURL,
+			Playable:  pub.Audio[it.PID].Plays(),
 		})
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy",
-		"default-src 'none'; media-src 'self'; img-src 'self'; style-src 'unsafe-inline'")
-	if err := sharePageTmpl.Execute(w, data); err != nil {
-		s.log.Warn("rendering share page", "err", err)
-	}
+	return page
 }
 
 func formatShareDuration(ms int64) string {
@@ -177,27 +201,38 @@ func formatShareDuration(ms int64) string {
 	return fmt.Sprintf("%d:%02d", total/60, total%60)
 }
 
-func shareNotFound(w http.ResponseWriter, loc *pagetext.Strings) {
+// sharePlainPage is the one-line page a link answers when it has nothing
+// to show.
+func sharePlainPage(w http.ResponseWriter, status int, loc *pagetext.Strings, title, body string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(http.StatusNotFound)
+	w.WriteHeader(status)
 	// Neither value is user-supplied, so the concatenation stays; both
 	// come from this repo's own tables.
 	fmt.Fprintf(w, `<!doctype html><html lang="%s"><meta charset="utf-8"><title>%s</title>`+
 		`<p style="font-family:system-ui;margin:3em auto;max-width:30em;text-align:center">`+
-		`%s</p>`, loc.Lang, loc.ShareNotFoundTitle, loc.ShareNotFoundBody)
+		`%s</p>`, loc.Lang, title, body)
 }
 
 // ServeShareStream streams one member of a share.
 func (s *Server) ServeShareStream(w http.ResponseWriter, r *http.Request) {
 	shareHeaders(w)
-	pub, id, ok := s.resolveShareRequest(r)
-	if !ok {
-		writeError(w, http.StatusNotFound, "not-found", "this link does not exist, has expired, or was revoked")
+	// On every answer, whichever path serves it: the bytes are bound for
+	// an anonymous browser, and only the relay's are held to a type.
+	w.Header().Set("X-Content-Type-Options", service.MediaNoSniff)
+	w.Header().Set("Content-Security-Policy", service.MediaCSP)
+	pub, id, err := s.resolveShareRequest(r)
+	if err != nil {
+		writeShareMiss(w, err, "this link does not exist, has expired, or was revoked")
 		return
 	}
 	it, ok := shareMember(pub, r)
 	if !ok {
 		writeError(w, http.StatusNotFound, "not-found", "no such entry")
+		return
+	}
+	audio := pub.Audio[it.PID]
+	if !audio.Plays() {
+		writeError(w, http.StatusNotFound, "not-found", "this entry has no audio to play yet")
 		return
 	}
 	release, ok := s.shareStreams.acquire(id)
@@ -206,18 +241,26 @@ func (s *Server) ServeShareStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer release()
+	bound, r, over := s.beginShareTransfer(w, r, id, pub.Share.ExpiresAt)
+	defer over()
 	// Mid-playback seeks are Range fetches from a nonzero offset;
 	// everything else that actually reads audio is the start of a
 	// listen. Browsers send `Range: bytes=0-` on a media element's
 	// very first fetch, so counting only rangeless requests would
 	// miss most real plays; Safari precedes its real (bounded) fetch
 	// with a tiny probe like `bytes=0-1`, which must not count a
-	// second play.
-	if countableShareFetch(r.Header.Get("Range")) {
-		s.svc.CountSharePlay(r.Context(), id)
+	// second play, and a HEAD reads no audio at all. Counted once the
+	// audio starts, so a refusal on the way counts nothing.
+	counter := &sharePlayCounter{ResponseWriter: bound}
+	if r.Method == http.MethodGet && countableShareFetch(r.Header.Get("Range")) {
+		counter.count = func() { s.svc.CountSharePlay(r.Context(), id) }
+	}
+	if audio == service.ShareAudioRelay {
+		s.relayShareEpisode(counter, r, pub.OwnerUserID, it.PID)
+		return
 	}
 	if s.bridge.Up() {
-		s.bridge.ServeShareStream(w, r, it.PID, pub.OwnerUserID)
+		s.bridge.ServeShareStream(counter, r, it.PID, pub.OwnerUserID)
 		return
 	}
 	// Without the streaming engine the only bytes on offer are the
@@ -230,8 +273,111 @@ func (s *Server) ServeShareStream(w http.ResponseWriter, r *http.Request) {
 			"this track plays a window of a shared source file, which needs the streaming engine")
 		return
 	}
-	s.serveShareFile(w, r, it.PID, false)
+	s.serveShareFile(counter, r, it.PID, false)
 }
+
+// beginShareTransfer starts one share stream or download, whichever path
+// serves it. Its writes are held to the stall bound, so a visitor who
+// stops reading lets go of the link's slots, and to the link still
+// serving: two row reads every few seconds while audio flows, where
+// resolving again would read the whole target, so a change to the target
+// itself bites on the next request. The link's end, a revoke or its
+// expiry, ends the transfer at once, whatever it is waiting on. It
+// answers the request to serve from, and over, which the caller defers.
+func (s *Server) beginShareTransfer(w http.ResponseWriter, r *http.Request, shareID string, expiresAt time.Time) (bound *stallBoundWriter, served *http.Request, over func()) {
+	ctx, cancel := context.WithCancel(r.Context())
+	live := func() bool { return service.KindOf(s.svc.ShareLive(ctx, shareID)) != service.KindNotFound }
+	bound = s.boundWrites(w, live)
+	bound.rangeAsked = r.Header.Get("Range") != ""
+	t := &shareTransfer{w: bound, cancel: cancel}
+	remove := s.shareTransfers.add(shareID, t, expiresAt, live)
+	return bound, r.WithContext(ctx), func() {
+		remove()
+		t.finish()
+	}
+}
+
+// relayShareEpisode plays a share's unfetched episode through the
+// enclosure relay. The visitor is anonymous, so the owner's relay slots
+// pay for it, within the share of them the owner's links may take, and
+// the source resolves for no account: a feed's credentials are never
+// spent on a public link.
+func (s *Server) relayShareEpisode(w http.ResponseWriter, r *http.Request, ownerID, pid string) {
+	releaseLinks, ok := s.shareRelays.acquire(ownerID)
+	if !ok {
+		writeError(w, http.StatusTooManyRequests, "rate-limited",
+			"too many concurrent relayed streams on this owner's links")
+		return
+	}
+	defer releaseLinks()
+	release, ok := s.relayStreams.acquire(ownerID)
+	if !ok {
+		writeError(w, http.StatusTooManyRequests, "rate-limited",
+			"too many concurrent relayed streams for this link's owner")
+		return
+	}
+	defer release()
+	src, err := s.svc.EnclosureStreamSource(r.Context(), "", pid)
+	if err != nil {
+		switch service.KindOf(err) {
+		case service.KindNotFound, service.KindInvalid, service.KindForbidden:
+			writeError(w, http.StatusNotFound, "not-found", "this entry has no audio to play yet")
+		case service.KindMaintenance:
+			writeError(w, http.StatusServiceUnavailable, "catalog-maintenance", "the catalog is in maintenance; retry shortly")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal", "resolving the episode failed")
+		}
+		return
+	}
+	s.relayEnclosure(w, r, pid, src)
+}
+
+// sharePlayCounter counts a share's play once its audio starts: on the
+// first success status, 200 or 206, written for a request that begins a
+// listen (count is nil for one that does not).
+type sharePlayCounter struct {
+	http.ResponseWriter
+	count   func()
+	started bool
+}
+
+func (c *sharePlayCounter) WriteHeader(code int) {
+	// Informational answers are not the response starting.
+	if code >= 200 && !c.started {
+		c.started = true
+		if c.count != nil && (code == http.StatusOK || code == http.StatusPartialContent) {
+			c.count()
+		}
+	}
+	c.ResponseWriter.WriteHeader(code)
+}
+
+func (c *sharePlayCounter) Write(b []byte) (int, error) {
+	if !c.started {
+		c.WriteHeader(http.StatusOK)
+	}
+	return c.ResponseWriter.Write(b)
+}
+
+// ReadFrom keeps the file path's sendfile, and Flush, through a
+// ResponseController so it reaches the real writer whatever wraps it,
+// keeps the writer a streaming one for the engine's proxy, which flushes
+// as audio arrives.
+func (c *sharePlayCounter) ReadFrom(src io.Reader) (int64, error) {
+	if !c.started {
+		c.WriteHeader(http.StatusOK)
+	}
+	if rf, ok := c.ResponseWriter.(io.ReaderFrom); ok {
+		return rf.ReadFrom(src)
+	}
+	return io.Copy(c.ResponseWriter, src)
+}
+
+func (c *sharePlayCounter) Flush() {
+	_ = http.NewResponseController(c.ResponseWriter).Flush()
+}
+
+func (c *sharePlayCounter) Unwrap() http.ResponseWriter { return c.ResponseWriter }
 
 // countableProbeFloor separates a browser's start-of-file probe from a
 // fetch that actually plays: Safari asks for `bytes=0-1` before its
@@ -262,12 +408,13 @@ func countableShareFetch(rangeHeader string) bool {
 	return end+1 >= countableProbeFloor
 }
 
-// ServeShareDownload serves the original file as an attachment.
+// ServeShareDownload serves the original file as an attachment. A
+// download takes one of the link's slots, as a stream does.
 func (s *Server) ServeShareDownload(w http.ResponseWriter, r *http.Request) {
 	shareHeaders(w)
-	pub, _, ok := s.resolveShareRequest(r)
-	if !ok {
-		writeError(w, http.StatusNotFound, "not-found", "this link does not exist, has expired, or was revoked")
+	pub, id, err := s.resolveShareRequest(r)
+	if err != nil {
+		writeShareMiss(w, err, "this link does not exist, has expired, or was revoked")
 		return
 	}
 	if !pub.Share.AllowDownload {
@@ -279,6 +426,10 @@ func (s *Server) ServeShareDownload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "not-found", "no such entry")
 		return
 	}
+	if pub.Audio[it.PID] != service.ShareAudioLocal {
+		writeError(w, http.StatusNotFound, "not-found", "this entry has no file on this server to download")
+		return
+	}
 	// A virtual track's original bytes are the whole backing rip, not
 	// the shared window; handing that to an anonymous visitor would
 	// serve every track in the rip, shared or not.
@@ -287,14 +438,26 @@ func (s *Server) ServeShareDownload(w http.ResponseWriter, r *http.Request) {
 			"this entry plays a window of a shared source file and has no standalone file to download")
 		return
 	}
-	s.serveShareFile(w, r, it.PID, true)
+	release, ok := s.shareStreams.acquire(id)
+	if !ok {
+		writeError(w, http.StatusTooManyRequests, "rate-limited", "too many concurrent listeners on this link")
+		return
+	}
+	defer release()
+	bound, r, over := s.beginShareTransfer(w, r, id, pub.Share.ExpiresAt)
+	defer over()
+	s.serveShareFile(bound, r, it.PID, true)
 }
 
 // ServeShareArt serves the share's representative artwork.
 func (s *Server) ServeShareArt(w http.ResponseWriter, r *http.Request) {
 	shareHeaders(w)
-	pub, _, ok := s.resolveShareRequest(r)
-	if !ok || pub.ArtItemPID == "" {
+	pub, _, err := s.resolveShareRequest(r)
+	if err != nil {
+		writeShareMiss(w, err, "no artwork")
+		return
+	}
+	if pub.ArtItemPID == "" {
 		writeError(w, http.StatusNotFound, "not-found", "no artwork")
 		return
 	}
@@ -369,7 +532,7 @@ func (s *Server) serveShareFile(w http.ResponseWriter, r *http.Request, apiItemP
 
 // sharePageTmpl is the whole landing page: no scripts, inline styles,
 // OpenGraph and Twitter tags for link previews, one audio element per
-// entry (preload=none keeps a long playlist cheap).
+// entry that has audio (preload=none keeps a long playlist cheap).
 var sharePageTmpl = template.Must(template.New("share").Parse(`<!doctype html>
 <html lang="{{.Lang}}">
 <meta charset="utf-8">
@@ -398,6 +561,7 @@ var sharePageTmpl = template.Must(template.New("share").Parse(`<!doctype html>
   .a { opacity: 0.7; }
   .d { opacity: 0.55; font-variant-numeric: tabular-nums; }
   audio { width: 100%; }
+  .na { margin: 0; opacity: 0.6; font-style: italic; }
   .foot { margin-top: 1.5rem; text-align: center; font-size: 0.85rem; opacity: 0.6; }
   .dl { display: inline-block; margin-top: 1rem; }
 </style>
@@ -409,7 +573,7 @@ var sharePageTmpl = template.Must(template.New("share").Parse(`<!doctype html>
     {{range .Rows}}
     <li>
       {{if not $.Single}}<div class="row"><span><span class="t">{{.Title}}</span>{{if .Artist}} <span class="a">{{.Artist}}</span>{{end}}</span><span class="d">{{.Duration}}</span></div>{{end}}
-      <audio controls preload="none" src="{{.StreamURL}}"></audio>
+      {{if .Playable}}<audio controls preload="none" src="{{.StreamURL}}"></audio>{{else}}<p class="na">{{$.T.ShareNotAvailable}}</p>{{end}}
     </li>
     {{end}}
   </ol>

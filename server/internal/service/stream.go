@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/colespringer/waxbin/model"
 	"github.com/colespringer/waxbin/waxerr"
@@ -25,6 +26,16 @@ import (
 // FillLoudness rather than making the whole library pay a second query
 // per play.
 func (l *Library) StreamSource(ctx context.Context, apiItemPID, filePID string) (flow.Source, error) {
+	src, err := l.streamSource(ctx, apiItemPID, filePID)
+	if KindOf(err) == KindMaintenance {
+		// The engine reads no service kinds; its sentinel is how it tells
+		// a catalog handed off for a moment from an item that is gone.
+		err = &Error{Kind: KindMaintenance, Msg: err.Error(), Err: fmt.Errorf("%w: %w", flow.ErrCatalogMaintenance, err)}
+	}
+	return src, err
+}
+
+func (l *Library) streamSource(ctx context.Context, apiItemPID, filePID string) (flow.Source, error) {
 	it, err := l.getItem(ctx, apiItemPID)
 	if err != nil {
 		return flow.Source{}, err

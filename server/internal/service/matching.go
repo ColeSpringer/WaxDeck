@@ -863,8 +863,12 @@ func (l *Library) SetLibraryMatching(ctx context.Context, uc *UserCtx, apiLibrar
 	if !ok || prefix != PrefixLibrary {
 		return errNotFound("no such library")
 	}
-	if _, err := l.libraryByPID(ctx, pid); err != nil {
+	lib, err := l.libraryByPID(ctx, pid)
+	if err != nil {
 		return err
+	}
+	if lib.Mode == model.ModePodcast {
+		return errInvalid("a podcast library takes no matching behavior; its episodes come from their feeds")
 	}
 	// Singles first, deliberately: the flag is inert unless the mode is
 	// auto, so if the second write fails (or a drain lands between

@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 )
 
 // FeedState is the refresh scheduler's per-feed accounting. The catalog
 // keeps validators (ETag, Last-Modified) but no failure state; this row
-// is what auto-disable reads.
+// is what auto-disable reads. LastError says why the last try failed and
+// never names the feed's address, which can be its own credential.
 type FeedState struct {
 	ShowPID             string
 	ConsecutiveFailures int
@@ -202,9 +204,10 @@ func (d *DB) PruneExhaustedAnalysis(ctx context.Context, gaveUpBeforeNS int64, m
 }
 
 // EnqueueFetch queues an episode's download; queuing one already queued
-// adds requester to those told when it lands. An empty requester is an
-// automatic fetch.
-func (d *DB) EnqueueFetch(ctx context.Context, episodePID, requester string, ns int64) error {
+// adds requester to those told when it lands. One that spent maxAttempts
+// starts over, due now; one queued, running or waiting out a failure's
+// backoff is left as it is. An empty requester is an automatic fetch.
+func (d *DB) EnqueueFetch(ctx context.Context, episodePID, requester string, ns int64, maxAttempts int) error {
 	tx, err := d.w.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("db: queuing fetch: %w", err)
@@ -212,7 +215,9 @@ func (d *DB) EnqueueFetch(ctx context.Context, episodePID, requester string, ns 
 	defer tx.Rollback()
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO fetch_queue (episode_pid, enqueued_at_ns) VALUES (?, ?)
-		ON CONFLICT (episode_pid) DO NOTHING`, episodePID, ns); err != nil {
+		ON CONFLICT (episode_pid) DO UPDATE SET
+			enqueued_at_ns = excluded.enqueued_at_ns, attempts = 0, lease_until_ns = 0, last_error = ''
+		WHERE fetch_queue.attempts >= ?`, episodePID, ns, maxAttempts); err != nil {
 		return fmt.Errorf("db: queuing fetch: %w", err)
 	}
 	if requester != "" {
@@ -233,9 +238,10 @@ func (d *DB) LeaseFetch(ctx context.Context, nowNS, leaseNS int64, maxAttempts i
 	return d.leaseQueue(ctx, "fetch_queue", "episode_pid", nowNS, leaseNS, maxAttempts)
 }
 
-// FinishFetch removes a fetch that landed and answers everyone who asked
-// for it, sorted; ErrNotFound when it was canceled meanwhile.
-func (d *DB) FinishFetch(ctx context.Context, episodePID string) ([]string, error) {
+// FinishFetch removes a fetch that landed, holds it at nowNS for everyone
+// who asked whose account is still there, and answers them all, sorted;
+// ErrNotFound when it was canceled meanwhile.
+func (d *DB) FinishFetch(ctx context.Context, episodePID, showPID string, nowNS int64) ([]string, error) {
 	tx, err := d.w.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("db: finishing fetch: %w", err)
@@ -265,11 +271,30 @@ func (d *DB) FinishFetch(ctx context.Context, episodePID string) ([]string, erro
 	if err := cmp.Or(rows.Err(), rows.Close()); err != nil {
 		return nil, fmt.Errorf("db: finishing fetch: %w", err)
 	}
+	for _, id := range by {
+		if err := holdFetch(ctx, tx, showPID, episodePID, id, nowNS); err != nil {
+			return nil, err
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("db: finishing fetch: %w", err)
 	}
 	slices.Sort(by)
 	return by, nil
+}
+
+// holdFetch holds a download for one account from nowNS, a later ask
+// starting the hold again; an account that is gone holds nothing.
+func holdFetch(ctx context.Context, tx *sql.Tx, showPID, episodePID, userID string, nowNS int64) error {
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO fetch_holds (episode_pid, user_id, show_pid, held_at_ns)
+		SELECT ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM users WHERE id = ?)
+		ON CONFLICT (episode_pid, user_id) DO UPDATE SET
+			show_pid = excluded.show_pid, held_at_ns = excluded.held_at_ns`,
+		episodePID, userID, showPID, nowNS, userID); err != nil {
+		return fmt.Errorf("db: holding fetch: %w", err)
+	}
+	return nil
 }
 
 // CompleteFetch removes a fetch row, landed or canceled, and who asked.
@@ -285,6 +310,79 @@ func (d *DB) CompleteFetch(ctx context.Context, episodePID string) error {
 	return nil
 }
 
+// FetchHold is one account's hold on a download it asked for, from
+// HeldAtNS.
+type FetchHold struct {
+	EpisodePID string
+	UserID     string
+	ShowPID    string
+	HeldAtNS   int64
+}
+
+// HoldFetch holds a download already on the server for an account that
+// asked for it, from nowNS.
+func (d *DB) HoldFetch(ctx context.Context, showPID, episodePID, userID string, nowNS int64) error {
+	tx, err := d.w.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("db: holding fetch: %w", err)
+	}
+	defer tx.Rollback()
+	if err := holdFetch(ctx, tx, showPID, episodePID, userID, nowNS); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("db: holding fetch: %w", err)
+	}
+	return nil
+}
+
+// FetchHoldsByShow reads every hold on a show's downloads.
+func (d *DB) FetchHoldsByShow(ctx context.Context, showPID string) ([]FetchHold, error) {
+	rows, err := d.r.QueryContext(ctx, `
+		SELECT episode_pid, user_id, show_pid, held_at_ns FROM fetch_holds WHERE show_pid = ?
+		ORDER BY episode_pid, user_id`, showPID)
+	if err != nil {
+		return nil, fmt.Errorf("db: reading fetch holds: %w", err)
+	}
+	defer rows.Close()
+	var out []FetchHold
+	for rows.Next() {
+		var h FetchHold
+		if err := rows.Scan(&h.EpisodePID, &h.UserID, &h.ShowPID, &h.HeldAtNS); err != nil {
+			return nil, fmt.Errorf("db: reading fetch holds: %w", err)
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+// FetchHoldShow answers the show of the account's hold on an episode;
+// ErrNotFound when it holds none.
+func (d *DB) FetchHoldShow(ctx context.Context, episodePID, userID string) (string, error) {
+	var show string
+	err := d.r.QueryRowContext(ctx, `
+		SELECT show_pid FROM fetch_holds WHERE episode_pid = ? AND user_id = ?`,
+		episodePID, userID).Scan(&show)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("db: reading fetch hold: %w", err)
+	}
+	return show, nil
+}
+
+// DropFetchHolds removes holds that keep nothing any more.
+func (d *DB) DropFetchHolds(ctx context.Context, holds []FetchHold) error {
+	for _, h := range holds {
+		if _, err := d.w.ExecContext(ctx, `
+			DELETE FROM fetch_holds WHERE episode_pid = ? AND user_id = ?`, h.EpisodePID, h.UserID); err != nil {
+			return fmt.Errorf("db: dropping fetch hold: %w", err)
+		}
+	}
+	return nil
+}
+
 // FailFetch records a failed attempt; the row stays leased until
 // retryAtNS so retries never hammer a failing host back-to-back.
 func (d *DB) FailFetch(ctx context.Context, episodePID, msg string, retryAtNS int64) error {
@@ -293,6 +391,19 @@ func (d *DB) FailFetch(ctx context.Context, episodePID, msg string, retryAtNS in
 		WHERE episode_pid = ?`, retryAtNS, msg, episodePID)
 	if err != nil {
 		return fmt.Errorf("db: failing fetch: %w", err)
+	}
+	return nil
+}
+
+// AbandonFetch records a fetch that cannot come good: it reads failed
+// with msg at once, rather than after its attempts, until it is queued
+// again.
+func (d *DB) AbandonFetch(ctx context.Context, episodePID, msg string, maxAttempts int) error {
+	_, err := d.w.ExecContext(ctx, `
+		UPDATE fetch_queue SET attempts = MAX(attempts, ?), lease_until_ns = 0, last_error = ?
+		WHERE episode_pid = ?`, maxAttempts, msg, episodePID)
+	if err != nil {
+		return fmt.Errorf("db: abandoning fetch: %w", err)
 	}
 	return nil
 }
@@ -325,19 +436,48 @@ func (d *DB) leaseQueue(ctx context.Context, table, keyCol string, nowNS, leaseN
 	return q, nil
 }
 
-// FetchQueueRow reads one episode's fetch-queue row; ErrNotFound when
-// nothing is queued (the common case).
-func (d *DB) FetchQueueRow(ctx context.Context, episodePID string) (attempts int, lastErr string, err error) {
-	err = d.r.QueryRowContext(ctx, `
-		SELECT attempts, last_error FROM fetch_queue WHERE episode_pid = ?`,
-		episodePID).Scan(&attempts, &lastErr)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, "", ErrNotFound
+// FetchAttempts is how far one queued episode fetch has got.
+type FetchAttempts struct {
+	Attempts  int
+	LastError string
+}
+
+// fetchQueueChunk bounds the pids one statement binds.
+const fetchQueueChunk = 500
+
+// FetchQueueRows reads the fetch-queue rows of the named episodes, keyed
+// by pid; an episode with nothing queued (the common case) is absent. A
+// listing hydrates a page at once, so this is one statement per chunk
+// rather than one per row.
+func (d *DB) FetchQueueRows(ctx context.Context, episodePIDs []string) (map[string]FetchAttempts, error) {
+	out := make(map[string]FetchAttempts)
+	for chunk := range slices.Chunk(episodePIDs, fetchQueueChunk) {
+		args := make([]any, len(chunk))
+		for i, pid := range chunk {
+			args[i] = pid
+		}
+		rows, err := d.r.QueryContext(ctx, `
+			SELECT episode_pid, attempts, last_error FROM fetch_queue
+			WHERE episode_pid IN (?`+strings.Repeat(", ?", len(chunk)-1)+`)`, args...)
+		if err != nil {
+			return nil, fmt.Errorf("db: reading fetch queue rows: %w", err)
+		}
+		for rows.Next() {
+			var pid string
+			var row FetchAttempts
+			if err := rows.Scan(&pid, &row.Attempts, &row.LastError); err != nil {
+				rows.Close()
+				return nil, fmt.Errorf("db: reading fetch queue rows: %w", err)
+			}
+			out[pid] = row
+		}
+		err = rows.Err()
+		rows.Close()
+		if err != nil {
+			return nil, fmt.Errorf("db: reading fetch queue rows: %w", err)
+		}
 	}
-	if err != nil {
-		return 0, "", fmt.Errorf("db: reading fetch queue row: %w", err)
-	}
-	return attempts, lastErr, nil
+	return out, nil
 }
 
 // EnqueueRetention marks one show for a retention re-evaluation.

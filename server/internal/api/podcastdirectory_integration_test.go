@@ -33,7 +33,7 @@ func TestPodcastDirectorySearch(t *testing.T) {
 	}))
 	t.Cleanup(directory.Close)
 
-	h := newHarnessWith(t, func(cfg *service.Config) {
+	h := newPodcastHarnessWith(t, func(cfg *service.Config) {
 		cfg.PodcastDirectoryBase = directory.URL
 	})
 

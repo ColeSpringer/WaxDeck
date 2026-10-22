@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/colespringer/waxbin/model"
@@ -54,15 +53,7 @@ const (
 // every other user-pointed fetch, unless the server opts LAN
 // instances in.
 func scrobbleHTTPClient(allowPrivate bool) *http.Client {
-	dialer := &net.Dialer{Timeout: 10 * time.Second}
-	if !allowPrivate {
-		dialer.Control = func(network, address string, _ syscall.RawConn) error {
-			return refusePrivateAddr(address)
-		}
-	}
-	transport := http.DefaultTransport.(*http.Transport).Clone()
-	transport.DialContext = dialer.DialContext
-	return &http.Client{Transport: transport, Timeout: 15 * time.Second}
+	return &http.Client{Transport: guardedTransport(allowPrivate), Timeout: 15 * time.Second}
 }
 
 // hostResolvesPrivate reports whether a hostname or address literal

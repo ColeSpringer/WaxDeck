@@ -210,6 +210,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	h.backups = service.NewBackups(svc, dataDir, nil)
 	srv := NewServer("test", Options{
 		Service:  svc,
+		Logger:   cfg.Logger,
 		Bridge:   bridge,
 		Sessions: auth.NewSessions(store),
 		Media:    media,
@@ -254,7 +255,7 @@ func newHarnessCore(t *testing.T, mutate func(*service.Config), noBridge bool, e
 	mux.HandleFunc("GET /s/{token}/stream", srv.ServeShareStream)
 	mux.HandleFunc("GET /s/{token}/art", srv.ServeShareArt)
 	mux.HandleFunc("GET /s/{token}/download", srv.ServeShareDownload)
-	mux.Handle("/rest/", subsonic.New(svc, bridge, media, "test", log))
+	mux.Handle("/rest/", subsonic.New(svc, bridge, media, "test", log).WithSessions(connectSvc))
 	if bridge != nil {
 		mux.HandleFunc("/media/stream", bridge.ServeStream)
 		mux.HandleFunc("/media/hls/", bridge.ServeHLS)

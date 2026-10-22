@@ -54,8 +54,27 @@ paths:
         rotation path. Credentials are stored once per show (the last
         supplied set wins, whoever supplied it), apply to feed and
         enclosure fetches, and are sealed at rest and never returned by
-        any endpoint. Supplying credentials marks the show private (a
-        global, sticky property; see the show schema).
+        any endpoint. Supplying credentials, or subscribing by an address
+        that carries user info or a query parameter named like a
+        credential, marks the show private (a global, sticky property;
+        see the show schema). An account that may not manage podcasts,
+        or cannot see the podcast library, is refused with `forbidden`.
+        A server whose podcasts are turned off answers every subscribe
+        with `feature-unavailable`, its `params.feature` `podcasts`.
+
+
+        An address the server will not take is refused with
+        `invalid-request`, its message a sentence saying why and its
+        `params.reason` naming it: `not-a-feed` (the address answered
+        with something that is not a podcast feed), `too-large` (the
+        feed is over the 16 MiB a feed may be), or `blocked-address`
+        (the address is on a private or local network, which this
+        server does not fetch from). A feed host that fails answers
+        `feed-unreachable` with the reason: `host-refused` (401, 403 or
+        another refusal, which can mean the feed needs credentials),
+        `host-missing` (404 or 410), `host-error` (a server error, a
+        request to come back later, or a redirect loop), or
+        `unreachable` (no connection, or no answer in time).
       tags: [podcasts]
       requestBody:
         required: true
@@ -80,8 +99,20 @@ paths:
           $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "501":
-          $ref: "#/components/responses/SourceUnavailable"
+          description: >
+            The subscribe needs something this server is not running:
+            `source-unavailable` for a YouTube subscription on a server
+            without the YouTube bridge, `feature-unavailable` (with
+            `params.feature` `podcasts`) on a server whose podcasts are
+            turned off. Retrying it unchanged will not help; the server
+            has to be configured and restarted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
         "502":
           $ref: "#/components/responses/FeedUnreachable"
         "503":
@@ -93,10 +124,10 @@ paths:
       summary: Export the caller's subscriptions as OPML
       description: >
         OPML 2.0 document of the calling user's subscriptions, with folder
-        assignments rendered as nested outlines. Private shows (see the
-        show schema's sticky privacy rule) are omitted entirely, for
-        every exporting user: private feed URLs are secrets and never
-        leave the server in an export.
+        assignments rendered as nested outlines and each show's title cut
+        to its first 1000 characters. Each feed is named by the address
+        the caller subscribed it by, a private show's included (see the
+        show schema); a stored login is never written.
       tags: [podcasts]
       responses:
         "200":
@@ -114,10 +145,22 @@ paths:
       summary: Import subscriptions from OPML
       description: >
         Subscribes the calling user to every feed in the document,
-        honoring folder outlines (nested outline titles become the
-        subscription's folder path). Feeds that fail to fetch are
-        reported per entry and do not fail the import. Already-followed
-        feeds are left unchanged.
+        honoring folder outlines: nested outline titles become the
+        subscription's folder path, normalized as a subscribe's
+        `folder` is and cut to the longest run of whole segments that
+        fits a folder's bounds (16 segments, 512 characters), so no feed
+        fails over its folder. Feeds that fail to subscribe are reported
+        per entry and do not fail the import: an entry's `error` is the
+        sentence a subscribe would answer with, and its `reason` names a
+        feed-side failure the way a subscribe's `params.reason` does.
+        Already-followed feeds are left unchanged. The subscribes keep
+        running for up to 30 minutes after the caller stops waiting. An
+        account that may not manage podcasts is refused with `forbidden`
+        before the document is parsed, and a server whose podcasts are
+        turned off answers any import with `feature-unavailable`, its
+        `params.feature` `podcasts`. A request body over 4 MiB, a
+        document that is not OPML, and one naming more than 1000 feeds
+        are refused whole with `invalid-request`.
       tags: [podcasts]
       requestBody:
         required: true
@@ -136,6 +179,10 @@ paths:
           $ref: "#/components/responses/InvalidRequest"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "501":
+          $ref: "#/components/responses/FeatureUnavailable"
         "503":
           $ref: "#/components/responses/CatalogMaintenance"
 
@@ -235,8 +282,8 @@ paths:
           $ref: "#/components/responses/Unauthenticated"
         "404":
           description: >
-            The caller is not subscribed to this show (code `not-found`);
-            settings exist only on subscriptions.
+            The caller is not subscribed to this show, or cannot see it
+            (code `not-found`); settings exist only on subscriptions.
           content:
             application/json:
               schema:
@@ -369,8 +416,9 @@ paths:
       description: >
         Fetches the show's feed immediately (conditional GET; a feed that
         reports no change is cheap) and reports how many new episodes
-        appeared. Subscribers only: refresh failures carry upstream
-        detail, and a private feed's detail belongs to its subscribers.
+        appeared. Subscribers only. A feed that fails answers
+        `feed-unreachable` with `params.reason` saying why, from the
+        reasons a subscribe uses, all of them under this code here.
         Refreshes are coalesced server-side: a show synced within the
         last minute answers from that sync instead of refetching. A
         repeatedly failing feed is auto-disabled from scheduled
@@ -496,7 +544,14 @@ paths:
         only when the episode announces no transcript; a pointer that
         exists but cannot be fetched or parsed answers
         `feed-unreachable`, so clients retry later instead of caching
-        a false absence.
+        a false absence. Its `params.reason` says why, from the reasons
+        a subscribe uses, all of them under this code here: the
+        address came from the feed, not from the caller. A failure is
+        remembered for a few minutes, and asking again meanwhile
+        answers the same reason without fetching. A private show (see
+        `PodcastShow`) has its transcript read for its subscribers only,
+        as its audio is relayed; anyone else is refused with
+        `forbidden`.
       tags: [podcasts]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -509,6 +564,8 @@ paths:
                 $ref: "#/components/schemas/Transcript"
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "502":
@@ -523,12 +580,16 @@ paths:
         the episode turns up in transcript search, without downloading the
         audio. This covers an episode a listener streams but never
         downloads; a downloaded episode already indexes its transcript, and
-        an already-indexed one is a no-op success. 404 when the episode
-        announces no transcript; a pointer that exists but cannot be fetched
-        or parsed answers `feed-unreachable`, so clients retry later instead
-        of recording a false absence. Distinct from the time-coded cue
-        transcript the read endpoint serves for display: this indexes
-        search text only.
+        an already-indexed one is a no-op success. The transcript is read
+        as the read endpoint reads it: under the same size cap, with the
+        same remembered failure, and for a private show, for its
+        subscribers only, anyone else being refused with `forbidden`.
+        404 when the episode announces no transcript; a pointer that
+        exists but cannot be fetched or holds no text answers
+        `feed-unreachable` with `params.reason` saying why, as the read
+        endpoint does, so clients retry later instead of recording a
+        false absence. Distinct from the time-coded cue transcript the
+        read endpoint serves for display: this indexes search text only.
       tags: [podcasts]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -537,6 +598,8 @@ paths:
           description: The transcript is indexed for search.
         "401":
           $ref: "#/components/responses/Unauthenticated"
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
         "502":
@@ -555,8 +618,14 @@ paths:
         completes, which reaches clients as a catalog invalidation; a
         failed fetch surfaces as `fetchState: failed` with `fetchError`
         on the episode summary. Queuing an episode that is already
-        downloaded or already queued is a no-op success; queuing a
-        previously failed one retries it.
+        downloaded or already queued succeeds without fetching it again;
+        queuing a previously failed one retries it. Retention keeps the
+        file for the caller, fetched now or already on the server, until
+        they finish the episode after asking for it or stop following
+        the show, while they can see the podcast library. An episode
+        whose enclosure is a playlist or a stream manifest, by its
+        feed's word or by what its host answered the relay, has no audio
+        to fetch and answers `not-found`.
       tags: [podcasts]
       parameters:
         - $ref: "#/components/parameters/Pid"
@@ -587,8 +656,9 @@ paths:
         and returns the episode to its not-fetched state, which reaches
         clients as a catalog invalidation. The episode itself is
         untouched - it stays in the show's listing, stays counted, keeps
-        every user's playback state, streams by enclosure passthrough,
-        and can be fetched again at any time. Only the local bytes go,
+        every user's playback state, streams by enclosure passthrough
+        unless it belongs to a YouTube show, and can be fetched again at
+        any time. Only the local bytes go,
         and they are not recoverable from the trash: an unfetched
         episode's audio is re-fetchable from its source, which is what
         makes deleting it the right answer rather than archiving it (an
@@ -634,12 +704,11 @@ components:
     FeedUnreachable:
       description: >
         An upstream feed could not be fetched or parsed (code
-        `feed-unreachable`): its server answered an error, timed out, or
-        returned something that is not a feed. The message carries the
-        upstream detail, except that for private shows it never includes
-        the feed URL or credentials (upstream error text routinely
-        embeds the request URL, and for a tokenized feed that URL is
-        the secret).
+        `feed-unreachable`): its server refused the request, had nothing
+        at the address, answered an error, could not be reached, or
+        returned something that is not a feed. The message is one
+        sentence saying which and `params.reason` names it; neither
+        carries the feed's URL or anything its host said.
       content:
         application/json:
           schema:
@@ -648,16 +717,27 @@ components:
     PodcastShow:
       type: object
       description: >
-        One globally cataloged show. Show privacy is a global, sticky
-        property: a show becomes private when it is first subscribed
-        with credentials or when any subscriber ever marks their
-        subscription private, and it never becomes public again. For a
-        private show, `feedUrl` is omitted from every response for
-        every user, and the show is excluded from every user's OPML
-        export: tokenized feed URLs and credentials are secrets.
-        Privacy protects the URL and credentials only, never the
-        show's existence or content, which any user with visibility
-        into the podcast library can browse and play.
+        One globally cataloged show. A caller who follows the show is
+        given, in `feedUrl` and its OPML export, the address it
+        subscribed by, never one another account subscribed by; anyone
+        else is given the catalog's address. Show privacy is a global,
+        sticky property: a show becomes private when anyone subscribes
+        to it with credentials, or by an address that carries user info
+        or a query parameter named, in any case, `auth`, `token`, `key`,
+        `secret`, `sig`, `signature`, `password`, `pass`, `apikey`,
+        `api_key` or `access_token`, or when any subscriber ever marks
+        their subscription private, and it never becomes public again.
+        A private show's `feedUrl` is omitted for anyone who does not
+        follow it: tokenized feed URLs and credentials are secrets.
+        Privacy protects the URL and credentials, never the show's
+        existence or content, which any user with visibility into the
+        podcast library can browse, and play once the server has
+        fetched it. What spends the feed's address or credentials is
+        for the show's subscribers only: an episode the server has not
+        fetched is relayed for them alone, and every episode's
+        transcript and chapters documents are read from the feed for
+        them alone. Chapters the server stored when it fetched an
+        episode are served to anyone who sees that episode.
       required: [pid, title, sourceType]
       properties:
         pid:
@@ -666,7 +746,7 @@ components:
           example: pc-01JZX5N8QW3F4V9T2B7KD3M9R6
         title:
           type: string
-          description: Show title.
+          description: Show title, cut to its first 1000 characters.
         author:
           type: string
           description: Show author or channel name.
@@ -677,7 +757,10 @@ components:
             safe to render directly).
         feedUrl:
           type: string
-          description: The feed URL. Omitted for private feeds.
+          description: >
+            For a caller who follows the show, the address it subscribed
+            by; for anyone else the catalog's address, omitted for a
+            private show.
         link:
           type: string
           description: The show's website, when the feed declares one.
@@ -763,14 +846,17 @@ components:
           maxLength: 512
           description: >
             Folder path for organizing subscriptions, as segments joined
-            by `/` (round-trips through OPML outline nesting).
+            by `/` (round-trips through OPML outline nesting). Each
+            segment is trimmed and empty ones are dropped before the path
+            is stored; a path of more than 16 segments, or still longer
+            than 512 characters, is refused with `invalid-request`.
         private:
           type: boolean
           description: >
             Mark the show private (see the show schema: privacy is
-            global and sticky, hiding the feed URL everywhere and
-            keeping the show out of every OPML export). Set
-            automatically when subscribing with credentials. Setting
+            global and sticky, hiding the feed URL from everyone who does
+            not follow the show). Set automatically when subscribing
+            with credentials or by an address that carries one. Setting
             this back to false does not un-private a show.
         speed:
           type: number
@@ -936,7 +1022,9 @@ components:
         folder:
           type: string
           maxLength: 512
-          description: Initial folder path for the subscription.
+          description: >
+            Initial folder path for the subscription, normalized and
+            bounded as the settings' `folder` is.
 
     RefreshResult:
       type: object
@@ -973,7 +1061,17 @@ components:
           description: The subscribed show's PID, when the feed resolved.
         error:
           type: string
-          description: Why this feed failed to subscribe, when it did.
+          description: >
+            Why this feed failed to subscribe, when it did: a sentence
+            for a person.
+        reason:
+          type: string
+          description: >
+            The feed-side failure's reason, when the failure was one:
+            `not-a-feed`, `too-large`, `blocked-address`, `host-refused`,
+            `host-missing`, `host-error` or `unreachable`, as a
+            subscribe's `params.reason` names them. New values may
+            appear.
 
     OpmlImportResult:
       type: object
@@ -1046,16 +1144,21 @@ components:
               type: boolean
               description: >
                 Whether the feed named audio this server could relay for
-                this episode: an enclosure URL, over http or https. True
-                with `downloaded` false is the passthrough case, where
+                this episode: an enclosure URL, over http or https, that
+                the feed does not call a playlist or a stream manifest.
+                True with `downloaded` false is the passthrough case, where
                 the episode plays relayed from the feed's own host.
+                Never true for an episode of a YouTube show: its
+                enclosure is a watch page, not audio, so it plays once
+                the server has fetched it.
 
-                False means the episode cannot play at all, and play-info
+                False with `downloaded` false means the episode cannot
+                play until the server fetches it, and play-info
                 answers `conflict`, so a client offering a play
                 affordance should read this rather than assume an
                 undownloaded episode is playable. True is a fact about
-                the feed rather than a promise to the caller: a show
-                whose feed needs credentials relays only for its own
+                the feed rather than a promise to the caller: a private
+                show (see `PodcastShow`) relays only for its own
                 subscribers, so play-info may still answer `conflict` for
                 someone reading an episode of a show they do not
                 subscribe to. Treat it as the signal to offer play, not

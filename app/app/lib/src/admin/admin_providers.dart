@@ -214,6 +214,11 @@ final libraryMatchingProvider =
       String
     >(LibraryMatchingController.new);
 
+/// Whether [library] has a matching mode to set. Not the podcast library:
+/// its episodes come from their feeds, which the matching engine never
+/// scores, and the server refuses a matching change on it.
+bool libraryTakesMatching(LibraryInfo library) => library.media != 'podcast';
+
 /// The canonical genre vocabulary, with the edits the editor applies.
 class GenreTreeController extends AsyncNotifier<GenreTree> {
   @override

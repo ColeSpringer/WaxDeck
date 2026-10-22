@@ -436,8 +436,10 @@ func TestDiscordEmbedCarriesItsFurniture(t *testing.T) {
 	}{
 		{"backup-failed", discordRed},
 		{"catalog-reset", discordRed},
+		{"subscription-failed", discordRed},
 		{"backup-completed", discordGreen},
 		{"signup-requested", discordBlue},
+		{"gpodder-device-removed", discordBlue},
 		{"invented-by-a-newer-server", discordGrey},
 	} {
 		if got := discordColorFor(c.event); got != c.color {

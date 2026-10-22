@@ -149,3 +149,50 @@ test('a share link plays anonymously and dies on revocation', async ({
     await anon.dispose();
   }
 });
+
+// The shared podcast feed. Its oldest episode is the one no spec fetches
+// (the roles are written down in podcasts.spec.ts), so its link has to
+// play by relaying the show's own audio.
+const FEED_URL = 'http://127.0.0.1:4421/feed.xml';
+const NEVER_FETCHED = 'Liner Notes';
+
+test('an episode share plays before the server fetches it', async ({
+  app,
+  playwright,
+  baseURL,
+}) => {
+  const showPid = await app.seed.subscribePodcast(FEED_URL);
+  const listed = (await app.seed.episodes(showPid)).find((e) => e.title === NEVER_FETCHED);
+  expect(listed, 'the feed carries its never-fetched episode').toBeTruthy();
+  // Made unfetched rather than assumed to be: a stack run against before
+  // may have met a stray fetch of it. The role is this test's alone, so
+  // the unfetch races no sibling.
+  await app.seed.unfetchEpisode(showPid, listed!.pid);
+  const episode = (await app.seed.episodes(showPid)).find((e) => e.pid === listed!.pid);
+  expect(episode!.downloaded, 'the episode is unfetched before its link is minted').toBe(false);
+
+  const share = await app.api.post('/shares', {
+    data: { pid: episode!.pid, allowDownload: true },
+  });
+  const anon = await playwright.request.newContext({
+    baseURL,
+    extraHTTPHeaders: { 'Accept-Language': 'en' },
+  });
+  try {
+    const landing = await anon.get(share.url);
+    expect(landing.status()).toBe(200);
+    const html = await landing.text();
+    expect(html).toContain('<audio');
+    expect(html).toContain(NEVER_FETCHED);
+    expect(html).not.toContain('/download');
+
+    const stream = await anon.get(`${share.url}/stream`);
+    expect(stream.status()).toBe(200);
+    expect(stream.headers()['content-type']).toMatch(/^audio\//);
+    expect(stream.headers()['x-content-type-options']).toBe('nosniff');
+    expect((await stream.body()).byteLength).toBeGreaterThan(1000);
+  } finally {
+    await app.api.raw.delete('/shares/{shareId}', { path: { shareId: share.pid } });
+    await anon.dispose();
+  }
+});
